@@ -17,6 +17,10 @@ import { CandidateProfile } from "@/components/dashboard/candidate-profile"
 import { AddCandidateDialog } from "@/components/dashboard/add-candidate-dialog"
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert"
 import { useLocalStorage } from "@/hooks/use-local-storage"
+import { getOnboarding, isOnboardingComplete, remainingSteps } from "@/lib/onboarding"
+import { Rocket } from "lucide-react"
+import Link from "next/link"
+import { useEffect } from "react"
 
 interface ColumnData {
   id: string
@@ -41,174 +45,56 @@ const defaultSettings: CardDisplaySettings = {
 
 const initialColumns: ColumnData[] = [
   {
-    id: "new",
-    title: "Новые",
-    count: 12,
-    colorFrom: defaultColumnColors.new.from,
-    colorTo: defaultColumnColors.new.to,
+    id: "new", title: "Новые", count: 2,
+    colorFrom: defaultColumnColors.new.from, colorTo: defaultColumnColors.new.to,
     candidates: [
-      {
-        id: "1",
-        name: "Иван Петров",
-        city: "Москва",
-        salaryMin: 150000,
-        salaryMax: 180000,
-        score: 88,
-        progress: 10,
-        source: "hh.ru",
-        experience: "5 лет в B2B продажах",
-        skills: ["CRM", "B2B", "Переговоры", "Excel"],
-        addedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000),
-        lastSeen: "online",
-      },
-      {
-        id: "2",
-        name: "Мария Сидорова",
-        city: "Санкт-Петербург",
-        salaryMin: 140000,
-        salaryMax: 170000,
-        score: 76,
-        progress: 10,
-        source: "Avito",
-        experience: "3 года в ритейле",
-        skills: ["Розничные продажи", "Клиентский сервис"],
-        addedAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
-        lastSeen: new Date(Date.now() - 2 * 60 * 60 * 1000),
-      },
-      {
-        id: "3",
-        name: "Алексей Козлов",
-        city: "Москва",
-        salaryMin: 160000,
-        salaryMax: 190000,
-        score: 92,
-        progress: 10,
-        source: "Telegram",
-        experience: "7 лет, Team Lead",
-        skills: ["Управление", "B2B", "SaaS", "Аналитика"],
-        addedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
-        lastSeen: new Date(Date.now() - 15 * 60 * 1000),
-      },
+      { id: "1", name: "Иван Петров", city: "Москва", salaryMin: 150000, salaryMax: 180000, score: 88, progress: 5, source: "hh.ru", experience: "5 лет в B2B", skills: ["CRM", "B2B", "Переговоры"], addedAt: new Date(Date.now() - 3600000), lastSeen: "online" },
+      { id: "2", name: "Мария Сидорова", city: "СПб", salaryMin: 140000, salaryMax: 170000, score: 76, progress: 5, source: "Avito", experience: "3 года в ритейле", skills: ["Продажи", "Сервис"], addedAt: new Date(Date.now() - 7200000), lastSeen: new Date(Date.now() - 3600000) },
     ],
   },
   {
-    id: "qualifying",
-    title: "Квалификация",
-    count: 8,
-    colorFrom: defaultColumnColors.qualifying.from,
-    colorTo: defaultColumnColors.qualifying.to,
+    id: "awaiting", title: "Ожидает ответа", count: 2,
+    colorFrom: defaultColumnColors.awaiting.from, colorTo: defaultColumnColors.awaiting.to,
     candidates: [
-      {
-        id: "4",
-        name: "Елена Волкова",
-        city: "Москва",
-        salaryMin: 155000,
-        salaryMax: 185000,
-        score: 81,
-        progress: 35,
-        source: "hh.ru",
-        experience: "4 года в IT-продажах",
-        skills: ["IT Sales", "Enterprise", "Презентации"],
-        addedAt: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000),
-        lastSeen: "online",
-      },
-      {
-        id: "5",
-        name: "Сергей Морозов",
-        city: "Казань",
-        salaryMin: 145000,
-        salaryMax: 175000,
-        score: 68,
-        progress: 35,
-        source: "LinkedIn",
-        experience: "2 года в продажах",
-        skills: ["Холодные звонки", "CRM"],
-        addedAt: new Date(Date.now() - 21 * 24 * 60 * 60 * 1000),
-        lastSeen: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
-      },
+      { id: "3", name: "Алексей Козлов", city: "Москва", salaryMin: 160000, salaryMax: 190000, score: 92, progress: 15, source: "Telegram", experience: "7 лет, Team Lead", skills: ["Управление", "SaaS"], addedAt: new Date(Date.now() - 86400000), lastSeen: new Date(Date.now() - 900000), utmSource: "TG канал HR" },
+      { id: "10", name: "Анна Белова", city: "Казань", salaryMin: 120000, salaryMax: 150000, score: 71, progress: 15, source: "hh.ru", experience: "2 года в продажах", skills: ["Звонки", "CRM"], addedAt: new Date(Date.now() - 172800000), lastSeen: new Date(Date.now() - 7200000) },
     ],
   },
   {
-    id: "course",
-    title: "Тестирование",
-    count: 7,
-    colorFrom: defaultColumnColors.course.from,
-    colorTo: defaultColumnColors.course.to,
+    id: "demo", title: "Демонстрация", count: 2,
+    colorFrom: defaultColumnColors.demo.from, colorTo: defaultColumnColors.demo.to,
     candidates: [
-      {
-        id: "6",
-        name: "Ольга Новикова",
-        city: "Москва",
-        salaryMin: 150000,
-        salaryMax: 180000,
-        score: 85,
-        progress: 60,
-        source: "hh.ru",
-        experience: "6 лет в FMCG",
-        skills: ["FMCG", "Дистрибуция", "Аналитика"],
-        addedAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
-        lastSeen: new Date(Date.now() - 30 * 60 * 1000),
-      },
-      {
-        id: "7",
-        name: "Дмитрий Смирнов",
-        city: "Санкт-Петербург",
-        salaryMin: 140000,
-        salaryMax: 170000,
-        score: 72,
-        progress: 60,
-        source: "Avito",
-        experience: "3 года в телекоме",
-        skills: ["Телеком", "B2C", "Upselling"],
-        addedAt: new Date(Date.now() - 25 * 24 * 60 * 60 * 1000),
-        lastSeen: new Date(Date.now() - 5 * 60 * 60 * 1000),
-      },
+      { id: "4", name: "Елена Волкова", city: "Москва", salaryMin: 155000, salaryMax: 185000, score: 81, progress: 35, source: "hh.ru", experience: "4 года в IT-продажах", skills: ["IT Sales", "Enterprise"], addedAt: new Date(Date.now() - 14 * 86400000), lastSeen: "online", demoProgress: 8, demoTotal: 12, demoTimeMin: 12 },
+      { id: "5", name: "Сергей Морозов", city: "Казань", salaryMin: 145000, salaryMax: 175000, score: 68, progress: 35, source: "LinkedIn", experience: "2 года", skills: ["Звонки", "CRM"], addedAt: new Date(Date.now() - 21 * 86400000), lastSeen: new Date(Date.now() - 86400000), demoProgress: 3, demoTotal: 12, demoTimeMin: 5 },
     ],
   },
   {
-    id: "interview",
-    title: "Интервью",
-    count: 3,
-    colorFrom: defaultColumnColors.interview.from,
-    colorTo: defaultColumnColors.interview.to,
+    id: "hr_decision", title: "Решение HR", count: 2,
+    colorFrom: defaultColumnColors.hr_decision.from, colorTo: defaultColumnColors.hr_decision.to,
     candidates: [
-      {
-        id: "8",
-        name: "Виктор Лебедев",
-        city: "Москва",
-        salaryMin: 160000,
-        salaryMax: 190000,
-        score: 79,
-        progress: 75,
-        source: "hh.ru",
-        experience: "5 лет, Key Account",
-        skills: ["Key Account", "Переговоры", "Тендеры"],
-        addedAt: new Date(Date.now() - 45 * 24 * 60 * 60 * 1000),
-        lastSeen: "online",
-      },
+      { id: "6", name: "Ольга Новикова", city: "Москва", salaryMin: 150000, salaryMax: 180000, score: 85, progress: 60, source: "hh.ru", experience: "6 лет в FMCG", skills: ["FMCG", "Дистрибуция"], addedAt: new Date(Date.now() - 30 * 86400000), lastSeen: new Date(Date.now() - 1800000), demoProgress: 12, demoTotal: 12, demoTimeMin: 18, aiSummary: "Сильный опыт в FMCG, хорошие коммуникативные навыки. Ответы на вопросы показали глубокое понимание продаж." },
+      { id: "7", name: "Дмитрий Смирнов", city: "СПб", salaryMin: 140000, salaryMax: 170000, score: 72, progress: 60, source: "Avito", experience: "3 года в телекоме", skills: ["B2C", "Upselling"], addedAt: new Date(Date.now() - 25 * 86400000), lastSeen: new Date(Date.now() - 18000000), demoProgress: 12, demoTotal: 12, demoTimeMin: 22, aiSummary: "Средний опыт, но мотивирован. Упомянул стремление к росту дохода и карьере." },
     ],
   },
   {
-    id: "offer",
-    title: "Предложение",
-    count: 1,
-    colorFrom: defaultColumnColors.offer.from,
-    colorTo: defaultColumnColors.offer.to,
+    id: "interview", title: "Интервью", count: 1,
+    colorFrom: defaultColumnColors.interview.from, colorTo: defaultColumnColors.interview.to,
     candidates: [
-      {
-        id: "9",
-        name: "Юлия Орлова",
-        city: "Москва",
-        salaryMin: 170000,
-        salaryMax: 200000,
-        score: 94,
-        progress: 90,
-        source: "hh.ru",
-        experience: "8 лет, Head of Sales",
-        skills: ["Управление", "Стратегия", "P&L", "Команда"],
-        addedAt: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000),
-        lastSeen: new Date(Date.now() - 10 * 60 * 1000),
-      },
+      { id: "8", name: "Виктор Лебедев", city: "Москва", salaryMin: 160000, salaryMax: 190000, score: 79, progress: 75, source: "hh.ru", experience: "5 лет, Key Account", skills: ["Key Account", "Переговоры"], addedAt: new Date(Date.now() - 45 * 86400000), lastSeen: "online", demoProgress: 12, demoTotal: 12, interviewDate: new Date(Date.now() + 2 * 86400000), interviewTime: "14:00" },
+    ],
+  },
+  {
+    id: "final_decision", title: "Финальное решение", count: 1,
+    colorFrom: defaultColumnColors.final_decision.from, colorTo: defaultColumnColors.final_decision.to,
+    candidates: [
+      { id: "9", name: "Юлия Орлова", city: "Москва", salaryMin: 170000, salaryMax: 200000, score: 94, progress: 90, source: "hh.ru", experience: "8 лет, Head of Sales", skills: ["Управление", "Стратегия", "P&L"], addedAt: new Date(Date.now() - 60 * 86400000), lastSeen: new Date(Date.now() - 600000), demoProgress: 12, demoTotal: 12, aiSummary: "Отличный кандидат. 8 лет опыта, управленческие навыки. Идеально подходит для позиции." },
+    ],
+  },
+  {
+    id: "hired", title: "Нанят 🎉", count: 1,
+    colorFrom: defaultColumnColors.hired.from, colorTo: defaultColumnColors.hired.to,
+    candidates: [
+      { id: "11", name: "Павел Соколов", city: "Москва", salaryMin: 155000, salaryMax: 180000, score: 87, progress: 100, source: "hh.ru", experience: "4 года B2B", skills: ["B2B", "CRM"], addedAt: new Date(Date.now() - 90 * 86400000), lastSeen: new Date(Date.now() - 86400000), demoProgress: 12, demoTotal: 12 },
     ],
   },
 ]
@@ -232,6 +118,14 @@ export default function DashboardPage() {
   const [profileCandidate, setProfileCandidate] = useState<Candidate | null>(null)
   const [profileColumnId, setProfileColumnId] = useState<string | null>(null)
   const [addDialogOpen, setAddDialogOpen] = useState(false)
+  const [onboardingRemaining, setOnboardingRemaining] = useState(0)
+  const [onboardingDone, setOnboardingDone] = useState(true)
+
+  useEffect(() => {
+    const ob = getOnboarding()
+    setOnboardingDone(isOnboardingComplete(ob))
+    setOnboardingRemaining(remainingSteps(ob))
+  }, [])
 
   const handleAddCandidate = (candidate: Candidate) => {
     setColumns((prev) =>
@@ -284,11 +178,35 @@ export default function DashboardPage() {
       return
     }
 
+    if (action === "think") {
+      toast("🤔 Подумаем над кандидатом", { description: candidate.name })
+      return
+    }
+
+    if (action === "hire") {
+      // Перемещаем в "Нанят"
+      const movedCandidate = { ...candidate, progress: 100 }
+      setColumns((prev) =>
+        prev.map((col) => {
+          if (col.id === columnId) {
+            const nc = col.candidates.filter((c) => c.id !== candidateId)
+            return { ...col, candidates: nc, count: nc.length }
+          }
+          if (col.id === "hired") {
+            const nc = [...col.candidates, movedCandidate]
+            return { ...col, candidates: nc, count: nc.length }
+          }
+          return col
+        })
+      )
+      toast.success(`🎉 ${candidate.name} — нанят!`)
+      return
+    }
+
     if (action === "advance") {
       const nextColumnId = getNextColumnId(columnId)
 
       if (!nextColumnId) {
-        // Last stage — hired
         setColumns((prev) =>
           prev.map((col) => {
             if (col.id !== columnId) return col
@@ -296,13 +214,10 @@ export default function DashboardPage() {
             return { ...col, candidates: newCandidates, count: newCandidates.length }
           })
         )
-        toast.success(`${candidate.name} — нанят!`, {
-          description: "Кандидат успешно прошёл все этапы",
-        })
+        toast.success(`${candidate.name} — нанят!`)
         return
       }
 
-      const nextColumn = columns.find((c) => c.id === nextColumnId)
       const movedCandidate = {
         ...candidate,
         progress: PROGRESS_BY_COLUMN[nextColumnId] ?? candidate.progress,
@@ -432,6 +347,22 @@ export default function DashboardPage() {
                 </Button>
               </Alert>
             )}
+            {/* Onboarding checklist */}
+            {!onboardingDone && onboardingRemaining > 0 && (
+              <div className="mb-6 flex items-center justify-between p-4 rounded-xl bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 border border-blue-200 dark:border-blue-800">
+                <div className="flex items-center gap-3">
+                  <Rocket className="w-6 h-6 text-blue-600" />
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">Настройте платформу: осталось {onboardingRemaining} {onboardingRemaining === 1 ? "шаг" : onboardingRemaining < 5 ? "шага" : "шагов"}</p>
+                    <p className="text-xs text-muted-foreground">Завершите настройку, чтобы получить максимум от HireFlow</p>
+                  </div>
+                </div>
+                <Button size="sm" asChild>
+                  <Link href="/onboarding">Продолжить настройку</Link>
+                </Button>
+              </div>
+            )}
+
             {/* Page Header */}
             <div className="flex flex-col sm:flex-row items-start justify-between gap-4 mb-6">
               <div>

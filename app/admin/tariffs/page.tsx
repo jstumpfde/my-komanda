@@ -1,0 +1,268 @@
+"use client"
+
+import { useState } from "react"
+import { DashboardSidebar } from "@/components/dashboard/sidebar"
+import { DashboardHeader } from "@/components/dashboard/header"
+import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
+import { Card, CardContent } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Switch } from "@/components/ui/switch"
+import { Separator } from "@/components/ui/separator"
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import { cn } from "@/lib/utils"
+import { toast } from "sonner"
+import { DEFAULT_TARIFFS, formatPrice, type Tariff, type TariffFeatures } from "@/lib/tariff-types"
+import {
+  Plus, Pencil, Trash2, Check, X, Shield, Save,
+} from "lucide-react"
+
+export default function AdminTariffsPage() {
+  const [tariffs, setTariffs] = useState<Tariff[]>(DEFAULT_TARIFFS)
+  const [editingTariff, setEditingTariff] = useState<Tariff | null>(null)
+  const [sheetOpen, setSheetOpen] = useState(false)
+
+  const openEdit = (tariff: Tariff) => {
+    setEditingTariff({ ...tariff })
+    setSheetOpen(true)
+  }
+
+  const openNew = () => {
+    setEditingTariff({
+      id: `tariff-${Date.now()}`,
+      name: "",
+      price: 0,
+      trialDays: 0,
+      maxVacancies: 5,
+      maxCandidates: 500,
+      features: { branding: false, customDomain: false, aiVideoInterview: false, api: false },
+      active: true,
+    })
+    setSheetOpen(true)
+  }
+
+  const handleSave = () => {
+    if (!editingTariff || !editingTariff.name) {
+      toast.error("Заполните название тарифа")
+      return
+    }
+    setTariffs(prev => {
+      const existing = prev.findIndex(t => t.id === editingTariff.id)
+      if (existing >= 0) {
+        const next = [...prev]
+        next[existing] = editingTariff
+        return next
+      }
+      return [...prev, editingTariff]
+    })
+    setSheetOpen(false)
+    toast.success("Тариф сохранён")
+  }
+
+  const handleDelete = () => {
+    if (!editingTariff) return
+    setTariffs(prev => prev.filter(t => t.id !== editingTariff.id))
+    setSheetOpen(false)
+    toast.error("Тариф удалён")
+  }
+
+  const updateEditing = (patch: Partial<Tariff>) => {
+    setEditingTariff(prev => prev ? { ...prev, ...patch } : null)
+  }
+
+  const updateFeature = (key: keyof TariffFeatures, value: boolean) => {
+    setEditingTariff(prev => prev ? { ...prev, features: { ...prev.features, [key]: value } } : null)
+  }
+
+  return (
+    <SidebarProvider defaultOpen={true}>
+      <DashboardSidebar />
+      <SidebarInset>
+        <DashboardHeader />
+        <main className="flex-1 overflow-auto bg-background">
+          <div className="p-4 sm:p-6 max-w-5xl">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <Shield className="w-5 h-5 text-primary" />
+                  <h1 className="text-2xl font-semibold text-foreground">Управление тарифами</h1>
+                </div>
+                <p className="text-muted-foreground text-sm">Только для администраторов</p>
+              </div>
+              <Button className="gap-1.5" onClick={openNew}>
+                <Plus className="w-4 h-4" />
+                Добавить тариф
+              </Button>
+            </div>
+
+            {/* Таблица тарифов */}
+            <Card>
+              <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b bg-muted/30">
+                        <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-3">Название</th>
+                        <th className="text-right text-xs font-semibold text-muted-foreground px-4 py-3">Цена</th>
+                        <th className="text-right text-xs font-semibold text-muted-foreground px-4 py-3">Trial дней</th>
+                        <th className="text-right text-xs font-semibold text-muted-foreground px-4 py-3">Вакансий</th>
+                        <th className="text-right text-xs font-semibold text-muted-foreground px-4 py-3">Кандидатов</th>
+                        <th className="text-center text-xs font-semibold text-muted-foreground px-4 py-3">Брендинг</th>
+                        <th className="text-center text-xs font-semibold text-muted-foreground px-4 py-3">Активен</th>
+                        <th className="text-center text-xs font-semibold text-muted-foreground px-4 py-3">Действия</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {tariffs.map(tariff => (
+                        <tr key={tariff.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium text-foreground">{tariff.name}</span>
+                              {tariff.badge && (
+                                <Badge className={cn("text-[10px]", tariff.badgeColor || "bg-primary text-primary-foreground")}>
+                                  {tariff.badge}
+                                </Badge>
+                              )}
+                            </div>
+                          </td>
+                          <td className="text-right px-4 py-3 text-sm text-foreground font-medium">
+                            {tariff.price === 0 ? "0 (бесплатно)" : `${tariff.price.toLocaleString("ru-RU")} ₽`}
+                          </td>
+                          <td className="text-right px-4 py-3 text-sm text-muted-foreground">{tariff.trialDays}</td>
+                          <td className="text-right px-4 py-3 text-sm text-foreground">{tariff.maxVacancies === 999 ? "∞" : tariff.maxVacancies}</td>
+                          <td className="text-right px-4 py-3 text-sm text-foreground">{tariff.maxCandidates.toLocaleString("ru-RU")}</td>
+                          <td className="text-center px-4 py-3">
+                            {tariff.features.branding ? (
+                              <Check className="w-4 h-4 text-emerald-600 mx-auto" />
+                            ) : (
+                              <X className="w-4 h-4 text-muted-foreground/40 mx-auto" />
+                            )}
+                          </td>
+                          <td className="text-center px-4 py-3">
+                            {tariff.active ? (
+                              <Check className="w-4 h-4 text-emerald-600 mx-auto" />
+                            ) : (
+                              <X className="w-4 h-4 text-red-500 mx-auto" />
+                            )}
+                          </td>
+                          <td className="text-center px-4 py-3">
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(tariff)}>
+                              <Pencil className="w-3.5 h-3.5" />
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </main>
+      </SidebarInset>
+
+      {/* Sheet редактирования */}
+      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+        <SheetContent className="w-full sm:max-w-md overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>{editingTariff?.name ? `Редактирование: ${editingTariff.name}` : "Новый тариф"}</SheetTitle>
+          </SheetHeader>
+
+          {editingTariff && (
+            <div className="space-y-5 mt-6">
+              {/* Основные поля */}
+              <div className="space-y-1.5">
+                <Label className="text-sm">Название</Label>
+                <Input value={editingTariff.name} onChange={e => updateEditing({ name: e.target.value })} placeholder="Starter" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-sm">Цена (₽/мес)</Label>
+                <Input type="number" value={editingTariff.price} onChange={e => updateEditing({ price: Number(e.target.value) })} />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-sm">Trial дней</Label>
+                <Input type="number" value={editingTariff.trialDays} onChange={e => updateEditing({ trialDays: Number(e.target.value) })} />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-sm">Макс вакансий</Label>
+                <Input type="number" value={editingTariff.maxVacancies} onChange={e => updateEditing({ maxVacancies: Number(e.target.value) })} />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-sm">Макс кандидатов</Label>
+                <Input type="number" value={editingTariff.maxCandidates} onChange={e => updateEditing({ maxCandidates: Number(e.target.value) })} />
+              </div>
+
+              <Separator />
+
+              {/* Функции */}
+              <div className="space-y-3">
+                <Label className="text-sm font-medium">Функции</Label>
+                {([
+                  { key: "branding" as const, label: "Брендинг" },
+                  { key: "customDomain" as const, label: "Кастомный домен" },
+                  { key: "aiVideoInterview" as const, label: "AI-видеоинтервью" },
+                  { key: "api" as const, label: "API доступ" },
+                ]).map(f => (
+                  <div key={f.key} className="flex items-center justify-between">
+                    <Label className="text-sm">{f.label}</Label>
+                    <Switch checked={editingTariff.features[f.key]} onCheckedChange={v => updateFeature(f.key, v)} />
+                  </div>
+                ))}
+              </div>
+
+              <Separator />
+
+              {/* Бейдж */}
+              <div className="space-y-1.5">
+                <Label className="text-sm">Бейдж</Label>
+                <div className="flex flex-wrap gap-1.5">
+                  {["", "Популярный", "Лучший выбор"].map(b => (
+                    <button
+                      key={b}
+                      className={cn(
+                        "px-3 py-1.5 rounded-md border text-xs font-medium transition-all",
+                        editingTariff.badge === b || (!editingTariff.badge && b === "")
+                          ? "border-primary bg-primary/5 text-primary"
+                          : "border-border text-muted-foreground"
+                      )}
+                      onClick={() => updateEditing({ badge: b || undefined })}
+                    >
+                      {b || "Без бейджа"}
+                    </button>
+                  ))}
+                </div>
+                <Input
+                  value={editingTariff.badge || ""}
+                  onChange={e => updateEditing({ badge: e.target.value || undefined })}
+                  placeholder="Или свой текст бейджа..."
+                  className="h-8 text-xs mt-1"
+                />
+              </div>
+
+              <div className="flex items-center justify-between">
+                <Label className="text-sm">Активен</Label>
+                <Switch checked={editingTariff.active} onCheckedChange={v => updateEditing({ active: v })} />
+              </div>
+
+              <Separator />
+
+              {/* Кнопки */}
+              <div className="flex gap-2 pt-2">
+                <Button className="flex-1 gap-1.5" onClick={handleSave}>
+                  <Save className="w-4 h-4" />
+                  Сохранить
+                </Button>
+                <Button variant="outline" className="gap-1.5 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={handleDelete}>
+                  <Trash2 className="w-4 h-4" />
+                  Удалить
+                </Button>
+              </div>
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
+    </SidebarProvider>
+  )
+}

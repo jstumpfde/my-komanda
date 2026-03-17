@@ -17,6 +17,14 @@ import {
   UserPlus,
   BookOpen,
   Plus,
+  CreditCard,
+  Shield,
+  Building2,
+  Gift,
+  Link2,
+  Clock,
+  Bell,
+  Plug,
 } from "lucide-react"
 import {
   Sidebar,
@@ -60,13 +68,28 @@ import {
   type VacancyCategory,
 } from "@/lib/vacancy-storage"
 import { cn } from "@/lib/utils"
-import { CreateVacancyDialog } from "./create-vacancy-dialog"
 
 const mainNavItems = [
-  { name: "Обзор", icon: LayoutDashboard, href: "/" },
-  { name: "Все кандидаты", icon: Users, href: "/candidates" },
-  { name: "Собеседования", icon: Calendar, href: "/interviews" },
+  { name: "Обзор", icon: LayoutDashboard, href: "/overview" },
+  { name: "Кандидаты", icon: Users, href: "/candidates" },
+  { name: "Интервью", icon: Calendar, href: "/interviews" },
   { name: "Аналитика", icon: BarChart3, href: "/analytics" },
+  { name: "Источники", icon: Link2, href: "/sources" },
+  { name: "Рефералы", icon: Gift, href: "/referrals" },
+]
+
+const settingsNavItems = [
+  { name: "Компания", icon: Building2, href: "/settings/company" },
+  { name: "Команда", icon: Users, href: "/settings/team" },
+  { name: "Интеграции", icon: Plug, href: "/settings/integrations" },
+  { name: "Расписание", icon: Clock, href: "/settings/schedule" },
+  { name: "Уведомления", icon: Bell, href: "/settings/notifications" },
+  { name: "Тариф и оплата", icon: CreditCard, href: "/settings/billing" },
+]
+
+const adminNavItems = [
+  { name: "Тарифы", icon: Shield, href: "/admin/tariffs" },
+  { name: "Клиенты", icon: Building2, href: "/admin/clients" },
 ]
 
 const onboardingItems = [
@@ -96,7 +119,6 @@ interface DragState {
 export function DashboardSidebar() {
   const pathname = usePathname()
   const [categories, setCategories] = useState<VacancyCategory[]>([])
-  const [createVacancyOpen, setCreateVacancyOpen] = useState(false)
   const [editingCategory, setEditingCategory] = useState<CategoryEditState | null>(null)
   const [dragState, setDragState] = useState<DragState | null>(null)
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
@@ -225,9 +247,11 @@ export function DashboardSidebar() {
                   size="icon"
                   className="size-6 shrink-0 text-sidebar-foreground/40 hover:text-sidebar-foreground hover:bg-sidebar-accent"
                   title="Создать вакансию"
-                  onClick={() => setCreateVacancyOpen(true)}
+                  asChild
                 >
-                  <Plus className="size-3.5" />
+                  <Link href="/vacancies/new">
+                    <Plus className="size-3.5" />
+                  </Link>
                 </Button>
               </div>
               <CollapsibleContent>
@@ -300,17 +324,20 @@ export function DashboardSidebar() {
                                   >
                                     <div className="flex items-center gap-1.5 w-full">
                                       <GripVertical className="size-3 text-sidebar-foreground/25 opacity-0 group-hover/subitem:opacity-100 transition-opacity cursor-move flex-shrink-0" />
-                                      <SidebarMenuSubButton 
-                                        isActive={index === 0 && item.id === "1"}
+                                      <SidebarMenuSubButton
+                                        asChild
+                                        isActive={pathname === `/vacancies/${item.id}`}
                                         className="text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground data-[active=true]:bg-sidebar-primary data-[active=true]:text-sidebar-primary-foreground h-7 text-xs flex-1"
                                       >
-                                        <span className="truncate">{item.name}</span>
-                                        <Badge 
-                                          variant="secondary" 
-                                          className="ml-auto bg-sidebar-accent/40 text-sidebar-accent-foreground/70 text-[10px] px-1 h-4"
-                                        >
-                                          {item.candidates}
-                                        </Badge>
+                                        <Link href={`/vacancies/${item.id}`}>
+                                          <span className="truncate">{item.name}</span>
+                                          <Badge
+                                            variant="secondary"
+                                            className="ml-auto bg-sidebar-accent/40 text-sidebar-accent-foreground/70 text-[10px] px-1 h-4"
+                                          >
+                                            {item.candidates}
+                                          </Badge>
+                                        </Link>
                                       </SidebarMenuSubButton>
                                     </div>
                                   </SidebarMenuSubItem>
@@ -398,6 +425,7 @@ export function DashboardSidebar() {
           </Collapsible>
         </SidebarGroup>
 
+        {/* Инструменты */}
         <SidebarGroup className="py-0 mb-0">
           <SidebarGroupLabel className="text-sidebar-foreground/40 text-[10px] font-medium uppercase tracking-widest px-3 mb-1">
             Инструменты
@@ -408,7 +436,7 @@ export function DashboardSidebar() {
                 <SidebarMenuItem key={item.name}>
                   <SidebarMenuButton
                     asChild
-                    isActive={pathname === item.href && item.href !== "/"}
+                    isActive={pathname === item.href}
                     className="text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground h-8 text-xs"
                   >
                     <Link href={item.href}>
@@ -420,6 +448,71 @@ export function DashboardSidebar() {
               ))}
             </SidebarMenu>
           </SidebarGroupContent>
+        </SidebarGroup>
+        {/* Настройки */}
+        <SidebarGroup className="py-0 mb-0">
+          <Collapsible>
+            <SidebarMenuItem className="list-none">
+              <CollapsibleTrigger asChild>
+                <SidebarMenuButton className="text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground h-8 group/trigger text-sm">
+                  <Edit2 className="size-4" />
+                  <span className="flex-1 font-medium">Настройки</span>
+                  <ChevronDown className="size-3.5 transition-transform duration-200 group-data-[state=open]/trigger:rotate-180 text-sidebar-foreground/40" />
+                </SidebarMenuButton>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <SidebarMenuSub className="mt-0.5 gap-0.5">
+                  {settingsNavItems.map((item) => (
+                    <SidebarMenuSubItem key={item.name}>
+                      <SidebarMenuSubButton
+                        asChild
+                        isActive={pathname === item.href}
+                        className="text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground h-7 text-xs"
+                      >
+                        <Link href={item.href}>
+                          <item.icon className="size-3.5" />
+                          <span>{item.name}</span>
+                        </Link>
+                      </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
+                  ))}
+                </SidebarMenuSub>
+              </CollapsibleContent>
+            </SidebarMenuItem>
+          </Collapsible>
+        </SidebarGroup>
+
+        {/* Администрирование */}
+        <SidebarGroup className="py-0 mb-0">
+          <Collapsible>
+            <SidebarMenuItem className="list-none">
+              <CollapsibleTrigger asChild>
+                <SidebarMenuButton className="text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground h-8 group/trigger text-sm">
+                  <Shield className="size-4" />
+                  <span className="flex-1 font-medium">Админ</span>
+                  <ChevronDown className="size-3.5 transition-transform duration-200 group-data-[state=open]/trigger:rotate-180 text-sidebar-foreground/40" />
+                </SidebarMenuButton>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <SidebarMenuSub className="mt-0.5 gap-0.5">
+                  {adminNavItems.map((item) => (
+                    <SidebarMenuSubItem key={item.name}>
+                      <SidebarMenuSubButton
+                        asChild
+                        isActive={pathname === item.href}
+                        className="text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground h-7 text-xs"
+                      >
+                        <Link href={item.href}>
+                          <item.icon className="size-3.5" />
+                          <span>{item.name}</span>
+                        </Link>
+                      </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
+                  ))}
+                </SidebarMenuSub>
+              </CollapsibleContent>
+            </SidebarMenuItem>
+          </Collapsible>
         </SidebarGroup>
       </SidebarContent>
 
@@ -508,7 +601,6 @@ export function DashboardSidebar() {
           )}
         </DialogContent>
       </Dialog>
-      <CreateVacancyDialog open={createVacancyOpen} onOpenChange={setCreateVacancyOpen} />
       <SidebarRail />
     </Sidebar>
   )

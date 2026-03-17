@@ -1,0 +1,1192 @@
+"use client"
+
+import { useState, useRef, useEffect, useCallback } from "react"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select"
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog"
+import { cn } from "@/lib/utils"
+import {
+  ArrowLeft, ArrowUp, ArrowDown, Copy, Trash2, GripVertical, Plus, Save,
+  Eye, Sparkles, Rocket, BookOpen, Loader2, X, MoreHorizontal, Pencil, ClipboardPaste,
+  Bold, Italic, Underline, Strikethrough, AlignLeft, AlignCenter, AlignRight,
+  Heading1, Heading2, Heading3, List as ListIcon, ListOrdered, Link2, Hash, Smile,
+  Type, ImageIcon, Video, Music, FileText, Info, MousePointerClick, CheckSquare,
+  Upload, Play, Mic, MicOff, FileUp, Square,
+  Star, Heart, Zap, Target, Trophy, Briefcase, Users, BarChart3,
+  Clock, Check, Flag, Shield, Globe, Camera,
+  Lightbulb, Gift, Phone, Mail, Settings, Search, Home,
+  Building2, Truck, Palette, Code2, Megaphone, GraduationCap,
+} from "lucide-react"
+import { toast } from "sonner"
+import type { Demo, Block, BlockType, ImageLayout, Question, Lesson } from "@/lib/course-types"
+import { VARIABLES, BLOCK_TYPE_META, createBlock, replaceVars } from "@/lib/course-types"
+import { LibraryDialog } from "./library-dialog"
+import { AiGenerateDialog } from "./ai-generate-dialog"
+
+interface DemoCardProps {
+  demo: Demo
+  onBack: () => void
+  onUpdate: (demo: Demo) => void
+}
+
+const EMOJI_DATA = {
+  "Смайлы": ["😊","😄","😃","😁","😆","😅","🤣","😂","🙂","😉","😌","😍","🥰","😘","😎","🤩","🥳","😏","🤔","🤗","🫡","😶","🙃","😴","🤯"],
+  "Жесты": ["👍","👎","👋","🤝","✌️","🤞","🫶","👏","🙌","💪","🫵","☝️","👆","👇","👈","👉","✋","🤚","🖐️"],
+  "Деловые": ["💼","📊","📈","📉","💰","💵","🏆","🎯","📋","✅","❌","📌","🔑","💡","⚡","🚀","📅","🏢","👤","⚙️","🎥","🏗","📍","🔔","📧","💬","📞","🖥️","📝"],
+  "Природа": ["🌟","⭐","✨","🔥","❤️","💚","💙","🌈","☀️","🌊","🌿","🌸","🍀","🌍","⛰️","🌙","🌞","☁️","🌺","🌻"],
+  "Предметы": ["📋","📄","📁","📊","📝","🗂","📌","🔖","✅","📎","🎓","🏠","🛠","🔧","🔨","🗓","🖥","📱","🎧","🖊"],
+  "Символы": ["➡️","⬅️","⬆️","⬇️","↗️","↘️","🔴","🟢","🔵","🟡","⚪","▶️","⏸️","✉️","🔗","🏷️","💬","⭕","✖️","➕","➖","❗","❓","♻️","🔒"],
+}
+
+const LUCIDE_ICONS_FOR_PICKER = [
+  "Star","Heart","Zap","Target","Trophy","Briefcase","Users","BarChart3",
+  "Rocket","Clock","Check","Flag","Shield","Globe","Camera","Music",
+  "BookOpen","Lightbulb","Gift","Phone","Mail","Settings","Search","Home",
+  "Building2","Truck","Palette","Code2","Megaphone","GraduationCap",
+] as const
+
+const LUCIDE_MAP: Record<string, React.ElementType> = {
+  Star, Heart, Zap, Target, Trophy, Briefcase, Users, BarChart3,
+  Rocket, Clock, Check, Flag, Shield, Globe, Camera, Music,
+  BookOpen, Lightbulb, Gift, Phone, Mail, Settings, Search, Home,
+  Building2, Truck, Palette, Code2, Megaphone, GraduationCap,
+}
+
+const INFO_STYLES: Record<string, { label: string; cls: string; icon: string }> = {
+  info: { label: "Инфо", cls: "border-blue-300 bg-blue-50 dark:bg-blue-950/30", icon: "ℹ️" },
+  warning: { label: "Внимание", cls: "border-amber-300 bg-amber-50 dark:bg-amber-950/30", icon: "⚠️" },
+  success: { label: "Успех", cls: "border-emerald-300 bg-emerald-50 dark:bg-emerald-950/30", icon: "✅" },
+  error: { label: "Ошибка", cls: "border-red-300 bg-red-50 dark:bg-red-950/30", icon: "❌" },
+}
+
+export function DemoCard({ demo, onBack, onUpdate }: DemoCardProps) {
+  const [activeLessonId, setActiveLessonId] = useState(demo.lessons[0]?.id || "")
+  const [previewMode, setPreviewMode] = useState(false)
+  const [previewIdx, setPreviewIdx] = useState(0)
+  const [templateOpen, setTemplateOpen] = useState(false)
+  const [dragLessonIdx, setDragLessonIdx] = useState<number | null>(null)
+  const [dragOverLessonIdx, setDragOverLessonIdx] = useState<number | null>(null)
+  const [renamingLessonId, setRenamingLessonId] = useState<string | null>(null)
+  const [copiedLesson, setCopiedLesson] = useState<Lesson | null>(null)
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
+  const [savedModules, setSavedModules] = useState<Lesson[]>([])
+  const [savedTemplates, setSavedTemplates] = useState<{ title: string; category: string; lessons: Lesson[] }[]>([])
+  const [saveModuleDialog, setSaveModuleDialog] = useState<Lesson | null>(null)
+  const [saveTemplateDialog, setSaveTemplateDialog] = useState(false)
+  const [saveModuleName, setSaveModuleName] = useState("")
+  const [saveTemplateName, setSaveTemplateName] = useState("")
+  const [saveTemplateCategory, setSaveTemplateCategory] = useState("")
+  const [aiModalOpen, setAiModalOpen] = useState(false)
+  const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "idle">("saved")
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const activeLesson = demo.lessons.find((l) => l.id === activeLessonId)
+
+  // === Helpers ===
+  const save = useCallback((lessons: Lesson[]) => {
+    setSaveStatus("saving")
+    const updated = { ...demo, lessons, updatedAt: new Date() }
+    console.log("[DemoCard] save →", updated.id, "lessons:", lessons.length, "blocks:", lessons.reduce((a, l) => a + l.blocks.length, 0))
+    onUpdate(updated)
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => setSaveStatus("saved"), 1000)
+  }, [demo, onUpdate])
+
+  const saveNow = () => {
+    // Force sync any contentEditable
+    const editors = document.querySelectorAll<HTMLElement>("[contenteditable=true]")
+    editors.forEach((el) => el.blur())
+    setSaveStatus("saved")
+    toast.success("Демонстрация сохранена")
+  }
+
+  // Sync contentEditable before switching lessons
+  const switchLesson = (id: string) => {
+    const editors = document.querySelectorAll<HTMLElement>("[contenteditable=true]")
+    editors.forEach((el) => el.blur())
+    setActiveLessonId(id)
+  }
+
+  // Cleanup debounce on unmount
+  useEffect(() => () => { if (debounceRef.current) clearTimeout(debounceRef.current) }, [])
+
+  const updateLesson = (lessonId: string, patch: Partial<Lesson>) => {
+    save(demo.lessons.map((l) => l.id === lessonId ? { ...l, ...patch } : l))
+  }
+
+  const addLesson = () => {
+    const l: Lesson = { id: `les-${Date.now()}`, emoji: "📝", title: "Новый урок", blocks: [createBlock("text")] }
+    save([...demo.lessons, l])
+    setActiveLessonId(l.id)
+  }
+
+  const duplicateLesson = (idx: number) => {
+    const orig = demo.lessons[idx]
+    const ts = Date.now()
+    const copy: Lesson = {
+      ...orig,
+      id: `les-${ts}`,
+      title: `${orig.title} (копия)`,
+      blocks: orig.blocks.map((b) => ({ ...b, id: `${b.id}-c${ts}` })),
+    }
+    const nl = [...demo.lessons]; nl.splice(idx + 1, 0, copy)
+    save(nl)
+    setActiveLessonId(copy.id)
+    toast.success("Урок дублирован")
+  }
+
+  const moveLessonDir = (idx: number, dir: -1 | 1) => {
+    const t = idx + dir; if (t < 0 || t >= demo.lessons.length) return
+    const nl = [...demo.lessons]; [nl[idx], nl[t]] = [nl[t], nl[idx]]
+    save(nl)
+  }
+
+  const pasteLesson = () => {
+    if (!copiedLesson) return
+    const ts = Date.now()
+    const pasted: Lesson = {
+      ...copiedLesson,
+      id: `les-${ts}`,
+      title: `${copiedLesson.title} (вставлен)`,
+      blocks: copiedLesson.blocks.map((b) => ({ ...b, id: `${b.id}-p${ts}` })),
+    }
+    save([...demo.lessons, pasted])
+    setActiveLessonId(pasted.id)
+    toast.success("Урок вставлен")
+  }
+
+  const deleteLesson = (id: string) => {
+    const nl = demo.lessons.filter((l) => l.id !== id)
+    save(nl)
+    if (activeLessonId === id) setActiveLessonId(nl[0]?.id || "")
+    setDeleteConfirmId(null)
+    toast("Урок удалён")
+  }
+
+  const dropLesson = (target: number) => {
+    if (dragLessonIdx === null || dragLessonIdx === target) return
+    const nl = [...demo.lessons]; const [m] = nl.splice(dragLessonIdx, 1); nl.splice(target, 0, m)
+    save(nl); setDragLessonIdx(null); setDragOverLessonIdx(null)
+  }
+
+  // Block operations within active lesson
+  const updateBlock = (blockId: string, patch: Partial<Block>) => {
+    if (!activeLesson) return
+    updateLesson(activeLessonId, { blocks: activeLesson.blocks.map((b) => b.id === blockId ? { ...b, ...patch } : b) })
+  }
+  const insertBlockAt = (idx: number, type: BlockType) => {
+    if (!activeLesson) return
+    const nb = [...activeLesson.blocks]; nb.splice(idx, 0, createBlock(type))
+    updateLesson(activeLessonId, { blocks: nb })
+  }
+  const removeBlock = (id: string) => {
+    if (!activeLesson) return
+    updateLesson(activeLessonId, { blocks: activeLesson.blocks.filter((b) => b.id !== id) })
+  }
+  const duplicateBlock = (idx: number) => {
+    if (!activeLesson) return
+    // Sync any contentEditable content first
+    const editorEl = document.querySelector(`[contenteditable="true"]`) as HTMLElement | null
+    if (editorEl) {
+      const currentBlockId = activeLesson.blocks.findIndex((b) => b.type === "text")
+      if (currentBlockId >= 0) {
+        // Force sync via blur-like action
+      }
+    }
+    const orig = activeLesson.blocks[idx]
+    const copy = {
+      ...orig,
+      id: `blk-${Date.now()}-${Math.random().toString(36).slice(2,6)}`,
+      content: orig.content,
+      questions: orig.questions.map((q) => ({ ...q, id: `q-${Date.now()}-${Math.random().toString(36).slice(2,4)}`, options: [...q.options] })),
+    }
+    const nb = [...activeLesson.blocks]; nb.splice(idx + 1, 0, copy)
+    updateLesson(activeLessonId, { blocks: nb })
+    toast.success("Блок дублирован")
+  }
+  const moveBlock = (idx: number, dir: -1 | 1) => {
+    if (!activeLesson) return
+    const t = idx + dir; if (t < 0 || t >= activeLesson.blocks.length) return
+    const nb = [...activeLesson.blocks]; [nb[idx], nb[t]] = [nb[t], nb[idx]]
+    updateLesson(activeLessonId, { blocks: nb })
+  }
+
+  const applyAiLessons = (lessons: Lesson[]) => {
+    const ts = Date.now()
+    const mapped = lessons.map((l, i) => ({ ...l, id: `ai-${ts}-${i}`, blocks: l.blocks.map((b) => ({ ...b, id: `${b.id}-${ts}-${i}` })) }))
+    save(mapped)
+    setActiveLessonId(mapped[0]?.id || "")
+    setAiModalOpen(false)
+    toast.success("Демонстрация сгенерирована")
+  }
+
+  // === PREVIEW (candidate-facing view) ===
+  if (previewMode) {
+    const lesson = demo.lessons[previewIdx]
+    if (!lesson) { setPreviewMode(false); return null }
+    const pct = ((previewIdx + 1) / demo.lessons.length) * 100
+    return (
+      <div className="max-w-2xl mx-auto">
+        {/* Top bar */}
+        <div className="flex items-center justify-between mb-3">
+          <Button variant="ghost" size="sm" onClick={() => setPreviewMode(false)} className="gap-1.5 text-xs">
+            <X className="w-3.5 h-3.5" />Закрыть превью
+          </Button>
+          <Badge variant="outline" className="text-[10px]">Предпросмотр для кандидата</Badge>
+        </div>
+
+        {/* Progress */}
+        <div className="flex items-center gap-3 mb-4">
+          <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+            <div className="h-full bg-primary rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
+          </div>
+          <span className="text-xs font-medium text-muted-foreground flex-shrink-0">{previewIdx + 1} / {demo.lessons.length}</span>
+        </div>
+
+        {/* Content card */}
+        <Card className="shadow-lg border-0 bg-white dark:bg-card">
+          <CardContent className="p-8 sm:p-10">
+            {/* Lesson title */}
+            <div className="text-center mb-8">
+              <span className="text-4xl block mb-3">{lesson.emoji}</span>
+              <h1 className="text-2xl font-bold text-foreground">{lesson.title}</h1>
+            </div>
+
+            {/* Blocks */}
+            <div className="space-y-6">
+              {lesson.blocks.map((block) => <PreviewBlock key={block.id} block={block} />)}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Navigation */}
+        <div className="flex items-center justify-between mt-5">
+          <Button variant="outline" disabled={previewIdx === 0} onClick={() => setPreviewIdx(previewIdx - 1)}>
+            ← Назад
+          </Button>
+          {previewIdx < demo.lessons.length - 1 ? (
+            <Button onClick={() => setPreviewIdx(previewIdx + 1)}>
+              Далее →
+            </Button>
+          ) : (
+            <Button onClick={() => setPreviewMode(false)}>
+              Завершить ✓
+            </Button>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  // === EDITOR (two-column) ===
+  return (
+    <div className="space-y-3">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onBack}><ArrowLeft className="w-4 h-4" /></Button>
+          <div>
+            <h3 className="text-lg font-semibold">{demo.title}</h3>
+            <Badge variant="outline" className={cn("text-[10px] mt-0.5", demo.status === "published" ? "bg-emerald-500/10 text-emerald-700 border-emerald-200" : "bg-amber-500/10 text-amber-700 border-amber-200")}>{demo.status === "published" ? "Опубликована" : "Черновик"}</Badge>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {/* Save status */}
+          <span className={cn("text-[11px] mr-1 transition-colors", saveStatus === "saving" ? "text-amber-500" : saveStatus === "saved" ? "text-muted-foreground/50" : "text-muted-foreground/30")}>
+            {saveStatus === "saving" ? "Сохранение..." : saveStatus === "saved" ? "✓ Сохранено" : ""}
+          </span>
+          <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={saveNow}><Save className="w-3.5 h-3.5" />Сохранить</Button>
+          <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => setTemplateOpen(true)}><BookOpen className="w-3.5 h-3.5" />Библиотека</Button>
+          <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => setSaveTemplateDialog(true)}><Save className="w-3.5 h-3.5" />Шаблон</Button>
+          <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => setAiModalOpen(true)}><Sparkles className="w-3.5 h-3.5" />AI</Button>
+          <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => { setPreviewIdx(0); setPreviewMode(true) }}><Eye className="w-3.5 h-3.5" />Превью</Button>
+        </div>
+      </div>
+
+      <div className="flex gap-4" style={{ minHeight: "calc(100vh - 280px)" }}>
+        {/* LEFT — Lesson list */}
+        <div className="w-[280px] flex-shrink-0 border border-border rounded-xl bg-card overflow-hidden flex flex-col">
+          <div className="flex items-center justify-between px-3 py-2 border-b border-border">
+            <h4 className="text-sm font-semibold">Уроки</h4>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" variant="ghost" className="h-7 gap-1 text-xs"><Plus className="w-3 h-3" />Урок</Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem onClick={addLesson}><Plus className="w-3.5 h-3.5 mr-2" />Новый пустой урок</DropdownMenuItem>
+                <DropdownMenuItem disabled={!copiedLesson} onClick={pasteLesson}><ClipboardPaste className="w-3.5 h-3.5 mr-2" />Вставить скопированный</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setTemplateOpen(true)}><BookOpen className="w-3.5 h-3.5 mr-2" />Из библиотеки шаблонов</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+          <div className="flex-1 overflow-y-auto px-1.5 py-1">
+            {demo.lessons.map((lesson, i) => {
+              const isActive = activeLessonId === lesson.id
+              const isRenaming = renamingLessonId === lesson.id
+              return (
+                <div
+                  key={lesson.id}
+                  draggable={!isRenaming}
+                  onDragStart={() => setDragLessonIdx(i)}
+                  onDragOver={(e) => { e.preventDefault(); setDragOverLessonIdx(i) }}
+                  onDragEnd={() => { setDragLessonIdx(null); setDragOverLessonIdx(null) }}
+                  onDrop={() => dropLesson(i)}
+                  onClick={() => { if (!isRenaming) switchLesson(lesson.id) }}
+                  className={cn(
+                    "flex items-center gap-1.5 pl-1 pr-0.5 py-1 rounded-md cursor-pointer group transition-all",
+                    isActive ? "bg-primary text-primary-foreground" : "hover:bg-muted/60 text-foreground",
+                    dragLessonIdx === i && "opacity-30",
+                    dragOverLessonIdx === i && dragLessonIdx !== i && "ring-1 ring-primary/50"
+                  )}
+                >
+                  <GripVertical className={cn("w-3 h-3 flex-shrink-0 cursor-move", isActive ? "text-primary-foreground/40" : "text-muted-foreground/20 group-hover:text-muted-foreground/50")} />
+                  <span className="text-sm flex-shrink-0">{lesson.emoji}</span>
+                  {isRenaming ? (
+                    <input
+                      autoFocus
+                      className="flex-1 text-xs font-medium bg-transparent border-b border-primary-foreground/40 outline-none min-w-0 px-0 py-0"
+                      value={lesson.title}
+                      onChange={(e) => updateLesson(lesson.id, { title: e.target.value })}
+                      onBlur={() => setRenamingLessonId(null)}
+                      onKeyDown={(e) => { if (e.key === "Enter") setRenamingLessonId(null) }}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  ) : (
+                    <span className="flex-1 truncate text-[12px] font-medium">{lesson.title}</span>
+                  )}
+                  {/* Context menu */}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        className={cn(
+                          "opacity-0 group-hover:opacity-100 p-0.5 rounded transition-opacity flex-shrink-0",
+                          isActive ? "text-primary-foreground/70 hover:bg-primary-foreground/20" : "text-muted-foreground/50 hover:bg-muted"
+                        )}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <MoreHorizontal className="w-3.5 h-3.5" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-44">
+                      <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setRenamingLessonId(lesson.id) }}>
+                        <Pencil className="w-3.5 h-3.5 mr-2" />Переименовать
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setCopiedLesson(lesson); toast.success("Урок скопирован") }}>
+                        <Copy className="w-3.5 h-3.5 mr-2" />Копировать
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={(e) => { e.stopPropagation(); duplicateLesson(i) }}>
+                        <Copy className="w-3.5 h-3.5 mr-2" />Дублировать
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={(e) => { e.stopPropagation(); moveLessonDir(i, -1) }} disabled={i === 0}>
+                        <ArrowUp className="w-3.5 h-3.5 mr-2" />Переместить вверх
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={(e) => { e.stopPropagation(); moveLessonDir(i, 1) }} disabled={i === demo.lessons.length - 1}>
+                        <ArrowDown className="w-3.5 h-3.5 mr-2" />Переместить вниз
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setSaveModuleDialog(lesson); setSaveModuleName(lesson.title) }}>
+                        <Save className="w-3.5 h-3.5 mr-2" />В библиотеку
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setDeleteConfirmId(lesson.id) }} className="text-destructive focus:text-destructive">
+                        <Trash2 className="w-3.5 h-3.5 mr-2" />Удалить
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Delete confirmation dialog */}
+        <Dialog open={!!deleteConfirmId} onOpenChange={(open) => { if (!open) setDeleteConfirmId(null) }}>
+          <DialogContent className="sm:max-w-sm">
+            <DialogHeader><DialogTitle>Удалить урок?</DialogTitle></DialogHeader>
+            <p className="text-sm text-muted-foreground">Урок и все его блоки будут удалены. Это действие нельзя отменить.</p>
+            <div className="flex justify-end gap-2 mt-2">
+              <Button variant="outline" size="sm" onClick={() => setDeleteConfirmId(null)}>Отмена</Button>
+              <Button variant="destructive" size="sm" onClick={() => deleteConfirmId && deleteLesson(deleteConfirmId)}>Удалить</Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* RIGHT — Block editor for active lesson */}
+        <div className="flex-1 min-w-0">
+          {activeLesson ? (
+            <div key={activeLessonId} className="space-y-0">
+              {/* Lesson title (inline editable) */}
+              <div className="flex items-center gap-2 mb-4">
+                <LessonIconPicker
+                  current={activeLesson.emoji}
+                  onSelect={(v) => updateLesson(activeLessonId, { emoji: v })}
+                />
+                <input
+                  className="text-xl font-bold bg-transparent border-0 outline-none flex-1 text-foreground placeholder:text-muted-foreground/40"
+                  value={activeLesson.title}
+                  onChange={(e) => updateLesson(activeLessonId, { title: e.target.value })}
+                  placeholder="Название урока"
+                />
+              </div>
+
+              {/* Blocks with inserters between them */}
+              <Inserter onInsert={(type) => insertBlockAt(0, type)} first={activeLesson.blocks.length === 0} />
+
+              {activeLesson.blocks.map((block, idx) => (
+                <div key={block.id}>
+                  {/* Block with toolbar */}
+                  <div className="group relative">
+                    <div className="absolute -top-3 right-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="flex items-center gap-0.5 bg-popover border border-border rounded-lg shadow-md px-1 py-0.5">
+                        <TBtn icon={Copy} tip="Дублировать" onClick={() => duplicateBlock(idx)} />
+                        <TBtn icon={ArrowUp} tip="Вверх" onClick={() => moveBlock(idx, -1)} disabled={idx === 0} />
+                        <TBtn icon={ArrowDown} tip="Вниз" onClick={() => moveBlock(idx, 1)} disabled={idx === activeLesson.blocks.length - 1} />
+                        <TBtn icon={Trash2} tip="Удалить" onClick={() => removeBlock(block.id)} className="hover:text-destructive" />
+                      </div>
+                    </div>
+                    <div className="rounded-lg border border-transparent hover:border-border transition-colors p-1">
+                      <BlockEditor key={block.id} block={block} onUpdate={(p) => updateBlock(block.id, p)} />
+                    </div>
+                  </div>
+
+                  {/* Inserter / divider after each block */}
+                  <Inserter onInsert={(type) => insertBlockAt(idx + 1, type)} />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="flex items-center justify-center h-full text-muted-foreground/40 text-sm">Выберите урок</div>
+          )}
+        </div>
+      </div>
+
+      {/* Library dialog */}
+      <LibraryDialog
+        open={templateOpen}
+        onOpenChange={setTemplateOpen}
+        currentLessons={demo.lessons}
+        onApplyTemplate={(lessons) => { save(lessons); setActiveLessonId(lessons[0]?.id || "") }}
+        onInsertModule={(lesson) => { save([...demo.lessons, lesson]); setActiveLessonId(lesson.id) }}
+        savedModules={savedModules}
+        savedTemplates={savedTemplates}
+      />
+
+      <AiGenerateDialog
+        open={aiModalOpen}
+        onOpenChange={setAiModalOpen}
+        onApply={applyAiLessons}
+      />
+
+      {/* Save module dialog */}
+      <Dialog open={!!saveModuleDialog} onOpenChange={(o) => { if (!o) setSaveModuleDialog(null) }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader><DialogTitle>Сохранить как модуль</DialogTitle></DialogHeader>
+          <div className="grid gap-3 py-2">
+            <Input value={saveModuleName} onChange={(e) => setSaveModuleName(e.target.value)} placeholder="Название модуля" autoFocus />
+            <Button onClick={() => {
+              if (!saveModuleDialog || !saveModuleName.trim()) return
+              setSavedModules((prev) => [...prev, { ...saveModuleDialog, title: saveModuleName.trim() }])
+              setSaveModuleDialog(null)
+              toast.success("Модуль сохранён в библиотеку")
+            }}>Сохранить</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Save template dialog */}
+      <Dialog open={saveTemplateDialog} onOpenChange={setSaveTemplateDialog}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader><DialogTitle>Сохранить как шаблон</DialogTitle></DialogHeader>
+          <div className="grid gap-3 py-2">
+            <Input value={saveTemplateName} onChange={(e) => setSaveTemplateName(e.target.value)} placeholder="Название шаблона" autoFocus />
+            <Input value={saveTemplateCategory} onChange={(e) => setSaveTemplateCategory(e.target.value)} placeholder="Категория (напр. Продажи)" />
+            <Button onClick={() => {
+              if (!saveTemplateName.trim()) return
+              setSavedTemplates((prev) => [...prev, { title: saveTemplateName.trim(), category: saveTemplateCategory.trim() || "Общие", lessons: demo.lessons }])
+              setSaveTemplateDialog(false)
+              setSaveTemplateName("")
+              setSaveTemplateCategory("")
+              toast.success("Шаблон сохранён в библиотеку")
+            }}>Сохранить</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}
+
+/* ──── Inserter (divider line + icon bar on hover) ──── */
+function Inserter({ onInsert, first }: { onInsert: (type: BlockType) => void; first?: boolean }) {
+  if (first) {
+    return (
+      <div className="py-4">
+        <div className="flex items-center justify-center gap-1 py-2 px-3 bg-muted/30 rounded-lg border border-dashed border-border">
+          {BLOCK_TYPE_META.map((m) => (
+            <button
+              key={m.type}
+              title={m.label}
+              onClick={() => onInsert(m.type)}
+              className="flex flex-col items-center gap-1 px-3 py-2 rounded-lg hover:bg-background text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <span className="text-base">{m.icon}</span>
+              <span className="text-[10px]">{m.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="group/ins relative h-7">
+      {/* Divider line */}
+      <div className="absolute inset-x-0 top-1/2 h-px bg-border opacity-0 group-hover/ins:opacity-100 transition-opacity" />
+      {/* Icon bar — appears on hover */}
+      <div className="relative z-10 flex justify-center h-full items-center">
+        <div className="flex items-center gap-0.5 opacity-0 group-hover/ins:opacity-100 transition-opacity">
+          {BLOCK_TYPE_META.map((m) => (
+            <button
+              key={m.type}
+              title={m.label}
+              onClick={() => onInsert(m.type)}
+              className="w-7 h-7 rounded-full border border-border bg-background flex items-center justify-center text-xs text-muted-foreground hover:text-foreground hover:border-primary hover:bg-primary/5 transition-all shadow-sm"
+            >
+              {m.icon}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ──── Block Editor ──── */
+function BlockEditor({ block, onUpdate }: { block: Block; onUpdate: (p: Partial<Block>) => void }) {
+  const editorRef = useRef<HTMLDivElement>(null)
+  const [alignState, setAlignState] = useState(0)
+  const [linkPopup, setLinkPopup] = useState(false)
+  const [linkUrl, setLinkUrl] = useState("")
+  const savedSelection = useRef<Range | null>(null)
+  const onUpdateRef = useRef(onUpdate)
+  onUpdateRef.current = onUpdate
+
+  // Set innerHTML when block changes (key prop forces remount for different blocks)
+  useEffect(() => {
+    if (editorRef.current && editorRef.current.innerHTML !== block.content) {
+      editorRef.current.innerHTML = block.content || ""
+    }
+  }, [block.id]) // only on block ID change, not content (to avoid cursor jump)
+
+  const tb = (fn: () => void) => (e: React.MouseEvent) => { e.preventDefault(); fn() }
+
+  const exec = (cmd: string, value?: string) => {
+    editorRef.current?.focus()
+    document.execCommand(cmd, false, value)
+  }
+
+  const insertHtml = (html: string) => {
+    editorRef.current?.focus()
+    document.execCommand("insertHTML", false, html)
+  }
+
+  const openLinkPopup = () => {
+    const sel = window.getSelection()
+    if (sel && sel.rangeCount > 0) savedSelection.current = sel.getRangeAt(0).cloneRange()
+    setLinkUrl("")
+    setLinkPopup(true)
+  }
+
+  const applyLink = () => {
+    if (!linkUrl.trim()) { setLinkPopup(false); return }
+    editorRef.current?.focus()
+    if (savedSelection.current) {
+      const sel = window.getSelection()
+      sel?.removeAllRanges()
+      sel?.addRange(savedSelection.current)
+    }
+    document.execCommand("createLink", false, linkUrl.trim())
+    setLinkPopup(false)
+    syncContent()
+  }
+
+  const cycleAlign = () => {
+    const cmds = ["justifyLeft", "justifyCenter", "justifyRight"]
+    const next = (alignState + 1) % 3
+    exec(cmds[next])
+    setAlignState(next)
+  }
+  const AlignIcon = [AlignLeft, AlignCenter, AlignRight][alignState]
+
+  const syncContent = useCallback(() => {
+    if (editorRef.current) {
+      const html = editorRef.current.innerHTML
+      onUpdateRef.current({ content: html })
+    }
+  }, [])
+
+  switch (block.type) {
+    case "text":
+      return (
+        <div>
+          <div className="flex items-center gap-0.5 flex-wrap p-1.5 bg-muted/40 rounded-t-lg border border-b-0 border-border">
+            <button onMouseDown={tb(() => exec("bold"))} className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground" title="Жирный"><Bold className="w-3.5 h-3.5" /></button>
+            <button onMouseDown={tb(() => exec("italic"))} className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground" title="Курсив"><Italic className="w-3.5 h-3.5" /></button>
+            <button onMouseDown={tb(() => exec("underline"))} className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground" title="Подчёркнутый"><Underline className="w-3.5 h-3.5" /></button>
+            <button onMouseDown={tb(() => exec("strikeThrough"))} className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground" title="Зачёркнутый"><Strikethrough className="w-3.5 h-3.5" /></button>
+            <Sep />
+            <button onMouseDown={tb(() => exec("formatBlock", "h1"))} className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground" title="Заголовок 1"><Heading1 className="w-3.5 h-3.5" /></button>
+            <button onMouseDown={tb(() => exec("formatBlock", "h2"))} className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground" title="Заголовок 2"><Heading2 className="w-3.5 h-3.5" /></button>
+            <button onMouseDown={tb(() => exec("formatBlock", "h3"))} className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground" title="Заголовок 3"><Heading3 className="w-3.5 h-3.5" /></button>
+            <Sep />
+            <button onMouseDown={tb(cycleAlign)} className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground" title="Выравнивание"><AlignIcon className="w-3.5 h-3.5" /></button>
+            <Sep />
+            <button onMouseDown={tb(() => exec("insertUnorderedList"))} className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground" title="Маркированный список"><ListIcon className="w-3.5 h-3.5" /></button>
+            <button onMouseDown={tb(() => exec("insertOrderedList"))} className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground" title="Нумерованный список"><ListOrdered className="w-3.5 h-3.5" /></button>
+            {/* Link with inline popup */}
+            <div className="relative">
+              <button onMouseDown={tb(openLinkPopup)} className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground" title="Ссылка"><Link2 className="w-3.5 h-3.5" /></button>
+              {linkPopup && (
+                <div className="absolute top-8 left-0 z-50 bg-popover border border-border rounded-lg shadow-lg p-2 w-64 flex gap-1.5">
+                  <Input
+                    autoFocus
+                    placeholder="https://..."
+                    value={linkUrl}
+                    onChange={(e) => setLinkUrl(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") applyLink(); if (e.key === "Escape") setLinkPopup(false) }}
+                    className="h-7 text-xs flex-1"
+                  />
+                  <Button size="sm" className="h-7 px-2 text-xs" onClick={applyLink}>OK</Button>
+                  <Button size="sm" variant="ghost" className="h-7 px-1.5 text-xs" onClick={() => setLinkPopup(false)}><X className="w-3 h-3" /></Button>
+                </div>
+              )}
+            </div>
+            <Sep />
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild><button className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground" title="Переменная"><Hash className="w-3.5 h-3.5" /></button></DropdownMenuTrigger>
+              <DropdownMenuContent>{VARIABLES.map((v) => <DropdownMenuItem key={v.key} onMouseDown={tb(() => insertHtml(`<span class="text-primary font-medium">{{${v.key}}}</span>`))}>
+                <code className="text-xs text-primary mr-2">{`{{${v.key}}}`}</code><span className="text-xs text-muted-foreground">{v.label}</span>
+              </DropdownMenuItem>)}</DropdownMenuContent>
+            </DropdownMenu>
+            <EmojiPicker onSelect={(e) => insertHtml(e)} />
+          </div>
+          <div
+            ref={editorRef}
+            contentEditable
+            suppressContentEditableWarning
+            className="min-h-[100px] text-sm rounded-b-lg border border-t-0 border-border bg-background p-3 outline-none focus:ring-1 focus:ring-ring [&_h1]:text-xl [&_h1]:font-bold [&_h1]:mt-3 [&_h1]:mb-1 [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:mt-2 [&_h2]:mb-1 [&_h3]:text-base [&_h3]:font-semibold [&_h3]:mt-2 [&_ul]:list-disc [&_ul]:ml-4 [&_ol]:list-decimal [&_ol]:ml-4 [&_a]:text-primary [&_a]:underline"
+            onBlur={syncContent}
+            onInput={syncContent}
+            data-placeholder="Введите текст..."
+          />
+        </div>
+      )
+
+    case "image":
+      return <ImageBlockEditor block={block} onUpdate={onUpdate} />
+
+    case "video":
+      return <VideoBlockEditor block={block} onUpdate={onUpdate} />
+
+    case "audio":
+      return <AudioBlockEditor block={block} onUpdate={onUpdate} />
+
+    case "file":
+      return (
+        <div className="space-y-2">
+          <FileDropZone accept="*" label="Загрузите файл (PDF, DOC, XLS до 10 МБ)" onFile={(url, name) => onUpdate({ fileUrl: url, fileName: name })} />
+          <Input placeholder="Или URL файла" value={block.fileUrl} onChange={(e) => onUpdate({ fileUrl: e.target.value })} />
+          <Input placeholder="Название файла" value={block.fileName} onChange={(e) => onUpdate({ fileName: e.target.value })} />
+        </div>
+      )
+
+    case "info":
+      return (
+        <div className="space-y-2">
+          <div className="flex gap-1">
+            {Object.entries(INFO_STYLES).map(([k, v]) => (
+              <Button key={k} variant={block.infoStyle === k ? "default" : "outline"} size="sm" className="text-xs h-6 gap-1 px-2" onClick={() => onUpdate({ infoStyle: k as Block["infoStyle"] })}>{v.icon} {v.label}</Button>
+            ))}
+          </div>
+          <div className={cn("rounded-lg border-l-4 p-3", INFO_STYLES[block.infoStyle].cls)}>
+            <Textarea className="bg-transparent border-0 p-0 min-h-[60px] text-sm focus-visible:ring-0 resize-none" value={block.content} onChange={(e) => onUpdate({ content: e.target.value })} placeholder="Текст инфо-блока..." />
+          </div>
+        </div>
+      )
+
+    case "button":
+      return (
+        <div className="space-y-2">
+          <div className="grid grid-cols-2 gap-2">
+            <Input placeholder="Текст кнопки" value={block.buttonText} onChange={(e) => onUpdate({ buttonText: e.target.value })} />
+            <Input placeholder="https://..." value={block.buttonUrl} onChange={(e) => onUpdate({ buttonUrl: e.target.value })} />
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant={block.buttonVariant === "primary" ? "default" : "outline"} size="sm" className="text-xs" onClick={() => onUpdate({ buttonVariant: "primary" })}>Основная</Button>
+            <Button variant={block.buttonVariant === "outline" ? "default" : "outline"} size="sm" className="text-xs" onClick={() => onUpdate({ buttonVariant: "outline" })}>Контурная</Button>
+          </div>
+          <div className="flex justify-center p-3 bg-muted/30 rounded-lg">
+            <Button variant={block.buttonVariant === "primary" ? "default" : "outline"} size="sm">{block.buttonText || "Кнопка"}</Button>
+          </div>
+        </div>
+      )
+
+    case "task":
+      return (
+        <div className="space-y-3">
+          <Textarea className="text-sm" rows={2} value={block.taskDescription} onChange={(e) => onUpdate({ taskDescription: e.target.value })} placeholder="Описание задания..." />
+          {block.questions.map((q, qi) => (
+            <div key={q.id} className="p-2.5 bg-muted/30 rounded-lg space-y-1.5">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-muted-foreground w-4">{qi + 1}.</span>
+                <Input className="flex-1 text-sm h-8" value={q.text} onChange={(e) => { const nq = [...block.questions]; nq[qi] = { ...nq[qi], text: e.target.value }; onUpdate({ questions: nq }) }} placeholder="Вопрос" />
+                <Select value={q.answerType} onValueChange={(v) => { const nq = [...block.questions]; nq[qi] = { ...nq[qi], answerType: v as Question["answerType"] }; onUpdate({ questions: nq }) }}>
+                  <SelectTrigger className="w-28 h-8 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent><SelectItem value="text">Текст</SelectItem><SelectItem value="single">Один</SelectItem><SelectItem value="multiple">Несколько</SelectItem><SelectItem value="video">Видео</SelectItem></SelectContent>
+                </Select>
+                <button onClick={() => onUpdate({ questions: block.questions.filter((_, j) => j !== qi) })} className="text-muted-foreground hover:text-destructive"><X className="w-3.5 h-3.5" /></button>
+              </div>
+              {(q.answerType === "single" || q.answerType === "multiple") && (
+                <div className="ml-6 space-y-1">
+                  {q.options.map((opt, oi) => (
+                    <div key={oi} className="flex items-center gap-1.5">
+                      <Input className="flex-1 text-xs h-7" value={opt} onChange={(e) => { const nq = [...block.questions]; const no = [...nq[qi].options]; no[oi] = e.target.value; nq[qi] = { ...nq[qi], options: no }; onUpdate({ questions: nq }) }} placeholder={`Вариант ${oi + 1}`} />
+                      <button onClick={() => { const nq = [...block.questions]; nq[qi] = { ...nq[qi], options: nq[qi].options.filter((_, j) => j !== oi) }; onUpdate({ questions: nq }) }} className="text-muted-foreground hover:text-destructive"><X className="w-3 h-3" /></button>
+                    </div>
+                  ))}
+                  <Button variant="ghost" size="sm" className="text-[11px] h-5 px-1.5" onClick={() => { const nq = [...block.questions]; nq[qi] = { ...nq[qi], options: [...nq[qi].options, ""] }; onUpdate({ questions: nq }) }}>+ Вариант</Button>
+                </div>
+              )}
+            </div>
+          ))}
+          <Button variant="outline" size="sm" className="text-xs gap-1" onClick={() => onUpdate({ questions: [...block.questions, { id: `q-${Date.now()}`, text: "", answerType: "text", options: [] }] })}><Plus className="w-3 h-3" />Вопрос</Button>
+        </div>
+      )
+
+    default: return null
+  }
+}
+
+/* ──── Preview ──── */
+function PreviewBlock({ block }: { block: Block }) {
+  const html = replaceVars(block.content)
+  const richTextClass = "text-sm leading-relaxed [&_h1]:text-2xl [&_h1]:font-bold [&_h1]:mb-3 [&_h1]:mt-4 [&_h2]:text-xl [&_h2]:font-semibold [&_h2]:mb-2 [&_h2]:mt-3 [&_h3]:text-lg [&_h3]:font-semibold [&_h3]:mb-2 [&_h3]:mt-2 [&_ul]:list-disc [&_ul]:ml-5 [&_ul]:my-2 [&_ol]:list-decimal [&_ol]:ml-5 [&_ol]:my-2 [&_li]:mb-1 [&_a]:text-primary [&_a]:underline [&_b]:font-bold [&_strong]:font-bold [&_i]:italic [&_em]:italic [&_u]:underline [&_s]:line-through [&_strike]:line-through"
+
+  switch (block.type) {
+    case "text":
+      return <div className={richTextClass} dangerouslySetInnerHTML={{ __html: html }} />
+    case "image":
+      return (
+        <div className={cn("flex gap-4", block.imageLayout === "image-right" && "flex-row-reverse", block.imageLayout === "full" && "flex-col")}>
+          <div className={cn("bg-muted rounded-xl flex items-center justify-center", block.imageLayout === "full" ? "w-full aspect-video" : "w-1/2 min-h-[140px]")}>
+            <ImageIcon className="w-8 h-8 text-muted-foreground/20" />
+          </div>
+          {block.imageLayout !== "full" && <div className={cn("flex-1", richTextClass)} dangerouslySetInnerHTML={{ __html: html }} />}
+          {block.imageLayout === "full" && block.imageCaption && <p className="text-xs text-muted-foreground text-center italic">{block.imageCaption}</p>}
+        </div>
+      )
+    case "video":
+      return (
+        <div className="aspect-video bg-muted rounded-xl flex items-center justify-center cursor-pointer hover:bg-muted/80 transition-colors">
+          <div className="text-center">
+            <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-2">
+              <Play className="w-6 h-6 text-primary ml-0.5" />
+            </div>
+            <p className="text-xs text-muted-foreground">Нажмите для воспроизведения</p>
+          </div>
+        </div>
+      )
+    case "audio":
+      return (
+        <div className="flex items-center gap-4 p-4 bg-muted/50 rounded-xl">
+          <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+            <Play className="w-5 h-5 text-primary ml-0.5" />
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-medium">{block.audioTitle || "Аудио"}</p>
+            <p className="text-xs text-muted-foreground">Нажмите для воспроизведения</p>
+          </div>
+        </div>
+      )
+    case "file":
+      return (
+        <div className="flex items-center gap-3 p-4 border border-border rounded-xl hover:shadow-sm transition-shadow cursor-pointer">
+          <FileText className="w-8 h-8 text-primary flex-shrink-0" />
+          <div>
+            <p className="text-sm font-medium">{block.fileName || "Документ"}</p>
+            <p className="text-xs text-muted-foreground">Нажмите для скачивания</p>
+          </div>
+        </div>
+      )
+    case "info":
+      return (
+        <div className={cn("rounded-xl border-l-4 p-4", INFO_STYLES[block.infoStyle].cls)}>
+          <div className={cn("flex gap-2", richTextClass)}>
+            <span className="flex-shrink-0">{INFO_STYLES[block.infoStyle].icon}</span>
+            <div dangerouslySetInnerHTML={{ __html: html }} />
+          </div>
+        </div>
+      )
+    case "button":
+      return (
+        <div className="flex justify-center py-4">
+          <Button size="lg" variant={block.buttonVariant === "primary" ? "default" : "outline"}>
+            {block.buttonText || "Кнопка"}
+          </Button>
+        </div>
+      )
+    case "task":
+      return (
+        <div className="space-y-4">
+          {block.taskDescription && <div className={richTextClass} dangerouslySetInnerHTML={{ __html: replaceVars(block.taskDescription) }} />}
+          {block.questions.map((q, i) => (
+            <div key={q.id} className="p-4 bg-muted/40 rounded-xl space-y-2">
+              <p className="text-sm font-semibold">{i + 1}. {replaceVars(q.text)}</p>
+              {q.answerType === "text" && <Textarea placeholder="Ваш ответ..." rows={3} className="text-sm bg-background" />}
+              {q.answerType === "video" && (
+                <div className="p-6 bg-muted rounded-xl text-center">
+                  <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-2">
+                    <Video className="w-5 h-5 text-primary" />
+                  </div>
+                  <p className="text-sm text-muted-foreground mb-2">Запишите видео-ответ</p>
+                  <Button variant="outline" size="sm">Начать запись</Button>
+                </div>
+              )}
+              {(q.answerType === "single" || q.answerType === "multiple") && (
+                <div className="space-y-1.5 mt-1">
+                  {q.options.map((o, oi) => (
+                    <label key={oi} className="flex items-center gap-2.5 text-sm py-1.5 px-3 rounded-lg hover:bg-background cursor-pointer transition-colors">
+                      <input type={q.answerType === "single" ? "radio" : "checkbox"} name={q.id} className="accent-primary w-4 h-4" />
+                      {o}
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )
+    default: return null
+  }
+}
+
+/* ──── File Drop Zone ──── */
+function FileDropZone({ accept, label, onFile }: { accept: string; label: string; onFile: (dataUrl: string, name: string) => void }) {
+  const ref = useRef<HTMLInputElement>(null)
+  const handleFile = (file: File) => {
+    const reader = new FileReader()
+    reader.onload = () => onFile(reader.result as string, file.name)
+    reader.readAsDataURL(file)
+  }
+  return (
+    <div
+      className="p-5 bg-muted/30 rounded-lg border-2 border-dashed border-border text-center cursor-pointer hover:border-primary/40 transition-colors"
+      onClick={() => ref.current?.click()}
+      onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add("border-primary") }}
+      onDragLeave={(e) => e.currentTarget.classList.remove("border-primary")}
+      onDrop={(e) => { e.preventDefault(); e.currentTarget.classList.remove("border-primary"); const f = e.dataTransfer.files[0]; if (f) handleFile(f) }}
+    >
+      <Upload className="w-6 h-6 text-muted-foreground/30 mx-auto mb-1" />
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <input ref={ref} type="file" accept={accept} className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f) }} />
+    </div>
+  )
+}
+
+function getEmbedUrl(url: string): string | null {
+  try {
+    // YouTube
+    let m = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]+)/)
+    if (m) return `https://www.youtube.com/embed/${m[1]}`
+    // RuTube
+    m = url.match(/rutube\.ru\/video\/([\w]+)/)
+    if (m) return `https://rutube.ru/play/embed/${m[1]}`
+    // VK
+    m = url.match(/vk\.com\/video(-?\d+_\d+)/)
+    if (m) return `https://vk.com/video_ext.php?oid=${m[1].split("_")[0]}&id=${m[1].split("_")[1]}`
+  } catch {}
+  return null
+}
+
+/* ──── Image Block Editor ──── */
+function ImageBlockEditor({ block, onUpdate }: { block: Block; onUpdate: (p: Partial<Block>) => void }) {
+  return (
+    <div className="space-y-3">
+      <div className="flex gap-2">
+        {(["full", "image-left", "image-right"] as ImageLayout[]).map((l) => (
+          <Button key={l} variant={block.imageLayout === l ? "default" : "outline"} size="sm" className="text-xs h-7" onClick={() => onUpdate({ imageLayout: l })}>
+            {l === "full" ? "⬜ Фото" : l === "image-left" ? "◧ Фото+текст" : "◨ Текст+фото"}
+          </Button>
+        ))}
+      </div>
+      <div className={cn("flex gap-3", block.imageLayout === "image-right" && "flex-row-reverse", block.imageLayout === "full" && "flex-col")}>
+        <div className={cn(block.imageLayout === "full" ? "w-full" : "w-1/2")}>
+          {block.imageUrl ? (
+            <div className="relative group">
+              <img src={block.imageUrl} alt="" className="w-full h-auto rounded-lg" />
+              <button className="absolute top-2 right-2 bg-destructive text-white rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => onUpdate({ imageUrl: "" })}><X className="w-3 h-3" /></button>
+            </div>
+          ) : (
+            <FileDropZone accept="image/*" label="Загрузить изображение" onFile={(url) => onUpdate({ imageUrl: url })} />
+          )}
+          <Input className="mt-1.5 text-xs" placeholder="Или вставьте URL" value={block.imageUrl.startsWith("data:") ? "" : block.imageUrl} onChange={(e) => onUpdate({ imageUrl: e.target.value })} />
+        </div>
+        {block.imageLayout !== "full" && (
+          <Textarea className="flex-1 min-h-[100px] text-sm" value={block.content} onChange={(e) => onUpdate({ content: e.target.value })} placeholder="Текст рядом с фото..." />
+        )}
+      </div>
+    </div>
+  )
+}
+
+/* ──── Video Block Editor ──── */
+function VideoBlockEditor({ block, onUpdate }: { block: Block; onUpdate: (p: Partial<Block>) => void }) {
+  const embedUrl = block.videoUrl ? getEmbedUrl(block.videoUrl) : null
+  const isLocal = block.videoUrl.startsWith("blob:") || block.videoUrl.startsWith("data:")
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [recording, setRecording] = useState(false)
+  const recorderRef = useRef<MediaRecorder | null>(null)
+  const chunksRef = useRef<Blob[]>([])
+  const streamRef = useRef<MediaStream | null>(null)
+  const previewRef = useRef<HTMLVideoElement>(null)
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+      streamRef.current = stream
+      if (previewRef.current) { previewRef.current.srcObject = stream; previewRef.current.play() }
+      const recorder = new MediaRecorder(stream)
+      chunksRef.current = []
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data) }
+      recorder.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: "video/webm" })
+        onUpdate({ videoUrl: URL.createObjectURL(blob) })
+        stream.getTracks().forEach((t) => t.stop())
+        streamRef.current = null
+      }
+      recorderRef.current = recorder
+      recorder.start()
+      setRecording(true)
+    } catch { toast.error("Нет доступа к камере") }
+  }
+
+  const stopRecording = () => {
+    recorderRef.current?.stop()
+    setRecording(false)
+  }
+
+  return (
+    <div className="space-y-2">
+      {/* Actions row */}
+      <div className="flex gap-2 flex-wrap">
+        <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => fileRef.current?.click()}>
+          <FileUp className="w-3.5 h-3.5" />Загрузить файл
+        </Button>
+        <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={recording ? stopRecording : startRecording}>
+          {recording ? <><MicOff className="w-3.5 h-3.5 text-destructive" />Остановить</> : <><Camera className="w-3.5 h-3.5" />Записать</>}
+        </Button>
+        <input ref={fileRef} type="file" accept="video/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) onUpdate({ videoUrl: URL.createObjectURL(f) }) }} />
+      </div>
+      <Input placeholder="🔗 Вставить ссылку (YouTube / RuTube / VK)" value={isLocal ? "" : block.videoUrl} onChange={(e) => onUpdate({ videoUrl: e.target.value })} className="text-xs" />
+
+      {/* Preview area */}
+      {recording ? (
+        <div className="relative rounded-lg overflow-hidden bg-black">
+          <video ref={previewRef} muted className="w-full h-auto" />
+          <div className="absolute top-3 left-3 flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
+            <span className="text-white text-xs font-medium">Запись...</span>
+          </div>
+          <Button size="sm" variant="destructive" className="absolute bottom-3 left-1/2 -translate-x-1/2 gap-1.5" onClick={stopRecording}>
+            <Square className="w-3 h-3" />Остановить
+          </Button>
+        </div>
+      ) : block.videoUrl ? (
+        <div className="relative group">
+          {embedUrl ? (
+            <iframe src={embedUrl} className="w-full aspect-video rounded-lg" allowFullScreen />
+          ) : (
+            <video src={block.videoUrl} controls className="w-full h-auto rounded-lg" />
+          )}
+          <button className="absolute top-2 right-2 bg-destructive text-white rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => onUpdate({ videoUrl: "" })}><X className="w-3 h-3" /></button>
+        </div>
+      ) : null}
+      <Textarea className="text-sm" rows={2} value={block.content} onChange={(e) => onUpdate({ content: e.target.value })} placeholder="Описание (опционально)" />
+    </div>
+  )
+}
+
+/* ──── Audio Block Editor ──── */
+function AudioBlockEditor({ block, onUpdate }: { block: Block; onUpdate: (p: Partial<Block>) => void }) {
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [recording, setRecording] = useState(false)
+  const [recordedUrl, setRecordedUrl] = useState<string | null>(null)
+  const recorderRef = useRef<MediaRecorder | null>(null)
+  const chunksRef = useRef<Blob[]>([])
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const recorder = new MediaRecorder(stream)
+      chunksRef.current = []
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data) }
+      recorder.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: "audio/webm" })
+        const url = URL.createObjectURL(blob)
+        setRecordedUrl(url)
+        stream.getTracks().forEach((t) => t.stop())
+      }
+      recorderRef.current = recorder
+      recorder.start()
+      setRecording(true)
+    } catch { toast.error("Нет доступа к микрофону") }
+  }
+
+  const stopRecording = () => { recorderRef.current?.stop(); setRecording(false) }
+  const useRecording = () => { if (recordedUrl) { onUpdate({ audioUrl: recordedUrl, audioTitle: block.audioTitle || "Голосовая запись" }); setRecordedUrl(null) } }
+  const retryRecording = () => { setRecordedUrl(null) }
+
+  return (
+    <div className="space-y-2">
+      <Input placeholder="Название аудио" value={block.audioTitle} onChange={(e) => onUpdate({ audioTitle: e.target.value })} />
+
+      {/* Actions */}
+      <div className="flex gap-2 flex-wrap">
+        <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => fileRef.current?.click()}>
+          <FileUp className="w-3.5 h-3.5" />Загрузить файл
+        </Button>
+        {!recording && !recordedUrl && (
+          <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={startRecording}>
+            <Mic className="w-3.5 h-3.5" />Записать
+          </Button>
+        )}
+        <input ref={fileRef} type="file" accept="audio/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) onUpdate({ audioUrl: URL.createObjectURL(f), audioTitle: block.audioTitle || f.name }) }} />
+      </div>
+
+      {/* Recording state */}
+      {recording && (
+        <div className="flex items-center gap-3 p-3 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg">
+          <span className="w-3 h-3 rounded-full bg-red-500 animate-pulse flex-shrink-0" />
+          <div className="flex-1 flex items-center gap-1">
+            {[...Array(12)].map((_, i) => (
+              <div key={i} className="w-1 bg-red-400 rounded-full animate-pulse" style={{ height: `${8 + Math.random() * 16}px`, animationDelay: `${i * 0.1}s` }} />
+            ))}
+          </div>
+          <Button size="sm" variant="destructive" className="gap-1 text-xs" onClick={stopRecording}>
+            <Square className="w-3 h-3" />Стоп
+          </Button>
+        </div>
+      )}
+
+      {/* Recorded preview (not yet applied) */}
+      {recordedUrl && !recording && (
+        <div className="p-3 bg-muted/50 rounded-lg space-y-2">
+          <audio src={recordedUrl} controls className="w-full" />
+          <div className="flex gap-2">
+            <Button size="sm" className="gap-1 text-xs flex-1" onClick={useRecording}><Check className="w-3 h-3" />Использовать</Button>
+            <Button size="sm" variant="outline" className="gap-1 text-xs" onClick={retryRecording}>Перезаписать</Button>
+          </div>
+        </div>
+      )}
+
+      {/* Applied audio player */}
+      {block.audioUrl && !recordedUrl && (
+        <div className="relative group">
+          <audio src={block.audioUrl} controls className="w-full" />
+          <button className="absolute -top-1 -right-1 bg-destructive text-white rounded-full w-5 h-5 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => onUpdate({ audioUrl: "" })}><X className="w-2.5 h-2.5" /></button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function TBtn({ icon: I, tip, onClick, disabled, className }: { icon: React.ElementType; tip: string; onClick?: () => void; disabled?: boolean; className?: string }) {
+  return <button type="button" title={tip} onMouseDown={(e) => { e.preventDefault(); onClick?.() }} disabled={disabled} className={cn("p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors disabled:opacity-30", className)}><I className="w-3.5 h-3.5" /></button>
+}
+function Sep() { return <div className="w-px h-5 bg-border mx-0.5" /> }
+
+/* ──── Emoji Picker (big, categorized) ──── */
+function EmojiPicker({ onSelect }: { onSelect: (emoji: string) => void }) {
+  const [open, setOpen] = useState(false)
+  const categories = Object.entries(EMOJI_DATA)
+
+  return (
+    <div className="relative">
+      <button className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground" title="Эмодзи" onClick={() => setOpen(!open)}><Smile className="w-3.5 h-3.5" /></button>
+      {open && (
+        <div className="absolute top-8 right-0 z-50 bg-popover border border-border rounded-xl shadow-xl p-3 w-[400px] max-h-[350px] overflow-y-auto">
+          {categories.map(([name, emojis]) => (
+            <div key={name} className="mb-3">
+              <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider mb-1.5">{name}</p>
+              <div className="flex flex-wrap gap-0.5">
+                {emojis.map((e) => (
+                  <button key={e} className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-muted text-lg transition-colors" onClick={() => { onSelect(e); setOpen(false) }}>{e}</button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ──── Lesson Icon Picker (two tabs: emoji + lucide) ──── */
+function LessonIconPicker({ current, onSelect }: { current: string; onSelect: (v: string) => void }) {
+  const [open, setOpen] = useState(false)
+  const [tab, setTab] = useState<"emoji" | "icons">("emoji")
+  const categories = Object.entries(EMOJI_DATA)
+
+  return (
+    <div className="relative">
+      <button className="text-2xl hover:bg-muted rounded-lg p-1 transition-colors" onClick={() => setOpen(!open)}>{current}</button>
+      {open && (
+        <div className="absolute top-12 left-0 z-50 bg-popover border border-border rounded-xl shadow-xl w-[400px] overflow-hidden">
+          {/* Tabs */}
+          <div className="flex border-b border-border">
+            <button className={cn("flex-1 py-2 text-xs font-medium transition-colors", tab === "emoji" ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground")} onClick={() => setTab("emoji")}>😊 Эмодзи</button>
+            <button className={cn("flex-1 py-2 text-xs font-medium transition-colors", tab === "icons" ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground")} onClick={() => setTab("icons")}>⚡ Иконки</button>
+          </div>
+          <div className="p-3 max-h-[300px] overflow-y-auto">
+            {tab === "emoji" ? (
+              <>
+                {categories.map(([name, emojis]) => (
+                  <div key={name} className="mb-3">
+                    <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider mb-1">{name}</p>
+                    <div className="flex flex-wrap gap-0.5">
+                      {emojis.map((e) => (
+                        <button key={e} className={cn("w-8 h-8 flex items-center justify-center rounded-md hover:bg-muted text-lg transition-colors", current === e && "bg-primary/10 ring-1 ring-primary")} onClick={() => { onSelect(e); setOpen(false) }}>{e}</button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </>
+            ) : (
+              <div className="grid grid-cols-6 gap-1">
+                {LUCIDE_ICONS_FOR_PICKER.map((name) => {
+                  const Icon = LUCIDE_MAP[name]
+                  if (!Icon) return null
+                  return (
+                    <button key={name} title={name} className="flex flex-col items-center gap-0.5 p-2 rounded-lg hover:bg-muted transition-colors" onClick={() => { onSelect(name); setOpen(false) }}>
+                      <Icon className="w-5 h-5 text-foreground" />
+                      <span className="text-[9px] text-muted-foreground truncate w-full text-center">{name}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}

@@ -32,9 +32,10 @@ function formatTimeAgo(date: Date) {
 
 export function FunnelView({ columns }: FunnelViewProps) {
   const [expandedCardId, setExpandedCardId] = useState<string | null>(null)
-  const maxCount = Math.max(...columns.map((c) => c.count))
+  const maxCount = Math.max(1, ...columns.map((c) => c.count))
 
   const conversionRates = columns.map((col, i) => {
+    if (columns[0].count === 0) return 0
     if (i === 0) return 100
     return Math.round((col.count / columns[0].count) * 100)
   })
@@ -47,9 +48,9 @@ export function FunnelView({ columns }: FunnelViewProps) {
         <div className="space-y-1">
           {columns.map((col, i) => {
             const widthPct = Math.max(20, (col.count / maxCount) * 100)
-            const dropPct = i > 0
+            const dropPct = i > 0 && columns[i - 1].count > 0
               ? Math.round(((columns[i - 1].count - col.count) / columns[i - 1].count) * 100)
-              : null
+              : i > 0 ? 0 : null
 
             return (
               <div key={col.id}>

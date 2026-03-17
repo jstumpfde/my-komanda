@@ -88,8 +88,8 @@ const defaultCategories: VacancyCategory[] = [
   {
     id: "sales",
     name: "Продажи",
-    icon: "Briefcase",
-    iconName: "Briefcase",
+    icon: "ShoppingCart",
+    iconName: "ShoppingCart",
     vacancies: 5,
     candidates: 47,
     order: 0,
@@ -153,6 +153,49 @@ export function reorderCategoryItems(categoryId: string, startIndex: number, end
   if (category && category.items) {
     const [removed] = category.items.splice(startIndex, 1)
     category.items.splice(endIndex, 0, removed)
+  }
+}
+
+export function addVacancyToCategory(sectionName: string, vacancyId: string, vacancyTitle: string) {
+  // Map section name to existing category or create new one
+  const sectionToId: Record<string, string> = {
+    "Продажи": "sales",
+    "IT": "it",
+    "Операции": "operations",
+    "Логистика": "logistics",
+    "Строительство": "construction",
+    "Розница": "retail",
+    "Металлоконструкции": "metal",
+  }
+  const sectionToIcon: Record<string, string> = {
+    "Логистика": "Truck",
+    "Строительство": "Building2",
+    "Розница": "Store",
+    "Металлоконструкции": "Wrench",
+  }
+
+  const catId = sectionToId[sectionName] || sectionName.toLowerCase()
+  let category = categories.find((c) => c.id === catId)
+
+  if (!category) {
+    // Create new category
+    category = {
+      id: catId,
+      name: sectionName,
+      icon: sectionToIcon[sectionName] || "Briefcase",
+      iconName: sectionToIcon[sectionName] || "Briefcase",
+      vacancies: 0,
+      candidates: 0,
+      order: categories.length,
+      items: [],
+    }
+    categories.push(category)
+  }
+
+  // Add vacancy item if not already present
+  if (!category.items.find((i) => i.id === vacancyId)) {
+    category.items.push({ id: vacancyId, name: vacancyTitle, candidates: 0 })
+    category.vacancies = category.items.length
   }
 }
 
