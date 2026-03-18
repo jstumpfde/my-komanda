@@ -30,7 +30,7 @@ import {
   Building2, Truck, Palette, Code2, Megaphone, GraduationCap,
 } from "lucide-react"
 import { toast } from "sonner"
-import type { Demo, Block, BlockType, ImageLayout, Question, Lesson } from "@/lib/course-types"
+import type { Demo, Block, BlockType, ImageLayout, FileLayout, Question, Lesson } from "@/lib/course-types"
 import { VARIABLES, BLOCK_TYPE_META, createBlock, replaceVars } from "@/lib/course-types"
 import { LibraryDialog } from "./library-dialog"
 import { AiGenerateDialog } from "./ai-generate-dialog"
@@ -64,11 +64,20 @@ const LUCIDE_MAP: Record<string, React.ElementType> = {
   Building2, Truck, Palette, Code2, Megaphone, GraduationCap,
 }
 
-const INFO_STYLES: Record<string, { label: string; cls: string; icon: string }> = {
-  info: { label: "Инфо", cls: "border-blue-300 bg-blue-50 dark:bg-blue-950/30", icon: "ℹ️" },
-  warning: { label: "Внимание", cls: "border-amber-300 bg-amber-50 dark:bg-amber-950/30", icon: "⚠️" },
-  success: { label: "Успех", cls: "border-emerald-300 bg-emerald-50 dark:bg-emerald-950/30", icon: "✅" },
-  error: { label: "Ошибка", cls: "border-red-300 bg-red-50 dark:bg-red-950/30", icon: "❌" },
+const INFO_STYLES: Record<string, { label: string; cls: string; icon: string; borderColor: string }> = {
+  info: { label: "Инфо", cls: "bg-blue-50 dark:bg-blue-950/30", icon: "ℹ️", borderColor: "#3B82F6" },
+  warning: { label: "Внимание", cls: "bg-amber-50 dark:bg-amber-950/30", icon: "⚠️", borderColor: "#F59E0B" },
+  success: { label: "Успех", cls: "bg-emerald-50 dark:bg-emerald-950/30", icon: "✅", borderColor: "#22C55E" },
+  error: { label: "Ошибка", cls: "bg-red-50 dark:bg-red-950/30", icon: "❌", borderColor: "#EF4444" },
+}
+
+function getFileIcon(fileName: string): { icon: string; color: string } {
+  const ext = fileName.split(".").pop()?.toLowerCase() || ""
+  if (ext === "pdf") return { icon: "📕", color: "text-red-600 bg-red-100 dark:bg-red-950" }
+  if (["doc", "docx"].includes(ext)) return { icon: "📘", color: "text-blue-600 bg-blue-100 dark:bg-blue-950" }
+  if (["xls", "xlsx"].includes(ext)) return { icon: "📗", color: "text-emerald-600 bg-emerald-100 dark:bg-emerald-950" }
+  if (["ppt", "pptx"].includes(ext)) return { icon: "📙", color: "text-amber-600 bg-amber-100 dark:bg-amber-950" }
+  return { icon: "📄", color: "text-muted-foreground bg-muted" }
 }
 
 export function DemoCard({ demo, onBack, onUpdate }: DemoCardProps) {
@@ -315,9 +324,9 @@ export function DemoCard({ demo, onBack, onUpdate }: DemoCardProps) {
         </div>
       </div>
 
-      <div className="flex gap-4" style={{ minHeight: "calc(100vh - 280px)" }}>
+      <div className="flex gap-4" style={{ height: "calc(100vh - 220px)" }}>
         {/* LEFT — Lesson list */}
-        <div className="w-[280px] flex-shrink-0 border border-border rounded-xl bg-card overflow-hidden flex flex-col">
+        <div className="w-[280px] flex-shrink-0 border border-border rounded-xl bg-card overflow-hidden flex flex-col sticky top-0">
           <div className="flex items-center justify-between px-3 py-2 border-b border-border">
             <h4 className="text-sm font-semibold">Уроки</h4>
             <DropdownMenu>
@@ -454,7 +463,7 @@ export function DemoCard({ demo, onBack, onUpdate }: DemoCardProps) {
                         <TBtn icon={Trash2} tip="Удалить" onClick={() => removeBlock(block.id)} className="hover:text-destructive" />
                       </div>
                     </div>
-                    <div className="rounded-lg border border-transparent hover:border-border transition-colors p-1">
+                    <div className={cn("rounded-lg border border-transparent hover:border-border transition-colors", block.type === "info" ? "p-0" : "p-1")}>
                       <BlockEditor key={block.id} block={block} onUpdate={(p) => updateBlock(block.id, p)} />
                     </div>
                   </div>
@@ -700,28 +709,44 @@ function BlockEditor({ block, onUpdate }: { block: Block; onUpdate: (p: Partial<
     case "audio":
       return <AudioBlockEditor block={block} onUpdate={onUpdate} />
 
-    case "file":
-      return (
-        <div className="space-y-2">
-          <FileDropZone accept="*" label="Загрузите файл (PDF, DOC, XLS до 10 МБ)" onFile={(url, name) => onUpdate({ fileUrl: url, fileName: name })} />
-          <Input placeholder="Или URL файла" value={block.fileUrl} onChange={(e) => onUpdate({ fileUrl: e.target.value })} />
-          <Input placeholder="Название файла" value={block.fileName} onChange={(e) => onUpdate({ fileName: e.target.value })} />
+    case "file": {
+      const fl = block.fileLayout || "full"
+      const fi = getFileIcon(block.fileName || "")
+      const fileCard = block.fileUrl ? (
+        <div className={cn("w-16 h-16 rounded-xl flex items-center justify-center text-3xl mx-auto", fi.color)}>
+          {fi.icon}
         </div>
-      )
-
-    case "info":
+      ) : null
       return (
-        <div className="space-y-2">
-          <div className="flex gap-1">
-            {Object.entries(INFO_STYLES).map(([k, v]) => (
-              <Button key={k} variant={block.infoStyle === k ? "default" : "outline"} size="sm" className="text-xs h-6 gap-1 px-2" onClick={() => onUpdate({ infoStyle: k as Block["infoStyle"] })}>{v.icon} {v.label}</Button>
+        <div className="space-y-3">
+          <div className="flex gap-2">
+            {(["full", "file-left", "file-right"] as FileLayout[]).map((l) => (
+              <Button key={l} variant={fl === l ? "default" : "outline"} size="sm" className="text-xs h-7" onClick={() => onUpdate({ fileLayout: l })}>
+                {l === "full" ? "📄 Документ" : l === "file-left" ? "📄↔ Документ+текст" : "↔📄 Текст+документ"}
+              </Button>
             ))}
           </div>
-          <div className={cn("rounded-lg border-l-4 p-3", INFO_STYLES[block.infoStyle].cls)}>
-            <Textarea className="bg-transparent border-0 p-0 min-h-[60px] text-sm focus-visible:ring-0 resize-none" value={block.content} onChange={(e) => onUpdate({ content: e.target.value })} placeholder="Текст инфо-блока..." />
-          </div>
+          {!block.fileUrl ? (
+            <FileDropZone accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx" label="Загрузите файл (PDF, DOC, XLS до 10 МБ)" onFile={(url, name) => onUpdate({ fileUrl: url, fileName: name })} />
+          ) : (
+            <div className={cn("flex gap-4", fl === "file-right" && "flex-row-reverse", fl === "full" && "flex-col items-center")}>
+              <div className="flex flex-col items-center gap-1.5 flex-shrink-0 relative group">
+                {fileCard}
+                <p className="text-xs font-medium text-foreground text-center max-w-[120px] truncate">{block.fileName}</p>
+                <button className="absolute -top-1 -right-1 bg-destructive text-white rounded-full w-5 h-5 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => onUpdate({ fileUrl: "", fileName: "" })}><X className="w-2.5 h-2.5" /></button>
+              </div>
+              {fl !== "full" && (
+                <Textarea className="flex-1 min-h-[80px] text-sm" value={block.content} onChange={(e) => onUpdate({ content: e.target.value })} placeholder="Текст рядом с документом..." />
+              )}
+            </div>
+          )}
+          <Input placeholder="Название файла" value={block.fileName} onChange={(e) => onUpdate({ fileName: e.target.value })} className="text-xs" />
         </div>
       )
+    }
+
+    case "info":
+      return <InfoBlockEditor block={block} onUpdate={onUpdate} />
 
     case "button":
       return (
@@ -740,37 +765,80 @@ function BlockEditor({ block, onUpdate }: { block: Block; onUpdate: (p: Partial<
         </div>
       )
 
-    case "task":
+    case "task": {
+      const uq = (qi: number, patch: Partial<Question>) => {
+        const nq = [...block.questions]; nq[qi] = { ...nq[qi], ...patch }; onUpdate({ questions: nq })
+      }
       return (
         <div className="space-y-3">
           <Textarea className="text-sm" rows={2} value={block.taskDescription} onChange={(e) => onUpdate({ taskDescription: e.target.value })} placeholder="Описание задания..." />
           {block.questions.map((q, qi) => (
-            <div key={q.id} className="p-2.5 bg-muted/30 rounded-lg space-y-1.5">
+            <div key={q.id} className="p-3 bg-muted/30 rounded-lg space-y-2">
+              {/* Question header */}
               <div className="flex items-center gap-2">
                 <span className="text-xs font-bold text-muted-foreground w-4">{qi + 1}.</span>
-                <Input className="flex-1 text-sm h-8" value={q.text} onChange={(e) => { const nq = [...block.questions]; nq[qi] = { ...nq[qi], text: e.target.value }; onUpdate({ questions: nq }) }} placeholder="Вопрос" />
-                <Select value={q.answerType} onValueChange={(v) => { const nq = [...block.questions]; nq[qi] = { ...nq[qi], answerType: v as Question["answerType"] }; onUpdate({ questions: nq }) }}>
+                <Input className="flex-1 text-sm h-8" value={q.text} onChange={(e) => uq(qi, { text: e.target.value })} placeholder="Вопрос" />
+                <Select value={q.answerType} onValueChange={(v) => uq(qi, { answerType: v as Question["answerType"], correctOptions: [] })}>
                   <SelectTrigger className="w-28 h-8 text-xs"><SelectValue /></SelectTrigger>
                   <SelectContent><SelectItem value="text">Текст</SelectItem><SelectItem value="single">Один</SelectItem><SelectItem value="multiple">Несколько</SelectItem><SelectItem value="video">Видео</SelectItem></SelectContent>
                 </Select>
+                <Input type="number" min={1} max={10} value={q.weight ?? 1} onChange={(e) => uq(qi, { weight: parseInt(e.target.value) || 1 })} className="w-14 h-8 text-xs text-center" title="Вес вопроса (1-10)" />
                 <button onClick={() => onUpdate({ questions: block.questions.filter((_, j) => j !== qi) })} className="text-muted-foreground hover:text-destructive"><X className="w-3.5 h-3.5" /></button>
               </div>
-              {(q.answerType === "single" || q.answerType === "multiple") && (
+
+              {/* Options with correct answers — single */}
+              {q.answerType === "single" && (
                 <div className="ml-6 space-y-1">
                   {q.options.map((opt, oi) => (
                     <div key={oi} className="flex items-center gap-1.5">
-                      <Input className="flex-1 text-xs h-7" value={opt} onChange={(e) => { const nq = [...block.questions]; const no = [...nq[qi].options]; no[oi] = e.target.value; nq[qi] = { ...nq[qi], options: no }; onUpdate({ questions: nq }) }} placeholder={`Вариант ${oi + 1}`} />
-                      <button onClick={() => { const nq = [...block.questions]; nq[qi] = { ...nq[qi], options: nq[qi].options.filter((_, j) => j !== oi) }; onUpdate({ questions: nq }) }} className="text-muted-foreground hover:text-destructive"><X className="w-3 h-3" /></button>
+                      <input type="radio" name={`correct-${q.id}`} checked={(q.correctOptions || [])[0] === oi} onChange={() => uq(qi, { correctOptions: [oi] })} className="accent-emerald-600 w-3.5 h-3.5" title="Правильный" />
+                      <Input className="flex-1 text-xs h-7" value={opt} onChange={(e) => { const no = [...q.options]; no[oi] = e.target.value; uq(qi, { options: no }) }} placeholder={`Вариант ${oi + 1}`} />
+                      <button onClick={() => uq(qi, { options: q.options.filter((_, j) => j !== oi), correctOptions: (q.correctOptions || []).filter((c) => c !== oi).map((c) => c > oi ? c - 1 : c) })} className="text-muted-foreground hover:text-destructive"><X className="w-3 h-3" /></button>
                     </div>
                   ))}
-                  <Button variant="ghost" size="sm" className="text-[11px] h-5 px-1.5" onClick={() => { const nq = [...block.questions]; nq[qi] = { ...nq[qi], options: [...nq[qi].options, ""] }; onUpdate({ questions: nq }) }}>+ Вариант</Button>
+                  <Button variant="ghost" size="sm" className="text-[11px] h-5 px-1.5" onClick={() => uq(qi, { options: [...q.options, ""] })}>+ Вариант</Button>
+                </div>
+              )}
+
+              {/* Options with correct answers — multiple */}
+              {q.answerType === "multiple" && (
+                <div className="ml-6 space-y-1">
+                  {q.options.map((opt, oi) => (
+                    <div key={oi} className="flex items-center gap-1.5">
+                      <input type="checkbox" checked={(q.correctOptions || []).includes(oi)} onChange={(e) => {
+                        const co = q.correctOptions || []
+                        uq(qi, { correctOptions: e.target.checked ? [...co, oi] : co.filter((c) => c !== oi) })
+                      }} className="accent-emerald-600 w-3.5 h-3.5" title="Правильный" />
+                      <Input className="flex-1 text-xs h-7" value={opt} onChange={(e) => { const no = [...q.options]; no[oi] = e.target.value; uq(qi, { options: no }) }} placeholder={`Вариант ${oi + 1}`} />
+                      <button onClick={() => uq(qi, { options: q.options.filter((_, j) => j !== oi), correctOptions: (q.correctOptions || []).filter((c) => c !== oi).map((c) => c > oi ? c - 1 : c) })} className="text-muted-foreground hover:text-destructive"><X className="w-3 h-3" /></button>
+                    </div>
+                  ))}
+                  <Button variant="ghost" size="sm" className="text-[11px] h-5 px-1.5" onClick={() => uq(qi, { options: [...q.options, ""] })}>+ Вариант</Button>
+                </div>
+              )}
+
+              {/* Text answer — exact or AI scoring */}
+              {q.answerType === "text" && (
+                <div className="ml-6 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center bg-muted rounded-lg p-0.5">
+                      <Button variant={(q.textMatchMode || "ai") === "exact" ? "default" : "ghost"} size="sm" className="h-6 text-[11px] px-2" onClick={() => uq(qi, { textMatchMode: "exact" })}>Точное совпадение</Button>
+                      <Button variant={(q.textMatchMode || "ai") === "ai" ? "default" : "ghost"} size="sm" className="h-6 text-[11px] px-2" onClick={() => uq(qi, { textMatchMode: "ai" })}>AI-оценка</Button>
+                    </div>
+                  </div>
+                  {(q.textMatchMode || "ai") === "exact" ? (
+                    <Input className="text-xs h-7" value={q.correctText || ""} onChange={(e) => uq(qi, { correctText: e.target.value })} placeholder="Правильный ответ" />
+                  ) : (
+                    <Textarea className="text-xs" rows={2} value={q.aiCriteria || ""} onChange={(e) => uq(qi, { aiCriteria: e.target.value })} placeholder="Критерии для AI: например, 'Кандидат должен упомянуть опыт в продажах и работу с возражениями'" />
+                  )}
                 </div>
               )}
             </div>
           ))}
-          <Button variant="outline" size="sm" className="text-xs gap-1" onClick={() => onUpdate({ questions: [...block.questions, { id: `q-${Date.now()}`, text: "", answerType: "text", options: [] }] })}><Plus className="w-3 h-3" />Вопрос</Button>
+          <Button variant="outline" size="sm" className="text-xs gap-1" onClick={() => onUpdate({ questions: [...block.questions, { id: `q-${Date.now()}`, text: "", answerType: "text", options: [], weight: 1 }] })}><Plus className="w-3 h-3" />Вопрос</Button>
         </div>
       )
+    }
 
     default: return null
   }
@@ -817,25 +885,34 @@ function PreviewBlock({ block }: { block: Block }) {
           </div>
         </div>
       )
-    case "file":
+    case "file": {
+      const pfi = getFileIcon(block.fileName || "")
       return (
-        <div className="flex items-center gap-3 p-4 border border-border rounded-xl hover:shadow-sm transition-shadow cursor-pointer">
-          <FileText className="w-8 h-8 text-primary flex-shrink-0" />
+        <div className="flex items-center gap-4 p-4 border border-border rounded-xl hover:shadow-sm transition-shadow cursor-pointer">
+          <div className={cn("w-16 h-16 rounded-xl flex items-center justify-center text-3xl flex-shrink-0", pfi.color)}>{pfi.icon}</div>
           <div>
             <p className="text-sm font-medium">{block.fileName || "Документ"}</p>
             <p className="text-xs text-muted-foreground">Нажмите для скачивания</p>
           </div>
         </div>
       )
-    case "info":
+    }
+    case "info": {
+      const pStyle = INFO_STYLES[block.infoStyle]
+      const pBorder = block.infoColor || pStyle.borderColor
+      const pIcon = block.infoIcon || pStyle.icon
+      const pSz = block.infoSize || "m"
+      const pSzMap = { s: { pad: "py-2 px-3", ic: "text-base" }, m: { pad: "py-3 px-4", ic: "text-2xl" }, l: { pad: "py-4 px-5", ic: "text-[32px]" }, xl: { pad: "py-6 px-7", ic: "text-[40px]" } }
+      const ps = pSzMap[pSz]
       return (
-        <div className={cn("rounded-xl border-l-4 p-4", INFO_STYLES[block.infoStyle].cls)}>
-          <div className={cn("flex gap-2", richTextClass)}>
-            <span className="flex-shrink-0">{INFO_STYLES[block.infoStyle].icon}</span>
+        <div className={cn("rounded-xl w-full min-h-[48px]", ps.pad)} style={{ border: `2px solid ${pBorder}`, borderLeft: `4px solid ${pBorder}` }}>
+          <div className={cn("flex gap-3", richTextClass)}>
+            <span className={cn("flex-shrink-0", ps.ic)}>{pIcon}</span>
             <div dangerouslySetInnerHTML={{ __html: html }} />
           </div>
         </div>
       )
+    }
     case "button":
       return (
         <div className="flex justify-center py-4">
@@ -932,7 +1009,7 @@ function ImageBlockEditor({ block, onUpdate }: { block: Block; onUpdate: (p: Par
         <div className={cn(block.imageLayout === "full" ? "w-full" : "w-1/2")}>
           {block.imageUrl ? (
             <div className="relative group">
-              <img src={block.imageUrl} alt="" className="w-full h-auto rounded-lg" />
+              <img src={block.imageUrl} alt="" className="max-w-[800px] max-h-[600px] w-full h-auto object-contain rounded-lg mx-auto" />
               <button className="absolute top-2 right-2 bg-destructive text-white rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => onUpdate({ imageUrl: "" })}><X className="w-3 h-3" /></button>
             </div>
           ) : (
@@ -1000,8 +1077,8 @@ function VideoBlockEditor({ block, onUpdate }: { block: Block; onUpdate: (p: Par
 
       {/* Preview area */}
       {recording ? (
-        <div className="relative rounded-lg overflow-hidden bg-black">
-          <video ref={previewRef} muted className="w-full h-auto" />
+        <div className="relative rounded-lg overflow-hidden bg-black max-w-[800px] mx-auto">
+          <video ref={previewRef} muted className="w-full aspect-video" />
           <div className="absolute top-3 left-3 flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
             <span className="text-white text-xs font-medium">Запись...</span>
@@ -1011,11 +1088,11 @@ function VideoBlockEditor({ block, onUpdate }: { block: Block; onUpdate: (p: Par
           </Button>
         </div>
       ) : block.videoUrl ? (
-        <div className="relative group">
+        <div className="relative group max-w-[800px] mx-auto">
           {embedUrl ? (
             <iframe src={embedUrl} className="w-full aspect-video rounded-lg" allowFullScreen />
           ) : (
-            <video src={block.videoUrl} controls className="w-full h-auto rounded-lg" />
+            <video src={block.videoUrl} controls className="w-full aspect-video rounded-lg" />
           )}
           <button className="absolute top-2 right-2 bg-destructive text-white rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => onUpdate({ videoUrl: "" })}><X className="w-3 h-3" /></button>
         </div>
@@ -1089,7 +1166,7 @@ function AudioBlockEditor({ block, onUpdate }: { block: Block; onUpdate: (p: Par
 
       {/* Recorded preview (not yet applied) */}
       {recordedUrl && !recording && (
-        <div className="p-3 bg-muted/50 rounded-lg space-y-2">
+        <div className="p-3 bg-muted/50 rounded-lg space-y-2 max-w-[480px]">
           <audio src={recordedUrl} controls className="w-full" />
           <div className="flex gap-2">
             <Button size="sm" className="gap-1 text-xs flex-1" onClick={useRecording}><Check className="w-3 h-3" />Использовать</Button>
@@ -1100,11 +1177,144 @@ function AudioBlockEditor({ block, onUpdate }: { block: Block; onUpdate: (p: Par
 
       {/* Applied audio player */}
       {block.audioUrl && !recordedUrl && (
-        <div className="relative group">
+        <div className="relative group max-w-[480px]">
           <audio src={block.audioUrl} controls className="w-full" />
           <button className="absolute -top-1 -right-1 bg-destructive text-white rounded-full w-5 h-5 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => onUpdate({ audioUrl: "" })}><X className="w-2.5 h-2.5" /></button>
         </div>
       )}
+    </div>
+  )
+}
+
+/* ──── Info Block Editor ──── */
+function InfoBlockEditor({ block, onUpdate }: { block: Block; onUpdate: (p: Partial<Block>) => void }) {
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const popRef = useRef<HTMLDivElement>(null)
+
+  const style = INFO_STYLES[block.infoStyle]
+  const borderCol = block.infoColor || style.borderColor
+  const icon = block.infoIcon || style.icon
+  const sz = block.infoSize || "m"
+
+  const sizeMap = {
+    s: { pad: "py-2 px-3", iconBox: "w-8 h-8", iconText: "text-sm", textCls: "text-sm" },
+    m: { pad: "py-3 px-4", iconBox: "w-10 h-10", iconText: "text-lg", textCls: "text-base" },
+    l: { pad: "py-4 px-5", iconBox: "w-12 h-12", iconText: "text-2xl", textCls: "text-lg" },
+    xl: { pad: "py-5 px-6", iconBox: "w-14 h-14", iconText: "text-3xl", textCls: "text-xl" },
+  }
+  const ss = sizeMap[sz]
+
+  const presetColors = [
+    { c: "#3B82F6", l: "Синий" }, { c: "#F59E0B", l: "Жёлтый" }, { c: "#22C55E", l: "Зелёный" },
+    { c: "#EF4444", l: "Красный" }, { c: "#8B5CF6", l: "Фиолетовый" }, { c: "#F97316", l: "Оранжевый" },
+    { c: "#6B7280", l: "Серый" },
+  ]
+  const infoIcons = ["ℹ️","📌","⚠️","✅","❌","💡","🔥","⭐","🎯","📢","🔔","💬","❓","❕"]
+  const sizes: { key: "s"|"m"|"l"|"xl"; label: string }[] = [
+    { key: "s", label: "S" }, { key: "m", label: "M" }, { key: "l", label: "L" }, { key: "xl", label: "XL" },
+  ]
+
+  // Close popover on outside click
+  useEffect(() => {
+    if (!settingsOpen) return
+    const handler = (e: MouseEvent) => {
+      if (popRef.current && !popRef.current.contains(e.target as Node)) setSettingsOpen(false)
+    }
+    document.addEventListener("mousedown", handler)
+    return () => document.removeEventListener("mousedown", handler)
+  }, [settingsOpen])
+
+  return (
+    <div className={cn("rounded-xl w-full min-h-[48px]", ss.pad)} style={{ border: `2px solid ${borderCol}`, borderLeft: `4px solid ${borderCol}` }}>
+      <div className="flex gap-3 items-start">
+        {/* Icon in circle */}
+        <div className={cn("rounded-full flex items-center justify-center flex-shrink-0", ss.iconBox)} style={{ backgroundColor: `${borderCol}20`, border: `2px solid ${borderCol}` }}>
+          <span className={ss.iconText}>{icon}</span>
+        </div>
+
+        {/* Text */}
+        <Textarea
+          className={cn("bg-transparent border-0 p-0 focus-visible:ring-0 resize-none flex-1 min-h-0 h-auto", ss.textCls)}
+          value={block.content}
+          onChange={(e) => onUpdate({ content: e.target.value })}
+          placeholder="Текст инфо-блока..."
+          rows={1}
+        />
+
+        {/* Inline toolbar */}
+        <div className="flex items-center gap-0.5 flex-shrink-0 mt-0.5 relative">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground" title="Переменная"><Hash className="w-3.5 h-3.5" /></button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent>{VARIABLES.map((v) => <DropdownMenuItem key={v.key} onClick={() => onUpdate({ content: block.content + `{{${v.key}}}` })}>
+              <code className="text-xs text-primary mr-2">{`{{${v.key}}}`}</code><span className="text-xs text-muted-foreground">{v.label}</span>
+            </DropdownMenuItem>)}</DropdownMenuContent>
+          </DropdownMenu>
+
+          <EmojiPicker onSelect={(e) => onUpdate({ content: block.content + e })} />
+
+          <button className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground" title="Настройки" onClick={() => setSettingsOpen(!settingsOpen)}>
+            <MoreHorizontal className="w-3.5 h-3.5" />
+          </button>
+
+          {/* Settings popover */}
+          {settingsOpen && (
+            <div ref={popRef} className="absolute top-8 right-0 z-50 bg-popover border border-border rounded-xl shadow-xl p-4 w-[300px] space-y-4">
+              {/* Icons */}
+              <div>
+                <p className="text-[11px] text-muted-foreground font-medium mb-1.5">Выберите иконку:</p>
+                <div className="flex flex-wrap gap-1">
+                  {infoIcons.map((ic) => (
+                    <button key={ic} onClick={() => onUpdate({ infoIcon: ic })} className={cn("w-8 h-8 rounded-lg flex items-center justify-center text-lg hover:bg-muted transition-colors", icon === ic && "bg-primary/10 ring-1 ring-primary")}>{ic}</button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Preset colors */}
+              <div>
+                <p className="text-[11px] text-muted-foreground font-medium mb-1.5">Стандартные цвета:</p>
+                <div className="flex items-center gap-1.5">
+                  {presetColors.map((p) => (
+                    <button key={p.c} title={p.l} onClick={() => onUpdate({ infoColor: p.c })} className={cn("w-7 h-7 rounded-full border-2 transition-transform hover:scale-110", borderCol === p.c ? "border-foreground scale-110" : "border-transparent")} style={{ backgroundColor: p.c }} />
+                  ))}
+                </div>
+              </div>
+
+              {/* Custom color */}
+              <div>
+                <p className="text-[11px] text-muted-foreground font-medium mb-1.5">Выберите цвет:</p>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="color" value={borderCol} onChange={(e) => onUpdate({ infoColor: e.target.value })} className="w-8 h-8 rounded border border-border cursor-pointer" />
+                  <span className="text-xs text-muted-foreground font-mono">{borderCol}</span>
+                </label>
+              </div>
+
+              {/* Size */}
+              <div>
+                <p className="text-[11px] text-muted-foreground font-medium mb-1.5">Размер:</p>
+                <div className="flex items-center bg-muted rounded-lg p-0.5">
+                  {sizes.map((s) => (
+                    <Button key={s.key} variant={sz === s.key ? "default" : "ghost"} size="sm" className="h-7 flex-1 text-xs font-bold" onClick={() => onUpdate({ infoSize: s.key })}>{s.label}</Button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Type */}
+              <div>
+                <p className="text-[11px] text-muted-foreground font-medium mb-1.5">Тип:</p>
+                <div className="flex items-center gap-1">
+                  {Object.entries(INFO_STYLES).map(([k, v]) => (
+                    <Button key={k} variant={block.infoStyle === k ? "default" : "outline"} size="sm" className="text-xs h-7 gap-1 px-2 flex-1" onClick={() => onUpdate({ infoStyle: k as Block["infoStyle"], infoColor: "", infoIcon: v.icon })}>
+                      <span className="text-sm">{v.icon}</span>{v.label}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   )
 }

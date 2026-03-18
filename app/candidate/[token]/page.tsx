@@ -48,14 +48,14 @@ function saveProgress(token: string, progress: CandidateProgress) {
 // Бренд — использует глобальные настройки
 function getBrandStyles(candidate: PublicCandidate, globalBrand?: BrandConfig | null) {
   if (candidate.brandPlan === "trial") {
-    return { color: "#3b82f6", bgColor: "#f0f4ff", textColor: "#1e293b", name: "HireFlow", showHireFlowLogo: true, logoUrl: null as string | null }
+    return { color: "#3b82f6", bgColor: "#f0f4ff", textColor: "#1e293b", name: "Моя Команда", showBrandLogo: true, logoUrl: null as string | null }
   }
   const color = globalBrand?.primaryColor || candidate.brandColor
   const bgColor = globalBrand?.bgColor || "#f0f4ff"
   const textColor = globalBrand?.textColor || "#1e293b"
   const logoUrl = globalBrand?.logoUrl || null
   const name = globalBrand?.companyName || candidate.company
-  return { color, bgColor, textColor, name, showHireFlowLogo: false, logoUrl }
+  return { color, bgColor, textColor, name, showBrandLogo: false, logoUrl }
 }
 
 export default function CandidatePublicPage({ params }: { params: Promise<{ token: string }> }) {
@@ -152,7 +152,7 @@ function WelcomeScreen({
   candidate, brand, onStart, onReentry,
 }: {
   candidate: PublicCandidate
-  brand: { color: string; bgColor: string; textColor: string; name: string; showHireFlowLogo: boolean; logoUrl: string | null }
+  brand: { color: string; bgColor: string; textColor: string; name: string; showBrandLogo: boolean; logoUrl: string | null }
   onStart: () => void
   onReentry: () => void
 }) {
@@ -161,10 +161,10 @@ function WelcomeScreen({
       <div className="max-w-lg w-full text-center space-y-8">
         {/* Логотип */}
         <div className="flex justify-center">
-          {brand.showHireFlowLogo ? (
+          {brand.showBrandLogo ? (
             <div className="flex items-center gap-2">
               <div className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-lg" style={{ background: `linear-gradient(135deg, ${brand.color}, #6366f1)` }}>H</div>
-              <span className="text-2xl font-bold" style={{ color: brand.textColor }}>HireFlow</span>
+              <span className="text-2xl font-bold" style={{ color: brand.textColor }}>Моя Команда</span>
             </div>
           ) : (
             <div className="flex items-center gap-2">
@@ -222,9 +222,9 @@ function WelcomeScreen({
         </div>
 
         {/* Футер */}
-        {brand.showHireFlowLogo && (
+        {brand.showBrandLogo && (
           <p className="text-xs text-muted-foreground/50 pt-4">
-            Powered by HireFlow
+            Powered by Моя Команда
           </p>
         )}
       </div>
@@ -238,7 +238,7 @@ function WelcomeScreen({
 function ReentryScreen({
   brand, onSuccess, onBack,
 }: {
-  brand: { color: string; name: string; showHireFlowLogo: boolean }
+  brand: { color: string; name: string; showBrandLogo: boolean }
   onSuccess: () => void
   onBack: () => void
 }) {
@@ -347,7 +347,7 @@ function LessonsScreen({
   candidate, brand, progress, updateProgress, onComplete,
 }: {
   candidate: PublicCandidate
-  brand: { color: string; name: string; showHireFlowLogo: boolean }
+  brand: { color: string; name: string; showBrandLogo: boolean }
   progress: CandidateProgress
   updateProgress: (u: Partial<CandidateProgress>) => void
   onComplete: () => void
@@ -558,7 +558,7 @@ function FinalScreen({
   candidate, brand, progress, updateProgress,
 }: {
   candidate: PublicCandidate
-  brand: { color: string; name: string; showHireFlowLogo: boolean }
+  brand: { color: string; name: string; showBrandLogo: boolean }
   progress: CandidateProgress
   updateProgress: (u: Partial<CandidateProgress>) => void
 }) {
@@ -672,8 +672,8 @@ function FinalScreen({
           </>
         )}
 
-        {brand.showHireFlowLogo && (
-          <p className="text-xs text-muted-foreground/50 pt-4">Powered by HireFlow</p>
+        {brand.showBrandLogo && (
+          <p className="text-xs text-muted-foreground/50 pt-4">Powered by Моя Команда</p>
         )}
       </div>
     </div>

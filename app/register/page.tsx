@@ -43,7 +43,7 @@ export default function RegisterPage() {
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white font-bold">
               <Briefcase className="w-5 h-5" />
             </div>
-            <span className="text-xl font-bold text-foreground">HireFlow</span>
+            <span className="text-xl font-bold text-foreground">Моя Команда</span>
           </div>
         </div>
 

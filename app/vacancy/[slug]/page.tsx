@@ -92,7 +92,7 @@ export default function VacancyLandingPage({ params }: { params: Promise<{ slug:
             <Play className="w-5 h-5 mr-2" />
             Начать демонстрацию
           </Button>
-          <p className="text-xs text-muted-foreground/50">Powered by HireFlow</p>
+          <p className="text-xs text-muted-foreground/50">Powered by Моя Команда</p>
         </div>
       </div>
     )
@@ -238,7 +238,7 @@ export default function VacancyLandingPage({ params }: { params: Promise<{ slug:
             </Card>
           )}
 
-          <p className="text-center text-xs text-muted-foreground/50">Powered by HireFlow</p>
+          <p className="text-center text-xs text-muted-foreground/50">Powered by Моя Команда</p>
         </div>
       </div>
     </div>

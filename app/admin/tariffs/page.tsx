@@ -15,14 +15,18 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { DEFAULT_TARIFFS, formatPrice, type Tariff, type TariffFeatures } from "@/lib/tariff-types"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import {
-  Plus, Pencil, Trash2, Check, X, Shield, Save,
+  Plus, Pencil, Trash2, Check, X, Shield, Save, UserPlus,
 } from "lucide-react"
 
 export default function AdminTariffsPage() {
   const [tariffs, setTariffs] = useState<Tariff[]>(DEFAULT_TARIFFS)
   const [editingTariff, setEditingTariff] = useState<Tariff | null>(null)
   const [sheetOpen, setSheetOpen] = useState(false)
+  const [buyCandidatesOpen, setBuyCandidatesOpen] = useState(false)
+  const [buyTariffId, setBuyTariffId] = useState<string | null>(null)
+  const [buyPackage, setBuyPackage] = useState(10)
 
   const openEdit = (tariff: Tariff) => {
     setEditingTariff({ ...tariff })
@@ -148,9 +152,16 @@ export default function AdminTariffsPage() {
                             )}
                           </td>
                           <td className="text-center px-4 py-3">
-                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(tariff)}>
-                              <Pencil className="w-3.5 h-3.5" />
-                            </Button>
+                            <div className="flex items-center justify-center gap-0.5">
+                              <Button variant="ghost" size="icon" className="h-8 w-8" title="Редактировать" onClick={() => openEdit(tariff)}>
+                                <Pencil className="w-3.5 h-3.5" />
+                              </Button>
+                              {tariff.id !== "trial" && (
+                                <Button variant="ghost" size="icon" className="h-8 w-8" title="Докупить кандидатов" onClick={() => { setBuyTariffId(tariff.id); setBuyPackage(10); setBuyCandidatesOpen(true) }}>
+                                  <UserPlus className="w-3.5 h-3.5" />
+                                </Button>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -162,6 +173,56 @@ export default function AdminTariffsPage() {
           </div>
         </main>
       </SidebarInset>
+
+      {/* Dialog: Докупить кандидатов */}
+      <Dialog open={buyCandidatesOpen} onOpenChange={setBuyCandidatesOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle>Увеличить лимит кандидатов</DialogTitle></DialogHeader>
+          {(() => {
+            const t = tariffs.find((x) => x.id === buyTariffId)
+            if (!t) return null
+            const packages = [
+              { count: 10, price: 500 },
+              { count: 25, price: 1250 },
+              { count: 50, price: 2500 },
+              { count: 100, price: 5000 },
+              { count: 150, price: 7500 },
+              { count: 250, price: 12500 },
+              { count: 500, price: 25000 },
+            ]
+            const selected = packages.find((p) => p.count === buyPackage) || packages[0]
+            return (
+              <div className="space-y-4 py-2">
+                <p className="text-xs text-muted-foreground">Тариф: <span className="font-medium text-foreground">{t.name}</span> · Текущий лимит: <span className="font-medium text-foreground">{t.maxCandidates.toLocaleString("ru-RU")}</span></p>
+                <div className="space-y-1.5">
+                  {packages.map((p) => (
+                    <label key={p.count} className={cn("flex items-center gap-3 px-3 py-2 rounded-lg border cursor-pointer transition-colors", buyPackage === p.count ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50")}>
+                      <input type="radio" name="package" checked={buyPackage === p.count} onChange={() => setBuyPackage(p.count)} className="accent-primary" />
+                      <span className="flex-1 text-sm font-medium">+{p.count} кандидатов</span>
+                      <span className="text-sm font-semibold">{p.price.toLocaleString("ru-RU")} ₽</span>
+                    </label>
+                  ))}
+                </div>
+                <p className="text-[11px] text-muted-foreground">Цена за кандидата: 50 ₽</p>
+                <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                  <span className="text-sm text-muted-foreground">Лимит после покупки:</span>
+                  <span className="text-sm font-bold text-foreground">{t.maxCandidates.toLocaleString("ru-RU")} → {(t.maxCandidates + selected.count).toLocaleString("ru-RU")}</span>
+                </div>
+                <div className="flex gap-2">
+                  <Button variant="outline" className="flex-1" onClick={() => setBuyCandidatesOpen(false)}>Отмена</Button>
+                  <Button className="flex-1" onClick={() => {
+                    setTariffs((prev) => prev.map((x) => x.id === buyTariffId ? { ...x, maxCandidates: x.maxCandidates + selected.count } : x))
+                    setBuyCandidatesOpen(false)
+                    toast.success(`+${selected.count} кандидатов добавлено к тарифу ${t.name}`)
+                  }}>
+                    Оплатить {selected.price.toLocaleString("ru-RU")} ₽
+                  </Button>
+                </div>
+              </div>
+            )
+          })()}
+        </DialogContent>
+      </Dialog>
 
       {/* Sheet редактирования */}
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>

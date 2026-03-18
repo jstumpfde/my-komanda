@@ -32,6 +32,7 @@ interface KanbanBoardProps {
   onColumnsChange: (columns: ColumnData[]) => void
   onOpenProfile?: (candidate: Candidate, columnId: string) => void
   onAction?: (candidateId: string, columnId: string, action: CandidateAction) => void
+  hideViewSwitcher?: boolean
 }
 
 const VIEW_BUTTONS: { mode: ViewMode; icon: React.ElementType; label: string }[] = [
@@ -41,47 +42,66 @@ const VIEW_BUTTONS: { mode: ViewMode; icon: React.ElementType; label: string }[]
   { mode: "tiles", icon: Grid3X3, label: "Плитки" },
 ]
 
-export function KanbanBoard({ settings, viewMode, onViewModeChange, columns, onColumnsChange, onOpenProfile, onAction }: KanbanBoardProps) {
+export function KanbanBoard({ settings, viewMode, onViewModeChange, columns, onColumnsChange, onOpenProfile, onAction, hideViewSwitcher }: KanbanBoardProps) {
   const handleColorChange = (colId: string, from: string, to: string) => {
     onColumnsChange(
       columns.map((col) => (col.id === colId ? { ...col, colorFrom: from, colorTo: to } : col))
     )
   }
 
+  const handleTitleChange = (colId: string, title: string) => {
+    onColumnsChange(
+      columns.map((col) => (col.id === colId ? { ...col, title } : col))
+    )
+  }
+
   return (
     <div>
       {/* View mode switcher */}
-      <div className="flex items-center gap-2 mb-5">
-        <div className="flex items-center bg-muted rounded-lg p-1 gap-0.5">
-          {VIEW_BUTTONS.map(({ mode, icon: Icon, label }) => (
-            <Button
-              key={mode}
-              variant={viewMode === mode ? "default" : "ghost"}
-              size="sm"
-              className={cn(
-                "h-7 px-3 text-xs gap-1.5 transition-all",
-                viewMode === mode ? "shadow-sm" : "text-muted-foreground hover:text-foreground"
-              )}
-              onClick={() => onViewModeChange(mode)}
-            >
-              <Icon className="w-3.5 h-3.5" />
-              {label}
-            </Button>
+      {!hideViewSwitcher && (
+        <div className="flex items-center gap-2 mb-5">
+          <div className="flex items-center bg-muted rounded-lg p-1 gap-0.5">
+            {VIEW_BUTTONS.map(({ mode, icon: Icon, label }) => (
+              <Button
+                key={mode}
+                variant={viewMode === mode ? "default" : "ghost"}
+                size="sm"
+                className={cn(
+                  "h-7 px-3 text-xs gap-1.5 transition-all",
+                  viewMode === mode ? "shadow-sm" : "text-muted-foreground hover:text-foreground"
+                )}
+                onClick={() => onViewModeChange(mode)}
+              >
+                <Icon className="w-3.5 h-3.5" />
+                {label}
+              </Button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Kanban column counters — mobile */}
+      {viewMode === "kanban" && (
+        <div className="flex gap-1.5 mb-3 overflow-x-auto pb-1 md:hidden">
+          {columns.map(col => (
+            <div key={col.id} className="flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium shrink-0 border" style={{ borderColor: col.colorFrom + "40", color: col.colorFrom }}>
+              {col.title.split(" ")[0]} <span className="font-bold">{col.count}</span>
+            </div>
           ))}
         </div>
-      </div>
+      )}
 
       {/* Kanban View — no drag-and-drop */}
       {viewMode === "kanban" && (
-        <div className="overflow-x-auto pb-4">
-          <div className="flex gap-4 min-w-min">
+        <div className="overflow-x-auto pb-4 -mx-4 px-4 sm:mx-0 sm:px-0 snap-x snap-mandatory md:snap-none">
+          <div className="flex gap-3">
             {columns.map((column) => {
               const isDecision = HR_DECISION_COLUMNS.includes(column.id)
 
               return (
                 <div
                   key={column.id}
-                  className="flex flex-col w-80 flex-shrink-0 rounded-xl"
+                  className="flex flex-col flex-1 min-w-[180px] rounded-xl snap-start"
                 >
                   {/* Column Header */}
                   <div className="mb-3 rounded-xl overflow-hidden">
@@ -105,6 +125,8 @@ export function KanbanBoard({ settings, viewMode, onViewModeChange, columns, onC
                         colorFrom={column.colorFrom}
                         colorTo={column.colorTo}
                         onColorChange={(from, to) => handleColorChange(column.id, from, to)}
+                        title={column.title}
+                        onTitleChange={(t) => handleTitleChange(column.id, t)}
                       />
                     </div>
                   </div>

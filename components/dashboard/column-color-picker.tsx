@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Input } from "@/components/ui/input"
 import { Pipette } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -23,9 +24,11 @@ interface ColumnColorPickerProps {
   colorFrom: string
   colorTo: string
   onColorChange: (from: string, to: string) => void
+  title?: string
+  onTitleChange?: (title: string) => void
 }
 
-export function ColumnColorPicker({ colorFrom, colorTo, onColorChange }: ColumnColorPickerProps) {
+export function ColumnColorPicker({ colorFrom, colorTo, onColorChange, title, onTitleChange }: ColumnColorPickerProps) {
   const [localFrom, setLocalFrom] = useState(colorFrom)
   const [localTo, setLocalTo] = useState(colorTo)
 
@@ -58,6 +61,16 @@ export function ColumnColorPicker({ colorFrom, colorTo, onColorChange }: ColumnC
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-52 p-3" align="end" side="bottom">
+        {onTitleChange && (
+          <div className="mb-3">
+            <label className="text-[11px] text-muted-foreground font-medium">Название</label>
+            <Input
+              value={title || ""}
+              onChange={(e) => onTitleChange(e.target.value)}
+              className="h-8 text-sm mt-1"
+            />
+          </div>
+        )}
         <p className="text-xs font-medium text-foreground mb-2">Цвет статуса</p>
         <div className="grid grid-cols-5 gap-1.5 mb-3">
           {PRESET_COLORS.map((preset) => (

@@ -100,7 +100,7 @@ export default function OnboardingPage() {
         <div className="max-w-2xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white font-bold text-sm">H</div>
-            <span className="text-lg font-bold text-foreground">HireFlow</span>
+            <span className="text-lg font-bold text-foreground">Моя Команда</span>
           </div>
           <Badge variant="outline" className="text-xs">Шаг {currentStep + 1} из {totalSteps}</Badge>
         </div>

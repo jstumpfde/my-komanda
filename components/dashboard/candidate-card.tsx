@@ -33,6 +33,7 @@ export interface Candidate {
   interviewDate?: Date       // дата интервью
   interviewTime?: string     // время слота
   utmSource?: string         // UTM название источника
+  workFormat?: "office" | "remote" | "hybrid"
 }
 
 interface CandidateCardProps {
@@ -47,11 +48,11 @@ interface CandidateCardProps {
 }
 
 export function CandidateCard({ candidate, settings, columnId, onOpenProfile, onAction }: CandidateCardProps) {
-  const isHrDecision = columnId === "hr_decision"
-  const isFinalDecision = columnId === "final_decision"
+  const isHrDecision = columnId === "task"
+  const isFinalDecision = columnId === "interviewed"
   const isDecisionColumn = HR_DECISION_COLUMNS.includes(columnId)
-  const isDemoColumn = columnId === "demo"
-  const isInterviewColumn = columnId === "interview"
+  const isDemoColumn = columnId === "demo" || columnId === "answers"
+  const isInterviewColumn = columnId === "scheduled"
   const isHiredColumn = columnId === "hired"
   const isAutoColumn = !isDecisionColumn && !isHiredColumn
 
@@ -226,26 +227,23 @@ export function CandidateCard({ candidate, settings, columnId, onOpenProfile, on
       {settings.showActions && (
         <div className="pt-2 border-t border-border/60 mt-1">
           {isHrDecision && (
-            /* Решение HR: Пригласить на интервью / Отказать / Резерв / Подумать */
             <div className="space-y-1.5">
+              <Button
+                size="sm"
+                className="w-full h-9 sm:h-8 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white"
+                onClick={() => onAction?.(candidate.id, columnId, "advance")}
+              >
+                <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
+                Пригласить на интервью
+              </Button>
               <div className="flex items-center gap-1.5">
-                <Button
-                  size="sm"
-                  className="flex-1 h-8 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white"
-                  onClick={() => onAction?.(candidate.id, columnId, "advance")}
-                >
-                  <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
-                  Пригласить на интервью
-                </Button>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <Button variant="ghost" size="sm" className="flex-1 h-7 text-[11px] text-destructive hover:bg-destructive/10" onClick={() => onAction?.(candidate.id, columnId, "reject")}>
+                <Button variant="ghost" size="sm" className="flex-1 h-9 sm:h-7 text-[11px] text-destructive hover:bg-destructive/10" onClick={() => onAction?.(candidate.id, columnId, "reject")}>
                   <XCircle className="w-3 h-3 mr-1" /> Отказать
                 </Button>
-                <Button variant="ghost" size="sm" className="flex-1 h-7 text-[11px] text-warning hover:bg-warning/10" onClick={() => onAction?.(candidate.id, columnId, "reserve")}>
+                <Button variant="ghost" size="sm" className="flex-1 h-9 sm:h-7 text-[11px] text-warning hover:bg-warning/10" onClick={() => onAction?.(candidate.id, columnId, "reserve")}>
                   <Archive className="w-3 h-3 mr-1" /> В резерв
                 </Button>
-                <Button variant="ghost" size="sm" className="flex-1 h-7 text-[11px] text-muted-foreground hover:bg-muted" onClick={() => onAction?.(candidate.id, columnId, "think")}>
+                <Button variant="ghost" size="sm" className="flex-1 h-9 sm:h-7 text-[11px] text-muted-foreground hover:bg-muted" onClick={() => onAction?.(candidate.id, columnId, "think")}>
                   <HelpCircle className="w-3 h-3 mr-1" /> Подумать
                 </Button>
               </div>
@@ -253,49 +251,38 @@ export function CandidateCard({ candidate, settings, columnId, onOpenProfile, on
           )}
 
           {isFinalDecision && (
-            /* Финальное решение: Нанять / Отказать / Резерв */
             <div className="space-y-1.5">
               <Button
                 size="sm"
-                className="w-full h-8 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white"
+                className="w-full h-9 sm:h-8 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white"
                 onClick={() => onAction?.(candidate.id, columnId, "hire")}
               >
                 <ThumbsUp className="w-3.5 h-3.5 mr-1" />
                 Нанять
               </Button>
               <div className="flex items-center gap-1.5">
-                <Button variant="ghost" size="sm" className="flex-1 h-7 text-[11px] text-destructive hover:bg-destructive/10" onClick={() => onAction?.(candidate.id, columnId, "reject")}>
+                <Button variant="ghost" size="sm" className="flex-1 h-9 sm:h-7 text-[11px] text-destructive hover:bg-destructive/10" onClick={() => onAction?.(candidate.id, columnId, "reject")}>
                   <XCircle className="w-3 h-3 mr-1" /> Отказать
                 </Button>
-                <Button variant="ghost" size="sm" className="flex-1 h-7 text-[11px] text-warning hover:bg-warning/10" onClick={() => onAction?.(candidate.id, columnId, "reserve")}>
+                <Button variant="ghost" size="sm" className="flex-1 h-9 sm:h-7 text-[11px] text-warning hover:bg-warning/10" onClick={() => onAction?.(candidate.id, columnId, "reserve")}>
                   <Archive className="w-3 h-3 mr-1" /> В резерв
                 </Button>
               </div>
             </div>
           )}
 
-          {isAutoColumn && (
-            /* Авто-колонки: только профиль */
-            <div className="flex items-center gap-1.5">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="flex-1 h-7 text-[11px] text-muted-foreground hover:text-primary"
-                onClick={() => onOpenProfile?.(candidate)}
-              >
-                <ArrowRight className="w-3 h-3 mr-1" />
-                Открыть профиль
-              </Button>
-            </div>
-          )}
+          {isAutoColumn && !isHrDecision && !isFinalDecision && !isHiredColumn && null}
 
-          {isHiredColumn && (
-            <div className="flex items-center gap-1.5">
-              <Button variant="ghost" size="sm" className="flex-1 h-7 text-[11px] text-muted-foreground hover:text-primary" onClick={() => onOpenProfile?.(candidate)}>
-                <ArrowRight className="w-3 h-3 mr-1" /> Профиль
-              </Button>
-            </div>
-          )}
+          {/* Открыть профиль — всегда видна */}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full h-7 text-[11px] text-muted-foreground hover:text-primary mt-1"
+            onClick={() => onOpenProfile?.(candidate)}
+          >
+            <ArrowRight className="w-3 h-3 mr-1" />
+            Открыть профиль
+          </Button>
         </div>
       )}
     </div>

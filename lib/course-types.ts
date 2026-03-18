@@ -1,12 +1,19 @@
 export type BlockType = "text" | "image" | "video" | "audio" | "file" | "info" | "button" | "task"
 
 export type ImageLayout = "full" | "image-left" | "image-right"
+export type AudioLayout = "full" | "audio-left" | "audio-right"
+export type FileLayout = "full" | "file-left" | "file-right"
 
 export interface Question {
   id: string
   text: string
   answerType: "text" | "single" | "multiple" | "video"
   options: string[]
+  correctOptions?: number[]
+  textMatchMode?: "exact" | "ai"
+  correctText?: string
+  aiCriteria?: string
+  weight?: number
 }
 
 export interface Block {
@@ -19,9 +26,14 @@ export interface Block {
   videoUrl: string
   audioUrl: string
   audioTitle: string
+  audioLayout?: AudioLayout
   fileUrl: string
   fileName: string
+  fileLayout?: FileLayout
   infoStyle: "info" | "warning" | "success" | "error"
+  infoColor?: string
+  infoIcon?: string
+  infoSize?: "s" | "m" | "l" | "xl"
   buttonText: string
   buttonUrl: string
   buttonVariant: "primary" | "outline"
@@ -77,13 +89,19 @@ export const BLOCK_TYPE_META: { type: BlockType; icon: string; label: string }[]
   { type: "task", icon: "✅", label: "Задание" },
 ]
 
+function defaultQuestion(): Question {
+  return { id: `q-${Date.now()}`, text: "", answerType: "text", options: [], correctOptions: [], textMatchMode: "ai", correctText: "", aiCriteria: "", weight: 1 }
+}
+
 export function createBlock(type: BlockType): Block {
   return {
     id: `blk-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
     type, content: "", imageUrl: "", imageLayout: "full", imageCaption: "",
-    videoUrl: "", audioUrl: "", audioTitle: "", fileUrl: "", fileName: "",
-    infoStyle: "info", buttonText: "Подробнее", buttonUrl: "", buttonVariant: "primary",
-    taskDescription: "", questions: type === "task" ? [{ id: `q-${Date.now()}`, text: "", answerType: "text", options: [] }] : [],
+    videoUrl: "", audioUrl: "", audioTitle: "", audioLayout: "full",
+    fileUrl: "", fileName: "", fileLayout: "full",
+    infoStyle: "info", infoColor: "",
+    buttonText: "Подробнее", buttonUrl: "", buttonVariant: "primary",
+    taskDescription: "", questions: type === "task" ? [defaultQuestion()] : [],
   }
 }
 
@@ -139,15 +157,15 @@ export const DEFAULT_LESSONS: Lesson[] = [
   ]),
   lesson("l13", "✅", "Задания и вопросы", [
     { ...createBlock("task"), id: "b13", taskDescription: "Ответьте на несколько вопросов — это поможет нам лучше понять ваш опыт и мотивацию.", questions: [
-      { id: "q1", text: "Расскажите о вашем опыте работы", answerType: "text" as const, options: [] },
-      { id: "q2", text: "Почему вас заинтересовала эта должность?", answerType: "text" as const, options: [] },
-      { id: "q3", text: "Какой у вас опыт продаж?", answerType: "single" as const, options: ["Нет опыта", "Менее 1 года", "1-3 года", "3-5 лет", "Более 5 лет"] },
+      { ...defaultQuestion(), id: "q1", text: "Расскажите о вашем опыте работы" },
+      { ...defaultQuestion(), id: "q2", text: "Почему вас заинтересовала эта должность?" },
+      { ...defaultQuestion(), id: "q3", text: "Какой у вас опыт продаж?", answerType: "single", options: ["Нет опыта", "Менее 1 года", "1-3 года", "3-5 лет", "Более 5 лет"] },
     ]},
   ]),
   lesson("l14", "🎥", "Видео-визитка", [
     { ...createBlock("task"), id: "b14", taskDescription: "Запишите короткое видео (1-2 минуты) о себе.", questions: [
-      { id: "vq1", text: "Кто вы и чем занимаетесь", answerType: "video" as const, options: [] },
-      { id: "vq2", text: "Почему хотите работать в {{компания}}?", answerType: "video" as const, options: [] },
+      { ...defaultQuestion(), id: "vq1", text: "Кто вы и чем занимаетесь", answerType: "video" },
+      { ...defaultQuestion(), id: "vq2", text: "Почему хотите работать в {{компания}}?", answerType: "video" },
     ]},
   ]),
   lesson("l15", "➡️", "Что дальше", [

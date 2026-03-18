@@ -49,12 +49,12 @@ export default function LoginPage() {
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white font-bold">
               <Briefcase className="w-5 h-5" />
             </div>
-            <span className="text-xl font-bold text-foreground">HireFlow</span>
+            <span className="text-xl font-bold text-foreground">Моя Команда</span>
           </div>
         </div>
 
         <div className="text-center">
-          <h1 className="text-2xl font-bold text-foreground">Войти в HireFlow</h1>
+          <h1 className="text-2xl font-bold text-foreground">Войти в Моя Команда</h1>
           <p className="text-muted-foreground text-sm mt-1">Добро пожаловать!</p>
         </div>
 

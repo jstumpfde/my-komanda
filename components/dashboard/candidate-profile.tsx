@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useRef, useEffect } from "react"
 import type { Candidate } from "./candidate-card"
 import { Sheet, SheetContent } from "@/components/ui/sheet"
 import { Badge } from "@/components/ui/badge"
@@ -14,8 +14,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import type { CandidateAction } from "@/lib/column-config"
+import { useAuth } from "@/lib/auth"
+import { Input } from "@/components/ui/input"
 import {
-  MapPin, Briefcase, Circle, Calendar, Star, ExternalLink,
+  MapPin, Briefcase, Circle, Calendar, Star, ExternalLink, Archive,
   CheckCircle2, XCircle, Clock, MessageSquare, Send, User,
   Play, FileText, History, Bot, Phone, Video, Building2,
   ChevronRight, Sparkles,
@@ -92,18 +94,68 @@ interface CandidateProfileProps {
   onAction?: (candidateId: string, columnId: string, action: CandidateAction) => void
 }
 
-// ─── Утилиты ────────────────────────────────────────────────
+// ─── Score thresholds (persisted via state, shared across component) ──
+
+interface ScoreThreshold {
+  excellent: { min: number; color: string }
+  good: { min: number; color: string }
+  weak: { color: string }
+}
+
+const DEFAULT_THRESHOLDS: ScoreThreshold = {
+  excellent: { min: 85, color: "#86EFAC" },
+  good: { min: 65, color: "#F97316" },
+  weak: { color: "#EF4444" },
+}
+
+let globalThresholds: ScoreThreshold = { ...DEFAULT_THRESHOLDS }
+
+function getScoreRingStyle(score: number): string {
+  if (score <= 0) return "#D1D5DB"
+  if (score >= 100) return "#22C55E"
+  if (score >= globalThresholds.excellent.min) return globalThresholds.excellent.color
+  if (score >= globalThresholds.good.min) return globalThresholds.good.color
+  return globalThresholds.weak.color
+}
 
 function getScoreColor(score: number) {
-  if (score >= 80) return "text-emerald-600 bg-emerald-500"
-  if (score >= 70) return "text-amber-600 bg-amber-500"
+  if (score >= globalThresholds.excellent.min) return "text-emerald-600 bg-emerald-500"
+  if (score >= globalThresholds.good.min) return "text-amber-600 bg-amber-500"
   return "text-red-600 bg-red-500"
 }
 
-function getScoreRingColor(score: number) {
-  if (score >= 80) return "border-emerald-500"
-  if (score >= 70) return "border-amber-500"
-  return "border-red-500"
+function ScoreRing({ score, size = 44 }: { score: number; size?: number }) {
+  const r = (size - 6) / 2 // radius accounting for stroke
+  const circ = 2 * Math.PI * r
+  const pct = Math.max(0, Math.min(100, score))
+  const offset = circ - (pct / 100) * circ
+  const color = getScoreRingStyle(score)
+  const noData = score === 0 || score == null
+
+  return (
+    <svg width={size} height={size} className="block">
+      {/* Background circle */}
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--border)" strokeWidth={3} />
+      {/* Progress arc */}
+      {!noData && (
+        <circle
+          cx={size / 2} cy={size / 2} r={r}
+          fill="none" stroke={color} strokeWidth={3}
+          strokeDasharray={circ} strokeDashoffset={offset}
+          strokeLinecap="round"
+          transform={`rotate(-90 ${size / 2} ${size / 2})`}
+          className="transition-all duration-500"
+        />
+      )}
+      {/* Score text */}
+      <text x="50%" y="50%" textAnchor="middle" dominantBaseline="central"
+        fill={noData ? "#D1D5DB" : color}
+        fontSize={noData ? 11 : 14} fontWeight="bold"
+      >
+        {noData ? "—" : score}
+      </text>
+    </svg>
+  )
 }
 
 const channelIcons: Record<string, { icon: typeof MessageSquare; color: string }> = {
@@ -123,6 +175,20 @@ export function CandidateProfile({ candidate, columnId, columnTitle, columnColor
   const [interviewType, setInterviewType] = useState("online")
   const [interviewDuration, setInterviewDuration] = useState("45")
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null)
+  const [scorePopup, setScorePopup] = useState(false)
+  const [thresholds, setThresholds] = useState<ScoreThreshold>(() => globalThresholds)
+  const scorePopRef = useRef<HTMLDivElement>(null)
+  const { role } = useAuth()
+  const canEditThresholds = role === "admin" || role === "manager"
+
+  useEffect(() => {
+    if (!scorePopup) return
+    const handler = (e: MouseEvent) => {
+      if (scorePopRef.current && !scorePopRef.current.contains(e.target as Node)) setScorePopup(false)
+    }
+    document.addEventListener("mousedown", handler)
+    return () => document.removeEventListener("mousedown", handler)
+  }, [scorePopup])
 
   if (!candidate) return null
 
@@ -171,7 +237,63 @@ export function CandidateProfile({ candidate, columnId, columnTitle, columnColor
                 <AvatarFallback className="bg-primary/10 text-primary text-lg font-semibold">{initials}</AvatarFallback>
               </Avatar>
               <div className="flex-1 min-w-0">
-                <h2 className="text-xl font-bold text-foreground">{candidate.name}</h2>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-xl font-bold text-foreground">{candidate.name}</h2>
+                  {/* AI Score — inline next to name with SVG arc */}
+                  <div className="relative ml-3">
+                    <button
+                      onClick={() => canEditThresholds && setScorePopup(!scorePopup)}
+                      className={cn("w-[44px] h-[44px] relative shrink-0 transition-transform", canEditThresholds && "cursor-pointer hover:scale-110")}
+                      title={canEditThresholds ? "Настройка порогов" : `AI-скор: ${candidate.score}`}
+                    >
+                      <ScoreRing score={candidate.score} size={44} />
+                    </button>
+
+                    {/* Score threshold settings popup */}
+                    {scorePopup && canEditThresholds && (
+                      <div ref={scorePopRef} className="absolute top-12 left-0 z-50 bg-popover border border-border rounded-xl shadow-xl p-4 w-[320px] space-y-3">
+                        <p className="text-xs font-semibold text-foreground">Настройка цветовых порогов AI-скора</p>
+
+                        {/* Excellent */}
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: thresholds.excellent.color }} />
+                          <span className="text-xs text-muted-foreground w-14 shrink-0">Отлично:</span>
+                          <span className="text-xs text-muted-foreground shrink-0">от</span>
+                          <Input type="number" min={0} max={100} value={thresholds.excellent.min} onChange={(e) => setThresholds({ ...thresholds, excellent: { ...thresholds.excellent, min: parseInt(e.target.value) || 0 } })} className="w-14 h-7 text-xs text-center" />
+                          <span className="text-xs text-muted-foreground shrink-0">до 100%</span>
+                          <input type="color" value={thresholds.excellent.color} onChange={(e) => setThresholds({ ...thresholds, excellent: { ...thresholds.excellent, color: e.target.value } })} className="w-6 h-6 rounded border border-border cursor-pointer shrink-0" />
+                        </div>
+
+                        {/* Good */}
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: thresholds.good.color }} />
+                          <span className="text-xs text-muted-foreground w-14 shrink-0">Хорошо:</span>
+                          <span className="text-xs text-muted-foreground shrink-0">от</span>
+                          <Input type="number" min={0} max={100} value={thresholds.good.min} onChange={(e) => setThresholds({ ...thresholds, good: { ...thresholds.good, min: parseInt(e.target.value) || 0 } })} className="w-14 h-7 text-xs text-center" />
+                          <span className="text-xs text-muted-foreground shrink-0">до {thresholds.excellent.min - 1}%</span>
+                          <input type="color" value={thresholds.good.color} onChange={(e) => setThresholds({ ...thresholds, good: { ...thresholds.good, color: e.target.value } })} className="w-6 h-6 rounded border border-border cursor-pointer shrink-0" />
+                        </div>
+
+                        {/* Weak */}
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: thresholds.weak.color }} />
+                          <span className="text-xs text-muted-foreground w-14 shrink-0">Слабо:</span>
+                          <span className="text-xs text-muted-foreground shrink-0">от 0% до {thresholds.good.min - 1}%</span>
+                          <div className="flex-1" />
+                          <input type="color" value={thresholds.weak.color} onChange={(e) => setThresholds({ ...thresholds, weak: { ...thresholds.weak, color: e.target.value } })} className="w-6 h-6 rounded border border-border cursor-pointer shrink-0" />
+                        </div>
+
+                        <Button size="sm" className="w-full text-xs h-8" onClick={() => {
+                          globalThresholds = { ...thresholds }
+                          setScorePopup(false)
+                          toast.success("Пороги сохранены")
+                        }}>
+                          Сохранить
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </div>
                 <div className="flex items-center gap-2 mt-1 flex-wrap">
                   <Badge variant="outline" className={cn("text-xs", candidate.source === "hh.ru" ? "border-red-200 text-red-600" : candidate.source === "Telegram" ? "border-blue-200 text-blue-600" : "border-border text-muted-foreground")}>
                     {candidate.source}
@@ -184,28 +306,18 @@ export function CandidateProfile({ candidate, columnId, columnTitle, columnColor
                   )}
                 </div>
               </div>
-              {/* AI Score circle */}
-              {hasAnswered ? (
-                <div className={cn("w-14 h-14 rounded-full border-4 flex items-center justify-center shrink-0", getScoreRingColor(candidate.score))}>
-                  <span className="text-lg font-bold text-foreground">{candidate.score}</span>
-                </div>
-              ) : (
-                <div className="w-14 h-14 rounded-full border-4 border-dashed border-muted-foreground/30 flex items-center justify-center shrink-0">
-                  <span className="text-xs text-muted-foreground">—</span>
-                </div>
-              )}
             </div>
 
             {/* Action buttons */}
             <div className="flex items-center gap-2 mt-4 flex-wrap">
-              <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={() => { /* scroll to chat tab */ toast.info("Перейдите в таб «Чат»") }}>
-                <MessageSquare className="w-3.5 h-3.5" /> Написать
-              </Button>
               <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={() => setInterviewOpen(true)}>
                 <Calendar className="w-3.5 h-3.5" /> Пригласить
               </Button>
               <Button size="sm" className="h-8 gap-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => { if (columnId) { onAction?.(candidate.id, columnId, "hire"); onOpenChange(false) } }}>
                 <CheckCircle2 className="w-3.5 h-3.5" /> Нанять
+              </Button>
+              <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs text-amber-600 border-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/30" onClick={() => { if (columnId) { onAction?.(candidate.id, columnId, "reserve"); onOpenChange(false) } }}>
+                <Archive className="w-3.5 h-3.5" /> В резерв
               </Button>
               <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs text-destructive hover:bg-destructive/10" onClick={() => { if (columnId) { onAction?.(candidate.id, columnId, "reject"); onOpenChange(false) } }}>
                 <XCircle className="w-3.5 h-3.5" /> Отказать
@@ -215,9 +327,10 @@ export function CandidateProfile({ candidate, columnId, columnTitle, columnColor
 
           {/* ═══ Табы ════════════════════════════════════════ */}
           <Tabs defaultValue="profile" className="px-5 pt-4 pb-6">
-            <TabsList className="w-full grid grid-cols-4 mb-4">
+            <TabsList className="w-full grid grid-cols-5 mb-4">
               <TabsTrigger value="profile" className="text-xs gap-1"><User className="w-3 h-3" /> Профиль</TabsTrigger>
               <TabsTrigger value="demo" className="text-xs gap-1"><Play className="w-3 h-3" /> Демо</TabsTrigger>
+              <TabsTrigger value="answers" className="text-xs gap-1"><FileText className="w-3 h-3" /> Ответы</TabsTrigger>
               <TabsTrigger value="chat" className="text-xs gap-1"><MessageSquare className="w-3 h-3" /> Чат</TabsTrigger>
               <TabsTrigger value="history" className="text-xs gap-1"><History className="w-3 h-3" /> История</TabsTrigger>
             </TabsList>
@@ -311,6 +424,78 @@ export function CandidateProfile({ candidate, columnId, columnTitle, columnColor
                   </div>
                 </>
               )}
+            </TabsContent>
+
+            {/* ─── Ответы ──────────────────────────────────── */}
+            <TabsContent value="answers" className="space-y-5 mt-0">
+              {/* Ответы на вопросы */}
+              <div>
+                <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-muted-foreground" />
+                  Ответы на вопросы
+                </h3>
+                {MOCK_ANSWERS.length > 0 ? (
+                  <div className="space-y-3">
+                    {MOCK_ANSWERS.map((a, i) => (
+                      <div key={i} className="p-3 rounded-lg border border-border">
+                        <p className="text-xs font-semibold text-muted-foreground mb-1">{i + 1}. {a.question}</p>
+                        <p className="text-sm text-foreground mb-2">{a.answer}</p>
+                        <div className="flex items-center gap-2">
+                          <div className={cn("flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold",
+                            a.aiScore >= 80 ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400" :
+                            a.aiScore >= 60 ? "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400" :
+                            "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400"
+                          )}>
+                            <Sparkles className="w-3 h-3" />
+                            AI: {a.aiScore}/100
+                          </div>
+                          <span className="text-[11px] text-muted-foreground">
+                            {a.aiScore >= 80 ? "Отличный ответ" : a.aiScore >= 60 ? "Хороший ответ" : "Требует внимания"}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground text-center py-6">Кандидат ещё не ответил на вопросы</p>
+                )}
+              </div>
+
+              <Separator />
+
+              {/* Видео и аудио */}
+              <div>
+                <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+                  <Video className="w-4 h-4 text-muted-foreground" />
+                  Видео и аудио
+                </h3>
+                {hasAnswered ? (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-3 p-3 rounded-lg border border-border hover:bg-muted/30 transition-colors">
+                      <div className="w-10 h-10 rounded-lg bg-purple-100 dark:bg-purple-950 flex items-center justify-center shrink-0">
+                        <Video className="w-5 h-5 text-purple-600" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium">Видео-визитка</p>
+                        <p className="text-[11px] text-muted-foreground">Урок «Видео-визитка» · 1:42</p>
+                      </div>
+                      <Button variant="outline" size="sm" className="h-7 text-xs gap-1"><Play className="w-3 h-3" />Смотреть</Button>
+                    </div>
+                    <div className="flex items-center gap-3 p-3 rounded-lg border border-border hover:bg-muted/30 transition-colors">
+                      <div className="w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-950 flex items-center justify-center shrink-0">
+                        <Play className="w-5 h-5 text-blue-600" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium">Аудио-ответ</p>
+                        <p className="text-[11px] text-muted-foreground">Урок «Задания и вопросы» · 0:45</p>
+                      </div>
+                      <Button variant="outline" size="sm" className="h-7 text-xs gap-1"><Play className="w-3 h-3" />Слушать</Button>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground text-center py-6">Записей пока нет</p>
+                )}
+              </div>
             </TabsContent>
 
             {/* ─── Чат ──────────────────────────────────────── */}

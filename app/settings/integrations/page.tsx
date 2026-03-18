@@ -192,8 +192,8 @@ export default function IntegrationsPage() {
                       <div className="space-y-2">
                         <Label className="text-sm font-medium">Направление</Label>
                         {[
-                          { value: "one-way" as const, label: "Только HireFlow → CRM", desc: "Рекомендуется" },
-                          { value: "two-way" as const, label: "Двусторонняя синхронизация", desc: "Изменения в CRM отражаются в HireFlow" },
+                          { value: "one-way" as const, label: "Только Моя Команда → CRM", desc: "Рекомендуется" },
+                          { value: "two-way" as const, label: "Двусторонняя синхронизация", desc: "Изменения в CRM отражаются в Моя Команда" },
                         ].map(opt => (
                           <button key={opt.value} className={cn("w-full flex items-start gap-3 p-3 rounded-lg border text-left transition-all", syncDirection === opt.value ? "border-primary bg-primary/5 ring-2 ring-primary/20" : "border-border hover:border-primary/30")} onClick={() => setSyncDirection(opt.value)}>
                             <div className={cn("w-4 h-4 rounded-full border-2 mt-0.5 shrink-0 flex items-center justify-center", syncDirection === opt.value ? "border-primary" : "border-muted-foreground/40")}>
@@ -212,7 +212,7 @@ export default function IntegrationsPage() {
                       <CardTitle className="text-base flex items-center gap-2"><ArrowRight className="w-4 h-4" /> Маппинг статусов</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-3">
-                      <p className="text-xs text-muted-foreground mb-2">Соответствие этапов HireFlow → статусы CRM</p>
+                      <p className="text-xs text-muted-foreground mb-2">Соответствие этапов Моя Команда → статусы CRM</p>
                       {HIREFLOW_STAGES.map(stage => (
                         <div key={stage} className="flex items-center gap-3">
                           <span className="text-sm text-foreground w-40 shrink-0">{stage}</span>
@@ -234,7 +234,7 @@ export default function IntegrationsPage() {
                       <Info className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
                       <div className="text-xs text-blue-700 dark:text-blue-400 space-y-1">
                         <p className="font-semibold">В каждом лиде CRM отображаются поля:</p>
-                        <p>Вакансия · Этап HireFlow (с прогрессом демонстрации) · AI скоринг · Источник · Ссылка «Открыть в HireFlow»</p>
+                        <p>Вакансия · Этап Моя Команда (с прогрессом демонстрации) · AI скоринг · Источник · Ссылка «Открыть в Моя Команда»</p>
                       </div>
                     </div>
                   </div>

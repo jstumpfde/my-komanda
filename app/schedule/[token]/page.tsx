@@ -62,24 +62,81 @@ export default function SchedulePublicPage({ params }: { params: Promise<{ token
   }
 
   if (confirmed) {
+    const officeAddr = "г. Москва, ул. Тверская, д. 1, офис 301"
+    const directions = "Метро «Тверская» или «Пушкинская», выход к ул. Тверской. Вход со двора, 3 этаж. На ресепшен скажите что на собеседование."
+
     return (
-      <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-blue-50 via-white to-indigo-50">
-        <div className="max-w-md w-full text-center space-y-6">
+      <div className="min-h-screen flex items-center justify-center p-4" style={{ backgroundColor: bgColor }}>
+        <div className="max-w-md w-full text-center space-y-5">
           <CheckCircle2 className="w-16 h-16 text-emerald-500 mx-auto" />
           <h1 className="text-2xl font-bold text-foreground">Встреча подтверждена!</h1>
+
+          {/* Details card */}
           <Card className="text-left">
             <CardContent className="pt-5 pb-5 space-y-3">
-              <div className="flex items-center gap-2 text-sm"><Calendar className="w-4 h-4 text-muted-foreground" /> {selectedSlot}</div>
-              <div className="flex items-center gap-2 text-sm"><Video className="w-4 h-4 text-muted-foreground" /> {MEETING_TYPES.find(t => t.id === meetingType)?.label}</div>
-              <div className="flex items-center gap-2 text-sm"><Globe className="w-4 h-4 text-muted-foreground" /> {TIMEZONES.find(t => t.id === timezone)?.label}</div>
+              <div className="flex items-center gap-2.5 text-sm">
+                <Calendar className="w-4 h-4 text-muted-foreground shrink-0" />
+                <span className="font-medium text-foreground">{selectedSlot}</span>
+              </div>
+              <div className="flex items-center gap-2.5 text-sm">
+                <Globe className="w-4 h-4 text-muted-foreground shrink-0" />
+                <span className="text-foreground">{TIMEZONES.find(t => t.id === timezone)?.label}</span>
+              </div>
+
+              {/* Meeting type specific block */}
+              {meetingType === "phone" && (
+                <div className="p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800">
+                  <div className="flex items-start gap-2.5">
+                    <Phone className="w-4 h-4 text-emerald-600 mt-0.5 shrink-0" />
+                    <div>
+                      <p className="text-sm font-medium text-emerald-800 dark:text-emerald-300">Звонок по телефону</p>
+                      <p className="text-xs text-emerald-700 dark:text-emerald-400 mt-0.5">Мы позвоним вам на указанный номер в назначенное время</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {meetingType === "online" && (
-                <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200">
-                  <p className="text-xs text-blue-700">Ссылка на Яндекс Телемост будет отправлена за 15 минут до встречи</p>
+                <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800">
+                  <div className="flex items-start gap-2.5">
+                    <Video className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
+                    <div>
+                      <p className="text-sm font-medium text-blue-800 dark:text-blue-300">Онлайн-встреча</p>
+                      <p className="text-xs text-blue-700 dark:text-blue-400 mt-0.5">Ссылка на Яндекс Телемост придёт в напоминании за 15 минут до встречи</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {meetingType === "office" && (
+                <div className="space-y-2">
+                  <div className="p-3 rounded-lg bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800">
+                    <div className="flex items-start gap-2.5">
+                      <Building2 className="w-4 h-4 text-purple-600 mt-0.5 shrink-0" />
+                      <div>
+                        <p className="text-sm font-medium text-purple-800 dark:text-purple-300">Встреча в офисе</p>
+                        <p className="text-xs text-purple-700 dark:text-purple-400 mt-0.5">{officeAddr}</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="p-3 rounded-lg bg-muted/50 border text-left">
+                    <p className="text-xs font-semibold text-foreground mb-1">Как добраться:</p>
+                    <p className="text-xs text-muted-foreground leading-relaxed">{directions}</p>
+                  </div>
                 </div>
               )}
             </CardContent>
           </Card>
 
+          {/* Reminder */}
+          <div className="flex items-center gap-2.5 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
+            <Clock className="w-4 h-4 text-amber-600 shrink-0" />
+            <p className="text-xs text-amber-700 dark:text-amber-400 text-left">
+              Мы пришлём напоминание за 24 часа до встречи
+            </p>
+          </div>
+
+          {/* Add to calendar */}
           <div className="flex flex-col gap-2">
             <p className="text-sm text-muted-foreground">Добавить в календарь:</p>
             <div className="flex justify-center gap-2">
@@ -93,7 +150,7 @@ export default function SchedulePublicPage({ params }: { params: Promise<{ token
             Перенести встречу
           </button>
 
-          <p className="text-xs text-muted-foreground/50">Powered by HireFlow</p>
+          <p className="text-xs text-muted-foreground/50">Powered by Моя Команда</p>
         </div>
       </div>
     )
@@ -193,7 +250,7 @@ export default function SchedulePublicPage({ params }: { params: Promise<{ token
           <Calendar className="w-5 h-5 mr-2" /> Подтвердить время
         </Button>
 
-        <p className="text-center text-xs text-muted-foreground/50">Powered by HireFlow</p>
+        <p className="text-center text-xs text-muted-foreground/50">Powered by Моя Команда</p>
       </div>
     </div>
   )

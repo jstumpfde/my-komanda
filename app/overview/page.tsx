@@ -89,7 +89,7 @@ export default function OverviewPage() {
                   <Rocket className="w-6 h-6 text-blue-600" />
                   <div>
                     <p className="text-sm font-semibold text-foreground">Настройте платформу: осталось {obRemaining} {obRemaining === 1 ? "шаг" : obRemaining < 5 ? "шага" : "шагов"}</p>
-                    <p className="text-xs text-muted-foreground">Завершите настройку для максимума от HireFlow</p>
+                    <p className="text-xs text-muted-foreground">Завершите настройку для максимума от Моя Команда</p>
                   </div>
                 </div>
                 <Button size="sm" asChild><Link href="/onboarding">Продолжить</Link></Button>

@@ -266,40 +266,26 @@ export function HhIntegration({ onCandidatesImported, onMessageLog }: HhIntegrat
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       {/* ── Карточка hh.ru ─────────────────────────────────── */}
       <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-red-500 flex items-center justify-center text-white font-bold text-sm shrink-0">
-                hh
-              </div>
-              <div>
-                <CardTitle className="text-base">hh.ru</CardTitle>
-                <p className="text-xs text-muted-foreground">Импорт откликов и управление вакансиями</p>
-              </div>
-            </div>
-            <Badge
-              variant="outline"
-              className={cn(
-                "text-xs",
-                isConnected
-                  ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800"
-                  : "bg-muted text-muted-foreground border-border"
-              )}
-            >
-              {isConnected ? (
-                <><CheckCircle2 className="w-3 h-3 mr-1" /> Подключено</>
-              ) : (
-                <><XCircle className="w-3 h-3 mr-1" /> Не подключено</>
-              )}
-            </Badge>
+        {/* Compact header row */}
+        <CardContent className="px-4 py-0 flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-red-500 flex items-center justify-center text-white font-bold text-xs shrink-0">hh</div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium">hh.ru</p>
+            <p className="text-[12px] text-muted-foreground">Импорт откликов и управление вакансиями</p>
           </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {isConnected ? (
-            <>
+          <Badge variant="outline" className={cn("text-[12px] shrink-0", isConnected ? "bg-emerald-500/10 text-emerald-700 border-emerald-200" : "text-muted-foreground border-border")}>
+            {isConnected ? <><CheckCircle2 className="w-3 h-3 mr-1" />Подключено</> : "Не подключено"}
+          </Badge>
+          {!isConnected && (
+            <Button size="sm" className="h-8 text-[12px] gap-1 bg-red-500 hover:bg-red-600 text-white shrink-0" onClick={() => setConnectDialogOpen(true)}>Подключить</Button>
+          )}
+        </CardContent>
+        {/* Expanded content only when connected */}
+        {isConnected && <CardContent className="px-4 pb-4 pt-0 space-y-4 border-t border-border mt-0">
+          <>
               {/* Список аккаунтов hh.ru */}
               <div className="space-y-2">
                 {accounts.map((acc, i) => (
@@ -392,16 +378,7 @@ export function HhIntegration({ onCandidatesImported, onMessageLog }: HhIntegrat
                 )}
               </div>
             </>
-          ) : (
-            <Button
-              className="w-full gap-2 bg-red-500 hover:bg-red-600 text-white"
-              onClick={() => setConnectDialogOpen(true)}
-            >
-              <Link2 className="w-4 h-4" />
-              🔗 Подключить hh.ru
-            </Button>
-          )}
-        </CardContent>
+        </CardContent>}
       </Card>
 
       {/* ── Настройки синхронизации (только если подключено) ── */}
@@ -568,7 +545,7 @@ export function HhIntegration({ onCandidatesImported, onMessageLog }: HhIntegrat
               <ol className="list-decimal list-inside space-y-2">
                 <li>Нажмите кнопку ниже — откроется страница авторизации hh.ru</li>
                 <li>Войдите в аккаунт работодателя</li>
-                <li>Разрешите доступ для HireFlow</li>
+                <li>Разрешите доступ для Моя Команда</li>
                 <li>Вы будете перенаправлены обратно</li>
               </ol>
             </div>
@@ -577,7 +554,7 @@ export function HhIntegration({ onCandidatesImported, onMessageLog }: HhIntegrat
               <div className="flex items-start gap-2">
                 <Info className="w-4 h-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
                 <p className="text-xs text-amber-700 dark:text-amber-400">
-                  HireFlow получит доступ к откликам и переписке по вакансиям. Вы сможете отключить интеграцию в любой момент.
+                  Моя Команда получит доступ к откликам и переписке по вакансиям. Вы сможете отключить интеграцию в любой момент.
                 </p>
               </div>
             </div>

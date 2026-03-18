@@ -25,6 +25,7 @@ import {
   Clock,
   Bell,
   Plug,
+  Database,
 } from "lucide-react"
 import {
   Sidebar,
@@ -68,12 +69,14 @@ import {
   type VacancyCategory,
 } from "@/lib/vacancy-storage"
 import { cn } from "@/lib/utils"
+import { useAuth, getVisibleSections, getVisibleSettings } from "@/lib/auth"
 
 const mainNavItems = [
   { name: "Обзор", icon: LayoutDashboard, href: "/overview" },
   { name: "Кандидаты", icon: Users, href: "/candidates" },
   { name: "Интервью", icon: Calendar, href: "/interviews" },
   { name: "Аналитика", icon: BarChart3, href: "/analytics" },
+  { name: "Talent Pool", icon: Database, href: "/talent-pool" },
   { name: "Источники", icon: Link2, href: "/sources" },
   { name: "Рефералы", icon: Gift, href: "/referrals" },
 ]
@@ -118,6 +121,9 @@ interface DragState {
 
 export function DashboardSidebar() {
   const pathname = usePathname()
+  const { role } = useAuth()
+  const vis = getVisibleSections(role)
+  const visSettings = getVisibleSettings(role)
   const [categories, setCategories] = useState<VacancyCategory[]>([])
   const [editingCategory, setEditingCategory] = useState<CategoryEditState | null>(null)
   const [dragState, setDragState] = useState<DragState | null>(null)
@@ -228,7 +234,7 @@ export function DashboardSidebar() {
         </SidebarGroup>
 
         {/* Найм Section */}
-        <SidebarGroup className="py-0 mb-0">
+        {vis.hiring && <SidebarGroup className="py-0 mb-0">
           <Collapsible defaultOpen>
             <SidebarMenuItem className="list-none">
               <div className="flex items-center gap-0.5">
@@ -355,8 +361,9 @@ export function DashboardSidebar() {
           </Collapsible>
         </SidebarGroup>
 
+        }
         {/* Ввод в должность Section */}
-        <SidebarGroup className="py-0 mb-0">
+        {vis.hiring && <SidebarGroup className="py-0 mb-0">
           <Collapsible>
             <SidebarMenuItem className="list-none">
               <CollapsibleTrigger asChild>
@@ -390,8 +397,9 @@ export function DashboardSidebar() {
           </Collapsible>
         </SidebarGroup>
 
+        }
         {/* Обучение Section */}
-        <SidebarGroup className="py-0 mb-0">
+        {vis.hiring && <SidebarGroup className="py-0 mb-0">
           <Collapsible>
             <SidebarMenuItem className="list-none">
               <CollapsibleTrigger asChild>
@@ -425,8 +433,9 @@ export function DashboardSidebar() {
           </Collapsible>
         </SidebarGroup>
 
+        }
         {/* Инструменты */}
-        <SidebarGroup className="py-0 mb-0">
+        {vis.tools && <SidebarGroup className="py-0 mb-0">
           <SidebarGroupLabel className="text-sidebar-foreground/40 text-[10px] font-medium uppercase tracking-widest px-3 mb-1">
             Инструменты
           </SidebarGroupLabel>
@@ -449,8 +458,9 @@ export function DashboardSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+        }
         {/* Настройки */}
-        <SidebarGroup className="py-0 mb-0">
+        {vis.settings && <SidebarGroup className="py-0 mb-0">
           <Collapsible>
             <SidebarMenuItem className="list-none">
               <CollapsibleTrigger asChild>
@@ -462,7 +472,10 @@ export function DashboardSidebar() {
               </CollapsibleTrigger>
               <CollapsibleContent>
                 <SidebarMenuSub className="mt-0.5 gap-0.5">
-                  {settingsNavItems.map((item) => (
+                  {settingsNavItems.filter(item => {
+                    const key = item.href.split("/settings/")[1]
+                    return !key || visSettings.includes(key)
+                  }).map((item) => (
                     <SidebarMenuSubItem key={item.name}>
                       <SidebarMenuSubButton
                         asChild
@@ -482,8 +495,9 @@ export function DashboardSidebar() {
           </Collapsible>
         </SidebarGroup>
 
+        }
         {/* Администрирование */}
-        <SidebarGroup className="py-0 mb-0">
+        {vis.admin && <SidebarGroup className="py-0 mb-0">
           <Collapsible>
             <SidebarMenuItem className="list-none">
               <CollapsibleTrigger asChild>
@@ -513,7 +527,7 @@ export function DashboardSidebar() {
               </CollapsibleContent>
             </SidebarMenuItem>
           </Collapsible>
-        </SidebarGroup>
+        </SidebarGroup>}
       </SidebarContent>
 
       <SidebarFooter className="border-t border-sidebar-border p-3">

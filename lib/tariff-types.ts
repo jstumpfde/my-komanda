@@ -46,6 +46,16 @@ export const DEFAULT_TARIFFS: Tariff[] = [
     active: true,
   },
   {
+    id: "solo",
+    name: "Solo",
+    price: 14900,
+    trialDays: 0,
+    maxVacancies: 1,
+    maxCandidates: 300,
+    features: { branding: false, customDomain: false, aiVideoInterview: false, api: false },
+    active: true,
+  },
+  {
     id: "starter",
     name: "Starter",
     price: 19900,

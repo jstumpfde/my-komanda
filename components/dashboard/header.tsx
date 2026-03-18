@@ -2,34 +2,24 @@
 
 import { Button } from "@/components/ui/button"
 import { CommandPalette } from "./command-palette"
-import { Bell, Moon, Sun, Coffee, LogOut, PanelLeftClose, PanelLeft, Search, Circle } from "lucide-react"
+import { Bell, Moon, Sun, Coffee, LogOut, PanelLeftClose, PanelLeft, ChevronDown, ArrowLeft } from "lucide-react"
 import { useTheme } from "next-themes"
 import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
+  DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { useSidebar } from "@/components/ui/sidebar"
 import { Badge } from "@/components/ui/badge"
-import { useAuth, ROLE_LABELS, type UserRole } from "@/lib/auth"
+import { useAuth, ROLE_LABELS, ROLE_ICONS, type UserRole } from "@/lib/auth"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 
 interface Notification {
-  id: string
-  text: string
-  time: string
-  color: string
-  read: boolean
+  id: string; text: string; time: string; color: string; read: boolean
 }
 
 const INITIAL_NOTIFICATIONS: Notification[] = [
@@ -41,162 +31,170 @@ const INITIAL_NOTIFICATIONS: Notification[] = [
   { id: "n6", text: "Новый отклик с hh.ru: Морозов С.", time: "5 часов назад", color: "bg-emerald-500", read: true },
 ]
 
+const ALL_ROLES: UserRole[] = ["admin", "manager", "client", "client_hr", "candidate"]
+
 export function DashboardHeader() {
   const { theme, setTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
   const { state, toggleSidebar } = useSidebar()
-  const { user, role, setRole } = useAuth()
-  const roles: UserRole[] = ["admin", "manager", "client"]
+  const { user, role, isViewingAs, setRole, returnToAdmin } = useAuth()
   const [notifications, setNotifications] = useState(INITIAL_NOTIFICATIONS)
+  const router = useRouter()
 
   const unreadCount = notifications.filter(n => !n.read).length
+  const markAllRead = () => setNotifications(prev => prev.map(n => ({ ...n, read: true })))
 
-  const markAllRead = () => {
-    setNotifications(prev => prev.map(n => ({ ...n, read: true })))
-  }
-
-  useEffect(() => {
-    setMounted(true)
-  }, [])
+  useEffect(() => { setMounted(true) }, [])
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "b") {
-        e.preventDefault()
-        toggleSidebar()
-      }
+      if ((e.metaKey || e.ctrlKey) && e.key === "b") { e.preventDefault(); toggleSidebar() }
     }
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
   }, [toggleSidebar])
 
+  const handleRoleSwitch = (r: UserRole) => {
+    if (r === "candidate") {
+      window.open("/candidate/abc123xyz789", "_blank")
+      return
+    }
+    setRole(r)
+    if (r === "admin") router.push("/overview")
+    else if (r === "manager") router.push("/overview")
+    else router.push("/")
+  }
+
   if (!mounted) return null
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="flex items-center justify-between h-16 px-6">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-9 w-9"
-          onClick={toggleSidebar}
-        >
-          {state === "expanded" ? (
-            <PanelLeftClose className="h-5 w-5" />
-          ) : (
-            <PanelLeft className="h-5 w-5" />
-          )}
-        </Button>
-
-        <div className="flex items-center gap-2">
-          <CommandPalette />
-
-          {/* Role Switcher (demo) */}
-          <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
-            {roles.map((r) => (
-              <Button
-                key={r}
-                variant={role === r ? "default" : "ghost"}
-                size="sm"
-                className="h-7 px-2.5 text-[11px]"
-                onClick={() => setRole(r)}
-              >
-                {ROLE_LABELS[r]}
-              </Button>
-            ))}
-          </div>
-
-          {/* Theme Switcher */}
-          <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
-            <Button variant={theme === "light" ? "default" : "ghost"} size="icon" className="h-8 w-8" onClick={() => setTheme("light")} title="Светлая тема">
-              <Sun className="h-4 w-4" />
-            </Button>
-            <Button variant={theme === "dark" ? "default" : "ghost"} size="icon" className="h-8 w-8" onClick={() => setTheme("dark")} title="Тёмная тема">
-              <Moon className="h-4 w-4" />
-            </Button>
-            <Button variant={theme === "warm" ? "default" : "ghost"} size="icon" className="h-8 w-8" onClick={() => setTheme("warm")} title="Тёплая тема">
-              <Coffee className="h-4 w-4" />
-            </Button>
-          </div>
-
-          {/* Notifications */}
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-9 w-9 relative">
-                <Bell className="h-5 w-5" />
-                {unreadCount > 0 && (
-                  <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center px-1">
-                    {unreadCount}
-                  </span>
-                )}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent align="end" className="w-80 p-0">
-              <div className="flex items-center justify-between px-4 py-3 border-b">
-                <span className="text-sm font-semibold text-foreground">Уведомления</span>
-                {unreadCount > 0 && (
-                  <button className="text-xs text-primary hover:underline" onClick={markAllRead}>
-                    Прочитать все
-                  </button>
-                )}
-              </div>
-              <div className="max-h-[360px] overflow-y-auto">
-                {notifications.map(n => (
-                  <div
-                    key={n.id}
-                    className={cn(
-                      "flex items-start gap-3 px-4 py-3 border-b last:border-0 transition-colors hover:bg-muted/30",
-                      !n.read && "bg-primary/5"
-                    )}
-                  >
-                    <div className={cn("w-2.5 h-2.5 rounded-full mt-1.5 shrink-0", n.color)} />
-                    <div className="flex-1 min-w-0">
-                      <p className={cn("text-sm leading-snug", !n.read ? "text-foreground font-medium" : "text-muted-foreground")}>{n.text}</p>
-                      <p className="text-[10px] text-muted-foreground mt-0.5">{n.time}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div className="border-t px-4 py-2.5">
-                <Link href="/settings/notifications" className="text-xs text-primary hover:underline">
-                  Все уведомления →
-                </Link>
-              </div>
-            </PopoverContent>
-          </Popover>
-
-          {/* User Menu */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="h-9 w-9 rounded-full p-0">
-                <Avatar className="h-8 w-8">
-                  <AvatarImage src="https://api.dicebear.com/7.x/avataaars/svg?seed=HR" />
-                  <AvatarFallback>HR</AvatarFallback>
-                </Avatar>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <div className="flex items-center gap-3 p-3 border-b border-border">
-                <Avatar className="h-10 w-10">
-                  <AvatarFallback className="text-xs">{user.name.split(" ").map(n => n[0]).join("")}</AvatarFallback>
-                </Avatar>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-foreground truncate">{user.name}</p>
-                  <p className="text-xs text-muted-foreground truncate">{user.email}</p>
-                  <Badge variant="secondary" className="text-[10px] mt-1 h-4 px-1.5">{ROLE_LABELS[role]}</Badge>
-                </div>
-              </div>
-              <DropdownMenuItem className="text-sm">Профиль</DropdownMenuItem>
-              <DropdownMenuItem className="text-sm">Настройки</DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem className="text-sm cursor-pointer">
-                <LogOut className="w-4 h-4 mr-2" />
-                Выход
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+    <>
+      {/* View-as banner */}
+      {isViewingAs && (
+        <div className="bg-amber-400 text-amber-950 px-4 py-1.5 flex items-center justify-between text-sm">
+          <span className="font-medium">
+            {ROLE_ICONS[role]} Вы просматриваете платформу как: <strong>{ROLE_LABELS[role]}</strong>
+            {user.company && <span className="opacity-70"> · {user.company}</span>}
+          </span>
+          <Button size="sm" variant="outline" className="h-7 text-xs bg-white/80 border-amber-600 text-amber-900 hover:bg-white gap-1" onClick={returnToAdmin}>
+            <ArrowLeft className="w-3 h-3" /> Вернуться к Admin
+          </Button>
         </div>
-      </div>
-    </header>
+      )}
+
+      <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="flex items-center justify-between h-14 px-4 sm:px-6">
+          <Button variant="ghost" size="icon" className="h-9 w-9" onClick={toggleSidebar}>
+            {state === "expanded" ? <PanelLeftClose className="h-5 w-5" /> : <PanelLeft className="h-5 w-5" />}
+          </Button>
+
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            <div className="hidden sm:block"><CommandPalette /></div>
+
+            {/* Role Switcher — dropdown */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs">
+                  <span>{ROLE_ICONS[role]}</span>
+                  <span className="hidden sm:inline">{ROLE_LABELS[role]}</span>
+                  <ChevronDown className="w-3 h-3 opacity-50" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-64">
+                {ALL_ROLES.map((r, i) => {
+                  const isSep = (i === 1 || i === 3)
+                  return (
+                    <div key={r}>
+                      {isSep && <DropdownMenuSeparator />}
+                      <DropdownMenuItem
+                        className={cn("gap-2 cursor-pointer", role === r && "bg-primary/5")}
+                        onClick={() => handleRoleSwitch(r)}
+                      >
+                        <span className="text-base">{ROLE_ICONS[r]}</span>
+                        <span className="flex-1 text-sm">{ROLE_LABELS[r]}</span>
+                        {role === r && <Badge variant="secondary" className="text-[9px] h-4 px-1">текущая</Badge>}
+                        {r === "candidate" && <span className="text-[10px] text-muted-foreground">(новая вкладка)</span>}
+                      </DropdownMenuItem>
+                    </div>
+                  )
+                })}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {/* Theme Switcher — hidden on mobile */}
+            <div className="hidden md:flex items-center gap-1 bg-muted rounded-lg p-1">
+              <Button variant={theme === "light" ? "default" : "ghost"} size="icon" className="h-8 w-8" onClick={() => setTheme("light")} title="Светлая тема" style={theme === "light" ? { backgroundColor: "#C0622F", color: "#fff" } : undefined}>
+                <Sun className="h-4 w-4" />
+              </Button>
+              <Button variant={theme === "dark" ? "default" : "ghost"} size="icon" className="h-8 w-8" onClick={() => setTheme("dark")} title="Тёмная тема" style={theme === "dark" ? { backgroundColor: "#C0622F", color: "#fff" } : undefined}>
+                <Moon className="h-4 w-4" />
+              </Button>
+              <Button variant={theme === "warm" ? "default" : "ghost"} size="icon" className="h-8 w-8" onClick={() => setTheme("warm")} title="Тёплая тема" style={theme === "warm" ? { backgroundColor: "#C0622F", color: "#fff" } : undefined}>
+                <Coffee className="h-4 w-4" />
+              </Button>
+            </div>
+
+            {/* Notifications */}
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-9 w-9 relative">
+                  <Bell className="h-5 w-5" />
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center px-1">{unreadCount}</span>
+                  )}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-80 p-0">
+                <div className="flex items-center justify-between px-4 py-3 border-b">
+                  <span className="text-sm font-semibold text-foreground">Уведомления</span>
+                  {unreadCount > 0 && <button className="text-xs text-primary hover:underline" onClick={markAllRead}>Прочитать все</button>}
+                </div>
+                <div className="max-h-[360px] overflow-y-auto">
+                  {notifications.map(n => (
+                    <div key={n.id} className={cn("flex items-start gap-3 px-4 py-3 border-b last:border-0 hover:bg-muted/30", !n.read && "bg-primary/5")}>
+                      <div className={cn("w-2.5 h-2.5 rounded-full mt-1.5 shrink-0", n.color)} />
+                      <div className="flex-1 min-w-0">
+                        <p className={cn("text-sm leading-snug", !n.read ? "text-foreground font-medium" : "text-muted-foreground")}>{n.text}</p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">{n.time}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="border-t px-4 py-2.5">
+                  <Link href="/settings/notifications" className="text-xs text-primary hover:underline">Все уведомления →</Link>
+                </div>
+              </PopoverContent>
+            </Popover>
+
+            {/* User Menu */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="h-9 w-9 rounded-full p-0">
+                  <Avatar className="h-8 w-8">
+                    <AvatarFallback className="text-xs">{user.name.split(" ").map(n => n[0]).join("")}</AvatarFallback>
+                  </Avatar>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <div className="flex items-center gap-3 p-3 border-b">
+                  <Avatar className="h-10 w-10">
+                    <AvatarFallback className="text-xs">{user.name.split(" ").map(n => n[0]).join("")}</AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-foreground truncate">{user.name}</p>
+                    <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+                    <Badge variant="secondary" className="text-[10px] mt-1 h-4 px-1.5">{ROLE_LABELS[role]}</Badge>
+                  </div>
+                </div>
+                <DropdownMenuItem className="text-sm">Профиль</DropdownMenuItem>
+                <DropdownMenuItem className="text-sm" asChild><Link href="/settings/company">Настройки</Link></DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem className="text-sm cursor-pointer"><LogOut className="w-4 h-4 mr-2" />Выход</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </div>
+      </header>
+    </>
   )
 }
