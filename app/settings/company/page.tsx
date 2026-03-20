@@ -151,55 +151,15 @@ export default function CompanyProfilePage() {
         <DashboardHeader />
         <main className="flex-1 overflow-auto bg-background">
           <div className="p-4 sm:p-6 max-w-4xl">
-            <div className="mb-6">
+            <div className="mb-4">
               <h1 className="text-2xl font-semibold text-foreground mb-1">Профиль компании</h1>
               <p className="text-muted-foreground text-sm">Данные организации и настройки для демонстраций</p>
             </div>
 
-            <div className="space-y-6">
-              {/* ═══ Поиск по ИНН ═══════════════════════════════ */}
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Search className="w-4 h-4" />
-                    Автозаполнение по ИНН
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-end gap-3">
-                    <div className="flex-1 space-y-1.5">
-                      <Label className="text-sm">ИНН</Label>
-                      <Input
-                        value={inn}
-                        onChange={e => setInn(e.target.value.replace(/\D/g, ""))}
-                        placeholder="7707083893"
-                        maxLength={12}
-                        className="font-mono"
-                        onKeyDown={e => { if (e.key === "Enter") handleSearch() }}
-                      />
-                    </div>
-                    <Button
-                      className="gap-1.5 h-9"
-                      onClick={handleSearch}
-                      disabled={searching}
-                    >
-                      {searching ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <Search className="w-4 h-4" />
-                      )}
-                      Найти
-                    </Button>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Введите ИНН для автозаполнения реквизитов. Тестовые ИНН: 7707083893, 7736050003
-                  </p>
-                </CardContent>
-              </Card>
-
+            <div className="space-y-3">
               {/* ═══ Реквизиты компании ═════════════════════════ */}
               <Card>
-                <CardHeader className="pb-3">
+                <CardHeader className="pb-2 pt-4 px-4">
                   <CardTitle className="text-base flex items-center gap-2">
                     <Building2 className="w-4 h-4" />
                     Реквизиты компании
@@ -211,33 +171,47 @@ export default function CompanyProfilePage() {
                     )}
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="space-y-1.5 sm:col-span-2">
-                      <Label className="text-sm">Полное название</Label>
-                      <Input value={fullName} onChange={e => setFullName(e.target.value)} placeholder='ООО «РОМАШКА»' />
-                    </div>
-                    <div className="space-y-1.5 sm:col-span-2">
-                      <Label className="text-sm">Краткое название</Label>
-                      <Input value={shortName} onChange={e => setShortName(e.target.value)} placeholder='ООО «Ромашка»' />
-                    </div>
-                    <div className="space-y-1.5">
+                <CardContent className="px-4 pb-4 pt-0">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {/* ИНН — первое поле, поиск по Enter */}
+                    <div className="space-y-1">
                       <Label className="text-sm">ИНН</Label>
-                      <Input value={inn} readOnly className="bg-muted/30 font-mono" />
+                      <div className="relative">
+                        <Input
+                          value={inn}
+                          onChange={e => setInn(e.target.value.replace(/\D/g, ""))}
+                          placeholder="7707083893"
+                          maxLength={12}
+                          className="font-mono pr-8"
+                          onKeyDown={e => { if (e.key === "Enter") handleSearch() }}
+                        />
+                        {searching && (
+                          <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-muted-foreground" />
+                        )}
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">Введите ИНН и нажмите Enter для автозаполнения</p>
                     </div>
-                    <div className="space-y-1.5">
+                    <div className="space-y-1">
                       <Label className="text-sm">КПП</Label>
                       <Input value={kpp} onChange={e => setKpp(e.target.value)} placeholder="770701001" className="font-mono" />
                     </div>
-                    <div className="space-y-1.5">
+                    <div className="space-y-1">
+                      <Label className="text-sm">Полное название</Label>
+                      <Input value={fullName} onChange={e => setFullName(e.target.value)} placeholder='ООО «РОМАШКА»' />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-sm">Краткое название</Label>
+                      <Input value={shortName} onChange={e => setShortName(e.target.value)} placeholder='ООО «Ромашка»' />
+                    </div>
+                    <div className="space-y-1">
                       <Label className="text-sm">ОГРН</Label>
                       <Input value={ogrn} onChange={e => setOgrn(e.target.value)} placeholder="1037707049388" className="font-mono" />
                     </div>
-                    <div className="space-y-1.5">
+                    <div className="space-y-1">
                       <Label className="text-sm">Руководитель</Label>
                       <Input value={director} onChange={e => setDirector(e.target.value)} placeholder="Иванов А.С." />
                     </div>
-                    <div className="space-y-1.5 sm:col-span-2">
+                    <div className="space-y-1 sm:col-span-2">
                       <Label className="text-sm">Юридический адрес</Label>
                       <Input value={legalAddress} onChange={e => setLegalAddress(e.target.value)} placeholder="125009, г. Москва, ул. Тверская, д. 1" />
                     </div>
@@ -247,27 +221,27 @@ export default function CompanyProfilePage() {
 
               {/* ═══ Банковские реквизиты ═══════════════════════ */}
               <Card>
-                <CardHeader className="pb-3">
+                <CardHeader className="pb-2 pt-4 px-4">
                   <CardTitle className="text-base flex items-center gap-2">
                     <CreditCard className="w-4 h-4" />
                     Банковские реквизиты
                   </CardTitle>
                 </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="space-y-1.5 sm:col-span-2">
+                <CardContent className="px-4 pb-4 pt-0">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1 sm:col-span-2">
                       <Label className="text-sm">Банк</Label>
                       <Input value={bankName} onChange={e => setBankName(e.target.value)} placeholder="ПАО Сбербанк" />
                     </div>
-                    <div className="space-y-1.5">
+                    <div className="space-y-1">
                       <Label className="text-sm">БИК</Label>
                       <Input value={bik} onChange={e => setBik(e.target.value)} placeholder="044525225" className="font-mono" />
                     </div>
-                    <div className="space-y-1.5">
+                    <div className="space-y-1">
                       <Label className="text-sm">Расчётный счёт</Label>
                       <Input value={rs} onChange={e => setRs(e.target.value)} placeholder="40702810938000012345" className="font-mono" />
                     </div>
-                    <div className="space-y-1.5 sm:col-span-2">
+                    <div className="space-y-1 sm:col-span-2">
                       <Label className="text-sm">Корреспондентский счёт</Label>
                       <Input value={ks} onChange={e => setKs(e.target.value)} placeholder="30101810400000000225" className="font-mono" />
                     </div>
@@ -277,27 +251,27 @@ export default function CompanyProfilePage() {
 
               {/* ═══ Контактная информация ══════════════════════ */}
               <Card>
-                <CardHeader className="pb-3">
+                <CardHeader className="pb-2 pt-4 px-4">
                   <CardTitle className="text-base flex items-center gap-2">
                     <Phone className="w-4 h-4" />
                     Контактная информация
                   </CardTitle>
                 </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
+                <CardContent className="px-4 pb-4 pt-0">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
                       <Label className="text-sm flex items-center gap-1.5"><Mail className="w-3.5 h-3.5 text-muted-foreground" /> Email</Label>
                       <Input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="hr@romashka.ru" />
                     </div>
-                    <div className="space-y-1.5">
+                    <div className="space-y-1">
                       <Label className="text-sm flex items-center gap-1.5"><Phone className="w-3.5 h-3.5 text-muted-foreground" /> Телефон</Label>
                       <Input value={phone} onChange={e => setPhone(e.target.value)} placeholder="+7 (495) 123-45-67" />
                     </div>
-                    <div className="space-y-1.5">
+                    <div className="space-y-1">
                       <Label className="text-sm flex items-center gap-1.5"><Globe className="w-3.5 h-3.5 text-muted-foreground" /> Сайт</Label>
                       <Input value={website} onChange={e => setWebsite(e.target.value)} placeholder="https://romashka.ru" />
                     </div>
-                    <div className="space-y-1.5">
+                    <div className="space-y-1">
                       <Label className="text-sm flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5 text-muted-foreground" /> Город</Label>
                       <Input value={city} onChange={e => setCity(e.target.value)} placeholder="Москва" />
                     </div>
@@ -307,63 +281,63 @@ export default function CompanyProfilePage() {
 
               {/* ═══ Данные для демонстрации ════════════════════ */}
               <Card>
-                <CardHeader className="pb-3">
+                <CardHeader className="pb-2 pt-4 px-4">
                   <CardTitle className="text-base flex items-center gap-2">
                     <Eye className="w-4 h-4" />
                     Данные для демонстрации должности
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex items-start gap-2 p-3 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800">
+                <CardContent className="px-4 pb-4 pt-0 space-y-3">
+                  <div className="flex items-start gap-2 p-2.5 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800">
                     <Info className="w-4 h-4 text-blue-600 dark:text-blue-400 mt-0.5 shrink-0" />
                     <p className="text-xs text-blue-700 dark:text-blue-400">
                       Эти данные подставляются в шаблоны демонстрации через переменные: {"{{компания_описание}}"}, {"{{год_основания}}"}, {"{{сотрудников}}"} и т.д.
                     </p>
                   </div>
 
-                  <div className="space-y-1.5">
+                  <div className="space-y-1">
                     <Label className="text-sm flex items-center gap-2">
                       Описание компании
                       <Badge variant="outline" className="text-[10px] font-mono">{"{{компания_описание}}"}</Badge>
                     </Label>
                     <textarea
-                      className="w-full border rounded-lg p-3 text-sm resize-none h-28 bg-background focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+                      className="w-full border rounded-lg p-2.5 text-sm resize-none h-20 bg-background focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
                       value={description}
                       onChange={e => setDescription(e.target.value)}
                       placeholder="Современная компания, специализирующаяся на..."
                     />
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
                       <Label className="text-sm flex items-center gap-2">
                         <Calendar className="w-3.5 h-3.5 text-muted-foreground" /> Год основания
                         <Badge variant="outline" className="text-[10px] font-mono">{"{{год_основания}}"}</Badge>
                       </Label>
                       <Input value={foundedYear} onChange={e => setFoundedYear(e.target.value)} placeholder="2018" />
                     </div>
-                    <div className="space-y-1.5">
+                    <div className="space-y-1">
                       <Label className="text-sm flex items-center gap-2">
                         <Users className="w-3.5 h-3.5 text-muted-foreground" /> Количество сотрудников
                         <Badge variant="outline" className="text-[10px] font-mono">{"{{сотрудников}}"}</Badge>
                       </Label>
                       <Input value={employeeCount} onChange={e => setEmployeeCount(e.target.value)} placeholder="150" />
                     </div>
-                    <div className="space-y-1.5">
+                    <div className="space-y-1">
                       <Label className="text-sm flex items-center gap-2">
                         <Briefcase className="w-3.5 h-3.5 text-muted-foreground" /> Сфера деятельности
                         <Badge variant="outline" className="text-[10px] font-mono">{"{{сфера}}"}</Badge>
                       </Label>
                       <Input value={industry} onChange={e => setIndustry(e.target.value)} placeholder="IT, B2B продажи" />
                     </div>
-                    <div className="space-y-1.5">
+                    <div className="space-y-1">
                       <Label className="text-sm flex items-center gap-2">
                         <MapPin className="w-3.5 h-3.5 text-muted-foreground" /> Адрес офиса
                         <Badge variant="outline" className="text-[10px] font-mono">{"{{адрес_офиса}}"}</Badge>
                       </Label>
                       <Input value={officeAddress} onChange={e => setOfficeAddress(e.target.value)} placeholder="ул. Примерная, 1" />
                     </div>
-                    <div className="space-y-1.5 sm:col-span-2">
+                    <div className="space-y-1 sm:col-span-2">
                       <Label className="text-sm flex items-center gap-2">
                         <FileText className="w-3.5 h-3.5 text-muted-foreground" /> График работы
                         <Badge variant="outline" className="text-[10px] font-mono">{"{{график}}"}</Badge>
@@ -376,14 +350,14 @@ export default function CompanyProfilePage() {
 
               {/* ═══ Брендинг ═══════════════════════════════════ */}
               <Card>
-                <CardHeader className="pb-3">
+                <CardHeader className="pb-2 pt-4 px-4">
                   <CardTitle className="text-base flex items-center gap-2">
                     <Palette className="w-4 h-4" />
                     Брендинг
                     {!canBrand && <Badge variant="outline" className="text-[10px] ml-2"><Lock className="w-3 h-3 mr-1" /> Business+</Badge>}
                   </CardTitle>
                 </CardHeader>
-                <CardContent className={cn("space-y-6", !canBrand && "opacity-60")}>
+                <CardContent className={cn("px-4 pb-4 pt-0 space-y-4", !canBrand && "opacity-60")}>
                   {!canBrand && (
                     <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
                       <Lock className="w-4 h-4 text-amber-600" />
@@ -414,22 +388,22 @@ export default function CompanyProfilePage() {
                   </div>
 
                   {/* Цвета */}
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div className="space-y-1.5">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="space-y-1">
                       <Label className="text-sm">Основной цвет (акцент)</Label>
                       <div className="flex items-center gap-2">
                         <input type="color" value={brandPrimary} onChange={e => canBrand && setBrandPrimary(e.target.value)} disabled={!canBrand} className="w-10 h-10 rounded-lg border cursor-pointer disabled:cursor-not-allowed" />
                         <Input value={brandPrimary} onChange={e => canBrand && setBrandPrimary(e.target.value)} disabled={!canBrand} className="h-9 font-mono text-xs flex-1" />
                       </div>
                     </div>
-                    <div className="space-y-1.5">
+                    <div className="space-y-1">
                       <Label className="text-sm">Фоновый цвет</Label>
                       <div className="flex items-center gap-2">
                         <input type="color" value={brandBg} onChange={e => canBrand && setBrandBg(e.target.value)} disabled={!canBrand} className="w-10 h-10 rounded-lg border cursor-pointer disabled:cursor-not-allowed" />
                         <Input value={brandBg} onChange={e => canBrand && setBrandBg(e.target.value)} disabled={!canBrand} className="h-9 font-mono text-xs flex-1" />
                       </div>
                     </div>
-                    <div className="space-y-1.5">
+                    <div className="space-y-1">
                       <Label className="text-sm">Цвет текста</Label>
                       <div className="flex items-center gap-2">
                         <input type="color" value={brandText} onChange={e => canBrand && setBrandText(e.target.value)} disabled={!canBrand} className="w-10 h-10 rounded-lg border cursor-pointer disabled:cursor-not-allowed" />
@@ -439,7 +413,7 @@ export default function CompanyProfilePage() {
                   </div>
 
                   {/* Логотип */}
-                  <div className="space-y-2">
+                  <div className="space-y-1.5">
                     <Label className="text-sm font-medium">Логотип</Label>
                     <div className="flex items-center gap-4">
                       <label className={cn("flex flex-col items-center justify-center w-20 h-20 rounded-xl border-2 border-dashed transition-all", canBrand ? "border-border hover:border-primary/30 cursor-pointer bg-muted/20 hover:bg-muted/40" : "border-border/50 bg-muted/10 cursor-not-allowed")}>
@@ -455,7 +429,7 @@ export default function CompanyProfilePage() {
                   </div>
 
                   {/* Кастомный домен */}
-                  <div className="space-y-1.5">
+                  <div className="space-y-1">
                     <Label className="text-sm flex items-center gap-2">
                       <Globe className="w-3.5 h-3.5 text-muted-foreground" /> Кастомный домен
                       {!canDomain && <Badge variant="outline" className="text-[10px]">только Pro</Badge>}
@@ -467,12 +441,12 @@ export default function CompanyProfilePage() {
 
                   {/* Live Preview */}
                   <div>
-                    <Label className="text-sm font-medium mb-3 block">Превью страницы кандидата</Label>
+                    <Label className="text-sm font-medium mb-2 block">Превью страницы кандидата</Label>
                     <div
                       className="rounded-xl border overflow-hidden"
                       style={{ backgroundColor: canBrand ? brandBg : "#f0f4ff" }}
                     >
-                      <div className="p-6 space-y-4">
+                      <div className="p-4 space-y-3">
                         {/* Header */}
                         <div className="flex items-center gap-2">
                           {logoPreview ? (
@@ -514,7 +488,7 @@ export default function CompanyProfilePage() {
               </Card>
 
               {/* ═══ Сохранить ══════════════════════════════════ */}
-              <div className="flex justify-end pb-8">
+              <div className="flex justify-end pb-4">
                 <Button size="lg" className="gap-2" onClick={handleSave}>
                   <Save className="w-4 h-4" />
                   Сохранить профиль
