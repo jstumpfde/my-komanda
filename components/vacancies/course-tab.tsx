@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import {
   Dialog,
@@ -11,11 +10,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { cn } from "@/lib/utils"
-import { Plus, GraduationCap, Clock, ChevronRight } from "lucide-react"
+import { Plus, GraduationCap } from "lucide-react"
 import { toast } from "sonner"
 import { type Demo, createDemo } from "@/lib/course-types"
-import { DemoCard } from "./demo-card"
+import { NotionEditor } from "./notion-editor"
 
 const STORAGE_KEY = "hireflow-demos"
 
@@ -87,10 +85,10 @@ export function CourseTab() {
 
   const selectedDemo = demos.find((d) => d.id === selectedDemoId)
 
-  // If a demo is selected — show editor directly
+  // If a demo is selected — show Notion editor
   if (selectedDemo) {
     return (
-      <DemoCard
+      <NotionEditor
         demo={selectedDemo}
         onBack={() => {
           // If single demo, stay in editor (no list to go back to)
