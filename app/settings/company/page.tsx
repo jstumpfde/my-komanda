@@ -302,12 +302,12 @@ export default function CompanyProfilePage() {
             </div>
 
             <div className="space-y-3">
-              {/* ═══ Реквизиты компании ═════════════════════════ */}
+              {/* ═══ Компания ═══════════════════════════════════ */}
               <Card>
                 <CardHeader className="pb-2 pt-4 px-4">
                   <CardTitle className="text-base flex items-center gap-2">
                     <Building2 className="w-4 h-4" />
-                    Реквизиты компании
+                    Компания
                     {companyStatus === "active" && (
                       <Badge variant="outline" className="ml-2 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 text-xs">
                         <CheckCircle2 className="w-3 h-3 mr-1" />
@@ -386,20 +386,7 @@ export default function CompanyProfilePage() {
                         />
                       )}
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* ═══ Контактная информация ══════════════════════ */}
-              <Card>
-                <CardHeader className="pb-2 pt-4 px-4">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Phone className="w-4 h-4" />
-                    Контактная информация
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="px-4 pb-4 pt-0">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {/* Контакты */}
                     <div className="space-y-1">
                       <Label className="text-sm flex items-center gap-1.5"><Mail className="w-3.5 h-3.5 text-muted-foreground" /> Email</Label>
                       <Input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="hr@romashka.ru" />
