@@ -122,8 +122,8 @@ function BankAccountItem({
       {/* Тело аккордеона */}
       {open && (
         <div className="px-3 pb-3 space-y-2 border-t border-border/60 pt-3">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <div className="space-y-1 sm:col-span-2">
+          <div className="grid grid-cols-4 gap-3">
+            <div className="space-y-1">
               <Label className="text-xs text-muted-foreground">Банк</Label>
               <Input
                 value={account.bankName}
@@ -150,8 +150,8 @@ function BankAccountItem({
                 className="h-8 text-sm font-mono"
               />
             </div>
-            <div className="space-y-1 sm:col-span-2">
-              <Label className="text-xs text-muted-foreground">Корреспондентский счёт</Label>
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Корр. счёт</Label>
               <Input
                 value={account.ks}
                 onChange={e => onChange({ ...account, ks: e.target.value })}
