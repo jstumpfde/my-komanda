@@ -16,6 +16,7 @@ import {
   Search, Loader2, Building2, CheckCircle2, Upload, Save,
   Phone, Mail, Globe, MapPin, Calendar, Users, Briefcase,
   FileText, CreditCard, Info, Eye, Palette, Lock, Play,
+  Plus, ChevronDown, ChevronUp, Star,
 } from "lucide-react"
 import { getBrand, saveBrand, BRAND_PRESETS, canCustomizeBrand, canCustomDomain, type BrandConfig, brandCssVars } from "@/lib/branding"
 
@@ -52,7 +53,131 @@ interface DadataResult {
   status: "active" | "liquidated"
 }
 
+// ─── Банковский счёт ─────────────────────────────────────────
+
+interface BankAccount {
+  id: string
+  bankName: string
+  bik: string
+  rs: string
+  ks: string
+}
+
+function BankAccountItem({
+  account,
+  isDefault,
+  onSetDefault,
+  onChange,
+  onRemove,
+}: {
+  account: BankAccount
+  isDefault: boolean
+  onSetDefault: () => void
+  onChange: (updated: BankAccount) => void
+  onRemove: () => void
+}) {
+  const [open, setOpen] = useState(true)
+
+  const label = account.bankName
+    ? `${account.bankName}${account.rs ? " · " + account.rs.slice(-4) : ""}`
+    : "Новый счёт"
+
+  return (
+    <div className={cn("rounded-lg border", isDefault ? "border-primary/40 bg-primary/[0.02]" : "border-border")}>
+      {/* Шапка аккордеона */}
+      <div
+        className="flex items-center gap-2 px-3 py-2.5 cursor-pointer select-none"
+        onClick={() => setOpen(o => !o)}
+      >
+        {/* Радио «По умолчанию» */}
+        <button
+          type="button"
+          onClick={e => { e.stopPropagation(); onSetDefault() }}
+          title="Сделать основным"
+          className="shrink-0"
+        >
+          <div className={cn(
+            "w-4 h-4 rounded-full border-2 flex items-center justify-center transition-colors",
+            isDefault ? "border-primary bg-primary" : "border-muted-foreground/40 hover:border-primary/60"
+          )}>
+            {isDefault && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+          </div>
+        </button>
+
+        <span className="flex-1 text-sm font-medium truncate">{label}</span>
+
+        {isDefault && (
+          <Badge variant="outline" className="text-[10px] border-primary/30 text-primary shrink-0">
+            <Star className="w-2.5 h-2.5 mr-1" /> Основной
+          </Badge>
+        )}
+
+        {open ? (
+          <ChevronUp className="w-4 h-4 text-muted-foreground shrink-0" />
+        ) : (
+          <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />
+        )}
+      </div>
+
+      {/* Тело аккордеона */}
+      {open && (
+        <div className="px-3 pb-3 space-y-2 border-t border-border/60 pt-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div className="space-y-1 sm:col-span-2">
+              <Label className="text-xs text-muted-foreground">Банк</Label>
+              <Input
+                value={account.bankName}
+                onChange={e => onChange({ ...account, bankName: e.target.value })}
+                placeholder="ПАО Сбербанк"
+                className="h-8 text-sm"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">БИК</Label>
+              <Input
+                value={account.bik}
+                onChange={e => onChange({ ...account, bik: e.target.value })}
+                placeholder="044525225"
+                className="h-8 text-sm font-mono"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Расчётный счёт</Label>
+              <Input
+                value={account.rs}
+                onChange={e => onChange({ ...account, rs: e.target.value })}
+                placeholder="40702810938000012345"
+                className="h-8 text-sm font-mono"
+              />
+            </div>
+            <div className="space-y-1 sm:col-span-2">
+              <Label className="text-xs text-muted-foreground">Корреспондентский счёт</Label>
+              <Input
+                value={account.ks}
+                onChange={e => onChange({ ...account, ks: e.target.value })}
+                placeholder="30101810400000000225"
+                className="h-8 text-sm font-mono"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={onRemove}
+              className="text-xs text-destructive/70 hover:text-destructive transition-colors"
+            >
+              Удалить счёт
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Компонент ──────────────────────────────────────────────
+
+let _nextId = 2
 
 export default function CompanyProfilePage() {
   // ИНН и поиск
@@ -69,11 +194,15 @@ export default function CompanyProfilePage() {
   const [director, setDirector] = useState("")
   const [companyStatus, setCompanyStatus] = useState<"active" | "liquidated" | "">("")
 
-  // Банк
-  const [bankName, setBankName] = useState("")
-  const [bik, setBik] = useState("")
-  const [rs, setRs] = useState("")
-  const [ks, setKs] = useState("")
+  // Почтовый адрес
+  const [postalSameAsLegal, setPostalSameAsLegal] = useState(false)
+  const [postalAddress, setPostalAddress] = useState("")
+
+  // Банк — список счетов
+  const [accounts, setAccounts] = useState<BankAccount[]>([
+    { id: "1", bankName: "", bik: "", rs: "", ks: "" },
+  ])
+  const [defaultAccountId, setDefaultAccountId] = useState("1")
 
   // Контакты
   const [email, setEmail] = useState("")
@@ -106,7 +235,6 @@ export default function CompanyProfilePage() {
       return
     }
     setSearching(true)
-    // Симуляция запроса к DaData
     await new Promise(r => setTimeout(r, 1000))
 
     const result = DADATA_MOCK[inn.trim()]
@@ -144,6 +272,23 @@ export default function CompanyProfilePage() {
     toast.success("Профиль компании сохранён")
   }
 
+  const addAccount = () => {
+    const id = String(_nextId++)
+    setAccounts(prev => [...prev, { id, bankName: "", bik: "", rs: "", ks: "" }])
+  }
+
+  const updateAccount = (updated: BankAccount) => {
+    setAccounts(prev => prev.map(a => a.id === updated.id ? updated : a))
+  }
+
+  const removeAccount = (id: string) => {
+    setAccounts(prev => {
+      const next = prev.filter(a => a.id !== id)
+      if (defaultAccountId === id && next.length > 0) setDefaultAccountId(next[0].id)
+      return next
+    })
+  }
+
   return (
     <SidebarProvider defaultOpen={true}>
       <DashboardSidebar />
@@ -173,7 +318,7 @@ export default function CompanyProfilePage() {
                 </CardHeader>
                 <CardContent className="px-4 pb-4 pt-0">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {/* ИНН — первое поле, поиск по Enter */}
+                    {/* ИНН */}
                     <div className="space-y-1">
                       <Label className="text-sm">ИНН</Label>
                       <div className="relative">
@@ -215,35 +360,31 @@ export default function CompanyProfilePage() {
                       <Label className="text-sm">Юридический адрес</Label>
                       <Input value={legalAddress} onChange={e => setLegalAddress(e.target.value)} placeholder="125009, г. Москва, ул. Тверская, д. 1" />
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* ═══ Банковские реквизиты ═══════════════════════ */}
-              <Card>
-                <CardHeader className="pb-2 pt-4 px-4">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <CreditCard className="w-4 h-4" />
-                    Банковские реквизиты
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="px-4 pb-4 pt-0">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {/* Почтовый адрес */}
                     <div className="space-y-1 sm:col-span-2">
-                      <Label className="text-sm">Банк</Label>
-                      <Input value={bankName} onChange={e => setBankName(e.target.value)} placeholder="ПАО Сбербанк" />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-sm">БИК</Label>
-                      <Input value={bik} onChange={e => setBik(e.target.value)} placeholder="044525225" className="font-mono" />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-sm">Расчётный счёт</Label>
-                      <Input value={rs} onChange={e => setRs(e.target.value)} placeholder="40702810938000012345" className="font-mono" />
-                    </div>
-                    <div className="space-y-1 sm:col-span-2">
-                      <Label className="text-sm">Корреспондентский счёт</Label>
-                      <Input value={ks} onChange={e => setKs(e.target.value)} placeholder="30101810400000000225" className="font-mono" />
+                      <Label className="text-sm">Почтовый адрес</Label>
+                      <div className="flex items-center gap-2 mb-1.5">
+                        <input
+                          type="checkbox"
+                          id="postal-same"
+                          checked={postalSameAsLegal}
+                          onChange={e => {
+                            setPostalSameAsLegal(e.target.checked)
+                            if (e.target.checked) setPostalAddress(legalAddress)
+                          }}
+                          className="w-4 h-4 rounded border-border accent-primary cursor-pointer"
+                        />
+                        <label htmlFor="postal-same" className="text-sm text-muted-foreground cursor-pointer select-none">
+                          Совпадает с юридическим
+                        </label>
+                      </div>
+                      {!postalSameAsLegal && (
+                        <Input
+                          value={postalAddress}
+                          onChange={e => setPostalAddress(e.target.value)}
+                          placeholder="125009, г. Москва, ул. Тверская, д. 1"
+                        />
+                      )}
                     </div>
                   </div>
                 </CardContent>
@@ -276,6 +417,39 @@ export default function CompanyProfilePage() {
                       <Input value={city} onChange={e => setCity(e.target.value)} placeholder="Москва" />
                     </div>
                   </div>
+                </CardContent>
+              </Card>
+
+              {/* ═══ Банковские реквизиты — список счетов ═══════ */}
+              <Card>
+                <CardHeader className="pb-2 pt-4 px-4">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <CreditCard className="w-4 h-4" />
+                      Банковские реквизиты
+                    </CardTitle>
+                    <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={addAccount}>
+                      <Plus className="w-3.5 h-3.5" />
+                      Добавить счёт
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent className="px-4 pb-4 pt-0 space-y-2">
+                  {accounts.map(account => (
+                    <BankAccountItem
+                      key={account.id}
+                      account={account}
+                      isDefault={account.id === defaultAccountId}
+                      onSetDefault={() => setDefaultAccountId(account.id)}
+                      onChange={updateAccount}
+                      onRemove={() => removeAccount(account.id)}
+                    />
+                  ))}
+                  {accounts.length === 0 && (
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                      Счёта ещё нет. Нажмите «Добавить счёт».
+                    </p>
+                  )}
                 </CardContent>
               </Card>
 
