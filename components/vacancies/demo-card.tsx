@@ -100,31 +100,69 @@ export function DemoCard({ demo, onBack, onUpdate }: DemoCardProps) {
   const [aiModalOpen, setAiModalOpen] = useState(false)
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "idle">("saved")
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Always-fresh ref to demo so callbacks don't close over stale value
+  const demoRef = useRef(demo)
+  demoRef.current = demo
 
   const activeLesson = demo.lessons.find((l) => l.id === activeLessonId)
 
   // === Helpers ===
   const save = useCallback((lessons: Lesson[]) => {
     setSaveStatus("saving")
-    const updated = { ...demo, lessons, updatedAt: new Date() }
+    const updated = { ...demoRef.current, lessons, updatedAt: new Date() }
     console.log("[DemoCard] save →", updated.id, "lessons:", lessons.length, "blocks:", lessons.reduce((a, l) => a + l.blocks.length, 0))
     onUpdate(updated)
     if (debounceRef.current) clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => setSaveStatus("saved"), 1000)
-  }, [demo, onUpdate])
+  }, [onUpdate])
+
+  // Read all contenteditable blocks in the current lesson and flush their innerHTML into demo state
+  const flushContentEditables = useCallback((): Lesson[] => {
+    const current = demoRef.current
+    const activeId = current.lessons.find((l) =>
+      document.querySelector(`[data-lesson-id="${l.id}"]`) !== null
+    )?.id
+    // Find all text block editors that are visible right now
+    const els = document.querySelectorAll<HTMLElement>("[data-block-editor]")
+    if (els.length === 0) return current.lessons
+    const patches: Record<string, string> = {}
+    els.forEach((el) => {
+      const blockId = el.dataset.blockEditor
+      if (blockId) {
+        patches[blockId] = el.innerHTML
+        console.log("[DemoCard] flush blockId:", blockId, "html length:", el.innerHTML.length)
+      }
+    })
+    if (Object.keys(patches).length === 0) return current.lessons
+    return current.lessons.map((l) => ({
+      ...l,
+      blocks: l.blocks.map((b) =>
+        b.type === "text" && patches[b.id] !== undefined
+          ? { ...b, content: patches[b.id] }
+          : b
+      ),
+    }))
+  }, [])
 
   const saveNow = () => {
-    // Force sync any contentEditable
-    const editors = document.querySelectorAll<HTMLElement>("[contenteditable=true]")
-    editors.forEach((el) => el.blur())
+    // Flush contenteditable content then save
+    const flushedLessons = flushContentEditables()
+    const updated = { ...demoRef.current, lessons: flushedLessons, updatedAt: new Date() }
+    onUpdate(updated)
     setSaveStatus("saved")
     toast.success("Демонстрация сохранена")
+    console.log("[DemoCard] saveNow — flushed", flushedLessons.length, "lessons")
   }
 
-  // Sync contentEditable before switching lessons
+  // Sync contentEditable before switching lessons — flush directly to onUpdate, no debounce
   const switchLesson = (id: string) => {
-    const editors = document.querySelectorAll<HTMLElement>("[contenteditable=true]")
-    editors.forEach((el) => el.blur())
+    // 1. Read innerHTML from DOM synchronously before React re-renders
+    const flushedLessons = flushContentEditables()
+    // 2. Persist immediately (bypass debounce — DOM elements unmount right after setActiveLessonId)
+    const updated = { ...demoRef.current, lessons: flushedLessons, updatedAt: new Date() }
+    console.log("[DemoCard] switchLesson → flush & save before switch to", id, "blocks saved:", flushedLessons.reduce((a, l) => a + l.blocks.length, 0))
+    onUpdate(updated)
+    // 3. Switch lesson
     setActiveLessonId(id)
   }
 
@@ -132,17 +170,17 @@ export function DemoCard({ demo, onBack, onUpdate }: DemoCardProps) {
   useEffect(() => () => { if (debounceRef.current) clearTimeout(debounceRef.current) }, [])
 
   const updateLesson = (lessonId: string, patch: Partial<Lesson>) => {
-    save(demo.lessons.map((l) => l.id === lessonId ? { ...l, ...patch } : l))
+    save(demoRef.current.lessons.map((l) => l.id === lessonId ? { ...l, ...patch } : l))
   }
 
   const addLesson = () => {
     const l: Lesson = { id: `les-${Date.now()}`, emoji: "📝", title: "Новый урок", blocks: [createBlock("text")] }
-    save([...demo.lessons, l])
+    save([...demoRef.current.lessons, l])
     setActiveLessonId(l.id)
   }
 
   const duplicateLesson = (idx: number) => {
-    const orig = demo.lessons[idx]
+    const orig = demoRef.current.lessons[idx]
     const ts = Date.now()
     const copy: Lesson = {
       ...orig,
@@ -150,15 +188,16 @@ export function DemoCard({ demo, onBack, onUpdate }: DemoCardProps) {
       title: `${orig.title} (копия)`,
       blocks: orig.blocks.map((b) => ({ ...b, id: `${b.id}-c${ts}` })),
     }
-    const nl = [...demo.lessons]; nl.splice(idx + 1, 0, copy)
+    const nl = [...demoRef.current.lessons]; nl.splice(idx + 1, 0, copy)
     save(nl)
     setActiveLessonId(copy.id)
     toast.success("Урок дублирован")
   }
 
   const moveLessonDir = (idx: number, dir: -1 | 1) => {
-    const t = idx + dir; if (t < 0 || t >= demo.lessons.length) return
-    const nl = [...demo.lessons]; [nl[idx], nl[t]] = [nl[t], nl[idx]]
+    const lessons = demoRef.current.lessons
+    const t = idx + dir; if (t < 0 || t >= lessons.length) return
+    const nl = [...lessons]; [nl[idx], nl[t]] = [nl[t], nl[idx]]
     save(nl)
   }
 
@@ -171,13 +210,13 @@ export function DemoCard({ demo, onBack, onUpdate }: DemoCardProps) {
       title: `${copiedLesson.title} (вставлен)`,
       blocks: copiedLesson.blocks.map((b) => ({ ...b, id: `${b.id}-p${ts}` })),
     }
-    save([...demo.lessons, pasted])
+    save([...demoRef.current.lessons, pasted])
     setActiveLessonId(pasted.id)
     toast.success("Урок вставлен")
   }
 
   const deleteLesson = (id: string) => {
-    const nl = demo.lessons.filter((l) => l.id !== id)
+    const nl = demoRef.current.lessons.filter((l) => l.id !== id)
     save(nl)
     if (activeLessonId === id) setActiveLessonId(nl[0]?.id || "")
     setDeleteConfirmId(null)
@@ -186,49 +225,45 @@ export function DemoCard({ demo, onBack, onUpdate }: DemoCardProps) {
 
   const dropLesson = (target: number) => {
     if (dragLessonIdx === null || dragLessonIdx === target) return
-    const nl = [...demo.lessons]; const [m] = nl.splice(dragLessonIdx, 1); nl.splice(target, 0, m)
+    const nl = [...demoRef.current.lessons]; const [m] = nl.splice(dragLessonIdx, 1); nl.splice(target, 0, m)
     save(nl); setDragLessonIdx(null); setDragOverLessonIdx(null)
   }
 
-  // Block operations within active lesson
+  // Block operations within active lesson — always read from demoRef to avoid stale closure
   const updateBlock = (blockId: string, patch: Partial<Block>) => {
-    if (!activeLesson) return
-    updateLesson(activeLessonId, { blocks: activeLesson.blocks.map((b) => b.id === blockId ? { ...b, ...patch } : b) })
+    const lesson = demoRef.current.lessons.find((l) => l.id === activeLessonId)
+    if (!lesson) return
+    updateLesson(activeLessonId, { blocks: lesson.blocks.map((b) => b.id === blockId ? { ...b, ...patch } : b) })
   }
   const insertBlockAt = (idx: number, type: BlockType) => {
-    if (!activeLesson) return
-    const nb = [...activeLesson.blocks]; nb.splice(idx, 0, createBlock(type))
+    const lesson = demoRef.current.lessons.find((l) => l.id === activeLessonId)
+    if (!lesson) return
+    const nb = [...lesson.blocks]; nb.splice(idx, 0, createBlock(type))
     updateLesson(activeLessonId, { blocks: nb })
   }
   const removeBlock = (id: string) => {
-    if (!activeLesson) return
-    updateLesson(activeLessonId, { blocks: activeLesson.blocks.filter((b) => b.id !== id) })
+    const lesson = demoRef.current.lessons.find((l) => l.id === activeLessonId)
+    if (!lesson) return
+    updateLesson(activeLessonId, { blocks: lesson.blocks.filter((b) => b.id !== id) })
   }
   const duplicateBlock = (idx: number) => {
-    if (!activeLesson) return
-    // Sync any contentEditable content first
-    const editorEl = document.querySelector(`[contenteditable="true"]`) as HTMLElement | null
-    if (editorEl) {
-      const currentBlockId = activeLesson.blocks.findIndex((b) => b.type === "text")
-      if (currentBlockId >= 0) {
-        // Force sync via blur-like action
-      }
-    }
-    const orig = activeLesson.blocks[idx]
+    const lesson = demoRef.current.lessons.find((l) => l.id === activeLessonId)
+    if (!lesson) return
+    const orig = lesson.blocks[idx]
     const copy = {
       ...orig,
       id: `blk-${Date.now()}-${Math.random().toString(36).slice(2,6)}`,
-      content: orig.content,
       questions: orig.questions.map((q) => ({ ...q, id: `q-${Date.now()}-${Math.random().toString(36).slice(2,4)}`, options: [...q.options] })),
     }
-    const nb = [...activeLesson.blocks]; nb.splice(idx + 1, 0, copy)
+    const nb = [...lesson.blocks]; nb.splice(idx + 1, 0, copy)
     updateLesson(activeLessonId, { blocks: nb })
     toast.success("Блок дублирован")
   }
   const moveBlock = (idx: number, dir: -1 | 1) => {
-    if (!activeLesson) return
-    const t = idx + dir; if (t < 0 || t >= activeLesson.blocks.length) return
-    const nb = [...activeLesson.blocks]; [nb[idx], nb[t]] = [nb[t], nb[idx]]
+    const lesson = demoRef.current.lessons.find((l) => l.id === activeLessonId)
+    if (!lesson) return
+    const t = idx + dir; if (t < 0 || t >= lesson.blocks.length) return
+    const nb = [...lesson.blocks]; [nb[idx], nb[t]] = [nb[t], nb[idx]]
     updateLesson(activeLessonId, { blocks: nb })
   }
 
@@ -483,9 +518,9 @@ export function DemoCard({ demo, onBack, onUpdate }: DemoCardProps) {
       <LibraryDialog
         open={templateOpen}
         onOpenChange={setTemplateOpen}
-        currentLessons={demo.lessons}
+        currentLessons={demoRef.current.lessons}
         onApplyTemplate={(lessons) => { save(lessons); setActiveLessonId(lessons[0]?.id || "") }}
-        onInsertModule={(lesson) => { save([...demo.lessons, lesson]); setActiveLessonId(lesson.id) }}
+        onInsertModule={(lesson) => { save([...demoRef.current.lessons, lesson]); setActiveLessonId(lesson.id) }}
         savedModules={savedModules}
         savedTemplates={savedTemplates}
       />
@@ -521,7 +556,7 @@ export function DemoCard({ demo, onBack, onUpdate }: DemoCardProps) {
             <Input value={saveTemplateCategory} onChange={(e) => setSaveTemplateCategory(e.target.value)} placeholder="Категория (напр. Продажи)" />
             <Button onClick={() => {
               if (!saveTemplateName.trim()) return
-              setSavedTemplates((prev) => [...prev, { title: saveTemplateName.trim(), category: saveTemplateCategory.trim() || "Общие", lessons: demo.lessons }])
+              setSavedTemplates((prev) => [...prev, { title: saveTemplateName.trim(), category: saveTemplateCategory.trim() || "Общие", lessons: demoRef.current.lessons }])
               setSaveTemplateDialog(false)
               setSaveTemplateName("")
               setSaveTemplateCategory("")
@@ -589,12 +624,14 @@ function BlockEditor({ block, onUpdate }: { block: Block; onUpdate: (p: Partial<
   const onUpdateRef = useRef(onUpdate)
   onUpdateRef.current = onUpdate
 
-  // Set innerHTML when block changes (key prop forces remount for different blocks)
+  // Set innerHTML on mount (key prop on BlockEditor forces remount when block.id changes)
   useEffect(() => {
-    if (editorRef.current && editorRef.current.innerHTML !== block.content) {
+    if (editorRef.current) {
       editorRef.current.innerHTML = block.content || ""
+      console.log("[BlockEditor] mounted block:", block.id, "content length:", (block.content || "").length)
     }
-  }, [block.id]) // only on block ID change, not content (to avoid cursor jump)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // intentionally run only on mount — key prop handles remount on block change
 
   const tb = (fn: () => void) => (e: React.MouseEvent) => { e.preventDefault(); fn() }
 
@@ -639,9 +676,10 @@ function BlockEditor({ block, onUpdate }: { block: Block; onUpdate: (p: Partial<
   const syncContent = useCallback(() => {
     if (editorRef.current) {
       const html = editorRef.current.innerHTML
+      console.log("[BlockEditor] syncContent block:", block.id, "html length:", html.length)
       onUpdateRef.current({ content: html })
     }
-  }, [])
+  }, [block.id])
 
   switch (block.type) {
     case "text":
@@ -692,6 +730,7 @@ function BlockEditor({ block, onUpdate }: { block: Block; onUpdate: (p: Partial<
             ref={editorRef}
             contentEditable
             suppressContentEditableWarning
+            data-block-editor={block.id}
             className="min-h-[100px] text-sm rounded-b-lg border border-t-0 border-border bg-background p-3 outline-none focus:ring-1 focus:ring-ring [&_h1]:text-xl [&_h1]:font-bold [&_h1]:mt-3 [&_h1]:mb-1 [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:mt-2 [&_h2]:mb-1 [&_h3]:text-base [&_h3]:font-semibold [&_h3]:mt-2 [&_ul]:list-disc [&_ul]:ml-4 [&_ol]:list-decimal [&_ol]:ml-4 [&_a]:text-primary [&_a]:underline"
             onBlur={syncContent}
             onInput={syncContent}
