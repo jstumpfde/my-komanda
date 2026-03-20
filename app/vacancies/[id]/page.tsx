@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { CourseTab } from "@/components/vacancies/course-tab"
+import { NotionCourseTab } from "@/components/vacancies/notion-course-tab"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Slider } from "@/components/ui/slider"
@@ -360,6 +361,7 @@ export default function VacancyPage() {
                 <TabsList className="shrink-0">
                   <TabsTrigger value="candidates" className="gap-1.5"><Kanban className="w-3.5 h-3.5" />Кандидаты</TabsTrigger>
                   <TabsTrigger value="course" className="gap-1.5"><BookOpen className="w-3.5 h-3.5" />Демонстрация</TabsTrigger>
+                  <TabsTrigger value="course2" className="gap-1.5"><BookOpen className="w-3.5 h-3.5" />Демонстрация 2</TabsTrigger>
                   <TabsTrigger value="analytics" className="gap-1.5"><BarChart3 className="w-3.5 h-3.5" />Аналитика</TabsTrigger>
                   <TabsTrigger value="automation" className="gap-1.5"><Zap className="w-3.5 h-3.5" />Автоматизация</TabsTrigger>
                   <TabsTrigger value="publish" className="gap-1.5"><Globe className="w-3.5 h-3.5" />Публикация</TabsTrigger>
@@ -413,6 +415,10 @@ export default function VacancyPage() {
 
               <TabsContent value="course">
                 <CourseTab />
+              </TabsContent>
+
+              <TabsContent value="course2" className="p-0 border-0 mt-0">
+                <NotionCourseTab />
               </TabsContent>
 
               <TabsContent value="analytics">
