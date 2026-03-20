@@ -13,12 +13,12 @@ import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import {
-  Search, Loader2, Building2, CheckCircle2, Upload, Save,
+  Loader2, Building2, CheckCircle2, Upload, Save,
   Phone, Mail, Globe, MapPin, Calendar, Users, Briefcase,
   FileText, CreditCard, Info, Eye, Palette, Lock, Play,
-  Plus, ChevronDown, ChevronUp, Star,
+  Plus,
 } from "lucide-react"
-import { getBrand, saveBrand, BRAND_PRESETS, canCustomizeBrand, canCustomDomain, type BrandConfig, brandCssVars } from "@/lib/branding"
+import { saveBrand, BRAND_PRESETS, canCustomizeBrand, canCustomDomain, type BrandConfig } from "@/lib/branding"
 
 // ─── Мок-данные DaData ──────────────────────────────────────
 
@@ -76,101 +76,60 @@ function BankAccountItem({
   onChange: (updated: BankAccount) => void
   onRemove: () => void
 }) {
-  const [open, setOpen] = useState(true)
-
-  const label = account.bankName
-    ? `${account.bankName}${account.rs ? " · " + account.rs.slice(-4) : ""}`
-    : "Новый счёт"
-
   return (
-    <div className={cn("rounded-lg border", isDefault ? "border-primary/40 bg-primary/[0.02]" : "border-border")}>
-      {/* Шапка аккордеона */}
-      <div
-        className="flex items-center gap-2 px-3 py-2.5 cursor-pointer select-none"
-        onClick={() => setOpen(o => !o)}
+    <div className="flex items-center gap-2">
+      {/* Радио «По умолчанию» */}
+      <button
+        type="button"
+        onClick={onSetDefault}
+        title="Сделать основным"
+        className="shrink-0"
       >
-        {/* Радио «По умолчанию» */}
-        <button
-          type="button"
-          onClick={e => { e.stopPropagation(); onSetDefault() }}
-          title="Сделать основным"
-          className="shrink-0"
-        >
-          <div className={cn(
-            "w-4 h-4 rounded-full border-2 flex items-center justify-center transition-colors",
-            isDefault ? "border-primary bg-primary" : "border-muted-foreground/40 hover:border-primary/60"
-          )}>
-            {isDefault && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
-          </div>
-        </button>
+        <div className={cn(
+          "w-4 h-4 rounded-full border-2 flex items-center justify-center transition-colors",
+          isDefault ? "border-primary bg-primary" : "border-muted-foreground/40 hover:border-primary/60"
+        )}>
+          {isDefault && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+        </div>
+      </button>
 
-        <span className="flex-1 text-sm font-medium truncate">{label}</span>
-
-        {isDefault && (
-          <Badge variant="outline" className="text-[10px] border-primary/30 text-primary shrink-0">
-            <Star className="w-2.5 h-2.5 mr-1" /> Основной
-          </Badge>
-        )}
-
-        {open ? (
-          <ChevronUp className="w-4 h-4 text-muted-foreground shrink-0" />
-        ) : (
-          <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />
-        )}
+      {/* Поля в одну строку */}
+      <div className="grid grid-cols-4 gap-2 flex-1">
+        <Input
+          value={account.bankName}
+          onChange={e => onChange({ ...account, bankName: e.target.value })}
+          placeholder="Банк"
+          className="h-8 text-sm"
+        />
+        <Input
+          value={account.bik}
+          onChange={e => onChange({ ...account, bik: e.target.value })}
+          placeholder="БИК"
+          className="h-8 text-sm font-mono"
+        />
+        <Input
+          value={account.rs}
+          onChange={e => onChange({ ...account, rs: e.target.value })}
+          placeholder="Расчётный счёт"
+          className="h-8 text-sm font-mono"
+        />
+        <Input
+          value={account.ks}
+          onChange={e => onChange({ ...account, ks: e.target.value })}
+          placeholder="Корр. счёт"
+          className="h-8 text-sm font-mono"
+        />
       </div>
 
-      {/* Тело аккордеона */}
-      {open && (
-        <div className="px-3 pb-3 space-y-2 border-t border-border/60 pt-3">
-          <div className="grid grid-cols-4 gap-3">
-            <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground">Банк</Label>
-              <Input
-                value={account.bankName}
-                onChange={e => onChange({ ...account, bankName: e.target.value })}
-                placeholder="ПАО Сбербанк"
-                className="h-8 text-sm"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground">БИК</Label>
-              <Input
-                value={account.bik}
-                onChange={e => onChange({ ...account, bik: e.target.value })}
-                placeholder="044525225"
-                className="h-8 text-sm font-mono"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground">Расчётный счёт</Label>
-              <Input
-                value={account.rs}
-                onChange={e => onChange({ ...account, rs: e.target.value })}
-                placeholder="40702810938000012345"
-                className="h-8 text-sm font-mono"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground">Корр. счёт</Label>
-              <Input
-                value={account.ks}
-                onChange={e => onChange({ ...account, ks: e.target.value })}
-                placeholder="30101810400000000225"
-                className="h-8 text-sm font-mono"
-              />
-            </div>
-          </div>
-          <div className="flex justify-end">
-            <button
-              type="button"
-              onClick={onRemove}
-              className="text-xs text-destructive/70 hover:text-destructive transition-colors"
-            >
-              Удалить счёт
-            </button>
-          </div>
-        </div>
-      )}
+      {/* Удалить */}
+      <button
+        type="button"
+        onClick={onRemove}
+        title="Удалить счёт"
+        className="shrink-0 text-muted-foreground/50 hover:text-destructive transition-colors"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+      </button>
     </div>
   )
 }
@@ -410,16 +369,10 @@ export default function CompanyProfilePage() {
               {/* ═══ Банковские реквизиты — список счетов ═══════ */}
               <Card>
                 <CardHeader className="pb-2 pt-4 px-4">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-base flex items-center gap-2">
-                      <CreditCard className="w-4 h-4" />
-                      Банковские реквизиты
-                    </CardTitle>
-                    <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={addAccount}>
-                      <Plus className="w-3.5 h-3.5" />
-                      Добавить счёт
-                    </Button>
-                  </div>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <CreditCard className="w-4 h-4" />
+                    Банковские реквизиты
+                  </CardTitle>
                 </CardHeader>
                 <CardContent className="px-4 pb-4 pt-0 space-y-2">
                   {accounts.map(account => (
@@ -434,9 +387,13 @@ export default function CompanyProfilePage() {
                   ))}
                   {accounts.length === 0 && (
                     <p className="text-sm text-muted-foreground text-center py-4">
-                      Счёта ещё нет. Нажмите «Добавить счёт».
+                      Счетов ещё нет.
                     </p>
                   )}
+                  <Button variant="outline" size="sm" className="h-7 text-xs gap-1 mt-1" onClick={addAccount}>
+                    <Plus className="w-3.5 h-3.5" />
+                    Добавить счёт
+                  </Button>
                 </CardContent>
               </Card>
 
