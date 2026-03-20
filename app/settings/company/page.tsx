@@ -150,7 +150,7 @@ export default function CompanyProfilePage() {
       <SidebarInset>
         <DashboardHeader />
         <main className="flex-1 overflow-auto bg-background">
-          <div className="p-4 sm:p-6 max-w-4xl">
+          <div className="p-4 sm:p-6">
             <div className="mb-4">
               <h1 className="text-2xl font-semibold text-foreground mb-1">Профиль компании</h1>
               <p className="text-muted-foreground text-sm">Данные организации и настройки для демонстраций</p>
