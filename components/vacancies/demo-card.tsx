@@ -1363,6 +1363,8 @@ function TBtn({ icon: I, tip, onClick, disabled, className }: { icon: React.Elem
 }
 function Sep() { return <div className="w-px h-5 bg-border mx-0.5" /> }
 
+const QUICK_EMOJIS = ["😀", "👋", "🐱", "🍎", "🏠", "⚽", "📝", "🚫", "🏁"]
+
 /* ──── Emoji Picker (big, categorized) ──── */
 function EmojiPicker({ onSelect }: { onSelect: (emoji: string) => void }) {
   const [open, setOpen] = useState(false)
@@ -1373,6 +1375,12 @@ function EmojiPicker({ onSelect }: { onSelect: (emoji: string) => void }) {
       <button className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground" title="Эмодзи" onClick={() => setOpen(!open)}><Smile className="w-3.5 h-3.5" /></button>
       {open && (
         <div className="absolute top-8 right-0 z-50 bg-popover border border-border rounded-xl shadow-xl p-3 w-[400px] max-h-[350px] overflow-y-auto">
+          {/* Быстрый доступ */}
+          <div className="flex gap-0.5 mb-2 pb-2 border-b border-border">
+            {QUICK_EMOJIS.map((e) => (
+              <button key={e} className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-muted text-lg transition-colors" onClick={() => { onSelect(e); setOpen(false) }}>{e}</button>
+            ))}
+          </div>
           {categories.map(([name, emojis]) => (
             <div key={name} className="mb-3">
               <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider mb-1.5">{name}</p>
@@ -1408,6 +1416,12 @@ function LessonIconPicker({ current, onSelect }: { current: string; onSelect: (v
           <div className="p-3 max-h-[300px] overflow-y-auto">
             {tab === "emoji" ? (
               <>
+                {/* Быстрый доступ */}
+                <div className="flex gap-0.5 mb-2 pb-2 border-b border-border">
+                  {QUICK_EMOJIS.map((e) => (
+                    <button key={e} className={cn("w-8 h-8 flex items-center justify-center rounded-md hover:bg-muted text-lg transition-colors", current === e && "bg-primary/10 ring-1 ring-primary")} onClick={() => { onSelect(e); setOpen(false) }}>{e}</button>
+                  ))}
+                </div>
                 {categories.map(([name, emojis]) => (
                   <div key={name} className="mb-3">
                     <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider mb-1">{name}</p>
