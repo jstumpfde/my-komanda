@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import {
   LayoutDashboard,
   Users,
@@ -26,6 +26,7 @@ import {
   Bell,
   Plug,
   Database,
+  LogOut,
 } from "lucide-react"
 import {
   Sidebar,
@@ -69,7 +70,7 @@ import {
   type VacancyCategory,
 } from "@/lib/vacancy-storage"
 import { cn } from "@/lib/utils"
-import { useAuth, getVisibleSections, getVisibleSettings } from "@/lib/auth"
+import { useAuth, getVisibleSections, getVisibleSettings, ROLE_LABELS } from "@/lib/auth"
 
 const mainNavItems = [
   { name: "Обзор", icon: LayoutDashboard, href: "/overview" },
@@ -121,7 +122,13 @@ interface DragState {
 
 export function DashboardSidebar() {
   const pathname = usePathname()
-  const { role } = useAuth()
+  const router = useRouter()
+  const { role, user, logout } = useAuth()
+
+  const handleLogout = () => {
+    logout()
+    router.push("/login")
+  }
   const vis = getVisibleSections(role)
   const visSettings = getVisibleSettings(role)
   const [categories, setCategories] = useState<VacancyCategory[]>([])
@@ -540,21 +547,28 @@ export function DashboardSidebar() {
           <p className="text-[10px] text-sidebar-foreground/40 mt-1">Использовано 80% лимита</p>
         </div>
         
-        <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-sidebar-accent transition-colors cursor-pointer group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-1">
+        <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-sidebar-accent transition-colors group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-1">
           <Avatar className="size-8 shrink-0">
-            <AvatarImage src="/placeholder.svg" />
+            <AvatarImage src={user.avatar} />
             <AvatarFallback className="bg-sidebar-primary text-sidebar-primary-foreground text-xs font-medium">
-              АИ
+              {user.name.split(" ").map(w => w[0]).slice(0, 2).join("")}
             </AvatarFallback>
           </Avatar>
           <div className="flex-1 min-w-0 group-data-[collapsible=icon]:hidden">
             <p className="text-[13px] font-medium text-sidebar-foreground truncate">
-              Анна Иванова
+              {user.name}
             </p>
             <p className="text-[11px] text-sidebar-foreground/50 truncate">
-              HR Менеджер
+              {ROLE_LABELS[role]}
             </p>
           </div>
+          <button
+            onClick={handleLogout}
+            title="Выйти"
+            className="shrink-0 group-data-[collapsible=icon]:hidden w-7 h-7 rounded-md flex items-center justify-center text-sidebar-foreground/40 hover:text-destructive hover:bg-destructive/10 transition-colors"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+          </button>
         </div>
       </SidebarFooter>
 

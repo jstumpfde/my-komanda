@@ -6,120 +6,172 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Separator } from "@/components/ui/separator"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { toast } from "sonner"
-import { Briefcase, ArrowRight, Eye, EyeOff } from "lucide-react"
-import Link from "next/link"
+import { Briefcase, ArrowRight, Eye, EyeOff, Info } from "lucide-react"
+import { useAuth } from "@/lib/auth"
+
+// Список пользователей (в реальном проекте — бэкенд)
+const USERS = [
+  { login: "admin", password: "admin", role: "admin" as const },
+  { login: "manager", password: "manager", role: "manager" as const },
+  { login: "client", password: "client", role: "client" as const },
+]
 
 export default function LoginPage() {
   const router = useRouter()
-  const [email, setEmail] = useState("")
+  const { login } = useAuth()
+  const [loginVal, setLoginVal] = useState("")
   const [password, setPassword] = useState("")
   const [showPw, setShowPw] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [forgotOpen, setForgotOpen] = useState(false)
-  const [resetEmail, setResetEmail] = useState("")
+  const [error, setError] = useState("")
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!email || !password) { toast.error("Заполните все поля"); return }
+    setError("")
+
+    if (!loginVal.trim() || !password) {
+      setError("Введите логин и пароль")
+      return
+    }
+
     setLoading(true)
-    await new Promise(r => setTimeout(r, 800))
-    toast.success("Вход выполнен!")
+    await new Promise(r => setTimeout(r, 600))
+
+    const found = USERS.find(u => u.login === loginVal.trim() && u.password === password)
+    if (!found) {
+      setLoading(false)
+      setError("Неверный логин или пароль")
+      return
+    }
+
+    login(found.role)
+    toast.success("Добро пожаловать!")
     router.push("/")
   }
 
-  const handleSocial = (provider: string) => {
-    toast.info(`Вход через ${provider} (заглушка)`)
-    setTimeout(() => router.push("/"), 500)
-  }
-
-  const handleReset = () => {
-    if (!resetEmail) { toast.error("Введите email"); return }
-    toast.success(`Ссылка для сброса отправлена на ${resetEmail}`)
-    setForgotOpen(false)
+  const fillAdmin = () => {
+    setLoginVal("admin")
+    setPassword("admin")
+    setError("")
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-blue-50 via-white to-indigo-50">
-      <div className="w-full max-w-md space-y-6">
-        <div className="flex justify-center">
-          <div className="flex items-center gap-2">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white font-bold">
-              <Briefcase className="w-5 h-5" />
-            </div>
-            <span className="text-xl font-bold text-foreground">Моя Команда</span>
+    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-blue-50 via-white to-indigo-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
+      <div className="w-full max-w-sm space-y-6">
+
+        {/* Logo */}
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center shadow-lg">
+            <Briefcase className="w-6 h-6 text-white" />
+          </div>
+          <div className="text-center">
+            <h1 className="text-2xl font-bold text-foreground">Моя Команда</h1>
+            <p className="text-sm text-muted-foreground mt-0.5">HR-платформа для найма</p>
           </div>
         </div>
 
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-foreground">Войти в Моя Команда</h1>
-          <p className="text-muted-foreground text-sm mt-1">Добро пожаловать!</p>
-        </div>
+        {/* Card */}
+        <Card className="border shadow-xl">
+          <CardContent className="pt-6 pb-6 space-y-5">
+            <div>
+              <h2 className="text-lg font-semibold text-foreground">Вход в систему</h2>
+              <p className="text-sm text-muted-foreground">Введите логин и пароль для доступа</p>
+            </div>
 
-        <Card className="border-none shadow-lg">
-          <CardContent className="pt-6 pb-6">
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-1.5">
-                <Label className="text-sm">Email</Label>
-                <Input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="email@company.ru" autoFocus />
+                <Label htmlFor="login" className="text-sm font-medium">Логин</Label>
+                <Input
+                  id="login"
+                  type="text"
+                  value={loginVal}
+                  onChange={e => { setLoginVal(e.target.value); setError("") }}
+                  placeholder="Введите логин"
+                  autoFocus
+                  autoComplete="username"
+                  className={error ? "border-destructive focus-visible:ring-destructive" : ""}
+                />
               </div>
+
               <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <Label className="text-sm">Пароль</Label>
-                  <button type="button" className="text-xs text-primary hover:underline" onClick={() => setForgotOpen(true)}>Забыли пароль?</button>
-                </div>
+                <Label htmlFor="password" className="text-sm font-medium">Пароль</Label>
                 <div className="relative">
-                  <Input type={showPw ? "text" : "password"} value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" />
-                  <button type="button" className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" onClick={() => setShowPw(!showPw)}>
+                  <Input
+                    id="password"
+                    type={showPw ? "text" : "password"}
+                    value={password}
+                    onChange={e => { setPassword(e.target.value); setError("") }}
+                    placeholder="Введите пароль"
+                    autoComplete="current-password"
+                    className={error ? "border-destructive focus-visible:ring-destructive pr-10" : "pr-10"}
+                  />
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                    onClick={() => setShowPw(!showPw)}
+                  >
                     {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
               </div>
+
+              {error && (
+                <p className="text-sm text-destructive flex items-center gap-1.5">
+                  <span className="text-base">⚠️</span> {error}
+                </p>
+              )}
+
               <Button type="submit" className="w-full h-11 font-semibold" disabled={loading}>
-                {loading ? "Входим..." : "Войти"} <ArrowRight className="w-4 h-4 ml-2" />
+                {loading ? (
+                  <span className="flex items-center gap-2">
+                    <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                    </svg>
+                    Проверяем...
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-2">
+                    Войти <ArrowRight className="w-4 h-4" />
+                  </span>
+                )}
               </Button>
             </form>
 
-            <div className="relative my-5">
-              <div className="absolute inset-0 flex items-center"><Separator /></div>
-              <div className="relative flex justify-center"><span className="bg-card px-3 text-xs text-muted-foreground">или</span></div>
-            </div>
-
-            <div className="space-y-2">
-              <Button variant="outline" className="w-full h-10 gap-2" onClick={() => handleSocial("VK ID")}>
-                <div className="w-5 h-5 rounded bg-blue-600 flex items-center justify-center text-white text-[10px] font-bold">VK</div>
-                Войти через VK ID
-              </Button>
-              <Button variant="outline" className="w-full h-10 gap-2" onClick={() => handleSocial("Яндекс")}>
-                <div className="w-5 h-5 rounded bg-amber-400 flex items-center justify-center text-white text-[10px] font-bold">Я</div>
-                Войти через Яндекс
-              </Button>
-              <Button variant="outline" className="w-full h-10 gap-2" onClick={() => handleSocial("Google")}>
-                <div className="w-5 h-5 rounded bg-blue-500 flex items-center justify-center text-white text-[10px] font-bold">G</div>
-                Войти через Google
-              </Button>
+            {/* Hint block */}
+            <div className="rounded-xl border border-blue-100 bg-blue-50 dark:border-blue-900/40 dark:bg-blue-950/30 p-3 space-y-2">
+              <div className="flex items-center gap-1.5 text-blue-700 dark:text-blue-400">
+                <Info className="w-3.5 h-3.5 shrink-0" />
+                <span className="text-xs font-semibold">Демо-доступ</span>
+              </div>
+              <div className="space-y-1">
+                {USERS.map(u => (
+                  <div key={u.login} className="flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground">
+                      <span className="font-mono bg-muted/60 px-1 rounded">{u.login}</span>
+                      {" / "}
+                      <span className="font-mono bg-muted/60 px-1 rounded">{u.password}</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => { setLoginVal(u.login); setPassword(u.password); setError("") }}
+                      className="text-blue-600 dark:text-blue-400 hover:underline text-[11px] font-medium"
+                    >
+                      Заполнить
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
           </CardContent>
         </Card>
 
-        <p className="text-center text-sm text-muted-foreground">
-          Нет аккаунта?{" "}
-          <Link href="/register" className="text-primary hover:underline font-medium">Попробовать бесплатно</Link>
+        <p className="text-center text-xs text-muted-foreground">
+          © 2025 Моя Команда. Все права защищены.
         </p>
       </div>
-
-      <Dialog open={forgotOpen} onOpenChange={setForgotOpen}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>Восстановление пароля</DialogTitle></DialogHeader>
-          <div className="space-y-4 pt-2">
-            <p className="text-sm text-muted-foreground">Введите email и мы отправим ссылку для сброса пароля</p>
-            <Input type="email" value={resetEmail} onChange={e => setResetEmail(e.target.value)} placeholder="email@company.ru" />
-            <Button className="w-full" onClick={handleReset}>Отправить ссылку</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }

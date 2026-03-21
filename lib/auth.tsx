@@ -25,38 +25,81 @@ interface AuthContextValue {
   user: User
   role: UserRole
   realRole: UserRole
+  isLoggedIn: boolean
   isViewingAs: boolean
   setRole: (role: UserRole) => void
   hasAccess: (allowed: UserRole[]) => boolean
   returnToAdmin: () => void
+  login: (role: UserRole) => void
+  logout: () => void
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
 
+const STORAGE_LOGGED_IN = "hireflow-logged-in"
+const STORAGE_VIEW_ROLE = "hireflow-view-role"
+const STORAGE_AUTH_ROLE = "hireflow-auth-role"
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [role, setRoleState] = useState<UserRole>("admin")
-  const [realRole] = useState<UserRole>("admin") // always admin in demo
+  const [realRole, setRealRole] = useState<UserRole>("admin")
+  const [isLoggedIn, setIsLoggedIn] = useState(false)
+  const [hydrated, setHydrated] = useState(false)
 
   useEffect(() => {
     if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("hireflow-view-role") as UserRole | null
-      if (saved && defaultUsers[saved]) setRoleState(saved)
+      const loggedIn = localStorage.getItem(STORAGE_LOGGED_IN) === "true"
+      const savedAuthRole = localStorage.getItem(STORAGE_AUTH_ROLE) as UserRole | null
+      const savedViewRole = localStorage.getItem(STORAGE_VIEW_ROLE) as UserRole | null
+
+      if (loggedIn && savedAuthRole && defaultUsers[savedAuthRole]) {
+        setIsLoggedIn(true)
+        setRealRole(savedAuthRole)
+        const viewRole = savedViewRole && defaultUsers[savedViewRole] ? savedViewRole : savedAuthRole
+        setRoleState(viewRole)
+      }
+      setHydrated(true)
     }
   }, [])
 
-  const setRole = (r: UserRole) => {
+  const login = (r: UserRole) => {
+    setIsLoggedIn(true)
+    setRealRole(r)
     setRoleState(r)
-    if (typeof window !== "undefined") localStorage.setItem("hireflow-view-role", r)
+    if (typeof window !== "undefined") {
+      localStorage.setItem(STORAGE_LOGGED_IN, "true")
+      localStorage.setItem(STORAGE_AUTH_ROLE, r)
+      localStorage.setItem(STORAGE_VIEW_ROLE, r)
+    }
   }
 
-  const returnToAdmin = () => setRole("admin")
+  const logout = () => {
+    setIsLoggedIn(false)
+    setRealRole("admin")
+    setRoleState("admin")
+    if (typeof window !== "undefined") {
+      localStorage.removeItem(STORAGE_LOGGED_IN)
+      localStorage.removeItem(STORAGE_AUTH_ROLE)
+      localStorage.removeItem(STORAGE_VIEW_ROLE)
+    }
+  }
+
+  const setRole = (r: UserRole) => {
+    setRoleState(r)
+    if (typeof window !== "undefined") localStorage.setItem(STORAGE_VIEW_ROLE, r)
+  }
+
+  const returnToAdmin = () => setRole(realRole)
 
   const user = defaultUsers[role]
   const isViewingAs = role !== realRole
   const hasAccess = (allowed: UserRole[]) => allowed.includes(role)
 
+  // Prevent rendering with wrong state before hydration
+  if (!hydrated) return null
+
   return (
-    <AuthContext.Provider value={{ user, role, realRole, isViewingAs, setRole, hasAccess, returnToAdmin }}>
+    <AuthContext.Provider value={{ user, role, realRole, isLoggedIn, isViewingAs, setRole, hasAccess, returnToAdmin, login, logout }}>
       {children}
     </AuthContext.Provider>
   )
