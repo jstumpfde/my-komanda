@@ -1075,16 +1075,12 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
           <LayoutPicker value={layout} onChange={(v) => onUpdate({ imageLayout: v as Block["imageLayout"] })} prefix="image" />
           {isSet ? (
             <div className={cn("flex gap-3", isSide ? (layout === "image-left" ? "flex-row" : "flex-row-reverse") : "flex-col")}>
-              {/* Картинка: подпись сверху (если есть), затем медиа */}
               <div className={cn("flex flex-col gap-1", isSide ? "w-1/2 shrink-0" : "w-full")}>
-                {block.imageCaption && (
-                  <p className="text-xs text-muted-foreground leading-snug">{block.imageCaption}</p>
-                )}
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={block.imageUrl} alt={block.imageCaption || ""} className="rounded-lg object-contain w-full max-h-64 bg-muted/30" />
                 <input
                   className="text-xs text-muted-foreground bg-transparent outline-none border-b border-border/40 pb-0.5 focus:border-primary/40 mt-0.5"
-                  value={block.imageCaption}
+                  value={block.imageCaption || ""}
                   onChange={(e) => onUpdate({ imageCaption: e.target.value })}
                   placeholder="Добавить подпись..."
                 />
@@ -1133,11 +1129,7 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
           <LayoutPicker value={layout} onChange={(v) => onUpdate({ videoLayout: v.replace("image", "video") as Block["videoLayout"] })} prefix="video" />
           {isSet ? (
             <div className={cn("flex gap-3", isSide ? (layout === "video-left" ? "flex-row" : "flex-row-reverse") : "flex-col")}>
-              {/* Видео: подпись сверху (если есть), затем плеер */}
               <div className={cn("flex flex-col gap-1", isSide ? "w-1/2 shrink-0" : "w-full")}>
-                {block.imageCaption && (
-                  <p className="text-xs text-muted-foreground leading-snug">{block.imageCaption}</p>
-                )}
                 <div className="rounded-lg bg-black aspect-video overflow-hidden">
                   {embed ? (
                     <iframe
@@ -1153,7 +1145,7 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
                 </div>
                 <input
                   className="text-xs text-muted-foreground bg-transparent outline-none border-b border-border/40 pb-0.5 focus:border-primary/40 mt-0.5"
-                  value={block.imageCaption}
+                  value={block.imageCaption || ""}
                   onChange={(e) => onUpdate({ imageCaption: e.target.value })}
                   placeholder="Добавить подпись..."
                 />
@@ -1161,7 +1153,7 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
               {isSide && (
                 <textarea
                   className="flex-1 text-sm bg-transparent outline-none resize-none min-h-[80px] leading-relaxed placeholder:text-muted-foreground/40"
-                  value={block.content}
+                  value={block.content || ""}
                   onChange={(e) => onUpdate({ content: e.target.value })}
                   placeholder="Текст рядом с видео..."
                 />
@@ -1200,16 +1192,12 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
           <LayoutPicker value={layout} onChange={(v) => onUpdate({ audioLayout: v.replace("image", "audio") as Block["audioLayout"] })} prefix="audio" />
           {isSet ? (
             <div className={cn("flex gap-3 items-start", isSide ? (layout === "audio-left" ? "flex-row" : "flex-row-reverse") : "flex-col")}>
-              {/* Аудио: подпись сверху (если есть), затем плеер */}
               <div className={cn("flex flex-col gap-1", isSide ? "w-1/2 shrink-0" : "w-full")}>
-                {block.imageCaption && (
-                  <p className="text-xs text-muted-foreground leading-snug">{block.imageCaption}</p>
-                )}
                 {block.audioTitle && <p className="text-xs font-medium text-foreground">{block.audioTitle}</p>}
                 <audio src={block.audioUrl} controls className="w-full" />
                 <input
                   className="text-xs text-muted-foreground bg-transparent outline-none border-b border-border/40 pb-0.5 focus:border-primary/40 mt-0.5"
-                  value={block.imageCaption}
+                  value={block.imageCaption || ""}
                   onChange={(e) => onUpdate({ imageCaption: e.target.value })}
                   placeholder="Добавить подпись..."
                 />
@@ -1263,11 +1251,7 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
           <LayoutPicker value={layout} onChange={(v) => onUpdate({ fileLayout: v.replace("image", "file") as Block["fileLayout"] })} prefix="file" />
           {isSet ? (
             <div className={cn("flex gap-3 items-start", isSide ? (layout === "file-left" ? "flex-row" : "flex-row-reverse") : "flex-col")}>
-              {/* Файл: подпись сверху (если есть), затем карточка */}
               <div className={cn("flex flex-col gap-1", isSide ? "w-1/2 shrink-0" : "w-full")}>
-                {block.imageCaption && (
-                  <p className="text-xs text-muted-foreground leading-snug">{block.imageCaption}</p>
-                )}
                 <div className="flex items-center gap-3 p-3 bg-background rounded-lg border border-border">
                   <FileText className="w-8 h-8 text-primary shrink-0" />
                   <div className="flex-1 min-w-0">
@@ -1277,7 +1261,7 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
                 </div>
                 <input
                   className="text-xs text-muted-foreground bg-transparent outline-none border-b border-border/40 pb-0.5 focus:border-primary/40 mt-0.5"
-                  value={block.imageCaption}
+                  value={block.imageCaption || ""}
                   onChange={(e) => onUpdate({ imageCaption: e.target.value })}
                   placeholder="Добавить подпись..."
                 />
