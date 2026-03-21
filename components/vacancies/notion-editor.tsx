@@ -631,9 +631,9 @@ function NotionBlock({ block, idx, totalBlocks, isHovered, isDragging, isDragOve
       onDrop={onDrop}
       data-block-id={block.id}
     >
-      {/* Action bar — горизонтальная, вверху слева, внутри блока, при наведении */}
+      {/* Action bar — горизонтальная, вверху справа, внутри блока, при наведении */}
       <div className={cn(
-        "flex items-center gap-0.5 mb-0.5",
+        "flex items-center gap-0.5 mb-0.5 ml-auto",
         "bg-background/95 backdrop-blur-sm border border-border rounded-md shadow-sm px-0.5 py-0.5 w-fit",
         "transition-all duration-100",
         isHovered ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
@@ -699,9 +699,22 @@ function NotionBlock({ block, idx, totalBlocks, isHovered, isDragging, isDragOve
 // ─── Emoji & tag insertion helpers ────────────────────────────────────────
 
 const QUICK_INSERT_EMOJIS = [
-  "😊","👋","🚀","💡","✅","❌","⚠️","🔥","💰","📊","🎯","🏆","👤","📍",
-  "📅","🕐","📞","📧","🔗","📄","🎓","💼","🏢","⚙️","🌟","💬","🤝","📈",
-  "🎉","❤️","👍","🙏","💪","🧠","✨","🔑","🏅","📝","🗓","💎",
+  // Смайлы и эмоции
+  "😊","😄","😂","🥰","😍","🤩","😎","🤔","😅","🥳","😇","🤗","😏","😢","😤","😱",
+  // Жесты и люди
+  "👋","👍","👎","👏","🙌","🤝","🙏","💪","🫶","✌️","🤞","👊","🫂","👤","👥","🧠",
+  // Животные
+  "🐱","🐶","🦊","🐻","🐼","🦁","🐯","🐸","🐧","🦋","🐝","🦄","🦅","🐠","🦀","🐙",
+  // Еда и напитки
+  "🍎","🍕","🍔","🍣","🍜","☕","🎂","🍰","🍇","🥑","🌮","🍦","🧃","🍺","🥂","🍩",
+  // Природа и погода
+  "🌸","🌺","🌻","🌿","🍀","🌊","⛰️","🌙","⭐","☀️","🌈","❄️","🔥","⚡","🌪️","🌍",
+  // Объекты и инструменты
+  "💡","🔑","🔒","📱","💻","⚙️","🔧","🛠️","📷","🎵","🎸","🎮","🎯","🎲","🧩","🔍",
+  // Символы и знаки
+  "✅","❌","⚠️","💰","📊","🎉","❤️","💔","⚡","🔗","📌","🔖","💬","📢","🔔","🚫",
+  // Транспорт и места
+  "🚀","✈️","🚗","🏠","🏢","🏆","🏅","🎓","💼","📍","🗓","📅","🕐","📞","📧","📝",
 ]
 
 const QUICK_TAGS = [
@@ -831,14 +844,15 @@ function NotionTextBlock({ block, editorRef, isHovered, onSync, onKeyDown }: Not
           {showEmoji && (
             <div
               data-text-popup
-              className="absolute bottom-full right-0 mb-1 z-50 bg-popover border border-border rounded-xl shadow-xl p-2 w-56"
+              className="absolute bottom-full right-0 mb-1 z-50 bg-popover border border-border rounded-xl shadow-xl p-2"
+              style={{ width: "calc(8 * 2.25rem + 1rem)" }}
             >
-              <div className="flex flex-wrap gap-0.5">
+              <div className="grid grid-cols-8 gap-0.5 max-h-52 overflow-y-auto">
                 {QUICK_INSERT_EMOJIS.map((e) => (
                   <button
                     key={e}
                     onMouseDown={(ev) => { ev.preventDefault(); restoreSelectionAndInsert(e) }}
-                    className="w-8 h-8 text-base flex items-center justify-center rounded hover:bg-muted transition-colors"
+                    className="w-9 h-9 text-2xl flex items-center justify-center rounded hover:bg-muted transition-colors leading-none"
                   >
                     {e}
                   </button>
