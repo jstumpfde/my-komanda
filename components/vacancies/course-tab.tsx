@@ -12,10 +12,35 @@ import {
 } from "@/components/ui/dialog"
 import { Plus, GraduationCap } from "lucide-react"
 import { toast } from "sonner"
-import { type Demo, createDemo } from "@/lib/course-types"
+import { type Demo, type Block, createDemo } from "@/lib/course-types"
 import { NotionEditor } from "./notion-editor"
 
 const STORAGE_KEY = "hireflow-demos"
+
+/** Проверяет, является ли строка валидным URL или data-URI */
+function isValidUrl(s: string): boolean {
+  if (!s) return true // пустая строка — ок, не мусор
+  if (s.startsWith("data:")) return true
+  if (s.startsWith("blob:")) return true
+  try {
+    const url = new URL(s)
+    return url.protocol === "http:" || url.protocol === "https:"
+  } catch {
+    return false
+  }
+}
+
+/** Санирует блок: сбрасывает мусорные значения imageUrl и content */
+function sanitizeBlock(block: Block): Block {
+  return {
+    ...block,
+    imageUrl: isValidUrl(block.imageUrl ?? "") ? (block.imageUrl ?? "") : "",
+    content: typeof block.content === "string" ? block.content : "",
+    videoUrl: isValidUrl(block.videoUrl ?? "") ? (block.videoUrl ?? "") : "",
+    audioUrl: isValidUrl(block.audioUrl ?? "") ? (block.audioUrl ?? "") : "",
+    fileUrl: isValidUrl(block.fileUrl ?? "") ? (block.fileUrl ?? "") : "",
+  }
+}
 
 function loadDemos(): Demo[] {
   if (typeof window === "undefined") return []
@@ -23,11 +48,15 @@ function loadDemos(): Demo[] {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return []
     const parsed = JSON.parse(raw)
-    // Revive Date objects
+    // Revive Date objects + санировать блоки
     return parsed.map((d: Demo) => ({
       ...d,
       createdAt: new Date(d.createdAt),
       updatedAt: new Date(d.updatedAt),
+      lessons: (d.lessons ?? []).map((l) => ({
+        ...l,
+        blocks: (l.blocks ?? []).map(sanitizeBlock),
+      })),
     }))
   } catch { return [] }
 }

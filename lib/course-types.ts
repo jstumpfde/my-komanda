@@ -98,10 +98,13 @@ function defaultQuestion(): Question {
 export function createBlock(type: BlockType): Block {
   return {
     id: `blk-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-    type, content: "", imageUrl: "", imageLayout: "full", imageCaption: "",
-    videoUrl: "", audioUrl: "", audioTitle: "", audioLayout: "full",
+    type,
+    content: "",
+    imageUrl: "", imageLayout: "full", imageCaption: "",
+    videoUrl: "", videoLayout: "full",
+    audioUrl: "", audioTitle: "", audioLayout: "full",
     fileUrl: "", fileName: "", fileLayout: "full",
-    infoStyle: "info", infoColor: "",
+    infoStyle: "info", infoColor: "", infoIcon: "", infoSize: "m",
     buttonText: "Подробнее", buttonUrl: "", buttonVariant: "primary",
     taskDescription: "", questions: type === "task" ? [defaultQuestion()] : [],
   }

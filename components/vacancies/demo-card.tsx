@@ -1054,10 +1054,10 @@ function ImageBlockEditor({ block, onUpdate }: { block: Block; onUpdate: (p: Par
           ) : (
             <FileDropZone accept="image/*" label="Загрузить изображение" onFile={(url) => onUpdate({ imageUrl: url })} />
           )}
-          <Input className="mt-1.5 text-xs" placeholder="Или вставьте URL" value={block.imageUrl.startsWith("data:") ? "" : block.imageUrl} onChange={(e) => onUpdate({ imageUrl: e.target.value })} />
+          <Input className="mt-1.5 text-xs" placeholder="Или вставьте URL" value={(block.imageUrl || "").startsWith("data:") ? "" : (block.imageUrl || "")} onChange={(e) => onUpdate({ imageUrl: e.target.value })} />
         </div>
         {block.imageLayout !== "full" && (
-          <Textarea className="flex-1 min-h-[100px] text-sm" value={block.content} onChange={(e) => onUpdate({ content: e.target.value })} placeholder="Текст рядом с фото..." />
+          <Textarea className="flex-1 min-h-[100px] text-sm" value={block.content || ""} onChange={(e) => onUpdate({ content: e.target.value })} placeholder="Текст рядом с фото..." />
         )}
       </div>
     </div>
