@@ -637,6 +637,7 @@ function NotionBlock({ block, idx, totalBlocks, isHovered, isDragging, isDragOve
           <NotionTextBlock
             block={block}
             editorRef={editorRef}
+            isHovered={isHovered}
             onSync={syncContent}
             onUpdate={onUpdate}
             onKeyDown={handleKeyDown}
@@ -694,39 +695,192 @@ function NotionBlock({ block, idx, totalBlocks, isHovered, isDragging, isDragOve
   )
 }
 
+// ─── Emoji & tag insertion helpers ────────────────────────────────────────
+
+const QUICK_INSERT_EMOJIS = [
+  "😊","👋","🚀","💡","✅","❌","⚠️","🔥","💰","📊","🎯","🏆","👤","📍",
+  "📅","🕐","📞","📧","🔗","📄","🎓","💼","🏢","⚙️","🌟","💬","🤝","📈",
+  "🎉","❤️","👍","🙏","💪","🧠","✨","🔑","🏅","📝","🗓","💎",
+]
+
+const QUICK_TAGS = [
+  { tag: "{{имя}}", label: "Имя кандидата" },
+  { tag: "{{отчество}}", label: "Отчество кандидата" },
+  { tag: "{{фамилия}}", label: "Фамилия кандидата" },
+  { tag: "{{должность}}", label: "Должность" },
+  { tag: "{{компания}}", label: "Компания" },
+  { tag: "{{город}}", label: "Город" },
+  { tag: "{{дата}}", label: "Дата" },
+]
+
+function insertAtCursor(editorRef: React.RefObject<HTMLDivElement | null>, text: string, onSync: () => void) {
+  const el = editorRef.current
+  if (!el) return
+  el.focus()
+  const sel = window.getSelection()
+  if (sel && sel.rangeCount > 0) {
+    const range = sel.getRangeAt(0)
+    range.deleteContents()
+    const node = document.createTextNode(text)
+    range.insertNode(node)
+    range.setStartAfter(node)
+    range.setEndAfter(node)
+    sel.removeAllRanges()
+    sel.addRange(range)
+  } else {
+    document.execCommand("insertText", false, text)
+  }
+  onSync()
+}
+
 // ─── Text block (Notion-style) ─────────────────────────────────────────────
 
 interface NotionTextBlockProps {
   block: Block
   editorRef: React.RefObject<HTMLDivElement | null>
+  isHovered: boolean
   onSync: () => void
   onUpdate: (patch: Partial<Block>) => void
   onKeyDown: (e: React.KeyboardEvent<HTMLDivElement>) => void
 }
 
-function NotionTextBlock({ block, editorRef, onSync, onKeyDown }: NotionTextBlockProps) {
+function NotionTextBlock({ block, editorRef, isHovered, onSync, onKeyDown }: NotionTextBlockProps) {
+  const [showEmoji, setShowEmoji] = useState(false)
+  const [showTags, setShowTags] = useState(false)
+  const savedRangeRef = useRef<Range | null>(null)
+
+  // Save selection before popup opens (so we don't lose cursor)
+  const saveSelection = () => {
+    const sel = window.getSelection()
+    if (sel && sel.rangeCount > 0) {
+      savedRangeRef.current = sel.getRangeAt(0).cloneRange()
+    }
+  }
+
+  // Restore saved selection before inserting
+  const restoreSelectionAndInsert = (text: string) => {
+    const el = editorRef.current
+    if (!el) return
+    el.focus()
+    if (savedRangeRef.current) {
+      const sel = window.getSelection()
+      if (sel) {
+        sel.removeAllRanges()
+        sel.addRange(savedRangeRef.current)
+      }
+    }
+    insertAtCursor(editorRef, text, onSync)
+    setShowEmoji(false)
+    setShowTags(false)
+  }
+
+  // Close popups on outside click
+  useEffect(() => {
+    if (!showEmoji && !showTags) return
+    const handler = (e: MouseEvent) => {
+      const target = e.target as HTMLElement
+      if (!target.closest("[data-text-popup]")) {
+        setShowEmoji(false)
+        setShowTags(false)
+      }
+    }
+    document.addEventListener("mousedown", handler)
+    return () => document.removeEventListener("mousedown", handler)
+  }, [showEmoji, showTags])
+
   return (
-    <div
-      ref={editorRef}
-      contentEditable
-      suppressContentEditableWarning
-      data-placeholder="Введите текст или / для команды..."
-      className={cn(
-        "outline-none min-h-[1.5em] text-[15px] leading-relaxed text-foreground",
-        "empty:before:content-[attr(data-placeholder)] empty:before:text-muted-foreground/30",
-        "[&_h1]:text-2xl [&_h1]:font-bold [&_h1]:mt-4 [&_h1]:mb-1",
-        "[&_h2]:text-xl [&_h2]:font-semibold [&_h2]:mt-3 [&_h2]:mb-1",
-        "[&_h3]:text-lg [&_h3]:font-semibold [&_h3]:mt-2",
-        "[&_ul]:list-disc [&_ul]:ml-5 [&_ul]:space-y-0.5",
-        "[&_ol]:list-decimal [&_ol]:ml-5 [&_ol]:space-y-0.5",
-        "[&_a]:text-primary [&_a]:underline [&_a]:underline-offset-2",
-        "[&_strong]:font-semibold [&_em]:italic",
-        "w-full px-1 py-0.5 rounded hover:bg-muted/20 focus:bg-transparent transition-colors"
-      )}
-      onBlur={onSync}
-      onInput={onSync}
-      onKeyDown={onKeyDown}
-    />
+    <div className="relative group/textblock">
+      <div
+        ref={editorRef}
+        contentEditable
+        suppressContentEditableWarning
+        data-placeholder="Введите текст или / для команды..."
+        className={cn(
+          "outline-none min-h-[1.5em] text-[15px] leading-relaxed text-foreground",
+          "empty:before:content-[attr(data-placeholder)] empty:before:text-muted-foreground/30",
+          "[&_h1]:text-2xl [&_h1]:font-bold [&_h1]:mt-4 [&_h1]:mb-1",
+          "[&_h2]:text-xl [&_h2]:font-semibold [&_h2]:mt-3 [&_h2]:mb-1",
+          "[&_h3]:text-lg [&_h3]:font-semibold [&_h3]:mt-2",
+          "[&_ul]:list-disc [&_ul]:ml-5 [&_ul]:space-y-0.5",
+          "[&_ol]:list-decimal [&_ol]:ml-5 [&_ol]:space-y-0.5",
+          "[&_a]:text-primary [&_a]:underline [&_a]:underline-offset-2",
+          "[&_strong]:font-semibold [&_em]:italic",
+          "w-full px-1 py-0.5 rounded hover:bg-muted/20 focus:bg-transparent transition-colors"
+        )}
+        onBlur={onSync}
+        onInput={onSync}
+        onKeyDown={onKeyDown}
+      />
+
+      {/* Emoji & tag buttons — bottom-right, on hover */}
+      <div className={cn(
+        "absolute bottom-0.5 right-0 flex items-center gap-0.5 z-10",
+        "transition-opacity duration-100",
+        isHovered || showEmoji || showTags ? "opacity-100" : "opacity-0 pointer-events-none"
+      )}>
+        {/* Emoji button */}
+        <div className="relative" data-text-popup>
+          <button
+            onMouseDown={(e) => { e.preventDefault(); saveSelection(); setShowTags(false); setShowEmoji((v) => !v) }}
+            title="Вставить эмодзи"
+            className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors text-sm"
+          >
+            😊
+          </button>
+          {showEmoji && (
+            <div
+              data-text-popup
+              className="absolute bottom-full right-0 mb-1 z-50 bg-popover border border-border rounded-xl shadow-xl p-2 w-56"
+            >
+              <div className="flex flex-wrap gap-0.5">
+                {QUICK_INSERT_EMOJIS.map((e) => (
+                  <button
+                    key={e}
+                    onMouseDown={(ev) => { ev.preventDefault(); restoreSelectionAndInsert(e) }}
+                    className="w-8 h-8 text-base flex items-center justify-center rounded hover:bg-muted transition-colors"
+                  >
+                    {e}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Tag button */}
+        <div className="relative" data-text-popup>
+          <button
+            onMouseDown={(e) => { e.preventDefault(); saveSelection(); setShowEmoji(false); setShowTags((v) => !v) }}
+            title="Вставить тег"
+            className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors text-xs font-bold"
+          >
+            #
+          </button>
+          {showTags && (
+            <div
+              data-text-popup
+              className="absolute bottom-full right-0 mb-1 z-50 bg-popover border border-border rounded-xl shadow-xl overflow-hidden w-52"
+            >
+              <div className="px-3 py-1.5 border-b border-border">
+                <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Переменные</span>
+              </div>
+              <div className="p-1">
+                {QUICK_TAGS.map((t) => (
+                  <button
+                    key={t.tag}
+                    onMouseDown={(ev) => { ev.preventDefault(); restoreSelectionAndInsert(t.tag) }}
+                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left hover:bg-muted transition-colors"
+                  >
+                    <span className="font-mono text-[11px] text-primary bg-primary/10 rounded px-1 py-0.5 shrink-0">{t.tag}</span>
+                    <span className="text-xs text-muted-foreground truncate">{t.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   )
 }
 
