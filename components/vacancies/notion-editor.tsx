@@ -847,6 +847,18 @@ function NotionTextBlock({ block, editorRef, isHovered, onSync, onKeyDown }: Not
               className="absolute bottom-full right-0 mb-1 z-50 bg-popover border border-border rounded-xl shadow-xl p-2"
               style={{ width: "calc(8 * 2.25rem + 1rem)" }}
             >
+              {/* Быстрый доступ */}
+              <div className="grid grid-cols-8 gap-0.5 pb-1.5 mb-1.5 border-b border-border">
+                {["😀","👋","🐱","🍎","🏠","⚽","📝","🚫"].map((e) => (
+                  <button
+                    key={`qa-${e}`}
+                    onMouseDown={(ev) => { ev.preventDefault(); restoreSelectionAndInsert(e) }}
+                    className="w-9 h-9 text-2xl flex items-center justify-center rounded hover:bg-muted transition-colors leading-none"
+                  >
+                    {e}
+                  </button>
+                ))}
+              </div>
               <div className="grid grid-cols-8 gap-0.5 max-h-52 overflow-y-auto">
                 {QUICK_INSERT_EMOJIS.map((e) => (
                   <button
