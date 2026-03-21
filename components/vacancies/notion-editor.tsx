@@ -632,7 +632,7 @@ function NotionBlock({ block, idx, totalBlocks, isHovered, isDragging, isDragOve
       data-block-id={block.id}
     >
       {/* Block content */}
-      <div className="flex-1 min-w-0 py-0.5" data-notion-area>
+      <div className="flex-1 min-w-0 py-0.5 relative" data-notion-area>
         {block.type === "text" ? (
           <NotionTextBlock
             block={block}
@@ -644,60 +644,52 @@ function NotionBlock({ block, idx, totalBlocks, isHovered, isDragging, isDragOve
         ) : (
           <NotionMediaBlock block={block} onUpdate={onUpdate} onRemove={onRemove} />
         )}
-      </div>
 
-      {/* Right action bar (appears on hover) */}
-      <div className={cn(
-        "absolute -right-2 top-1/2 -translate-y-1/2 translate-x-full flex items-center gap-0.5 transition-all duration-100 bg-background border border-border rounded-lg shadow-sm px-0.5 py-0.5 z-10",
-        isHovered ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
-      )}>
-        {/* Копировать */}
-        <button
-          onClick={onDuplicate}
-          title="Дублировать блок"
-          className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-        >
-          <Copy className="w-3.5 h-3.5" />
-        </button>
-
-        {/* Drag handle */}
-        <button
-          title="Перетащить"
-          className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-grab active:cursor-grabbing"
-          onMouseDown={(e) => e.currentTarget.closest<HTMLElement>("[data-block-id]")?.setAttribute("draggable", "true")}
-        >
-          <GripVertical className="w-3.5 h-3.5" />
-        </button>
-
-        {/* Стрелки */}
-        <button
-          onClick={onMoveUp}
-          disabled={idx === 0}
-          title="Переместить вверх"
-          className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-25 disabled:cursor-not-allowed"
-        >
-          <ArrowUp className="w-3.5 h-3.5" />
-        </button>
-        <button
-          onClick={onMoveDown}
-          disabled={idx === totalBlocks - 1}
-          title="Переместить вниз"
-          className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-25 disabled:cursor-not-allowed"
-        >
-          <ArrowDown className="w-3.5 h-3.5" />
-        </button>
-
-        {/* Разделитель */}
-        <div className="w-px h-4 bg-border mx-0.5" />
-
-        {/* Удалить */}
-        <button
-          onClick={onRemove}
-          title="Удалить блок"
-          className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10 transition-colors"
-        >
-          <Trash2 className="w-3.5 h-3.5" />
-        </button>
+        {/* Action bar — верхний левый угол блока, при наведении */}
+        <div className={cn(
+          "absolute top-1.5 left-1.5 flex items-center gap-0.5 z-20",
+          "bg-background/90 backdrop-blur-sm border border-border rounded-md shadow-sm px-0.5 py-0.5",
+          "transition-all duration-100",
+          isHovered ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+        )}>
+          <button
+            onClick={onDuplicate}
+            title="Дублировать блок"
+            className="w-5 h-5 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          >
+            <Copy className="w-3 h-3" />
+          </button>
+          <button
+            title="Перетащить"
+            className="w-5 h-5 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-grab active:cursor-grabbing"
+          >
+            <GripVertical className="w-3 h-3" />
+          </button>
+          <button
+            onClick={onMoveUp}
+            disabled={idx === 0}
+            title="Вверх"
+            className="w-5 h-5 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-25 disabled:cursor-not-allowed"
+          >
+            <ArrowUp className="w-3 h-3" />
+          </button>
+          <button
+            onClick={onMoveDown}
+            disabled={idx === totalBlocks - 1}
+            title="Вниз"
+            className="w-5 h-5 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-25 disabled:cursor-not-allowed"
+          >
+            <ArrowDown className="w-3 h-3" />
+          </button>
+          <div className="w-px h-3 bg-border mx-0.5" />
+          <button
+            onClick={onRemove}
+            title="Удалить блок"
+            className="w-5 h-5 rounded flex items-center justify-center text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10 transition-colors"
+          >
+            <Trash2 className="w-3 h-3" />
+          </button>
+        </div>
       </div>
     </div>
   )
@@ -887,9 +879,9 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
     case "image": {
       const layout = block.imageLayout || "full"
       const isSet = !!block.imageUrl
+      const isSide = layout === "image-left" || layout === "image-right"
       return (
         <div className="rounded-xl border border-dashed border-border bg-muted/20 p-4 space-y-3">
-          {/* Header */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
               <ImageIcon className="w-4 h-4" /><span>Изображение</span>
@@ -900,21 +892,29 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
               </button>
             )}
           </div>
-          {/* Layout */}
           <LayoutPicker value={layout} onChange={(v) => onUpdate({ imageLayout: v as Block["imageLayout"] })} prefix="image" />
-          {/* Content */}
           {isSet ? (
-            <div className={cn("flex gap-3", layout === "full" ? "flex-col" : layout === "image-left" ? "flex-row" : "flex-row-reverse")}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={block.imageUrl} alt={block.imageCaption || ""} className={cn("rounded-lg object-cover", layout === "full" ? "w-full max-h-64" : "w-1/2 max-h-48")} />
-              <div className="flex-1 flex flex-col justify-end">
+            <div className={cn("flex gap-3", isSide ? (layout === "image-left" ? "flex-row" : "flex-row-reverse") : "flex-col")}>
+              {/* Картинка + подпись под ней */}
+              <div className={cn("flex flex-col gap-1", isSide ? "w-1/2 shrink-0" : "w-full")}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={block.imageUrl} alt={block.imageCaption || ""} className="rounded-lg object-cover w-full max-h-64" />
                 <input
-                  className="text-xs text-muted-foreground bg-transparent outline-none border-b border-border/50 pb-0.5 w-full"
+                  className="text-xs text-muted-foreground bg-transparent outline-none border-b border-border/40 pb-0.5 focus:border-primary/40"
                   value={block.imageCaption}
                   onChange={(e) => onUpdate({ imageCaption: e.target.value })}
-                  placeholder="Подпись к изображению..."
+                  placeholder="Подпись..."
                 />
               </div>
+              {/* Текст справа/слева при боковом layout */}
+              {isSide && (
+                <textarea
+                  className="flex-1 text-sm bg-transparent outline-none resize-none min-h-[80px] leading-relaxed placeholder:text-muted-foreground/40"
+                  value={block.content}
+                  onChange={(e) => onUpdate({ content: e.target.value })}
+                  placeholder="Текст рядом с изображением..."
+                />
+              )}
             </div>
           ) : (
             <SourcePicker
@@ -933,6 +933,7 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
       const layout = (block.videoLayout || "full") as string
       const isSet = !!block.videoUrl
       const embed = isSet ? detectVideoService(block.videoUrl) : null
+      const isSide = layout === "video-left" || layout === "video-right"
       return (
         <div className="rounded-xl border border-dashed border-border bg-muted/20 p-4 space-y-3">
           <div className="flex items-center justify-between">
@@ -948,20 +949,37 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
           </div>
           <LayoutPicker value={layout} onChange={(v) => onUpdate({ videoLayout: v.replace("image", "video") as Block["videoLayout"] })} prefix="video" />
           {isSet ? (
-            <div className={cn("flex gap-3", layout === "full" || layout === "video-full" ? "flex-col" : layout === "video-left" ? "flex-row" : "flex-row-reverse")}>
-              <div className={cn("rounded-lg overflow-hidden bg-black", layout === "full" || layout === "video-full" ? "w-full aspect-video" : "w-1/2 aspect-video shrink-0")}>
-                {embed ? (
-                  <iframe
-                    src={embed.embedUrl}
-                    className="w-full h-full"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                    title="video"
-                  />
-                ) : (
-                  <video src={block.videoUrl} controls className="w-full h-full object-contain" />
-                )}
+            <div className={cn("flex gap-3", isSide ? (layout === "video-left" ? "flex-row" : "flex-row-reverse") : "flex-col")}>
+              {/* Видео + подпись под ним */}
+              <div className={cn("flex flex-col gap-1", isSide ? "w-1/2 shrink-0" : "w-full")}>
+                <div className="rounded-lg overflow-hidden bg-black aspect-video">
+                  {embed ? (
+                    <iframe
+                      src={embed.embedUrl}
+                      className="w-full h-full"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                      title="video"
+                    />
+                  ) : (
+                    <video src={block.videoUrl} controls className="w-full h-full object-contain" />
+                  )}
+                </div>
+                <input
+                  className="text-xs text-muted-foreground bg-transparent outline-none border-b border-border/40 pb-0.5 focus:border-primary/40"
+                  value={block.imageCaption}
+                  onChange={(e) => onUpdate({ imageCaption: e.target.value })}
+                  placeholder="Подпись к видео..."
+                />
               </div>
+              {isSide && (
+                <textarea
+                  className="flex-1 text-sm bg-transparent outline-none resize-none min-h-[80px] leading-relaxed placeholder:text-muted-foreground/40"
+                  value={block.content}
+                  onChange={(e) => onUpdate({ content: e.target.value })}
+                  placeholder="Текст рядом с видео..."
+                />
+              )}
             </div>
           ) : (
             <SourcePicker
@@ -980,6 +998,7 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
     case "audio": {
       const layout = block.audioLayout || "full"
       const isSet = !!block.audioUrl
+      const isSide = layout === "audio-left" || layout === "audio-right"
       return (
         <div className="rounded-xl border border-dashed border-border bg-muted/20 p-4 space-y-3">
           <div className="flex items-center justify-between">
@@ -994,11 +1013,26 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
           </div>
           <LayoutPicker value={layout} onChange={(v) => onUpdate({ audioLayout: v.replace("image", "audio") as Block["audioLayout"] })} prefix="audio" />
           {isSet ? (
-            <div className={cn("flex gap-3 items-start", layout === "full" ? "flex-col" : layout === "audio-left" ? "flex-row" : "flex-row-reverse")}>
-              <div className={cn(layout === "full" ? "w-full" : "w-1/2")}>
-                {block.audioTitle && <p className="text-xs font-medium mb-1.5 text-foreground">{block.audioTitle}</p>}
+            <div className={cn("flex gap-3 items-start", isSide ? (layout === "audio-left" ? "flex-row" : "flex-row-reverse") : "flex-col")}>
+              {/* Плеер + подпись */}
+              <div className={cn("flex flex-col gap-1", isSide ? "w-1/2 shrink-0" : "w-full")}>
+                {block.audioTitle && <p className="text-xs font-medium text-foreground">{block.audioTitle}</p>}
                 <audio src={block.audioUrl} controls className="w-full" />
+                <input
+                  className="text-xs text-muted-foreground bg-transparent outline-none border-b border-border/40 pb-0.5 focus:border-primary/40"
+                  value={block.imageCaption}
+                  onChange={(e) => onUpdate({ imageCaption: e.target.value })}
+                  placeholder="Подпись к аудио..."
+                />
               </div>
+              {isSide && (
+                <textarea
+                  className="flex-1 text-sm bg-transparent outline-none resize-none min-h-[60px] leading-relaxed placeholder:text-muted-foreground/40"
+                  value={block.content}
+                  onChange={(e) => onUpdate({ content: e.target.value })}
+                  placeholder="Текст рядом с аудио..."
+                />
+              )}
             </div>
           ) : (
             <div className="space-y-2">
@@ -1024,6 +1058,7 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
     case "file": {
       const layout = block.fileLayout || "full"
       const isSet = !!block.fileUrl
+      const isSide = layout === "file-left" || layout === "file-right"
       return (
         <div className="rounded-xl border border-dashed border-border bg-muted/20 p-4 space-y-3">
           <div className="flex items-center justify-between">
@@ -1038,12 +1073,31 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
           </div>
           <LayoutPicker value={layout} onChange={(v) => onUpdate({ fileLayout: v.replace("image", "file") as Block["fileLayout"] })} prefix="file" />
           {isSet ? (
-            <div className="flex items-center gap-3 p-3 bg-background rounded-lg border border-border">
-              <FileText className="w-8 h-8 text-primary shrink-0" />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium truncate">{block.fileName || "Файл"}</p>
-                <a href={block.fileUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">Открыть</a>
+            <div className={cn("flex gap-3 items-start", isSide ? (layout === "file-left" ? "flex-row" : "flex-row-reverse") : "flex-col")}>
+              {/* Файл + подпись */}
+              <div className={cn("flex flex-col gap-1", isSide ? "w-1/2 shrink-0" : "w-full")}>
+                <div className="flex items-center gap-3 p-3 bg-background rounded-lg border border-border">
+                  <FileText className="w-8 h-8 text-primary shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{block.fileName || "Файл"}</p>
+                    <a href={block.fileUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">Открыть</a>
+                  </div>
+                </div>
+                <input
+                  className="text-xs text-muted-foreground bg-transparent outline-none border-b border-border/40 pb-0.5 focus:border-primary/40"
+                  value={block.imageCaption}
+                  onChange={(e) => onUpdate({ imageCaption: e.target.value })}
+                  placeholder="Подпись к файлу..."
+                />
               </div>
+              {isSide && (
+                <textarea
+                  className="flex-1 text-sm bg-transparent outline-none resize-none min-h-[60px] leading-relaxed placeholder:text-muted-foreground/40"
+                  value={block.content}
+                  onChange={(e) => onUpdate({ content: e.target.value })}
+                  placeholder="Текст рядом с файлом..."
+                />
+              )}
             </div>
           ) : (
             <SourcePicker
