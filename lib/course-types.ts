@@ -3,6 +3,7 @@ export type BlockType = "text" | "image" | "video" | "audio" | "file" | "info" |
 export type ImageLayout = "full" | "image-left" | "image-right"
 export type AudioLayout = "full" | "audio-left" | "audio-right"
 export type FileLayout = "full" | "file-left" | "file-right"
+export type VideoLayout = "full" | "video-left" | "video-right"
 
 export interface Question {
   id: string
@@ -24,6 +25,7 @@ export interface Block {
   imageLayout: ImageLayout
   imageCaption: string
   videoUrl: string
+  videoLayout?: VideoLayout
   audioUrl: string
   audioTitle: string
   audioLayout?: AudioLayout
