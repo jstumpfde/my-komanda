@@ -894,15 +894,18 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
           <LayoutPicker value={layout} onChange={(v) => onUpdate({ imageLayout: v as Block["imageLayout"] })} prefix="image" />
           {isSet ? (
             <div className={cn("flex gap-3", isSide ? (layout === "image-left" ? "flex-row" : "flex-row-reverse") : "flex-col")}>
-              {/* Картинка + подпись под ней */}
+              {/* Картинка: подпись сверху (если есть), затем медиа */}
               <div className={cn("flex flex-col gap-1", isSide ? "w-1/2 shrink-0" : "w-full")}>
+                {block.imageCaption && (
+                  <p className="text-xs text-muted-foreground leading-snug">{block.imageCaption}</p>
+                )}
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={block.imageUrl} alt={block.imageCaption || ""} className="rounded-lg object-cover w-full max-h-64" />
+                <img src={block.imageUrl} alt={block.imageCaption || ""} className="rounded-lg object-contain w-full max-h-64 bg-muted/30" />
                 <input
-                  className="text-xs text-muted-foreground bg-transparent outline-none border-b border-border/40 pb-0.5 focus:border-primary/40"
+                  className="text-xs text-muted-foreground bg-transparent outline-none border-b border-border/40 pb-0.5 focus:border-primary/40 mt-0.5"
                   value={block.imageCaption}
                   onChange={(e) => onUpdate({ imageCaption: e.target.value })}
-                  placeholder="Подпись..."
+                  placeholder="Добавить подпись..."
                 />
               </div>
               {/* Текст справа/слева при боковом layout */}
@@ -949,9 +952,12 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
           <LayoutPicker value={layout} onChange={(v) => onUpdate({ videoLayout: v.replace("image", "video") as Block["videoLayout"] })} prefix="video" />
           {isSet ? (
             <div className={cn("flex gap-3", isSide ? (layout === "video-left" ? "flex-row" : "flex-row-reverse") : "flex-col")}>
-              {/* Видео + подпись под ним */}
+              {/* Видео: подпись сверху (если есть), затем плеер */}
               <div className={cn("flex flex-col gap-1", isSide ? "w-1/2 shrink-0" : "w-full")}>
-                <div className="rounded-lg overflow-hidden bg-black aspect-video">
+                {block.imageCaption && (
+                  <p className="text-xs text-muted-foreground leading-snug">{block.imageCaption}</p>
+                )}
+                <div className="rounded-lg bg-black aspect-video overflow-hidden">
                   {embed ? (
                     <iframe
                       src={embed.embedUrl}
@@ -965,10 +971,10 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
                   )}
                 </div>
                 <input
-                  className="text-xs text-muted-foreground bg-transparent outline-none border-b border-border/40 pb-0.5 focus:border-primary/40"
+                  className="text-xs text-muted-foreground bg-transparent outline-none border-b border-border/40 pb-0.5 focus:border-primary/40 mt-0.5"
                   value={block.imageCaption}
                   onChange={(e) => onUpdate({ imageCaption: e.target.value })}
-                  placeholder="Подпись к видео..."
+                  placeholder="Добавить подпись..."
                 />
               </div>
               {isSide && (
@@ -1013,15 +1019,18 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
           <LayoutPicker value={layout} onChange={(v) => onUpdate({ audioLayout: v.replace("image", "audio") as Block["audioLayout"] })} prefix="audio" />
           {isSet ? (
             <div className={cn("flex gap-3 items-start", isSide ? (layout === "audio-left" ? "flex-row" : "flex-row-reverse") : "flex-col")}>
-              {/* Плеер + подпись */}
+              {/* Аудио: подпись сверху (если есть), затем плеер */}
               <div className={cn("flex flex-col gap-1", isSide ? "w-1/2 shrink-0" : "w-full")}>
+                {block.imageCaption && (
+                  <p className="text-xs text-muted-foreground leading-snug">{block.imageCaption}</p>
+                )}
                 {block.audioTitle && <p className="text-xs font-medium text-foreground">{block.audioTitle}</p>}
                 <audio src={block.audioUrl} controls className="w-full" />
                 <input
-                  className="text-xs text-muted-foreground bg-transparent outline-none border-b border-border/40 pb-0.5 focus:border-primary/40"
+                  className="text-xs text-muted-foreground bg-transparent outline-none border-b border-border/40 pb-0.5 focus:border-primary/40 mt-0.5"
                   value={block.imageCaption}
                   onChange={(e) => onUpdate({ imageCaption: e.target.value })}
-                  placeholder="Подпись к аудио..."
+                  placeholder="Добавить подпись..."
                 />
               </div>
               {isSide && (
@@ -1073,8 +1082,11 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
           <LayoutPicker value={layout} onChange={(v) => onUpdate({ fileLayout: v.replace("image", "file") as Block["fileLayout"] })} prefix="file" />
           {isSet ? (
             <div className={cn("flex gap-3 items-start", isSide ? (layout === "file-left" ? "flex-row" : "flex-row-reverse") : "flex-col")}>
-              {/* Файл + подпись */}
+              {/* Файл: подпись сверху (если есть), затем карточка */}
               <div className={cn("flex flex-col gap-1", isSide ? "w-1/2 shrink-0" : "w-full")}>
+                {block.imageCaption && (
+                  <p className="text-xs text-muted-foreground leading-snug">{block.imageCaption}</p>
+                )}
                 <div className="flex items-center gap-3 p-3 bg-background rounded-lg border border-border">
                   <FileText className="w-8 h-8 text-primary shrink-0" />
                   <div className="flex-1 min-w-0">
@@ -1083,10 +1095,10 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
                   </div>
                 </div>
                 <input
-                  className="text-xs text-muted-foreground bg-transparent outline-none border-b border-border/40 pb-0.5 focus:border-primary/40"
+                  className="text-xs text-muted-foreground bg-transparent outline-none border-b border-border/40 pb-0.5 focus:border-primary/40 mt-0.5"
                   value={block.imageCaption}
                   onChange={(e) => onUpdate({ imageCaption: e.target.value })}
-                  placeholder="Подпись к файлу..."
+                  placeholder="Добавить подпись..."
                 />
               </div>
               {isSide && (
@@ -1291,20 +1303,85 @@ function SimplePreviewBlock({ block }: { block: Block }) {
   switch (block.type) {
     case "text":
       return <div className="prose prose-sm max-w-none dark:prose-invert" dangerouslySetInnerHTML={{ __html: block.content || "" }} />
-    case "image":
-      return block.imageUrl ? (
-        <div>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={block.imageUrl} alt={block.imageCaption || ""} className="rounded-xl w-full max-h-64 object-cover" />
-          {block.imageCaption && <p className="text-xs text-muted-foreground text-center mt-1">{block.imageCaption}</p>}
+    case "image": {
+      if (!block.imageUrl) return null
+      const layout = block.imageLayout || "full"
+      const isSide = layout === "image-left" || layout === "image-right"
+      return (
+        <div className={cn("flex gap-3", isSide ? (layout === "image-left" ? "flex-row" : "flex-row-reverse") : "flex-col")}>
+          <div className={cn("flex flex-col gap-1", isSide ? "w-1/2 shrink-0" : "w-full")}>
+            {block.imageCaption && <p className="text-xs text-muted-foreground leading-snug">{block.imageCaption}</p>}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={block.imageUrl} alt={block.imageCaption || ""} className="rounded-xl w-full max-h-64 object-contain bg-muted/20" />
+          </div>
+          {isSide && block.content && (
+            <p className="flex-1 text-sm leading-relaxed whitespace-pre-wrap">{block.content}</p>
+          )}
         </div>
-      ) : null
-    case "video":
-      return block.videoUrl ? (
-        <div className="aspect-video rounded-xl bg-muted flex items-center justify-center">
-          <span className="text-muted-foreground text-sm">▶ Видео</span>
+      )
+    }
+    case "video": {
+      if (!block.videoUrl) return null
+      const layout = (block.videoLayout || "full") as string
+      const isSide = layout === "video-left" || layout === "video-right"
+      const embed = detectVideoService(block.videoUrl)
+      return (
+        <div className={cn("flex gap-3", isSide ? (layout === "video-left" ? "flex-row" : "flex-row-reverse") : "flex-col")}>
+          <div className={cn("flex flex-col gap-1", isSide ? "w-1/2 shrink-0" : "w-full")}>
+            {block.imageCaption && <p className="text-xs text-muted-foreground leading-snug">{block.imageCaption}</p>}
+            <div className="aspect-video rounded-xl bg-black overflow-hidden">
+              {embed ? (
+                <iframe src={embed.embedUrl} className="w-full h-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen title="video" />
+              ) : (
+                <video src={block.videoUrl} controls className="w-full h-full object-contain" />
+              )}
+            </div>
+          </div>
+          {isSide && block.content && (
+            <p className="flex-1 text-sm leading-relaxed whitespace-pre-wrap">{block.content}</p>
+          )}
         </div>
-      ) : null
+      )
+    }
+    case "audio": {
+      if (!block.audioUrl) return null
+      const layout = block.audioLayout || "full"
+      const isSide = layout === "audio-left" || layout === "audio-right"
+      return (
+        <div className={cn("flex gap-3 items-start", isSide ? (layout === "audio-left" ? "flex-row" : "flex-row-reverse") : "flex-col")}>
+          <div className={cn("flex flex-col gap-1", isSide ? "w-1/2 shrink-0" : "w-full")}>
+            {block.imageCaption && <p className="text-xs text-muted-foreground leading-snug">{block.imageCaption}</p>}
+            {block.audioTitle && <p className="text-xs font-medium text-foreground">{block.audioTitle}</p>}
+            <audio src={block.audioUrl} controls className="w-full" />
+          </div>
+          {isSide && block.content && (
+            <p className="flex-1 text-sm leading-relaxed whitespace-pre-wrap">{block.content}</p>
+          )}
+        </div>
+      )
+    }
+    case "file": {
+      if (!block.fileUrl) return null
+      const layout = block.fileLayout || "full"
+      const isSide = layout === "file-left" || layout === "file-right"
+      return (
+        <div className={cn("flex gap-3 items-start", isSide ? (layout === "file-left" ? "flex-row" : "flex-row-reverse") : "flex-col")}>
+          <div className={cn("flex flex-col gap-1", isSide ? "w-1/2 shrink-0" : "w-full")}>
+            {block.imageCaption && <p className="text-xs text-muted-foreground leading-snug">{block.imageCaption}</p>}
+            <div className="flex items-center gap-3 p-3 bg-muted/30 rounded-xl border border-border">
+              <FileText className="w-7 h-7 text-primary shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">{block.fileName || "Файл"}</p>
+                <a href={block.fileUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">Открыть</a>
+              </div>
+            </div>
+          </div>
+          {isSide && block.content && (
+            <p className="flex-1 text-sm leading-relaxed whitespace-pre-wrap">{block.content}</p>
+          )}
+        </div>
+      )
+    }
     case "info":
       return (
         <div className={cn("rounded-xl border-l-4 p-4", block.infoStyle === "info" ? "bg-blue-50 border-blue-400" : block.infoStyle === "warning" ? "bg-amber-50 border-amber-400" : block.infoStyle === "success" ? "bg-emerald-50 border-emerald-400" : "bg-red-50 border-red-400")}>
