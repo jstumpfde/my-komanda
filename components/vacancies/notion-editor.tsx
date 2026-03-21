@@ -1443,6 +1443,7 @@ function FmtBtn({ icon: Icon, tip, cmd }: { icon: React.ElementType; tip: string
 
 // ─── Emoji button ──────────────────────────────────────────────────────────
 
+const QUICK_ACCESS_EMOJIS = ["😀", "👋", "🐱", "🍎", "🏠", "⚽", "📝", "🚫", "🏁"]
 const QUICK_EMOJIS = ["👋","🚀","🏢","💰","📈","✅","🎯","⚙️","👤","📍","🎥","📝","➡️","🌟","💡","📋","🔑","💬","🏆","🎓"]
 
 function EmojiBtn({ current, onSelect }: { current: string; onSelect: (v: string) => void }) {
@@ -1455,9 +1456,15 @@ function EmojiBtn({ current, onSelect }: { current: string; onSelect: (v: string
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="p-2 w-48">
+        {/* Быстрый доступ */}
+        <div className="flex gap-0.5 mb-1.5 pb-1.5 border-b border-border">
+          {QUICK_ACCESS_EMOJIS.map((e) => (
+            <button key={e} className={cn("w-8 h-8 text-lg flex items-center justify-center rounded hover:bg-muted transition-colors", current === e && "bg-primary/10 ring-1 ring-primary")} onClick={() => { onSelect(e); setOpen(false) }}>{e}</button>
+          ))}
+        </div>
         <div className="flex flex-wrap gap-1">
           {QUICK_EMOJIS.map((e) => (
-            <button key={e} className="w-8 h-8 text-lg flex items-center justify-center rounded hover:bg-muted transition-colors" onClick={() => { onSelect(e); setOpen(false) }}>{e}</button>
+            <button key={e} className={cn("w-8 h-8 text-lg flex items-center justify-center rounded hover:bg-muted transition-colors", current === e && "bg-primary/10 ring-1 ring-primary")} onClick={() => { onSelect(e); setOpen(false) }}>{e}</button>
           ))}
         </div>
       </DropdownMenuContent>
