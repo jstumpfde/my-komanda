@@ -30,13 +30,23 @@ function isValidUrl(s: string): boolean {
   }
 }
 
+/** Проверяет что строка — осмысленный текст, а не мусор из localStorage.
+ *  Мусор: очень длинная строка без пробелов (слитные символы). */
+function isCleanText(s: string): boolean {
+  if (!s) return true
+  if (s.length > 200) return false
+  // Строка длиннее 30 символов без единого пробела — мусор
+  if (s.length > 30 && !s.includes(" ")) return false
+  return true
+}
+
 /** Санирует блок: сбрасывает мусорные значения URL-полей и строковых полей */
 function sanitizeBlock(block: Block): Block {
   return {
     ...block,
-    content: typeof block.content === "string" ? block.content : "",
+    content: typeof block.content === "string" && isCleanText(block.content) ? block.content : "",
     imageUrl: isValidUrl(block.imageUrl ?? "") ? (block.imageUrl ?? "") : "",
-    imageCaption: typeof block.imageCaption === "string" ? block.imageCaption : "",
+    imageCaption: typeof block.imageCaption === "string" && isCleanText(block.imageCaption) ? block.imageCaption : "",
     videoUrl: isValidUrl(block.videoUrl ?? "") ? (block.videoUrl ?? "") : "",
     audioUrl: isValidUrl(block.audioUrl ?? "") ? (block.audioUrl ?? "") : "",
     fileUrl: isValidUrl(block.fileUrl ?? "") ? (block.fileUrl ?? "") : "",
@@ -84,6 +94,8 @@ export function CourseTab() {
       keys.forEach((k) => { if (k.startsWith("demo_")) localStorage.removeItem(k) })
     } catch {}
     const loaded = loadDemos()
+    // Сразу пересохраняем — чтобы вымыть мусор из localStorage
+    if (loaded.length > 0) saveDemos(loaded)
     setDemos(loaded)
     setHydrated(true)
     // Auto-open editor if exactly one demo exists
