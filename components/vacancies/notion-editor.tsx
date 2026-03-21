@@ -618,7 +618,7 @@ function NotionBlock({ block, idx, totalBlocks, isHovered, isDragging, isDragOve
   return (
     <div
       className={cn(
-        "relative group/block flex items-start gap-0",
+        "relative group/block",
         isDragging && "opacity-30",
         isDragOver && "ring-1 ring-primary/40 ring-offset-1 rounded-lg"
       )}
@@ -631,8 +631,54 @@ function NotionBlock({ block, idx, totalBlocks, isHovered, isDragging, isDragOve
       onDrop={onDrop}
       data-block-id={block.id}
     >
+      {/* Action bar — горизонтальная, вверху слева, внутри блока, при наведении */}
+      <div className={cn(
+        "flex items-center gap-0.5 mb-0.5",
+        "bg-background/95 backdrop-blur-sm border border-border rounded-md shadow-sm px-0.5 py-0.5 w-fit",
+        "transition-all duration-100",
+        isHovered ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+      )}>
+        <button
+          onClick={onDuplicate}
+          title="Дублировать блок"
+          className="w-5 h-5 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+        >
+          <Copy className="w-3 h-3" />
+        </button>
+        <button
+          title="Перетащить"
+          className="w-5 h-5 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-grab active:cursor-grabbing"
+        >
+          <GripVertical className="w-3 h-3" />
+        </button>
+        <button
+          onClick={onMoveUp}
+          disabled={idx === 0}
+          title="Вверх"
+          className="w-5 h-5 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-25 disabled:cursor-not-allowed"
+        >
+          <ArrowUp className="w-3 h-3" />
+        </button>
+        <button
+          onClick={onMoveDown}
+          disabled={idx === totalBlocks - 1}
+          title="Вниз"
+          className="w-5 h-5 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-25 disabled:cursor-not-allowed"
+        >
+          <ArrowDown className="w-3 h-3" />
+        </button>
+        <div className="w-px h-3 bg-border mx-0.5" />
+        <button
+          onClick={onRemove}
+          title="Удалить блок"
+          className="w-5 h-5 rounded flex items-center justify-center text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10 transition-colors"
+        >
+          <Trash2 className="w-3 h-3" />
+        </button>
+      </div>
+
       {/* Block content */}
-      <div className="flex-1 min-w-0 py-0.5" data-notion-area>
+      <div className="min-w-0" data-notion-area>
         {block.type === "text" ? (
           <NotionTextBlock
             block={block}
@@ -645,51 +691,6 @@ function NotionBlock({ block, idx, totalBlocks, isHovered, isDragging, isDragOve
         ) : (
           <NotionMediaBlock block={block} onUpdate={onUpdate} onRemove={onRemove} />
         )}
-      </div>
-
-      {/* Action bar — правый край блока, вертикально, при наведении */}
-      <div className={cn(
-        "flex-shrink-0 flex flex-col items-center gap-0.5 ml-1 py-0.5 z-20",
-        "transition-all duration-100",
-        isHovered ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
-      )}>
-        <button
-          onClick={onDuplicate}
-          title="Дублировать блок"
-          className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-        >
-          <Copy className="w-3 h-3" />
-        </button>
-        <button
-          title="Перетащить"
-          className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-grab active:cursor-grabbing"
-        >
-          <GripVertical className="w-3 h-3" />
-        </button>
-        <button
-          onClick={onMoveUp}
-          disabled={idx === 0}
-          title="Вверх"
-          className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-25 disabled:cursor-not-allowed"
-        >
-          <ArrowUp className="w-3 h-3" />
-        </button>
-        <button
-          onClick={onMoveDown}
-          disabled={idx === totalBlocks - 1}
-          title="Вниз"
-          className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-25 disabled:cursor-not-allowed"
-        >
-          <ArrowDown className="w-3 h-3" />
-        </button>
-        <div className="h-px w-3 bg-border my-0.5" />
-        <button
-          onClick={onRemove}
-          title="Удалить блок"
-          className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10 transition-colors"
-        >
-          <Trash2 className="w-3 h-3" />
-        </button>
       </div>
     </div>
   )
