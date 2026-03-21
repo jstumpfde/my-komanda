@@ -30,12 +30,13 @@ function isValidUrl(s: string): boolean {
   }
 }
 
-/** Санирует блок: сбрасывает мусорные значения imageUrl и content */
+/** Санирует блок: сбрасывает мусорные значения URL-полей и строковых полей */
 function sanitizeBlock(block: Block): Block {
   return {
     ...block,
-    imageUrl: isValidUrl(block.imageUrl ?? "") ? (block.imageUrl ?? "") : "",
     content: typeof block.content === "string" ? block.content : "",
+    imageUrl: isValidUrl(block.imageUrl ?? "") ? (block.imageUrl ?? "") : "",
+    imageCaption: typeof block.imageCaption === "string" ? block.imageCaption : "",
     videoUrl: isValidUrl(block.videoUrl ?? "") ? (block.videoUrl ?? "") : "",
     audioUrl: isValidUrl(block.audioUrl ?? "") ? (block.audioUrl ?? "") : "",
     fileUrl: isValidUrl(block.fileUrl ?? "") ? (block.fileUrl ?? "") : "",
