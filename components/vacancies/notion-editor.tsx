@@ -17,7 +17,7 @@ import {
   Bold, Italic, Underline, Strikethrough, AlignLeft, AlignCenter, AlignRight,
   Heading1, Heading2, Heading3, List as ListIcon, ListOrdered, Link2, Hash, Smile,
   Type, ImageIcon, Video, Music, FileText, Info, MousePointerClick, CheckSquare,
-  ChevronLeft, ChevronRight,
+  ChevronLeft, ChevronRight, Mic,
 } from "lucide-react"
 import { toast } from "sonner"
 import type { Demo, Block, BlockType, Lesson } from "@/lib/course-types"
@@ -34,14 +34,14 @@ interface NotionEditorProps {
 // ─── Slash command menu ────────────────────────────────────────────────────
 
 const SLASH_ITEMS = [
-  { type: "text" as BlockType, icon: <Type className="w-4 h-4" />, label: "Текст", desc: "Обычный абзац" },
-  { type: "image" as BlockType, icon: <ImageIcon className="w-4 h-4" />, label: "Фото", desc: "Изображение" },
-  { type: "video" as BlockType, icon: <Video className="w-4 h-4" />, label: "Видео", desc: "Embed или загрузка" },
-  { type: "audio" as BlockType, icon: <Music className="w-4 h-4" />, label: "Аудио", desc: "Аудиофайл" },
-  { type: "file" as BlockType, icon: <FileText className="w-4 h-4" />, label: "Файл", desc: "PDF, DOC и др." },
-  { type: "info" as BlockType, icon: <Info className="w-4 h-4" />, label: "Инфо", desc: "Блок с иконкой" },
-  { type: "button" as BlockType, icon: <MousePointerClick className="w-4 h-4" />, label: "Кнопка", desc: "Кнопка-ссылка" },
-  { type: "task" as BlockType, icon: <CheckSquare className="w-4 h-4" />, label: "Задание", desc: "Вопросы кандидату" },
+  { type: "text" as BlockType, icon: <Type className="w-4 h-4" />, inlineIcon: <Type className="w-3.5 h-3.5" />, label: "Текст", desc: "Обычный абзац" },
+  { type: "image" as BlockType, icon: <ImageIcon className="w-4 h-4" />, inlineIcon: <ImageIcon className="w-3.5 h-3.5" />, label: "Фото", desc: "Изображение" },
+  { type: "video" as BlockType, icon: <Video className="w-4 h-4" />, inlineIcon: <Video className="w-3.5 h-3.5" />, label: "Видео", desc: "Embed или загрузка" },
+  { type: "audio" as BlockType, icon: <Music className="w-4 h-4" />, inlineIcon: <Mic className="w-3.5 h-3.5" />, label: "Аудио", desc: "Аудиофайл" },
+  { type: "file" as BlockType, icon: <FileText className="w-4 h-4" />, inlineIcon: <FileText className="w-3.5 h-3.5" />, label: "Файл", desc: "PDF, DOC и др." },
+  { type: "info" as BlockType, icon: <Info className="w-4 h-4" />, inlineIcon: <Info className="w-3.5 h-3.5" />, label: "Инфо", desc: "Блок с иконкой" },
+  { type: "button" as BlockType, icon: <MousePointerClick className="w-4 h-4" />, inlineIcon: <MousePointerClick className="w-3.5 h-3.5" />, label: "Кнопка", desc: "Кнопка-ссылка" },
+  { type: "task" as BlockType, icon: <CheckSquare className="w-4 h-4" />, inlineIcon: <CheckSquare className="w-3.5 h-3.5" />, label: "Задание", desc: "Вопросы кандидату" },
 ]
 
 // ─── Main component ────────────────────────────────────────────────────────
@@ -468,33 +468,39 @@ function NotionLessonEditor({ lesson, onUpdateLesson, onUpdateBlock, onInsertBlo
       </div>
 
       {/* Blocks */}
-      <div className="space-y-0.5">
+      <div className="space-y-0">
+        {/* Inline bar перед первым блоком */}
+        <InlineBetweenBar onAdd={(type) => onInsertBlock(0, type)} />
+
         {lesson.blocks.map((block, idx) => (
-          <NotionBlock
-            key={block.id}
-            block={block}
-            idx={idx}
-            totalBlocks={lesson.blocks.length}
-            isHovered={hoveredIdx === idx}
-            isDragging={dragIdx === idx}
-            isDragOver={dragOverIdx === idx && dragIdx !== idx}
-            onMouseEnter={() => setHoveredIdx(idx)}
-            onMouseLeave={() => setHoveredIdx(null)}
-            onDragStart={() => setDragIdx(idx)}
-            onDragOver={(e) => { e.preventDefault(); setDragOverIdx(idx) }}
-            onDragEnd={() => { setDragIdx(null); setDragOverIdx(null) }}
-            onDrop={() => handleDrop(idx)}
-            onUpdate={(patch) => onUpdateBlock(block.id, patch)}
-            onRemove={() => onRemoveBlock(block.id)}
-            onMoveUp={() => onMoveBlock(idx, -1)}
-            onMoveDown={() => onMoveBlock(idx, 1)}
-            onDuplicate={() => onDuplicateBlock(idx)}
-            onInsertBelow={(type) => onInsertBlock(idx + 1, type)}
-            onSlashTrigger={(x, y, query) => setSlashMenu({ blockIdx: idx + 1, x, y, query })}
-          />
+          <div key={block.id}>
+            <NotionBlock
+              block={block}
+              idx={idx}
+              totalBlocks={lesson.blocks.length}
+              isHovered={hoveredIdx === idx}
+              isDragging={dragIdx === idx}
+              isDragOver={dragOverIdx === idx && dragIdx !== idx}
+              onMouseEnter={() => setHoveredIdx(idx)}
+              onMouseLeave={() => setHoveredIdx(null)}
+              onDragStart={() => setDragIdx(idx)}
+              onDragOver={(e) => { e.preventDefault(); setDragOverIdx(idx) }}
+              onDragEnd={() => { setDragIdx(null); setDragOverIdx(null) }}
+              onDrop={() => handleDrop(idx)}
+              onUpdate={(patch) => onUpdateBlock(block.id, patch)}
+              onRemove={() => onRemoveBlock(block.id)}
+              onMoveUp={() => onMoveBlock(idx, -1)}
+              onMoveDown={() => onMoveBlock(idx, 1)}
+              onDuplicate={() => onDuplicateBlock(idx)}
+              onInsertBelow={(type) => onInsertBlock(idx + 1, type)}
+              onSlashTrigger={(x, y, query) => setSlashMenu({ blockIdx: idx + 1, x, y, query })}
+            />
+            {/* Inline bar после каждого блока */}
+            <InlineBetweenBar onAdd={(type) => onInsertBlock(idx + 1, type)} />
+          </div>
         ))}
 
-        {/* Empty state / append zone */}
+        {/* Empty state */}
         {lesson.blocks.length === 0 && (
           <div
             className="py-8 px-4 text-sm text-muted-foreground/40 text-center border border-dashed border-border rounded-xl cursor-text"
@@ -503,9 +509,6 @@ function NotionLessonEditor({ lesson, onUpdateLesson, onUpdateBlock, onInsertBlo
             Нажмите для добавления текста или введите / для выбора блока
           </div>
         )}
-
-        {/* Always visible + button at bottom */}
-        <AddBlockButton onAdd={onAppendBlock} />
       </div>
 
       {/* Slash command menu */}
@@ -617,7 +620,7 @@ function NotionBlock({ block, idx, totalBlocks, isHovered, isDragging, isDragOve
       className={cn(
         "relative group/block flex items-start gap-0",
         isDragging && "opacity-30",
-        isDragOver && "border-t-2 border-primary"
+        isDragOver && "ring-1 ring-primary/40 ring-offset-1 rounded-lg"
       )}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
@@ -628,49 +631,6 @@ function NotionBlock({ block, idx, totalBlocks, isHovered, isDragging, isDragOve
       onDrop={onDrop}
       data-block-id={block.id}
     >
-      {/* Left action bar (appears on hover) */}
-      <div className={cn(
-        "absolute -left-14 top-1 flex items-center gap-0.5 transition-opacity",
-        isHovered ? "opacity-100" : "opacity-0"
-      )}>
-        {/* Insert block button */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button className="w-6 h-6 rounded-md hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground" title="Добавить блок">
-              <Plus className="w-3.5 h-3.5" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-48">
-            {SLASH_ITEMS.map((item) => (
-              <DropdownMenuItem key={item.type} onClick={() => onInsertBelow(item.type)}>
-                <span className="mr-2">{item.icon}</span>{item.label}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-
-        {/* Drag handle + context menu */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button
-              className="w-6 h-6 rounded-md hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground cursor-grab active:cursor-grabbing"
-              title="Переместить / меню"
-            >
-              <GripVertical className="w-3.5 h-3.5" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-44">
-            <DropdownMenuItem onClick={onDuplicate}><Copy className="w-3.5 h-3.5 mr-2" />Дублировать</DropdownMenuItem>
-            <DropdownMenuItem onClick={onMoveUp} disabled={idx === 0}><ArrowUp className="w-3.5 h-3.5 mr-2" />Вверх</DropdownMenuItem>
-            <DropdownMenuItem onClick={onMoveDown} disabled={idx === totalBlocks - 1}><ArrowDown className="w-3.5 h-3.5 mr-2" />Вниз</DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={onRemove} className="text-destructive focus:text-destructive">
-              <Trash2 className="w-3.5 h-3.5 mr-2" />Удалить блок
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-
       {/* Block content */}
       <div className="flex-1 min-w-0 py-0.5" data-notion-area>
         {block.type === "text" ? (
@@ -684,6 +644,60 @@ function NotionBlock({ block, idx, totalBlocks, isHovered, isDragging, isDragOve
         ) : (
           <NotionMediaBlock block={block} onUpdate={onUpdate} onRemove={onRemove} />
         )}
+      </div>
+
+      {/* Right action bar (appears on hover) */}
+      <div className={cn(
+        "absolute -right-2 top-1/2 -translate-y-1/2 translate-x-full flex items-center gap-0.5 transition-all duration-100 bg-background border border-border rounded-lg shadow-sm px-0.5 py-0.5 z-10",
+        isHovered ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+      )}>
+        {/* Копировать */}
+        <button
+          onClick={onDuplicate}
+          title="Дублировать блок"
+          className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+        >
+          <Copy className="w-3.5 h-3.5" />
+        </button>
+
+        {/* Drag handle */}
+        <button
+          title="Перетащить"
+          className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-grab active:cursor-grabbing"
+          onMouseDown={(e) => e.currentTarget.closest<HTMLElement>("[data-block-id]")?.setAttribute("draggable", "true")}
+        >
+          <GripVertical className="w-3.5 h-3.5" />
+        </button>
+
+        {/* Стрелки */}
+        <button
+          onClick={onMoveUp}
+          disabled={idx === 0}
+          title="Переместить вверх"
+          className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-25 disabled:cursor-not-allowed"
+        >
+          <ArrowUp className="w-3.5 h-3.5" />
+        </button>
+        <button
+          onClick={onMoveDown}
+          disabled={idx === totalBlocks - 1}
+          title="Переместить вниз"
+          className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-25 disabled:cursor-not-allowed"
+        >
+          <ArrowDown className="w-3.5 h-3.5" />
+        </button>
+
+        {/* Разделитель */}
+        <div className="w-px h-4 bg-border mx-0.5" />
+
+        {/* Удалить */}
+        <button
+          onClick={onRemove}
+          title="Удалить блок"
+          className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10 transition-colors"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
       </div>
     </div>
   )
@@ -888,29 +902,42 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
   }
 }
 
-// ─── Add block button ──────────────────────────────────────────────────────
+// ─── Inline between bar ────────────────────────────────────────────────────
 
-function AddBlockButton({ onAdd }: { onAdd: (type: BlockType) => void }) {
+function InlineBetweenBar({ onAdd }: { onAdd: (type: BlockType) => void }) {
+  const [visible, setVisible] = useState(false)
+
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button className="w-full mt-2 flex items-center gap-2 px-2 py-2 rounded-lg text-muted-foreground/40 hover:text-muted-foreground hover:bg-muted/30 transition-colors text-sm group">
-          <Plus className="w-4 h-4 group-hover:text-primary transition-colors" />
-          <span className="text-xs">Добавить блок</span>
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-52">
+    <div
+      className="relative flex items-center group/between h-6 my-0.5"
+      onMouseEnter={() => setVisible(true)}
+      onMouseLeave={() => setVisible(false)}
+    >
+      {/* Линия */}
+      <div className={cn(
+        "absolute inset-x-0 top-1/2 -translate-y-1/2 h-px transition-colors duration-100",
+        visible ? "bg-primary/30" : "bg-transparent group-hover/between:bg-border/60"
+      )} />
+
+      {/* Иконки по центру */}
+      <div className={cn(
+        "absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2",
+        "flex items-center gap-0.5 bg-background border border-border rounded-lg shadow-sm px-1 py-0.5",
+        "transition-all duration-100",
+        visible ? "opacity-100 scale-100 pointer-events-auto" : "opacity-0 scale-95 pointer-events-none"
+      )}>
         {SLASH_ITEMS.map((item) => (
-          <DropdownMenuItem key={item.type} onClick={() => onAdd(item.type)}>
-            <span className="mr-2">{item.icon}</span>
-            <div>
-              <div className="font-medium">{item.label}</div>
-              <div className="text-[11px] text-muted-foreground">{item.desc}</div>
-            </div>
-          </DropdownMenuItem>
+          <button
+            key={item.type}
+            title={item.label}
+            onClick={() => onAdd(item.type)}
+            className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          >
+            {item.inlineIcon}
+          </button>
         ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
+      </div>
+    </div>
   )
 }
 
