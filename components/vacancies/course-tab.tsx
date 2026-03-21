@@ -42,9 +42,14 @@ function isCleanText(s: string): boolean {
 
 /** Санирует блок: сбрасывает мусорные значения URL-полей и строковых полей */
 function sanitizeBlock(block: Block): Block {
+  // У медиа-блоков с layout "full" поле content не используется — сбрасываем
+  const isMediaFull = ["image", "video", "audio", "file"].includes(block.type) &&
+    (block.imageLayout === "full" || block.videoLayout === "full" ||
+     block.audioLayout === "full" || block.fileLayout === "full")
+
   return {
     ...block,
-    content: typeof block.content === "string" && isCleanText(block.content) ? block.content : "",
+    content: isMediaFull ? "" : (typeof block.content === "string" && isCleanText(block.content) ? block.content : ""),
     imageUrl: isValidUrl(block.imageUrl ?? "") ? (block.imageUrl ?? "") : "",
     imageCaption: typeof block.imageCaption === "string" && isCleanText(block.imageCaption) ? block.imageCaption : "",
     videoUrl: isValidUrl(block.videoUrl ?? "") ? (block.videoUrl ?? "") : "",

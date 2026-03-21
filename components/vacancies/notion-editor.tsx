@@ -587,10 +587,10 @@ function NotionBlock({ block, idx, totalBlocks, isHovered, isDragging, isDragOve
   }, [block.id])
 
   const syncContent = useCallback(() => {
-    if (editorRef.current) {
+    if (editorRef.current && block.type === "text") {
       onUpdate({ content: editorRef.current.innerHTML })
     }
-  }, [onUpdate])
+  }, [onUpdate, block.type])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (e.key === "/") {
