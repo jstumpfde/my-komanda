@@ -1455,18 +1455,21 @@ function EmojiBtn({ current, onSelect }: { current: string; onSelect: (v: string
 
 function SimplePreviewBlock({ block }: { block: Block }) {
   switch (block.type) {
-    case "text":
-      return <div className="prose prose-sm max-w-none dark:prose-invert" dangerouslySetInnerHTML={{ __html: block.content || "" }} />
+    case "text": {
+      const html = block.content?.trim()
+      if (!html || html === "<br>") return null
+      return <div className="prose prose-sm max-w-none dark:prose-invert" dangerouslySetInnerHTML={{ __html: block.content }} />
+    }
     case "image": {
       if (!block.imageUrl) return null
       const layout = block.imageLayout || "full"
       const isSide = layout === "image-left" || layout === "image-right"
       return (
         <div className={cn("flex gap-3", isSide ? (layout === "image-left" ? "flex-row" : "flex-row-reverse") : "flex-col")}>
-          <div className={cn("flex flex-col gap-1", isSide ? "w-1/2 shrink-0" : "w-full")}>
-            {block.imageCaption && <p className="text-xs text-muted-foreground leading-snug">{block.imageCaption}</p>}
+          <div className={cn("flex flex-col gap-1.5", isSide ? "w-1/2 shrink-0" : "w-full")}>
+            {block.imageCaption && <p className="text-xs text-muted-foreground leading-snug mb-0">{block.imageCaption}</p>}
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={block.imageUrl} alt={block.imageCaption || ""} className="rounded-xl w-full max-h-64 object-contain bg-muted/20" />
+            <img src={block.imageUrl} alt={block.imageCaption || ""} className="rounded-xl w-full h-48 object-cover" />
           </div>
           {isSide && block.content && (
             <p className="flex-1 text-sm leading-relaxed whitespace-pre-wrap">{block.content}</p>
@@ -1481,8 +1484,8 @@ function SimplePreviewBlock({ block }: { block: Block }) {
       const embed = detectVideoService(block.videoUrl)
       return (
         <div className={cn("flex gap-3", isSide ? (layout === "video-left" ? "flex-row" : "flex-row-reverse") : "flex-col")}>
-          <div className={cn("flex flex-col gap-1", isSide ? "w-1/2 shrink-0" : "w-full")}>
-            {block.imageCaption && <p className="text-xs text-muted-foreground leading-snug">{block.imageCaption}</p>}
+          <div className={cn("flex flex-col gap-1.5", isSide ? "w-1/2 shrink-0" : "w-full")}>
+            {block.imageCaption && <p className="text-xs text-muted-foreground leading-snug mb-0">{block.imageCaption}</p>}
             <div className="aspect-video rounded-xl bg-black overflow-hidden">
               {embed ? (
                 <iframe src={embed.embedUrl} className="w-full h-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen title="video" />
@@ -1503,8 +1506,8 @@ function SimplePreviewBlock({ block }: { block: Block }) {
       const isSide = layout === "audio-left" || layout === "audio-right"
       return (
         <div className={cn("flex gap-3 items-start", isSide ? (layout === "audio-left" ? "flex-row" : "flex-row-reverse") : "flex-col")}>
-          <div className={cn("flex flex-col gap-1", isSide ? "w-1/2 shrink-0" : "w-full")}>
-            {block.imageCaption && <p className="text-xs text-muted-foreground leading-snug">{block.imageCaption}</p>}
+          <div className={cn("flex flex-col gap-1.5", isSide ? "w-1/2 shrink-0" : "w-full")}>
+            {block.imageCaption && <p className="text-xs text-muted-foreground leading-snug mb-0">{block.imageCaption}</p>}
             {block.audioTitle && <p className="text-xs font-medium text-foreground">{block.audioTitle}</p>}
             <audio src={block.audioUrl} controls className="w-full" />
           </div>
@@ -1520,8 +1523,8 @@ function SimplePreviewBlock({ block }: { block: Block }) {
       const isSide = layout === "file-left" || layout === "file-right"
       return (
         <div className={cn("flex gap-3 items-start", isSide ? (layout === "file-left" ? "flex-row" : "flex-row-reverse") : "flex-col")}>
-          <div className={cn("flex flex-col gap-1", isSide ? "w-1/2 shrink-0" : "w-full")}>
-            {block.imageCaption && <p className="text-xs text-muted-foreground leading-snug">{block.imageCaption}</p>}
+          <div className={cn("flex flex-col gap-1.5", isSide ? "w-1/2 shrink-0" : "w-full")}>
+            {block.imageCaption && <p className="text-xs text-muted-foreground leading-snug mb-0">{block.imageCaption}</p>}
             <div className="flex items-center gap-3 p-3 bg-muted/30 rounded-xl border border-border">
               <FileText className="w-7 h-7 text-primary shrink-0" />
               <div className="flex-1 min-w-0">
@@ -1537,12 +1540,14 @@ function SimplePreviewBlock({ block }: { block: Block }) {
       )
     }
     case "info":
+      if (!block.content?.trim()) return null
       return (
         <div className={cn("rounded-xl border-l-4 p-4", block.infoStyle === "info" ? "bg-blue-50 border-blue-400" : block.infoStyle === "warning" ? "bg-amber-50 border-amber-400" : block.infoStyle === "success" ? "bg-emerald-50 border-emerald-400" : "bg-red-50 border-red-400")}>
           <p className="text-sm whitespace-pre-line">{block.content}</p>
         </div>
       )
     case "button":
+      if (!block.buttonText?.trim() && !block.buttonUrl?.trim()) return null
       return (
         <div className="flex justify-center">
           <Button variant={block.buttonVariant === "primary" ? "default" : "outline"} size="sm">
@@ -1551,9 +1556,10 @@ function SimplePreviewBlock({ block }: { block: Block }) {
         </div>
       )
     case "task":
+      if (!block.taskDescription?.trim() && block.questions.length === 0) return null
       return (
         <div className="rounded-xl border border-border p-4 space-y-3">
-          <p className="text-sm font-medium">{block.taskDescription}</p>
+          {block.taskDescription && <p className="text-sm font-medium">{block.taskDescription}</p>}
           {block.questions.map((q, i) => (
             <div key={q.id} className="space-y-1">
               <p className="text-sm text-muted-foreground">{i + 1}. {q.text}</p>
