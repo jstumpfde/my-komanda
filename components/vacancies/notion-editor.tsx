@@ -739,73 +739,325 @@ function NotionTextBlock({ block, editorRef, onSync, onKeyDown }: NotionTextBloc
   )
 }
 
-// ─── Media / other block types (simplified) ────────────────────────────────
+// ─── Video embed helper ────────────────────────────────────────────────────
+
+function detectVideoService(url: string): { service: string; embedUrl: string } | null {
+  if (!url) return null
+  // YouTube
+  const yt = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/)
+  if (yt) return { service: "YouTube", embedUrl: `https://www.youtube.com/embed/${yt[1]}?rel=0` }
+  // RuTube
+  const rt = url.match(/rutube\.ru\/video\/([a-f0-9]+)/)
+  if (rt) return { service: "RuTube", embedUrl: `https://rutube.ru/play/embed/${rt[1]}` }
+  // VK video
+  const vk = url.match(/vk\.com\/video(-?\d+_\d+)/)
+  if (vk) return { service: "VK", embedUrl: `https://vk.com/video_ext.php?oid=${vk[1].split("_")[0]}&id=${vk[1].split("_")[1]}&hd=2` }
+  // VK clip
+  const vkc = url.match(/vk\.com\/clip(-?\d+_\d+)/)
+  if (vkc) return { service: "VK", embedUrl: `https://vk.com/video_ext.php?oid=${vkc[1].split("_")[0]}&id=${vkc[1].split("_")[1]}&hd=2` }
+  return null
+}
+
+// ─── Layout picker ─────────────────────────────────────────────────────────
+
+const LAYOUTS = [
+  { value: "full", label: "Во всю ширину", icon: "▬" },
+  { value: "image-left", label: "Слева", icon: "◧" },
+  { value: "image-right", label: "Справа", icon: "◨" },
+] as const
+
+function LayoutPicker({ value, onChange, prefix = "image" }: {
+  value: string
+  onChange: (v: string) => void
+  prefix?: string
+}) {
+  const items = LAYOUTS.map(l => ({ ...l, value: l.value.replace("image", prefix) }))
+  return (
+    <div className="flex gap-1.5 items-center">
+      <span className="text-xs text-muted-foreground shrink-0">Расположение:</span>
+      {items.map(l => (
+        <button
+          key={l.value}
+          title={l.label}
+          onClick={() => onChange(l.value)}
+          className={cn(
+            "flex items-center gap-1 px-2 py-1 rounded-md border text-xs font-mono transition-colors",
+            value === l.value
+              ? "border-primary bg-primary/10 text-primary"
+              : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
+          )}
+        >
+          <span className="text-base leading-none">{l.icon}</span>
+        </button>
+      ))}
+    </div>
+  )
+}
+
+// ─── Upload or URL picker ──────────────────────────────────────────────────
+
+function SourcePicker({
+  onFile,
+  onUrl,
+  accept,
+  urlPlaceholder,
+  urlHint,
+  fileLabel = "Загрузить с устройства",
+}: {
+  onFile: (dataUrl: string, fileName: string) => void
+  onUrl: (url: string) => void
+  accept: string
+  urlPlaceholder: string
+  urlHint?: string
+  fileLabel?: string
+}) {
+  const [mode, setMode] = useState<"choose" | "file" | "url">("choose")
+  const [urlDraft, setUrlDraft] = useState("")
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => onFile(reader.result as string, file.name)
+    reader.readAsDataURL(file)
+  }
+
+  if (mode === "choose") {
+    return (
+      <div className="flex gap-2 flex-wrap">
+        <button
+          onClick={() => { setMode("file"); setTimeout(() => fileRef.current?.click(), 50) }}
+          className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border hover:border-primary/50 text-sm text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <Plus className="w-3.5 h-3.5" />{fileLabel}
+        </button>
+        <button
+          onClick={() => setMode("url")}
+          className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border hover:border-primary/50 text-sm text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <Link2 className="w-3.5 h-3.5" />Вставить ссылку
+        </button>
+        <input ref={fileRef} type="file" accept={accept} className="hidden" onChange={handleFile} />
+      </div>
+    )
+  }
+
+  if (mode === "file") {
+    return (
+      <div className="flex flex-col items-start gap-2">
+        <button
+          onClick={() => fileRef.current?.click()}
+          className="flex items-center gap-2 px-4 py-3 rounded-xl border-2 border-dashed border-border hover:border-primary/50 text-sm text-muted-foreground hover:text-foreground transition-colors w-full justify-center"
+        >
+          <Plus className="w-4 h-4" /> {fileLabel}
+        </button>
+        <button onClick={() => setMode("choose")} className="text-xs text-muted-foreground hover:text-foreground">← Назад</button>
+        <input ref={fileRef} type="file" accept={accept} className="hidden" onChange={handleFile} />
+      </div>
+    )
+  }
+
+  // url mode
+  return (
+    <div className="space-y-1.5">
+      <div className="flex gap-2">
+        <Input
+          autoFocus
+          className="text-sm flex-1"
+          placeholder={urlPlaceholder}
+          value={urlDraft}
+          onChange={(e) => setUrlDraft(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter" && urlDraft.trim()) onUrl(urlDraft.trim()) }}
+        />
+        <Button size="sm" variant="outline" onClick={() => { if (urlDraft.trim()) onUrl(urlDraft.trim()) }}>Добавить</Button>
+      </div>
+      {urlHint && <p className="text-[11px] text-muted-foreground">{urlHint}</p>}
+      <button onClick={() => setMode("choose")} className="text-xs text-muted-foreground hover:text-foreground">← Назад</button>
+    </div>
+  )
+}
+
+// ─── Media / other block types ─────────────────────────────────────────────
 
 function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdate: (patch: Partial<Block>) => void; onRemove: () => void }) {
   const meta = BLOCK_TYPE_META.find((m) => m.type === block.type)
 
   switch (block.type) {
-    case "image":
+    case "image": {
+      const layout = block.imageLayout || "full"
+      const isSet = !!block.imageUrl
       return (
-        <div className="rounded-xl border border-dashed border-border bg-muted/20 p-4 space-y-2">
-          <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-            <ImageIcon className="w-4 h-4" /><span>Изображение</span>
+        <div className="rounded-xl border border-dashed border-border bg-muted/20 p-4 space-y-3">
+          {/* Header */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+              <ImageIcon className="w-4 h-4" /><span>Изображение</span>
+            </div>
+            {isSet && (
+              <button onClick={() => onUpdate({ imageUrl: "" })} className="text-xs text-muted-foreground hover:text-destructive transition-colors">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
-          {block.imageUrl ? (
-            <div className="relative group/img">
+          {/* Layout */}
+          <LayoutPicker value={layout} onChange={(v) => onUpdate({ imageLayout: v as Block["imageLayout"] })} prefix="image" />
+          {/* Content */}
+          {isSet ? (
+            <div className={cn("flex gap-3", layout === "full" ? "flex-col" : layout === "image-left" ? "flex-row" : "flex-row-reverse")}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={block.imageUrl} alt={block.imageCaption || ""} className="rounded-lg max-h-64 object-cover w-full" />
-              <button onClick={() => onUpdate({ imageUrl: "" })} className="absolute top-2 right-2 bg-black/50 text-white rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover/img:opacity-100"><X className="w-3.5 h-3.5" /></button>
-            </div>
-          ) : (
-            <MediaUrlInput placeholder="URL изображения (https://...)" value={block.imageUrl} onSave={(url) => onUpdate({ imageUrl: url })} />
-          )}
-          {block.imageUrl && (
-            <input className="w-full text-xs text-muted-foreground bg-transparent outline-none border-b border-border/50 pb-0.5" value={block.imageCaption} onChange={(e) => onUpdate({ imageCaption: e.target.value })} placeholder="Подпись..." />
-          )}
-        </div>
-      )
-
-    case "video":
-      return (
-        <div className="rounded-xl border border-dashed border-border bg-muted/20 p-4 space-y-2">
-          <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-            <Video className="w-4 h-4" /><span>Видео</span>
-          </div>
-          {block.videoUrl ? (
-            <div className="relative">
-              <div className="aspect-video rounded-lg bg-black flex items-center justify-center">
-                <span className="text-white/60 text-sm">▶ {block.videoUrl}</span>
+              <img src={block.imageUrl} alt={block.imageCaption || ""} className={cn("rounded-lg object-cover", layout === "full" ? "w-full max-h-64" : "w-1/2 max-h-48")} />
+              <div className="flex-1 flex flex-col justify-end">
+                <input
+                  className="text-xs text-muted-foreground bg-transparent outline-none border-b border-border/50 pb-0.5 w-full"
+                  value={block.imageCaption}
+                  onChange={(e) => onUpdate({ imageCaption: e.target.value })}
+                  placeholder="Подпись к изображению..."
+                />
               </div>
-              <button onClick={() => onUpdate({ videoUrl: "" })} className="absolute top-2 right-2 bg-black/50 text-white rounded-full w-6 h-6 flex items-center justify-center"><X className="w-3.5 h-3.5" /></button>
             </div>
           ) : (
-            <MediaUrlInput placeholder="YouTube / Vimeo / прямой URL видео" value={block.videoUrl} onSave={(url) => onUpdate({ videoUrl: url })} />
+            <SourcePicker
+              accept="image/*"
+              urlPlaceholder="https://example.com/photo.jpg"
+              fileLabel="Загрузить изображение"
+              onFile={(dataUrl) => onUpdate({ imageUrl: dataUrl })}
+              onUrl={(url) => onUpdate({ imageUrl: url })}
+            />
           )}
         </div>
       )
+    }
 
-    case "audio":
+    case "video": {
+      const layout = (block.videoLayout || "full") as string
+      const isSet = !!block.videoUrl
+      const embed = isSet ? detectVideoService(block.videoUrl) : null
       return (
-        <div className="rounded-xl border border-dashed border-border bg-muted/20 p-4 space-y-2">
-          <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-            <Music className="w-4 h-4" /><span>Аудио</span>
+        <div className="rounded-xl border border-dashed border-border bg-muted/20 p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+              <Video className="w-4 h-4" /><span>Видео</span>
+              {embed && <span className="text-[10px] font-normal bg-primary/10 text-primary rounded px-1.5 py-0.5">{embed.service}</span>}
+            </div>
+            {isSet && (
+              <button onClick={() => onUpdate({ videoUrl: "" })} className="text-xs text-muted-foreground hover:text-destructive transition-colors">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
-          <Input placeholder="Название аудио" value={block.audioTitle} onChange={(e) => onUpdate({ audioTitle: e.target.value })} className="text-sm" />
-          <MediaUrlInput placeholder="URL аудиофайла" value={block.audioUrl} onSave={(url) => onUpdate({ audioUrl: url })} />
+          <LayoutPicker value={layout} onChange={(v) => onUpdate({ videoLayout: v.replace("image", "video") as Block["videoLayout"] })} prefix="video" />
+          {isSet ? (
+            <div className={cn("flex gap-3", layout === "full" || layout === "video-full" ? "flex-col" : layout === "video-left" ? "flex-row" : "flex-row-reverse")}>
+              <div className={cn("rounded-lg overflow-hidden bg-black", layout === "full" || layout === "video-full" ? "w-full aspect-video" : "w-1/2 aspect-video shrink-0")}>
+                {embed ? (
+                  <iframe
+                    src={embed.embedUrl}
+                    className="w-full h-full"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                    title="video"
+                  />
+                ) : (
+                  <video src={block.videoUrl} controls className="w-full h-full object-contain" />
+                )}
+              </div>
+            </div>
+          ) : (
+            <SourcePicker
+              accept="video/*"
+              urlPlaceholder="https://youtube.com/watch?v=... или другой сервис"
+              urlHint="Поддерживаются: YouTube, RuTube, VK, прямые ссылки на видеофайлы"
+              fileLabel="Загрузить видео"
+              onFile={(dataUrl, fileName) => onUpdate({ videoUrl: dataUrl, fileName })}
+              onUrl={(url) => onUpdate({ videoUrl: url })}
+            />
+          )}
         </div>
       )
+    }
 
-    case "file":
+    case "audio": {
+      const layout = block.audioLayout || "full"
+      const isSet = !!block.audioUrl
       return (
-        <div className="rounded-xl border border-dashed border-border bg-muted/20 p-4 space-y-2">
-          <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-            <FileText className="w-4 h-4" /><span>Файл</span>
+        <div className="rounded-xl border border-dashed border-border bg-muted/20 p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+              <Music className="w-4 h-4" /><span>Аудио</span>
+            </div>
+            {isSet && (
+              <button onClick={() => onUpdate({ audioUrl: "", audioTitle: "" })} className="text-xs text-muted-foreground hover:text-destructive transition-colors">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
-          <Input placeholder="Название файла" value={block.fileName} onChange={(e) => onUpdate({ fileName: e.target.value })} className="text-sm" />
-          <MediaUrlInput placeholder="URL файла (PDF, DOC...)" value={block.fileUrl} onSave={(url) => onUpdate({ fileUrl: url })} />
+          <LayoutPicker value={layout} onChange={(v) => onUpdate({ audioLayout: v.replace("image", "audio") as Block["audioLayout"] })} prefix="audio" />
+          {isSet ? (
+            <div className={cn("flex gap-3 items-start", layout === "full" ? "flex-col" : layout === "audio-left" ? "flex-row" : "flex-row-reverse")}>
+              <div className={cn(layout === "full" ? "w-full" : "w-1/2")}>
+                {block.audioTitle && <p className="text-xs font-medium mb-1.5 text-foreground">{block.audioTitle}</p>}
+                <audio src={block.audioUrl} controls className="w-full" />
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <Input
+                placeholder="Название аудио (необязательно)"
+                value={block.audioTitle}
+                onChange={(e) => onUpdate({ audioTitle: e.target.value })}
+                className="text-sm h-8"
+              />
+              <SourcePicker
+                accept="audio/*"
+                urlPlaceholder="https://example.com/audio.mp3"
+                fileLabel="Загрузить аудио"
+                onFile={(dataUrl, fileName) => onUpdate({ audioUrl: dataUrl, audioTitle: block.audioTitle || fileName })}
+                onUrl={(url) => onUpdate({ audioUrl: url })}
+              />
+            </div>
+          )}
         </div>
       )
+    }
+
+    case "file": {
+      const layout = block.fileLayout || "full"
+      const isSet = !!block.fileUrl
+      return (
+        <div className="rounded-xl border border-dashed border-border bg-muted/20 p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+              <FileText className="w-4 h-4" /><span>Файл</span>
+            </div>
+            {isSet && (
+              <button onClick={() => onUpdate({ fileUrl: "", fileName: "" })} className="text-xs text-muted-foreground hover:text-destructive transition-colors">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+          <LayoutPicker value={layout} onChange={(v) => onUpdate({ fileLayout: v.replace("image", "file") as Block["fileLayout"] })} prefix="file" />
+          {isSet ? (
+            <div className="flex items-center gap-3 p-3 bg-background rounded-lg border border-border">
+              <FileText className="w-8 h-8 text-primary shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">{block.fileName || "Файл"}</p>
+                <a href={block.fileUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">Открыть</a>
+              </div>
+            </div>
+          ) : (
+            <SourcePicker
+              accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip"
+              urlPlaceholder="https://docs.google.com/... или Яндекс Документы"
+              urlHint="Поддерживаются: Google Docs, Яндекс Документы, OneDrive, прямые ссылки"
+              fileLabel="Загрузить файл"
+              onFile={(dataUrl, fileName) => onUpdate({ fileUrl: dataUrl, fileName })}
+              onUrl={(url) => onUpdate({ fileUrl: url, fileName: block.fileName || url.split("/").pop() || "Документ" })}
+            />
+          )}
+        </div>
+      )
+    }
 
     case "info":
       return (
@@ -979,23 +1231,6 @@ function EmojiBtn({ current, onSelect }: { current: string; onSelect: (v: string
   )
 }
 
-// ─── Media URL input ───────────────────────────────────────────────────────
-
-function MediaUrlInput({ placeholder, value, onSave }: { placeholder: string; value: string; onSave: (url: string) => void }) {
-  const [draft, setDraft] = useState(value)
-  return (
-    <div className="flex gap-2">
-      <Input
-        className="text-sm flex-1"
-        placeholder={placeholder}
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onKeyDown={(e) => { if (e.key === "Enter") onSave(draft) }}
-      />
-      <Button size="sm" variant="outline" className="text-xs" onClick={() => onSave(draft)}>OK</Button>
-    </div>
-  )
-}
 
 // ─── Preview block (candidate view) ───────────────────────────────────────
 
