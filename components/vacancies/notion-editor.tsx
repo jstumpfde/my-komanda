@@ -384,8 +384,10 @@ function NotionLessonEditor({ lesson, onUpdateLesson, onUpdateBlock, onInsertBlo
   const [showBgColors, setShowBgColors] = useState(false)
   const [currentTextColor, setCurrentTextColor] = useState("#000000")
   const [showTagsInToolbar, setShowTagsInToolbar] = useState(false)
+  const [toolbarTagsPos, setToolbarTagsPos] = useState<React.CSSProperties>({})
   const [showEmojiInToolbar, setShowEmojiInToolbar] = useState(false)
   const [toolbarEmojiPos, setToolbarEmojiPos] = useState<React.CSSProperties>({})
+  const [toolbarEmojiAvailH, setToolbarEmojiAvailH] = useState(480)
   const toolbarEmojiSearchRef = useRef<HTMLInputElement>(null)
   const toolbarEmojiBtnRef = useRef<HTMLButtonElement>(null)
   const toolbarTagsBtnRef = useRef<HTMLButtonElement>(null)
@@ -394,6 +396,20 @@ function NotionLessonEditor({ lesson, onUpdateLesson, onUpdateBlock, onInsertBlo
 
   const FORE_COLORS = ["#000000", "#ef4444", "#f97316", "#eab308", "#22c55e", "#3b82f6", "#8b5cf6", "#6b7280"]
   const BG_COLORS = ["#fde047", "#fb923c", "#f87171", "#86efac", "#93c5fd", "#c4b5fd", "#f9a8d4", "transparent"]
+
+  // Close # and emoji toolbar popups on outside click
+  useEffect(() => {
+    if (!showTagsInToolbar && !showEmojiInToolbar) return
+    const handler = (e: MouseEvent) => {
+      const t = e.target as HTMLElement
+      if (toolbarTagsBtnRef.current?.contains(t) || toolbarEmojiBtnRef.current?.contains(t)) return
+      if (t.closest("[data-toolbar-popup]")) return
+      setShowTagsInToolbar(false)
+      setShowEmojiInToolbar(false)
+    }
+    document.addEventListener("mousedown", handler)
+    return () => document.removeEventListener("mousedown", handler)
+  }, [showTagsInToolbar, showEmojiInToolbar])
 
   // Close slash menu on click outside
   useEffect(() => {
@@ -580,30 +596,50 @@ function NotionLessonEditor({ lesson, onUpdateLesson, onUpdateBlock, onInsertBlo
           </button>
           <div className="w-px h-4 bg-border mx-0.5" />
           {/* Variables # */}
-          <div className="relative">
-            <button
-              ref={toolbarTagsBtnRef}
-              className="w-7 h-7 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors text-xs font-bold"
-              title="Вставить переменную"
-              onMouseDown={(e) => { e.preventDefault(); saveToolbarSelection(); setShowEmojiInToolbar(false); setShowTagsInToolbar(v => !v) }}
-            >#</button>
-            {showTagsInToolbar && (
-              <div className="absolute bottom-full mb-1 left-0 z-[200] bg-popover border border-border rounded-xl shadow-xl overflow-hidden w-52" onMouseDown={e => e.preventDefault()}>
-                <div className="px-3 py-1.5 border-b border-border">
-                  <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Переменные</span>
-                </div>
-                <div className="p-1">
-                  {QUICK_TAGS.map((t) => (
-                    <button key={t.tag} onMouseDown={(ev) => { ev.preventDefault(); insertAtToolbarCursor(t.tag) }}
-                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left hover:bg-muted transition-colors">
-                      <span className="font-mono text-[11px] text-primary bg-primary/10 rounded px-1 py-0.5 shrink-0">{t.tag}</span>
-                      <span className="text-xs text-muted-foreground truncate">{t.label}</span>
-                    </button>
-                  ))}
-                </div>
+          <button
+            ref={toolbarTagsBtnRef}
+            className="w-7 h-7 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors text-xs font-bold"
+            title="Вставить переменную"
+            onMouseDown={(e) => {
+              e.preventDefault()
+              saveToolbarSelection()
+              setShowEmojiInToolbar(false)
+              if (toolbarTagsBtnRef.current) {
+                const rect = toolbarTagsBtnRef.current.getBoundingClientRect()
+                const popupH = QUICK_TAGS.length * 36 + 36 // approx height
+                const spaceAbove = rect.top - 8
+                const spaceBelow = window.innerHeight - rect.bottom - 8
+                const left = Math.min(rect.left, window.innerWidth - 208 - 8)
+                if (spaceAbove >= popupH || spaceAbove >= spaceBelow) {
+                  setToolbarTagsPos({ bottom: window.innerHeight - rect.top + 4, left })
+                } else {
+                  setToolbarTagsPos({ top: rect.bottom + 4, left })
+                }
+              }
+              setShowTagsInToolbar(v => !v)
+            }}
+          >#</button>
+          {showTagsInToolbar && (
+            <div
+              className="fixed z-[200] bg-popover border border-border rounded-xl shadow-xl overflow-hidden w-52"
+              style={toolbarTagsPos}
+              data-toolbar-popup
+              onMouseDown={e => e.preventDefault()}
+            >
+              <div className="px-3 py-1.5 border-b border-border">
+                <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Переменные</span>
               </div>
-            )}
-          </div>
+              <div className="p-1">
+                {QUICK_TAGS.map((t) => (
+                  <button key={t.tag} onMouseDown={(ev) => { ev.preventDefault(); insertAtToolbarCursor(t.tag) }}
+                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left hover:bg-muted transition-colors">
+                    <span className="font-mono text-[11px] text-primary bg-primary/10 rounded px-1 py-0.5 shrink-0">{t.tag}</span>
+                    <span className="text-xs text-muted-foreground truncate">{t.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           {/* Emoji 😊 */}
           <button
             ref={toolbarEmojiBtnRef}
@@ -617,10 +653,13 @@ function NotionLessonEditor({ lesson, onUpdateLesson, onUpdateBlock, onInsertBlo
                 const rect = toolbarEmojiBtnRef.current.getBoundingClientRect()
                 const spaceBelow = window.innerHeight - rect.bottom - 8
                 const spaceAbove = rect.top - 8
+                const left = Math.min(rect.left, window.innerWidth - (9 * 37 + 16) - 8)
                 if (spaceBelow >= 300 || spaceBelow >= spaceAbove) {
-                  setToolbarEmojiPos({ top: rect.bottom + 4, left: Math.min(rect.left, window.innerWidth - (9 * 37 + 16) - 8) })
+                  setToolbarEmojiPos({ top: rect.bottom + 4, left })
+                  setToolbarEmojiAvailH(spaceBelow)
                 } else {
-                  setToolbarEmojiPos({ bottom: window.innerHeight - rect.top + 4, left: Math.min(rect.left, window.innerWidth - (9 * 37 + 16) - 8) })
+                  setToolbarEmojiPos({ bottom: window.innerHeight - rect.top + 4, left })
+                  setToolbarEmojiAvailH(spaceAbove)
                 }
               }
               setShowEmojiInToolbar(v => !v)
@@ -629,6 +668,7 @@ function NotionLessonEditor({ lesson, onUpdateLesson, onUpdateBlock, onInsertBlo
           <InlineEmojiPicker
             isOpen={showEmojiInToolbar}
             positionStyle={toolbarEmojiPos}
+            availH={toolbarEmojiAvailH}
             searchRef={toolbarEmojiSearchRef}
             onSelect={(emoji) => { insertAtToolbarCursor(emoji); setShowEmojiInToolbar(false) }}
           />
@@ -958,6 +998,7 @@ function NotionTextBlock({ block, editorRef, isHovered, onSync, onKeyDown }: Not
   const [showTags, setShowTags] = useState(false)
   const [tagsOpenUpward, setTagsOpenUpward] = useState(false)
   const [emojiPos, setEmojiPos] = useState<React.CSSProperties>({})
+  const [emojiAvailH, setEmojiAvailH] = useState(480)
   const emojiBtnRef = useRef<HTMLButtonElement>(null)
   const tagsBtnRef = useRef<HTMLButtonElement>(null)
   const emojiSearchRef = useRef<HTMLInputElement>(null)
@@ -1047,8 +1088,10 @@ function NotionTextBlock({ block, editorRef, isHovered, onSync, onKeyDown }: Not
                 const spaceAbove = rect.top - 8
                 if (spaceBelow >= 300 || spaceBelow >= spaceAbove) {
                   setEmojiPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right })
+                  setEmojiAvailH(spaceBelow)
                 } else {
                   setEmojiPos({ bottom: window.innerHeight - rect.top + 4, right: window.innerWidth - rect.right })
+                  setEmojiAvailH(spaceAbove)
                 }
               }
               setShowEmoji((v) => !v)
@@ -1061,6 +1104,7 @@ function NotionTextBlock({ block, editorRef, isHovered, onSync, onKeyDown }: Not
           <InlineEmojiPicker
             isOpen={showEmoji}
             positionStyle={emojiPos}
+            availH={emojiAvailH}
             searchRef={emojiSearchRef}
             onSelect={(e) => { restoreSelectionAndInsert(e); setShowEmoji(false) }}
           />
@@ -2305,11 +2349,12 @@ function FmtBtn({ icon: Icon, tip, cmd }: { icon: React.ElementType; tip: string
 }
 
 /* ──── InlineEmojiPicker: пикер для вставки эмодзи в текст ──── */
-function InlineEmojiPicker({ onSelect, positionStyle, isOpen, searchRef }: {
+function InlineEmojiPicker({ onSelect, positionStyle, isOpen, searchRef, availH }: {
   onSelect: (e: string) => void
   positionStyle: React.CSSProperties
   isOpen: boolean
   searchRef: React.RefObject<HTMLInputElement>
+  availH?: number
 }) {
   const [activeCategory, setActiveCategory] = useState(Object.keys(CATEGORIES)[0])
   const [search, setSearch] = useState("")
@@ -2329,7 +2374,7 @@ function InlineEmojiPicker({ onSelect, positionStyle, isOpen, searchRef }: {
   if (!isOpen) return null
   return (
     <div
-      style={{ ...positionStyle, width: PICKER_WIDTH, maxHeight: 480, zIndex: 9999 }}
+      style={{ ...positionStyle, width: PICKER_WIDTH, maxHeight: Math.min(480, availH ?? 480), zIndex: 9999 }}
       className="fixed bg-popover border border-border rounded-xl shadow-xl p-2 flex flex-col gap-1"
     >
       <input ref={searchRef} value={search} onChange={(e) => setSearch(e.target.value)}
@@ -2459,6 +2504,7 @@ function InfoBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: Partia
   const [showTags, setShowTags] = useState(false)
   const [tagsOpenUpward, setTagsOpenUpward] = useState(false)
   const [emojiPos, setEmojiPos] = useState<React.CSSProperties>({})
+  const [emojiAvailH, setEmojiAvailH] = useState(480)
   const settingsRef = useRef<HTMLDivElement>(null)
   const btnRef = useRef<HTMLButtonElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
@@ -2606,8 +2652,10 @@ function InfoBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: Partia
                   const spaceAbove = rect.top - 8
                   if (spaceBelow >= 300 || spaceBelow >= spaceAbove) {
                     setEmojiPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right })
+                    setEmojiAvailH(spaceBelow)
                   } else {
                     setEmojiPos({ bottom: window.innerHeight - rect.top + 4, right: window.innerWidth - rect.right })
+                    setEmojiAvailH(spaceAbove)
                   }
                 }
                 setShowEmoji((v) => !v)
@@ -2618,6 +2666,7 @@ function InfoBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: Partia
             <InlineEmojiPicker
               isOpen={showEmoji}
               positionStyle={emojiPos}
+              availH={emojiAvailH}
               searchRef={emojiSearchRef}
               onSelect={(e) => { insertAndSync(e); setShowEmoji(false) }}
             />
