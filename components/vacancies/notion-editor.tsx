@@ -17,7 +17,7 @@ import {
   Bold, Italic, Underline, Strikethrough, AlignLeft, AlignCenter, AlignRight,
   Heading1, Heading2, Heading3, List as ListIcon, ListOrdered, Link2, Hash, Smile,
   Type, ImageIcon, Video, Music, FileText, Info, MousePointerClick, CheckSquare,
-  ChevronLeft, ChevronRight, Mic,
+  ChevronLeft, ChevronRight, Mic, Highlighter,
 } from "lucide-react"
 import { toast } from "sonner"
 import type { Demo, Block, BlockType, Lesson } from "@/lib/course-types"
@@ -383,10 +383,11 @@ function NotionLessonEditor({ lesson, onUpdateLesson, onUpdateBlock, onInsertBlo
   const [floatingBlockId, setFloatingBlockId] = useState<string | null>(null)
   const [showForeColors, setShowForeColors] = useState(false)
   const [showBgColors, setShowBgColors] = useState(false)
+  const [currentTextColor, setCurrentTextColor] = useState("#000000")
   const editorAreaRef = useRef<HTMLDivElement>(null)
 
   const FORE_COLORS = ["#000000", "#ef4444", "#f97316", "#eab308", "#22c55e", "#3b82f6", "#8b5cf6", "#6b7280"]
-  const BG_COLORS = ["transparent", "#fef08a", "#fed7aa", "#fecaca", "#bbf7d0", "#bfdbfe", "#e9d5ff", "#f1f5f9"]
+  const BG_COLORS = ["#fde047", "#fb923c", "#f87171", "#86efac", "#93c5fd", "#c4b5fd", "#f9a8d4", "transparent"]
 
   // Close slash menu on click outside
   useEffect(() => {
@@ -432,6 +433,7 @@ function NotionLessonEditor({ lesson, onUpdateLesson, onUpdateBlock, onInsertBlo
 
   const execFmt = (cmd: string, value?: string) => {
     document.execCommand(cmd, false, value)
+    if (cmd === "foreColor" && value) setCurrentTextColor(value)
     setShowForeColors(false)
     setShowBgColors(false)
   }
@@ -465,10 +467,15 @@ function NotionLessonEditor({ lesson, onUpdateLesson, onUpdateBlock, onInsertBlo
           {/* Foreground color */}
           <div className="relative">
             <button
-              className="w-7 h-7 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors text-xs font-bold"
+              className="w-7 h-7 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
               title="Цвет текста"
               onMouseDown={(e) => { e.preventDefault(); setShowForeColors(v => !v); setShowBgColors(false) }}
-            >A</button>
+            >
+              <span className="flex flex-col items-center leading-none">
+                <span className="text-sm font-bold">A</span>
+                <span style={{ height: "3px", width: "14px", background: currentTextColor, borderRadius: "1px", marginTop: "1px" }} />
+              </span>
+            </button>
             {showForeColors && (
               <div className="absolute bottom-full mb-1 left-0 z-50 bg-popover border border-border rounded-lg shadow-lg p-1.5 flex gap-1" onMouseDown={e => e.preventDefault()}>
                 {FORE_COLORS.map(c => (
@@ -485,13 +492,15 @@ function NotionLessonEditor({ lesson, onUpdateLesson, onUpdateBlock, onInsertBlo
               className="w-7 h-7 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
               title="Цвет фона"
               onMouseDown={(e) => { e.preventDefault(); setShowBgColors(v => !v); setShowForeColors(false) }}
-            >🖍</button>
+            >
+              <Highlighter className="w-3.5 h-3.5" />
+            </button>
             {showBgColors && (
               <div className="absolute bottom-full mb-1 left-0 z-50 bg-popover border border-border rounded-lg shadow-lg p-1.5 flex gap-1" onMouseDown={e => e.preventDefault()}>
                 {BG_COLORS.map(c => (
                   <button key={c} onMouseDown={(e) => { e.preventDefault(); execFmt("hiliteColor", c) }}
                     className="w-5 h-5 rounded-full border border-border shadow-sm hover:scale-110 transition-transform"
-                    style={{ background: c === "transparent" ? "repeating-conic-gradient(#ccc 0% 25%, #fff 0% 50%) 0 0 / 8px 8px" : c }}
+                    style={{ background: c === "transparent" ? "repeating-conic-gradient(#ccc 0% 25%, white 0% 50%) 0 0 / 8px 8px" : c }}
                     title={c === "transparent" ? "Без фона" : c} />
                 ))}
               </div>
@@ -631,6 +640,8 @@ interface NotionBlockProps {
 
 function NotionBlock({ block, idx, totalBlocks, isHovered, isDragging, isDragOver, onMouseEnter, onMouseLeave, onDragStart, onDragOver, onDragEnd, onDrop, onUpdate, onRemove, onMoveUp, onMoveDown, onDuplicate, onInsertBelow, onSlashTrigger }: NotionBlockProps) {
   const editorRef = useRef<HTMLDivElement>(null)
+  const mouseDownPos = useRef<{ x: number; y: number } | null>(null)
+  const isDragStarted = useRef(false)
 
 
   // Set innerHTML when block changes
@@ -684,7 +695,16 @@ function NotionBlock({ block, idx, totalBlocks, isHovered, isDragging, isDragOve
       )}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
-      onDragOver={onDragOver}
+      onMouseDown={(e) => {
+        // Track mousedown position to distinguish click/select from drag
+        mouseDownPos.current = { x: e.clientX, y: e.clientY }
+        isDragStarted.current = false
+      }}
+      onDragOver={(e) => {
+        // Only handle dragOver if a real HTML drag is happening (isDragStarted)
+        if (isDragStarted.current) onDragOver(e)
+        else e.stopPropagation()
+      }}
       onDrop={onDrop}
       data-block-id={block.id}
     >
@@ -706,8 +726,8 @@ function NotionBlock({ block, idx, totalBlocks, isHovered, isDragging, isDragOve
           title="Перетащить"
           className="w-5 h-5 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-grab active:cursor-grabbing"
           draggable
-          onDragStart={() => onDragStart()}
-          onDragEnd={() => onDragEnd()}
+          onDragStart={() => { isDragStarted.current = true; onDragStart() }}
+          onDragEnd={() => { isDragStarted.current = false; onDragEnd() }}
         >
           <GripVertical className="w-3 h-3" />
         </button>
