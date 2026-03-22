@@ -951,11 +951,11 @@ function BlockEditor({ block, onUpdate }: { block: Block; onUpdate: (p: Partial<
               if (e.key === "Enter") {
                 e.preventDefault()
                 if (e.shiftKey) {
-                  // Shift+Enter — одиночный перенос строки
-                  document.execCommand("insertHTML", false, "<br>")
-                } else {
-                  // Enter — новый параграф внутри блока (двойной br)
+                  // Shift+Enter — абзацный отступ (двойной br)
                   document.execCommand("insertHTML", false, "<br><br>")
+                } else {
+                  // Enter — мягкий перенос строки
+                  document.execCommand("insertHTML", false, "<br>")
                 }
               }
             }}
