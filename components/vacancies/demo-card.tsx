@@ -917,7 +917,7 @@ function BlockEditor({ block, onUpdate }: { block: Block; onUpdate: (p: Partial<
             contentEditable
             suppressContentEditableWarning
             data-block-editor={block.id}
-            className="min-h-[100px] text-sm rounded-b-lg border border-t-0 border-border bg-background p-3 outline-none focus:ring-1 focus:ring-ring [&_h1]:text-xl [&_h1]:font-bold [&_h1]:mt-3 [&_h1]:mb-1 [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:mt-2 [&_h2]:mb-1 [&_h3]:text-base [&_h3]:font-semibold [&_h3]:mt-2 [&_ul]:list-disc [&_ul]:ml-4 [&_ol]:list-decimal [&_ol]:ml-4 [&_a]:text-primary [&_a]:underline"
+            className="min-h-[100px] text-sm rounded-b-lg border border-t-0 border-border bg-background p-3 outline-none focus:ring-1 focus:ring-ring [&_h1]:text-xl [&_h1]:font-bold [&_h1]:mt-3 [&_h1]:mb-1 [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:mt-2 [&_h2]:mb-1 [&_h3]:text-base [&_h3]:font-semibold [&_h3]:mt-2 [&_ul]:list-disc [&_ul]:ml-4 [&_ol]:list-decimal [&_ol]:ml-4 [&_a]:text-primary [&_a]:underline [&_blockquote]:border-0 [&_blockquote]:p-0 [&_blockquote]:m-0 [&_blockquote]:not-italic"
             onBlur={syncContent}
             onInput={syncContent}
             data-placeholder="Введите текст..."
