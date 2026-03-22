@@ -52,6 +52,7 @@ export function NotionEditor({ demo, onBack, onUpdate }: NotionEditorProps) {
   const [previewIdx, setPreviewIdx] = useState(0)
   const [renamingLessonId, setRenamingLessonId] = useState<string | null>(null)
   const [copiedLesson, setCopiedLesson] = useState<Lesson | null>(null)
+  const [contextMenuLessonId, setContextMenuLessonId] = useState<string | null>(null)
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "idle">("saved")
   const [dragLessonIdx, setDragLessonIdx] = useState<number | null>(null)
@@ -253,75 +254,70 @@ export function NotionEditor({ demo, onBack, onUpdate }: NotionEditorProps) {
               const isActive = activeLessonId === lesson.id
               const isRenaming = renamingLessonId === lesson.id
               return (
-                <div
-                  key={lesson.id}
-                  draggable={!isRenaming}
-                  onDragStart={() => setDragLessonIdx(i)}
-                  onDragOver={(e) => { e.preventDefault(); setDragOverLessonIdx(i) }}
-                  onDragEnd={() => { setDragLessonIdx(null); setDragOverLessonIdx(null) }}
-                  onDrop={() => dropLesson(i)}
-                  onClick={() => { if (!isRenaming) switchLesson(lesson.id) }}
-                  className={cn(
-                    "flex items-center gap-1.5 pl-1 pr-0.5 py-1.5 rounded-lg cursor-pointer group transition-all text-sm",
-                    isActive ? "bg-primary text-primary-foreground" : "hover:bg-muted/60 text-foreground",
-                    dragLessonIdx === i && "opacity-30",
-                    dragOverLessonIdx === i && dragLessonIdx !== i && "ring-1 ring-primary/50 bg-primary/5"
-                  )}
+                <DropdownMenu
+                  open={contextMenuLessonId === lesson.id}
+                  onOpenChange={(v) => { if (!v) setContextMenuLessonId(null) }}
                 >
-                  <GripVertical className={cn("w-3 h-3 flex-shrink-0 cursor-move", isActive ? "text-primary-foreground/40" : "text-muted-foreground/20 group-hover:text-muted-foreground/50")} />
-                  <span className="text-xl flex-shrink-0 leading-none">{lesson.emoji}</span>
-                  {isRenaming ? (
-                    <input
-                      autoFocus
-                      className="flex-1 text-xs font-medium bg-transparent border-b border-primary-foreground/40 outline-none min-w-0"
-                      value={lesson.title}
-                      onChange={(e) => updateLesson(lesson.id, { title: e.target.value })}
-                      onBlur={() => setRenamingLessonId(null)}
-                      onKeyDown={(e) => { if (e.key === "Enter") setRenamingLessonId(null) }}
-                      onClick={(e) => e.stopPropagation()}
-                    />
-                  ) : (
-                    <span className="flex-1 truncate text-[12px] font-medium">{lesson.title}</span>
-                  )}
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <button
-                        className={cn(
-                          "opacity-0 group-hover:opacity-100 p-0.5 rounded transition-opacity flex-shrink-0",
-                          isActive ? "text-primary-foreground/70 hover:bg-primary-foreground/20" : "text-muted-foreground/50 hover:bg-muted"
-                        )}
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <MoreHorizontal className="w-3.5 h-3.5" />
-                      </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-44">
-                      <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setRenamingLessonId(lesson.id) }}>
-                        <Pencil className="w-3.5 h-3.5 mr-2" />Переименовать
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setCopiedLesson(lesson); toast.success("Скопировано") }}>
-                        <Copy className="w-3.5 h-3.5 mr-2" />Копировать
-                      </DropdownMenuItem>
-                      <DropdownMenuItem disabled={!copiedLesson} onClick={(e) => { e.stopPropagation(); pasteLesson() }}>
-                        <ClipboardPaste className="w-3.5 h-3.5 mr-2" />Вставить
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={(e) => { e.stopPropagation(); duplicateLesson(i) }}>
-                        <Copy className="w-3.5 h-3.5 mr-2" />Дублировать
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={(e) => { e.stopPropagation(); moveLessonDir(i, -1) }} disabled={i === 0}>
-                        <ArrowUp className="w-3.5 h-3.5 mr-2" />Переместить вверх
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={(e) => { e.stopPropagation(); moveLessonDir(i, 1) }} disabled={i === demo.lessons.length - 1}>
-                        <ArrowDown className="w-3.5 h-3.5 mr-2" />Переместить вниз
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setDeleteConfirmId(lesson.id) }} className="text-destructive focus:text-destructive">
-                        <Trash2 className="w-3.5 h-3.5 mr-2" />Удалить
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
+                  <DropdownMenuTrigger asChild>
+                    <div
+                      key={lesson.id}
+                      draggable={!isRenaming}
+                      onDragStart={() => setDragLessonIdx(i)}
+                      onDragOver={(e) => { e.preventDefault(); setDragOverLessonIdx(i) }}
+                      onDragEnd={() => { setDragLessonIdx(null); setDragOverLessonIdx(null) }}
+                      onDrop={() => dropLesson(i)}
+                      onClick={() => { if (!isRenaming) switchLesson(lesson.id) }}
+                      onContextMenu={(e) => { e.preventDefault(); setContextMenuLessonId(lesson.id) }}
+                      className={cn(
+                        "flex items-center gap-1.5 pl-1 pr-2 py-1.5 rounded-lg cursor-pointer group transition-all text-sm",
+                        isActive ? "bg-primary text-primary-foreground" : "hover:bg-muted/60 text-foreground",
+                        dragLessonIdx === i && "opacity-30",
+                        dragOverLessonIdx === i && dragLessonIdx !== i && "ring-1 ring-primary/50 bg-primary/5"
+                      )}
+                    >
+                      <GripVertical className={cn("w-3 h-3 flex-shrink-0 cursor-move", isActive ? "text-primary-foreground/40" : "text-muted-foreground/20 group-hover:text-muted-foreground/50")} />
+                      <span className="text-xl flex-shrink-0 leading-none">{lesson.emoji}</span>
+                      {isRenaming ? (
+                        <input
+                          autoFocus
+                          className="flex-1 text-xs font-medium bg-transparent border-b border-primary-foreground/40 outline-none min-w-0"
+                          value={lesson.title}
+                          onChange={(e) => updateLesson(lesson.id, { title: e.target.value })}
+                          onBlur={() => setRenamingLessonId(null)}
+                          onKeyDown={(e) => { if (e.key === "Enter") setRenamingLessonId(null) }}
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      ) : (
+                        <span className="flex-1 truncate text-[12px] font-medium">{lesson.title}</span>
+                      )}
+                    </div>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-44">
+                    <DropdownMenuItem onClick={() => { setContextMenuLessonId(null); setRenamingLessonId(lesson.id) }}>
+                      <Pencil className="w-3.5 h-3.5 mr-2" />Переименовать
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => { setContextMenuLessonId(null); setCopiedLesson(lesson); toast.success("Скопировано") }}>
+                      <Copy className="w-3.5 h-3.5 mr-2" />Копировать
+                    </DropdownMenuItem>
+                    <DropdownMenuItem disabled={!copiedLesson} onClick={() => { setContextMenuLessonId(null); pasteLesson() }}>
+                      <ClipboardPaste className="w-3.5 h-3.5 mr-2" />Вставить
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => { setContextMenuLessonId(null); duplicateLesson(i) }}>
+                      <Copy className="w-3.5 h-3.5 mr-2" />Дублировать
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => { setContextMenuLessonId(null); moveLessonDir(i, -1) }} disabled={i === 0}>
+                      <ArrowUp className="w-3.5 h-3.5 mr-2" />Переместить вверх
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => { setContextMenuLessonId(null); moveLessonDir(i, 1) }} disabled={i === demo.lessons.length - 1}>
+                      <ArrowDown className="w-3.5 h-3.5 mr-2" />Переместить вниз
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => { setContextMenuLessonId(null); setDeleteConfirmId(lesson.id) }} className="text-destructive focus:text-destructive">
+                      <Trash2 className="w-3.5 h-3.5 mr-2" />Удалить
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               )
             })}
           </div>
