@@ -1794,16 +1794,17 @@ function EmojiBtn({ current, onSelect }: { current: string; onSelect: (v: string
           {current || "📝"}
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="p-2 w-48">
+      <DropdownMenuContent align="start" className="p-2" style={{ width: "calc(9 * 2.25rem + 1rem)" }}>
         {/* Быстрый доступ */}
-        <div className="flex gap-0.5 mb-1.5 pb-1.5 border-b border-border">
+        <div className="grid grid-cols-9 gap-0.5 mb-1.5 pb-1.5 border-b border-border">
           {QUICK_ACCESS_EMOJIS.map((e) => (
-            <button key={e} className={cn("w-8 h-8 text-lg flex items-center justify-center rounded hover:bg-muted transition-colors", current === e && "bg-primary/10 ring-1 ring-primary")} onClick={() => { onSelect(e); setOpen(false) }}>{e}</button>
+            <button key={e} className={cn("w-9 h-9 text-xl flex items-center justify-center rounded hover:bg-muted transition-colors leading-none", current === e && "bg-primary/10 ring-1 ring-primary")} onClick={() => { onSelect(e); setOpen(false) }}>{e}</button>
           ))}
         </div>
-        <div className="flex flex-wrap gap-1">
-          {QUICK_EMOJIS.map((e) => (
-            <button key={e} className={cn("w-8 h-8 text-lg flex items-center justify-center rounded hover:bg-muted transition-colors", current === e && "bg-primary/10 ring-1 ring-primary")} onClick={() => { onSelect(e); setOpen(false) }}>{e}</button>
+        {/* Полная сетка по категориям */}
+        <div className="grid grid-cols-9 gap-0.5 max-h-52 overflow-y-auto">
+          {QUICK_INSERT_EMOJIS.map((e) => (
+            <button key={e} className={cn("w-9 h-9 text-xl flex items-center justify-center rounded hover:bg-muted transition-colors leading-none", current === e && "bg-primary/10 ring-1 ring-primary")} onClick={() => { onSelect(e); setOpen(false) }}>{e}</button>
           ))}
         </div>
       </DropdownMenuContent>
