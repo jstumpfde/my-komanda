@@ -375,7 +375,7 @@ interface NotionLessonEditorProps {
 }
 
 function NotionLessonEditor({ lesson, onUpdateLesson, onUpdateBlock, onInsertBlock, onAppendBlock, onRemoveBlock, onMoveBlock, onDuplicateBlock }: NotionLessonEditorProps) {
-  const [slashMenu, setSlashMenu] = useState<{ blockIdx: number; x: number; y: number; query: string } | null>(null)
+  const [slashMenu, setSlashMenu] = useState<{ blockIdx: number; x: number; y: number; yTop: number; upward: boolean; query: string } | null>(null)
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null)
   const [dragIdx, setDragIdx] = useState<number | null>(null)
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null)
@@ -557,7 +557,7 @@ function NotionLessonEditor({ lesson, onUpdateLesson, onUpdateBlock, onInsertBlo
               onMoveDown={() => onMoveBlock(idx, 1)}
               onDuplicate={() => onDuplicateBlock(idx)}
               onInsertBelow={(type) => onInsertBlock(idx + 1, type)}
-              onSlashTrigger={(x, y, query) => setSlashMenu({ blockIdx: idx + 1, x, y, query })}
+              onSlashTrigger={(x, y, yTop, upward, query) => setSlashMenu({ blockIdx: idx + 1, x, y, yTop, upward, query })}
             />
             {/* Inline bar после каждого блока */}
             <InlineBetweenBar onAdd={(type) => onInsertBlock(idx + 1, type)} />
@@ -580,7 +580,9 @@ function NotionLessonEditor({ lesson, onUpdateLesson, onUpdateBlock, onInsertBlo
         <div
           data-slash-menu
           className="absolute z-50 w-56 bg-popover border border-border rounded-xl shadow-xl overflow-hidden"
-          style={{ left: slashMenu.x, top: slashMenu.y }}
+          style={slashMenu.upward
+            ? { left: slashMenu.x, top: slashMenu.yTop, transform: "translateY(-100%)" }
+            : { left: slashMenu.x, top: slashMenu.y }}
         >
           <div className="px-3 py-1.5 border-b border-border">
             <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Тип блока</span>
@@ -635,7 +637,7 @@ interface NotionBlockProps {
   onMoveDown: () => void
   onDuplicate: () => void
   onInsertBelow: (type: BlockType) => void
-  onSlashTrigger: (x: number, y: number, query: string) => void
+  onSlashTrigger: (x: number, y: number, yTop: number, upward: boolean, query: string) => void
 }
 
 function NotionBlock({ block, idx, totalBlocks, isHovered, isDragging, isDragOver, onMouseEnter, onMouseLeave, onDragStart, onDragOver, onDragEnd, onDrop, onUpdate, onRemove, onMoveUp, onMoveDown, onDuplicate, onInsertBelow, onSlashTrigger }: NotionBlockProps) {
@@ -665,7 +667,11 @@ function NotionBlock({ block, idx, totalBlocks, isHovered, isDragging, isDragOve
       const rect = (e.target as HTMLElement).getBoundingClientRect()
       const container = (e.target as HTMLElement).closest("[data-notion-area]")
       const cr = container?.getBoundingClientRect() || { left: 0, top: 0 }
-      onSlashTrigger(rect.left - cr.left, rect.bottom - cr.top + 4, "")
+      const spaceBelow = window.innerHeight - rect.bottom
+      const upward = spaceBelow < 300
+      const yBottom = rect.bottom - cr.top + 4   // distance from container top to bottom of trigger
+      const yTop = rect.top - cr.top - 4          // distance from container top to top of trigger
+      onSlashTrigger(rect.left - cr.left, yBottom, yTop, upward, "")
     }
     if (e.key === "Enter" && block.type === "text") {
       e.preventDefault()
@@ -842,7 +848,9 @@ function NotionTextBlock({ block, editorRef, isHovered, onSync, onKeyDown }: Not
   const [showEmoji, setShowEmoji] = useState(false)
   const [showTags, setShowTags] = useState(false)
   const [emojiOpenUpward, setEmojiOpenUpward] = useState(false)
+  const [tagsOpenUpward, setTagsOpenUpward] = useState(false)
   const emojiBtnRef = useRef<HTMLButtonElement>(null)
+  const tagsBtnRef = useRef<HTMLButtonElement>(null)
   const savedRangeRef = useRef<Range | null>(null)
 
   // Save selection before popup opens (so we don't lose cursor)
@@ -972,8 +980,18 @@ function NotionTextBlock({ block, editorRef, isHovered, onSync, onKeyDown }: Not
         {/* Tag button */}
         <div className="relative" data-text-popup>
           <button
-            onMouseDown={(e) => { e.preventDefault(); saveSelection(); setShowEmoji(false); setShowTags((v) => !v) }}
-            title="Вставить тег"
+            ref={tagsBtnRef}
+            onMouseDown={(e) => {
+              e.preventDefault()
+              saveSelection()
+              setShowEmoji(false)
+              if (!showTags && tagsBtnRef.current) {
+                const rect = tagsBtnRef.current.getBoundingClientRect()
+                setTagsOpenUpward(window.innerHeight - rect.bottom < 300)
+              }
+              setShowTags((v) => !v)
+            }}
+            title="Вставить переменную"
             className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors text-xs font-bold"
           >
             #
@@ -981,7 +999,10 @@ function NotionTextBlock({ block, editorRef, isHovered, onSync, onKeyDown }: Not
           {showTags && (
             <div
               data-text-popup
-              className="absolute bottom-full right-0 mb-1 z-50 bg-popover border border-border rounded-xl shadow-xl overflow-hidden w-52"
+              className={cn(
+                "absolute right-0 z-50 bg-popover border border-border rounded-xl shadow-xl overflow-hidden w-52",
+                tagsOpenUpward ? "bottom-full mb-1" : "top-full mt-1"
+              )}
             >
               <div className="px-3 py-1.5 border-b border-border">
                 <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Переменные</span>
