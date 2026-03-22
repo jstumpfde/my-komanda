@@ -790,49 +790,21 @@ function NotionBlock({ block, idx, totalBlocks, isHovered, isDragging, isDragOve
 // ─── Emoji & tag insertion helpers ────────────────────────────────────────
 
 // ─── LessonIconPicker: жёсткие массивы по категориям ──────────────────────
-const LESSON_EMOJI_CATEGORIES: { icon: string; label: string; emojis: string[] }[] = [
-  {
-    icon: "😀", label: "Смайлы",
-    emojis: ["😀","😊","😄","😎","🤩","😍","🥳","😌","🤔","😅","😂","🥰","😇","😜","🤗","😏","😴","🤓"],
-  },
-  {
-    icon: "👋", label: "Жесты",
-    emojis: ["👋","👍","👎","🙌","🤝","🙏","💪","✌️","🤞","👏","🫶","🤜","🤛","☝️","👆","👇","👈","👉"],
-  },
-  {
-    icon: "👤", label: "Люди",
-    emojis: ["👤","👥","🧠","👶","👧","👦","👩","👨","👴","👵","🧑","👮","💂","🧑‍💼","👷","🧑‍🔬","🧑‍🎓","🧑‍🏫"],
-  },
-  {
-    icon: "🐱", label: "Животные",
-    emojis: ["🐱","🐶","🦊","🐻","🐼","🦁","🐯","🐸","🐧","🦋","🐝","🦄","🦅","🐠","🦀","🐙","🐄","🐷","🐔","🦆"],
-  },
-  {
-    icon: "🍎", label: "Еда",
-    emojis: ["🍎","🍕","🍔","🍣","☕","🎂","🍰","🍇","🥑","🍦","🥤","🍺","🍩","🥐","🧁","🍫","🍬","🌮"],
-  },
-  {
-    icon: "🌸", label: "Природа",
-    emojis: ["🌸","🌺","🌻","🌿","🍀","🌊","🏔️","🌙","⭐","☀️","🌈","❄️","🔥","⚡","🌍","🌲","🌴","🌵"],
-  },
-  {
-    icon: "🚀", label: "Транспорт",
-    emojis: ["🚀","✈️","🚗","🚕","🚌","🚎","🏎️","🚂","🚢","🛸","🚁","🛵","🚲","🛴","🏍️","⛵","🛥️","🚤"],
-  },
-  {
-    icon: "✅", label: "Символы",
-    emojis: ["✅","❌","⚠️","ℹ️","❓","❗","🔴","🟡","🟢","🔵","💜","🔗","🔔","🔕","⭐","💫","✨","🏆"],
-  },
-  {
-    icon: "💼", label: "Работа",
-    emojis: ["💼","📝","📊","📈","📉","💰","💳","🏦","📌","📎","✂️","📅","📋","📁","💡","🔑","🖥️","⌨️"],
-  },
-]
-
-const LESSON_QUICK_ACCESS = ["😀","👋","💼","📝","✅","🚀","🐱","🍎","🌸"]
+const QUICK = ["😀","👋","🐱","🍎","🏠","⚽","📝","🚫","🏁"]
+const CATEGORIES: Record<string, string[]> = {
+  "😊 Смайлы": ["😀","😊","😄","😎","🤩","😍","🥳","😌","🤔","😅","😂","🥰","😇","😜","🤗","😏","😴","🤓","😆","😋","🤨","😐","😑","🥴","😬","🙃","😪"],
+  "👋 Жесты": ["👋","👍","👎","🙌","🤝","🙏","💪","✌️","🤞","👏","🫶","🤜","🤛","☝️","👆","👇","👈","👉","🤙","🖐","✋","🤚","🖖","🤘","🤟","🖕"],
+  "👤 Люди": ["👤","👥","🧠","👶","👧","👦","👩","👨","👴","👵","🧑","👮","💂","🧑‍💼","👷","🧑‍🔬","🧑‍🎓","🧑‍🏫","🧑‍⚕️","🧑‍🍳","🧑‍🎨","🧑‍✈️","👸","🤴","🦸","🦹"],
+  "🐱 Животные": ["🐱","🐶","🦊","🐻","🐼","🦁","🐯","🐸","🐧","🦋","🐝","🦄","🦅","🐠","🦀","🐙","🐄","🐷","🐔","🦆","🐺","🦝","🦨","🦡","🐿","🦔"],
+  "🍎 Еда": ["🍎","🍕","🍔","🍣","☕","🎂","🍰","🍇","🥑","🍦","🥤","🍺","🍩","🥐","🧁","🍫","🍬","🌮","🥗","🍱","🥩","🍗","🥚","🧀","🥞","🌯"],
+  "🌸 Природа": ["🌸","🌺","🌻","🌿","🍀","🌊","🏔","🌙","⭐","☀️","🌈","❄️","🔥","⚡","🌍","🌲","🌴","🌵","🍄","🌾","🍂","🍁","🌰","🐚","🪸","🪨"],
+  "🚀 Транспорт": ["🚀","✈️","🚗","🚕","🚌","🚎","🏎","🚂","🚢","🛸","🚁","🛵","🚲","🛴","🏍","⛵","🛥","🚤","🛺","🚐","🚑","🚒","🚓","🛻","🚚","🚛"],
+  "✅ Символы": ["✅","❌","⚠️","ℹ️","❓","❗","🔴","🟡","🟢","🔵","💜","🔗","🔔","🔕","⭐","💫","✨","🏆","🎯","💡","🔑","🔒","💎","🎁","🎀","🏅"],
+  "💼 Работа": ["💼","📝","📊","📈","📉","💰","💳","🏦","📌","📎","✂️","📅","📋","📁","💡","🔑","🖥","⌨️","🖨","📱","☎️","📞","📠","🗂","🗃","🗄"],
+}
 
 // Flat list for inline text block emoji picker (all emojis)
-const QUICK_INSERT_EMOJIS = LESSON_EMOJI_CATEGORIES.flatMap(c => c.emojis)
+const QUICK_INSERT_EMOJIS = Object.values(CATEGORIES).flat()
 
 const QUICK_TAGS = [
   { tag: "{{имя}}", label: "Имя кандидата" },
@@ -2685,69 +2657,112 @@ function InfoBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: Partia
 
 function EmojiBtn({ current, onSelect }: { current: string; onSelect: (v: string) => void }) {
   const [open, setOpen] = useState(false)
-  const [catLabel, setCatLabel] = useState<string>(LESSON_EMOJI_CATEGORIES[0].label)
+  const [activeCategory, setActiveCategory] = useState(Object.keys(CATEGORIES)[0])
+  const [pos, setPos] = useState<{ top?: number; bottom?: number; left: number } | null>(null)
+  const btnRef = useRef<HTMLButtonElement>(null)
 
-  const activeCat = LESSON_EMOJI_CATEGORIES.find(c => c.label === catLabel) ?? LESSON_EMOJI_CATEGORIES[0]
+  const emojis = CATEGORIES[activeCategory] ?? []
+  const PICKER_WIDTH = 9 * 36 + 16 // 9 cols * 36px + padding
+
+  const openPicker = () => {
+    if (!btnRef.current) return
+    const rect = btnRef.current.getBoundingClientRect()
+    const spaceBelow = window.innerHeight - rect.bottom
+    const left = Math.min(rect.left, window.innerWidth - PICKER_WIDTH - 8)
+    if (spaceBelow < 400) {
+      setPos({ bottom: window.innerHeight - rect.top + 4, left })
+    } else {
+      setPos({ top: rect.bottom + 4, left })
+    }
+    setOpen(true)
+  }
+
+  // Закрытие по клику вне
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: MouseEvent) => {
+      const target = e.target as Node
+      if (btnRef.current && !btnRef.current.contains(target)) {
+        const picker = document.getElementById("lesson-emoji-picker")
+        if (!picker || !picker.contains(target)) setOpen(false)
+      }
+    }
+    document.addEventListener("mousedown", handler)
+    return () => document.removeEventListener("mousedown", handler)
+  }, [open])
 
   return (
-    <DropdownMenu open={open} onOpenChange={setOpen}>
-      <DropdownMenuTrigger asChild>
-        <button className="text-4xl leading-none hover:opacity-70 transition-opacity flex-shrink-0 cursor-pointer" title="Сменить эмодзи">
-          {current || "📝"}
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="p-2" style={{ width: "calc(9 * 2.25rem + 1rem)" }}>
-        {/* Быстрый доступ сверху */}
-        <div className="grid grid-cols-9 gap-0.5 pb-1.5 mb-1.5 border-b border-border">
-          {LESSON_QUICK_ACCESS.map((e) => (
-            <button
-              key={`qa-${e}`}
-              title={e}
-              onClick={() => { onSelect(e); setOpen(false) }}
-              className={cn(
-                "w-9 h-9 text-2xl flex items-center justify-center rounded transition-colors leading-none",
-                current === e ? "bg-primary/10 ring-1 ring-primary" : "hover:bg-muted"
-              )}
-            >
-              {e}
-            </button>
-          ))}
+    <>
+      <button
+        ref={btnRef}
+        onClick={openPicker}
+        className="text-4xl leading-none hover:opacity-70 transition-opacity flex-shrink-0 cursor-pointer"
+        title="Сменить эмодзи"
+      >
+        {current || "📝"}
+      </button>
+
+      {open && pos && typeof document !== "undefined" && (
+        <div
+          id="lesson-emoji-picker"
+          style={{
+            position: "fixed",
+            top: pos.top,
+            bottom: pos.bottom,
+            left: pos.left,
+            width: PICKER_WIDTH,
+            zIndex: 9999,
+          }}
+          className="bg-popover border border-border rounded-xl shadow-xl p-2 flex flex-col gap-1.5"
+        >
+          {/* 1. Быстрый доступ */}
+          <div className="grid grid-cols-9 gap-0.5 pb-1.5 border-b border-border">
+            {QUICK.map((e) => (
+              <button
+                key={e}
+                onClick={() => { onSelect(e); setOpen(false) }}
+                className={cn(
+                  "w-9 h-9 text-xl flex items-center justify-center rounded transition-colors leading-none",
+                  current === e ? "bg-primary/10 ring-1 ring-primary" : "hover:bg-muted"
+                )}
+              >{e}</button>
+            ))}
+          </div>
+
+          {/* 2. Сетка эмодзи активной категории */}
+          <div className="grid grid-cols-9 gap-0.5 max-h-[180px] overflow-y-auto">
+            {emojis.map((e, i) => (
+              <button
+                key={i}
+                onClick={() => { onSelect(e); setOpen(false) }}
+                className={cn(
+                  "w-9 h-9 text-xl flex items-center justify-center rounded hover:bg-muted transition-colors leading-none",
+                  current === e && "bg-primary/10 ring-1 ring-primary"
+                )}
+              >{e}</button>
+            ))}
+          </div>
+
+          {/* 3. Категории снизу — горизонтальный скролл */}
+          <div className="overflow-x-auto border-t border-border pt-1.5" style={{ scrollbarWidth: "none" }}>
+            <div className="flex gap-1 whitespace-nowrap">
+              {Object.keys(CATEGORIES).map((cat) => (
+                <button
+                  key={cat}
+                  onClick={() => setActiveCategory(cat)}
+                  className={cn(
+                    "text-xs px-2 py-1 rounded-lg transition-all shrink-0",
+                    activeCategory === cat
+                      ? "bg-primary text-primary-foreground"
+                      : "hover:bg-muted text-muted-foreground"
+                  )}
+                >{cat}</button>
+              ))}
+            </div>
+          </div>
         </div>
-        {/* Сетка эмодзи активной категории */}
-        <div className="grid grid-cols-9 gap-0.5 max-h-44 overflow-y-auto mb-1.5">
-          {activeCat.emojis.map((e, i) => (
-            <button
-              key={`${activeCat.label}-${i}`}
-              onClick={() => { onSelect(e); setOpen(false) }}
-              className={cn(
-                "w-9 h-9 text-2xl flex items-center justify-center rounded hover:bg-muted transition-colors leading-none",
-                current === e && "bg-primary/10 ring-1 ring-primary"
-              )}
-            >
-              {e}
-            </button>
-          ))}
-        </div>
-        {/* Табы категорий снизу */}
-        <div className="flex flex-wrap gap-0.5 pt-1.5 border-t border-border">
-          {LESSON_EMOJI_CATEGORIES.map((cat) => (
-            <button
-              key={cat.label}
-              title={cat.label}
-              onClick={() => setCatLabel(cat.label)}
-              className={cn(
-                "px-1.5 py-0.5 text-xs rounded transition-colors leading-none",
-                cat.label === catLabel
-                  ? "bg-primary/10 ring-1 ring-primary text-primary font-medium"
-                  : "hover:bg-muted text-muted-foreground"
-              )}
-            >
-              {cat.icon} {cat.label}
-            </button>
-          ))}
-        </div>
-      </DropdownMenuContent>
-    </DropdownMenu>
+      )}
+    </>
   )
 }
 
