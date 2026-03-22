@@ -1840,17 +1840,17 @@ function EmojiBtn({ current, onSelect }: { current: string; onSelect: (v: string
           {current || "📝"}
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="p-1.5" style={{ width: "calc(8 * 2rem + 0.75rem)" }}>
-        {/* Строка категорий-табов */}
-        <div className="flex gap-0 mb-1 pb-1 border-b border-border">
+      <DropdownMenuContent align="start" className="p-2" style={{ width: "calc(9 * 2.25rem + 1rem)" }}>
+        {/* Строка категорий-табов — тот же размер что и сетка */}
+        <div className="grid grid-cols-9 gap-0.5 pb-1.5 mb-1.5 border-b border-border">
           {EMOJI_CATEGORIES.map((cat, i) => (
             <button
               key={cat.label}
               title={cat.label}
               onClick={() => setCatIdx(i)}
               className={cn(
-                "w-8 h-8 text-base flex items-center justify-center rounded transition-colors leading-none flex-shrink-0",
-                i === catIdx ? "bg-primary/15 ring-1 ring-primary/40" : "hover:bg-muted"
+                "w-9 h-9 text-2xl flex items-center justify-center rounded transition-colors leading-none",
+                i === catIdx ? "bg-primary/10 ring-1 ring-primary" : "hover:bg-muted"
               )}
             >
               {cat.icon}
@@ -1858,13 +1858,13 @@ function EmojiBtn({ current, onSelect }: { current: string; onSelect: (v: string
           ))}
         </div>
         {/* Сетка эмодзи выбранной категории */}
-        <div className="grid grid-cols-8 gap-0 max-h-56 overflow-y-auto">
+        <div className="grid grid-cols-9 gap-0.5 max-h-52 overflow-y-auto">
           {activeCat.emojis.map((e) => (
             <button
               key={e}
               onClick={() => { onSelect(e); setOpen(false) }}
               className={cn(
-                "w-8 h-8 text-lg flex items-center justify-center rounded hover:bg-muted transition-colors leading-none",
+                "w-9 h-9 text-2xl flex items-center justify-center rounded hover:bg-muted transition-colors leading-none",
                 current === e && "bg-primary/10 ring-1 ring-primary"
               )}
             >
