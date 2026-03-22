@@ -1074,9 +1074,11 @@ interface MiniRichEditorProps {
   /** max-height for scrollable multi-line mode */
   maxHeight?: number
   className?: string
+  /** show emoji button in the toolbar (only for side-text fields) */
+  showEmojiBtn?: boolean
 }
 
-function MiniRichEditor({ html, onChange, placeholder, singleLine, maxLength, maxHeight, className }: MiniRichEditorProps) {
+function MiniRichEditor({ html, onChange, placeholder, singleLine, maxLength, maxHeight, className, showEmojiBtn }: MiniRichEditorProps) {
   const ref = useRef<HTMLDivElement>(null)
   const [toolbar, setToolbar] = useState<{ x: number; y: number; upward: boolean } | null>(null)
   const [showFore, setShowFore] = useState(false)
@@ -1248,29 +1250,30 @@ function MiniRichEditor({ html, onChange, placeholder, singleLine, maxLength, ma
           <button className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" title="Влево" onMouseDown={(e) => { e.preventDefault(); exec("justifyLeft") }}><AlignLeft className="w-3 h-3" /></button>
           <button className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" title="По центру" onMouseDown={(e) => { e.preventDefault(); exec("justifyCenter") }}><AlignCenter className="w-3 h-3" /></button>
           <button className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" title="Вправо" onMouseDown={(e) => { e.preventDefault(); exec("justifyRight") }}><AlignRight className="w-3 h-3" /></button>
-          <div className="w-px h-3.5 bg-border mx-0.5" />
-          <button
-            ref={miniEmojiBtnRef}
-            className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors text-sm"
-            title="Вставить эмодзи"
-            onMouseDown={(e) => {
-              e.preventDefault()
-              // save selection before picker opens
-              const sel = window.getSelection()
-              if (sel && sel.rangeCount > 0) savedRangeMiniRef.current = sel.getRangeAt(0).cloneRange()
-              if (miniEmojiBtnRef.current) {
-                const rect = miniEmojiBtnRef.current.getBoundingClientRect()
-                const spaceBelow = window.innerHeight - rect.bottom - 8
-                const spaceAbove = rect.top - 8
-                if (spaceBelow >= 300 || spaceBelow >= spaceAbove) {
-                  setMiniEmojiPos({ top: rect.bottom + 4, left: Math.min(rect.left, window.innerWidth - (9 * 37 + 16) - 8) })
-                } else {
-                  setMiniEmojiPos({ bottom: window.innerHeight - rect.top + 4, left: Math.min(rect.left, window.innerWidth - (9 * 37 + 16) - 8) })
+          {showEmojiBtn && <>
+            <div className="w-px h-3.5 bg-border mx-0.5" />
+            <button
+              ref={miniEmojiBtnRef}
+              className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors text-sm"
+              title="Вставить эмодзи"
+              onMouseDown={(e) => {
+                e.preventDefault()
+                const sel = window.getSelection()
+                if (sel && sel.rangeCount > 0) savedRangeMiniRef.current = sel.getRangeAt(0).cloneRange()
+                if (miniEmojiBtnRef.current) {
+                  const rect = miniEmojiBtnRef.current.getBoundingClientRect()
+                  const spaceBelow = window.innerHeight - rect.bottom - 8
+                  const spaceAbove = rect.top - 8
+                  if (spaceBelow >= 300 || spaceBelow >= spaceAbove) {
+                    setMiniEmojiPos({ top: rect.bottom + 4, left: Math.min(rect.left, window.innerWidth - (9 * 37 + 16) - 8) })
+                  } else {
+                    setMiniEmojiPos({ bottom: window.innerHeight - rect.top + 4, left: Math.min(rect.left, window.innerWidth - (9 * 37 + 16) - 8) })
+                  }
                 }
-              }
-              setShowMiniEmoji(v => !v)
-            }}
-          >😊</button>
+                setShowMiniEmoji(v => !v)
+              }}
+            >😊</button>
+          </>}
         </div>
       )}
       <InlineEmojiPicker
@@ -1829,6 +1832,7 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
                   placeholder="Текст рядом с изображением..."
                   maxHeight={imgHeight}
                   className="flex-1 text-sm not-italic"
+                  showEmojiBtn
                 />
               )}
             </div>
@@ -1904,6 +1908,7 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
                   placeholder="Текст рядом с видео..."
                   maxHeight={videoHeight}
                   className="flex-1 text-sm not-italic"
+                  showEmojiBtn
                 />
               )}
             </div>
@@ -1969,6 +1974,7 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
                   placeholder="Текст рядом с аудио..."
                   maxHeight={audioHeight}
                   className="flex-1 text-sm not-italic"
+                  showEmojiBtn
                 />
               )}
             </div>
@@ -2058,6 +2064,7 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
                   placeholder="Текст рядом с файлом..."
                   maxHeight={fileHeight}
                   className="flex-1 text-sm not-italic"
+                  showEmojiBtn
                 />
               )}
             </div>
