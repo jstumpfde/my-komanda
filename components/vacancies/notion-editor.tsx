@@ -792,13 +792,13 @@ function NotionBlock({ block, idx, totalBlocks, isHovered, isDragging, isDragOve
 // ─── LessonIconPicker: жёсткие массивы по категориям ──────────────────────
 const QUICK = ["📝","✅","📊","💡","🎯","💼","🏆","🔑","⚠️"]
 const CATEGORIES: Record<string, string[]> = {
-  "😊 Смайлы": ["😀","😊","😄","😎","🤩","😍","🥳","😌","🤔","😅","😂","🥰","😇","😜","🤗","😏","😴","🤓","😆","😋","🤨","😐","😑","🥴","😬","🙃","😪"],
-  "✅ Символы": ["✅","❌","⚠️","ℹ️","❓","❗","🔴","🟡","🟢","🔵","💜","🔗","🔔","🔕","⭐","💫","✨","🏆","🎯","💡","🔑","🔒","💎","🎁","🎀","🏅"],
-  "👋 Жесты": ["👋","👍","👎","🙌","🤝","🙏","💪","✌️","🤞","👏","🫶","🤜","🤛","☝️","👆","👇","👈","👉","🤙","🖐","✋","🤚","🖖","🤘","🤟","🖕"],
-  "💼 Работа": ["💼","📝","📊","📈","📉","💰","💳","🏦","📌","📎","✂️","📅","📋","📁","💡","🔑","🖥","⌨️","🖨","📱","☎️","📞","📠","🗂","🗃","🗄"],
-  "👤 Люди": ["👤","👥","🧠","👶","👧","👦","👩","👨","👴","👵","🧑","👮","💂","🧑‍💼","👷","🧑‍🔬","🧑‍🎓","🧑‍🏫","🧑‍⚕️","🧑‍🍳","🧑‍🎨","🧑‍✈️","👸","🤴","🦸","🦹"],
-  "🚀 Транспорт": ["🚀","✈️","🚗","🚕","🚌","🚎","🏎","🚂","🚢","🛸","🚁","🛵","🚲","🛴","🏍","⛵","🛥","🚤","🛺","🚐","🚑","🚒","🚓","🛻","🚚","🚛"],
-  "🌸 Природа": ["🌸","🌺","🌻","🌿","🍀","🌊","🏔","🌙","⭐","☀️","🌈","❄️","🔥","⚡","🌍","🌲","🌴","🌵","🍄","🌾","🍂","🍁","🌰","🐚","🪸","🪨","🐱","🐶","🦊","🐻","🐼","🦁","🐯","🐸","🐧","🦋","🐝","🦄","🦅","🐠","🦀","🐙","🐄","🐷","🐔","🦆","🐺","🦝","🦨","🦡","🐿","🦔"],
+  "😊 Смайлы": ["😀","😊","😄","😁","😆","😅","🤣","😂","🙂","🙃","😉","😌","😍","🥰","😘","😗","😙","😚","😋","😛","😜","🤪","😝","🤑","🤗","🤭","🫢","🫣","🤫","🤔","🤐","🤨","😐","😑","😶","😏","😒","🙄","😬","🤥","😔","😪","🤤","😴","😷","🤒","🤕","🤢","🤧","🥵","🥶","🥴","😵","🤯","🤠","🥸","🧐","🤓","😈","👿","💀","☠️","😺","😸","😹","😻","😼","😽","🙀","😿","😾","🫠","😎","😟","😕","🙁","☹️","😣","😖","😫","😩","🥺","😢","😭","😤","😠","😡","🤬"],
+  "✅ Символы": ["✅","❌","⚠️","ℹ️","❓","❗","🔴","🟠","🟡","🟢","🔵","🟣","🟤","⚫","⚪","🔶","🔷","🔸","🔹","🔺","🔻","💠","🔘","🔲","🔳","▪️","▫️","◾","◽","◼️","◻️","🔗","🔔","🔕","⭐","🌟","💫","✨","🏆","🥇","🥈","🥉","🎯","💡","🔑","🗝️","🔒","🔓","🔐","🛡","💎","🎁","🎀","🏅","🎖️","🏵️","🎗️","📍","🔖","🏷️"],
+  "👋 Жесты": ["👋","🤚","🖐️","✋","🖖","🫱","🫲","🫳","🫴","🫵","👌","🤌","🤏","✌️","🤞","🤟","🤘","🤙","👈","👉","👆","🖕","👇","☝️","👍","👎","✊","👊","🤛","🤜","👏","🙌","🫶","👐","🤲","🤝","🙏","✍️","💅","🤳","💪","🦾","🦵","🦶","👂","🦻","👃","🫦","👣","👁️","👀","🫀","🫁","🧠","🦷","🦴","👤","👥","🫂"],
+  "💼 Работа": ["💼","📝","📊","📈","📉","💰","💵","💴","💶","💷","💳","🏦","💹","💱","🤝","📌","📎","🖇️","✂️","📅","📆","📋","📁","📂","🗂️","💡","🔑","🖥️","💻","🖨️","⌨️","🖱️","📱","☎️","📞","📟","📠","📤","📥","📦","📧","📨","📩","📫","📬","📭","📮","🗳️","✏️","🖊️","🖋️","📓","📔","📒","📕","📗","📘","📙","📚","📖","🗓️","📇","🗄️","🗃️","🗑️","🏢","🏪","🏬","🏭","🏗️","🎪","🔏","🔐","🔒","🔓","🛡️"],
+  "👤 Люди": ["👶","🧒","👦","👧","🧑","👱","👨","🧔","👩","🧓","👴","👵","🧏","👮","🕵️","💂","👷","🤴","👸","🧙","🧝","🧛","🧟","🧞","🧜","🧚","👼","🤶","🎅","🥷","🦸","🦹","🧑‍⚕️","🧑‍🎓","🧑‍🏫","🧑‍⚖️","🧑‍🌾","🧑‍🍳","🧑‍🔧","🧑‍🏭","🧑‍💼","🧑‍🔬","🧑‍🎨","🧑‍✈️","🧑‍🚀","🧑‍🚒","💆","💇","🧖","🧗","🏋️","🤸","🤼","🤺","🏇","⛷️","🏂","🪂","🤽","🧘","🛀"],
+  "🚀 Транспорт": ["🚀","🛸","✈️","🛩️","🛫","🛬","🪂","💺","🚁","🛶","⛵","🚤","🛥️","🛳️","🚢","🚂","🚃","🚄","🚅","🚆","🚇","🚈","🚉","🚊","🚞","🚝","🚋","🚌","🚍","🚎","🏎️","🚐","🚑","🚒","🚓","🚔","🚕","🚖","🚗","🚘","🚙","🛻","🚚","🛺","🚲","🛵","🏍️","🛴","🛹","🛼","🚏","🚦","🚥","🗺️","🧭","⛽","🚧","⚓","🛟","🪝","🏔️","🗻","🌋","🏕️","🏖️","🏜️","🏝️","🏟️","🏛️"],
+  "🌸 Природа": ["🌸","🌺","🌻","🌹","🌷","💐","🪷","🌼","🪻","🌿","🍀","🌱","🌲","🌳","🌴","🌵","🎋","🎍","🍃","🍂","🍁","🌾","🍄","🌰","🐚","🪸","🪨","🪵","🌊","🌙","🌛","🌜","🌝","🌞","⭐","🌟","☀️","⛅","🌤️","🌈","❄️","⛄","🔥","⚡","🌪️","🌊","🌍","🌎","🌏","🐱","🐶","🦊","🐻","🐼","🐨","🦁","🐯","🐸","🐧","🦋","🐝","🦄","🦅","🐠","🦀","🐙","🦈","🐳","🐬","🦭","🦒","🦓","🦏","🐘","🦛","🐆","🐅"],
 }
 
 // Flat list for inline text block emoji picker (all emojis)
@@ -958,7 +958,7 @@ function NotionTextBlock({ block, editorRef, isHovered, onSync, onKeyDown }: Not
                   <button
                     key={`qa-${e}`}
                     onMouseDown={(ev) => { ev.preventDefault(); restoreSelectionAndInsert(e) }}
-                    className="w-9 h-9 text-2xl flex items-center justify-center rounded hover:bg-muted transition-colors leading-none"
+                    className="w-10 h-10 text-2xl flex items-center justify-center rounded hover:bg-muted transition-colors leading-none"
                   >
                     {e}
                   </button>
@@ -969,7 +969,7 @@ function NotionTextBlock({ block, editorRef, isHovered, onSync, onKeyDown }: Not
                   <button
                     key={e}
                     onMouseDown={(ev) => { ev.preventDefault(); restoreSelectionAndInsert(e) }}
-                    className="w-9 h-9 text-2xl flex items-center justify-center rounded hover:bg-muted transition-colors leading-none"
+                    className="w-10 h-10 text-2xl flex items-center justify-center rounded hover:bg-muted transition-colors leading-none"
                   >
                     {e}
                   </button>
@@ -2498,13 +2498,13 @@ function InfoBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: Partia
                 <div className="grid grid-cols-9 gap-0.5 pb-1.5 mb-1.5 border-b border-border">
                   {QUICK_ACCESS_EMOJIS.map((e) => (
                     <button key={`qa-${e}`} onMouseDown={(ev) => { ev.preventDefault(); insertAndSync(e) }}
-                      className="w-9 h-9 text-2xl flex items-center justify-center rounded hover:bg-muted transition-colors leading-none">{e}</button>
+                      className="w-10 h-10 text-2xl flex items-center justify-center rounded hover:bg-muted transition-colors leading-none">{e}</button>
                   ))}
                 </div>
                 <div className="grid grid-cols-9 gap-0.5 max-h-52 overflow-y-auto">
                   {QUICK_INSERT_EMOJIS.map((e, i) => (
                     <button key={`${e}-${i}`} onMouseDown={(ev) => { ev.preventDefault(); insertAndSync(e) }}
-                      className="w-9 h-9 text-2xl flex items-center justify-center rounded hover:bg-muted transition-colors leading-none">{e}</button>
+                      className="w-10 h-10 text-2xl flex items-center justify-center rounded hover:bg-muted transition-colors leading-none">{e}</button>
                   ))}
                 </div>
               </div>
@@ -2673,7 +2673,7 @@ function EmojiBtn({ current, onSelect }: { current: string; onSelect: (v: string
   const btnRef = useRef<HTMLButtonElement>(null)
   const searchRef = useRef<HTMLInputElement>(null)
 
-  const PICKER_WIDTH = 9 * 36 + 16
+  const PICKER_WIDTH = 9 * 40 + 16
 
   // Результаты поиска — по всем эмодзи всех категорий
   const searchResults = search.trim()
@@ -2730,8 +2730,8 @@ function EmojiBtn({ current, onSelect }: { current: string; onSelect: (v: string
       {open && pos && typeof document !== "undefined" && (
         <div
           id="lesson-emoji-picker"
-          style={{ position: "fixed", top: pos.top, bottom: pos.bottom, left: pos.left, width: PICKER_WIDTH, zIndex: 9999 }}
-          className="bg-popover border border-border rounded-xl shadow-xl p-2 flex flex-col gap-1.5"
+          style={{ position: "fixed", top: pos.top, bottom: pos.bottom, left: pos.left, width: PICKER_WIDTH, zIndex: 9999, maxHeight: "min(560px, 90vh)" }}
+          className="bg-popover border border-border rounded-xl shadow-xl p-2 flex flex-col gap-1"
         >
           {/* Поиск */}
           <input
@@ -2744,10 +2744,10 @@ function EmojiBtn({ current, onSelect }: { current: string; onSelect: (v: string
 
           {/* Быстрый доступ — скрываем при поиске */}
           {!search && (
-            <div className="grid grid-cols-9 gap-0.5 pb-1.5 border-b border-border">
+            <div className="grid grid-cols-9 gap-0 pb-1 border-b border-border">
               {QUICK.map((e) => (
                 <button key={e} onClick={() => { onSelect(e); setOpen(false) }}
-                  className={cn("w-9 h-9 text-xl flex items-center justify-center rounded transition-colors leading-none",
+                  className={cn("w-10 h-10 text-2xl flex items-center justify-center rounded transition-colors leading-none",
                     current === e ? "bg-primary/10 ring-1 ring-primary" : "hover:bg-muted")}
                 >{e}</button>
               ))}
@@ -2755,12 +2755,12 @@ function EmojiBtn({ current, onSelect }: { current: string; onSelect: (v: string
           )}
 
           {/* Сетка эмодзи */}
-          <div className="grid grid-cols-9 gap-0.5 max-h-[180px] overflow-y-auto">
+          <div className="grid grid-cols-9 gap-0 overflow-y-auto flex-1 min-h-0">
             {displayEmojis.length > 0
               ? displayEmojis.map((e, i) => (
                   <button key={i} onClick={() => { onSelect(e); setOpen(false) }}
                     title={EMOJI_NAMES[e] || e}
-                    className={cn("w-9 h-9 text-xl flex items-center justify-center rounded hover:bg-muted transition-colors leading-none",
+                    className={cn("w-10 h-10 text-2xl flex items-center justify-center rounded hover:bg-muted transition-colors leading-none",
                       current === e && "bg-primary/10 ring-1 ring-primary")}
                   >{e}</button>
                 ))
@@ -2770,7 +2770,7 @@ function EmojiBtn({ current, onSelect }: { current: string; onSelect: (v: string
 
           {/* Категории в 2 ряда */}
           {!search && (
-            <div className="flex flex-wrap gap-1 border-t border-border pt-1.5">
+            <div className="flex flex-wrap gap-1 border-t border-border pt-1">
               {Object.keys(CATEGORIES).map((cat) => (
                 <button key={cat} onClick={() => setActiveCategory(cat)}
                   className={cn("text-xs px-2 py-1 rounded-lg transition-all",
