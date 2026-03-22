@@ -42,13 +42,18 @@ interface DemoCardProps {
   onUpdate: (demo: Demo) => void
 }
 
-const EMOJI_DATA = {
-  "Смайлы": ["😊","😄","😃","😁","😆","😅","🤣","😂","🙂","😉","😌","😍","🥰","😘","😎","🤩","🥳","😏","🤔","🤗","🫡","😶","🙃","😴","🤯"],
-  "Жесты": ["👍","👎","👋","🤝","✌️","🤞","🫶","👏","🙌","💪","🫵","☝️","👆","👇","👈","👉","✋","🤚","🖐️"],
-  "Деловые": ["💼","📊","📈","📉","💰","💵","🏆","🎯","📋","✅","❌","📌","🔑","💡","⚡","🚀","📅","🏢","👤","⚙️","🎥","🏗","📍","🔔","📧","💬","📞","🖥️","📝"],
-  "Природа": ["🌟","⭐","✨","🔥","❤️","💚","💙","🌈","☀️","🌊","🌿","🌸","🍀","🌍","⛰️","🌙","🌞","☁️","🌺","🌻"],
-  "Предметы": ["📋","📄","📁","📊","📝","🗂","📌","🔖","✅","📎","🎓","🏠","🛠","🔧","🔨","🗓","🖥","📱","🎧","🖊"],
-  "Символы": ["➡️","⬅️","⬆️","⬇️","↗️","↘️","🔴","🟢","🔵","🟡","⚪","▶️","⏸️","✉️","🔗","🏷️","💬","⭕","✖️","➕","➖","❗","❓","♻️","🔒"],
+const DEMO_QUICK = ["📝","✅","📊","💡","🎯","💼","🏆","🔑","⚠️"]
+const DEMO_CATEGORIES: Record<string, string[]> = {
+  "😊 Смайлы": ["😀","😊","😄","😁","😆","😅","🤣","😂","🙂","🙃","😉","😌","😍","🥰","😎","🤗","🤔","🧐","🤓","😏","😒","🙄","😬","😔","😪","😷","🤒","🤕","🥺","😢","😭","😤","😠","😡","🤬","😈","💀","😺","😸","😻","😾","🫠","😵","🤯","🥳"],
+  "✅ Символы": ["✅","❌","⚠️","ℹ️","❓","❗","🔴","🟡","🟢","🔵","⭐","🌟","💫","✨","🏆","🥇","🥈","🥉","🎯","💡","🔑","🔒","🔓","🛡","💎","🎁","🏅","📍","🔖","🏷️","🔗","🔔","➕","➖","✖️","➗","♾️","🔼","🔽","▶️","⏸️","⏹️","⏺️","🔃","🔀"],
+  "👋 Жесты": ["👋","✋","🖐️","🖖","👌","✌️","🤞","👍","👎","✊","👊","👏","🙌","🫶","🤝","🙏","💪","👆","👇","👈","👉","☝️","🤜","🤛","💅","✍️","👀","🧠","👤","👥","🫂","🤲","👐","🤳","🦾","🫵","🤌","🤏","🤟","🤘","🤙","❤️","💙","💚","💛"],
+  "💼 Работа": ["💼","📝","📊","📈","📉","💰","💳","🏦","🤝","📌","📎","✂️","📅","📋","📁","💡","🔑","🖥️","💻","⌨️","📱","☎️","📞","📠","📤","📥","📦","📧","✏️","🖊️","📓","📒","📕","📗","📘","📙","📚","📖","🗓️","📇","🗄️","🏢","🏭","🗂️","🔐"],
+  "👤 Люди": ["👶","👦","👧","🧑","👨","👩","👴","👵","👮","💂","👷","🤴","👸","🧙","🦸","🦹","👼","🎅","🥷","💆","💇","🧖","🏋️","🧘","🏊","🚴","🤸","🙏","🧠","🕵️","🧑‍💼","🧑‍🎓","🧑‍🏫","🧑‍⚕️","🧑‍🍳","🧑‍🔬","🧑‍🎨","🧑‍✈️","🧑‍🚀","🧑‍🚒","🧑‍⚖️","🧑‍🌾","🧑‍🔧","🧑‍🏭"],
+  "🚀 Транспорт": ["🚀","🛸","✈️","🚁","🚢","🚂","🚄","🚇","🚌","🏎️","🚗","🚕","🛻","🚚","🚲","🛵","🏍️","🛴","⛵","🚤","🛥️","🚑","🚒","🚓","🚐","⛽","🚧","⚓","🗺️","🧭","🏔️","🌋","🏕️","🏖️","🏜️","🏝️","🏟️","🏛️","🏗️","🛩️","💺","🛶","🛹","🚦","🚥"],
+  "🌸 Природа": ["🌸","🌺","🌻","🌹","🌷","💐","🌿","🍀","🌱","🌲","🌴","🌵","🍃","🍂","🍁","🌾","🍄","🌊","🌙","☀️","🌈","❄️","🔥","⚡","🌍","🌎","🌏","🐱","🐶","🦊","🐻","🐼","🦁","🐯","🐧","🦋","🐝","🦄","🦅","🐠","🦀","🐙","🐳","🐬","🦒"],
+}
+const DEMO_EMOJI_NAMES: Record<string, string> = {
+  "😀":"улыбка","😊":"счастье","😄":"смех","😎":"крутой","🤩":"восторг","😍":"влюблён","🥳":"праздник","😌":"покой","🤔":"думаю","😅":"пот смех","😂":"слёзы смех","🥰":"любовь","😇":"ангел","😜":"шутка","🤗":"обнимашки","😏":"хитрость","😴":"сон","🤓":"умный","😆":"смех","😋":"вкусно","🤨":"скептик","😐":"нейтральный","😑":"раздражение","😬":"нервы","🙃":"иронично","😪":"сонный","✅":"галочка да","❌":"нет отмена","⚠️":"предупреждение","❓":"вопрос","❗":"важно","⭐":"звезда","🌟":"блеск","✨":"магия","🏆":"победа","🎯":"цель","💡":"идея","🔑":"ключ","🔒":"замок","💎":"бриллиант","🎁":"подарок","🏅":"медаль","📍":"место","🔖":"закладка","🔗":"ссылка","🔔":"уведомление","💼":"работа","📝":"заметка","📊":"диаграмма","📈":"рост","📉":"падение","💰":"деньги","💳":"карта","🏦":"банк","📌":"закреплено","📎":"скрепка","📅":"календарь","📋":"список","📁":"папка","💻":"компьютер","📱":"телефон","📧":"почта","✏️":"ручка","📚":"книги","🏢":"офис","👋":"привет","👍":"лайк","👎":"дизлайк","🙌":"аплодисменты","🤝":"рукопожатие","🙏":"спасибо","💪":"сила","✌️":"победа","🤞":"удача","👏":"хлопки","🫶":"сердце руки","👍":"хорошо","💪":"мышца","👀":"глаза","🧠":"мозг","👤":"человек","👥":"люди","❤️":"сердце красное","💙":"сердце синее","💚":"сердце зелёное","🚀":"ракета","✈️":"самолёт","🚗":"машина","🚢":"корабль","🌸":"цветок","🌺":"цветок","🌻":"подсолнух","🌿":"трава","🍀":"клевер","🌊":"море","🌙":"луна","☀️":"солнце","🌈":"радуга","❄️":"снег","🔥":"огонь","⚡":"молния","🌍":"земля","🐱":"кот","🐶":"собака","🦊":"лиса","🐻":"медведь","🦁":"лев","🦋":"бабочка","🦄":"единорог",
 }
 
 const LUCIDE_ICONS_FOR_PICKER = [
@@ -472,7 +477,7 @@ export function DemoCard({ demo, onBack, onUpdate }: DemoCardProps) {
             <div key={activeLessonId} className="space-y-0">
               {/* Lesson title (inline editable) */}
               <div className="flex items-center gap-2 mb-4">
-                <LessonIconPicker
+                <DemoEmojiBtn
                   current={activeLesson.emoji}
                   onSelect={(v) => updateLesson(activeLessonId, { emoji: v })}
                 />
@@ -935,7 +940,7 @@ function BlockEditor({ block, onUpdate }: { block: Block; onUpdate: (p: Partial<
                 <code className="text-xs text-primary mr-2">{`{{${v.key}}}`}</code><span className="text-xs text-muted-foreground">{v.label}</span>
               </DropdownMenuItem>)}</DropdownMenuContent>
             </DropdownMenu>
-            <EmojiPicker onSelect={(e) => insertHtml(e)} />
+            <DemoEmojiBtn onSelect={(e) => insertHtml(e)} />
           </div>
           <div
             ref={editorRef}
@@ -1514,7 +1519,7 @@ function InfoBlockEditor({ block, onUpdate }: { block: Block; onUpdate: (p: Part
             </DropdownMenuItem>)}</DropdownMenuContent>
           </DropdownMenu>
 
-          <EmojiPicker onSelect={(e) => onUpdate({ content: block.content + e })} />
+          <DemoEmojiBtn onSelect={(e) => onUpdate({ content: block.content + e })} />
 
           <button className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground" title="Настройки" onClick={() => setSettingsOpen(!settingsOpen)}>
             <MoreHorizontal className="w-3.5 h-3.5" />
@@ -1586,117 +1591,95 @@ function TBtn({ icon: I, tip, onClick, disabled, className }: { icon: React.Elem
 }
 function Sep() { return <div className="w-px h-5 bg-border mx-0.5" /> }
 
-const QUICK_EMOJIS = ["😀", "👋", "🐱", "🍎", "🏠", "⚽", "📝", "🚫", "🏁"]
-
-/* ──── Emoji Picker (big, categorized) ──── */
-function EmojiPicker({ onSelect }: { onSelect: (emoji: string) => void }) {
+/* ──── DemoEmojiBtn — единый пикер эмодзи ──── */
+function DemoEmojiBtn({ current, onSelect, trigger }: { current?: string; onSelect: (v: string) => void; trigger?: React.ReactNode }) {
   const [open, setOpen] = useState(false)
-  const [openUpward, setOpenUpward] = useState(false)
-  const buttonRef = useRef<HTMLButtonElement>(null)
-  const categories = Object.entries(EMOJI_DATA)
+  const [activeCategory, setActiveCategory] = useState(Object.keys(DEMO_CATEGORIES)[0])
+  const [search, setSearch] = useState("")
+  const [pos, setPos] = useState<{ top?: number; bottom?: number; left: number; availH: number } | null>(null)
+  const btnRef = useRef<HTMLButtonElement>(null)
+  const searchRef = useRef<HTMLInputElement>(null)
+  const PICKER_WIDTH = 9 * 37 + 16
 
-  const handleOpen = () => {
-    if (!open && buttonRef.current) {
-      const rect = buttonRef.current.getBoundingClientRect()
-      const spaceBelow = window.innerHeight - rect.bottom
-      const spaceAbove = rect.top
-      setOpenUpward(spaceBelow < 360 && spaceAbove > spaceBelow)
+  const searchResults = search.trim()
+    ? Object.values(DEMO_CATEGORIES).flat().filter((e) => {
+        const q = search.toLowerCase()
+        return (DEMO_EMOJI_NAMES[e] || "").toLowerCase().includes(q) || e.includes(q)
+      })
+    : null
+  const displayEmojis = searchResults ?? DEMO_CATEGORIES[activeCategory] ?? []
+
+  const openPicker = () => {
+    if (!btnRef.current) return
+    const rect = btnRef.current.getBoundingClientRect()
+    const spaceBelow = window.innerHeight - rect.bottom - 8
+    const spaceAbove = rect.top - 8
+    const left = Math.min(rect.left, window.innerWidth - PICKER_WIDTH - 8)
+    if (spaceBelow >= 300 || spaceBelow >= spaceAbove) {
+      setPos({ top: rect.bottom + 4, left, availH: spaceBelow })
+    } else {
+      setPos({ bottom: window.innerHeight - rect.top + 4, left, availH: spaceAbove })
     }
-    setOpen(!open)
+    setSearch("")
+    setOpen(true)
   }
 
+  useEffect(() => { if (open) setTimeout(() => searchRef.current?.focus(), 50) }, [open])
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: MouseEvent) => {
+      const target = e.target as Node
+      if (btnRef.current && !btnRef.current.contains(target)) {
+        const picker = document.getElementById("demo-emoji-picker")
+        if (!picker || !picker.contains(target)) setOpen(false)
+      }
+    }
+    document.addEventListener("mousedown", handler)
+    return () => document.removeEventListener("mousedown", handler)
+  }, [open])
+
   return (
-    <div className="relative">
-      <button ref={buttonRef} className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground" title="Эмодзи" onClick={handleOpen}><Smile className="w-3.5 h-3.5" /></button>
-      {open && (
-        <div className={cn("absolute right-0 z-50 bg-popover border border-border rounded-xl shadow-xl p-3 w-[400px] max-h-[350px] overflow-y-auto", openUpward ? "bottom-8" : "top-8")}>
-          {/* Быстрый доступ */}
-          <div className="flex gap-0.5 mb-2 pb-2 border-b border-border">
-            {QUICK_EMOJIS.map((e) => (
-              <button key={e} className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-muted text-lg transition-colors" onClick={() => { onSelect(e); setOpen(false) }}>{e}</button>
-            ))}
-          </div>
-          {categories.map(([name, emojis]) => (
-            <div key={name} className="mb-3">
-              <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider mb-1.5">{name}</p>
-              <div className="flex flex-wrap gap-0.5">
-                {emojis.map((e) => (
-                  <button key={e} className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-muted text-lg transition-colors" onClick={() => { onSelect(e); setOpen(false) }}>{e}</button>
-                ))}
-              </div>
+    <>
+      <button ref={btnRef} onClick={openPicker} title="Эмодзи" className={current ? "text-[1.4rem] leading-none hover:opacity-70 transition-opacity flex-shrink-0 cursor-pointer" : "p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground"}>
+        {trigger ?? (current ? current : <Smile className="w-3.5 h-3.5" />)}
+      </button>
+      {open && pos && typeof document !== "undefined" && (
+        <div id="demo-emoji-picker"
+          style={{ position: "fixed", top: pos.top, bottom: pos.bottom, left: pos.left, width: PICKER_WIDTH, zIndex: 9999, maxHeight: Math.min(560, pos.availH) }}
+          className="bg-popover border border-border rounded-xl shadow-xl p-2 flex flex-col gap-1"
+        >
+          <input ref={searchRef} value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Поиск эмодзи..."
+            className="w-full text-xs border border-border rounded-lg px-2.5 py-1.5 outline-none focus:border-primary/50 bg-muted/30 placeholder:text-muted-foreground/50" />
+          {!search && (
+            <div className="grid grid-cols-9 gap-0 pb-1 border-b border-border">
+              {DEMO_QUICK.map((e) => (
+                <button key={e} onClick={() => { onSelect(e); setOpen(false) }}
+                  className={cn("w-[37px] h-[37px] text-[1.44rem] flex items-center justify-center rounded transition-colors leading-none",
+                    current === e ? "bg-primary/10 ring-1 ring-primary" : "hover:bg-muted")}>{e}</button>
+              ))}
             </div>
-          ))}
+          )}
+          <div className="grid grid-cols-9 gap-0 overflow-y-auto flex-1 min-h-0">
+            {displayEmojis.length > 0
+              ? displayEmojis.map((e, i) => (
+                  <button key={i} onClick={() => { onSelect(e); setOpen(false) }} title={DEMO_EMOJI_NAMES[e] || e}
+                    className={cn("w-[37px] h-[37px] text-[1.44rem] flex items-center justify-center rounded hover:bg-muted transition-colors leading-none",
+                      current === e && "bg-primary/10 ring-1 ring-primary")}>{e}</button>
+                ))
+              : <p className="col-span-9 text-xs text-muted-foreground text-center py-4">Ничего не найдено</p>
+            }
+          </div>
+          {!search && (
+            <div className="flex flex-wrap gap-1 border-t border-border pt-1">
+              {Object.keys(DEMO_CATEGORIES).map((cat) => (
+                <button key={cat} onClick={() => setActiveCategory(cat)}
+                  className={cn("text-xs px-2 py-1 rounded-lg transition-all",
+                    activeCategory === cat ? "bg-primary text-primary-foreground" : "hover:bg-muted text-muted-foreground")}>{cat}</button>
+              ))}
+            </div>
+          )}
         </div>
       )}
-    </div>
-  )
-}
-
-/* ──── Lesson Icon Picker (two tabs: emoji + lucide) ──── */
-function LessonIconPicker({ current, onSelect }: { current: string; onSelect: (v: string) => void }) {
-  const [open, setOpen] = useState(false)
-  const [openUpward, setOpenUpward] = useState(false)
-  const [tab, setTab] = useState<"emoji" | "icons">("emoji")
-  const buttonRef = useRef<HTMLButtonElement>(null)
-  const categories = Object.entries(EMOJI_DATA)
-
-  const handleOpen = () => {
-    if (!open && buttonRef.current) {
-      const rect = buttonRef.current.getBoundingClientRect()
-      const spaceBelow = window.innerHeight - rect.bottom
-      const spaceAbove = rect.top
-      setOpenUpward(spaceBelow < 360 && spaceAbove > spaceBelow)
-    }
-    setOpen(!open)
-  }
-
-  return (
-    <div className="relative">
-      <button ref={buttonRef} className="text-2xl hover:bg-muted rounded-lg p-1 transition-colors" onClick={handleOpen}>{current}</button>
-      {open && (
-        <div className={cn("absolute left-0 z-50 bg-popover border border-border rounded-xl shadow-xl w-[400px] overflow-hidden", openUpward ? "bottom-12" : "top-12")}>
-          {/* Tabs */}
-          <div className="flex border-b border-border">
-            <button className={cn("flex-1 py-2 text-xs font-medium transition-colors", tab === "emoji" ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground")} onClick={() => setTab("emoji")}>😊 Эмодзи</button>
-            <button className={cn("flex-1 py-2 text-xs font-medium transition-colors", tab === "icons" ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground")} onClick={() => setTab("icons")}>⚡ Иконки</button>
-          </div>
-          <div className="p-3 max-h-[300px] overflow-y-auto">
-            {tab === "emoji" ? (
-              <>
-                {/* Быстрый доступ */}
-                <div className="flex gap-0.5 mb-2 pb-2 border-b border-border">
-                  {QUICK_EMOJIS.map((e) => (
-                    <button key={e} className={cn("w-8 h-8 flex items-center justify-center rounded-md hover:bg-muted text-lg transition-colors", current === e && "bg-primary/10 ring-1 ring-primary")} onClick={() => { onSelect(e); setOpen(false) }}>{e}</button>
-                  ))}
-                </div>
-                {categories.map(([name, emojis]) => (
-                  <div key={name} className="mb-3">
-                    <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider mb-1">{name}</p>
-                    <div className="flex flex-wrap gap-0.5">
-                      {emojis.map((e) => (
-                        <button key={e} className={cn("w-8 h-8 flex items-center justify-center rounded-md hover:bg-muted text-lg transition-colors", current === e && "bg-primary/10 ring-1 ring-primary")} onClick={() => { onSelect(e); setOpen(false) }}>{e}</button>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </>
-            ) : (
-              <div className="grid grid-cols-6 gap-1">
-                {LUCIDE_ICONS_FOR_PICKER.map((name) => {
-                  const Icon = LUCIDE_MAP[name]
-                  if (!Icon) return null
-                  return (
-                    <button key={name} title={name} className="flex flex-col items-center gap-0.5 p-2 rounded-lg hover:bg-muted transition-colors" onClick={() => { onSelect(name); setOpen(false) }}>
-                      <Icon className="w-5 h-5 text-foreground" />
-                      <span className="text-[9px] text-muted-foreground truncate w-full text-center">{name}</span>
-                    </button>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
+    </>
   )
 }
