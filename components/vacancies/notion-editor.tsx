@@ -380,6 +380,7 @@ function NotionLessonEditor({ lesson, onUpdateLesson, onUpdateBlock, onInsertBlo
   const [floatingToolbar, setFloatingToolbar] = useState<{ x: number; y: number; vx: number; vy: number } | null>(null)
   const [floatingBlockId, setFloatingBlockId] = useState<string | null>(null)
   const [floatingInInfoBlock, setFloatingInInfoBlock] = useState(false)
+  const [floatingAlign, setFloatingAlign] = useState<"left" | "center" | "right">("left")
   const [showForeColors, setShowForeColors] = useState(false)
   const [showBgColors, setShowBgColors] = useState(false)
   const [currentTextColor, setCurrentTextColor] = useState("#000000")
@@ -392,6 +393,7 @@ function NotionLessonEditor({ lesson, onUpdateLesson, onUpdateBlock, onInsertBlo
   const toolbarEmojiBtnRef = useRef<HTMLButtonElement>(null)
   const toolbarTagsBtnRef = useRef<HTMLButtonElement>(null)
   const savedRangeToolbarRef = useRef<Range | null>(null)
+  const savedAlignRef = useRef<"left" | "center" | "right">("left")
   const editorAreaRef = useRef<HTMLDivElement>(null)
 
   const FORE_COLORS = ["#000000", "#ef4444", "#f97316", "#eab308", "#22c55e", "#3b82f6", "#8b5cf6", "#6b7280"]
@@ -504,8 +506,10 @@ function NotionLessonEditor({ lesson, onUpdateLesson, onUpdateBlock, onInsertBlo
     } catch { return "left" }
   }
   const cycleAlign = () => {
-    const cur = currentAlign()
-    const next = cur === "left" ? "center" : cur === "center" ? "right" : "left"
+    const cur = savedAlignRef.current
+    const next: "left" | "center" | "right" = cur === "left" ? "center" : cur === "center" ? "right" : "left"
+    savedAlignRef.current = next
+    setFloatingAlign(next)
     execFmt(next === "center" ? "justifyCenter" : next === "right" ? "justifyRight" : "justifyLeft")
   }
 
@@ -513,6 +517,10 @@ function NotionLessonEditor({ lesson, onUpdateLesson, onUpdateBlock, onInsertBlo
   const saveToolbarSelection = () => {
     const sel = window.getSelection()
     if (sel && sel.rangeCount > 0) savedRangeToolbarRef.current = sel.getRangeAt(0).cloneRange()
+    // Snapshot alignment while contentEditable still has focus
+    const align = currentAlign()
+    savedAlignRef.current = align
+    setFloatingAlign(align)
   }
   const insertAtToolbarCursor = (text: string) => {
     if (savedRangeToolbarRef.current) {
@@ -607,7 +615,7 @@ function NotionLessonEditor({ lesson, onUpdateLesson, onUpdateBlock, onInsertBlo
             title="Выравнивание (влево→по центру→вправо)"
             onMouseDown={(e) => { e.preventDefault(); cycleAlign() }}
           >
-            {currentAlign() === "center" ? <AlignCenter className="w-3.5 h-3.5" /> : currentAlign() === "right" ? <AlignRight className="w-3.5 h-3.5" /> : <AlignLeft className="w-3.5 h-3.5" />}
+            {floatingAlign === "center" ? <AlignCenter className="w-3.5 h-3.5" /> : floatingAlign === "right" ? <AlignRight className="w-3.5 h-3.5" /> : <AlignLeft className="w-3.5 h-3.5" />}
           </button>
         </div>
       )}
