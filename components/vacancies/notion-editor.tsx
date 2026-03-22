@@ -1667,30 +1667,7 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
     }
 
     case "info":
-      return (
-        <div className={cn(
-          "rounded-xl border-l-4 p-4",
-          block.infoStyle === "info" ? "bg-blue-50 dark:bg-blue-950/30 border-blue-400" :
-            block.infoStyle === "warning" ? "bg-amber-50 dark:bg-amber-950/30 border-amber-400" :
-              block.infoStyle === "success" ? "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-400" :
-                "bg-red-50 dark:bg-red-950/30 border-red-400"
-        )}>
-          <div className="flex items-center gap-2 mb-2">
-            <span className="text-base">{block.infoStyle === "info" ? "ℹ️" : block.infoStyle === "warning" ? "⚠️" : block.infoStyle === "success" ? "✅" : "❌"}</span>
-            <div className="flex gap-1">
-              {(["info", "warning", "success", "error"] as const).map((s) => (
-                <button key={s} onClick={() => onUpdate({ infoStyle: s })} className={cn("w-4 h-4 rounded-full border-2", s === "info" ? "bg-blue-400" : s === "warning" ? "bg-amber-400" : s === "success" ? "bg-emerald-400" : "bg-red-400", block.infoStyle === s ? "border-foreground/60" : "border-transparent")} />
-              ))}
-            </div>
-          </div>
-          <textarea
-            className="w-full text-sm bg-transparent outline-none resize-none min-h-[60px] leading-relaxed"
-            value={block.content}
-            onChange={(e) => onUpdate({ content: e.target.value })}
-            placeholder="Текст блока..."
-          />
-        </div>
-      )
+      return <InfoBlock block={block} onUpdate={onUpdate} />
 
     case "button":
       return (
@@ -1818,6 +1795,246 @@ function FmtBtn({ icon: Icon, tip, cmd }: { icon: React.ElementType; tip: string
 
 const QUICK_ACCESS_EMOJIS = ["😀", "👋", "🐱", "🍎", "🏠", "⚽", "📝", "🚫", "🏁"]
 const QUICK_EMOJIS = ["👋","🚀","🏢","💰","📈","✅","🎯","⚙️","👤","📍","🎥","📝","➡️","🌟","💡","📋","🔑","💬","🏆","🎓"]
+
+// ─── InfoBlock ──────────────────────────────────────────────────────────────
+
+const INFO_ICONS: { symbol: string; label: string }[] = [
+  { symbol: "✓", label: "Галочка" },
+  { symbol: "?", label: "Вопрос" },
+  { symbol: "✗", label: "Крест" },
+  { symbol: "!", label: "Восклицание" },
+  { symbol: "i", label: "Информация" },
+]
+
+const INFO_PRESET_COLORS = [
+  { hex: "#ef4444", label: "Красный" },
+  { hex: "#f97316", label: "Оранжевый" },
+  { hex: "#22c55e", label: "Зелёный" },
+  { hex: "#3b82f6", label: "Синий" },
+  { hex: "#8b5cf6", label: "Фиолетовый" },
+]
+
+function hexToHsl(hex: string): { h: number; s: number; l: number } {
+  const r = parseInt(hex.slice(1, 3), 16) / 255
+  const g = parseInt(hex.slice(3, 5), 16) / 255
+  const b = parseInt(hex.slice(5, 7), 16) / 255
+  const max = Math.max(r, g, b), min = Math.min(r, g, b)
+  const l = (max + min) / 2
+  if (max === min) return { h: 0, s: 0, l: Math.round(l * 100) }
+  const d = max - min
+  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min)
+  let h = 0
+  if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) / 6
+  else if (max === g) h = ((b - r) / d + 2) / 6
+  else h = ((r - g) / d + 4) / 6
+  return { h: Math.round(h * 360), s: Math.round(s * 100), l: Math.round(l * 100) }
+}
+
+function hslToHex(h: number, s: number, l: number): string {
+  const sl = s / 100, ll = l / 100
+  const a = sl * Math.min(ll, 1 - ll)
+  const f = (n: number) => {
+    const k = (n + h / 30) % 12
+    const color = ll - a * Math.max(Math.min(k - 3, 9 - k, 1), -1)
+    return Math.round(255 * color).toString(16).padStart(2, "0")
+  }
+  return `#${f(0)}${f(8)}${f(4)}`
+}
+
+function InfoBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: Partial<Block>) => void }) {
+  const [showSettings, setShowSettings] = useState(false)
+  const settingsRef = useRef<HTMLDivElement>(null)
+  const btnRef = useRef<HTMLButtonElement>(null)
+  const contentRef = useRef<HTMLDivElement>(null)
+
+  // derive color: use infoColor if set, else map infoStyle to preset
+  const styleColorMap: Record<string, string> = {
+    info: "#3b82f6", success: "#22c55e", warning: "#f97316", error: "#ef4444",
+  }
+  const activeColor = block.infoColor || styleColorMap[block.infoStyle] || "#3b82f6"
+  const activeIcon = block.infoIcon || "i"
+
+  const hsl = hexToHsl(activeColor)
+  const [hue, setHue] = useState(hsl.h)
+  const [lightness, setLightness] = useState(hsl.l)
+
+  // sync sliders when color changes externally
+  useEffect(() => {
+    const h = hexToHsl(activeColor)
+    setHue(h.h)
+    setLightness(h.l)
+  }, [activeColor])
+
+  // close on outside click
+  useEffect(() => {
+    if (!showSettings) return
+    const handler = (e: MouseEvent) => {
+      if (
+        settingsRef.current && !settingsRef.current.contains(e.target as Node) &&
+        btnRef.current && !btnRef.current.contains(e.target as Node)
+      ) setShowSettings(false)
+    }
+    document.addEventListener("mousedown", handler)
+    return () => document.removeEventListener("mousedown", handler)
+  }, [showSettings])
+
+  const applyColor = (hex: string) => {
+    onUpdate({ infoColor: hex })
+  }
+
+  const applySliders = (h: number, l: number) => {
+    const hex = hslToHex(h, 70, l)
+    onUpdate({ infoColor: hex })
+  }
+
+  // floating toolbar for contentEditable
+  const execFmt = (cmd: string) => { document.execCommand(cmd, false) }
+
+  const syncContent = () => {
+    if (contentRef.current) {
+      onUpdate({ content: contentRef.current.innerHTML })
+    }
+  }
+
+  // light background: color at 10% opacity approximation via hex
+  const bgStyle = { borderColor: activeColor, backgroundColor: activeColor + "18" }
+  const iconBgStyle = { backgroundColor: activeColor }
+
+  return (
+    <div className="relative rounded-2xl border-2 p-4 flex gap-4 items-start" style={bgStyle}>
+      {/* Иконка слева */}
+      <div
+        className="flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-xl select-none"
+        style={iconBgStyle}
+      >
+        {activeIcon}
+      </div>
+
+      {/* Текст справа */}
+      <div className="flex-1 min-w-0">
+        {/* Floating toolbar */}
+        <div className="flex items-center gap-0.5 mb-1.5">
+          {[
+            { cmd: "bold", icon: <Bold className="w-3.5 h-3.5" />, title: "Жирный" },
+            { cmd: "italic", icon: <Italic className="w-3.5 h-3.5" />, title: "Курсив" },
+            { cmd: "underline", icon: <Underline className="w-3.5 h-3.5" />, title: "Подчёркнутый" },
+            { cmd: "strikeThrough", icon: <Strikethrough className="w-3.5 h-3.5" />, title: "Зачёркнутый" },
+          ].map(({ cmd, icon, title }) => (
+            <button
+              key={cmd}
+              title={title}
+              onMouseDown={(e) => { e.preventDefault(); execFmt(cmd) }}
+              className="w-6 h-6 flex items-center justify-center rounded hover:bg-black/10 transition-colors text-foreground/60"
+            >
+              {icon}
+            </button>
+          ))}
+        </div>
+        <div
+          ref={contentRef}
+          contentEditable
+          suppressContentEditableWarning
+          onInput={syncContent}
+          onBlur={syncContent}
+          dangerouslySetInnerHTML={{ __html: block.content || "" }}
+          className="text-sm leading-relaxed outline-none min-h-[2rem] empty:before:content-['Введите_текст...'] empty:before:text-muted-foreground/50"
+          style={{ wordBreak: "break-word" }}
+        />
+      </div>
+
+      {/* Кнопка ⋮ настроек */}
+      <button
+        ref={btnRef}
+        onClick={() => setShowSettings((v) => !v)}
+        className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded hover:bg-black/10 transition-colors text-foreground/50 self-start"
+        title="Настройки"
+      >
+        <MoreHorizontal className="w-4 h-4" />
+      </button>
+
+      {/* Попап настроек */}
+      {showSettings && (
+        <div
+          ref={settingsRef}
+          className="absolute right-0 top-8 z-50 bg-popover border border-border rounded-xl shadow-xl p-3 w-64"
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          {/* Выбор иконки */}
+          <p className="text-xs font-medium text-muted-foreground mb-2">Иконка</p>
+          <div className="flex gap-1.5 mb-3">
+            {INFO_ICONS.map(({ symbol, label }) => (
+              <button
+                key={symbol}
+                title={label}
+                onClick={() => onUpdate({ infoIcon: symbol })}
+                className={cn(
+                  "w-9 h-9 rounded-full flex items-center justify-center font-bold text-base transition-all",
+                  activeIcon === symbol ? "ring-2 ring-offset-1 scale-110" : "hover:scale-105"
+                )}
+                style={activeIcon === symbol ? { backgroundColor: activeColor, color: "#fff" } : { backgroundColor: activeColor + "30", color: activeColor }}
+              >
+                {symbol}
+              </button>
+            ))}
+          </div>
+
+          {/* Пресеты цветов */}
+          <p className="text-xs font-medium text-muted-foreground mb-2">Цвет</p>
+          <div className="flex gap-1.5 mb-3">
+            {INFO_PRESET_COLORS.map(({ hex, label }) => (
+              <button
+                key={hex}
+                title={label}
+                onClick={() => applyColor(hex)}
+                className={cn(
+                  "w-8 h-8 rounded-full border-2 transition-all",
+                  activeColor.toLowerCase() === hex ? "border-foreground/60 scale-110" : "border-transparent hover:scale-105"
+                )}
+                style={{ backgroundColor: hex }}
+              />
+            ))}
+          </div>
+
+          {/* Слайдер Hue */}
+          <p className="text-xs text-muted-foreground mb-1">Оттенок</p>
+          <div className="relative mb-2">
+            <div
+              className="h-3 rounded-full mb-1"
+              style={{ background: "linear-gradient(to right,hsl(0,70%,55%),hsl(30,70%,55%),hsl(60,70%,55%),hsl(120,70%,55%),hsl(180,70%,55%),hsl(240,70%,55%),hsl(300,70%,55%),hsl(360,70%,55%))" }}
+            />
+            <input
+              type="range" min={0} max={360} value={hue}
+              onChange={(e) => { const h = Number(e.target.value); setHue(h); applySliders(h, lightness) }}
+              className="absolute inset-0 w-full opacity-0 cursor-pointer h-3"
+            />
+            <div
+              className="absolute top-0 w-4 h-4 -mt-0.5 rounded-full border-2 border-white shadow pointer-events-none"
+              style={{ left: `calc(${hue / 360 * 100}% - 8px)`, backgroundColor: hslToHex(hue, 70, lightness) }}
+            />
+          </div>
+
+          {/* Слайдер Lightness */}
+          <p className="text-xs text-muted-foreground mb-1">Яркость</p>
+          <div className="relative mb-1">
+            <div
+              className="h-3 rounded-full"
+              style={{ background: `linear-gradient(to right, hsl(${hue},70%,20%), hsl(${hue},70%,50%), hsl(${hue},70%,80%))` }}
+            />
+            <input
+              type="range" min={20} max={75} value={lightness}
+              onChange={(e) => { const l = Number(e.target.value); setLightness(l); applySliders(hue, l) }}
+              className="absolute inset-0 w-full opacity-0 cursor-pointer h-3"
+            />
+            <div
+              className="absolute top-0 w-4 h-4 -mt-0.5 rounded-full border-2 border-white shadow pointer-events-none"
+              style={{ left: `calc(${(lightness - 20) / 55 * 100}% - 8px)`, backgroundColor: hslToHex(hue, 70, lightness) }}
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 
 function EmojiBtn({ current, onSelect }: { current: string; onSelect: (v: string) => void }) {
   const [open, setOpen] = useState(false)
@@ -1979,13 +2196,31 @@ function SimplePreviewBlock({ block }: { block: Block }) {
         </div>
       )
     }
-    case "info":
+    case "info": {
       if (!block.content?.trim()) return null
+      const styleColorMap: Record<string, string> = {
+        info: "#3b82f6", success: "#22c55e", warning: "#f97316", error: "#ef4444",
+      }
+      const color = block.infoColor || styleColorMap[block.infoStyle] || "#3b82f6"
+      const icon = block.infoIcon || "i"
       return (
-        <div className={cn("rounded-xl border-l-4 p-4", block.infoStyle === "info" ? "bg-blue-50 border-blue-400" : block.infoStyle === "warning" ? "bg-amber-50 border-amber-400" : block.infoStyle === "success" ? "bg-emerald-50 border-emerald-400" : "bg-red-50 border-red-400")}>
-          <p className="text-sm whitespace-pre-line">{block.content}</p>
+        <div
+          className="rounded-2xl border-2 p-4 flex gap-4 items-start"
+          style={{ borderColor: color, backgroundColor: color + "18" }}
+        >
+          <div
+            className="flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-xl select-none"
+            style={{ backgroundColor: color }}
+          >
+            {icon}
+          </div>
+          <div
+            className="flex-1 min-w-0 text-sm leading-relaxed pt-2"
+            dangerouslySetInnerHTML={{ __html: block.content }}
+          />
         </div>
       )
+    }
     case "button":
       if (!block.buttonText?.trim() && !block.buttonUrl?.trim()) return null
       return (
