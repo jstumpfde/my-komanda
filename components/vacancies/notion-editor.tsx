@@ -1149,6 +1149,8 @@ function SourcePicker({
 
 function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdate: (patch: Partial<Block>) => void; onRemove: () => void }) {
   const meta = BLOCK_TYPE_META.find((m) => m.type === block.type)
+  const imgRef = useRef<HTMLImageElement>(null)
+  const [imgHeight, setImgHeight] = useState<number>(256)
 
   switch (block.type) {
     case "image": {
@@ -1176,21 +1178,29 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
                   value={block.imageTitleTop || ""}
                   onChange={(e) => onUpdate({ imageTitleTop: e.target.value })}
                   placeholder="Подпись сверху..."
+                  maxLength={80}
                 />
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={block.imageUrl} alt={block.imageCaption || ""} className="rounded-lg object-contain w-full max-h-64 bg-muted/30" />
+                <img
+                  ref={imgRef}
+                  src={block.imageUrl}
+                  alt={block.imageCaption || ""}
+                  className="rounded-lg object-contain w-full max-h-64 bg-muted/30"
+                  onLoad={() => setImgHeight(imgRef.current?.offsetHeight ?? 256)}
+                />
                 <input
                   className="text-xs text-muted-foreground italic bg-transparent outline-none border-b border-border/40 pb-0.5 focus:border-primary/40 mt-1"
                   value={block.imageCaption || ""}
                   onChange={(e) => onUpdate({ imageCaption: e.target.value })}
                   placeholder="Подпись снизу..."
+                  maxLength={80}
                 />
               </div>
               {/* Текст справа/слева при боковом layout */}
               {isSide && (
                 <textarea
                   className="flex-1 text-sm bg-transparent outline-none resize-none leading-relaxed placeholder:text-muted-foreground/40 overflow-y-auto"
-                  style={{ minHeight: "80px", maxHeight: "256px" }}
+                  style={{ maxHeight: imgHeight }}
                   value={block.content}
                   onChange={(e) => onUpdate({ content: e.target.value })}
                   placeholder="Текст рядом с изображением..."
@@ -1237,6 +1247,7 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
                   value={block.videoTitleTop || ""}
                   onChange={(e) => onUpdate({ videoTitleTop: e.target.value })}
                   placeholder="Подпись сверху..."
+                  maxLength={80}
                 />
                 <div className="rounded-lg bg-black aspect-video overflow-hidden">
                   {embed ? (
@@ -1256,6 +1267,7 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
                   value={block.videoCaption || ""}
                   onChange={(e) => onUpdate({ videoCaption: e.target.value })}
                   placeholder="Подпись снизу..."
+                  maxLength={80}
                 />
               </div>
               {isSide && (
@@ -1599,14 +1611,14 @@ function SimplePreviewBlock({ block }: { block: Block }) {
       const isSide = layout === "image-left" || layout === "image-right"
       return (
         <div className={cn("flex gap-3", isSide ? (layout === "image-left" ? "flex-row" : "flex-row-reverse") : "flex-col")}>
-          <div className={cn("flex flex-col", isSide ? "w-1/2 shrink-0 overflow-y-auto" : "w-full")}>
-            {block.imageTitleTop && <p className="text-xs text-muted-foreground italic leading-snug mb-1">{block.imageTitleTop}</p>}
+          <div className={cn("flex flex-col min-w-0", isSide ? "w-1/2 shrink-0" : "w-full")}>
+            {block.imageTitleTop && <p className="text-xs text-muted-foreground italic leading-snug mb-1 truncate max-w-full">{block.imageTitleTop}</p>}
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={block.imageUrl} alt={block.imageCaption || ""} className="rounded-xl w-full h-48 object-cover" />
-            {block.imageCaption && <p className="text-xs text-muted-foreground italic leading-snug mt-1">{block.imageCaption}</p>}
+            {block.imageCaption && <p className="text-xs text-muted-foreground italic leading-snug mt-1 truncate max-w-full">{block.imageCaption}</p>}
           </div>
           {isSide && block.content && (
-            <p className="flex-1 text-sm leading-relaxed whitespace-pre-wrap">{block.content}</p>
+            <p className="flex-1 text-sm leading-relaxed whitespace-pre-wrap overflow-y-auto" style={{ maxHeight: "12rem" }}>{block.content}</p>
           )}
         </div>
       )
@@ -1618,8 +1630,8 @@ function SimplePreviewBlock({ block }: { block: Block }) {
       const embed = detectVideoService(block.videoUrl)
       return (
         <div className={cn("flex gap-3", isSide ? (layout === "video-left" ? "flex-row" : "flex-row-reverse") : "flex-col")}>
-          <div className={cn("flex flex-col", isSide ? "w-1/2 shrink-0" : "w-full")}>
-            {block.videoTitleTop && <p className="text-xs text-muted-foreground italic leading-snug mb-1">{block.videoTitleTop}</p>}
+          <div className={cn("flex flex-col min-w-0", isSide ? "w-1/2 shrink-0" : "w-full")}>
+            {block.videoTitleTop && <p className="text-xs text-muted-foreground italic leading-snug mb-1 truncate max-w-full">{block.videoTitleTop}</p>}
             <div className="aspect-video rounded-xl bg-black overflow-hidden">
               {embed ? (
                 <iframe src={embed.embedUrl} className="w-full h-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen title="video" />
@@ -1627,7 +1639,7 @@ function SimplePreviewBlock({ block }: { block: Block }) {
                 <video src={block.videoUrl} controls className="w-full h-full object-contain" />
               )}
             </div>
-            {block.videoCaption && <p className="text-xs text-muted-foreground italic leading-snug mt-1">{block.videoCaption}</p>}
+            {block.videoCaption && <p className="text-xs text-muted-foreground italic leading-snug mt-1 truncate max-w-full">{block.videoCaption}</p>}
           </div>
           {isSide && block.content && (
             <p className="flex-1 text-sm leading-relaxed whitespace-pre-wrap">{block.content}</p>
