@@ -2739,7 +2739,7 @@ function EmojiBtn({ current, onSelect }: { current: string; onSelect: (v: string
       <button
         ref={btnRef}
         onClick={openPicker}
-        className="text-[1.8rem] leading-none hover:opacity-70 transition-opacity flex-shrink-0 cursor-pointer"
+        className="text-[1.44rem] leading-none hover:opacity-70 transition-opacity flex-shrink-0 cursor-pointer"
         title="Сменить эмодзи"
       >
         {current || "📝"}
