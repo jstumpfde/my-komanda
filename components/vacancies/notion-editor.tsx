@@ -381,6 +381,7 @@ function NotionLessonEditor({ lesson, onUpdateLesson, onUpdateBlock, onInsertBlo
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null)
   const [floatingToolbar, setFloatingToolbar] = useState<{ x: number; y: number } | null>(null)
   const [floatingBlockId, setFloatingBlockId] = useState<string | null>(null)
+  const [floatingInInfoBlock, setFloatingInInfoBlock] = useState(false)
   const [showForeColors, setShowForeColors] = useState(false)
   const [showBgColors, setShowBgColors] = useState(false)
   const [currentTextColor, setCurrentTextColor] = useState("#000000")
@@ -412,6 +413,8 @@ function NotionLessonEditor({ lesson, onUpdateLesson, onUpdateBlock, onInsertBlo
       const container = editorAreaRef.current
       if (!container) return
       const cr = container.getBoundingClientRect()
+      const anchorEl = sel.anchorNode instanceof Element ? sel.anchorNode : sel.anchorNode?.parentElement
+      setFloatingInInfoBlock(!!anchorEl?.closest("[data-main-editor]"))
       setFloatingToolbar({ x: rect.left - cr.left + rect.width / 2, y: rect.top - cr.top - 44 })
     }
     document.addEventListener("mouseup", handler)
@@ -506,13 +509,15 @@ function NotionLessonEditor({ lesson, onUpdateLesson, onUpdateBlock, onInsertBlo
               </div>
             )}
           </div>
-          <div className="w-px h-4 bg-border mx-0.5" />
-          <button className={cn("w-7 h-7 rounded flex items-center justify-center transition-colors", currentBlock() === "h1" ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted")} title="Заголовок 1" onMouseDown={(e) => { e.preventDefault(); toggleBlock("h1") }}><Heading1 className="w-3.5 h-3.5" /></button>
-          <button className={cn("w-7 h-7 rounded flex items-center justify-center transition-colors", currentBlock() === "h2" ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted")} title="Заголовок 2" onMouseDown={(e) => { e.preventDefault(); toggleBlock("h2") }}><Heading2 className="w-3.5 h-3.5" /></button>
-          <button className={cn("w-7 h-7 rounded flex items-center justify-center transition-colors", currentBlock() === "h3" ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted")} title="Заголовок 3" onMouseDown={(e) => { e.preventDefault(); toggleBlock("h3") }}><Heading3 className="w-3.5 h-3.5" /></button>
-          <div className="w-px h-4 bg-border mx-0.5" />
-          <FmtBtn icon={ListIcon} tip="Маркированный список" cmd={() => execFmt("insertUnorderedList")} />
-          <FmtBtn icon={ListOrdered} tip="Нумерованный список" cmd={() => execFmt("insertOrderedList")} />
+          {!floatingInInfoBlock && <>
+            <div className="w-px h-4 bg-border mx-0.5" />
+            <button className={cn("w-7 h-7 rounded flex items-center justify-center transition-colors", currentBlock() === "h1" ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted")} title="Заголовок 1" onMouseDown={(e) => { e.preventDefault(); toggleBlock("h1") }}><Heading1 className="w-3.5 h-3.5" /></button>
+            <button className={cn("w-7 h-7 rounded flex items-center justify-center transition-colors", currentBlock() === "h2" ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted")} title="Заголовок 2" onMouseDown={(e) => { e.preventDefault(); toggleBlock("h2") }}><Heading2 className="w-3.5 h-3.5" /></button>
+            <button className={cn("w-7 h-7 rounded flex items-center justify-center transition-colors", currentBlock() === "h3" ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted")} title="Заголовок 3" onMouseDown={(e) => { e.preventDefault(); toggleBlock("h3") }}><Heading3 className="w-3.5 h-3.5" /></button>
+            <div className="w-px h-4 bg-border mx-0.5" />
+            <FmtBtn icon={ListIcon} tip="Маркированный список" cmd={() => execFmt("insertUnorderedList")} />
+            <FmtBtn icon={ListOrdered} tip="Нумерованный список" cmd={() => execFmt("insertOrderedList")} />
+          </>}
           <div className="w-px h-4 bg-border mx-0.5" />
           <FmtBtn icon={AlignLeft} tip="Влево" cmd={() => execFmt("justifyLeft")} />
           <FmtBtn icon={AlignCenter} tip="По центру" cmd={() => execFmt("justifyCenter")} />
