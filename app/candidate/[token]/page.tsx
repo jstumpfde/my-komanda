@@ -12,6 +12,7 @@ import { getCandidateByToken, type PublicCandidate } from "@/lib/candidate-token
 import { DEFAULT_LESSONS, replaceVars, type Lesson, type Block } from "@/lib/course-types"
 import { getBrand, brandCssVars, type BrandConfig } from "@/lib/branding"
 import { cn } from "@/lib/utils"
+import { cleanHtml } from "@/lib/clean-html"
 import {
   Play, ChevronLeft, ChevronRight, CheckCircle2, Calendar,
   Phone, Mail, MessageCircle, ArrowRight, Briefcase, Clock,
@@ -442,7 +443,7 @@ function LessonBlock({ block, brandColor }: { block: Block; brandColor: string }
     return (
       <div
         className="prose prose-sm max-w-none text-foreground leading-relaxed"
-        dangerouslySetInnerHTML={{ __html: content.replace(/\n/g, "<br/>") }}
+        dangerouslySetInnerHTML={{ __html: cleanHtml(content.replace(/\n/g, "<br/>")) }}
       />
     )
   }
@@ -495,7 +496,7 @@ function LessonBlock({ block, brandColor }: { block: Block; brandColor: string }
     }
     return (
       <div className={cn("rounded-xl border p-4", styles[block.infoStyle])}>
-        <div dangerouslySetInnerHTML={{ __html: content.replace(/\n/g, "<br/>") }} className="text-sm leading-relaxed" />
+        <div dangerouslySetInnerHTML={{ __html: cleanHtml(content.replace(/\n/g, "<br/>")) }} className="text-sm leading-relaxed" />
       </div>
     )
   }

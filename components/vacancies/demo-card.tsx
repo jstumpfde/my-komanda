@@ -34,6 +34,7 @@ import type { Demo, Block, BlockType, ImageLayout, FileLayout, Question, Lesson 
 import { VARIABLES, BLOCK_TYPE_META, createBlock, replaceVars } from "@/lib/course-types"
 import { LibraryDialog } from "./library-dialog"
 import { AiGenerateDialog } from "./ai-generate-dialog"
+import { cleanHtml } from "@/lib/clean-html"
 
 interface DemoCardProps {
   demo: Demo
@@ -781,27 +782,6 @@ function FloatingToolbar({ editorRef, savedSelectionRef }: FloatingToolbarProps)
       <button onMouseDown={tb(() => { const isCenter = document.queryCommandState("justifyCenter"); exec(isCenter ? "justifyLeft" : "justifyCenter") })} className={btnCls()} title="Выравнивание"><span className="text-[11px]">≡</span></button>
     </div>
   )
-}
-
-/* ──── HTML cleaner — strips inline styles/margins/padding from pasted content ──── */
-function cleanHtml(html: string): string {
-  const div = document.createElement("div")
-  div.innerHTML = html
-  const walk = (el: Element) => {
-    // Remove style attribute entirely
-    el.removeAttribute("style")
-    // Remove class attributes that carry external formatting
-    el.removeAttribute("class")
-    // Remove data-* and other non-semantic attrs that Word/Notion add
-    Array.from(el.attributes).forEach(attr => {
-      if (attr.name !== "href" && attr.name !== "src" && attr.name !== "alt" && attr.name !== "target") {
-        el.removeAttribute(attr.name)
-      }
-    })
-    Array.from(el.children).forEach(walk)
-  }
-  Array.from(div.children).forEach(walk)
-  return div.innerHTML
 }
 
 /* ──── Block Editor ──── */
