@@ -1804,14 +1804,20 @@ const INFO_ICONS: { symbol: string; label: string }[] = [
   { symbol: "✗", label: "Крест" },
   { symbol: "!", label: "Восклицание" },
   { symbol: "i", label: "Информация" },
+  { symbol: "⚠", label: "Предупреждение" },
+  { symbol: "★", label: "Звезда" },
+  { symbol: "♥", label: "Сердце" },
 ]
 
 const INFO_PRESET_COLORS = [
+  { hex: "#000000", label: "Чёрный" },
   { hex: "#ef4444", label: "Красный" },
   { hex: "#f97316", label: "Оранжевый" },
+  { hex: "#eab308", label: "Жёлтый" },
   { hex: "#22c55e", label: "Зелёный" },
   { hex: "#3b82f6", label: "Синий" },
   { hex: "#8b5cf6", label: "Фиолетовый" },
+  { hex: "#6b7280", label: "Серый" },
 ]
 
 function hexToHsl(hex: string): { h: number; s: number; l: number } {
@@ -1887,9 +1893,6 @@ function InfoBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: Partia
     onUpdate({ infoColor: hex })
   }
 
-  // floating toolbar for contentEditable
-  const execFmt = (cmd: string) => { document.execCommand(cmd, false) }
-
   const syncContent = () => {
     if (contentRef.current) {
       onUpdate({ content: contentRef.current.innerHTML })
@@ -1912,33 +1915,16 @@ function InfoBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: Partia
 
       {/* Текст справа */}
       <div className="flex-1 min-w-0">
-        {/* Floating toolbar */}
-        <div className="flex items-center gap-0.5 mb-1.5">
-          {[
-            { cmd: "bold", icon: <Bold className="w-3.5 h-3.5" />, title: "Жирный" },
-            { cmd: "italic", icon: <Italic className="w-3.5 h-3.5" />, title: "Курсив" },
-            { cmd: "underline", icon: <Underline className="w-3.5 h-3.5" />, title: "Подчёркнутый" },
-            { cmd: "strikeThrough", icon: <Strikethrough className="w-3.5 h-3.5" />, title: "Зачёркнутый" },
-          ].map(({ cmd, icon, title }) => (
-            <button
-              key={cmd}
-              title={title}
-              onMouseDown={(e) => { e.preventDefault(); execFmt(cmd) }}
-              className="w-6 h-6 flex items-center justify-center rounded hover:bg-black/10 transition-colors text-foreground/60"
-            >
-              {icon}
-            </button>
-          ))}
-        </div>
         <div
           ref={contentRef}
           contentEditable
           suppressContentEditableWarning
+          dir="ltr"
+          data-main-editor="true"
           onInput={syncContent}
           onBlur={syncContent}
           dangerouslySetInnerHTML={{ __html: block.content || "" }}
           className="text-sm leading-relaxed outline-none min-h-[2rem] empty:before:content-['Введите_текст...'] empty:before:text-muted-foreground/50"
-          style={{ wordBreak: "break-word" }}
         />
       </div>
 
@@ -1961,14 +1947,14 @@ function InfoBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: Partia
         >
           {/* Выбор иконки */}
           <p className="text-xs font-medium text-muted-foreground mb-2">Иконка</p>
-          <div className="flex gap-1.5 mb-3">
+          <div className="flex flex-wrap gap-1.5 mb-3">
             {INFO_ICONS.map(({ symbol, label }) => (
               <button
                 key={symbol}
                 title={label}
                 onClick={() => onUpdate({ infoIcon: symbol })}
                 className={cn(
-                  "w-9 h-9 rounded-full flex items-center justify-center font-bold text-base transition-all",
+                  "w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm transition-all",
                   activeIcon === symbol ? "ring-2 ring-offset-1 scale-110" : "hover:scale-105"
                 )}
                 style={activeIcon === symbol ? { backgroundColor: activeColor, color: "#fff" } : { backgroundColor: activeColor + "30", color: activeColor }}
@@ -1980,14 +1966,14 @@ function InfoBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: Partia
 
           {/* Пресеты цветов */}
           <p className="text-xs font-medium text-muted-foreground mb-2">Цвет</p>
-          <div className="flex gap-1.5 mb-3">
+          <div className="flex flex-wrap gap-1.5 mb-3">
             {INFO_PRESET_COLORS.map(({ hex, label }) => (
               <button
                 key={hex}
                 title={label}
                 onClick={() => applyColor(hex)}
                 className={cn(
-                  "w-8 h-8 rounded-full border-2 transition-all",
+                  "w-7 h-7 rounded-full border-2 transition-all",
                   activeColor.toLowerCase() === hex ? "border-foreground/60 scale-110" : "border-transparent hover:scale-105"
                 )}
                 style={{ backgroundColor: hex }}
