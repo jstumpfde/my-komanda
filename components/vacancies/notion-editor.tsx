@@ -1082,6 +1082,11 @@ function MiniRichEditor({ html, onChange, placeholder, singleLine, maxLength, ma
   const [showFore, setShowFore] = useState(false)
   const [showBg,   setShowBg]   = useState(false)
   const [fgColor,  setFgColor]  = useState("#000000")
+  const [showMiniEmoji, setShowMiniEmoji] = useState(false)
+  const [miniEmojiPos, setMiniEmojiPos] = useState<React.CSSProperties>({})
+  const miniEmojiSearchRef = useRef<HTMLInputElement>(null)
+  const miniEmojiBtnRef = useRef<HTMLButtonElement>(null)
+  const savedRangeMiniRef = useRef<Range | null>(null)
 
   // Keep DOM in sync when html prop changes from outside (initial load / undo)
   const lastHtmlRef = useRef(html)
@@ -1091,6 +1096,16 @@ function MiniRichEditor({ html, onChange, placeholder, singleLine, maxLength, ma
       lastHtmlRef.current = html
     }
   }, [html])
+
+  useEffect(() => {
+    if (!showMiniEmoji) return
+    const handler = (e: MouseEvent) => {
+      if (miniEmojiBtnRef.current?.contains(e.target as Node)) return
+      setShowMiniEmoji(false)
+    }
+    document.addEventListener("mousedown", handler)
+    return () => document.removeEventListener("mousedown", handler)
+  }, [showMiniEmoji])
 
   const exec = (cmd: string, val?: string) => {
     ref.current?.focus()
@@ -1233,8 +1248,46 @@ function MiniRichEditor({ html, onChange, placeholder, singleLine, maxLength, ma
           <button className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" title="Влево" onMouseDown={(e) => { e.preventDefault(); exec("justifyLeft") }}><AlignLeft className="w-3 h-3" /></button>
           <button className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" title="По центру" onMouseDown={(e) => { e.preventDefault(); exec("justifyCenter") }}><AlignCenter className="w-3 h-3" /></button>
           <button className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" title="Вправо" onMouseDown={(e) => { e.preventDefault(); exec("justifyRight") }}><AlignRight className="w-3 h-3" /></button>
+          <div className="w-px h-3.5 bg-border mx-0.5" />
+          <button
+            ref={miniEmojiBtnRef}
+            className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors text-sm"
+            title="Вставить эмодзи"
+            onMouseDown={(e) => {
+              e.preventDefault()
+              // save selection before picker opens
+              const sel = window.getSelection()
+              if (sel && sel.rangeCount > 0) savedRangeMiniRef.current = sel.getRangeAt(0).cloneRange()
+              if (miniEmojiBtnRef.current) {
+                const rect = miniEmojiBtnRef.current.getBoundingClientRect()
+                const spaceBelow = window.innerHeight - rect.bottom - 8
+                const spaceAbove = rect.top - 8
+                if (spaceBelow >= 300 || spaceBelow >= spaceAbove) {
+                  setMiniEmojiPos({ top: rect.bottom + 4, left: Math.min(rect.left, window.innerWidth - (9 * 37 + 16) - 8) })
+                } else {
+                  setMiniEmojiPos({ bottom: window.innerHeight - rect.top + 4, left: Math.min(rect.left, window.innerWidth - (9 * 37 + 16) - 8) })
+                }
+              }
+              setShowMiniEmoji(v => !v)
+            }}
+          >😊</button>
         </div>
       )}
+      <InlineEmojiPicker
+        isOpen={showMiniEmoji}
+        positionStyle={miniEmojiPos}
+        searchRef={miniEmojiSearchRef}
+        onSelect={(emoji) => {
+          setShowMiniEmoji(false)
+          if (!ref.current) return
+          ref.current.focus()
+          if (savedRangeMiniRef.current) {
+            const sel = window.getSelection()
+            if (sel) { sel.removeAllRanges(); sel.addRange(savedRangeMiniRef.current) }
+          }
+          insertAtCursor(ref, emoji, sync)
+        }}
+      />
     </div>
   )
 }
