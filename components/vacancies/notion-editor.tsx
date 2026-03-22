@@ -802,9 +802,6 @@ const CATEGORIES: Record<string, string[]> = {
   "⚽ Спорт": ["⚽","🏓","🎾","🏀","🏈","⚾","🎱","🏐","🏉","🥏","🏸","🏒","🏑","🥍","🏏","🪃","🥅","⛳","🪁","🏹","🎣","🤿","🥊","🥋","🎽","🛹","🛷","⛸️","🥌","🎿","⛷️","🏂","🪂","🏋️","🤸","🤼","🤺","🏇","🏊","🚴","🧘","🏄","🚣","🤽","🧗","🏌️","🎯","🎳","🏆","🥇","🥈","🥉"],
 }
 
-// Flat list for inline text block emoji picker (all emojis)
-const QUICK_INSERT_EMOJIS = Object.values(CATEGORIES).flat()
-
 const QUICK_TAGS = [
   { tag: "{{имя}}", label: "Имя кандидата" },
   { tag: "{{отчество}}", label: "Отчество кандидата" },
@@ -849,10 +846,11 @@ interface NotionTextBlockProps {
 function NotionTextBlock({ block, editorRef, isHovered, onSync, onKeyDown }: NotionTextBlockProps) {
   const [showEmoji, setShowEmoji] = useState(false)
   const [showTags, setShowTags] = useState(false)
-  const [emojiOpenUpward, setEmojiOpenUpward] = useState(false)
   const [tagsOpenUpward, setTagsOpenUpward] = useState(false)
+  const [emojiPos, setEmojiPos] = useState<React.CSSProperties>({})
   const emojiBtnRef = useRef<HTMLButtonElement>(null)
   const tagsBtnRef = useRef<HTMLButtonElement>(null)
+  const emojiSearchRef = useRef<HTMLInputElement>(null)
   const savedRangeRef = useRef<Range | null>(null)
 
   // Save selection before popup opens (so we don't lose cursor)
@@ -935,7 +933,13 @@ function NotionTextBlock({ block, editorRef, isHovered, onSync, onKeyDown }: Not
               setShowTags(false)
               if (!showEmoji && emojiBtnRef.current) {
                 const rect = emojiBtnRef.current.getBoundingClientRect()
-                setEmojiOpenUpward(window.innerHeight - rect.bottom < 360)
+                const spaceBelow = window.innerHeight - rect.bottom - 8
+                const spaceAbove = rect.top - 8
+                if (spaceBelow >= 300 || spaceBelow >= spaceAbove) {
+                  setEmojiPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right })
+                } else {
+                  setEmojiPos({ bottom: window.innerHeight - rect.top + 4, right: window.innerWidth - rect.right })
+                }
               }
               setShowEmoji((v) => !v)
             }}
@@ -944,40 +948,12 @@ function NotionTextBlock({ block, editorRef, isHovered, onSync, onKeyDown }: Not
           >
             😊
           </button>
-          {showEmoji && (
-            <div
-              data-text-popup
-              className={cn(
-                "absolute right-0 z-50 bg-popover border border-border rounded-xl shadow-xl p-2",
-                emojiOpenUpward ? "bottom-full mb-1" : "top-full mt-1"
-              )}
-              style={{ width: "calc(9 * 2.5rem + 1rem)" }}
-            >
-              {/* Быстрый доступ */}
-              <div className="grid grid-cols-9 gap-0.5 pb-1.5 mb-1.5 border-b border-border">
-                {QUICK_ACCESS_EMOJIS.map((e) => (
-                  <button
-                    key={`qa-${e}`}
-                    onMouseDown={(ev) => { ev.preventDefault(); restoreSelectionAndInsert(e) }}
-                    className="w-10 h-10 text-2xl flex items-center justify-center rounded hover:bg-muted transition-colors leading-none"
-                  >
-                    {e}
-                  </button>
-                ))}
-              </div>
-              <div className="grid grid-cols-9 gap-0.5 max-h-52 overflow-y-auto">
-                {QUICK_INSERT_EMOJIS.map((e) => (
-                  <button
-                    key={e}
-                    onMouseDown={(ev) => { ev.preventDefault(); restoreSelectionAndInsert(e) }}
-                    className="w-10 h-10 text-2xl flex items-center justify-center rounded hover:bg-muted transition-colors leading-none"
-                  >
-                    {e}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
+          <InlineEmojiPicker
+            isOpen={showEmoji}
+            positionStyle={emojiPos}
+            searchRef={emojiSearchRef}
+            onSelect={(e) => { restoreSelectionAndInsert(e); setShowEmoji(false) }}
+          />
         </div>
 
         {/* Tag button */}
@@ -2232,10 +2208,67 @@ function FmtBtn({ icon: Icon, tip, cmd }: { icon: React.ElementType; tip: string
   )
 }
 
-// ─── Emoji button ──────────────────────────────────────────────────────────
+/* ──── InlineEmojiPicker: пикер для вставки эмодзи в текст ──── */
+function InlineEmojiPicker({ onSelect, positionStyle, isOpen, searchRef }: {
+  onSelect: (e: string) => void
+  positionStyle: React.CSSProperties
+  isOpen: boolean
+  searchRef: React.RefObject<HTMLInputElement>
+}) {
+  const [activeCategory, setActiveCategory] = useState(Object.keys(CATEGORIES)[0])
+  const [search, setSearch] = useState("")
 
-const QUICK_ACCESS_EMOJIS = ["😀", "👋", "🐱", "🍎", "🏠", "⚽", "📝", "🚫", "🏁"]
-const QUICK_EMOJIS = ["👋","🚀","🏢","💰","📈","✅","🎯","⚙️","👤","📍","🎥","📝","➡️","🌟","💡","📋","🔑","💬","🏆","🎓"]
+  useEffect(() => { if (isOpen) { setSearch(""); setActiveCategory(Object.keys(CATEGORIES)[0]) } }, [isOpen])
+  useEffect(() => { if (isOpen) setTimeout(() => searchRef.current?.focus(), 50) }, [isOpen])
+
+  const searchResults = search.trim()
+    ? Object.values(CATEGORIES).flat().filter((e) => {
+        const q = search.toLowerCase()
+        return (EMOJI_NAMES[e] || "").toLowerCase().includes(q) || e.includes(q)
+      })
+    : null
+  const displayEmojis = searchResults ?? CATEGORIES[activeCategory] ?? []
+  const PICKER_WIDTH = 9 * 37 + 16
+
+  if (!isOpen) return null
+  return (
+    <div
+      style={{ ...positionStyle, width: PICKER_WIDTH, maxHeight: 480, zIndex: 9999 }}
+      className="fixed bg-popover border border-border rounded-xl shadow-xl p-2 flex flex-col gap-1"
+    >
+      <input ref={searchRef} value={search} onChange={(e) => setSearch(e.target.value)}
+        placeholder="Поиск эмодзи..."
+        className="w-full text-xs border border-border rounded-lg px-2.5 py-1.5 outline-none focus:border-primary/50 bg-muted/30 placeholder:text-muted-foreground/50" />
+      {!search && (
+        <div className="grid grid-cols-9 gap-0 pb-1 border-b border-border">
+          {QUICK.map((e) => (
+            <button key={e} onMouseDown={(ev) => { ev.preventDefault(); onSelect(e) }}
+              className="w-[37px] h-[37px] text-[1.44rem] flex items-center justify-center rounded hover:bg-muted transition-colors leading-none">{e}</button>
+          ))}
+        </div>
+      )}
+      <div className="grid grid-cols-9 gap-0 overflow-y-auto flex-1 min-h-0">
+        {displayEmojis.length > 0
+          ? displayEmojis.map((e, i) => (
+              <button key={i} onMouseDown={(ev) => { ev.preventDefault(); onSelect(e) }}
+                title={EMOJI_NAMES[e] || e}
+                className="w-[37px] h-[37px] text-[1.44rem] flex items-center justify-center rounded hover:bg-muted transition-colors leading-none">{e}</button>
+            ))
+          : <p className="col-span-9 text-xs text-muted-foreground text-center py-4">Ничего не найдено</p>
+        }
+      </div>
+      {!search && (
+        <div className="flex flex-wrap gap-1 border-t border-border pt-1">
+          {Object.keys(CATEGORIES).map((cat) => (
+            <button key={cat} onMouseDown={(ev) => { ev.preventDefault(); setActiveCategory(cat) }}
+              className={cn("text-xs px-2 py-1 rounded-lg transition-all",
+                activeCategory === cat ? "bg-primary text-primary-foreground" : "hover:bg-muted text-muted-foreground")}>{cat}</button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 // ─── InfoBlock ──────────────────────────────────────────────────────────────
 
@@ -2328,13 +2361,14 @@ function InfoBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: Partia
   const [showSettings, setShowSettings] = useState(false)
   const [showEmoji, setShowEmoji] = useState(false)
   const [showTags, setShowTags] = useState(false)
-  const [emojiOpenUpward, setEmojiOpenUpward] = useState(false)
   const [tagsOpenUpward, setTagsOpenUpward] = useState(false)
+  const [emojiPos, setEmojiPos] = useState<React.CSSProperties>({})
   const settingsRef = useRef<HTMLDivElement>(null)
   const btnRef = useRef<HTMLButtonElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
   const emojiBtnRef = useRef<HTMLButtonElement>(null)
   const tagsBtnRef = useRef<HTMLButtonElement>(null)
+  const emojiSearchRef = useRef<HTMLInputElement>(null)
   const savedRangeRef = useRef<Range | null>(null)
   // отслеживаем id блока чтобы сбросить DOM только при смене блока
   const blockIdRef = useRef(block.id)
@@ -2472,44 +2506,25 @@ function InfoBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: Partia
                 setShowTags(false)
                 if (!showEmoji && emojiBtnRef.current) {
                   const rect = emojiBtnRef.current.getBoundingClientRect()
-                  setEmojiOpenUpward(window.innerHeight - rect.bottom < 360)
+                  const spaceBelow = window.innerHeight - rect.bottom - 8
+                  const spaceAbove = rect.top - 8
+                  if (spaceBelow >= 300 || spaceBelow >= spaceAbove) {
+                    setEmojiPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right })
+                  } else {
+                    setEmojiPos({ bottom: window.innerHeight - rect.top + 4, right: window.innerWidth - rect.right })
+                  }
                 }
                 setShowEmoji((v) => !v)
               }}
               title="Вставить эмодзи"
               className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-black/10 transition-colors text-sm"
             >😊</button>
-            {showEmoji && (
-              <div
-                data-info-popup
-                className={cn(
-                  "fixed z-[200] bg-popover border border-border rounded-xl shadow-xl p-2",
-                  emojiOpenUpward ? "" : ""
-                )}
-                style={{
-                  width: "calc(9 * 2.5rem + 1rem)",
-                  ...(emojiBtnRef.current ? (() => {
-                    const r = emojiBtnRef.current.getBoundingClientRect()
-                    return emojiOpenUpward
-                      ? { bottom: window.innerHeight - r.top + 4, right: window.innerWidth - r.right }
-                      : { top: r.bottom + 4, right: window.innerWidth - r.right }
-                  })() : {})
-                }}
-              >
-                <div className="grid grid-cols-9 gap-0.5 pb-1.5 mb-1.5 border-b border-border">
-                  {QUICK_ACCESS_EMOJIS.map((e) => (
-                    <button key={`qa-${e}`} onMouseDown={(ev) => { ev.preventDefault(); insertAndSync(e) }}
-                      className="w-10 h-10 text-2xl flex items-center justify-center rounded hover:bg-muted transition-colors leading-none">{e}</button>
-                  ))}
-                </div>
-                <div className="grid grid-cols-9 gap-0.5 max-h-52 overflow-y-auto">
-                  {QUICK_INSERT_EMOJIS.map((e, i) => (
-                    <button key={`${e}-${i}`} onMouseDown={(ev) => { ev.preventDefault(); insertAndSync(e) }}
-                      className="w-10 h-10 text-2xl flex items-center justify-center rounded hover:bg-muted transition-colors leading-none">{e}</button>
-                  ))}
-                </div>
-              </div>
-            )}
+            <InlineEmojiPicker
+              isOpen={showEmoji}
+              positionStyle={emojiPos}
+              searchRef={emojiSearchRef}
+              onSelect={(e) => { insertAndSync(e); setShowEmoji(false) }}
+            />
           </div>
           {/* Tag button */}
           <div className="relative" data-info-popup>
