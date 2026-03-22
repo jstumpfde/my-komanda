@@ -17,11 +17,12 @@ import { NotionEditor } from "./notion-editor"
 
 const STORAGE_KEY = "hireflow-demos"
 
-/** Проверяет, является ли строка валидным URL или data-URI */
+/** Проверяет, является ли строка постоянным URL (http/https).
+ *  data: и blob: НЕ считаются валидными — они не переживают перезагрузку
+ *  и занимают мегабайты в localStorage. */
 function isValidUrl(s: string): boolean {
-  if (!s) return true // пустая строка — ок, не мусор
-  if (s.startsWith("data:")) return true
-  if (s.startsWith("blob:")) return true
+  if (!s) return true // пустая строка — ок
+  if (s.startsWith("data:") || s.startsWith("blob:")) return false
   try {
     const url = new URL(s)
     return url.protocol === "http:" || url.protocol === "https:"
@@ -30,28 +31,24 @@ function isValidUrl(s: string): boolean {
   }
 }
 
-/** Проверяет что строка — осмысленный текст, а не мусор из localStorage.
- *  Мусор: очень длинная строка без пробелов (слитные символы). */
-function isCleanText(s: string): boolean {
-  if (!s) return true
-  if (s.length > 200) return false
-  // Строка длиннее 30 символов без единого пробела — мусор
-  if (s.length > 30 && !s.includes(" ")) return false
-  return true
+
+/** Удаляет data:/blob: src из HTML-контента (встроенные картинки через paste) */
+function stripBlobsFromHtml(html: string): string {
+  if (!html) return html
+  return html.replace(/src="(data|blob):[^"]*"/g, 'src=""')
 }
 
-/** Санирует блок: сбрасывает мусорные значения URL-полей и строковых полей */
+/** Санирует блок: сбрасывает base64/blob URL-поля и inline-src в контенте */
 function sanitizeBlock(block: Block): Block {
-  // У медиа-блоков с layout "full" поле content не используется — сбрасываем
-  const isMediaFull = ["image", "video", "audio", "file"].includes(block.type) &&
-    (block.imageLayout === "full" || block.videoLayout === "full" ||
-     block.audioLayout === "full" || block.fileLayout === "full")
+  const content = typeof block.content === "string"
+    ? stripBlobsFromHtml(block.content)
+    : ""
 
   return {
     ...block,
-    content: isMediaFull ? "" : (typeof block.content === "string" && isCleanText(block.content) ? block.content : ""),
+    content,
     imageUrl: isValidUrl(block.imageUrl ?? "") ? (block.imageUrl ?? "") : "",
-    imageCaption: typeof block.imageCaption === "string" && isCleanText(block.imageCaption) ? block.imageCaption : "",
+    imageCaption: typeof block.imageCaption === "string" ? block.imageCaption : "",
     videoUrl: isValidUrl(block.videoUrl ?? "") ? (block.videoUrl ?? "") : "",
     audioUrl: isValidUrl(block.audioUrl ?? "") ? (block.audioUrl ?? "") : "",
     fileUrl: isValidUrl(block.fileUrl ?? "") ? (block.fileUrl ?? "") : "",
@@ -79,10 +76,23 @@ function loadDemos(): Demo[] {
 
 function saveDemos(demos: Demo[]) {
   try {
-    const json = JSON.stringify(demos)
+    // Sanitize before saving — strips base64/blob URLs that bloat storage
+    const sanitized = demos.map(d => ({
+      ...d,
+      lessons: (d.lessons ?? []).map(l => ({
+        ...l,
+        blocks: (l.blocks ?? []).map(sanitizeBlock),
+      })),
+    }))
+    const json = JSON.stringify(sanitized)
     localStorage.setItem(STORAGE_KEY, json)
     console.log("[CourseTab] saved to localStorage:", STORAGE_KEY, "size:", json.length, "demos:", demos.length)
-  } catch (e) { console.error("[CourseTab] save error:", e) }
+  } catch (e) {
+    console.error("[CourseTab] save error:", e)
+    if (e instanceof DOMException && e.name === "QuotaExceededError") {
+      toast.error("Хранилище переполнено. Удалите неиспользуемые медиафайлы из блоков.")
+    }
+  }
 }
 
 export function CourseTab() {
