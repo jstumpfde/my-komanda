@@ -526,7 +526,7 @@ function NotionLessonEditor({ lesson, onUpdateLesson, onUpdateBlock, onInsertBlo
       )}
 
       {/* Lesson title */}
-      <div className="flex items-start gap-3 mb-8 group/title">
+      <div className="flex items-center gap-3 mb-8 group/title">
         <EmojiBtn current={lesson.emoji} onSelect={(v) => onUpdateLesson({ emoji: v })} />
         <input
           className="flex-1 text-3xl font-bold bg-transparent outline-none text-foreground placeholder:text-muted-foreground/30 leading-tight pt-0.5"
