@@ -34,14 +34,14 @@ interface NotionEditorProps {
 // ─── Slash command menu ────────────────────────────────────────────────────
 
 const SLASH_ITEMS = [
-  { type: "text" as BlockType, icon: <Type className="w-4 h-4" />, inlineIcon: <Type className="w-3.5 h-3.5" />, label: "Текст", desc: "Обычный абзац" },
-  { type: "image" as BlockType, icon: <ImageIcon className="w-4 h-4" />, inlineIcon: <ImageIcon className="w-3.5 h-3.5" />, label: "Фото", desc: "Изображение" },
-  { type: "video" as BlockType, icon: <Video className="w-4 h-4" />, inlineIcon: <Video className="w-3.5 h-3.5" />, label: "Видео", desc: "Embed или загрузка" },
-  { type: "audio" as BlockType, icon: <Music className="w-4 h-4" />, inlineIcon: <Mic className="w-3.5 h-3.5" />, label: "Аудио", desc: "Аудиофайл" },
-  { type: "file" as BlockType, icon: <FileText className="w-4 h-4" />, inlineIcon: <FileText className="w-3.5 h-3.5" />, label: "Файл", desc: "PDF, DOC и др." },
-  { type: "info" as BlockType, icon: <Info className="w-4 h-4" />, inlineIcon: <Info className="w-3.5 h-3.5" />, label: "Инфо", desc: "Блок с иконкой" },
-  { type: "button" as BlockType, icon: <MousePointerClick className="w-4 h-4" />, inlineIcon: <MousePointerClick className="w-3.5 h-3.5" />, label: "Кнопка", desc: "Кнопка-ссылка" },
-  { type: "task" as BlockType, icon: <CheckSquare className="w-4 h-4" />, inlineIcon: <CheckSquare className="w-3.5 h-3.5" />, label: "Задание", desc: "Вопросы кандидату" },
+  { type: "text" as BlockType, icon: <Type className="w-4 h-4" />, inlineIcon: <Type className="w-[17px] h-[17px]" />, label: "Текст", desc: "Обычный абзац" },
+  { type: "image" as BlockType, icon: <ImageIcon className="w-4 h-4" />, inlineIcon: <ImageIcon className="w-[17px] h-[17px]" />, label: "Фото", desc: "Изображение" },
+  { type: "video" as BlockType, icon: <Video className="w-4 h-4" />, inlineIcon: <Video className="w-[17px] h-[17px]" />, label: "Видео", desc: "Embed или загрузка" },
+  { type: "audio" as BlockType, icon: <Music className="w-4 h-4" />, inlineIcon: <Mic className="w-[17px] h-[17px]" />, label: "Аудио", desc: "Аудиофайл" },
+  { type: "file" as BlockType, icon: <FileText className="w-4 h-4" />, inlineIcon: <FileText className="w-[17px] h-[17px]" />, label: "Файл", desc: "PDF, DOC и др." },
+  { type: "info" as BlockType, icon: <Info className="w-4 h-4" />, inlineIcon: <Info className="w-[17px] h-[17px]" />, label: "Инфо", desc: "Блок с иконкой" },
+  { type: "button" as BlockType, icon: <MousePointerClick className="w-4 h-4" />, inlineIcon: <MousePointerClick className="w-[17px] h-[17px]" />, label: "Кнопка", desc: "Кнопка-ссылка" },
+  { type: "task" as BlockType, icon: <CheckSquare className="w-4 h-4" />, inlineIcon: <CheckSquare className="w-[17px] h-[17px]" />, label: "Задание", desc: "Вопросы кандидату" },
 ]
 
 // ─── Main component ────────────────────────────────────────────────────────
@@ -2174,7 +2174,7 @@ function InlineBetweenBar({ onAdd }: { onAdd: (type: BlockType) => void }) {
       {/* Иконки по центру */}
       <div className={cn(
         "absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2",
-        "flex items-center gap-0.5 bg-background border border-border rounded-lg shadow-sm px-1 py-0.5",
+        "flex items-center gap-1 bg-background border border-border rounded-lg shadow-sm px-1.5 py-1",
         "transition-all duration-100",
         visible ? "opacity-100 scale-100 pointer-events-auto" : "opacity-0 scale-95 pointer-events-none"
       )}>
@@ -2183,7 +2183,7 @@ function InlineBetweenBar({ onAdd }: { onAdd: (type: BlockType) => void }) {
             key={item.type}
             title={item.label}
             onClick={() => onAdd(item.type)}
-            className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+            className="w-[29px] h-[29px] rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
           >
             {item.inlineIcon}
           </button>
