@@ -2183,10 +2183,10 @@ function InfoBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: Partia
   }
 
   return (
-    <div className="relative flex gap-3 items-start" style={cardStyle}>
-      {/* Иконка слева — символ 24px цвета акцента, без кружка */}
+    <div className="relative flex gap-3 items-center" style={cardStyle}>
+      {/* Иконка слева — символ 24px цвета акцента, без кружка, по центру высоты */}
       <div
-        className="flex-shrink-0 flex items-center justify-center font-bold select-none leading-none mt-0.5"
+        className="flex-shrink-0 flex items-center justify-center font-bold select-none leading-none"
         style={{ fontSize: 24, color: activeColor, minWidth: 28 }}
       >
         {activeIcon}
