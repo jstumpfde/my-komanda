@@ -629,19 +629,22 @@ interface FloatingToolbarProps {
 
 function FloatingToolbar({ editorRef, savedSelectionRef }: FloatingToolbarProps) {
   const [toolbar, setToolbar] = useState<FloatingToolbarState>({ visible: false, top: 0, left: 0 })
-  const [showColors, setShowColors] = useState(false)
+  const [showForeColors, setShowForeColors] = useState(false)
+  const [showBgColors, setShowBgColors] = useState(false)
   const [floatingLinkPopup, setFloatingLinkPopup] = useState(false)
   const [floatingLinkUrl, setFloatingLinkUrl] = useState("")
   const toolbarRef = useRef<HTMLDivElement>(null)
   const [, forceUpdate] = useState(0)
 
-  const COLORS = ["#E53E3E", "#DD6B20", "#D69E2E", "#38A169", "#3182CE", "#805AD5"]
+  const FORE_COLORS = ["#000000", "#ef4444", "#f97316", "#eab308", "#22c55e", "#3b82f6", "#8b5cf6", "#ffffff"]
+  const BG_COLORS = ["transparent", "#fef08a", "#fed7aa", "#fecaca", "#bbf7d0", "#bfdbfe", "#e9d5ff", "#f1f5f9"]
 
   const updatePosition = useCallback(() => {
     const sel = window.getSelection()
     if (!sel || sel.rangeCount === 0 || sel.isCollapsed) {
       setToolbar(t => ({ ...t, visible: false }))
-      setShowColors(false)
+      setShowForeColors(false)
+      setShowBgColors(false)
       setFloatingLinkPopup(false)
       return
     }
@@ -649,7 +652,8 @@ function FloatingToolbar({ editorRef, savedSelectionRef }: FloatingToolbarProps)
     const range = sel.getRangeAt(0)
     if (!editorRef.current?.contains(range.commonAncestorContainer)) {
       setToolbar(t => ({ ...t, visible: false }))
-      setShowColors(false)
+      setShowForeColors(false)
+      setShowBgColors(false)
       setFloatingLinkPopup(false)
       return
     }
@@ -672,7 +676,8 @@ function FloatingToolbar({ editorRef, savedSelectionRef }: FloatingToolbarProps)
   useEffect(() => {
     const handleMouseDown = (e: MouseEvent) => {
       if (toolbarRef.current && !toolbarRef.current.contains(e.target as Node)) {
-        setShowColors(false)
+        setShowForeColors(false)
+        setShowBgColors(false)
         setFloatingLinkPopup(false)
       }
     }
@@ -731,25 +736,47 @@ function FloatingToolbar({ editorRef, savedSelectionRef }: FloatingToolbarProps)
       <button onMouseDown={tb(() => exec("italic"))} className={btnCls("italic")} title="Курсив"><span className="italic">I</span></button>
       <button onMouseDown={tb(() => exec("underline"))} className={btnCls("underline")} title="Подчёркнутый"><span className="underline">U</span></button>
       <button onMouseDown={tb(() => exec("strikeThrough"))} className={btnCls("strikeThrough")} title="Зачёркнутый"><span className="line-through">S</span></button>
-      <button onMouseDown={tb(() => exec("hiliteColor", "#FFF3CD"))} className={btnCls()} title="Выделить цветом">🎨</button>
       {/* Foreground color picker */}
       <div className="relative">
         <button
-          onMouseDown={tb(() => setShowColors(v => !v))}
+          onMouseDown={tb(() => { setShowForeColors(v => !v); setShowBgColors(false) })}
           className={btnCls()}
           title="Цвет текста"
         >
           <span className="font-bold">A</span>
         </button>
-        {showColors && (
+        {showForeColors && (
           <div className="absolute top-8 left-0 z-50 bg-popover border border-border rounded-lg shadow-lg p-1.5 flex gap-1" onMouseDown={e => e.preventDefault()}>
-            {COLORS.map(c => (
+            {FORE_COLORS.map(c => (
               <button
                 key={c}
-                onMouseDown={tb(() => { exec("foreColor", c); setShowColors(false) })}
-                className="w-5 h-5 rounded-full border-2 border-white shadow-sm hover:scale-110 transition-transform"
+                onMouseDown={tb(() => { exec("foreColor", c); setShowForeColors(false) })}
+                className="w-4 h-4 rounded-full border border-border shadow-sm hover:scale-110 transition-transform"
                 style={{ background: c }}
                 title={c}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+      {/* Background color picker */}
+      <div className="relative">
+        <button
+          onMouseDown={tb(() => { setShowBgColors(v => !v); setShowForeColors(false) })}
+          className={btnCls()}
+          title="Цвет фона"
+        >
+          <span>🎨</span>
+        </button>
+        {showBgColors && (
+          <div className="absolute top-8 left-0 z-50 bg-popover border border-border rounded-lg shadow-lg p-1.5 flex gap-1" onMouseDown={e => e.preventDefault()}>
+            {BG_COLORS.map(c => (
+              <button
+                key={c}
+                onMouseDown={tb(() => { exec("hiliteColor", c); setShowBgColors(false) })}
+                className="w-4 h-4 rounded-full border border-border shadow-sm hover:scale-110 transition-transform"
+                style={{ background: c === "transparent" ? "repeating-conic-gradient(#ccc 0% 25%, #fff 0% 50%) 0 0 / 8px 8px" : c }}
+                title={c === "transparent" ? "Без фона" : c}
               />
             ))}
           </div>
@@ -920,6 +947,12 @@ function BlockEditor({ block, onUpdate }: { block: Block; onUpdate: (p: Partial<
             className="min-h-[100px] text-sm rounded-b-lg border border-t-0 border-border bg-background p-3 outline-none focus:ring-1 focus:ring-ring [&_h1]:text-xl [&_h1]:font-bold [&_h1]:mt-3 [&_h1]:mb-1 [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:mt-2 [&_h2]:mb-1 [&_h3]:text-base [&_h3]:font-semibold [&_h3]:mt-2 [&_ul]:list-disc [&_ul]:ml-4 [&_ol]:list-decimal [&_ol]:ml-4 [&_a]:text-primary [&_a]:underline [&_blockquote]:border-0 [&_blockquote]:p-0 [&_blockquote]:m-0 [&_blockquote]:not-italic"
             onBlur={syncContent}
             onInput={syncContent}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault()
+                document.execCommand("insertParagraph")
+              }
+            }}
             data-placeholder="Введите текст..."
           />
         </div>
