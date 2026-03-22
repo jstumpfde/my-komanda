@@ -632,6 +632,7 @@ interface NotionBlockProps {
 function NotionBlock({ block, idx, totalBlocks, isHovered, isDragging, isDragOver, onMouseEnter, onMouseLeave, onDragStart, onDragOver, onDragEnd, onDrop, onUpdate, onRemove, onMoveUp, onMoveDown, onDuplicate, onInsertBelow, onSlashTrigger }: NotionBlockProps) {
   const editorRef = useRef<HTMLDivElement>(null)
 
+
   // Set innerHTML when block changes
   useEffect(() => {
     if (editorRef.current && block.type === "text") {
@@ -683,10 +684,7 @@ function NotionBlock({ block, idx, totalBlocks, isHovered, isDragging, isDragOve
       )}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
-      draggable
-      onDragStart={onDragStart}
       onDragOver={onDragOver}
-      onDragEnd={onDragEnd}
       onDrop={onDrop}
       data-block-id={block.id}
     >
@@ -707,6 +705,9 @@ function NotionBlock({ block, idx, totalBlocks, isHovered, isDragging, isDragOve
         <button
           title="Перетащить"
           className="w-5 h-5 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-grab active:cursor-grabbing"
+          draggable
+          onDragStart={() => onDragStart()}
+          onDragEnd={() => onDragEnd()}
         >
           <GripVertical className="w-3 h-3" />
         </button>
