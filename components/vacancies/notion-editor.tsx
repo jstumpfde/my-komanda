@@ -2041,6 +2041,33 @@ const BUTTON_ICONS_AFTER = [
 ]
 
 
+function hexToHsl(hex: string): { h: number; s: number; l: number } {
+  const r = parseInt(hex.slice(1, 3), 16) / 255
+  const g = parseInt(hex.slice(3, 5), 16) / 255
+  const b = parseInt(hex.slice(5, 7), 16) / 255
+  const max = Math.max(r, g, b), min = Math.min(r, g, b)
+  const l = (max + min) / 2
+  if (max === min) return { h: 0, s: 0, l: Math.round(l * 100) }
+  const d = max - min
+  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min)
+  let h = 0
+  if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) / 6
+  else if (max === g) h = ((b - r) / d + 2) / 6
+  else h = ((r - g) / d + 4) / 6
+  return { h: Math.round(h * 360), s: Math.round(s * 100), l: Math.round(l * 100) }
+}
+
+function hslToHex(h: number, s: number, l: number): string {
+  const sl = s / 100, ll = l / 100
+  const a = sl * Math.min(ll, 1 - ll)
+  const f = (n: number) => {
+    const k = (n + h / 30) % 12
+    const color = ll - a * Math.max(Math.min(k - 3, 9 - k, 1), -1)
+    return Math.round(255 * color).toString(16).padStart(2, "0")
+  }
+  return `#${f(0)}${f(8)}${f(4)}`
+}
+
 function InfoBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: Partial<Block>) => void }) {
   const [showSettings, setShowSettings] = useState(false)
   const [showEmoji, setShowEmoji] = useState(false)
@@ -2062,6 +2089,17 @@ function InfoBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: Partia
   }
   const activeColor = block.infoColor || styleColorMap[block.infoStyle] || "#3b82f6"
   const activeIcon = block.infoIcon || "i"
+
+  const initHsl = hexToHsl(activeColor)
+  const [hue, setHue] = useState(initHsl.h)
+  const [lightness, setLightness] = useState(initHsl.l)
+
+  // Синхронизируем слайдеры при внешнем изменении цвета
+  useEffect(() => {
+    const h = hexToHsl(activeColor)
+    setHue(h.h)
+    setLightness(h.l)
+  }, [activeColor])
 
   // Инициализируем innerHTML только при первом монте или смене блока.
   // Дальше React НЕ трогает DOM — выделение и курсор не сбрасываются.
@@ -2095,6 +2133,10 @@ function InfoBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: Partia
 
   const applyColor = (hex: string) => {
     onUpdate({ infoColor: hex })
+  }
+
+  const applySliders = (h: number, l: number) => {
+    onUpdate({ infoColor: hslToHex(h, 70, l) })
   }
 
   const syncContent = () => {
@@ -2267,13 +2309,13 @@ function InfoBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: Partia
         >
           {/* Выбор иконки */}
           <p className="text-xs font-medium text-muted-foreground mb-2">Иконка</p>
-          <div className="grid grid-cols-6 gap-2 mb-4">
+          <div className="grid grid-cols-6 gap-1.5 mb-3">
             {INFO_ICONS.map(({ symbol, label }) => (
               <button
                 key={symbol}
                 title={label}
                 onClick={() => onUpdate({ infoIcon: symbol })}
-                className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg transition-all hover:scale-105"
+                className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm transition-all hover:scale-105"
                 style={
                   activeIcon === symbol
                     ? { backgroundColor: activeColor, color: "#fff" }
@@ -2287,14 +2329,14 @@ function InfoBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: Partia
 
           {/* Пресеты цветов */}
           <p className="text-xs font-medium text-muted-foreground mb-2">Цвет</p>
-          <div className="flex gap-2 flex-wrap">
+          <div className="flex gap-1.5 mb-3">
             {INFO_PRESET_COLORS.map(({ hex, label }) => (
               <button
                 key={hex}
                 title={label}
                 onClick={() => applyColor(hex)}
                 className={cn(
-                  "w-10 h-10 rounded-full transition-all hover:scale-105",
+                  "w-8 h-8 rounded-full transition-all hover:scale-105 flex-shrink-0",
                   activeColor.toLowerCase() === hex
                     ? "ring-2 ring-offset-2 ring-foreground/50 scale-110"
                     : ""
@@ -2302,6 +2344,42 @@ function InfoBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: Partia
                 style={{ backgroundColor: hex }}
               />
             ))}
+          </div>
+
+          {/* Шкала Оттенок */}
+          <p className="text-xs text-muted-foreground mb-1">Оттенок</p>
+          <div className="relative h-4 mb-3">
+            <div
+              className="absolute inset-0 rounded-full"
+              style={{ background: "linear-gradient(to right,hsl(0,70%,55%),hsl(30,70%,55%),hsl(60,70%,55%),hsl(120,70%,55%),hsl(180,70%,55%),hsl(240,70%,55%),hsl(300,70%,55%),hsl(360,70%,55%))" }}
+            />
+            <input
+              type="range" min={0} max={360} value={hue}
+              onChange={(e) => { const h = Number(e.target.value); setHue(h); applySliders(h, lightness) }}
+              className="absolute inset-0 w-full opacity-0 cursor-pointer"
+            />
+            <div
+              className="absolute top-1/2 -translate-y-1/2 w-4 h-4 rounded-full border-2 border-white shadow pointer-events-none"
+              style={{ left: `calc(${hue / 360 * 100}% - 8px)`, backgroundColor: hslToHex(hue, 70, lightness) }}
+            />
+          </div>
+
+          {/* Шкала Яркость */}
+          <p className="text-xs text-muted-foreground mb-1">Яркость</p>
+          <div className="relative h-4">
+            <div
+              className="absolute inset-0 rounded-full"
+              style={{ background: `linear-gradient(to right,hsl(${hue},70%,20%),hsl(${hue},70%,50%),hsl(${hue},70%,80%))` }}
+            />
+            <input
+              type="range" min={20} max={75} value={lightness}
+              onChange={(e) => { const l = Number(e.target.value); setLightness(l); applySliders(hue, l) }}
+              className="absolute inset-0 w-full opacity-0 cursor-pointer"
+            />
+            <div
+              className="absolute top-1/2 -translate-y-1/2 w-4 h-4 rounded-full border-2 border-white shadow pointer-events-none"
+              style={{ left: `calc(${(lightness - 20) / 55 * 100}% - 8px)`, backgroundColor: hslToHex(hue, 70, lightness) }}
+            />
           </div>
         </div>
       )}
