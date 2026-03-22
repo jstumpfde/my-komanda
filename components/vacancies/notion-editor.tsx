@@ -1852,6 +1852,8 @@ function InfoBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: Partia
   const settingsRef = useRef<HTMLDivElement>(null)
   const btnRef = useRef<HTMLButtonElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
+  // отслеживаем id блока чтобы сбросить DOM только при смене блока
+  const blockIdRef = useRef(block.id)
 
   // derive color: use infoColor if set, else map infoStyle to preset
   const styleColorMap: Record<string, string> = {
@@ -1863,6 +1865,23 @@ function InfoBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: Partia
   const hsl = hexToHsl(activeColor)
   const [hue, setHue] = useState(hsl.h)
   const [lightness, setLightness] = useState(hsl.l)
+
+  // Инициализируем innerHTML только при первом монте или смене блока.
+  // Дальше React НЕ трогает DOM — выделение и курсор не сбрасываются.
+  useEffect(() => {
+    if (!contentRef.current) return
+    if (blockIdRef.current !== block.id) {
+      blockIdRef.current = block.id
+      contentRef.current.innerHTML = block.content || ""
+    }
+  }, [block.id, block.content])
+
+  useEffect(() => {
+    if (contentRef.current && contentRef.current.innerHTML === "") {
+      contentRef.current.innerHTML = block.content || ""
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // sync sliders when color changes externally
   useEffect(() => {
@@ -1921,9 +1940,8 @@ function InfoBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: Partia
           suppressContentEditableWarning
           data-main-editor="true"
           onInput={syncContent}
-          dangerouslySetInnerHTML={{ __html: block.content || "" }}
           className="text-sm leading-relaxed outline-none min-h-[2rem] empty:before:content-['Введите_текст...'] empty:before:text-muted-foreground/50"
-          style={{ direction: "ltr", unicodeBidi: "embed" }}
+          style={{ direction: "ltr", unicodeBidi: "plaintext" }}
         />
       </div>
 
