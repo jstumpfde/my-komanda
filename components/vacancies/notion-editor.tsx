@@ -1812,16 +1812,18 @@ const INFO_ICONS: { symbol: string; label: string }[] = [
   { symbol: "⚠", label: "Предупреждение" },
   { symbol: "★", label: "Звезда" },
   { symbol: "♥", label: "Сердце" },
+  { symbol: "→", label: "Стрелка" },
+  { symbol: "↑", label: "Вверх" },
+  { symbol: "☎", label: "Телефон" },
+  { symbol: "✉", label: "Письмо" },
 ]
 
 const INFO_PRESET_COLORS = [
-  { hex: "#000000", label: "Чёрный" },
   { hex: "#ef4444", label: "Красный" },
   { hex: "#f97316", label: "Оранжевый" },
   { hex: "#eab308", label: "Жёлтый" },
   { hex: "#22c55e", label: "Зелёный" },
   { hex: "#3b82f6", label: "Синий" },
-  { hex: "#8b5cf6", label: "Фиолетовый" },
   { hex: "#6b7280", label: "Серый" },
 ]
 
