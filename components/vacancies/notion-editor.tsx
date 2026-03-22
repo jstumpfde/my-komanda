@@ -1185,12 +1185,20 @@ function MiniRichEditor({ html, onChange, placeholder, singleLine, maxLength, ma
     "empty:before:content-[attr(data-placeholder)] empty:before:text-muted-foreground/30 empty:before:not-italic",
     "border-b border-border/40 pb-0.5 focus:border-primary/40",
     "[&_strong]:font-semibold [&_em]:italic [&_u]:underline [&_s]:line-through",
-    "[&_h1]:text-2xl [&_h1]:font-bold [&_h1]:mt-4 [&_h1]:mb-2",
-    "[&_h2]:text-xl [&_h2]:font-bold [&_h2]:mt-3 [&_h2]:mb-1",
-    "[&_h3]:text-lg [&_h3]:font-semibold [&_h3]:mt-2 [&_h3]:mb-1",
-    "[&_p]:text-base [&_p]:leading-relaxed",
+    // Multi-line only: headings and paragraph styles
+    !singleLine && "[&_h1]:text-2xl [&_h1]:font-bold [&_h1]:mt-4 [&_h1]:mb-2",
+    !singleLine && "[&_h2]:text-xl [&_h2]:font-bold [&_h2]:mt-3 [&_h2]:mb-1",
+    !singleLine && "[&_h3]:text-lg [&_h3]:font-semibold [&_h3]:mt-2 [&_h3]:mb-1",
+    !singleLine && "[&_p]:text-base [&_p]:leading-relaxed",
+    // Single-line: force heading tags back to caption size
+    singleLine && "[&_h1]:text-xs [&_h1]:font-normal [&_h1]:m-0 [&_h2]:text-xs [&_h2]:font-normal [&_h2]:m-0 [&_h3]:text-xs [&_h3]:font-normal [&_h3]:m-0",
     className
   )
+
+  // For single-line captions: lock font size and weight so execCommand can't make them huge
+  const inlineStyle: React.CSSProperties = singleLine
+    ? { fontSize: "12px", fontWeight: "normal", ...(maxHeight ? { maxHeight, overflowY: "auto" } : {}) }
+    : (maxHeight ? { maxHeight, overflowY: "auto" } : {})
 
   return (
     <div className="relative">
@@ -1200,7 +1208,7 @@ function MiniRichEditor({ html, onChange, placeholder, singleLine, maxLength, ma
         suppressContentEditableWarning
         data-placeholder={placeholder || ""}
         className={wrapperCls}
-        style={maxHeight ? { maxHeight, overflowY: "auto" } : undefined}
+        style={inlineStyle}
         onBlur={sync}
         onInput={handleInput}
         onKeyDown={handleKeyDown}
@@ -1353,7 +1361,7 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
   const imgRef = useRef<HTMLImageElement>(null)
   const [imgHeight, setImgHeight] = useState<number>(256)
   const videoContainerRef = useRef<HTMLDivElement>(null)
-  const [videoHeight, setVideoHeight] = useState<number>(200)
+  const [videoHeight, setVideoHeight] = useState<number>(400)
   useEffect(() => {
     const el = videoContainerRef.current
     if (!el) return
