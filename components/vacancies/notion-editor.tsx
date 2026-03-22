@@ -436,8 +436,11 @@ function NotionLessonEditor({ lesson, onUpdateLesson, onUpdateBlock, onInsertBlo
       const cr = container.getBoundingClientRect()
       const anchorEl = sel.anchorNode instanceof Element ? sel.anchorNode : sel.anchorNode?.parentElement
       setFloatingInInfoBlock(!!anchorEl?.closest("[data-main-editor]"))
+      // Align toolbar to the left edge of the content area (matches text block px-1 indent)
+      const textBlockLeft = cr.left + 4 // px-2 container (8) - 4px to match text px-1
+      const toolbarX = textBlockLeft - cr.left // = 4
       setFloatingToolbar({
-        x: 8,                           // always fixed left edge of editor
+        x: toolbarX,
         y: rect.top - cr.top - 48,
         vx: rect.left + rect.width / 2, // viewport center-x
         vy: rect.top,                   // viewport top of selection
