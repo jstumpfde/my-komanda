@@ -9,6 +9,7 @@ export interface Question {
   id: string
   text: string
   answerType: "text" | "single" | "multiple" | "video"
+  questionType?: "short" | "long"
   options: string[]
   correctOptions?: number[]
   textMatchMode?: "exact" | "ai"
@@ -102,7 +103,7 @@ export const BLOCK_TYPE_META: { type: BlockType; icon: string; label: string }[]
 ]
 
 function defaultQuestion(): Question {
-  return { id: `q-${Date.now()}`, text: "", answerType: "text", options: [], correctOptions: [], textMatchMode: "ai", correctText: "", aiCriteria: "", weight: 1 }
+  return { id: `q-${Date.now()}`, text: "", answerType: "text", questionType: "short", options: [], correctOptions: [], textMatchMode: "ai", correctText: "", aiCriteria: "", weight: 1 }
 }
 
 export function createBlock(type: BlockType): Block {

@@ -1851,25 +1851,61 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
             placeholder="Описание задания..."
           />
           <div className="space-y-2">
-            {block.questions.map((q, qi) => (
-              <div key={q.id} className="flex items-center gap-2 p-2 bg-background rounded-lg border border-border">
-                <span className="text-xs font-bold text-muted-foreground w-5">{qi + 1}.</span>
-                <input
-                  className="flex-1 text-sm bg-transparent outline-none"
-                  value={q.text}
-                  onChange={(e) => {
-                    const nq = [...block.questions]; nq[qi] = { ...nq[qi], text: e.target.value }; onUpdate({ questions: nq })
-                  }}
-                  placeholder="Вопрос кандидату..."
-                />
-                <button
-                  className="text-muted-foreground hover:text-destructive"
-                  onClick={() => onUpdate({ questions: block.questions.filter((_, j) => j !== qi) })}
-                ><X className="w-3.5 h-3.5" /></button>
-              </div>
-            ))}
+            {block.questions.map((q, qi) => {
+              const qType = q.questionType ?? "short"
+              const setQType = (t: "short" | "long") => {
+                const nq = [...block.questions]; nq[qi] = { ...nq[qi], questionType: t }; onUpdate({ questions: nq })
+              }
+              return (
+                <div key={q.id} className="bg-background rounded-lg border border-border p-2 space-y-2">
+                  {/* Строка: номер + текст вопроса + удалить */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-muted-foreground w-5 shrink-0">{qi + 1}.</span>
+                    <input
+                      className="flex-1 text-sm bg-transparent outline-none"
+                      value={q.text}
+                      onChange={(e) => {
+                        const nq = [...block.questions]; nq[qi] = { ...nq[qi], text: e.target.value }; onUpdate({ questions: nq })
+                      }}
+                      placeholder="Вопрос кандидату..."
+                    />
+                    <button
+                      className="text-muted-foreground hover:text-destructive shrink-0"
+                      onClick={() => onUpdate({ questions: block.questions.filter((_, j) => j !== qi) })}
+                    ><X className="w-3.5 h-3.5" /></button>
+                  </div>
+                  {/* Переключатель типа ответа */}
+                  <div className="flex items-center gap-1 pl-7">
+                    <button
+                      onClick={() => setQType("short")}
+                      title="Короткий ответ"
+                      className={cn(
+                        "flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium border transition-all",
+                        qType === "short"
+                          ? "bg-primary/10 border-primary text-primary"
+                          : "border-border text-muted-foreground hover:border-primary/50 hover:text-foreground"
+                      )}
+                    >
+                      <span className="font-mono">〔T〕</span>Короткий
+                    </button>
+                    <button
+                      onClick={() => setQType("long")}
+                      title="Длинный ответ"
+                      className={cn(
+                        "flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium border transition-all",
+                        qType === "long"
+                          ? "bg-primary/10 border-primary text-primary"
+                          : "border-border text-muted-foreground hover:border-primary/50 hover:text-foreground"
+                      )}
+                    >
+                      <span className="font-mono">〔≡〕</span>Длинный
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
             <Button variant="ghost" size="sm" className="text-xs h-7" onClick={() => {
-              const nq = [...block.questions, { id: `q-${Date.now()}`, text: "", answerType: "text" as const, options: [], correctOptions: [], textMatchMode: "ai" as const, correctText: "", aiCriteria: "", weight: 1 }]
+              const nq = [...block.questions, { id: `q-${Date.now()}`, text: "", answerType: "text" as const, questionType: "short" as const, options: [], correctOptions: [], textMatchMode: "ai" as const, correctText: "", aiCriteria: "", weight: 1 }]
               onUpdate({ questions: nq })
             }}>
               <Plus className="w-3 h-3 mr-1" />Добавить вопрос
@@ -2504,9 +2540,20 @@ function SimplePreviewBlock({ block }: { block: Block }) {
         <div className="rounded-xl border border-border p-4 space-y-3">
           {block.taskDescription && <p className="text-sm font-medium">{block.taskDescription}</p>}
           {block.questions.map((q, i) => (
-            <div key={q.id} className="space-y-1">
+            <div key={q.id} className="space-y-1.5">
               <p className="text-sm text-muted-foreground">{i + 1}. {q.text}</p>
-              <div className="h-9 border border-border rounded-lg bg-muted/20 text-xs flex items-center px-3 text-muted-foreground/50">Ответ кандидата...</div>
+              {(q.questionType ?? "short") === "long" ? (
+                <textarea
+                  disabled
+                  rows={3}
+                  placeholder="Развёрнутый ответ кандидата..."
+                  className="w-full border border-border rounded-lg bg-muted/20 text-xs px-3 py-2 text-muted-foreground/50 resize-y outline-none placeholder:text-muted-foreground/40"
+                />
+              ) : (
+                <div className="h-9 border border-border rounded-lg bg-muted/20 text-xs flex items-center px-3 text-muted-foreground/40">
+                  Ответ кандидата...
+                </div>
+              )}
             </div>
           ))}
         </div>
