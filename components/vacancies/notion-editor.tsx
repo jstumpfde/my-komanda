@@ -1173,8 +1173,6 @@ function LayoutPicker({ value, onChange, prefix = "image" }: {
 
 // ─── Mini rich-text editor (captions & side text) ─────────────────────────
 
-const MINI_FORE = ["#000000","#ef4444","#f97316","#eab308","#22c55e","#3b82f6","#8b5cf6","#6b7280"]
-const MINI_BG   = ["#fde047","#fb923c","#f87171","#86efac","#93c5fd","#c4b5fd","#f9a8d4","transparent"]
 
 interface MiniRichEditorProps {
   html: string
@@ -1192,10 +1190,6 @@ interface MiniRichEditorProps {
 
 function MiniRichEditor({ html, onChange, placeholder, singleLine, maxLength, maxHeight, className, showEmojiBtn }: MiniRichEditorProps) {
   const ref = useRef<HTMLDivElement>(null)
-  const [toolbar, setToolbar] = useState<{ x: number; y: number; upward: boolean } | null>(null)
-  const [showFore, setShowFore] = useState(false)
-  const [showBg,   setShowBg]   = useState(false)
-  const [fgColor,  setFgColor]  = useState("#000000")
   const [showMiniEmoji, setShowMiniEmoji] = useState(false)
   const [miniEmojiPos, setMiniEmojiPos] = useState<React.CSSProperties>({})
   const miniEmojiSearchRef = useRef<HTMLInputElement>(null)
@@ -1221,32 +1215,11 @@ function MiniRichEditor({ html, onChange, placeholder, singleLine, maxLength, ma
     return () => document.removeEventListener("mousedown", handler)
   }, [showMiniEmoji])
 
-  const exec = (cmd: string, val?: string) => {
-    ref.current?.focus()
-    document.execCommand(cmd, false, val)
-    if (cmd === "foreColor" && val) setFgColor(val)
-    setShowFore(false); setShowBg(false)
-  }
-
   const sync = () => {
     if (!ref.current) return
     const next = ref.current.innerHTML
     lastHtmlRef.current = next
     onChange(next)
-  }
-
-  const handleSelChange = () => {
-    const sel = window.getSelection()
-    if (!sel || sel.isCollapsed || !sel.toString().trim() || !ref.current) {
-      setToolbar(null); return
-    }
-    // Only show toolbar when selection is inside our editor
-    if (!ref.current.contains(sel.anchorNode)) { setToolbar(null); return }
-    const range = sel.getRangeAt(0)
-    const rr = range.getBoundingClientRect()
-    const cr = ref.current.getBoundingClientRect()
-    const upward = (rr.top - cr.top) > 44
-    setToolbar({ x: rr.left - cr.left + rr.width / 2, y: upward ? rr.top - cr.top - 44 : rr.bottom - cr.top + 6, upward })
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -1317,76 +1290,29 @@ function MiniRichEditor({ html, onChange, placeholder, singleLine, maxLength, ma
         onBlur={sync}
         onInput={handleInput}
         onKeyDown={handleKeyDown}
-        onMouseUp={handleSelChange}
-        onKeyUp={handleSelChange}
       />
-      {toolbar && (
-        <div
-          className="absolute z-50 flex items-center gap-0.5 bg-popover border border-border rounded-lg shadow-lg px-1.5 py-1 pointer-events-auto"
-          style={{ left: toolbar.x, top: toolbar.y, transform: "translateX(-50%)" }}
-          onMouseDown={(e) => e.preventDefault()}
-        >
-          <button className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" title="Жирный" onMouseDown={(e) => { e.preventDefault(); exec("bold") }}><Bold className="w-3 h-3" /></button>
-          <button className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" title="Курсив" onMouseDown={(e) => { e.preventDefault(); exec("italic") }}><Italic className="w-3 h-3" /></button>
-          <button className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" title="Подчёркнутый" onMouseDown={(e) => { e.preventDefault(); exec("underline") }}><Underline className="w-3 h-3" /></button>
-          <button className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" title="Зачёркнутый" onMouseDown={(e) => { e.preventDefault(); exec("strikeThrough") }}><Strikethrough className="w-3 h-3" /></button>
-          <div className="w-px h-3.5 bg-border mx-0.5" />
-          {/* Foreground */}
-          <div className="relative">
-            <button className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" title="Цвет текста"
-              onMouseDown={(e) => { e.preventDefault(); setShowFore(v => !v); setShowBg(false) }}>
-              <span className="flex flex-col items-center leading-none">
-                <span className="text-[11px] font-bold">A</span>
-                <span style={{ height: "2px", width: "12px", background: fgColor, borderRadius: "1px", marginTop: "1px" }} />
-              </span>
-            </button>
-            {showFore && (
-              <div className={cn("absolute z-50 bg-popover border border-border rounded-lg shadow-lg p-1.5 flex gap-1", toolbar.upward ? "top-full mt-1" : "bottom-full mb-1")} onMouseDown={e => e.preventDefault()}>
-                {MINI_FORE.map(c => <button key={c} onMouseDown={(e) => { e.preventDefault(); exec("foreColor", c) }} className="w-4 h-4 rounded-full border border-border hover:scale-110 transition-transform" style={{ background: c }} />)}
-              </div>
-            )}
-          </div>
-          {/* Background */}
-          <div className="relative">
-            <button className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" title="Цвет фона"
-              onMouseDown={(e) => { e.preventDefault(); setShowBg(v => !v); setShowFore(false) }}>
-              <Highlighter className="w-3 h-3" />
-            </button>
-            {showBg && (
-              <div className={cn("absolute z-50 bg-popover border border-border rounded-lg shadow-lg p-1.5 flex gap-1", toolbar.upward ? "top-full mt-1" : "bottom-full mb-1")} onMouseDown={e => e.preventDefault()}>
-                {MINI_BG.map(c => <button key={c} onMouseDown={(e) => { e.preventDefault(); exec("hiliteColor", c) }} className="w-4 h-4 rounded-full border border-border hover:scale-110 transition-transform" style={{ background: c === "transparent" ? "repeating-conic-gradient(#ccc 0% 25%, white 0% 50%) 0 0 / 6px 6px" : c }} />)}
-              </div>
-            )}
-          </div>
-          <div className="w-px h-3.5 bg-border mx-0.5" />
-          <button className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" title="Влево" onMouseDown={(e) => { e.preventDefault(); exec("justifyLeft") }}><AlignLeft className="w-3 h-3" /></button>
-          <button className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" title="По центру" onMouseDown={(e) => { e.preventDefault(); exec("justifyCenter") }}><AlignCenter className="w-3 h-3" /></button>
-          <button className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" title="Вправо" onMouseDown={(e) => { e.preventDefault(); exec("justifyRight") }}><AlignRight className="w-3 h-3" /></button>
-          {showEmojiBtn && <>
-            <div className="w-px h-3.5 bg-border mx-0.5" />
-            <button
-              ref={miniEmojiBtnRef}
-              className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors text-sm"
-              title="Вставить эмодзи"
-              onMouseDown={(e) => {
-                e.preventDefault()
-                const sel = window.getSelection()
-                if (sel && sel.rangeCount > 0) savedRangeMiniRef.current = sel.getRangeAt(0).cloneRange()
-                if (miniEmojiBtnRef.current) {
-                  const rect = miniEmojiBtnRef.current.getBoundingClientRect()
-                  const spaceBelow = window.innerHeight - rect.bottom - 8
-                  const spaceAbove = rect.top - 8
-                  if (spaceBelow >= 300 || spaceBelow >= spaceAbove) {
-                    setMiniEmojiPos({ top: rect.bottom + 4, left: Math.min(rect.left, window.innerWidth - (9 * 37 + 16) - 8) })
-                  } else {
-                    setMiniEmojiPos({ bottom: window.innerHeight - rect.top + 4, left: Math.min(rect.left, window.innerWidth - (9 * 37 + 16) - 8) })
-                  }
-                }
-                setShowMiniEmoji(v => !v)
-              }}
-            >😊</button>
-          </>}
-        </div>
+      {showEmojiBtn && (
+        <button
+          ref={miniEmojiBtnRef}
+          className="mt-1 w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors text-sm"
+          title="Вставить эмодзи"
+          onMouseDown={(e) => {
+            e.preventDefault()
+            const sel = window.getSelection()
+            if (sel && sel.rangeCount > 0) savedRangeMiniRef.current = sel.getRangeAt(0).cloneRange()
+            if (miniEmojiBtnRef.current) {
+              const rect = miniEmojiBtnRef.current.getBoundingClientRect()
+              const spaceBelow = window.innerHeight - rect.bottom - 8
+              const spaceAbove = rect.top - 8
+              if (spaceBelow >= 300 || spaceBelow >= spaceAbove) {
+                setMiniEmojiPos({ top: rect.bottom + 4, left: Math.min(rect.left, window.innerWidth - (9 * 37 + 16) - 8) })
+              } else {
+                setMiniEmojiPos({ bottom: window.innerHeight - rect.top + 4, left: Math.min(rect.left, window.innerWidth - (9 * 37 + 16) - 8) })
+              }
+            }
+            setShowMiniEmoji(v => !v)
+          }}
+        >😊</button>
       )}
       <InlineEmojiPicker
         isOpen={showMiniEmoji}
