@@ -2193,19 +2193,19 @@ function InfoBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: Partia
       </div>
 
       {/* Текст справа */}
-      <div className="flex-1 min-w-0">
+      <div className="flex-1 min-w-0 relative">
         <div
           ref={contentRef}
           contentEditable
           suppressContentEditableWarning
           data-main-editor="true"
           onInput={syncContent}
-          className="text-base leading-relaxed outline-none min-h-[1.5rem] empty:before:content-['Введите_текст...'] empty:before:text-muted-foreground/50"
+          className="text-base leading-relaxed outline-none empty:before:content-['Введите_текст...'] empty:before:text-muted-foreground/50 pr-14"
           style={{ direction: "ltr", unicodeBidi: "plaintext" }}
         />
 
-        {/* Emoji & tag buttons — bottom-right of text area */}
-        <div className="flex items-center gap-0.5 justify-end mt-1">
+        {/* Emoji & tag buttons — абсолютно справа, не добавляют высоту */}
+        <div className="absolute top-0 right-0 flex items-center gap-0.5">
           {/* Emoji button */}
           <div className="relative" data-info-popup>
             <button
@@ -2227,10 +2227,18 @@ function InfoBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: Partia
               <div
                 data-info-popup
                 className={cn(
-                  "absolute right-0 z-50 bg-popover border border-border rounded-xl shadow-xl p-2",
-                  emojiOpenUpward ? "bottom-full mb-1" : "top-full mt-1"
+                  "fixed z-[200] bg-popover border border-border rounded-xl shadow-xl p-2",
+                  emojiOpenUpward ? "" : ""
                 )}
-                style={{ width: "calc(9 * 2.25rem + 1rem)" }}
+                style={{
+                  width: "calc(9 * 2.25rem + 1rem)",
+                  ...(emojiBtnRef.current ? (() => {
+                    const r = emojiBtnRef.current.getBoundingClientRect()
+                    return emojiOpenUpward
+                      ? { bottom: window.innerHeight - r.top + 4, right: window.innerWidth - r.right }
+                      : { top: r.bottom + 4, right: window.innerWidth - r.right }
+                  })() : {})
+                }}
               >
                 <div className="grid grid-cols-9 gap-0.5 pb-1.5 mb-1.5 border-b border-border">
                   {QUICK_ACCESS_EMOJIS.map((e) => (
@@ -2267,10 +2275,13 @@ function InfoBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: Partia
             {showTags && (
               <div
                 data-info-popup
-                className={cn(
-                  "absolute right-0 z-50 bg-popover border border-border rounded-xl shadow-xl overflow-hidden w-52",
-                  tagsOpenUpward ? "bottom-full mb-1" : "top-full mt-1"
-                )}
+                className="fixed z-[200] bg-popover border border-border rounded-xl shadow-xl overflow-hidden w-52"
+                style={tagsBtnRef.current ? (() => {
+                  const r = tagsBtnRef.current!.getBoundingClientRect()
+                  return tagsOpenUpward
+                    ? { bottom: window.innerHeight - r.top + 4, right: window.innerWidth - r.right }
+                    : { top: r.bottom + 4, right: window.innerWidth - r.right }
+                })() : {}}
               >
                 <div className="px-3 py-1.5 border-b border-border">
                   <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Переменные</span>
