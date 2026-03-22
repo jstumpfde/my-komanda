@@ -802,6 +802,20 @@ function BlockEditor({ block, onUpdate }: { block: Block; onUpdate: (p: Partial<
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []) // intentionally run only on mount — key prop handles remount on block change
 
+  // Strip formatting on paste — insert plain text only
+  useEffect(() => {
+    const el = editorRef.current
+    if (!el) return
+    const onPaste = (e: ClipboardEvent) => {
+      e.preventDefault()
+      const text = e.clipboardData?.getData("text/plain") ?? ""
+      document.execCommand("insertText", false, text)
+      onUpdateRef.current({ content: el.innerHTML })
+    }
+    el.addEventListener("paste", onPaste)
+    return () => el.removeEventListener("paste", onPaste)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   const tb = (fn: () => void) => (e: React.MouseEvent) => { e.preventDefault(); fn() }
 
   const exec = (cmd: string, value?: string) => {
