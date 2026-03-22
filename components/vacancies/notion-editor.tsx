@@ -1396,8 +1396,16 @@ const TASK_QTYPES: { type: import("@/lib/course-types").QuestionAnswerType; labe
   { type: "sort",     label: "↕",      title: "Расставить по порядку" },
 ]
 
+// Пересчёт баллов: 100 / n, равномерно
+function distributePoints(questions: import("@/lib/course-types").Question[]): import("@/lib/course-types").Question[] {
+  const n = questions.length
+  if (n === 0) return questions
+  const base = Math.floor(100 / n)
+  const rem = 100 - base * n
+  return questions.map((q, i) => ({ ...q, points: base + (i < rem ? 1 : 0) }))
+}
+
 function TaskEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: Partial<Block>) => void }) {
-  // expandedIdx: какой вопрос раскрыт (-1 = ни один, qi = раскрыт)
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -1415,14 +1423,39 @@ function TaskEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: 
     setExpandedIdx(t)
   }
 
-  // Метка типа для свёрнутой карточки
+  // Добавить вопрос + пересчитать баллы
+  const addQuestion = () => {
+    const newQ = { id: `q-${Date.now()}`, text: "", answerType: "short" as const, required: false, options: [] }
+    const nq = distributePoints([...block.questions, newQ])
+    onUpdate({ questions: nq })
+    setTimeout(() => setExpandedIdx(nq.length - 1), 0)
+  }
+
+  // Удалить вопрос + пересчитать баллы
+  const removeQuestion = (qi: number) => {
+    const nq = distributePoints(block.questions.filter((_, j) => j !== qi))
+    onUpdate({ questions: nq })
+    if (expandedIdx === qi) setExpandedIdx(null)
+    else if (expandedIdx !== null && expandedIdx > qi) setExpandedIdx(expandedIdx - 1)
+  }
+
   const qTypeLabel = (type: import("@/lib/course-types").QuestionAnswerType) =>
     TASK_QTYPES.find((t) => t.type === type)?.label ?? "T"
 
+  // Всего баллов
+  const totalPoints = block.questions.reduce((s, q) => s + (q.points ?? 0), 0)
+
   return (
     <div className="rounded-xl border border-dashed border-border bg-muted/20 p-4 space-y-3">
-      <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-        <CheckSquare className="w-4 h-4" /><span>Задание и вопросы</span>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+          <CheckSquare className="w-4 h-4" /><span>Задание и вопросы</span>
+        </div>
+        {totalPoints > 0 && (
+          <span className="text-xs text-amber-600 bg-amber-500/10 px-2 py-0.5 rounded font-medium">
+            Итого: {totalPoints} б.
+          </span>
+        )}
       </div>
       {/* Заголовок */}
       <Input
@@ -1453,12 +1486,11 @@ function TaskEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: 
                 isExpanded ? "border-primary/40 shadow-sm" : "border-border"
               )}
             >
-              {/* ── Заголовок карточки (всегда виден, клик = раскрыть/свернуть) ── */}
+              {/* ── Заголовок карточки ── */}
               <div
                 className="flex items-center gap-1.5 px-2.5 py-2 cursor-pointer select-none"
                 onClick={() => setExpandedIdx(isExpanded ? null : qi)}
               >
-                {/* Кнопки перемещения — не пропагируют клик */}
                 <div
                   className="flex flex-col gap-0.5 text-muted-foreground/30 shrink-0"
                   onClick={(e) => e.stopPropagation()}
@@ -1467,51 +1499,34 @@ function TaskEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: 
                   <button className="hover:text-muted-foreground disabled:opacity-20" onClick={() => moveQ(qi, 1)} disabled={qi === block.questions.length - 1}><ArrowDown className="w-3 h-3" /></button>
                 </div>
                 <span className="text-xs font-bold text-muted-foreground w-5 shrink-0">{qi + 1}.</span>
-
-                {/* Текст вопроса */}
-                <span className={cn(
-                  "flex-1 text-sm",
-                  q.text ? "text-foreground" : "text-muted-foreground/50 italic"
-                )}>
+                <span className={cn("flex-1 text-sm", q.text ? "text-foreground" : "text-muted-foreground/50 italic")}>
                   {q.text || "Вопрос"}
                 </span>
-
-                {/* Тип (бейдж) */}
                 <span className="text-[11px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-mono shrink-0">
                   {qTypeLabel(q.answerType)}
                 </span>
-
-                {/* Баллы (если заданы) */}
                 {points > 0 && (
                   <span className="text-[11px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600 font-medium shrink-0">
                     {points}б
                   </span>
                 )}
-
-                {/* Обязательный * */}
                 <button
                   title={q.required ? "Обязательный" : "Не обязательный"}
                   onClick={(e) => { e.stopPropagation(); updateQ(qi, { required: !q.required }) }}
-                  className={cn(
-                    "shrink-0 w-5 h-5 rounded flex items-center justify-center text-sm font-bold transition-colors",
-                    q.required ? "text-destructive" : "text-muted-foreground/25 hover:text-muted-foreground"
-                  )}
+                  className={cn("shrink-0 w-5 h-5 rounded flex items-center justify-center text-sm font-bold transition-colors",
+                    q.required ? "text-destructive" : "text-muted-foreground/25 hover:text-muted-foreground")}
                 >*</button>
-
-                {/* Удалить */}
                 <button
                   className="text-muted-foreground/40 hover:text-destructive shrink-0"
-                  onClick={(e) => { e.stopPropagation(); onUpdate({ questions: block.questions.filter((_, j) => j !== qi) }); if (isExpanded) setExpandedIdx(null) }}
+                  onClick={(e) => { e.stopPropagation(); removeQuestion(qi) }}
                 ><X className="w-3.5 h-3.5" /></button>
-
-                {/* Шеврон раскрытия */}
                 <ChevronRight className={cn("w-3.5 h-3.5 text-muted-foreground/40 shrink-0 transition-transform", isExpanded && "rotate-90")} />
               </div>
 
-              {/* ── Расширенные настройки (видны только когда раскрыт) ── */}
+              {/* ── Расширенные настройки ── */}
               {isExpanded && (
                 <div className="px-2.5 pb-3 space-y-3 border-t border-border/60 pt-3">
-                  {/* Ввод текста вопроса */}
+                  {/* Текст вопроса */}
                   <input
                     ref={inputRef}
                     className="w-full text-sm bg-muted/30 border border-border rounded-lg px-3 py-1.5 outline-none focus:border-primary/50"
@@ -1521,7 +1536,7 @@ function TaskEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: 
                     placeholder="Введите текст вопроса..."
                   />
 
-                  {/* Переключатель типа */}
+                  {/* Тип */}
                   <div className="flex items-center gap-1 flex-wrap">
                     <span className="text-[11px] text-muted-foreground mr-1">Тип:</span>
                     {TASK_QTYPES.map(({ type, label, title }) => (
@@ -1542,52 +1557,56 @@ function TaskEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: 
                     ))}
                   </div>
 
-                  {/* Варианты ответов (single / multiple / sort) */}
+                  {/* Варианты (single / multiple / sort) — маркер СПРАВА */}
                   {hasOptions && (
                     <div className="space-y-1.5">
                       {q.options.map((opt, oi) => {
-                        const isCorrectSingle = q.answerType === "single" && (q.correctOptions?.[0] === oi)
+                        const isCorrectSingle = q.answerType === "single" && q.correctOptions?.[0] === oi
                         const isCorrectMulti = q.answerType === "multiple" && (q.correctOptions?.includes(oi) ?? false)
                         return (
                           <div key={oi} className="flex items-center gap-1.5">
-                            {/* Маркер правильного ответа */}
-                            {q.answerType === "single" && (
-                              <button
-                                title="Отметить как правильный"
-                                onClick={() => updateQ(qi, { correctOptions: [oi] })}
-                                className={cn(
-                                  "w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 transition-all",
-                                  isCorrectSingle ? "border-green-500" : "border-muted-foreground/30 hover:border-green-400"
-                                )}
-                              >
-                                {isCorrectSingle && <div className="w-2 h-2 rounded-full bg-green-500" />}
-                              </button>
-                            )}
-                            {q.answerType === "multiple" && (
-                              <button
-                                title="Отметить как правильный"
-                                onClick={() => {
-                                  const cur = q.correctOptions || []
-                                  const next = cur.includes(oi) ? cur.filter((x) => x !== oi) : [...cur, oi]
-                                  updateQ(qi, { correctOptions: next })
-                                }}
-                                className={cn(
-                                  "w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-all",
-                                  isCorrectMulti ? "border-green-500 bg-green-500" : "border-muted-foreground/30 hover:border-green-400"
-                                )}
-                              >
-                                {isCorrectMulti && <span className="text-white text-[9px] leading-none">✓</span>}
-                              </button>
-                            )}
                             {q.answerType === "sort" && (
                               <span className="text-xs text-muted-foreground w-4 shrink-0 text-center">{oi + 1}.</span>
                             )}
                             <input
-                              className="flex-1 text-xs bg-muted/30 border border-border rounded px-2 py-1 outline-none focus:border-primary/50"
+                              className={cn(
+                                "flex-1 text-xs border rounded px-2 py-1 outline-none focus:border-primary/50",
+                                (isCorrectSingle || isCorrectMulti)
+                                  ? "bg-green-500/5 border-green-400/50"
+                                  : "bg-muted/30 border-border"
+                              )}
                               value={opt}
                               onChange={(e) => { const no = [...q.options]; no[oi] = e.target.value; updateQ(qi, { options: no }) }}
                               placeholder={`Вариант ${oi + 1}...`}
                             />
+                            {/* Кнопка "правильный" справа */}
+                            {q.answerType === "single" && (
+                              <button
+                                title={isCorrectSingle ? "Правильный ответ" : "Отметить как правильный"}
+                                onClick={() => updateQ(qi, { correctOptions: isCorrectSingle ? [] : [oi] })}
+                                className={cn(
+                                  "shrink-0 px-2 py-0.5 rounded text-[11px] font-medium border transition-all",
+                                  isCorrectSingle
+                                    ? "bg-green-500 border-green-500 text-white"
+                                    : "border-border text-muted-foreground/40 hover:border-green-400 hover:text-green-600"
+                                )}
+                              >✓</button>
+                            )}
+                            {q.answerType === "multiple" && (
+                              <button
+                                title={isCorrectMulti ? "Правильный (снять)" : "Отметить как правильный"}
+                                onClick={() => {
+                                  const cur = q.correctOptions || []
+                                  updateQ(qi, { correctOptions: cur.includes(oi) ? cur.filter((x) => x !== oi) : [...cur, oi] })
+                                }}
+                                className={cn(
+                                  "shrink-0 px-2 py-0.5 rounded text-[11px] font-medium border transition-all",
+                                  isCorrectMulti
+                                    ? "bg-green-500 border-green-500 text-white"
+                                    : "border-border text-muted-foreground/40 hover:border-green-400 hover:text-green-600"
+                                )}
+                              >✓</button>
+                            )}
                             <button
                               className="text-muted-foreground/40 hover:text-destructive shrink-0"
                               onClick={() => {
@@ -1600,23 +1619,18 @@ function TaskEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: 
                         )
                       })}
                       <button
-                        className="text-xs text-primary/70 hover:text-primary flex items-center gap-1 pl-5"
+                        className="text-xs text-primary/70 hover:text-primary flex items-center gap-1"
                         onClick={() => updateQ(qi, { options: [...q.options, ""] })}
                       >
                         <Plus className="w-3 h-3" />{q.answerType === "sort" ? "Добавить пункт" : "Добавить вариант"}
                       </button>
                       {q.answerType === "sort" && q.options.length > 0 && (
-                        <p className="text-[11px] text-muted-foreground/50 pl-5">Текущий порядок считается правильным</p>
-                      )}
-                      {(q.answerType === "single" || q.answerType === "multiple") && (
-                        <p className="text-[11px] text-muted-foreground/50 pl-5">
-                          {q.answerType === "single" ? "◉ — отметьте один правильный ответ" : "☑ — отметьте все правильные ответы"}
-                        </p>
+                        <p className="text-[11px] text-muted-foreground/50">Текущий порядок считается правильным</p>
                       )}
                     </div>
                   )}
 
-                  {/* Да/Нет: выбор правильного ответа */}
+                  {/* Да/Нет */}
                   {q.answerType === "yesno" && (
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-muted-foreground">Правильный:</span>
@@ -1627,7 +1641,7 @@ function TaskEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: 
                           className={cn(
                             "px-3 py-0.5 rounded text-xs font-medium border transition-all",
                             q.correctYesNo === v
-                              ? v === "yes" ? "bg-green-500/15 border-green-500 text-green-600" : "bg-destructive/15 border-destructive text-destructive"
+                              ? v === "yes" ? "bg-green-500 border-green-500 text-white" : "bg-destructive border-destructive text-white"
                               : "border-border text-muted-foreground hover:border-primary/40"
                           )}
                         >{v === "yes" ? "Да" : "Нет"}</button>
@@ -1635,7 +1649,7 @@ function TaskEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: 
                     </div>
                   )}
 
-                  {/* Баллы — для вопросов с правильным ответом */}
+                  {/* Баллы */}
                   {hasCorrect && (
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-muted-foreground">Баллы:</span>
@@ -1644,14 +1658,19 @@ function TaskEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: 
                         min={0}
                         max={999}
                         className="w-16 text-xs border border-border rounded px-2 py-0.5 outline-none bg-background focus:border-primary/50 text-center"
-                        value={points === 0 ? "" : points}
-                        placeholder="0"
+                        value={points}
                         onChange={(e) => {
                           const v = parseInt(e.target.value)
                           updateQ(qi, { points: isNaN(v) || v < 0 ? 0 : v })
                         }}
                       />
-                      <span className="text-xs text-muted-foreground/50">за правильный ответ</span>
+                      <button
+                        className="text-[11px] text-primary/60 hover:text-primary underline underline-offset-2"
+                        onClick={() => onUpdate({ questions: distributePoints(block.questions) })}
+                        title="Распределить 100 баллов равномерно"
+                      >
+                        сбросить (÷{block.questions.length})
+                      </button>
                     </div>
                   )}
                 </div>
@@ -1659,12 +1678,7 @@ function TaskEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: 
             </div>
           )
         })}
-        <Button variant="ghost" size="sm" className="text-xs h-7" onClick={() => {
-          const nq = [...block.questions, { id: `q-${Date.now()}`, text: "", answerType: "short" as const, required: false, options: [] }]
-          onUpdate({ questions: nq })
-          // Сразу раскрываем новый вопрос
-          setTimeout(() => setExpandedIdx(nq.length - 1), 0)
-        }}>
+        <Button variant="ghost" size="sm" className="text-xs h-7" onClick={addQuestion}>
           <Plus className="w-3 h-3 mr-1" />Добавить вопрос
         </Button>
       </div>
