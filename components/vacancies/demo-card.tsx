@@ -1593,13 +1593,25 @@ const QUICK_EMOJIS = ["😀", "👋", "🐱", "🍎", "🏠", "⚽", "📝", "�
 /* ──── Emoji Picker (big, categorized) ──── */
 function EmojiPicker({ onSelect }: { onSelect: (emoji: string) => void }) {
   const [open, setOpen] = useState(false)
+  const [openUpward, setOpenUpward] = useState(false)
+  const buttonRef = useRef<HTMLButtonElement>(null)
   const categories = Object.entries(EMOJI_DATA)
+
+  const handleOpen = () => {
+    if (!open && buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect()
+      const spaceBelow = window.innerHeight - rect.bottom
+      const spaceAbove = rect.top
+      setOpenUpward(spaceBelow < 360 && spaceAbove > spaceBelow)
+    }
+    setOpen(!open)
+  }
 
   return (
     <div className="relative">
-      <button className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground" title="Эмодзи" onClick={() => setOpen(!open)}><Smile className="w-3.5 h-3.5" /></button>
+      <button ref={buttonRef} className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground" title="Эмодзи" onClick={handleOpen}><Smile className="w-3.5 h-3.5" /></button>
       {open && (
-        <div className="absolute top-8 right-0 z-50 bg-popover border border-border rounded-xl shadow-xl p-3 w-[400px] max-h-[350px] overflow-y-auto">
+        <div className={cn("absolute right-0 z-50 bg-popover border border-border rounded-xl shadow-xl p-3 w-[400px] max-h-[350px] overflow-y-auto", openUpward ? "bottom-8" : "top-8")}>
           {/* Быстрый доступ */}
           <div className="flex gap-0.5 mb-2 pb-2 border-b border-border">
             {QUICK_EMOJIS.map((e) => (
@@ -1625,14 +1637,26 @@ function EmojiPicker({ onSelect }: { onSelect: (emoji: string) => void }) {
 /* ──── Lesson Icon Picker (two tabs: emoji + lucide) ──── */
 function LessonIconPicker({ current, onSelect }: { current: string; onSelect: (v: string) => void }) {
   const [open, setOpen] = useState(false)
+  const [openUpward, setOpenUpward] = useState(false)
   const [tab, setTab] = useState<"emoji" | "icons">("emoji")
+  const buttonRef = useRef<HTMLButtonElement>(null)
   const categories = Object.entries(EMOJI_DATA)
+
+  const handleOpen = () => {
+    if (!open && buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect()
+      const spaceBelow = window.innerHeight - rect.bottom
+      const spaceAbove = rect.top
+      setOpenUpward(spaceBelow < 360 && spaceAbove > spaceBelow)
+    }
+    setOpen(!open)
+  }
 
   return (
     <div className="relative">
-      <button className="text-2xl hover:bg-muted rounded-lg p-1 transition-colors" onClick={() => setOpen(!open)}>{current}</button>
+      <button ref={buttonRef} className="text-2xl hover:bg-muted rounded-lg p-1 transition-colors" onClick={handleOpen}>{current}</button>
       {open && (
-        <div className="absolute top-12 left-0 z-50 bg-popover border border-border rounded-xl shadow-xl w-[400px] overflow-hidden">
+        <div className={cn("absolute left-0 z-50 bg-popover border border-border rounded-xl shadow-xl w-[400px] overflow-hidden", openUpward ? "bottom-12" : "top-12")}>
           {/* Tabs */}
           <div className="flex border-b border-border">
             <button className={cn("flex-1 py-2 text-xs font-medium transition-colors", tab === "emoji" ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground")} onClick={() => setTab("emoji")}>😊 Эмодзи</button>
