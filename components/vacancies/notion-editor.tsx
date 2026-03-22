@@ -1400,6 +1400,24 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
     ro.observe(el)
     return () => ro.disconnect()
   }, [])
+  const audioContainerRef = useRef<HTMLDivElement>(null)
+  const [audioHeight, setAudioHeight] = useState<number>(54)
+  useEffect(() => {
+    const el = audioContainerRef.current
+    if (!el) return
+    const ro = new ResizeObserver(() => setAudioHeight(el.offsetHeight))
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+  const fileContainerRef = useRef<HTMLDivElement>(null)
+  const [fileHeight, setFileHeight] = useState<number>(64)
+  useEffect(() => {
+    const el = fileContainerRef.current
+    if (!el) return
+    const ro = new ResizeObserver(() => setFileHeight(el.offsetHeight))
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
 
   switch (block.type) {
     case "image": {
@@ -1565,31 +1583,36 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
           </div>
           <LayoutPicker value={layout} onChange={(v) => onUpdate({ audioLayout: v.replace("image", "audio") as Block["audioLayout"] })} prefix="audio" />
           {isSet ? (
-            <div className={cn("flex gap-3 items-start", isSide ? (layout === "audio-left" ? "flex-row" : "flex-row-reverse") : "flex-col")}>
+            <div className={cn("flex gap-3", isSide ? (layout === "audio-left" ? "flex-row" : "flex-row-reverse") : "flex-col")}>
               <div className={cn("flex flex-col gap-1", isSide ? "w-1/2 shrink-0" : "w-full")}>
-                <input
-                  className="text-xs text-muted-foreground italic bg-transparent outline-none border-b border-border/40 pb-0.5 focus:border-primary/40 mb-1"
-                  value={block.audioTitleTop || ""}
-                  onChange={(e) => onUpdate({ audioTitleTop: e.target.value })}
+                <MiniRichEditor
+                  html={block.audioTitleTop || ""}
+                  onChange={(v) => onUpdate({ audioTitleTop: v })}
                   placeholder="Подпись сверху..."
+                  singleLine
                   maxLength={42}
+                  className="mb-1"
                 />
                 {block.audioTitle && <p className="text-xs font-medium text-foreground">{block.audioTitle}</p>}
-                <audio src={block.audioUrl} controls className="w-full" />
-                <input
-                  className="text-xs text-muted-foreground italic bg-transparent outline-none border-b border-border/40 pb-0.5 focus:border-primary/40 mt-1"
-                  value={block.audioCaption || ""}
-                  onChange={(e) => onUpdate({ audioCaption: e.target.value })}
+                <div ref={audioContainerRef}>
+                  <audio src={block.audioUrl} controls className="w-full" />
+                </div>
+                <MiniRichEditor
+                  html={block.audioCaption || ""}
+                  onChange={(v) => onUpdate({ audioCaption: v })}
                   placeholder="Подпись снизу..."
+                  singleLine
                   maxLength={42}
+                  className="mt-1"
                 />
               </div>
               {isSide && (
-                <textarea
-                  className="flex-1 text-sm bg-transparent outline-none resize-none min-h-[60px] leading-relaxed placeholder:text-muted-foreground/40"
-                  value={block.content}
-                  onChange={(e) => onUpdate({ content: e.target.value })}
+                <MiniRichEditor
+                  html={block.content || ""}
+                  onChange={(v) => onUpdate({ content: v })}
                   placeholder="Текст рядом с аудио..."
+                  maxHeight={audioHeight}
+                  className="flex-1 text-sm not-italic"
                 />
               )}
             </div>
@@ -1632,28 +1655,39 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
           </div>
           <LayoutPicker value={layout} onChange={(v) => onUpdate({ fileLayout: v.replace("image", "file") as Block["fileLayout"] })} prefix="file" />
           {isSet ? (
-            <div className={cn("flex gap-3 items-start", isSide ? (layout === "file-left" ? "flex-row" : "flex-row-reverse") : "flex-col")}>
+            <div className={cn("flex gap-3", isSide ? (layout === "file-left" ? "flex-row" : "flex-row-reverse") : "flex-col")}>
               <div className={cn("flex flex-col gap-1", isSide ? "w-1/2 shrink-0" : "w-full")}>
-                <div className="flex items-center gap-3 p-3 bg-background rounded-lg border border-border">
+                <MiniRichEditor
+                  html={block.fileTitleTop || ""}
+                  onChange={(v) => onUpdate({ fileTitleTop: v })}
+                  placeholder="Подпись сверху..."
+                  singleLine
+                  maxLength={42}
+                  className="mb-1"
+                />
+                <div ref={fileContainerRef} className="flex items-center gap-3 p-3 bg-background rounded-lg border border-border">
                   <FileText className="w-8 h-8 text-primary shrink-0" />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate">{block.fileName || "Файл"}</p>
                     <a href={block.fileUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">Открыть</a>
                   </div>
                 </div>
-                <input
-                  className="text-xs text-muted-foreground bg-transparent outline-none border-b border-border/40 pb-0.5 focus:border-primary/40 mt-0.5"
-                  value={block.imageCaption || ""}
-                  onChange={(e) => onUpdate({ imageCaption: e.target.value })}
-                  placeholder="Добавить подпись..."
+                <MiniRichEditor
+                  html={block.fileCaption || ""}
+                  onChange={(v) => onUpdate({ fileCaption: v })}
+                  placeholder="Подпись снизу..."
+                  singleLine
+                  maxLength={42}
+                  className="mt-1"
                 />
               </div>
               {isSide && (
-                <textarea
-                  className="flex-1 text-sm bg-transparent outline-none resize-none min-h-[60px] leading-relaxed placeholder:text-muted-foreground/40"
-                  value={block.content}
-                  onChange={(e) => onUpdate({ content: e.target.value })}
+                <MiniRichEditor
+                  html={block.content || ""}
+                  onChange={(v) => onUpdate({ content: v })}
                   placeholder="Текст рядом с файлом..."
+                  maxHeight={fileHeight}
+                  className="flex-1 text-sm not-italic"
                 />
               )}
             </div>

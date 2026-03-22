@@ -37,6 +37,8 @@ export interface Block {
   fileUrl: string
   fileName: string
   fileLayout?: FileLayout
+  fileTitleTop: string
+  fileCaption: string
   infoStyle: "info" | "warning" | "success" | "error"
   infoColor?: string
   infoIcon?: string
@@ -108,7 +110,7 @@ export function createBlock(type: BlockType): Block {
     imageUrl: "", imageLayout: "full", imageCaption: "", imageTitleTop: "",
     videoUrl: "", videoLayout: "full", videoTitleTop: "", videoCaption: "",
     audioUrl: "", audioTitle: "", audioLayout: "full", audioTitleTop: "", audioCaption: "",
-    fileUrl: "", fileName: "", fileLayout: "full",
+    fileUrl: "", fileName: "", fileLayout: "full", fileTitleTop: "", fileCaption: "",
     infoStyle: "info", infoColor: "", infoIcon: "", infoSize: "m",
     buttonText: "Подробнее", buttonUrl: "", buttonVariant: "primary",
     taskDescription: "", questions: type === "task" ? [defaultQuestion()] : [],
