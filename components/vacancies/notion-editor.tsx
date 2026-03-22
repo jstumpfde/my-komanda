@@ -841,6 +841,8 @@ interface NotionTextBlockProps {
 function NotionTextBlock({ block, editorRef, isHovered, onSync, onKeyDown }: NotionTextBlockProps) {
   const [showEmoji, setShowEmoji] = useState(false)
   const [showTags, setShowTags] = useState(false)
+  const [emojiOpenUpward, setEmojiOpenUpward] = useState(false)
+  const emojiBtnRef = useRef<HTMLButtonElement>(null)
   const savedRangeRef = useRef<Range | null>(null)
 
   // Save selection before popup opens (so we don't lose cursor)
@@ -915,7 +917,17 @@ function NotionTextBlock({ block, editorRef, isHovered, onSync, onKeyDown }: Not
         {/* Emoji button */}
         <div className="relative" data-text-popup>
           <button
-            onMouseDown={(e) => { e.preventDefault(); saveSelection(); setShowTags(false); setShowEmoji((v) => !v) }}
+            ref={emojiBtnRef}
+            onMouseDown={(e) => {
+              e.preventDefault()
+              saveSelection()
+              setShowTags(false)
+              if (!showEmoji && emojiBtnRef.current) {
+                const rect = emojiBtnRef.current.getBoundingClientRect()
+                setEmojiOpenUpward(window.innerHeight - rect.bottom < 360)
+              }
+              setShowEmoji((v) => !v)
+            }}
             title="Вставить эмодзи"
             className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors text-sm"
           >
@@ -924,12 +936,15 @@ function NotionTextBlock({ block, editorRef, isHovered, onSync, onKeyDown }: Not
           {showEmoji && (
             <div
               data-text-popup
-              className="absolute bottom-full right-0 mb-1 z-50 bg-popover border border-border rounded-xl shadow-xl p-2"
-              style={{ width: "calc(8 * 2.25rem + 1rem)" }}
+              className={cn(
+                "absolute right-0 z-50 bg-popover border border-border rounded-xl shadow-xl p-2",
+                emojiOpenUpward ? "bottom-full mb-1" : "top-full mt-1"
+              )}
+              style={{ width: "calc(9 * 2.25rem + 1rem)" }}
             >
               {/* Быстрый доступ */}
-              <div className="grid grid-cols-8 gap-0.5 pb-1.5 mb-1.5 border-b border-border">
-                {["😀","👋","🐱","🍎","🏠","⚽","📝","🚫"].map((e) => (
+              <div className="grid grid-cols-9 gap-0.5 pb-1.5 mb-1.5 border-b border-border">
+                {QUICK_ACCESS_EMOJIS.map((e) => (
                   <button
                     key={`qa-${e}`}
                     onMouseDown={(ev) => { ev.preventDefault(); restoreSelectionAndInsert(e) }}
@@ -939,7 +954,7 @@ function NotionTextBlock({ block, editorRef, isHovered, onSync, onKeyDown }: Not
                   </button>
                 ))}
               </div>
-              <div className="grid grid-cols-8 gap-0.5 max-h-52 overflow-y-auto">
+              <div className="grid grid-cols-9 gap-0.5 max-h-52 overflow-y-auto">
                 {QUICK_INSERT_EMOJIS.map((e) => (
                   <button
                     key={e}
