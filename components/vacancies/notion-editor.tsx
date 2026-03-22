@@ -2004,7 +2004,6 @@ const INFO_PRESET_COLORS = [
   { hex: "#eab308", label: "Жёлтый" },
   { hex: "#22c55e", label: "Зелёный" },
   { hex: "#3b82f6", label: "Синий" },
-  { hex: "#000000", label: "Чёрный" },
   { hex: "#6b7280", label: "Серый" },
 ]
 
@@ -2268,19 +2267,18 @@ function InfoBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: Partia
         >
           {/* Выбор иконки */}
           <p className="text-xs font-medium text-muted-foreground mb-2">Иконка</p>
-          <div className="grid grid-cols-6 gap-1 mb-3">
+          <div className="grid grid-cols-6 gap-2 mb-4">
             {INFO_ICONS.map(({ symbol, label }) => (
               <button
                 key={symbol}
                 title={label}
                 onClick={() => onUpdate({ infoIcon: symbol })}
-                className={cn(
-                  "flex items-center justify-center rounded-lg transition-all leading-none font-bold",
+                className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg transition-all hover:scale-105"
+                style={
                   activeIcon === symbol
-                    ? "bg-primary/10 ring-1 ring-primary"
-                    : "hover:bg-muted"
-                )}
-                style={{ fontSize: 22, width: 40, height: 40, color: activeColor }}
+                    ? { backgroundColor: activeColor, color: "#fff" }
+                    : { backgroundColor: activeColor + "22", color: activeColor }
+                }
               >
                 {symbol}
               </button>
@@ -2289,31 +2287,21 @@ function InfoBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: Partia
 
           {/* Пресеты цветов */}
           <p className="text-xs font-medium text-muted-foreground mb-2">Цвет</p>
-          <div className="flex items-end gap-1.5 flex-wrap">
+          <div className="flex gap-2 flex-wrap">
             {INFO_PRESET_COLORS.map(({ hex, label }) => (
               <button
                 key={hex}
                 title={label}
                 onClick={() => applyColor(hex)}
                 className={cn(
-                  "w-8 h-8 rounded-full border-2 transition-all flex-shrink-0",
+                  "w-10 h-10 rounded-full transition-all hover:scale-105",
                   activeColor.toLowerCase() === hex
-                    ? "ring-2 ring-offset-2 ring-foreground/40 border-transparent scale-110"
-                    : "border-transparent hover:scale-105"
+                    ? "ring-2 ring-offset-2 ring-foreground/50 scale-110"
+                    : ""
                 )}
                 style={{ backgroundColor: hex }}
               />
             ))}
-            {/* Произвольный цвет */}
-            <label title="Свой цвет" className="flex flex-col items-center gap-0.5 cursor-pointer flex-shrink-0">
-              <input
-                type="color"
-                value={activeColor}
-                onChange={(e) => applyColor(e.target.value)}
-                className="w-8 h-8 rounded cursor-pointer border border-border p-0.5 bg-transparent"
-              />
-              <span className="text-[9px] text-muted-foreground leading-none">Свой</span>
-            </label>
           </div>
         </div>
       )}
