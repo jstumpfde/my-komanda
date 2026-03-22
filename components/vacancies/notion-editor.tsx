@@ -1436,6 +1436,8 @@ function TaskEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: 
         {block.questions.map((q, qi) => {
           const isEditing = editingIdx === qi
           const hasOptions = q.answerType === "single" || q.answerType === "multiple" || q.answerType === "sort"
+          const hasCorrect = q.answerType !== "short" && q.answerType !== "long" && q.answerType !== "text" && q.answerType !== "video"
+          const points = q.points ?? 0
           return (
             <div key={q.id} className="bg-background rounded-lg border border-border p-2.5 space-y-2">
               {/* Строка 1: ↑↓ + номер + текст вопроса + * + ✕ */}
@@ -1508,29 +1510,110 @@ function TaskEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: 
               {/* Варианты ответов (single / multiple / sort) */}
               {hasOptions && (
                 <div className="pl-8 space-y-1.5">
-                  {q.options.map((opt, oi) => (
-                    <div key={oi} className="flex items-center gap-1.5">
-                      <span className="text-xs text-muted-foreground w-4 shrink-0">
-                        {q.answerType === "sort" ? `${oi + 1}.` : q.answerType === "single" ? "◉" : "☑"}
-                      </span>
-                      <input
-                        className="flex-1 text-xs bg-muted/30 border border-border rounded px-2 py-1 outline-none focus:border-primary/50"
-                        value={opt}
-                        onChange={(e) => { const no = [...q.options]; no[oi] = e.target.value; updateQ(qi, { options: no }) }}
-                        placeholder={`Вариант ${oi + 1}...`}
-                      />
-                      <button
-                        className="text-muted-foreground/40 hover:text-destructive shrink-0"
-                        onClick={() => updateQ(qi, { options: q.options.filter((_, j) => j !== oi) })}
-                      ><X className="w-3 h-3" /></button>
-                    </div>
-                  ))}
+                  {q.options.map((opt, oi) => {
+                    const isCorrectSingle = q.answerType === "single" && (q.correctOptions?.[0] === oi)
+                    const isCorrectMulti = q.answerType === "multiple" && (q.correctOptions?.includes(oi) ?? false)
+                    const isCorrectSort = q.answerType === "sort"
+                    return (
+                      <div key={oi} className="flex items-center gap-1.5">
+                        {/* Маркер правильного ответа */}
+                        {q.answerType === "single" && (
+                          <button
+                            title="Правильный ответ"
+                            onClick={() => updateQ(qi, { correctOptions: [oi] })}
+                            className={cn(
+                              "w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 transition-all",
+                              isCorrectSingle ? "border-green-500" : "border-muted-foreground/30 hover:border-green-400"
+                            )}
+                          >
+                            {isCorrectSingle && <div className="w-2 h-2 rounded-full bg-green-500" />}
+                          </button>
+                        )}
+                        {q.answerType === "multiple" && (
+                          <button
+                            title="Правильный ответ"
+                            onClick={() => {
+                              const cur = q.correctOptions || []
+                              const next = cur.includes(oi) ? cur.filter((x) => x !== oi) : [...cur, oi]
+                              updateQ(qi, { correctOptions: next })
+                            }}
+                            className={cn(
+                              "w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-all",
+                              isCorrectMulti ? "border-green-500 bg-green-500" : "border-muted-foreground/30 hover:border-green-400"
+                            )}
+                          >
+                            {isCorrectMulti && <span className="text-white text-[9px] leading-none">✓</span>}
+                          </button>
+                        )}
+                        {q.answerType === "sort" && (
+                          <span className="text-xs text-muted-foreground w-4 shrink-0 text-center">{oi + 1}.</span>
+                        )}
+                        <input
+                          className="flex-1 text-xs bg-muted/30 border border-border rounded px-2 py-1 outline-none focus:border-primary/50"
+                          value={opt}
+                          onChange={(e) => { const no = [...q.options]; no[oi] = e.target.value; updateQ(qi, { options: no }) }}
+                          placeholder={`Вариант ${oi + 1}...`}
+                        />
+                        <button
+                          className="text-muted-foreground/40 hover:text-destructive shrink-0"
+                          onClick={() => {
+                            const newOpts = q.options.filter((_, j) => j !== oi)
+                            // Пересчитываем correctOptions при удалении варианта
+                            let newCorrect = q.correctOptions?.filter((c) => c !== oi).map((c) => c > oi ? c - 1 : c)
+                            updateQ(qi, { options: newOpts, correctOptions: newCorrect })
+                          }}
+                        ><X className="w-3 h-3" /></button>
+                      </div>
+                    )
+                  })}
                   <button
                     className="text-xs text-primary/70 hover:text-primary flex items-center gap-1 pl-5"
                     onClick={() => updateQ(qi, { options: [...q.options, ""] })}
                   >
                     <Plus className="w-3 h-3" />{q.answerType === "sort" ? "Добавить пункт" : "Добавить вариант"}
                   </button>
+                  {q.answerType === "sort" && q.options.length > 0 && (
+                    <p className="text-[11px] text-muted-foreground/50 pl-5">Текущий порядок считается правильным</p>
+                  )}
+                </div>
+              )}
+
+              {/* Да/Нет: выбор правильного ответа */}
+              {q.answerType === "yesno" && (
+                <div className="pl-8 flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">Правильный:</span>
+                  {(["yes", "no"] as const).map((v) => (
+                    <button
+                      key={v}
+                      onClick={() => updateQ(qi, { correctYesNo: q.correctYesNo === v ? undefined : v })}
+                      className={cn(
+                        "px-3 py-0.5 rounded text-xs font-medium border transition-all",
+                        q.correctYesNo === v
+                          ? v === "yes" ? "bg-green-500/15 border-green-500 text-green-600" : "bg-destructive/15 border-destructive text-destructive"
+                          : "border-border text-muted-foreground hover:border-primary/40"
+                      )}
+                    >{v === "yes" ? "Да" : "Нет"}</button>
+                  ))}
+                </div>
+              )}
+
+              {/* Баллы — для вопросов с правильным ответом */}
+              {hasCorrect && (
+                <div className="pl-8 flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">Баллы:</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={999}
+                    className="w-16 text-xs border border-border rounded px-2 py-0.5 outline-none bg-background focus:border-primary/50 text-center"
+                    value={points === 0 ? "" : points}
+                    placeholder="0"
+                    onChange={(e) => {
+                      const v = parseInt(e.target.value)
+                      updateQ(qi, { points: isNaN(v) || v < 0 ? 0 : v })
+                    }}
+                  />
+                  <span className="text-xs text-muted-foreground/50">за правильный ответ</span>
                 </div>
               )}
             </div>
@@ -2562,7 +2645,7 @@ function EmojiBtn({ current, onSelect }: { current: string; onSelect: (v: string
 
 function TaskPreviewBlock({ block }: { block: Block }) {
   const [yesno, setYesno] = useState<Record<string, "yes" | "no" | null>>({})
-  const [single, setSingle] = useState<Record<string, number>>({})
+  const [single, setSingle] = useState<Record<string, number | null>>({})
   const [multi, setMulti] = useState<Record<string, Set<number>>>({})
   const [sortItems, setSortItems] = useState<Record<string, string[]>>(() => {
     const init: Record<string, string[]> = {}
@@ -2571,6 +2654,10 @@ function TaskPreviewBlock({ block }: { block: Block }) {
   })
   const [dragSortId, setDragSortId] = useState<string | null>(null)
   const [dragSortIdx, setDragSortIdx] = useState<number | null>(null)
+  // Отслеживаем, по каким вопросам кандидат уже ответил
+  const [answered, setAnswered] = useState<Record<string, boolean>>({})
+
+  const markAnswered = (qid: string) => setAnswered((p) => ({ ...p, [qid]: true }))
 
   const moveSort = (qid: string, from: number, to: number) => {
     setSortItems((prev) => {
@@ -2581,6 +2668,26 @@ function TaskPreviewBlock({ block }: { block: Block }) {
     })
   }
 
+  // Проверка правильности ответа
+  const checkYesno = (q: import("@/lib/course-types").Question): boolean | null => {
+    if (!q.correctYesNo || !answered[q.id]) return null
+    return yesno[q.id] === q.correctYesNo
+  }
+  const checkSingle = (q: import("@/lib/course-types").Question): boolean | null => {
+    if (!q.correctOptions?.length || !answered[q.id] || single[q.id] == null) return null
+    return q.correctOptions[0] === single[q.id]
+  }
+  const checkMulti = (q: import("@/lib/course-types").Question): boolean | null => {
+    if (!q.correctOptions?.length || !answered[q.id]) return null
+    const chosen = Array.from(multi[q.id] || []).sort().join(",")
+    const correct = [...q.correctOptions].sort().join(",")
+    return chosen === correct
+  }
+
+  // Цвет подсветки
+  const scoreColor = (ok: boolean | null) =>
+    ok === null ? "" : ok ? "border-green-500 bg-green-500/5" : "border-red-400 bg-red-400/5"
+
   return (
     <div className="rounded-xl border border-border p-4 space-y-4">
       {block.taskTitle?.trim() && (
@@ -2589,122 +2696,201 @@ function TaskPreviewBlock({ block }: { block: Block }) {
       {block.taskDescription?.trim() && (
         <p className="text-sm text-muted-foreground">{block.taskDescription}</p>
       )}
-      {block.questions.map((q, i) => (
-        <div key={q.id} className="space-y-2">
-          <p className="text-sm font-medium">
-            {i + 1}. {q.text}
-            {q.required && <span className="text-destructive ml-0.5">*</span>}
-          </p>
-          {/* Короткий текст */}
-          {q.answerType === "short" && (
-            <input
-              className="w-full border border-border rounded-lg px-3 h-9 text-sm bg-background outline-none focus:border-primary/50 placeholder:text-muted-foreground/40"
-              placeholder="Ответ кандидата..."
-            />
-          )}
-          {/* Длинный текст */}
-          {q.answerType === "long" && (
-            <textarea
-              rows={3}
-              className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background outline-none focus:border-primary/50 resize-y placeholder:text-muted-foreground/40"
-              placeholder="Развёрнутый ответ кандидата..."
-            />
-          )}
-          {/* Да/Нет */}
-          {q.answerType === "yesno" && (
-            <div className="flex gap-2">
-              {(["yes", "no"] as const).map((v) => (
-                <button
-                  key={v}
-                  onClick={() => setYesno((p) => ({ ...p, [q.id]: p[q.id] === v ? null : v }))}
-                  className={cn(
-                    "px-6 py-2 rounded-lg text-sm font-medium border transition-all",
-                    yesno[q.id] === v
-                      ? v === "yes" ? "bg-green-500 border-green-500 text-white" : "bg-destructive border-destructive text-white"
-                      : "border-border hover:border-primary/50"
-                  )}
-                >{v === "yes" ? "Да" : "Нет"}</button>
-              ))}
+      {block.questions.map((q, i) => {
+        const yesnoResult = q.answerType === "yesno" ? checkYesno(q) : null
+        const singleResult = q.answerType === "single" ? checkSingle(q) : null
+        const multiResult = q.answerType === "multiple" ? checkMulti(q) : null
+        const hasScoring = (q.points ?? 0) > 0
+        return (
+          <div key={q.id} className={cn("space-y-2 rounded-lg p-2 -m-2 border transition-all",
+            q.answerType === "yesno" ? scoreColor(yesnoResult) :
+            q.answerType === "single" ? scoreColor(singleResult) :
+            q.answerType === "multiple" ? scoreColor(multiResult) :
+            "border-transparent"
+          )}>
+            <div className="flex items-start justify-between gap-2">
+              <p className="text-sm font-medium">
+                {i + 1}. {q.text}
+                {q.required && <span className="text-destructive ml-0.5">*</span>}
+              </p>
+              {hasScoring && (
+                <span className={cn(
+                  "text-xs shrink-0 px-1.5 py-0.5 rounded font-medium",
+                  (q.answerType === "yesno" && yesnoResult === true) ||
+                  (q.answerType === "single" && singleResult === true) ||
+                  (q.answerType === "multiple" && multiResult === true)
+                    ? "text-green-600 bg-green-500/10"
+                    : (q.answerType === "yesno" && yesnoResult === false) ||
+                      (q.answerType === "single" && singleResult === false) ||
+                      (q.answerType === "multiple" && multiResult === false)
+                      ? "text-red-500 bg-red-400/10"
+                      : "text-muted-foreground/50 bg-muted/50"
+                )}>{q.points} б.</span>
+              )}
             </div>
-          )}
-          {/* Один из списка */}
-          {q.answerType === "single" && q.options.length > 0 && (
-            <div className="space-y-1.5">
-              {q.options.map((opt, oi) => (
-                <label key={oi} className="flex items-center gap-2.5 cursor-pointer group">
-                  <div
-                    onClick={() => setSingle((p) => ({ ...p, [q.id]: oi }))}
-                    className={cn(
-                      "w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 transition-all",
-                      single[q.id] === oi ? "border-primary" : "border-border group-hover:border-primary/50"
-                    )}
-                  >
-                    {single[q.id] === oi && <div className="w-2 h-2 rounded-full bg-primary" />}
-                  </div>
-                  <span className="text-sm">{opt}</span>
-                </label>
-              ))}
-            </div>
-          )}
-          {/* Несколько из списка */}
-          {q.answerType === "multiple" && q.options.length > 0 && (
-            <div className="space-y-1.5">
-              {q.options.map((opt, oi) => {
-                const checked = multi[q.id]?.has(oi)
-                return (
-                  <label key={oi} className="flex items-center gap-2.5 cursor-pointer group">
-                    <div
-                      onClick={() => setMulti((p) => {
-                        const s = new Set(p[q.id] || [])
-                        checked ? s.delete(oi) : s.add(oi)
-                        return { ...p, [q.id]: s }
-                      })}
+            {/* Короткий текст */}
+            {q.answerType === "short" && (
+              <input
+                className="w-full border border-border rounded-lg px-3 h-9 text-sm bg-background outline-none focus:border-primary/50 placeholder:text-muted-foreground/40"
+                placeholder="Ответ кандидата..."
+              />
+            )}
+            {/* Длинный текст */}
+            {q.answerType === "long" && (
+              <textarea
+                rows={3}
+                className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background outline-none focus:border-primary/50 resize-y placeholder:text-muted-foreground/40"
+                placeholder="Развёрнутый ответ кандидата..."
+              />
+            )}
+            {/* Да/Нет */}
+            {q.answerType === "yesno" && (
+              <div className="flex gap-2">
+                {(["yes", "no"] as const).map((v) => {
+                  const isSelected = yesno[q.id] === v
+                  const isCorrectAnswer = q.correctYesNo === v
+                  const showFeedback = answered[q.id] && isSelected && q.correctYesNo
+                  return (
+                    <button
+                      key={v}
+                      onClick={() => {
+                        setYesno((p) => ({ ...p, [q.id]: p[q.id] === v ? null : v }))
+                        markAnswered(q.id)
+                      }}
                       className={cn(
-                        "w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-all",
-                        checked ? "border-primary bg-primary" : "border-border group-hover:border-primary/50"
+                        "px-6 py-2 rounded-lg text-sm font-medium border transition-all",
+                        isSelected
+                          ? showFeedback
+                            ? isCorrectAnswer
+                              ? "bg-green-500 border-green-500 text-white"
+                              : "bg-red-500 border-red-500 text-white"
+                            : v === "yes"
+                              ? "bg-green-500 border-green-500 text-white"
+                              : "bg-destructive border-destructive text-white"
+                          : "border-border hover:border-primary/50"
                       )}
-                    >
-                      {checked && <span className="text-white text-[10px] leading-none">✓</span>}
+                    >{v === "yes" ? "Да" : "Нет"}</button>
+                  )
+                })}
+              </div>
+            )}
+            {/* Один из списка */}
+            {q.answerType === "single" && q.options.length > 0 && (
+              <div className="space-y-1.5">
+                {q.options.map((opt, oi) => {
+                  const isSelected = single[q.id] === oi
+                  const isCorrect = q.correctOptions?.[0] === oi
+                  const showFeedback = answered[q.id] && q.correctOptions?.length
+                  return (
+                    <label key={oi} className={cn(
+                      "flex items-center gap-2.5 cursor-pointer group rounded-lg px-2 py-1 -mx-2 transition-all",
+                      showFeedback && isSelected && isCorrect ? "text-green-600" :
+                      showFeedback && isSelected && !isCorrect ? "text-red-500" :
+                      showFeedback && !isSelected && isCorrect ? "text-green-600/50" : ""
+                    )}>
+                      <div
+                        onClick={() => {
+                          setSingle((p) => ({ ...p, [q.id]: oi }))
+                          markAnswered(q.id)
+                        }}
+                        className={cn(
+                          "w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 transition-all",
+                          showFeedback && isSelected && isCorrect ? "border-green-500" :
+                          showFeedback && isSelected && !isCorrect ? "border-red-500" :
+                          showFeedback && !isSelected && isCorrect ? "border-green-400/50" :
+                          isSelected ? "border-primary" : "border-border group-hover:border-primary/50"
+                        )}
+                      >
+                        {isSelected && (
+                          <div className={cn(
+                            "w-2 h-2 rounded-full",
+                            showFeedback && isCorrect ? "bg-green-500" :
+                            showFeedback && !isCorrect ? "bg-red-500" : "bg-primary"
+                          )} />
+                        )}
+                        {!isSelected && showFeedback && isCorrect && (
+                          <div className="w-2 h-2 rounded-full bg-green-400/40" />
+                        )}
+                      </div>
+                      <span className="text-sm">{opt}</span>
+                    </label>
+                  )
+                })}
+              </div>
+            )}
+            {/* Несколько из списка */}
+            {q.answerType === "multiple" && q.options.length > 0 && (
+              <div className="space-y-1.5">
+                {q.options.map((opt, oi) => {
+                  const checked = multi[q.id]?.has(oi)
+                  const isCorrect = q.correctOptions?.includes(oi)
+                  const showFeedback = answered[q.id] && q.correctOptions?.length
+                  return (
+                    <label key={oi} className={cn(
+                      "flex items-center gap-2.5 cursor-pointer group rounded-lg px-2 py-1 -mx-2 transition-all",
+                      showFeedback && checked && isCorrect ? "text-green-600" :
+                      showFeedback && checked && !isCorrect ? "text-red-500" :
+                      showFeedback && !checked && isCorrect ? "text-green-600/50" : ""
+                    )}>
+                      <div
+                        onClick={() => {
+                          setMulti((p) => {
+                            const s = new Set(p[q.id] || [])
+                            checked ? s.delete(oi) : s.add(oi)
+                            return { ...p, [q.id]: s }
+                          })
+                          markAnswered(q.id)
+                        }}
+                        className={cn(
+                          "w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-all",
+                          showFeedback && checked && isCorrect ? "border-green-500 bg-green-500" :
+                          showFeedback && checked && !isCorrect ? "border-red-500 bg-red-500" :
+                          showFeedback && !checked && isCorrect ? "border-green-400/50" :
+                          checked ? "border-primary bg-primary" : "border-border group-hover:border-primary/50"
+                        )}
+                      >
+                        {checked && <span className="text-white text-[10px] leading-none">✓</span>}
+                      </div>
+                      <span className="text-sm">{opt}</span>
+                    </label>
+                  )
+                })}
+              </div>
+            )}
+            {/* Расставить по порядку */}
+            {q.answerType === "sort" && (
+              <div className="space-y-1.5">
+                {(sortItems[q.id] || q.options).map((item, oi) => (
+                  <div
+                    key={`${q.id}-${oi}`}
+                    draggable
+                    onDragStart={() => { setDragSortId(q.id); setDragSortIdx(oi) }}
+                    onDragOver={(e) => { e.preventDefault() }}
+                    onDrop={() => {
+                      if (dragSortId === q.id && dragSortIdx !== null && dragSortIdx !== oi)
+                        moveSort(q.id, dragSortIdx, oi)
+                      setDragSortId(null); setDragSortIdx(null)
+                    }}
+                    className="flex items-center gap-2 border border-border rounded-lg px-3 py-2 bg-background cursor-grab active:cursor-grabbing hover:border-primary/40 transition-colors"
+                  >
+                    <GripVertical className="w-4 h-4 text-muted-foreground/40 shrink-0" />
+                    <span className="text-sm flex-1">{item}</span>
+                    {/* Мобильные кнопки ↑↓ */}
+                    <div className="flex gap-1 sm:hidden">
+                      <button onClick={() => oi > 0 && moveSort(q.id, oi, oi - 1)} className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted">
+                        <ArrowUp className="w-3 h-3" />
+                      </button>
+                      <button onClick={() => oi < (sortItems[q.id] || q.options).length - 1 && moveSort(q.id, oi, oi + 1)} className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted">
+                        <ArrowDown className="w-3 h-3" />
+                      </button>
                     </div>
-                    <span className="text-sm">{opt}</span>
-                  </label>
-                )
-              })}
-            </div>
-          )}
-          {/* Расставить по порядку */}
-          {q.answerType === "sort" && (
-            <div className="space-y-1.5">
-              {(sortItems[q.id] || q.options).map((item, oi) => (
-                <div
-                  key={`${q.id}-${oi}`}
-                  draggable
-                  onDragStart={() => { setDragSortId(q.id); setDragSortIdx(oi) }}
-                  onDragOver={(e) => { e.preventDefault() }}
-                  onDrop={() => {
-                    if (dragSortId === q.id && dragSortIdx !== null && dragSortIdx !== oi)
-                      moveSort(q.id, dragSortIdx, oi)
-                    setDragSortId(null); setDragSortIdx(null)
-                  }}
-                  className="flex items-center gap-2 border border-border rounded-lg px-3 py-2 bg-background cursor-grab active:cursor-grabbing hover:border-primary/40 transition-colors"
-                >
-                  <GripVertical className="w-4 h-4 text-muted-foreground/40 shrink-0" />
-                  <span className="text-sm flex-1">{item}</span>
-                  {/* Мобильные кнопки ↑↓ */}
-                  <div className="flex gap-1 sm:hidden">
-                    <button onClick={() => oi > 0 && moveSort(q.id, oi, oi - 1)} className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted">
-                      <ArrowUp className="w-3 h-3" />
-                    </button>
-                    <button onClick={() => oi < (sortItems[q.id] || q.options).length - 1 && moveSort(q.id, oi, oi + 1)} className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted">
-                      <ArrowDown className="w-3 h-3" />
-                    </button>
                   </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      ))}
+                ))}
+              </div>
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }

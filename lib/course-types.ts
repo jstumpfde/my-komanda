@@ -21,9 +21,12 @@ export interface Question {
   text: string
   answerType: QuestionAnswerType
   required?: boolean
-  options: string[]        // варианты для single/multiple/sort
-  // legacy fields (kept for backward compat)
-  correctOptions?: number[]
+  options: string[]          // варианты для single/multiple/sort
+  correctOptions?: number[]  // индексы правильных вариантов (single/multiple)
+  correctYesNo?: "yes" | "no" // правильный ответ для yesno
+  correctSort?: number[]     // правильный порядок для sort (индексы)
+  points?: number            // баллы за правильный ответ (0 = не учитывать)
+  // legacy fields
   textMatchMode?: "exact" | "ai"
   correctText?: string
   aiCriteria?: string
