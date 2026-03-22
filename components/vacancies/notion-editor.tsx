@@ -2669,7 +2669,7 @@ function EmojiBtn({ current, onSelect }: { current: string; onSelect: (v: string
   const [open, setOpen] = useState(false)
   const [activeCategory, setActiveCategory] = useState(Object.keys(CATEGORIES)[0])
   const [search, setSearch] = useState("")
-  const [pos, setPos] = useState<{ top?: number; bottom?: number; left: number } | null>(null)
+  const [pos, setPos] = useState<{ top?: number; bottom?: number; left: number; availH: number } | null>(null)
   const btnRef = useRef<HTMLButtonElement>(null)
   const searchRef = useRef<HTMLInputElement>(null)
 
@@ -2688,12 +2688,13 @@ function EmojiBtn({ current, onSelect }: { current: string; onSelect: (v: string
   const openPicker = () => {
     if (!btnRef.current) return
     const rect = btnRef.current.getBoundingClientRect()
-    const spaceBelow = window.innerHeight - rect.bottom
+    const spaceBelow = window.innerHeight - rect.bottom - 8
+    const spaceAbove = rect.top - 8
     const left = Math.min(rect.left, window.innerWidth - PICKER_WIDTH - 8)
-    if (spaceBelow < 400) {
-      setPos({ bottom: window.innerHeight - rect.top + 4, left })
+    if (spaceBelow >= 300 || spaceBelow >= spaceAbove) {
+      setPos({ top: rect.bottom + 4, left, availH: spaceBelow })
     } else {
-      setPos({ top: rect.bottom + 4, left })
+      setPos({ bottom: window.innerHeight - rect.top + 4, left, availH: spaceAbove })
     }
     setSearch("")
     setOpen(true)
@@ -2730,7 +2731,7 @@ function EmojiBtn({ current, onSelect }: { current: string; onSelect: (v: string
       {open && pos && typeof document !== "undefined" && (
         <div
           id="lesson-emoji-picker"
-          style={{ position: "fixed", top: pos.top, bottom: pos.bottom, left: pos.left, width: PICKER_WIDTH, zIndex: 9999, maxHeight: "min(560px, 90vh)" }}
+          style={{ position: "fixed", top: pos.top, bottom: pos.bottom, left: pos.left, width: PICKER_WIDTH, zIndex: 9999, maxHeight: Math.min(560, pos.availH) }}
           className="bg-popover border border-border rounded-xl shadow-xl p-2 flex flex-col gap-1"
         >
           {/* Поиск */}
