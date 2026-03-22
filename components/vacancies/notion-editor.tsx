@@ -377,7 +377,7 @@ function NotionLessonEditor({ lesson, onUpdateLesson, onUpdateBlock, onInsertBlo
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null)
   const [dragIdx, setDragIdx] = useState<number | null>(null)
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null)
-  const [floatingToolbar, setFloatingToolbar] = useState<{ x: number; y: number } | null>(null)
+  const [floatingToolbar, setFloatingToolbar] = useState<{ x: number; y: number; vx: number; vy: number } | null>(null)
   const [floatingBlockId, setFloatingBlockId] = useState<string | null>(null)
   const [floatingInInfoBlock, setFloatingInInfoBlock] = useState(false)
   const [showForeColors, setShowForeColors] = useState(false)
@@ -436,7 +436,12 @@ function NotionLessonEditor({ lesson, onUpdateLesson, onUpdateBlock, onInsertBlo
       const cr = container.getBoundingClientRect()
       const anchorEl = sel.anchorNode instanceof Element ? sel.anchorNode : sel.anchorNode?.parentElement
       setFloatingInInfoBlock(!!anchorEl?.closest("[data-main-editor]"))
-      setFloatingToolbar({ x: rect.left - cr.left + rect.width / 2, y: rect.top - cr.top - 44 })
+      setFloatingToolbar({
+        x: rect.left - cr.left + rect.width / 2,
+        y: rect.top - cr.top - 48,
+        vx: rect.left + rect.width / 2, // viewport center-x
+        vy: rect.top,                   // viewport top of selection
+      })
     }
     document.addEventListener("mouseup", handler)
     document.addEventListener("keyup", handler)
@@ -613,10 +618,10 @@ function NotionLessonEditor({ lesson, onUpdateLesson, onUpdateBlock, onInsertBlo
               setShowEmojiInToolbar(false)
               if (toolbarTagsBtnRef.current) {
                 const rect = toolbarTagsBtnRef.current.getBoundingClientRect()
-                const popupH = QUICK_TAGS.length * 36 + 36 // approx height
+                const popupH = QUICK_TAGS.length * 36 + 36
                 const spaceAbove = rect.top - 8
                 const spaceBelow = window.innerHeight - rect.bottom - 8
-                const left = Math.min(rect.left, window.innerWidth - 208 - 8)
+                const left = Math.min(Math.max(8, rect.left), window.innerWidth - 208 - 8)
                 if (spaceAbove >= popupH || spaceAbove >= spaceBelow) {
                   setToolbarTagsPos({ bottom: window.innerHeight - rect.top + 4, left })
                 } else {
@@ -658,15 +663,18 @@ function NotionLessonEditor({ lesson, onUpdateLesson, onUpdateBlock, onInsertBlo
               setShowTagsInToolbar(false)
               if (toolbarEmojiBtnRef.current) {
                 const rect = toolbarEmojiBtnRef.current.getBoundingClientRect()
+                const PICKER_W = 9 * 37 + 16
+                const left = Math.min(Math.max(8, rect.left), window.innerWidth - PICKER_W - 8)
+                // Toolbar is above the selection — always open upward from toolbar top
+                const toolbarTop = rect.top
+                const spaceAbove = toolbarTop - 8
                 const spaceBelow = window.innerHeight - rect.bottom - 8
-                const spaceAbove = rect.top - 8
-                const left = Math.min(rect.left, window.innerWidth - (9 * 37 + 16) - 8)
-                if (spaceBelow >= 300 || spaceBelow >= spaceAbove) {
+                if (spaceAbove >= 260) {
+                  setToolbarEmojiPos({ bottom: window.innerHeight - toolbarTop + 4, left })
+                  setToolbarEmojiAvailH(spaceAbove)
+                } else {
                   setToolbarEmojiPos({ top: rect.bottom + 4, left })
                   setToolbarEmojiAvailH(spaceBelow)
-                } else {
-                  setToolbarEmojiPos({ bottom: window.innerHeight - rect.top + 4, left })
-                  setToolbarEmojiAvailH(spaceAbove)
                 }
               }
               setShowEmojiInToolbar(v => !v)
