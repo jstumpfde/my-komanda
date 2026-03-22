@@ -437,7 +437,7 @@ function NotionLessonEditor({ lesson, onUpdateLesson, onUpdateBlock, onInsertBlo
       const anchorEl = sel.anchorNode instanceof Element ? sel.anchorNode : sel.anchorNode?.parentElement
       setFloatingInInfoBlock(!!anchorEl?.closest("[data-main-editor]"))
       setFloatingToolbar({
-        x: rect.left - cr.left + rect.width / 2,
+        x: 8,                           // always fixed left edge of editor
         y: rect.top - cr.top - 48,
         vx: rect.left + rect.width / 2, // viewport center-x
         vy: rect.top,                   // viewport top of selection
@@ -535,7 +535,7 @@ function NotionLessonEditor({ lesson, onUpdateLesson, onUpdateBlock, onInsertBlo
       {floatingToolbar && (
         <div
           className="absolute z-50 flex items-center gap-0.5 bg-popover border border-border rounded-lg shadow-lg px-1.5 py-1 pointer-events-auto"
-          style={{ left: floatingToolbar.x, top: floatingToolbar.y, transform: "translateX(-50%)" }}
+          style={{ left: floatingToolbar.x, top: floatingToolbar.y }}
           onMouseDown={(e) => { e.preventDefault(); saveToolbarSelection() }}
         >
           <FmtBtn icon={Bold} tip="Жирный" cmd={() => execFmt("bold")} />
@@ -606,87 +606,6 @@ function NotionLessonEditor({ lesson, onUpdateLesson, onUpdateBlock, onInsertBlo
           >
             {currentAlign() === "center" ? <AlignCenter className="w-3.5 h-3.5" /> : currentAlign() === "right" ? <AlignRight className="w-3.5 h-3.5" /> : <AlignLeft className="w-3.5 h-3.5" />}
           </button>
-          <div className="w-px h-4 bg-border mx-0.5" />
-          {/* Variables # */}
-          <button
-            ref={toolbarTagsBtnRef}
-            className="w-7 h-7 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors text-xs font-bold"
-            title="Вставить переменную"
-            onMouseDown={(e) => {
-              e.preventDefault()
-              saveToolbarSelection()
-              setShowEmojiInToolbar(false)
-              if (toolbarTagsBtnRef.current) {
-                const rect = toolbarTagsBtnRef.current.getBoundingClientRect()
-                const popupH = QUICK_TAGS.length * 36 + 36
-                const spaceAbove = rect.top - 8
-                const spaceBelow = window.innerHeight - rect.bottom - 8
-                const left = Math.min(Math.max(8, rect.left), window.innerWidth - 208 - 8)
-                if (spaceAbove >= popupH || spaceAbove >= spaceBelow) {
-                  setToolbarTagsPos({ bottom: window.innerHeight - rect.top + 4, left })
-                } else {
-                  setToolbarTagsPos({ top: rect.bottom + 4, left })
-                }
-              }
-              setShowTagsInToolbar(v => !v)
-            }}
-          >#</button>
-          {showTagsInToolbar && (
-            <div
-              className="fixed z-[200] bg-popover border border-border rounded-xl shadow-xl overflow-hidden w-52"
-              style={toolbarTagsPos}
-              data-toolbar-popup
-              onMouseDown={e => e.preventDefault()}
-            >
-              <div className="px-3 py-1.5 border-b border-border">
-                <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Переменные</span>
-              </div>
-              <div className="p-1">
-                {QUICK_TAGS.map((t) => (
-                  <button key={t.tag} onMouseDown={(ev) => { ev.preventDefault(); insertAtToolbarCursor(t.tag) }}
-                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left hover:bg-muted transition-colors">
-                    <span className="font-mono text-[11px] text-primary bg-primary/10 rounded px-1 py-0.5 shrink-0">{t.tag}</span>
-                    <span className="text-xs text-muted-foreground truncate">{t.label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-          {/* Emoji 😊 */}
-          <button
-            ref={toolbarEmojiBtnRef}
-            className="w-7 h-7 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors text-sm"
-            title="Вставить эмодзи"
-            onMouseDown={(e) => {
-              e.preventDefault()
-              saveToolbarSelection()
-              setShowTagsInToolbar(false)
-              if (toolbarEmojiBtnRef.current) {
-                const rect = toolbarEmojiBtnRef.current.getBoundingClientRect()
-                const PICKER_W = 9 * 37 + 16
-                const left = Math.min(Math.max(8, rect.left), window.innerWidth - PICKER_W - 8)
-                // Toolbar is above the selection — always open upward from toolbar top
-                const toolbarTop = rect.top
-                const spaceAbove = toolbarTop - 8
-                const spaceBelow = window.innerHeight - rect.bottom - 8
-                if (spaceAbove >= 260) {
-                  setToolbarEmojiPos({ bottom: window.innerHeight - toolbarTop + 4, left })
-                  setToolbarEmojiAvailH(spaceAbove)
-                } else {
-                  setToolbarEmojiPos({ top: rect.bottom + 4, left })
-                  setToolbarEmojiAvailH(spaceBelow)
-                }
-              }
-              setShowEmojiInToolbar(v => !v)
-            }}
-          >😊</button>
-          <InlineEmojiPicker
-            isOpen={showEmojiInToolbar}
-            positionStyle={toolbarEmojiPos}
-            availH={toolbarEmojiAvailH}
-            searchRef={toolbarEmojiSearchRef}
-            onSelect={(emoji) => { insertAtToolbarCursor(emoji); setShowEmojiInToolbar(false) }}
-          />
         </div>
       )}
 
@@ -1072,8 +991,8 @@ function NotionTextBlock({ block, editorRef, isHovered, onSync, onKeyDown }: Not
           "[&_h2]:text-xl [&_h2]:font-bold [&_h2]:mt-3 [&_h2]:mb-1",
           "[&_h3]:text-lg [&_h3]:font-semibold [&_h3]:mt-2 [&_h3]:mb-1",
           "[&_p]:text-base [&_p]:leading-relaxed",
-          "[&_ul]:list-disc [&_ul]:ml-5 [&_ul]:space-y-0.5",
-          "[&_ol]:list-decimal [&_ol]:ml-5 [&_ol]:space-y-0.5",
+          "[&_ul]:list-disc [&_ul]:list-inside [&_ul]:space-y-0.5",
+          "[&_ol]:list-decimal [&_ol]:list-inside [&_ol]:space-y-0.5",
           "[&_a]:text-primary [&_a]:underline [&_a]:underline-offset-2",
           "[&_strong]:font-semibold [&_em]:italic",
           "w-full px-1 py-0.5 rounded hover:bg-muted/20 focus:bg-transparent transition-colors"
