@@ -636,7 +636,7 @@ function FloatingToolbar({ editorRef, savedSelectionRef }: FloatingToolbarProps)
   const toolbarRef = useRef<HTMLDivElement>(null)
   const [, forceUpdate] = useState(0)
 
-  const FORE_COLORS = ["#000000", "#ef4444", "#f97316", "#eab308", "#22c55e", "#3b82f6", "#8b5cf6", "#ffffff"]
+  const FORE_COLORS = ["#000000", "#ef4444", "#f97316", "#eab308", "#22c55e", "#3b82f6", "#8b5cf6", "#6b7280"]
   const BG_COLORS = ["transparent", "#fef08a", "#fed7aa", "#fecaca", "#bbf7d0", "#bfdbfe", "#e9d5ff", "#f1f5f9"]
 
   const updatePosition = useCallback(() => {
@@ -700,9 +700,22 @@ function FloatingToolbar({ editorRef, savedSelectionRef }: FloatingToolbarProps)
     try { return document.queryCommandState(cmd) } catch { return false }
   }
 
+  const currentBlock = () => {
+    try { return document.queryCommandValue("formatBlock").toLowerCase() } catch { return "" }
+  }
+
+  const toggleBlock = (tag: string) => {
+    const cur = currentBlock()
+    exec("formatBlock", cur === tag ? "p" : tag)
+  }
+
   const btnCls = (cmd?: string) =>
     cn("w-7 h-7 rounded hover:bg-muted text-xs font-medium flex items-center justify-center transition-colors",
       cmd && isActive(cmd) ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground")
+
+  const blockBtnCls = (tag: string) =>
+    cn("w-7 h-7 rounded hover:bg-muted text-xs font-medium flex items-center justify-center transition-colors",
+      currentBlock() === tag ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground")
 
   const openFloatingLink = () => {
     const sel = window.getSelection()
@@ -738,46 +751,31 @@ function FloatingToolbar({ editorRef, savedSelectionRef }: FloatingToolbarProps)
       <button onMouseDown={tb(() => exec("strikeThrough"))} className={btnCls("strikeThrough")} title="Зачёркнутый"><span className="line-through">S</span></button>
       {/* Foreground color picker */}
       <div className="relative">
-        <button
-          onMouseDown={tb(() => { setShowForeColors(v => !v); setShowBgColors(false) })}
-          className={btnCls()}
-          title="Цвет текста"
-        >
+        <button onMouseDown={tb(() => { setShowForeColors(v => !v); setShowBgColors(false) })} className={btnCls()} title="Цвет текста">
           <span className="font-bold">A</span>
         </button>
         {showForeColors && (
-          <div className="absolute top-8 left-0 z-50 bg-popover border border-border rounded-lg shadow-lg p-1.5 flex gap-1" onMouseDown={e => e.preventDefault()}>
+          <div className="absolute bottom-full mb-1 left-0 z-50 bg-popover border border-border rounded-lg shadow-lg p-1.5 flex gap-1" onMouseDown={e => e.preventDefault()}>
             {FORE_COLORS.map(c => (
-              <button
-                key={c}
-                onMouseDown={tb(() => { exec("foreColor", c); setShowForeColors(false) })}
-                className="w-4 h-4 rounded-full border border-border shadow-sm hover:scale-110 transition-transform"
-                style={{ background: c }}
-                title={c}
-              />
+              <button key={c} onMouseDown={tb(() => { exec("foreColor", c); setShowForeColors(false) })}
+                className="w-5 h-5 rounded-full border border-border shadow-sm hover:scale-110 transition-transform"
+                style={{ background: c }} title={c} />
             ))}
           </div>
         )}
       </div>
       {/* Background color picker */}
       <div className="relative">
-        <button
-          onMouseDown={tb(() => { setShowBgColors(v => !v); setShowForeColors(false) })}
-          className={btnCls()}
-          title="Цвет фона"
-        >
-          <span>🎨</span>
+        <button onMouseDown={tb(() => { setShowBgColors(v => !v); setShowForeColors(false) })} className={btnCls()} title="Цвет фона">
+          <span>🖍</span>
         </button>
         {showBgColors && (
-          <div className="absolute top-8 left-0 z-50 bg-popover border border-border rounded-lg shadow-lg p-1.5 flex gap-1" onMouseDown={e => e.preventDefault()}>
+          <div className="absolute bottom-full mb-1 left-0 z-50 bg-popover border border-border rounded-lg shadow-lg p-1.5 flex gap-1" onMouseDown={e => e.preventDefault()}>
             {BG_COLORS.map(c => (
-              <button
-                key={c}
-                onMouseDown={tb(() => { exec("hiliteColor", c); setShowBgColors(false) })}
-                className="w-4 h-4 rounded-full border border-border shadow-sm hover:scale-110 transition-transform"
+              <button key={c} onMouseDown={tb(() => { exec("hiliteColor", c); setShowBgColors(false) })}
+                className="w-5 h-5 rounded-full border border-border shadow-sm hover:scale-110 transition-transform"
                 style={{ background: c === "transparent" ? "repeating-conic-gradient(#ccc 0% 25%, #fff 0% 50%) 0 0 / 8px 8px" : c }}
-                title={c === "transparent" ? "Без фона" : c}
-              />
+                title={c === "transparent" ? "Без фона" : c} />
             ))}
           </div>
         )}
@@ -786,7 +784,7 @@ function FloatingToolbar({ editorRef, savedSelectionRef }: FloatingToolbarProps)
       <div className="relative">
         <button onMouseDown={tb(openFloatingLink)} className={btnCls()} title="Ссылка">🔗</button>
         {floatingLinkPopup && (
-          <div className="absolute top-8 left-0 z-50 bg-popover border border-border rounded-lg shadow-lg p-2 w-56 flex gap-1.5" onMouseDown={e => e.preventDefault()}>
+          <div className="absolute bottom-full mb-1 left-0 z-50 bg-popover border border-border rounded-lg shadow-lg p-2 w-56 flex gap-1.5" onMouseDown={e => e.preventDefault()}>
             <Input
               autoFocus
               placeholder="https://..."
@@ -800,9 +798,9 @@ function FloatingToolbar({ editorRef, savedSelectionRef }: FloatingToolbarProps)
         )}
       </div>
       <div className="w-px h-4 bg-border mx-0.5" />
-      <button onMouseDown={tb(() => exec("formatBlock", "h1"))} className={btnCls()} title="Заголовок 1"><span className="font-bold text-[11px]">H1</span></button>
-      <button onMouseDown={tb(() => exec("formatBlock", "h2"))} className={btnCls()} title="Заголовок 2"><span className="font-bold text-[11px]">H2</span></button>
-      <button onMouseDown={tb(() => exec("formatBlock", "h3"))} className={btnCls()} title="Заголовок 3"><span className="font-bold text-[11px]">H3</span></button>
+      <button onMouseDown={tb(() => toggleBlock("h1"))} className={blockBtnCls("h1")} title="Заголовок 1"><span className="font-bold text-[11px]">H1</span></button>
+      <button onMouseDown={tb(() => toggleBlock("h2"))} className={blockBtnCls("h2")} title="Заголовок 2"><span className="font-bold text-[11px]">H2</span></button>
+      <button onMouseDown={tb(() => toggleBlock("h3"))} className={blockBtnCls("h3")} title="Заголовок 3"><span className="font-bold text-[11px]">H3</span></button>
       <div className="w-px h-4 bg-border mx-0.5" />
       <button onMouseDown={tb(() => exec("insertUnorderedList"))} className={btnCls("insertUnorderedList")} title="Маркированный список"><span className="text-[11px]">:≡</span></button>
       <button onMouseDown={tb(() => exec("insertOrderedList"))} className={btnCls("insertOrderedList")} title="Нумерованный список"><span className="text-[11px]">1≡</span></button>
