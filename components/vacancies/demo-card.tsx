@@ -948,9 +948,15 @@ function BlockEditor({ block, onUpdate }: { block: Block; onUpdate: (p: Partial<
             onBlur={syncContent}
             onInput={syncContent}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
+              if (e.key === "Enter") {
                 e.preventDefault()
-                document.execCommand("insertParagraph")
+                if (e.shiftKey) {
+                  // Shift+Enter — одиночный перенос строки
+                  document.execCommand("insertHTML", false, "<br>")
+                } else {
+                  // Enter — новый параграф внутри блока (двойной br)
+                  document.execCommand("insertHTML", false, "<br><br>")
+                }
               }
             }}
             data-placeholder="Введите текст..."
