@@ -269,7 +269,7 @@ export function NotionEditor({ demo, onBack, onUpdate }: NotionEditorProps) {
                   )}
                 >
                   <GripVertical className={cn("w-3 h-3 flex-shrink-0 cursor-move", isActive ? "text-primary-foreground/40" : "text-muted-foreground/20 group-hover:text-muted-foreground/50")} />
-                  <span className="text-sm flex-shrink-0">{lesson.emoji}</span>
+                  <span className="text-xl flex-shrink-0 leading-none">{lesson.emoji}</span>
                   {isRenaming ? (
                     <input
                       autoFocus
