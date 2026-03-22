@@ -302,6 +302,9 @@ export function NotionEditor({ demo, onBack, onUpdate }: NotionEditorProps) {
                       <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setCopiedLesson(lesson); toast.success("Скопировано") }}>
                         <Copy className="w-3.5 h-3.5 mr-2" />Копировать
                       </DropdownMenuItem>
+                      <DropdownMenuItem disabled={!copiedLesson} onClick={(e) => { e.stopPropagation(); pasteLesson() }}>
+                        <ClipboardPaste className="w-3.5 h-3.5 mr-2" />Вставить
+                      </DropdownMenuItem>
                       <DropdownMenuItem onClick={(e) => { e.stopPropagation(); duplicateLesson(i) }}>
                         <Copy className="w-3.5 h-3.5 mr-2" />Дублировать
                       </DropdownMenuItem>
