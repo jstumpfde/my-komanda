@@ -1171,19 +1171,26 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
           {isSet ? (
             <div className={cn("flex gap-3", isSide ? (layout === "image-left" ? "flex-row" : "flex-row-reverse") : "flex-col")}>
               <div className={cn("flex flex-col gap-1", isSide ? "w-1/2 shrink-0" : "w-full")}>
+                <input
+                  className="text-xs text-muted-foreground italic bg-transparent outline-none border-b border-border/40 pb-0.5 focus:border-primary/40 mb-1"
+                  value={block.imageTitleTop || ""}
+                  onChange={(e) => onUpdate({ imageTitleTop: e.target.value })}
+                  placeholder="Подпись сверху..."
+                />
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={block.imageUrl} alt={block.imageCaption || ""} className="rounded-lg object-contain w-full max-h-64 bg-muted/30" />
                 <input
-                  className="text-xs text-muted-foreground bg-transparent outline-none border-b border-border/40 pb-0.5 focus:border-primary/40 mt-0.5"
+                  className="text-xs text-muted-foreground italic bg-transparent outline-none border-b border-border/40 pb-0.5 focus:border-primary/40 mt-1"
                   value={block.imageCaption || ""}
                   onChange={(e) => onUpdate({ imageCaption: e.target.value })}
-                  placeholder="Добавить подпись..."
+                  placeholder="Подпись снизу..."
                 />
               </div>
               {/* Текст справа/слева при боковом layout */}
               {isSide && (
                 <textarea
-                  className="flex-1 text-sm bg-transparent outline-none resize-none min-h-[80px] leading-relaxed placeholder:text-muted-foreground/40"
+                  className="flex-1 text-sm bg-transparent outline-none resize-none leading-relaxed placeholder:text-muted-foreground/40 overflow-y-auto"
+                  style={{ minHeight: "80px", maxHeight: "256px" }}
                   value={block.content}
                   onChange={(e) => onUpdate({ content: e.target.value })}
                   placeholder="Текст рядом с изображением..."
@@ -1225,6 +1232,12 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
           {isSet ? (
             <div className={cn("flex gap-3", isSide ? (layout === "video-left" ? "flex-row" : "flex-row-reverse") : "flex-col")}>
               <div className={cn("flex flex-col gap-1", isSide ? "w-1/2 shrink-0" : "w-full")}>
+                <input
+                  className="text-xs text-muted-foreground italic bg-transparent outline-none border-b border-border/40 pb-0.5 focus:border-primary/40 mb-1"
+                  value={block.videoTitleTop || ""}
+                  onChange={(e) => onUpdate({ videoTitleTop: e.target.value })}
+                  placeholder="Подпись сверху..."
+                />
                 <div className="rounded-lg bg-black aspect-video overflow-hidden">
                   {embed ? (
                     <iframe
@@ -1239,15 +1252,16 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
                   )}
                 </div>
                 <input
-                  className="text-xs text-muted-foreground bg-transparent outline-none border-b border-border/40 pb-0.5 focus:border-primary/40 mt-0.5"
-                  value={block.imageCaption || ""}
-                  onChange={(e) => onUpdate({ imageCaption: e.target.value })}
-                  placeholder="Добавить подпись..."
+                  className="text-xs text-muted-foreground italic bg-transparent outline-none border-b border-border/40 pb-0.5 focus:border-primary/40 mt-1"
+                  value={block.videoCaption || ""}
+                  onChange={(e) => onUpdate({ videoCaption: e.target.value })}
+                  placeholder="Подпись снизу..."
                 />
               </div>
               {isSide && (
                 <textarea
-                  className="flex-1 text-sm bg-transparent outline-none resize-none min-h-[80px] leading-relaxed placeholder:text-muted-foreground/40"
+                  className="flex-1 text-sm bg-transparent outline-none resize-none leading-relaxed placeholder:text-muted-foreground/40 overflow-y-auto"
+                  style={{ minHeight: "80px" }}
                   value={block.content || ""}
                   onChange={(e) => onUpdate({ content: e.target.value })}
                   placeholder="Текст рядом с видео..."
@@ -1288,13 +1302,19 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
           {isSet ? (
             <div className={cn("flex gap-3 items-start", isSide ? (layout === "audio-left" ? "flex-row" : "flex-row-reverse") : "flex-col")}>
               <div className={cn("flex flex-col gap-1", isSide ? "w-1/2 shrink-0" : "w-full")}>
+                <input
+                  className="text-xs text-muted-foreground italic bg-transparent outline-none border-b border-border/40 pb-0.5 focus:border-primary/40 mb-1"
+                  value={block.audioTitleTop || ""}
+                  onChange={(e) => onUpdate({ audioTitleTop: e.target.value })}
+                  placeholder="Подпись сверху..."
+                />
                 {block.audioTitle && <p className="text-xs font-medium text-foreground">{block.audioTitle}</p>}
                 <audio src={block.audioUrl} controls className="w-full" />
                 <input
-                  className="text-xs text-muted-foreground bg-transparent outline-none border-b border-border/40 pb-0.5 focus:border-primary/40 mt-0.5"
-                  value={block.imageCaption || ""}
-                  onChange={(e) => onUpdate({ imageCaption: e.target.value })}
-                  placeholder="Добавить подпись..."
+                  className="text-xs text-muted-foreground italic bg-transparent outline-none border-b border-border/40 pb-0.5 focus:border-primary/40 mt-1"
+                  value={block.audioCaption || ""}
+                  onChange={(e) => onUpdate({ audioCaption: e.target.value })}
+                  placeholder="Подпись снизу..."
                 />
               </div>
               {isSide && (
@@ -1579,10 +1599,11 @@ function SimplePreviewBlock({ block }: { block: Block }) {
       const isSide = layout === "image-left" || layout === "image-right"
       return (
         <div className={cn("flex gap-3", isSide ? (layout === "image-left" ? "flex-row" : "flex-row-reverse") : "flex-col")}>
-          <div className={cn("flex flex-col gap-1.5", isSide ? "w-1/2 shrink-0" : "w-full")}>
-            {block.imageCaption && <p className="text-xs text-muted-foreground leading-snug mb-0">{block.imageCaption}</p>}
+          <div className={cn("flex flex-col", isSide ? "w-1/2 shrink-0 overflow-y-auto" : "w-full")}>
+            {block.imageTitleTop && <p className="text-xs text-muted-foreground italic leading-snug mb-1">{block.imageTitleTop}</p>}
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={block.imageUrl} alt={block.imageCaption || ""} className="rounded-xl w-full h-48 object-cover" />
+            {block.imageCaption && <p className="text-xs text-muted-foreground italic leading-snug mt-1">{block.imageCaption}</p>}
           </div>
           {isSide && block.content && (
             <p className="flex-1 text-sm leading-relaxed whitespace-pre-wrap">{block.content}</p>
@@ -1597,8 +1618,8 @@ function SimplePreviewBlock({ block }: { block: Block }) {
       const embed = detectVideoService(block.videoUrl)
       return (
         <div className={cn("flex gap-3", isSide ? (layout === "video-left" ? "flex-row" : "flex-row-reverse") : "flex-col")}>
-          <div className={cn("flex flex-col gap-1.5", isSide ? "w-1/2 shrink-0" : "w-full")}>
-            {block.imageCaption && <p className="text-xs text-muted-foreground leading-snug mb-0">{block.imageCaption}</p>}
+          <div className={cn("flex flex-col", isSide ? "w-1/2 shrink-0" : "w-full")}>
+            {block.videoTitleTop && <p className="text-xs text-muted-foreground italic leading-snug mb-1">{block.videoTitleTop}</p>}
             <div className="aspect-video rounded-xl bg-black overflow-hidden">
               {embed ? (
                 <iframe src={embed.embedUrl} className="w-full h-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen title="video" />
@@ -1606,6 +1627,7 @@ function SimplePreviewBlock({ block }: { block: Block }) {
                 <video src={block.videoUrl} controls className="w-full h-full object-contain" />
               )}
             </div>
+            {block.videoCaption && <p className="text-xs text-muted-foreground italic leading-snug mt-1">{block.videoCaption}</p>}
           </div>
           {isSide && block.content && (
             <p className="flex-1 text-sm leading-relaxed whitespace-pre-wrap">{block.content}</p>
@@ -1619,10 +1641,11 @@ function SimplePreviewBlock({ block }: { block: Block }) {
       const isSide = layout === "audio-left" || layout === "audio-right"
       return (
         <div className={cn("flex gap-3 items-start", isSide ? (layout === "audio-left" ? "flex-row" : "flex-row-reverse") : "flex-col")}>
-          <div className={cn("flex flex-col gap-1.5", isSide ? "w-1/2 shrink-0" : "w-full")}>
-            {block.imageCaption && <p className="text-xs text-muted-foreground leading-snug mb-0">{block.imageCaption}</p>}
+          <div className={cn("flex flex-col", isSide ? "w-1/2 shrink-0" : "w-full")}>
+            {block.audioTitleTop && <p className="text-xs text-muted-foreground italic leading-snug mb-1">{block.audioTitleTop}</p>}
             {block.audioTitle && <p className="text-xs font-medium text-foreground">{block.audioTitle}</p>}
             <audio src={block.audioUrl} controls className="w-full" />
+            {block.audioCaption && <p className="text-xs text-muted-foreground italic leading-snug mt-1">{block.audioCaption}</p>}
           </div>
           {isSide && block.content && (
             <p className="flex-1 text-sm leading-relaxed whitespace-pre-wrap">{block.content}</p>

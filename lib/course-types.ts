@@ -24,11 +24,16 @@ export interface Block {
   imageUrl: string
   imageLayout: ImageLayout
   imageCaption: string
+  imageTitleTop: string
   videoUrl: string
   videoLayout?: VideoLayout
+  videoTitleTop: string
+  videoCaption: string
   audioUrl: string
   audioTitle: string
   audioLayout?: AudioLayout
+  audioTitleTop: string
+  audioCaption: string
   fileUrl: string
   fileName: string
   fileLayout?: FileLayout
@@ -100,9 +105,9 @@ export function createBlock(type: BlockType): Block {
     id: `blk-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
     type,
     content: "",
-    imageUrl: "", imageLayout: "full", imageCaption: "",
-    videoUrl: "", videoLayout: "full",
-    audioUrl: "", audioTitle: "", audioLayout: "full",
+    imageUrl: "", imageLayout: "full", imageCaption: "", imageTitleTop: "",
+    videoUrl: "", videoLayout: "full", videoTitleTop: "", videoCaption: "",
+    audioUrl: "", audioTitle: "", audioLayout: "full", audioTitleTop: "", audioCaption: "",
     fileUrl: "", fileName: "", fileLayout: "full",
     infoStyle: "info", infoColor: "", infoIcon: "", infoSize: "m",
     buttonText: "Подробнее", buttonUrl: "", buttonVariant: "primary",
