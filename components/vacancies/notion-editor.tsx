@@ -1948,12 +1948,12 @@ const QUICK_EMOJIS = ["👋","🚀","🏢","💰","📈","✅","🎯","⚙️","
 // ─── InfoBlock ──────────────────────────────────────────────────────────────
 
 const INFO_ICONS: { symbol: string; label: string }[] = [
-  { symbol: "✓", label: "Галочка" },
-  { symbol: "?", label: "Вопрос" },
-  { symbol: "✗", label: "Крест" },
-  { symbol: "!", label: "Восклицание" },
-  { symbol: "i", label: "Информация" },
-  { symbol: "⚠", label: "Предупреждение" },
+  { symbol: "✅", label: "Галочка" },
+  { symbol: "❓", label: "Вопрос" },
+  { symbol: "❌", label: "Крест" },
+  { symbol: "❗", label: "Восклицание" },
+  { symbol: "ℹ️", label: "Информация" },
+  { symbol: "⚠️", label: "Предупреждение" },
   { symbol: "★", label: "Звезда" },
   { symbol: "♥", label: "Сердце" },
   { symbol: "→", label: "Стрелка" },
@@ -1968,6 +1968,7 @@ const INFO_PRESET_COLORS = [
   { hex: "#eab308", label: "Жёлтый" },
   { hex: "#22c55e", label: "Зелёный" },
   { hex: "#3b82f6", label: "Синий" },
+  { hex: "#000000", label: "Чёрный" },
   { hex: "#6b7280", label: "Серый" },
 ]
 
@@ -2004,32 +2005,6 @@ const BUTTON_ICONS_AFTER = [
   { symbol: "▶", label: "Воспроизвести" },
 ]
 
-function hexToHsl(hex: string): { h: number; s: number; l: number } {
-  const r = parseInt(hex.slice(1, 3), 16) / 255
-  const g = parseInt(hex.slice(3, 5), 16) / 255
-  const b = parseInt(hex.slice(5, 7), 16) / 255
-  const max = Math.max(r, g, b), min = Math.min(r, g, b)
-  const l = (max + min) / 2
-  if (max === min) return { h: 0, s: 0, l: Math.round(l * 100) }
-  const d = max - min
-  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min)
-  let h = 0
-  if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) / 6
-  else if (max === g) h = ((b - r) / d + 2) / 6
-  else h = ((r - g) / d + 4) / 6
-  return { h: Math.round(h * 360), s: Math.round(s * 100), l: Math.round(l * 100) }
-}
-
-function hslToHex(h: number, s: number, l: number): string {
-  const sl = s / 100, ll = l / 100
-  const a = sl * Math.min(ll, 1 - ll)
-  const f = (n: number) => {
-    const k = (n + h / 30) % 12
-    const color = ll - a * Math.max(Math.min(k - 3, 9 - k, 1), -1)
-    return Math.round(255 * color).toString(16).padStart(2, "0")
-  }
-  return `#${f(0)}${f(8)}${f(4)}`
-}
 
 function InfoBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: Partial<Block>) => void }) {
   const [showSettings, setShowSettings] = useState(false)
@@ -2053,10 +2028,6 @@ function InfoBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: Partia
   const activeColor = block.infoColor || styleColorMap[block.infoStyle] || "#3b82f6"
   const activeIcon = block.infoIcon || "i"
 
-  const hsl = hexToHsl(activeColor)
-  const [hue, setHue] = useState(hsl.h)
-  const [lightness, setLightness] = useState(hsl.l)
-
   // Инициализируем innerHTML только при первом монте или смене блока.
   // Дальше React НЕ трогает DOM — выделение и курсор не сбрасываются.
   useEffect(() => {
@@ -2074,13 +2045,6 @@ function InfoBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: Partia
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // sync sliders when color changes externally
-  useEffect(() => {
-    const h = hexToHsl(activeColor)
-    setHue(h.h)
-    setLightness(h.l)
-  }, [activeColor])
-
   // close on outside click
   useEffect(() => {
     if (!showSettings) return
@@ -2095,11 +2059,6 @@ function InfoBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: Partia
   }, [showSettings])
 
   const applyColor = (hex: string) => {
-    onUpdate({ infoColor: hex })
-  }
-
-  const applySliders = (h: number, l: number) => {
-    const hex = hslToHex(h, 70, l)
     onUpdate({ infoColor: hex })
   }
 
@@ -2270,17 +2229,19 @@ function InfoBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: Partia
         >
           {/* Выбор иконки */}
           <p className="text-xs font-medium text-muted-foreground mb-2">Иконка</p>
-          <div className="flex flex-wrap gap-1.5 mb-3">
+          <div className="grid grid-cols-6 gap-1 mb-3">
             {INFO_ICONS.map(({ symbol, label }) => (
               <button
                 key={symbol}
                 title={label}
                 onClick={() => onUpdate({ infoIcon: symbol })}
                 className={cn(
-                  "w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm transition-all",
-                  activeIcon === symbol ? "ring-2 ring-offset-1 scale-110" : "hover:scale-105"
+                  "flex items-center justify-center rounded-lg transition-all leading-none",
+                  activeIcon === symbol
+                    ? "bg-primary/10 ring-1 ring-primary"
+                    : "hover:bg-muted"
                 )}
-                style={activeIcon === symbol ? { backgroundColor: activeColor, color: "#fff" } : { backgroundColor: activeColor + "30", color: activeColor }}
+                style={{ fontSize: 28, width: 44, height: 44 }}
               >
                 {symbol}
               </button>
@@ -2289,55 +2250,31 @@ function InfoBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: Partia
 
           {/* Пресеты цветов */}
           <p className="text-xs font-medium text-muted-foreground mb-2">Цвет</p>
-          <div className="flex flex-wrap gap-1.5 mb-3">
+          <div className="flex flex-wrap gap-1.5">
             {INFO_PRESET_COLORS.map(({ hex, label }) => (
               <button
                 key={hex}
                 title={label}
                 onClick={() => applyColor(hex)}
                 className={cn(
-                  "w-7 h-7 rounded-full border-2 transition-all",
-                  activeColor.toLowerCase() === hex ? "border-foreground/60 scale-110" : "border-transparent hover:scale-105"
+                  "w-8 h-8 rounded-full border-2 transition-all",
+                  activeColor.toLowerCase() === hex
+                    ? "ring-2 ring-offset-2 ring-foreground/40 border-transparent"
+                    : "border-transparent hover:scale-105"
                 )}
                 style={{ backgroundColor: hex }}
               />
             ))}
-          </div>
-
-          {/* Слайдер Hue */}
-          <p className="text-xs text-muted-foreground mb-1">Оттенок</p>
-          <div className="relative mb-2">
-            <div
-              className="h-3 rounded-full mb-1"
-              style={{ background: "linear-gradient(to right,hsl(0,70%,55%),hsl(30,70%,55%),hsl(60,70%,55%),hsl(120,70%,55%),hsl(180,70%,55%),hsl(240,70%,55%),hsl(300,70%,55%),hsl(360,70%,55%))" }}
-            />
-            <input
-              type="range" min={0} max={360} value={hue}
-              onChange={(e) => { const h = Number(e.target.value); setHue(h); applySliders(h, lightness) }}
-              className="absolute inset-0 w-full opacity-0 cursor-pointer h-3"
-            />
-            <div
-              className="absolute top-0 w-4 h-4 -mt-0.5 rounded-full border-2 border-white shadow pointer-events-none"
-              style={{ left: `calc(${hue / 360 * 100}% - 8px)`, backgroundColor: hslToHex(hue, 70, lightness) }}
-            />
-          </div>
-
-          {/* Слайдер Lightness */}
-          <p className="text-xs text-muted-foreground mb-1">Яркость</p>
-          <div className="relative mb-1">
-            <div
-              className="h-3 rounded-full"
-              style={{ background: `linear-gradient(to right, hsl(${hue},70%,20%), hsl(${hue},70%,50%), hsl(${hue},70%,80%))` }}
-            />
-            <input
-              type="range" min={20} max={75} value={lightness}
-              onChange={(e) => { const l = Number(e.target.value); setLightness(l); applySliders(hue, l) }}
-              className="absolute inset-0 w-full opacity-0 cursor-pointer h-3"
-            />
-            <div
-              className="absolute top-0 w-4 h-4 -mt-0.5 rounded-full border-2 border-white shadow pointer-events-none"
-              style={{ left: `calc(${(lightness - 20) / 55 * 100}% - 8px)`, backgroundColor: hslToHex(hue, 70, lightness) }}
-            />
+            {/* Произвольный цвет */}
+            <label title="Свой цвет" className="flex flex-col items-center gap-0.5 cursor-pointer">
+              <input
+                type="color"
+                value={activeColor}
+                onChange={(e) => applyColor(e.target.value)}
+                className="w-8 h-8 rounded cursor-pointer border border-border p-0.5 bg-transparent"
+              />
+              <span className="text-[9px] text-muted-foreground leading-none">Свой</span>
+            </label>
           </div>
         </div>
       )}
