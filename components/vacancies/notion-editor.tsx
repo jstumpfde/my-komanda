@@ -1106,6 +1106,13 @@ function SourcePicker({
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
+    // Video and audio files are too large for base64 / localStorage —
+    // use a blob URL instead (valid for the current session only)
+    if (file.type.startsWith("video/") || file.type.startsWith("audio/")) {
+      const blobUrl = URL.createObjectURL(file)
+      onFile(blobUrl, file.name)
+      return
+    }
     const reader = new FileReader()
     reader.onload = () => onFile(reader.result as string, file.name)
     reader.readAsDataURL(file)
