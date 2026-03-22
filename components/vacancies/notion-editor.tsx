@@ -1840,16 +1840,16 @@ function EmojiBtn({ current, onSelect }: { current: string; onSelect: (v: string
           {current || "📝"}
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="p-2" style={{ width: "calc(9 * 2.25rem + 1rem)" }}>
-        {/* Строка категорий */}
-        <div className="flex gap-0.5 mb-1.5 pb-1.5 border-b border-border overflow-x-auto">
+      <DropdownMenuContent align="start" className="p-1.5" style={{ width: "calc(8 * 2rem + 0.75rem)" }}>
+        {/* Строка категорий-табов */}
+        <div className="flex gap-0 mb-1 pb-1 border-b border-border">
           {EMOJI_CATEGORIES.map((cat, i) => (
             <button
               key={cat.label}
               title={cat.label}
               onClick={() => setCatIdx(i)}
               className={cn(
-                "w-9 h-9 text-xl flex items-center justify-center rounded transition-colors leading-none flex-shrink-0",
+                "w-8 h-8 text-base flex items-center justify-center rounded transition-colors leading-none flex-shrink-0",
                 i === catIdx ? "bg-primary/15 ring-1 ring-primary/40" : "hover:bg-muted"
               )}
             >
@@ -1857,16 +1857,14 @@ function EmojiBtn({ current, onSelect }: { current: string; onSelect: (v: string
             </button>
           ))}
         </div>
-        {/* Название категории */}
-        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide px-1 mb-1">{activeCat.label}</p>
         {/* Сетка эмодзи выбранной категории */}
-        <div className="grid grid-cols-9 gap-0.5 max-h-56 overflow-y-auto">
+        <div className="grid grid-cols-8 gap-0 max-h-56 overflow-y-auto">
           {activeCat.emojis.map((e) => (
             <button
               key={e}
               onClick={() => { onSelect(e); setOpen(false) }}
               className={cn(
-                "w-9 h-9 text-xl flex items-center justify-center rounded hover:bg-muted transition-colors leading-none",
+                "w-8 h-8 text-lg flex items-center justify-center rounded hover:bg-muted transition-colors leading-none",
                 current === e && "bg-primary/10 ring-1 ring-primary"
               )}
             >
