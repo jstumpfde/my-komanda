@@ -1082,6 +1082,174 @@ function LayoutPicker({ value, onChange, prefix = "image" }: {
   )
 }
 
+// ─── Mini rich-text editor (captions & side text) ─────────────────────────
+
+const MINI_FORE = ["#000000","#ef4444","#f97316","#eab308","#22c55e","#3b82f6","#8b5cf6","#6b7280"]
+const MINI_BG   = ["#fde047","#fb923c","#f87171","#86efac","#93c5fd","#c4b5fd","#f9a8d4","transparent"]
+
+interface MiniRichEditorProps {
+  html: string
+  onChange: (html: string) => void
+  placeholder?: string
+  /** single-line: blocks Enter, enforces maxLength on plain text */
+  singleLine?: boolean
+  maxLength?: number
+  /** max-height for scrollable multi-line mode */
+  maxHeight?: number
+  className?: string
+}
+
+function MiniRichEditor({ html, onChange, placeholder, singleLine, maxLength, maxHeight, className }: MiniRichEditorProps) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [toolbar, setToolbar] = useState<{ x: number; y: number; upward: boolean } | null>(null)
+  const [showFore, setShowFore] = useState(false)
+  const [showBg,   setShowBg]   = useState(false)
+  const [fgColor,  setFgColor]  = useState("#000000")
+
+  // Keep DOM in sync when html prop changes from outside (initial load / undo)
+  const lastHtmlRef = useRef(html)
+  useEffect(() => {
+    if (ref.current && html !== lastHtmlRef.current && ref.current.innerHTML !== html) {
+      ref.current.innerHTML = html
+      lastHtmlRef.current = html
+    }
+  }, [html])
+
+  const exec = (cmd: string, val?: string) => {
+    ref.current?.focus()
+    document.execCommand(cmd, false, val)
+    if (cmd === "foreColor" && val) setFgColor(val)
+    setShowFore(false); setShowBg(false)
+  }
+
+  const sync = () => {
+    if (!ref.current) return
+    const next = ref.current.innerHTML
+    lastHtmlRef.current = next
+    onChange(next)
+  }
+
+  const handleSelChange = () => {
+    const sel = window.getSelection()
+    if (!sel || sel.isCollapsed || !sel.toString().trim() || !ref.current) {
+      setToolbar(null); return
+    }
+    // Only show toolbar when selection is inside our editor
+    if (!ref.current.contains(sel.anchorNode)) { setToolbar(null); return }
+    const range = sel.getRangeAt(0)
+    const rr = range.getBoundingClientRect()
+    const cr = ref.current.getBoundingClientRect()
+    const upward = (rr.top - cr.top) > 44
+    setToolbar({ x: rr.left - cr.left + rr.width / 2, y: upward ? rr.top - cr.top - 44 : rr.bottom - cr.top + 6, upward })
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (singleLine && e.key === "Enter") { e.preventDefault(); return }
+    if (maxLength && !singleLine) {
+      // Allow control keys
+      if (e.ctrlKey || e.metaKey || e.key.length > 1) return
+      const text = ref.current?.innerText || ""
+      if (text.length >= maxLength) e.preventDefault()
+    }
+  }
+
+  const handleInput = () => {
+    if (singleLine && maxLength && ref.current) {
+      // Strip newlines in single-line mode
+      const text = ref.current.innerText.replace(/\n/g, "")
+      if ((ref.current.innerText.length > maxLength) || ref.current.innerText.includes("\n")) {
+        // Clamp: truncate to maxLength characters by restoring truncated value
+        const clamped = text.slice(0, maxLength)
+        ref.current.innerText = clamped
+        // Move cursor to end
+        const sel = window.getSelection()
+        const range = document.createRange()
+        if (ref.current.childNodes.length > 0) {
+          const lastNode = ref.current.childNodes[ref.current.childNodes.length - 1]
+          range.setStartAfter(lastNode)
+        } else {
+          range.setStart(ref.current, 0)
+        }
+        range.collapse(true)
+        sel?.removeAllRanges()
+        sel?.addRange(range)
+      }
+    }
+    sync()
+  }
+
+  const wrapperCls = cn(
+    "relative text-xs text-muted-foreground italic",
+    "outline-none min-h-[1.2em]",
+    "empty:before:content-[attr(data-placeholder)] empty:before:text-muted-foreground/30 empty:before:not-italic",
+    "border-b border-border/40 pb-0.5 focus:border-primary/40",
+    "[&_strong]:font-semibold [&_em]:italic [&_u]:underline [&_s]:line-through",
+    className
+  )
+
+  return (
+    <div className="relative">
+      <div
+        ref={ref}
+        contentEditable
+        suppressContentEditableWarning
+        data-placeholder={placeholder || ""}
+        className={wrapperCls}
+        style={maxHeight ? { maxHeight, overflowY: "auto" } : undefined}
+        onBlur={sync}
+        onInput={handleInput}
+        onKeyDown={handleKeyDown}
+        onMouseUp={handleSelChange}
+        onKeyUp={handleSelChange}
+      />
+      {toolbar && (
+        <div
+          className="absolute z-50 flex items-center gap-0.5 bg-popover border border-border rounded-lg shadow-lg px-1.5 py-1 pointer-events-auto"
+          style={{ left: toolbar.x, top: toolbar.y, transform: "translateX(-50%)" }}
+          onMouseDown={(e) => e.preventDefault()}
+        >
+          <button className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" title="Жирный" onMouseDown={(e) => { e.preventDefault(); exec("bold") }}><Bold className="w-3 h-3" /></button>
+          <button className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" title="Курсив" onMouseDown={(e) => { e.preventDefault(); exec("italic") }}><Italic className="w-3 h-3" /></button>
+          <button className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" title="Подчёркнутый" onMouseDown={(e) => { e.preventDefault(); exec("underline") }}><Underline className="w-3 h-3" /></button>
+          <button className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" title="Зачёркнутый" onMouseDown={(e) => { e.preventDefault(); exec("strikeThrough") }}><Strikethrough className="w-3 h-3" /></button>
+          <div className="w-px h-3.5 bg-border mx-0.5" />
+          {/* Foreground */}
+          <div className="relative">
+            <button className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" title="Цвет текста"
+              onMouseDown={(e) => { e.preventDefault(); setShowFore(v => !v); setShowBg(false) }}>
+              <span className="flex flex-col items-center leading-none">
+                <span className="text-[11px] font-bold">A</span>
+                <span style={{ height: "2px", width: "12px", background: fgColor, borderRadius: "1px", marginTop: "1px" }} />
+              </span>
+            </button>
+            {showFore && (
+              <div className={cn("absolute z-50 bg-popover border border-border rounded-lg shadow-lg p-1.5 flex gap-1", toolbar.upward ? "top-full mt-1" : "bottom-full mb-1")} onMouseDown={e => e.preventDefault()}>
+                {MINI_FORE.map(c => <button key={c} onMouseDown={(e) => { e.preventDefault(); exec("foreColor", c) }} className="w-4 h-4 rounded-full border border-border hover:scale-110 transition-transform" style={{ background: c }} />)}
+              </div>
+            )}
+          </div>
+          {/* Background */}
+          <div className="relative">
+            <button className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" title="Цвет фона"
+              onMouseDown={(e) => { e.preventDefault(); setShowBg(v => !v); setShowFore(false) }}>
+              <Highlighter className="w-3 h-3" />
+            </button>
+            {showBg && (
+              <div className={cn("absolute z-50 bg-popover border border-border rounded-lg shadow-lg p-1.5 flex gap-1", toolbar.upward ? "top-full mt-1" : "bottom-full mb-1")} onMouseDown={e => e.preventDefault()}>
+                {MINI_BG.map(c => <button key={c} onMouseDown={(e) => { e.preventDefault(); exec("hiliteColor", c) }} className="w-4 h-4 rounded-full border border-border hover:scale-110 transition-transform" style={{ background: c === "transparent" ? "repeating-conic-gradient(#ccc 0% 25%, white 0% 50%) 0 0 / 6px 6px" : c }} />)}
+              </div>
+            )}
+          </div>
+          <div className="w-px h-3.5 bg-border mx-0.5" />
+          <button className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" title="Влево" onMouseDown={(e) => { e.preventDefault(); exec("justifyLeft") }}><AlignLeft className="w-3 h-3" /></button>
+          <button className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" title="По центру" onMouseDown={(e) => { e.preventDefault(); exec("justifyCenter") }}><AlignCenter className="w-3 h-3" /></button>
+          <button className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" title="Вправо" onMouseDown={(e) => { e.preventDefault(); exec("justifyRight") }}><AlignRight className="w-3 h-3" /></button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Upload or URL picker ──────────────────────────────────────────────────
 
 function SourcePicker({
@@ -1179,6 +1347,15 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
   const meta = BLOCK_TYPE_META.find((m) => m.type === block.type)
   const imgRef = useRef<HTMLImageElement>(null)
   const [imgHeight, setImgHeight] = useState<number>(256)
+  const videoContainerRef = useRef<HTMLDivElement>(null)
+  const [videoHeight, setVideoHeight] = useState<number>(200)
+  useEffect(() => {
+    const el = videoContainerRef.current
+    if (!el) return
+    const ro = new ResizeObserver(() => setVideoHeight(el.offsetHeight))
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
 
   switch (block.type) {
     case "image": {
@@ -1201,37 +1378,39 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
           {isSet ? (
             <div className={cn("flex gap-3", isSide ? (layout === "image-left" ? "flex-row" : "flex-row-reverse") : "flex-col")}>
               <div className={cn("flex flex-col gap-1", isSide ? "w-1/2 shrink-0" : "w-full")}>
-                <input
-                  className="text-xs text-muted-foreground italic bg-transparent outline-none border-b border-border/40 pb-0.5 focus:border-primary/40 mb-1"
-                  value={block.imageTitleTop || ""}
-                  onChange={(e) => onUpdate({ imageTitleTop: e.target.value })}
+                <MiniRichEditor
+                  html={block.imageTitleTop || ""}
+                  onChange={(v) => onUpdate({ imageTitleTop: v })}
                   placeholder="Подпись сверху..."
+                  singleLine
                   maxLength={42}
+                  className="mb-1"
                 />
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   ref={imgRef}
                   src={block.imageUrl}
-                  alt={block.imageCaption || ""}
+                  alt=""
                   className="rounded-lg object-contain w-full max-h-64 bg-muted/30"
                   onLoad={() => setImgHeight(imgRef.current?.offsetHeight ?? 256)}
                 />
-                <input
-                  className="text-xs text-muted-foreground italic bg-transparent outline-none border-b border-border/40 pb-0.5 focus:border-primary/40 mt-1"
-                  value={block.imageCaption || ""}
-                  onChange={(e) => onUpdate({ imageCaption: e.target.value })}
+                <MiniRichEditor
+                  html={block.imageCaption || ""}
+                  onChange={(v) => onUpdate({ imageCaption: v })}
                   placeholder="Подпись снизу..."
+                  singleLine
                   maxLength={42}
+                  className="mt-1"
                 />
               </div>
               {/* Текст справа/слева при боковом layout */}
               {isSide && (
-                <textarea
-                  className="flex-1 text-sm bg-transparent outline-none resize-none leading-relaxed placeholder:text-muted-foreground/40 overflow-y-auto"
-                  style={{ maxHeight: imgHeight }}
-                  value={block.content}
-                  onChange={(e) => onUpdate({ content: e.target.value })}
+                <MiniRichEditor
+                  html={block.content || ""}
+                  onChange={(v) => onUpdate({ content: v })}
                   placeholder="Текст рядом с изображением..."
+                  maxHeight={imgHeight}
+                  className="flex-1 text-sm not-italic"
                 />
               )}
             </div>
@@ -1270,14 +1449,15 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
           {isSet ? (
             <div className={cn("flex gap-3", isSide ? (layout === "video-left" ? "flex-row" : "flex-row-reverse") : "flex-col")}>
               <div className={cn("flex flex-col gap-1", isSide ? "w-1/2 shrink-0" : "w-full")}>
-                <input
-                  className="text-xs text-muted-foreground italic bg-transparent outline-none border-b border-border/40 pb-0.5 focus:border-primary/40 mb-1"
-                  value={block.videoTitleTop || ""}
-                  onChange={(e) => onUpdate({ videoTitleTop: e.target.value })}
+                <MiniRichEditor
+                  html={block.videoTitleTop || ""}
+                  onChange={(v) => onUpdate({ videoTitleTop: v })}
                   placeholder="Подпись сверху..."
+                  singleLine
                   maxLength={42}
+                  className="mb-1"
                 />
-                <div className="rounded-lg bg-black aspect-video overflow-hidden">
+                <div ref={videoContainerRef} className="rounded-lg bg-black aspect-video overflow-hidden">
                   {embed ? (
                     <iframe
                       src={embed.embedUrl}
@@ -1290,21 +1470,22 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
                     <video src={block.videoUrl} controls className="w-full h-full object-contain" />
                   )}
                 </div>
-                <input
-                  className="text-xs text-muted-foreground italic bg-transparent outline-none border-b border-border/40 pb-0.5 focus:border-primary/40 mt-1"
-                  value={block.videoCaption || ""}
-                  onChange={(e) => onUpdate({ videoCaption: e.target.value })}
+                <MiniRichEditor
+                  html={block.videoCaption || ""}
+                  onChange={(v) => onUpdate({ videoCaption: v })}
                   placeholder="Подпись снизу..."
+                  singleLine
                   maxLength={42}
+                  className="mt-1"
                 />
               </div>
               {isSide && (
-                <textarea
-                  className="flex-1 text-sm bg-transparent outline-none resize-none leading-relaxed placeholder:text-muted-foreground/40 overflow-y-auto"
-                  style={{ minHeight: "80px" }}
-                  value={block.content || ""}
-                  onChange={(e) => onUpdate({ content: e.target.value })}
+                <MiniRichEditor
+                  html={block.content || ""}
+                  onChange={(v) => onUpdate({ content: v })}
                   placeholder="Текст рядом с видео..."
+                  maxHeight={videoHeight}
+                  className="flex-1 text-sm not-italic"
                 />
               )}
             </div>
@@ -1642,13 +1823,13 @@ function SimplePreviewBlock({ block }: { block: Block }) {
       return (
         <div className={cn("flex gap-3", isSide ? (layout === "image-left" ? "flex-row" : "flex-row-reverse") : "flex-col")}>
           <div className={cn("flex flex-col min-w-0", isSide ? "w-1/2 shrink-0" : "w-full")}>
-            {block.imageTitleTop && <p className="text-xs text-muted-foreground italic leading-snug mb-1 truncate max-w-full">{block.imageTitleTop}</p>}
+            {block.imageTitleTop && <div className="text-xs text-muted-foreground italic leading-snug mb-1 truncate max-w-full" dangerouslySetInnerHTML={{ __html: block.imageTitleTop }} />}
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={block.imageUrl} alt={block.imageCaption || ""} className="rounded-xl w-full h-48 object-cover" />
-            {block.imageCaption && <p className="text-xs text-muted-foreground italic leading-snug mt-1 truncate max-w-full">{block.imageCaption}</p>}
+            <img src={block.imageUrl} alt="" className="rounded-xl w-full h-48 object-cover" />
+            {block.imageCaption && <div className="text-xs text-muted-foreground italic leading-snug mt-1 truncate max-w-full" dangerouslySetInnerHTML={{ __html: block.imageCaption }} />}
           </div>
           {isSide && block.content && (
-            <p className="flex-1 text-sm leading-relaxed whitespace-pre-wrap overflow-y-auto" style={{ maxHeight: "12rem" }}>{block.content}</p>
+            <div className="flex-1 text-sm leading-relaxed overflow-y-auto prose prose-sm max-w-none dark:prose-invert" style={{ maxHeight: "12rem" }} dangerouslySetInnerHTML={{ __html: block.content }} />
           )}
         </div>
       )
@@ -1661,7 +1842,7 @@ function SimplePreviewBlock({ block }: { block: Block }) {
       return (
         <div className={cn("flex gap-3", isSide ? (layout === "video-left" ? "flex-row" : "flex-row-reverse") : "flex-col")}>
           <div className={cn("flex flex-col min-w-0", isSide ? "w-1/2 shrink-0" : "w-full")}>
-            {block.videoTitleTop && <p className="text-xs text-muted-foreground italic leading-snug mb-1 truncate max-w-full">{block.videoTitleTop}</p>}
+            {block.videoTitleTop && <div className="text-xs text-muted-foreground italic leading-snug mb-1 truncate max-w-full" dangerouslySetInnerHTML={{ __html: block.videoTitleTop }} />}
             <div className="aspect-video rounded-xl bg-black overflow-hidden">
               {embed ? (
                 <iframe src={embed.embedUrl} className="w-full h-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen title="video" />
@@ -1669,10 +1850,10 @@ function SimplePreviewBlock({ block }: { block: Block }) {
                 <video src={block.videoUrl} controls className="w-full h-full object-contain" />
               )}
             </div>
-            {block.videoCaption && <p className="text-xs text-muted-foreground italic leading-snug mt-1 truncate max-w-full">{block.videoCaption}</p>}
+            {block.videoCaption && <div className="text-xs text-muted-foreground italic leading-snug mt-1 truncate max-w-full" dangerouslySetInnerHTML={{ __html: block.videoCaption }} />}
           </div>
           {isSide && block.content && (
-            <p className="flex-1 text-sm leading-relaxed whitespace-pre-wrap">{block.content}</p>
+            <div className="flex-1 text-sm leading-relaxed prose prose-sm max-w-none dark:prose-invert" dangerouslySetInnerHTML={{ __html: block.content }} />
           )}
         </div>
       )
