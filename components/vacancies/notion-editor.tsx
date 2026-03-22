@@ -255,43 +255,42 @@ export function NotionEditor({ demo, onBack, onUpdate }: NotionEditorProps) {
               const isRenaming = renamingLessonId === lesson.id
               return (
                 <DropdownMenu
+                  key={lesson.id}
                   open={contextMenuLessonId === lesson.id}
                   onOpenChange={(v) => { if (!v) setContextMenuLessonId(null) }}
                 >
-                  <DropdownMenuTrigger asChild>
-                    <div
-                      key={lesson.id}
-                      draggable={!isRenaming}
-                      onDragStart={() => setDragLessonIdx(i)}
-                      onDragOver={(e) => { e.preventDefault(); setDragOverLessonIdx(i) }}
-                      onDragEnd={() => { setDragLessonIdx(null); setDragOverLessonIdx(null) }}
-                      onDrop={() => dropLesson(i)}
-                      onClick={() => { if (!isRenaming) switchLesson(lesson.id) }}
-                      onContextMenu={(e) => { e.preventDefault(); setContextMenuLessonId(lesson.id) }}
-                      className={cn(
-                        "flex items-center gap-1.5 pl-1 pr-2 py-1.5 rounded-lg cursor-pointer group transition-all text-sm",
-                        isActive ? "bg-primary text-primary-foreground" : "hover:bg-muted/60 text-foreground",
-                        dragLessonIdx === i && "opacity-30",
-                        dragOverLessonIdx === i && dragLessonIdx !== i && "ring-1 ring-primary/50 bg-primary/5"
-                      )}
-                    >
-                      <GripVertical className={cn("w-3 h-3 flex-shrink-0 cursor-move", isActive ? "text-primary-foreground/40" : "text-muted-foreground/20 group-hover:text-muted-foreground/50")} />
-                      <span className="text-xl flex-shrink-0 leading-none">{lesson.emoji}</span>
-                      {isRenaming ? (
-                        <input
-                          autoFocus
-                          className="flex-1 text-xs font-medium bg-transparent border-b border-primary-foreground/40 outline-none min-w-0"
-                          value={lesson.title}
-                          onChange={(e) => updateLesson(lesson.id, { title: e.target.value })}
-                          onBlur={() => setRenamingLessonId(null)}
-                          onKeyDown={(e) => { if (e.key === "Enter") setRenamingLessonId(null) }}
-                          onClick={(e) => e.stopPropagation()}
-                        />
-                      ) : (
-                        <span className="flex-1 truncate text-[12px] font-medium">{lesson.title}</span>
-                      )}
-                    </div>
-                  </DropdownMenuTrigger>
+                  <div
+                    draggable={!isRenaming}
+                    onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; setDragLessonIdx(i) }}
+                    onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; setDragOverLessonIdx(i) }}
+                    onDragEnd={() => { setDragLessonIdx(null); setDragOverLessonIdx(null) }}
+                    onDrop={(e) => { e.preventDefault(); dropLesson(i) }}
+                    onClick={() => { if (!isRenaming) switchLesson(lesson.id) }}
+                    onContextMenu={(e) => { e.preventDefault(); setContextMenuLessonId(lesson.id) }}
+                    className={cn(
+                      "flex items-center gap-1.5 pl-1 pr-2 py-1.5 rounded-lg cursor-pointer group transition-all text-sm select-none",
+                      isActive ? "bg-primary text-primary-foreground" : "hover:bg-muted/60 text-foreground",
+                      dragLessonIdx === i && "opacity-30",
+                      dragOverLessonIdx === i && dragLessonIdx !== i && "ring-2 ring-primary/50 bg-primary/5"
+                    )}
+                  >
+                    <GripVertical className={cn("w-3 h-3 flex-shrink-0 cursor-grab active:cursor-grabbing", isActive ? "text-primary-foreground/40" : "text-muted-foreground/30 group-hover:text-muted-foreground/60")} />
+                    <span className="text-xl flex-shrink-0 leading-none">{lesson.emoji}</span>
+                    {isRenaming ? (
+                      <input
+                        autoFocus
+                        className="flex-1 text-xs font-medium bg-transparent border-b border-primary-foreground/40 outline-none min-w-0"
+                        value={lesson.title}
+                        onChange={(e) => updateLesson(lesson.id, { title: e.target.value })}
+                        onBlur={() => setRenamingLessonId(null)}
+                        onKeyDown={(e) => { if (e.key === "Enter") setRenamingLessonId(null) }}
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    ) : (
+                      <span className="flex-1 truncate text-[12px] font-medium">{lesson.title}</span>
+                    )}
+                  </div>
+                  <DropdownMenuTrigger className="sr-only" />
                   <DropdownMenuContent align="start" className="w-44">
                     <DropdownMenuItem onClick={() => { setContextMenuLessonId(null); setRenamingLessonId(lesson.id) }}>
                       <Pencil className="w-3.5 h-3.5 mr-2" />Переименовать
