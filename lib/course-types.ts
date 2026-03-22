@@ -46,6 +46,9 @@ export interface Block {
   buttonText: string
   buttonUrl: string
   buttonVariant: "primary" | "outline"
+  buttonColor?: string
+  buttonIconBefore?: string
+  buttonIconAfter?: string
   taskDescription: string
   questions: Question[]
 }
@@ -112,7 +115,7 @@ export function createBlock(type: BlockType): Block {
     audioUrl: "", audioTitle: "", audioLayout: "full", audioTitleTop: "", audioCaption: "",
     fileUrl: "", fileName: "", fileLayout: "full", fileTitleTop: "", fileCaption: "",
     infoStyle: "info", infoColor: "", infoIcon: "", infoSize: "m",
-    buttonText: "Подробнее", buttonUrl: "", buttonVariant: "primary",
+    buttonText: "Подробнее", buttonUrl: "", buttonVariant: "primary", buttonColor: "", buttonIconBefore: "", buttonIconAfter: "",
     taskDescription: "", questions: type === "task" ? [defaultQuestion()] : [],
   }
 }

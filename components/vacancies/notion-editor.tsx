@@ -1708,25 +1708,121 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
     case "info":
       return <InfoBlock block={block} onUpdate={onUpdate} />
 
-    case "button":
+    case "button": {
+      const btnColor = block.buttonColor || ""
+      const isPrimary = block.buttonVariant === "primary"
+      const previewStyle = btnColor
+        ? isPrimary
+          ? { backgroundColor: btnColor, borderColor: btnColor, color: "#fff" }
+          : { borderColor: btnColor, color: btnColor }
+        : {}
       return (
         <div className="rounded-xl border border-dashed border-border bg-muted/20 p-4 space-y-3">
           <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
             <MousePointerClick className="w-4 h-4" /><span>Кнопка</span>
           </div>
+
+          {/* Текст + ссылка */}
           <div className="grid grid-cols-2 gap-2">
             <Input placeholder="Текст кнопки" value={block.buttonText} onChange={(e) => onUpdate({ buttonText: e.target.value })} className="text-sm" />
             <Input placeholder="https://..." value={block.buttonUrl} onChange={(e) => onUpdate({ buttonUrl: e.target.value })} className="text-sm" />
           </div>
+
+          {/* Стиль: основная / контурная */}
           <div className="flex items-center gap-2">
-            <Button variant={block.buttonVariant === "primary" ? "default" : "outline"} size="sm" className="text-xs" onClick={() => onUpdate({ buttonVariant: "primary" })}>Основная</Button>
-            <Button variant={block.buttonVariant === "outline" ? "default" : "outline"} size="sm" className="text-xs" onClick={() => onUpdate({ buttonVariant: "outline" })}>Контурная</Button>
-            <div className="ml-auto">
-              <Button variant={block.buttonVariant === "primary" ? "default" : "outline"} size="sm">{block.buttonText || "Кнопка"}</Button>
+            <Button variant={isPrimary ? "default" : "outline"} size="sm" className="text-xs" onClick={() => onUpdate({ buttonVariant: "primary" })}>Основная</Button>
+            <Button variant={!isPrimary ? "default" : "outline"} size="sm" className="text-xs" onClick={() => onUpdate({ buttonVariant: "outline" })}>Контурная</Button>
+          </div>
+
+          {/* Иконка ДО текста */}
+          <div>
+            <p className="text-xs text-muted-foreground mb-1.5">Иконка слева</p>
+            <div className="flex flex-wrap gap-1.5">
+              {BUTTON_ICONS_BEFORE.map(({ symbol, label }) => (
+                <button
+                  key={`before-${label}`}
+                  title={label}
+                  onClick={() => onUpdate({ buttonIconBefore: symbol })}
+                  className={cn(
+                    "w-8 h-8 rounded-lg flex items-center justify-center text-sm border transition-all",
+                    (block.buttonIconBefore ?? "") === symbol
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border hover:border-primary/50 hover:bg-muted"
+                  )}
+                >
+                  {symbol || "∅"}
+                </button>
+              ))}
             </div>
+          </div>
+
+          {/* Иконка ПОСЛЕ текста */}
+          <div>
+            <p className="text-xs text-muted-foreground mb-1.5">Иконка справа</p>
+            <div className="flex flex-wrap gap-1.5">
+              {BUTTON_ICONS_AFTER.map(({ symbol, label }) => (
+                <button
+                  key={`after-${label}`}
+                  title={label}
+                  onClick={() => onUpdate({ buttonIconAfter: symbol })}
+                  className={cn(
+                    "w-8 h-8 rounded-lg flex items-center justify-center text-sm border transition-all",
+                    (block.buttonIconAfter ?? "") === symbol
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border hover:border-primary/50 hover:bg-muted"
+                  )}
+                >
+                  {symbol || "∅"}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Цвет */}
+          <div>
+            <p className="text-xs text-muted-foreground mb-1.5">Цвет</p>
+            <div className="flex flex-wrap gap-1.5">
+              {BUTTON_PRESET_COLORS.map(({ hex, label }) => (
+                <button
+                  key={hex}
+                  title={label}
+                  onClick={() => onUpdate({ buttonColor: btnColor === hex ? "" : hex })}
+                  className={cn(
+                    "w-7 h-7 rounded-full border-2 transition-all",
+                    btnColor === hex ? "border-foreground/60 scale-110" : "border-transparent hover:scale-105"
+                  )}
+                  style={{ backgroundColor: hex }}
+                />
+              ))}
+              {btnColor && (
+                <button
+                  title="Сбросить цвет"
+                  onClick={() => onUpdate({ buttonColor: "" })}
+                  className="w-7 h-7 rounded-full border-2 border-border flex items-center justify-center text-muted-foreground hover:text-destructive hover:border-destructive transition-all text-xs"
+                >✕</button>
+              )}
+            </div>
+          </div>
+
+          {/* Превью */}
+          <div className="flex justify-center pt-1">
+            <button
+              className={cn(
+                "inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all",
+                isPrimary
+                  ? btnColor ? "text-white" : "bg-primary text-primary-foreground"
+                  : btnColor ? "bg-transparent border" : "border border-border"
+              )}
+              style={previewStyle}
+            >
+              {block.buttonIconBefore && <span>{block.buttonIconBefore}</span>}
+              {block.buttonText || "Кнопка"}
+              {block.buttonIconAfter && <span>{block.buttonIconAfter}</span>}
+            </button>
           </div>
         </div>
       )
+    }
 
     case "task":
       return (
@@ -1859,6 +1955,39 @@ const INFO_PRESET_COLORS = [
   { hex: "#22c55e", label: "Зелёный" },
   { hex: "#3b82f6", label: "Синий" },
   { hex: "#6b7280", label: "Серый" },
+]
+
+// ─── Button block constants ─────────────────────────────────────────────────
+
+const BUTTON_PRESET_COLORS = [
+  { hex: "#3b82f6", label: "Синий" },
+  { hex: "#ef4444", label: "Красный" },
+  { hex: "#22c55e", label: "Зелёный" },
+  { hex: "#f97316", label: "Оранжевый" },
+  { hex: "#8b5cf6", label: "Фиолетовый" },
+  { hex: "#000000", label: "Чёрный" },
+]
+
+const BUTTON_ICONS_BEFORE = [
+  { symbol: "", label: "Нет" },
+  { symbol: "←", label: "Стрелка влево" },
+  { symbol: "↑", label: "Стрелка вверх" },
+  { symbol: "▶", label: "Воспроизвести" },
+  { symbol: "✓", label: "Галочка" },
+  { symbol: "★", label: "Звезда" },
+  { symbol: "📎", label: "Скрепка" },
+  { symbol: "📥", label: "Загрузить" },
+]
+
+const BUTTON_ICONS_AFTER = [
+  { symbol: "", label: "Нет" },
+  { symbol: "→", label: "Стрелка вправо" },
+  { symbol: "↓", label: "Стрелка вниз" },
+  { symbol: "↗", label: "Открыть" },
+  { symbol: "⬇", label: "Скачать" },
+  { symbol: "✓", label: "Галочка" },
+  { symbol: "+", label: "Плюс" },
+  { symbol: "▶", label: "Воспроизвести" },
 ]
 
 function hexToHsl(hex: string): { h: number; s: number; l: number } {
@@ -2387,15 +2516,36 @@ function SimplePreviewBlock({ block }: { block: Block }) {
         </div>
       )
     }
-    case "button":
+    case "button": {
       if (!block.buttonText?.trim() && !block.buttonUrl?.trim()) return null
+      const btnColor = block.buttonColor || ""
+      const isPrimary = block.buttonVariant === "primary"
+      const previewStyle: React.CSSProperties = btnColor
+        ? isPrimary
+          ? { backgroundColor: btnColor, borderColor: btnColor, color: "#fff" }
+          : { borderColor: btnColor, color: btnColor }
+        : {}
       return (
         <div className="flex justify-center">
-          <Button variant={block.buttonVariant === "primary" ? "default" : "outline"} size="sm">
+          <a
+            href={block.buttonUrl || "#"}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={cn(
+              "inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all",
+              isPrimary
+                ? btnColor ? "text-white" : "bg-primary text-primary-foreground hover:bg-primary/90"
+                : btnColor ? "bg-transparent border hover:bg-muted/50" : "border border-border hover:bg-muted/50"
+            )}
+            style={previewStyle}
+          >
+            {block.buttonIconBefore && <span>{block.buttonIconBefore}</span>}
             {block.buttonText || "Кнопка"}
-          </Button>
+            {block.buttonIconAfter && <span>{block.buttonIconAfter}</span>}
+          </a>
         </div>
       )
+    }
     case "task":
       if (!block.taskDescription?.trim() && block.questions.length === 0) return null
       return (
