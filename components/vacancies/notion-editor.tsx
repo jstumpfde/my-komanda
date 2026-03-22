@@ -2187,7 +2187,7 @@ function InfoBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: Partia
       {/* Иконка слева — символ 24px цвета акцента, без кружка, по центру высоты */}
       <div
         className="flex-shrink-0 flex items-center justify-center font-bold select-none leading-none"
-        style={{ fontSize: 24, color: activeColor, minWidth: 28 }}
+        style={{ fontSize: 48, color: activeColor, minWidth: 52 }}
       >
         {activeIcon}
       </div>
@@ -2573,7 +2573,7 @@ function SimplePreviewBlock({ block }: { block: Block }) {
         >
           <div
             className="flex-shrink-0 flex items-center justify-center font-bold select-none leading-none mt-0.5"
-            style={{ fontSize: 24, color, minWidth: 28 }}
+            style={{ fontSize: 48, color, minWidth: 52 }}
           >
             {icon}
           </div>
