@@ -2653,14 +2653,37 @@ function InfoBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: Partia
   )
 }
 
+// Имена эмодзи для поиска (русские + английские ключевые слова)
+const EMOJI_NAMES: Record<string, string> = {
+  "😀":"улыбка радость смех","😊":"улыбка счастье","😄":"смех радость","😎":"крутой очки","🤩":"восторг звезда","😍":"влюблён сердце","🥳":"праздник вечеринка","😌":"спокойствие покой","🤔":"думаю размышление","😅":"нервный пот смех","😂":"смех слёзы","🥰":"любовь обнимашки","😇":"ангел добро","😜":"язык шутка","🤗":"обнимашки радость","😏":"усмешка хитрость","😴":"сон усталость","🤓":"очки умный","😆":"смех","😋":"вкусно язык","🤨":"скептик бровь","😐":"нейтральный","😑":"раздражение","🥴":"пьяный","😬":"нервы скрежет","🙃":"перевёрнутый иронично","😪":"сонный усталость",
+  "✅":"галочка да ок верно","❌":"крест нет отмена","⚠️":"предупреждение осторожно","ℹ️":"информация","❓":"вопрос","❗":"восклицание важно","🔴":"красный круг","🟡":"жёлтый круг","🟢":"зелёный круг","🔵":"синий круг","💜":"сердце фиолетовый","🔗":"ссылка цепочка","🔔":"колокол уведомление","🔕":"без звука","💫":"звезда блеск","✨":"блеск магия","🏆":"кубок победа","🎯":"цель мишень","💡":"идея лампочка","🔒":"замок безопасность","💎":"бриллиант","🎁":"подарок","🎀":"бант","🏅":"медаль",
+  "👋":"привет рука","👍":"лайк хорошо","👎":"дизлайк плохо","🙌":"аплодисменты","🤝":"рукопожатие","🙏":"спасибо просьба","💪":"сила мышца","✌️":"победа два мир","🤞":"удача крест пальцы","👏":"хлопки аплодисменты","🫶":"сердце руки","🤜":"кулак удар","🤛":"кулак удар","☝️":"один указание","👆":"вверх","👇":"вниз","👈":"влево","👉":"вправо","🤙":"позвони","🖐":"стоп рука","✋":"стоп рука","🤚":"рука","🖖":"вулкан","🤘":"рок","🤟":"ай лав ю","🖕":"средний",
+  "💼":"работа портфель","📝":"заметка ручка","📊":"диаграмма","📈":"рост график","📉":"падение график","💰":"деньги мешок","💳":"карта оплата","🏦":"банк","📌":"булавка закреплено","📎":"скрепка","✂️":"ножницы","📅":"календарь дата","📋":"список буфер","📁":"папка","🔑":"ключ доступ","🖥":"компьютер монитор","⌨️":"клавиатура","🖨":"принтер","📱":"телефон мобильный","☎️":"телефон","📞":"звонок","📠":"факс","🗂":"вкладки","🗃":"картотека","🗄":"шкаф",
+  "👤":"человек профиль","👥":"люди группа","🧠":"мозг","👶":"ребёнок","👧":"девочка","👦":"мальчик","👩":"женщина","👨":"мужчина","👴":"дед","👵":"бабушка","🧑":"человек","👮":"полиция","💂":"охрана","🧑‍💼":"менеджер","👷":"строитель","🧑‍🔬":"учёный","🧑‍🎓":"студент","🧑‍🏫":"учитель","🧑‍⚕️":"врач","🧑‍🍳":"повар","🧑‍🎨":"художник","🧑‍✈️":"пилот","👸":"принцесса","🤴":"принц","🦸":"герой","🦹":"злодей",
+  "🚀":"ракета","✈️":"самолёт","🚗":"машина автомобиль","🚕":"такси","🚌":"автобус","🚎":"троллейбус","🏎":"гонка","🚂":"поезд","🚢":"корабль","🛸":"нло тарелка","🚁":"вертолёт","🛵":"скутер","🚲":"велосипед","🛴":"самокат","🏍":"мотоцикл","⛵":"яхта парус","🛥":"лодка","🚤":"катер","🛺":"рикша","🚐":"микроавтобус","🚑":"скорая помощь","🚒":"пожарная","🚓":"полиция","🛻":"пикап","🚚":"грузовик","🚛":"фура",
+  "🌸":"цветок сакура","🌺":"цветок","🌻":"подсолнух","🌿":"трава листья","🍀":"клевер удача","🌊":"волна море","🏔":"гора","🌙":"луна ночь","⭐":"звезда","☀️":"солнце","🌈":"радуга","❄️":"снег зима","🔥":"огонь жар","⚡":"молния","🌍":"земля мир","🌲":"дерево лес","🌴":"пальма","🌵":"кактус","🍄":"гриб","🌾":"колос поле","🍂":"осень листья","🍁":"клён осень","🌰":"каштан","🐚":"ракушка","🪸":"коралл","🪨":"камень",
+  "🐱":"кот кошка","🐶":"собака пёс","🦊":"лиса","🐻":"медведь","🐼":"панда","🦁":"лев","🐯":"тигр","🐸":"лягушка","🐧":"пингвин","🦋":"бабочка","🐝":"пчела","🦄":"единорог","🦅":"орёл","🐠":"рыба","🦀":"краб","🐙":"осьминог","🐄":"корова","🐷":"свинья","🐔":"курица","🦆":"утка","🐺":"волк","🦝":"енот","🦨":"скунс","🦡":"барсук","🐿":"белка","🦔":"ёж",
+}
+
 function EmojiBtn({ current, onSelect }: { current: string; onSelect: (v: string) => void }) {
   const [open, setOpen] = useState(false)
   const [activeCategory, setActiveCategory] = useState(Object.keys(CATEGORIES)[0])
+  const [search, setSearch] = useState("")
   const [pos, setPos] = useState<{ top?: number; bottom?: number; left: number } | null>(null)
   const btnRef = useRef<HTMLButtonElement>(null)
+  const searchRef = useRef<HTMLInputElement>(null)
 
-  const emojis = CATEGORIES[activeCategory] ?? []
-  const PICKER_WIDTH = 9 * 36 + 16 // 9 cols * 36px + padding
+  const PICKER_WIDTH = 9 * 36 + 16
+
+  // Результаты поиска — по всем эмодзи всех категорий
+  const searchResults = search.trim()
+    ? Object.values(CATEGORIES).flat().filter((e) => {
+        const q = search.toLowerCase()
+        return (EMOJI_NAMES[e] || "").toLowerCase().includes(q) || e.includes(q)
+      })
+    : null
+
+  const displayEmojis = searchResults ?? CATEGORIES[activeCategory] ?? []
 
   const openPicker = () => {
     if (!btnRef.current) return
@@ -2672,10 +2695,14 @@ function EmojiBtn({ current, onSelect }: { current: string; onSelect: (v: string
     } else {
       setPos({ top: rect.bottom + 4, left })
     }
+    setSearch("")
     setOpen(true)
   }
 
-  // Закрытие по клику вне
+  useEffect(() => {
+    if (open) setTimeout(() => searchRef.current?.focus(), 50)
+  }, [open])
+
   useEffect(() => {
     if (!open) return
     const handler = (e: MouseEvent) => {
@@ -2703,61 +2730,55 @@ function EmojiBtn({ current, onSelect }: { current: string; onSelect: (v: string
       {open && pos && typeof document !== "undefined" && (
         <div
           id="lesson-emoji-picker"
-          style={{
-            position: "fixed",
-            top: pos.top,
-            bottom: pos.bottom,
-            left: pos.left,
-            width: PICKER_WIDTH,
-            zIndex: 9999,
-          }}
+          style={{ position: "fixed", top: pos.top, bottom: pos.bottom, left: pos.left, width: PICKER_WIDTH, zIndex: 9999 }}
           className="bg-popover border border-border rounded-xl shadow-xl p-2 flex flex-col gap-1.5"
         >
-          {/* 1. Быстрый доступ */}
-          <div className="grid grid-cols-9 gap-0.5 pb-1.5 border-b border-border">
-            {QUICK.map((e) => (
-              <button
-                key={e}
-                onClick={() => { onSelect(e); setOpen(false) }}
-                className={cn(
-                  "w-9 h-9 text-xl flex items-center justify-center rounded transition-colors leading-none",
-                  current === e ? "bg-primary/10 ring-1 ring-primary" : "hover:bg-muted"
-                )}
-              >{e}</button>
-            ))}
-          </div>
+          {/* Поиск */}
+          <input
+            ref={searchRef}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Поиск эмодзи..."
+            className="w-full text-xs border border-border rounded-lg px-2.5 py-1.5 outline-none focus:border-primary/50 bg-muted/30 placeholder:text-muted-foreground/50"
+          />
 
-          {/* 2. Сетка эмодзи активной категории */}
+          {/* Быстрый доступ — скрываем при поиске */}
+          {!search && (
+            <div className="grid grid-cols-9 gap-0.5 pb-1.5 border-b border-border">
+              {QUICK.map((e) => (
+                <button key={e} onClick={() => { onSelect(e); setOpen(false) }}
+                  className={cn("w-9 h-9 text-xl flex items-center justify-center rounded transition-colors leading-none",
+                    current === e ? "bg-primary/10 ring-1 ring-primary" : "hover:bg-muted")}
+                >{e}</button>
+              ))}
+            </div>
+          )}
+
+          {/* Сетка эмодзи */}
           <div className="grid grid-cols-9 gap-0.5 max-h-[180px] overflow-y-auto">
-            {emojis.map((e, i) => (
-              <button
-                key={i}
-                onClick={() => { onSelect(e); setOpen(false) }}
-                className={cn(
-                  "w-9 h-9 text-xl flex items-center justify-center rounded hover:bg-muted transition-colors leading-none",
-                  current === e && "bg-primary/10 ring-1 ring-primary"
-                )}
-              >{e}</button>
-            ))}
+            {displayEmojis.length > 0
+              ? displayEmojis.map((e, i) => (
+                  <button key={i} onClick={() => { onSelect(e); setOpen(false) }}
+                    title={EMOJI_NAMES[e] || e}
+                    className={cn("w-9 h-9 text-xl flex items-center justify-center rounded hover:bg-muted transition-colors leading-none",
+                      current === e && "bg-primary/10 ring-1 ring-primary")}
+                  >{e}</button>
+                ))
+              : <p className="col-span-9 text-xs text-muted-foreground text-center py-4">Ничего не найдено</p>
+            }
           </div>
 
-          {/* 3. Категории снизу — горизонтальный скролл */}
-          <div className="overflow-x-auto border-t border-border pt-1.5" style={{ scrollbarWidth: "none" }}>
-            <div className="flex gap-1 whitespace-nowrap">
+          {/* Категории в 2 ряда */}
+          {!search && (
+            <div className="flex flex-wrap gap-1 border-t border-border pt-1.5">
               {Object.keys(CATEGORIES).map((cat) => (
-                <button
-                  key={cat}
-                  onClick={() => setActiveCategory(cat)}
-                  className={cn(
-                    "text-xs px-2 py-1 rounded-lg transition-all shrink-0",
-                    activeCategory === cat
-                      ? "bg-primary text-primary-foreground"
-                      : "hover:bg-muted text-muted-foreground"
-                  )}
+                <button key={cat} onClick={() => setActiveCategory(cat)}
+                  className={cn("text-xs px-2 py-1 rounded-lg transition-all",
+                    activeCategory === cat ? "bg-primary text-primary-foreground" : "hover:bg-muted text-muted-foreground")}
                 >{cat}</button>
               ))}
             </div>
-          </div>
+          )}
         </div>
       )}
     </>
