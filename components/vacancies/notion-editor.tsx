@@ -507,10 +507,17 @@ function NotionLessonEditor({ lesson, onUpdateLesson, onUpdateBlock, onInsertBlo
     if (sel && sel.rangeCount > 0) savedRangeToolbarRef.current = sel.getRangeAt(0).cloneRange()
   }
   const insertAtToolbarCursor = (text: string) => {
-    const sel = window.getSelection()
-    if (savedRangeToolbarRef.current && sel) {
-      sel.removeAllRanges()
-      sel.addRange(savedRangeToolbarRef.current)
+    if (savedRangeToolbarRef.current) {
+      // Focus the container element of the saved range
+      const container = savedRangeToolbarRef.current.commonAncestorContainer
+      const el = container instanceof Element ? container : container.parentElement
+      const editable = el?.closest("[contenteditable]") as HTMLElement | null
+      if (editable) editable.focus()
+      const sel = window.getSelection()
+      if (sel) {
+        sel.removeAllRanges()
+        sel.addRange(savedRangeToolbarRef.current)
+      }
     }
     document.execCommand("insertText", false, text)
     setShowTagsInToolbar(false)
@@ -524,7 +531,7 @@ function NotionLessonEditor({ lesson, onUpdateLesson, onUpdateBlock, onInsertBlo
         <div
           className="absolute z-50 flex items-center gap-0.5 bg-popover border border-border rounded-lg shadow-lg px-1.5 py-1 pointer-events-auto"
           style={{ left: floatingToolbar.x, top: floatingToolbar.y, transform: "translateX(-50%)" }}
-          onMouseDown={(e) => e.preventDefault()}
+          onMouseDown={(e) => { e.preventDefault(); saveToolbarSelection() }}
         >
           <FmtBtn icon={Bold} tip="Жирный" cmd={() => execFmt("bold")} />
           <FmtBtn icon={Italic} tip="Курсив" cmd={() => execFmt("italic")} />
