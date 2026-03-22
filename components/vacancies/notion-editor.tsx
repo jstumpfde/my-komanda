@@ -383,6 +383,13 @@ function NotionLessonEditor({ lesson, onUpdateLesson, onUpdateBlock, onInsertBlo
   const [showForeColors, setShowForeColors] = useState(false)
   const [showBgColors, setShowBgColors] = useState(false)
   const [currentTextColor, setCurrentTextColor] = useState("#000000")
+  const [showTagsInToolbar, setShowTagsInToolbar] = useState(false)
+  const [showEmojiInToolbar, setShowEmojiInToolbar] = useState(false)
+  const [toolbarEmojiPos, setToolbarEmojiPos] = useState<React.CSSProperties>({})
+  const toolbarEmojiSearchRef = useRef<HTMLInputElement>(null)
+  const toolbarEmojiBtnRef = useRef<HTMLButtonElement>(null)
+  const toolbarTagsBtnRef = useRef<HTMLButtonElement>(null)
+  const savedRangeToolbarRef = useRef<Range | null>(null)
   const editorAreaRef = useRef<HTMLDivElement>(null)
 
   const FORE_COLORS = ["#000000", "#ef4444", "#f97316", "#eab308", "#22c55e", "#3b82f6", "#8b5cf6", "#6b7280"]
@@ -452,6 +459,48 @@ function NotionLessonEditor({ lesson, onUpdateLesson, onUpdateBlock, onInsertBlo
     try { return document.queryCommandValue("formatBlock").toLowerCase() } catch { return "" }
   }
 
+  // Cycle heading: H1 → H2 → H3 → p → H1 ...
+  const cycleHeading = () => {
+    const cur = currentBlock()
+    const next = cur === "h1" ? "h2" : cur === "h2" ? "h3" : cur === "h3" ? "p" : "h1"
+    execFmt("formatBlock", next)
+  }
+  const headingLabel = () => {
+    const cur = currentBlock()
+    return cur === "h1" ? "H1" : cur === "h2" ? "H2" : cur === "h3" ? "H3" : "H"
+  }
+  const headingActive = () => ["h1","h2","h3"].includes(currentBlock())
+
+  // Cycle alignment: left → center → right → left ...
+  const currentAlign = () => {
+    try {
+      if (document.queryCommandState("justifyCenter")) return "center"
+      if (document.queryCommandState("justifyRight")) return "right"
+      return "left"
+    } catch { return "left" }
+  }
+  const cycleAlign = () => {
+    const cur = currentAlign()
+    const next = cur === "left" ? "center" : cur === "center" ? "right" : "left"
+    execFmt(next === "center" ? "justifyCenter" : next === "right" ? "justifyRight" : "justifyLeft")
+  }
+
+  // Save/restore selection for emoji/tags insert
+  const saveToolbarSelection = () => {
+    const sel = window.getSelection()
+    if (sel && sel.rangeCount > 0) savedRangeToolbarRef.current = sel.getRangeAt(0).cloneRange()
+  }
+  const insertAtToolbarCursor = (text: string) => {
+    const sel = window.getSelection()
+    if (savedRangeToolbarRef.current && sel) {
+      sel.removeAllRanges()
+      sel.addRange(savedRangeToolbarRef.current)
+    }
+    document.execCommand("insertText", false, text)
+    setShowTagsInToolbar(false)
+    setShowEmojiInToolbar(false)
+  }
+
   return (
     <div ref={editorAreaRef} className="relative max-w-3xl mx-auto py-6 px-2">
       {/* Floating toolbar */}
@@ -509,17 +558,80 @@ function NotionLessonEditor({ lesson, onUpdateLesson, onUpdateBlock, onInsertBlo
           </div>
           {!floatingInInfoBlock && <>
             <div className="w-px h-4 bg-border mx-0.5" />
-            <button className={cn("w-7 h-7 rounded flex items-center justify-center transition-colors", currentBlock() === "h1" ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted")} title="Заголовок 1" onMouseDown={(e) => { e.preventDefault(); toggleBlock("h1") }}><Heading1 className="w-3.5 h-3.5" /></button>
-            <button className={cn("w-7 h-7 rounded flex items-center justify-center transition-colors", currentBlock() === "h2" ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted")} title="Заголовок 2" onMouseDown={(e) => { e.preventDefault(); toggleBlock("h2") }}><Heading2 className="w-3.5 h-3.5" /></button>
-            <button className={cn("w-7 h-7 rounded flex items-center justify-center transition-colors", currentBlock() === "h3" ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted")} title="Заголовок 3" onMouseDown={(e) => { e.preventDefault(); toggleBlock("h3") }}><Heading3 className="w-3.5 h-3.5" /></button>
+            {/* Heading cycle: H → H1 → H2 → H3 → H */}
+            <button
+              className={cn("w-7 h-7 rounded flex items-center justify-center transition-colors text-xs font-bold",
+                headingActive() ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted")}
+              title="Заголовок (H1→H2→H3→сброс)"
+              onMouseDown={(e) => { e.preventDefault(); cycleHeading() }}
+            >{headingLabel()}</button>
             <div className="w-px h-4 bg-border mx-0.5" />
             <FmtBtn icon={ListIcon} tip="Маркированный список" cmd={() => execFmt("insertUnorderedList")} />
             <FmtBtn icon={ListOrdered} tip="Нумерованный список" cmd={() => execFmt("insertOrderedList")} />
           </>}
           <div className="w-px h-4 bg-border mx-0.5" />
-          <FmtBtn icon={AlignLeft} tip="Влево" cmd={() => execFmt("justifyLeft")} />
-          <FmtBtn icon={AlignCenter} tip="По центру" cmd={() => execFmt("justifyCenter")} />
-          <FmtBtn icon={AlignRight} tip="Вправо" cmd={() => execFmt("justifyRight")} />
+          {/* Align cycle: ← → ↔ → → */}
+          <button
+            className="w-7 h-7 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+            title="Выравнивание (влево→по центру→вправо)"
+            onMouseDown={(e) => { e.preventDefault(); cycleAlign() }}
+          >
+            {currentAlign() === "center" ? <AlignCenter className="w-3.5 h-3.5" /> : currentAlign() === "right" ? <AlignRight className="w-3.5 h-3.5" /> : <AlignLeft className="w-3.5 h-3.5" />}
+          </button>
+          <div className="w-px h-4 bg-border mx-0.5" />
+          {/* Variables # */}
+          <div className="relative">
+            <button
+              ref={toolbarTagsBtnRef}
+              className="w-7 h-7 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors text-xs font-bold"
+              title="Вставить переменную"
+              onMouseDown={(e) => { e.preventDefault(); saveToolbarSelection(); setShowEmojiInToolbar(false); setShowTagsInToolbar(v => !v) }}
+            >#</button>
+            {showTagsInToolbar && (
+              <div className="absolute bottom-full mb-1 left-0 z-[200] bg-popover border border-border rounded-xl shadow-xl overflow-hidden w-52" onMouseDown={e => e.preventDefault()}>
+                <div className="px-3 py-1.5 border-b border-border">
+                  <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Переменные</span>
+                </div>
+                <div className="p-1">
+                  {QUICK_TAGS.map((t) => (
+                    <button key={t.tag} onMouseDown={(ev) => { ev.preventDefault(); insertAtToolbarCursor(t.tag) }}
+                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left hover:bg-muted transition-colors">
+                      <span className="font-mono text-[11px] text-primary bg-primary/10 rounded px-1 py-0.5 shrink-0">{t.tag}</span>
+                      <span className="text-xs text-muted-foreground truncate">{t.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+          {/* Emoji 😊 */}
+          <button
+            ref={toolbarEmojiBtnRef}
+            className="w-7 h-7 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors text-sm"
+            title="Вставить эмодзи"
+            onMouseDown={(e) => {
+              e.preventDefault()
+              saveToolbarSelection()
+              setShowTagsInToolbar(false)
+              if (toolbarEmojiBtnRef.current) {
+                const rect = toolbarEmojiBtnRef.current.getBoundingClientRect()
+                const spaceBelow = window.innerHeight - rect.bottom - 8
+                const spaceAbove = rect.top - 8
+                if (spaceBelow >= 300 || spaceBelow >= spaceAbove) {
+                  setToolbarEmojiPos({ top: rect.bottom + 4, left: Math.min(rect.left, window.innerWidth - (9 * 37 + 16) - 8) })
+                } else {
+                  setToolbarEmojiPos({ bottom: window.innerHeight - rect.top + 4, left: Math.min(rect.left, window.innerWidth - (9 * 37 + 16) - 8) })
+                }
+              }
+              setShowEmojiInToolbar(v => !v)
+            }}
+          >😊</button>
+          <InlineEmojiPicker
+            isOpen={showEmojiInToolbar}
+            positionStyle={toolbarEmojiPos}
+            searchRef={toolbarEmojiSearchRef}
+            onSelect={(emoji) => { insertAtToolbarCursor(emoji); setShowEmojiInToolbar(false) }}
+          />
         </div>
       )}
 
