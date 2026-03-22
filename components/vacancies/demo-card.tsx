@@ -783,6 +783,27 @@ function FloatingToolbar({ editorRef, savedSelectionRef }: FloatingToolbarProps)
   )
 }
 
+/* ──── HTML cleaner — strips inline styles/margins/padding from pasted content ──── */
+function cleanHtml(html: string): string {
+  const div = document.createElement("div")
+  div.innerHTML = html
+  const walk = (el: Element) => {
+    // Remove style attribute entirely
+    el.removeAttribute("style")
+    // Remove class attributes that carry external formatting
+    el.removeAttribute("class")
+    // Remove data-* and other non-semantic attrs that Word/Notion add
+    Array.from(el.attributes).forEach(attr => {
+      if (attr.name !== "href" && attr.name !== "src" && attr.name !== "alt" && attr.name !== "target") {
+        el.removeAttribute(attr.name)
+      }
+    })
+    Array.from(el.children).forEach(walk)
+  }
+  Array.from(div.children).forEach(walk)
+  return div.innerHTML
+}
+
 /* ──── Block Editor ──── */
 function BlockEditor({ block, onUpdate }: { block: Block; onUpdate: (p: Partial<Block>) => void }) {
   const editorRef = useRef<HTMLDivElement>(null)
@@ -796,7 +817,7 @@ function BlockEditor({ block, onUpdate }: { block: Block; onUpdate: (p: Partial<
   // Set innerHTML on mount (key prop on BlockEditor forces remount when block.id changes)
   useEffect(() => {
     if (editorRef.current) {
-      editorRef.current.innerHTML = block.content || ""
+      editorRef.current.innerHTML = cleanHtml(block.content || "")
       console.log("[BlockEditor] mounted block:", block.id, "content length:", (block.content || "").length)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
