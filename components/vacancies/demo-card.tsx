@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useEffect, useCallback } from "react"
+import { useState, useRef, useEffect, useCallback, type RefObject, type MutableRefObject } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -614,6 +614,175 @@ function Inserter({ onInsert, first }: { onInsert: (type: BlockType) => void; fi
   )
 }
 
+/* ──── Floating Selection Toolbar ──── */
+interface FloatingToolbarState {
+  visible: boolean
+  top: number
+  left: number
+}
+
+interface FloatingToolbarProps {
+  editorRef: RefObject<HTMLDivElement | null>
+  savedSelectionRef: MutableRefObject<Range | null>
+}
+
+function FloatingToolbar({ editorRef, savedSelectionRef }: FloatingToolbarProps) {
+  const [toolbar, setToolbar] = useState<FloatingToolbarState>({ visible: false, top: 0, left: 0 })
+  const [showColors, setShowColors] = useState(false)
+  const [floatingLinkPopup, setFloatingLinkPopup] = useState(false)
+  const [floatingLinkUrl, setFloatingLinkUrl] = useState("")
+  const toolbarRef = useRef<HTMLDivElement>(null)
+  const [, forceUpdate] = useState(0)
+
+  const COLORS = ["#E53E3E", "#DD6B20", "#D69E2E", "#38A169", "#3182CE", "#805AD5"]
+
+  const updatePosition = useCallback(() => {
+    const sel = window.getSelection()
+    if (!sel || sel.rangeCount === 0 || sel.isCollapsed) {
+      setToolbar(t => ({ ...t, visible: false }))
+      setShowColors(false)
+      setFloatingLinkPopup(false)
+      return
+    }
+    // Check selection is inside our editor
+    const range = sel.getRangeAt(0)
+    if (!editorRef.current?.contains(range.commonAncestorContainer)) {
+      setToolbar(t => ({ ...t, visible: false }))
+      setShowColors(false)
+      setFloatingLinkPopup(false)
+      return
+    }
+    const rect = range.getBoundingClientRect()
+    const editorRect = editorRef.current!.getBoundingClientRect()
+    setToolbar({
+      visible: true,
+      top: rect.top - editorRect.top - 44,
+      left: Math.max(0, rect.left - editorRect.left + rect.width / 2 - 180),
+    })
+    forceUpdate(n => n + 1) // re-render to update active states
+  }, [editorRef])
+
+  useEffect(() => {
+    const onSelectionChange = () => { updatePosition() }
+    document.addEventListener("selectionchange", onSelectionChange)
+    return () => document.removeEventListener("selectionchange", onSelectionChange)
+  }, [updatePosition])
+
+  useEffect(() => {
+    const handleMouseDown = (e: MouseEvent) => {
+      if (toolbarRef.current && !toolbarRef.current.contains(e.target as Node)) {
+        setShowColors(false)
+        setFloatingLinkPopup(false)
+      }
+    }
+    document.addEventListener("mousedown", handleMouseDown)
+    return () => document.removeEventListener("mousedown", handleMouseDown)
+  }, [])
+
+  const exec = (cmd: string, value?: string) => {
+    editorRef.current?.focus()
+    document.execCommand(cmd, false, value)
+    setTimeout(() => forceUpdate(n => n + 1), 0)
+  }
+
+  const tb = (fn: () => void) => (e: React.MouseEvent) => {
+    e.preventDefault()
+    fn()
+  }
+
+  const isActive = (cmd: string) => {
+    try { return document.queryCommandState(cmd) } catch { return false }
+  }
+
+  const btnCls = (cmd?: string) =>
+    cn("w-7 h-7 rounded hover:bg-muted text-xs font-medium flex items-center justify-center transition-colors",
+      cmd && isActive(cmd) ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground")
+
+  const openFloatingLink = () => {
+    const sel = window.getSelection()
+    if (sel && sel.rangeCount > 0) savedSelectionRef.current = sel.getRangeAt(0).cloneRange()
+    setFloatingLinkUrl("")
+    setFloatingLinkPopup(true)
+  }
+
+  const applyFloatingLink = () => {
+    if (!floatingLinkUrl.trim()) { setFloatingLinkPopup(false); return }
+    editorRef.current?.focus()
+    if (savedSelectionRef.current) {
+      const sel = window.getSelection()
+      sel?.removeAllRanges()
+      sel?.addRange(savedSelectionRef.current)
+    }
+    document.execCommand("createLink", false, floatingLinkUrl.trim())
+    setFloatingLinkPopup(false)
+  }
+
+  if (!toolbar.visible) return null
+
+  return (
+    <div
+      ref={toolbarRef}
+      className="absolute z-50 bg-popover border border-border rounded-xl shadow-xl px-2 py-1 flex gap-0.5 items-center"
+      style={{ top: toolbar.top, left: toolbar.left }}
+      onMouseDown={(e) => e.preventDefault()}
+    >
+      <button onMouseDown={tb(() => exec("bold"))} className={btnCls("bold")} title="Жирный"><span className="font-bold">B</span></button>
+      <button onMouseDown={tb(() => exec("italic"))} className={btnCls("italic")} title="Курсив"><span className="italic">I</span></button>
+      <button onMouseDown={tb(() => exec("underline"))} className={btnCls("underline")} title="Подчёркнутый"><span className="underline">U</span></button>
+      <button onMouseDown={tb(() => exec("strikeThrough"))} className={btnCls("strikeThrough")} title="Зачёркнутый"><span className="line-through">S</span></button>
+      <button onMouseDown={tb(() => exec("hiliteColor", "#FFF3CD"))} className={btnCls()} title="Выделить цветом">🎨</button>
+      {/* Foreground color picker */}
+      <div className="relative">
+        <button
+          onMouseDown={tb(() => setShowColors(v => !v))}
+          className={btnCls()}
+          title="Цвет текста"
+        >
+          <span className="font-bold">A</span>
+        </button>
+        {showColors && (
+          <div className="absolute top-8 left-0 z-50 bg-popover border border-border rounded-lg shadow-lg p-1.5 flex gap-1" onMouseDown={e => e.preventDefault()}>
+            {COLORS.map(c => (
+              <button
+                key={c}
+                onMouseDown={tb(() => { exec("foreColor", c); setShowColors(false) })}
+                className="w-5 h-5 rounded-full border-2 border-white shadow-sm hover:scale-110 transition-transform"
+                style={{ background: c }}
+                title={c}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+      {/* Link */}
+      <div className="relative">
+        <button onMouseDown={tb(openFloatingLink)} className={btnCls()} title="Ссылка">🔗</button>
+        {floatingLinkPopup && (
+          <div className="absolute top-8 left-0 z-50 bg-popover border border-border rounded-lg shadow-lg p-2 w-56 flex gap-1.5" onMouseDown={e => e.preventDefault()}>
+            <Input
+              autoFocus
+              placeholder="https://..."
+              value={floatingLinkUrl}
+              onChange={e => setFloatingLinkUrl(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") applyFloatingLink(); if (e.key === "Escape") setFloatingLinkPopup(false) }}
+              className="h-7 text-xs flex-1"
+            />
+            <Button size="sm" className="h-7 px-2 text-xs" onMouseDown={tb(applyFloatingLink)}>OK</Button>
+          </div>
+        )}
+      </div>
+      <div className="w-px h-4 bg-border mx-0.5" />
+      <button onMouseDown={tb(() => exec("formatBlock", "h1"))} className={btnCls()} title="Заголовок 1"><span className="font-bold text-[11px]">H1</span></button>
+      <button onMouseDown={tb(() => exec("formatBlock", "h2"))} className={btnCls()} title="Заголовок 2"><span className="font-bold text-[11px]">H2</span></button>
+      <button onMouseDown={tb(() => exec("formatBlock", "h3"))} className={btnCls()} title="Заголовок 3"><span className="font-bold text-[11px]">H3</span></button>
+      <div className="w-px h-4 bg-border mx-0.5" />
+      <button onMouseDown={tb(() => exec("insertUnorderedList"))} className={btnCls("insertUnorderedList")} title="Маркированный список"><span className="text-[11px]">:≡</span></button>
+      <button onMouseDown={tb(() => exec("insertOrderedList"))} className={btnCls("insertOrderedList")} title="Нумерованный список"><span className="text-[11px]">1≡</span></button>
+      <button onMouseDown={tb(() => { const isCenter = document.queryCommandState("justifyCenter"); exec(isCenter ? "justifyLeft" : "justifyCenter") })} className={btnCls()} title="Выравнивание"><span className="text-[11px]">≡</span></button>
+    </div>
+  )
+}
+
 /* ──── Block Editor ──── */
 function BlockEditor({ block, onUpdate }: { block: Block; onUpdate: (p: Partial<Block>) => void }) {
   const editorRef = useRef<HTMLDivElement>(null)
@@ -684,8 +853,10 @@ function BlockEditor({ block, onUpdate }: { block: Block; onUpdate: (p: Partial<
   switch (block.type) {
     case "text":
       return (
-        <div>
+        <div className="relative">
+          <FloatingToolbar editorRef={editorRef} savedSelectionRef={savedSelection} />
           <div className="flex items-center gap-0.5 flex-wrap p-1.5 bg-muted/40 rounded-t-lg border border-b-0 border-border">
+
             <button onMouseDown={tb(() => exec("bold"))} className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground" title="Жирный"><Bold className="w-3.5 h-3.5" /></button>
             <button onMouseDown={tb(() => exec("italic"))} className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground" title="Курсив"><Italic className="w-3.5 h-3.5" /></button>
             <button onMouseDown={tb(() => exec("underline"))} className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground" title="Подчёркнутый"><Underline className="w-3.5 h-3.5" /></button>
