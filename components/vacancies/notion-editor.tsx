@@ -1385,6 +1385,170 @@ function SourcePicker({
   )
 }
 
+// ─── Task editor block ─────────────────────────────────────────────────────
+
+const TASK_QTYPES: { type: import("@/lib/course-types").QuestionAnswerType; label: string; title: string }[] = [
+  { type: "short",    label: "T",      title: "Короткий текст" },
+  { type: "long",     label: "≡",      title: "Длинный текст" },
+  { type: "yesno",    label: "Да/Нет", title: "Да / Нет" },
+  { type: "single",   label: "◉",      title: "Один из списка" },
+  { type: "multiple", label: "☑",      title: "Несколько из списка" },
+  { type: "sort",     label: "↕",      title: "Расставить по порядку" },
+]
+
+function TaskEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: Partial<Block>) => void }) {
+  const [editingIdx, setEditingIdx] = useState<number | null>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (editingIdx !== null) inputRef.current?.focus()
+  }, [editingIdx])
+
+  const updateQ = (qi: number, patch: Partial<import("@/lib/course-types").Question>) => {
+    const nq = [...block.questions]; nq[qi] = { ...nq[qi], ...patch }; onUpdate({ questions: nq })
+  }
+  const moveQ = (qi: number, dir: -1 | 1) => {
+    const t = qi + dir; if (t < 0 || t >= block.questions.length) return
+    const nq = [...block.questions];[nq[qi], nq[t]] = [nq[t], nq[qi]]; onUpdate({ questions: nq })
+  }
+
+  return (
+    <div className="rounded-xl border border-dashed border-border bg-muted/20 p-4 space-y-3">
+      <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+        <CheckSquare className="w-4 h-4" /><span>Задание и вопросы</span>
+      </div>
+      {/* Заголовок */}
+      <Input
+        placeholder="Заголовок задания..."
+        value={block.taskTitle || ""}
+        onChange={(e) => onUpdate({ taskTitle: e.target.value })}
+        className="text-sm font-medium"
+      />
+      {/* Описание */}
+      <textarea
+        className="w-full text-sm bg-background border border-border rounded-lg p-2 outline-none resize-none min-h-[52px]"
+        value={block.taskDescription}
+        onChange={(e) => onUpdate({ taskDescription: e.target.value })}
+        placeholder="Описание задания..."
+      />
+      {/* Вопросы */}
+      <div className="space-y-2">
+        {block.questions.map((q, qi) => {
+          const isEditing = editingIdx === qi
+          const hasOptions = q.answerType === "single" || q.answerType === "multiple" || q.answerType === "sort"
+          return (
+            <div key={q.id} className="bg-background rounded-lg border border-border p-2.5 space-y-2">
+              {/* Строка 1: ↑↓ + номер + текст вопроса + * + ✕ */}
+              <div className="flex items-center gap-1.5">
+                {/* Кнопки перемещения */}
+                <div className="flex flex-col gap-0.5 text-muted-foreground/30 shrink-0">
+                  <button className="hover:text-muted-foreground disabled:opacity-20" onClick={() => moveQ(qi, -1)} disabled={qi === 0}><ArrowUp className="w-3 h-3" /></button>
+                  <button className="hover:text-muted-foreground disabled:opacity-20" onClick={() => moveQ(qi, 1)} disabled={qi === block.questions.length - 1}><ArrowDown className="w-3 h-3" /></button>
+                </div>
+                <span className="text-xs font-bold text-muted-foreground w-5 shrink-0">{qi + 1}.</span>
+
+                {/* Текст вопроса: label при неактивном, input при редактировании */}
+                {isEditing ? (
+                  <input
+                    ref={inputRef}
+                    className="flex-1 text-sm bg-transparent outline-none border-b border-primary/40"
+                    value={q.text}
+                    onChange={(e) => updateQ(qi, { text: e.target.value })}
+                    onBlur={() => setEditingIdx(null)}
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") setEditingIdx(null) }}
+                    placeholder="Введите вопрос..."
+                  />
+                ) : (
+                  <button
+                    className={cn(
+                      "flex-1 text-sm text-left transition-colors",
+                      q.text ? "text-foreground" : "text-muted-foreground/50 italic"
+                    )}
+                    onClick={() => setEditingIdx(qi)}
+                  >
+                    {q.text || "Вопрос"}
+                  </button>
+                )}
+
+                {/* Обязательный * */}
+                <button
+                  title={q.required ? "Обязательный" : "Не обязательный"}
+                  onClick={() => updateQ(qi, { required: !q.required })}
+                  className={cn(
+                    "shrink-0 w-5 h-5 rounded flex items-center justify-center text-sm font-bold transition-colors",
+                    q.required ? "text-destructive" : "text-muted-foreground/25 hover:text-muted-foreground"
+                  )}
+                >*</button>
+                <button
+                  className="text-muted-foreground/40 hover:text-destructive shrink-0"
+                  onClick={() => onUpdate({ questions: block.questions.filter((_, j) => j !== qi) })}
+                ><X className="w-3.5 h-3.5" /></button>
+              </div>
+
+              {/* Строка 2: переключатель типа */}
+              <div className="flex items-center gap-1 pl-8 flex-wrap">
+                {TASK_QTYPES.map(({ type, label, title }) => (
+                  <button
+                    key={type}
+                    title={title}
+                    onClick={() => updateQ(qi, {
+                      answerType: type,
+                      options: (type === "single" || type === "multiple" || type === "sort") && q.options.length === 0 ? [""] : q.options
+                    })}
+                    className={cn(
+                      "px-2 py-0.5 rounded text-xs font-medium border transition-all",
+                      q.answerType === type
+                        ? "bg-primary/10 border-primary text-primary"
+                        : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                    )}
+                  >{label}</button>
+                ))}
+              </div>
+
+              {/* Варианты ответов (single / multiple / sort) */}
+              {hasOptions && (
+                <div className="pl-8 space-y-1.5">
+                  {q.options.map((opt, oi) => (
+                    <div key={oi} className="flex items-center gap-1.5">
+                      <span className="text-xs text-muted-foreground w-4 shrink-0">
+                        {q.answerType === "sort" ? `${oi + 1}.` : q.answerType === "single" ? "◉" : "☑"}
+                      </span>
+                      <input
+                        className="flex-1 text-xs bg-muted/30 border border-border rounded px-2 py-1 outline-none focus:border-primary/50"
+                        value={opt}
+                        onChange={(e) => { const no = [...q.options]; no[oi] = e.target.value; updateQ(qi, { options: no }) }}
+                        placeholder={`Вариант ${oi + 1}...`}
+                      />
+                      <button
+                        className="text-muted-foreground/40 hover:text-destructive shrink-0"
+                        onClick={() => updateQ(qi, { options: q.options.filter((_, j) => j !== oi) })}
+                      ><X className="w-3 h-3" /></button>
+                    </div>
+                  ))}
+                  <button
+                    className="text-xs text-primary/70 hover:text-primary flex items-center gap-1 pl-5"
+                    onClick={() => updateQ(qi, { options: [...q.options, ""] })}
+                  >
+                    <Plus className="w-3 h-3" />{q.answerType === "sort" ? "Добавить пункт" : "Добавить вариант"}
+                  </button>
+                </div>
+              )}
+            </div>
+          )
+        })}
+        <Button variant="ghost" size="sm" className="text-xs h-7" onClick={() => {
+          const nq = [...block.questions, { id: `q-${Date.now()}`, text: "", answerType: "short" as const, required: false, options: [] }]
+          onUpdate({ questions: nq })
+          // Сразу открываем новый вопрос на редактирование
+          setTimeout(() => setEditingIdx(nq.length - 1), 0)
+        }}>
+          <Plus className="w-3 h-3 mr-1" />Добавить вопрос
+        </Button>
+      </div>
+    </div>
+  )
+}
+
 // ─── Media / other block types ─────────────────────────────────────────────
 
 function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdate: (patch: Partial<Block>) => void; onRemove: () => void }) {
@@ -1838,134 +2002,8 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
       )
     }
 
-    case "task": {
-      const QTYPES: { type: import("@/lib/course-types").QuestionAnswerType; label: string; title: string }[] = [
-        { type: "short",    label: "T",    title: "Короткий текст" },
-        { type: "long",     label: "≡",    title: "Длинный текст" },
-        { type: "yesno",    label: "Да/Нет", title: "Да / Нет" },
-        { type: "single",   label: "◉",    title: "Один из списка" },
-        { type: "multiple", label: "☑",    title: "Несколько из списка" },
-        { type: "sort",     label: "↕",    title: "Расставить по порядку" },
-      ]
-      const updateQ = (qi: number, patch: Partial<import("@/lib/course-types").Question>) => {
-        const nq = [...block.questions]; nq[qi] = { ...nq[qi], ...patch }; onUpdate({ questions: nq })
-      }
-      const moveQ = (qi: number, dir: -1 | 1) => {
-        const t = qi + dir; if (t < 0 || t >= block.questions.length) return
-        const nq = [...block.questions];[nq[qi], nq[t]] = [nq[t], nq[qi]]; onUpdate({ questions: nq })
-      }
-      return (
-        <div className="rounded-xl border border-dashed border-border bg-muted/20 p-4 space-y-3">
-          <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-            <CheckSquare className="w-4 h-4" /><span>Задание и вопросы</span>
-          </div>
-          {/* Заголовок */}
-          <Input
-            placeholder="Заголовок задания..."
-            value={block.taskTitle || ""}
-            onChange={(e) => onUpdate({ taskTitle: e.target.value })}
-            className="text-sm font-medium"
-          />
-          {/* Описание */}
-          <textarea
-            className="w-full text-sm bg-background border border-border rounded-lg p-2 outline-none resize-none min-h-[52px]"
-            value={block.taskDescription}
-            onChange={(e) => onUpdate({ taskDescription: e.target.value })}
-            placeholder="Описание задания..."
-          />
-          {/* Вопросы */}
-          <div className="space-y-2">
-            {block.questions.map((q, qi) => {
-              const hasOptions = q.answerType === "single" || q.answerType === "multiple" || q.answerType === "sort"
-              return (
-                <div key={q.id} className="bg-background rounded-lg border border-border p-2.5 space-y-2">
-                  {/* Строка 1: drag handle + номер + текст + обязательный + удалить */}
-                  <div className="flex items-center gap-1.5">
-                    {/* drag handle */}
-                    <div className="flex flex-col gap-0.5 text-muted-foreground/40 shrink-0 cursor-grab">
-                      <button className="hover:text-muted-foreground" onClick={() => moveQ(qi, -1)} title="Вверх" disabled={qi === 0}><ArrowUp className="w-3 h-3" /></button>
-                      <button className="hover:text-muted-foreground" onClick={() => moveQ(qi, 1)} title="Вниз" disabled={qi === block.questions.length - 1}><ArrowDown className="w-3 h-3" /></button>
-                    </div>
-                    <span className="text-xs font-bold text-muted-foreground w-5 shrink-0">{qi + 1}.</span>
-                    <input
-                      className="flex-1 text-sm bg-transparent outline-none"
-                      value={q.text}
-                      onChange={(e) => updateQ(qi, { text: e.target.value })}
-                      placeholder="Вопрос кандидату..."
-                    />
-                    {/* Обязательный */}
-                    <button
-                      title={q.required ? "Обязательный" : "Не обязательный"}
-                      onClick={() => updateQ(qi, { required: !q.required })}
-                      className={cn(
-                        "shrink-0 w-5 h-5 rounded flex items-center justify-center text-sm font-bold transition-colors",
-                        q.required ? "text-destructive" : "text-muted-foreground/30 hover:text-muted-foreground"
-                      )}
-                    >*</button>
-                    <button
-                      className="text-muted-foreground hover:text-destructive shrink-0"
-                      onClick={() => onUpdate({ questions: block.questions.filter((_, j) => j !== qi) })}
-                    ><X className="w-3.5 h-3.5" /></button>
-                  </div>
-                  {/* Строка 2: переключатель типа */}
-                  <div className="flex items-center gap-1 pl-8 flex-wrap">
-                    {QTYPES.map(({ type, label, title }) => (
-                      <button
-                        key={type}
-                        title={title}
-                        onClick={() => updateQ(qi, { answerType: type, options: (type === "single" || type === "multiple" || type === "sort") && q.options.length === 0 ? [""] : q.options })}
-                        className={cn(
-                          "px-2 py-0.5 rounded text-xs font-medium border transition-all",
-                          q.answerType === type
-                            ? "bg-primary/10 border-primary text-primary"
-                            : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
-                        )}
-                      >{label}</button>
-                    ))}
-                  </div>
-                  {/* Варианты ответов (single / multiple / sort) */}
-                  {hasOptions && (
-                    <div className="pl-8 space-y-1.5">
-                      {q.options.map((opt, oi) => (
-                        <div key={oi} className="flex items-center gap-1.5">
-                          <span className="text-xs text-muted-foreground w-4 shrink-0">
-                            {q.answerType === "sort" ? `${oi + 1}.` : q.answerType === "single" ? "◉" : "☑"}
-                          </span>
-                          <input
-                            className="flex-1 text-xs bg-muted/30 border border-border rounded px-2 py-1 outline-none focus:border-primary/50"
-                            value={opt}
-                            onChange={(e) => {
-                              const no = [...q.options]; no[oi] = e.target.value; updateQ(qi, { options: no })
-                            }}
-                            placeholder={`Вариант ${oi + 1}...`}
-                          />
-                          <button
-                            className="text-muted-foreground/40 hover:text-destructive shrink-0"
-                            onClick={() => updateQ(qi, { options: q.options.filter((_, j) => j !== oi) })}
-                          ><X className="w-3 h-3" /></button>
-                        </div>
-                      ))}
-                      <button
-                        className="text-xs text-primary/70 hover:text-primary flex items-center gap-1 pl-5"
-                        onClick={() => updateQ(qi, { options: [...q.options, ""] })}
-                      >
-                        <Plus className="w-3 h-3" />{q.answerType === "sort" ? "Добавить пункт" : "Добавить вариант"}
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-            <Button variant="ghost" size="sm" className="text-xs h-7" onClick={() => {
-              const nq = [...block.questions, { id: `q-${Date.now()}`, text: "", answerType: "short" as const, required: false, options: [] }]
-              onUpdate({ questions: nq })
-            }}>
-              <Plus className="w-3 h-3 mr-1" />Добавить вопрос
-            </Button>
-          </div>
-        </div>
-      )
-    }
+    case "task":
+      return <TaskEditorBlock block={block} onUpdate={onUpdate} />
 
     default:
       return (
