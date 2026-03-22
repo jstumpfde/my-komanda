@@ -262,7 +262,7 @@ export function DashboardSidebar() {
                   title="Создать вакансию"
                   asChild
                 >
-                  <Link href="/vacancies/new">
+                  <Link href="/vacancies/create">
                     <Plus className="size-3.5" />
                   </Link>
                 </Button>
