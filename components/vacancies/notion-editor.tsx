@@ -950,7 +950,7 @@ function NotionTextBlock({ block, editorRef, isHovered, onSync, onKeyDown }: Not
                 "absolute right-0 z-50 bg-popover border border-border rounded-xl shadow-xl p-2",
                 emojiOpenUpward ? "bottom-full mb-1" : "top-full mt-1"
               )}
-              style={{ width: "calc(9 * 2.25rem + 1rem)" }}
+              style={{ width: "calc(9 * 2.5rem + 1rem)" }}
             >
               {/* Быстрый доступ */}
               <div className="grid grid-cols-9 gap-0.5 pb-1.5 mb-1.5 border-b border-border">
@@ -2486,7 +2486,7 @@ function InfoBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: Partia
                   emojiOpenUpward ? "" : ""
                 )}
                 style={{
-                  width: "calc(9 * 2.25rem + 1rem)",
+                  width: "calc(9 * 2.5rem + 1rem)",
                   ...(emojiBtnRef.current ? (() => {
                     const r = emojiBtnRef.current.getBoundingClientRect()
                     return emojiOpenUpward
