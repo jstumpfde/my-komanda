@@ -2673,7 +2673,7 @@ function EmojiBtn({ current, onSelect }: { current: string; onSelect: (v: string
   const btnRef = useRef<HTMLButtonElement>(null)
   const searchRef = useRef<HTMLInputElement>(null)
 
-  const PICKER_WIDTH = 9 * 40 + 16
+  const PICKER_WIDTH = 9 * 46 + 16
 
   // Результаты поиска — по всем эмодзи всех категорий
   const searchResults = search.trim()
@@ -2747,7 +2747,7 @@ function EmojiBtn({ current, onSelect }: { current: string; onSelect: (v: string
             <div className="grid grid-cols-9 gap-0 pb-1 border-b border-border">
               {QUICK.map((e) => (
                 <button key={e} onClick={() => { onSelect(e); setOpen(false) }}
-                  className={cn("w-10 h-10 text-2xl flex items-center justify-center rounded transition-colors leading-none",
+                  className={cn("w-[46px] h-[46px] text-[1.725rem] flex items-center justify-center rounded transition-colors leading-none",
                     current === e ? "bg-primary/10 ring-1 ring-primary" : "hover:bg-muted")}
                 >{e}</button>
               ))}
