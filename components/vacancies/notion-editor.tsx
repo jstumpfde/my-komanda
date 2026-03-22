@@ -1199,7 +1199,7 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
                   value={block.imageTitleTop || ""}
                   onChange={(e) => onUpdate({ imageTitleTop: e.target.value })}
                   placeholder="Подпись сверху..."
-                  maxLength={80}
+                  maxLength={42}
                 />
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
@@ -1214,7 +1214,7 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
                   value={block.imageCaption || ""}
                   onChange={(e) => onUpdate({ imageCaption: e.target.value })}
                   placeholder="Подпись снизу..."
-                  maxLength={80}
+                  maxLength={42}
                 />
               </div>
               {/* Текст справа/слева при боковом layout */}
@@ -1268,7 +1268,7 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
                   value={block.videoTitleTop || ""}
                   onChange={(e) => onUpdate({ videoTitleTop: e.target.value })}
                   placeholder="Подпись сверху..."
-                  maxLength={80}
+                  maxLength={42}
                 />
                 <div className="rounded-lg bg-black aspect-video overflow-hidden">
                   {embed ? (
@@ -1288,7 +1288,7 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
                   value={block.videoCaption || ""}
                   onChange={(e) => onUpdate({ videoCaption: e.target.value })}
                   placeholder="Подпись снизу..."
-                  maxLength={80}
+                  maxLength={42}
                 />
               </div>
               {isSide && (
@@ -1340,6 +1340,7 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
                   value={block.audioTitleTop || ""}
                   onChange={(e) => onUpdate({ audioTitleTop: e.target.value })}
                   placeholder="Подпись сверху..."
+                  maxLength={42}
                 />
                 {block.audioTitle && <p className="text-xs font-medium text-foreground">{block.audioTitle}</p>}
                 <audio src={block.audioUrl} controls className="w-full" />
@@ -1348,6 +1349,7 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
                   value={block.audioCaption || ""}
                   onChange={(e) => onUpdate({ audioCaption: e.target.value })}
                   placeholder="Подпись снизу..."
+                  maxLength={42}
                 />
               </div>
               {isSide && (
