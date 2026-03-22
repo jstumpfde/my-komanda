@@ -900,11 +900,12 @@ function NotionTextBlock({ block, editorRef, isHovered, onSync, onKeyDown }: Not
         suppressContentEditableWarning
         data-placeholder="Введите текст или / для команды..."
         className={cn(
-          "outline-none min-h-[1.5em] text-[15px] leading-relaxed text-foreground",
+          "outline-none min-h-[1.5em] text-base leading-relaxed text-foreground",
           "empty:before:content-[attr(data-placeholder)] empty:before:text-muted-foreground/30",
-          "[&_h1]:text-2xl [&_h1]:font-bold [&_h1]:mt-4 [&_h1]:mb-1",
-          "[&_h2]:text-xl [&_h2]:font-semibold [&_h2]:mt-3 [&_h2]:mb-1",
-          "[&_h3]:text-lg [&_h3]:font-semibold [&_h3]:mt-2",
+          "[&_h1]:text-2xl [&_h1]:font-bold [&_h1]:mt-4 [&_h1]:mb-2",
+          "[&_h2]:text-xl [&_h2]:font-bold [&_h2]:mt-3 [&_h2]:mb-1",
+          "[&_h3]:text-lg [&_h3]:font-semibold [&_h3]:mt-2 [&_h3]:mb-1",
+          "[&_p]:text-base [&_p]:leading-relaxed",
           "[&_ul]:list-disc [&_ul]:ml-5 [&_ul]:space-y-0.5",
           "[&_ol]:list-decimal [&_ol]:ml-5 [&_ol]:space-y-0.5",
           "[&_a]:text-primary [&_a]:underline [&_a]:underline-offset-2",
@@ -1184,6 +1185,10 @@ function MiniRichEditor({ html, onChange, placeholder, singleLine, maxLength, ma
     "empty:before:content-[attr(data-placeholder)] empty:before:text-muted-foreground/30 empty:before:not-italic",
     "border-b border-border/40 pb-0.5 focus:border-primary/40",
     "[&_strong]:font-semibold [&_em]:italic [&_u]:underline [&_s]:line-through",
+    "[&_h1]:text-2xl [&_h1]:font-bold [&_h1]:mt-4 [&_h1]:mb-2",
+    "[&_h2]:text-xl [&_h2]:font-bold [&_h2]:mt-3 [&_h2]:mb-1",
+    "[&_h3]:text-lg [&_h3]:font-semibold [&_h3]:mt-2 [&_h3]:mb-1",
+    "[&_p]:text-base [&_p]:leading-relaxed",
     className
   )
 
