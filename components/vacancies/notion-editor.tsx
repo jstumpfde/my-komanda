@@ -1387,13 +1387,13 @@ function SourcePicker({
 
 // ─── Task editor block ─────────────────────────────────────────────────────
 
-const TASK_QTYPES: { type: import("@/lib/course-types").QuestionAnswerType; label: string; title: string }[] = [
-  { type: "short",    label: "T",      title: "Короткий текст" },
-  { type: "long",     label: "≡",      title: "Длинный текст" },
-  { type: "yesno",    label: "Да/Нет", title: "Да / Нет" },
-  { type: "single",   label: "◉",      title: "Один из списка" },
-  { type: "multiple", label: "☑",      title: "Несколько из списка" },
-  { type: "sort",     label: "↕",      title: "Расставить по порядку" },
+const TASK_QTYPES: { type: import("@/lib/course-types").QuestionAnswerType; icon: string; label: string; desc: string }[] = [
+  { type: "short",    icon: "T",   label: "Короткий текст",       desc: "Одна строка" },
+  { type: "long",     icon: "≡",   label: "Длинный текст",        desc: "Абзац" },
+  { type: "yesno",    icon: "⊙",   label: "Да / Нет",             desc: "Один из двух" },
+  { type: "single",   icon: "◉",   label: "Один из списка",       desc: "Радио" },
+  { type: "multiple", icon: "☑",   label: "Несколько",            desc: "Чекбоксы" },
+  { type: "sort",     icon: "↕",   label: "Сортировка",           desc: "Порядок" },
 ]
 
 // Пересчёт баллов: 100 / n, равномерно
@@ -1407,6 +1407,8 @@ function distributePoints(questions: import("@/lib/course-types").Question[]): i
 
 function TaskEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: Partial<Block>) => void }) {
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null)
+  // null = нет пикера, "add" = добавляем новый, qi = меняем тип существующего
+  const [typePicker, setTypePicker] = useState<"add" | number | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -1419,19 +1421,21 @@ function TaskEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: 
   const moveQ = (qi: number, dir: -1 | 1) => {
     const t = qi + dir; if (t < 0 || t >= block.questions.length) return
     const nq = [...block.questions];[nq[qi], nq[t]] = [nq[t], nq[qi]]
-    onUpdate({ questions: nq })
-    setExpandedIdx(t)
+    onUpdate({ questions: nq }); setExpandedIdx(t)
   }
 
-  // Добавить вопрос + пересчитать баллы
-  const addQuestion = () => {
-    const newQ = { id: `q-${Date.now()}`, text: "", answerType: "short" as const, required: false, options: [] }
+  // Добавить вопрос выбранного типа
+  const addQuestion = (type: import("@/lib/course-types").QuestionAnswerType) => {
+    const newQ: import("@/lib/course-types").Question = {
+      id: `q-${Date.now()}`, text: "", answerType: type, required: false,
+      options: (type === "single" || type === "multiple" || type === "sort") ? ["", ""] : [],
+    }
     const nq = distributePoints([...block.questions, newQ])
     onUpdate({ questions: nq })
+    setTypePicker(null)
     setTimeout(() => setExpandedIdx(nq.length - 1), 0)
   }
 
-  // Удалить вопрос + пересчитать баллы
   const removeQuestion = (qi: number) => {
     const nq = distributePoints(block.questions.filter((_, j) => j !== qi))
     onUpdate({ questions: nq })
@@ -1439,10 +1443,9 @@ function TaskEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: 
     else if (expandedIdx !== null && expandedIdx > qi) setExpandedIdx(expandedIdx - 1)
   }
 
-  const qTypeLabel = (type: import("@/lib/course-types").QuestionAnswerType) =>
-    TASK_QTYPES.find((t) => t.type === type)?.label ?? "T"
+  const qTypeInfo = (type: import("@/lib/course-types").QuestionAnswerType) =>
+    TASK_QTYPES.find((t) => t.type === type)
 
-  // Всего баллов
   const totalPoints = block.questions.reduce((s, q) => s + (q.points ?? 0), 0)
 
   return (
@@ -1457,6 +1460,7 @@ function TaskEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: 
           </span>
         )}
       </div>
+
       {/* Заголовок */}
       <Input
         placeholder="Заголовок задания..."
@@ -1471,13 +1475,15 @@ function TaskEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: 
         onChange={(e) => onUpdate({ taskDescription: e.target.value })}
         placeholder="Описание задания..."
       />
+
       {/* Вопросы */}
       <div className="space-y-2">
         {block.questions.map((q, qi) => {
           const isExpanded = expandedIdx === qi
           const hasOptions = q.answerType === "single" || q.answerType === "multiple" || q.answerType === "sort"
-          const hasCorrect = q.answerType !== "short" && q.answerType !== "long" && q.answerType !== "text" && q.answerType !== "video"
+          const isText = q.answerType === "short" || q.answerType === "long" || q.answerType === "text"
           const points = q.points ?? 0
+          const typeInfo = qTypeInfo(q.answerType)
           return (
             <div
               key={q.id}
@@ -1489,26 +1495,23 @@ function TaskEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: 
               {/* ── Заголовок карточки ── */}
               <div
                 className="flex items-center gap-1.5 px-2.5 py-2 cursor-pointer select-none"
-                onClick={() => setExpandedIdx(isExpanded ? null : qi)}
+                onClick={() => { setExpandedIdx(isExpanded ? null : qi); setTypePicker(null) }}
               >
-                <div
-                  className="flex flex-col gap-0.5 text-muted-foreground/30 shrink-0"
-                  onClick={(e) => e.stopPropagation()}
-                >
+                <div className="flex flex-col gap-0.5 text-muted-foreground/30 shrink-0" onClick={(e) => e.stopPropagation()}>
                   <button className="hover:text-muted-foreground disabled:opacity-20" onClick={() => moveQ(qi, -1)} disabled={qi === 0}><ArrowUp className="w-3 h-3" /></button>
                   <button className="hover:text-muted-foreground disabled:opacity-20" onClick={() => moveQ(qi, 1)} disabled={qi === block.questions.length - 1}><ArrowDown className="w-3 h-3" /></button>
                 </div>
                 <span className="text-xs font-bold text-muted-foreground w-5 shrink-0">{qi + 1}.</span>
-                <span className={cn("flex-1 text-sm", q.text ? "text-foreground" : "text-muted-foreground/50 italic")}>
+                <span className={cn("flex-1 text-sm truncate", q.text ? "text-foreground" : "text-muted-foreground/50 italic")}>
                   {q.text || "Вопрос"}
                 </span>
-                <span className="text-[11px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-mono shrink-0">
-                  {qTypeLabel(q.answerType)}
-                </span>
-                {points > 0 && (
-                  <span className="text-[11px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600 font-medium shrink-0">
-                    {points}б
+                {typeInfo && (
+                  <span className="text-[11px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground shrink-0 font-mono">
+                    {typeInfo.icon}
                   </span>
+                )}
+                {points > 0 && (
+                  <span className="text-[11px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600 font-medium shrink-0">{points}б</span>
                 )}
                 <button
                   title={q.required ? "Обязательный" : "Не обязательный"}
@@ -1516,8 +1519,7 @@ function TaskEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: 
                   className={cn("shrink-0 w-5 h-5 rounded flex items-center justify-center text-sm font-bold transition-colors",
                     q.required ? "text-destructive" : "text-muted-foreground/25 hover:text-muted-foreground")}
                 >*</button>
-                <button
-                  className="text-muted-foreground/40 hover:text-destructive shrink-0"
+                <button className="text-muted-foreground/40 hover:text-destructive shrink-0"
                   onClick={(e) => { e.stopPropagation(); removeQuestion(qi) }}
                 ><X className="w-3.5 h-3.5" /></button>
                 <ChevronRight className={cn("w-3.5 h-3.5 text-muted-foreground/40 shrink-0 transition-transform", isExpanded && "rotate-90")} />
@@ -1525,7 +1527,8 @@ function TaskEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: 
 
               {/* ── Расширенные настройки ── */}
               {isExpanded && (
-                <div className="px-2.5 pb-3 space-y-3 border-t border-border/60 pt-3">
+                <div className="px-3 pb-3 space-y-3 border-t border-border/60 pt-3">
+
                   {/* Текст вопроса */}
                   <input
                     ref={inputRef}
@@ -1536,28 +1539,75 @@ function TaskEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: 
                     placeholder="Введите текст вопроса..."
                   />
 
-                  {/* Тип */}
-                  <div className="flex items-center gap-1 flex-wrap">
-                    <span className="text-[11px] text-muted-foreground mr-1">Тип:</span>
-                    {TASK_QTYPES.map(({ type, label, title }) => (
-                      <button
-                        key={type}
-                        title={title}
-                        onClick={() => updateQ(qi, {
-                          answerType: type,
-                          options: (type === "single" || type === "multiple" || type === "sort") && q.options.length === 0 ? [""] : q.options
-                        })}
-                        className={cn(
-                          "px-2 py-0.5 rounded text-xs font-medium border transition-all",
-                          q.answerType === type
-                            ? "bg-primary/10 border-primary text-primary"
-                            : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
-                        )}
-                      >{label}</button>
-                    ))}
+                  {/* Выбор типа — кнопка + раскрывающийся пикер */}
+                  <div className="space-y-1.5">
+                    <button
+                      className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                      onClick={() => setTypePicker(typePicker === qi ? null : qi)}
+                    >
+                      <span className="font-mono bg-muted px-1.5 py-0.5 rounded text-[11px]">{typeInfo?.icon}</span>
+                      <span>{typeInfo?.label}</span>
+                      <ChevronRight className={cn("w-3 h-3 transition-transform", typePicker === qi && "rotate-90")} />
+                    </button>
+                    {typePicker === qi && (
+                      <div className="grid grid-cols-3 gap-1.5 pt-1">
+                        {TASK_QTYPES.map(({ type, icon, label, desc }) => (
+                          <button
+                            key={type}
+                            onClick={() => {
+                              updateQ(qi, {
+                                answerType: type,
+                                options: (type === "single" || type === "multiple" || type === "sort") && q.options.length === 0 ? ["", ""] : q.options,
+                                aiCriteria: type === "short" || type === "long" ? q.aiCriteria : undefined,
+                              })
+                              setTypePicker(null)
+                            }}
+                            className={cn(
+                              "flex flex-col items-center gap-0.5 px-2 py-2 rounded-lg border text-center transition-all",
+                              q.answerType === type
+                                ? "bg-primary/10 border-primary text-primary"
+                                : "border-border hover:border-primary/40 hover:bg-muted/50"
+                            )}
+                          >
+                            <span className="text-base font-mono leading-none">{icon}</span>
+                            <span className="text-[10px] font-medium leading-tight">{label}</span>
+                            <span className="text-[9px] text-muted-foreground leading-none">{desc}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
-                  {/* Варианты (single / multiple / sort) — маркер СПРАВА */}
+                  {/* ── Короткий/длинный текст → ИИ-проверка ── */}
+                  {isText && (
+                    <div className="space-y-1.5">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] text-muted-foreground font-medium">🤖 ИИ-проверка</span>
+                        <span className="text-[10px] text-muted-foreground/50">необязательно</span>
+                      </div>
+                      <textarea
+                        className="w-full text-xs bg-muted/30 border border-border rounded-lg px-2.5 py-1.5 outline-none focus:border-primary/50 resize-none min-h-[52px]"
+                        value={q.aiCriteria || ""}
+                        onChange={(e) => updateQ(qi, { aiCriteria: e.target.value })}
+                        placeholder="Критерий для ИИ: например «Кандидат должен упомянуть опыт продаж более 2 лет»"
+                      />
+                      {q.aiCriteria && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-muted-foreground">Баллы:</span>
+                          <input type="number" min={0} max={999}
+                            className="w-16 text-xs border border-border rounded px-2 py-0.5 outline-none bg-background focus:border-primary/50 text-center"
+                            value={points}
+                            onChange={(e) => { const v = parseInt(e.target.value); updateQ(qi, { points: isNaN(v) || v < 0 ? 0 : v }) }}
+                          />
+                          <button className="text-[11px] text-primary/60 hover:text-primary underline underline-offset-2"
+                            onClick={() => onUpdate({ questions: distributePoints(block.questions) })}
+                          >÷{block.questions.length}</button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* ── Варианты (single / multiple / sort) ── */}
                   {hasOptions && (
                     <div className="space-y-1.5">
                       {q.options.map((opt, oi) => {
@@ -1570,25 +1620,20 @@ function TaskEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: 
                             )}
                             <input
                               className={cn(
-                                "flex-1 text-xs border rounded px-2 py-1 outline-none focus:border-primary/50",
-                                (isCorrectSingle || isCorrectMulti)
-                                  ? "bg-green-500/5 border-green-400/50"
-                                  : "bg-muted/30 border-border"
+                                "flex-1 text-xs border rounded px-2 py-1.5 outline-none focus:border-primary/50",
+                                (isCorrectSingle || isCorrectMulti) ? "bg-green-500/5 border-green-400/50" : "bg-muted/30 border-border"
                               )}
                               value={opt}
                               onChange={(e) => { const no = [...q.options]; no[oi] = e.target.value; updateQ(qi, { options: no }) }}
                               placeholder={`Вариант ${oi + 1}...`}
                             />
-                            {/* Кнопка "правильный" справа */}
                             {q.answerType === "single" && (
                               <button
                                 title={isCorrectSingle ? "Правильный ответ" : "Отметить как правильный"}
                                 onClick={() => updateQ(qi, { correctOptions: isCorrectSingle ? [] : [oi] })}
                                 className={cn(
-                                  "shrink-0 px-2 py-0.5 rounded text-[11px] font-medium border transition-all",
-                                  isCorrectSingle
-                                    ? "bg-green-500 border-green-500 text-white"
-                                    : "border-border text-muted-foreground/40 hover:border-green-400 hover:text-green-600"
+                                  "shrink-0 px-2 py-1 rounded text-[11px] font-medium border transition-all",
+                                  isCorrectSingle ? "bg-green-500 border-green-500 text-white" : "border-border text-muted-foreground/40 hover:border-green-400 hover:text-green-600"
                                 )}
                               >✓</button>
                             )}
@@ -1600,15 +1645,12 @@ function TaskEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: 
                                   updateQ(qi, { correctOptions: cur.includes(oi) ? cur.filter((x) => x !== oi) : [...cur, oi] })
                                 }}
                                 className={cn(
-                                  "shrink-0 px-2 py-0.5 rounded text-[11px] font-medium border transition-all",
-                                  isCorrectMulti
-                                    ? "bg-green-500 border-green-500 text-white"
-                                    : "border-border text-muted-foreground/40 hover:border-green-400 hover:text-green-600"
+                                  "shrink-0 px-2 py-1 rounded text-[11px] font-medium border transition-all",
+                                  isCorrectMulti ? "bg-green-500 border-green-500 text-white" : "border-border text-muted-foreground/40 hover:border-green-400 hover:text-green-600"
                                 )}
                               >✓</button>
                             )}
-                            <button
-                              className="text-muted-foreground/40 hover:text-destructive shrink-0"
+                            <button className="text-muted-foreground/40 hover:text-destructive shrink-0"
                               onClick={() => {
                                 const newOpts = q.options.filter((_, j) => j !== oi)
                                 const newCorrect = q.correctOptions?.filter((c) => c !== oi).map((c) => c > oi ? c - 1 : c)
@@ -1618,8 +1660,7 @@ function TaskEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: 
                           </div>
                         )
                       })}
-                      <button
-                        className="text-xs text-primary/70 hover:text-primary flex items-center gap-1"
+                      <button className="text-xs text-primary/70 hover:text-primary flex items-center gap-1"
                         onClick={() => updateQ(qi, { options: [...q.options, ""] })}
                       >
                         <Plus className="w-3 h-3" />{q.answerType === "sort" ? "Добавить пункт" : "Добавить вариант"}
@@ -1630,16 +1671,15 @@ function TaskEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: 
                     </div>
                   )}
 
-                  {/* Да/Нет */}
+                  {/* ── Да/Нет: правильный ── */}
                   {q.answerType === "yesno" && (
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-muted-foreground">Правильный:</span>
                       {(["yes", "no"] as const).map((v) => (
-                        <button
-                          key={v}
+                        <button key={v}
                           onClick={() => updateQ(qi, { correctYesNo: q.correctYesNo === v ? undefined : v })}
                           className={cn(
-                            "px-3 py-0.5 rounded text-xs font-medium border transition-all",
+                            "px-3 py-1 rounded text-xs font-medium border transition-all",
                             q.correctYesNo === v
                               ? v === "yes" ? "bg-green-500 border-green-500 text-white" : "bg-destructive border-destructive text-white"
                               : "border-border text-muted-foreground hover:border-primary/40"
@@ -1649,28 +1689,19 @@ function TaskEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: 
                     </div>
                   )}
 
-                  {/* Баллы */}
-                  {hasCorrect && (
-                    <div className="flex items-center gap-2">
+                  {/* ── Баллы (не для текстовых без aiCriteria) ── */}
+                  {!isText && (
+                    <div className="flex items-center gap-2 pt-0.5 border-t border-border/40">
                       <span className="text-xs text-muted-foreground">Баллы:</span>
-                      <input
-                        type="number"
-                        min={0}
-                        max={999}
+                      <input type="number" min={0} max={999}
                         className="w-16 text-xs border border-border rounded px-2 py-0.5 outline-none bg-background focus:border-primary/50 text-center"
                         value={points}
-                        onChange={(e) => {
-                          const v = parseInt(e.target.value)
-                          updateQ(qi, { points: isNaN(v) || v < 0 ? 0 : v })
-                        }}
+                        onChange={(e) => { const v = parseInt(e.target.value); updateQ(qi, { points: isNaN(v) || v < 0 ? 0 : v }) }}
                       />
-                      <button
-                        className="text-[11px] text-primary/60 hover:text-primary underline underline-offset-2"
+                      <button className="text-[11px] text-primary/60 hover:text-primary underline underline-offset-2"
                         onClick={() => onUpdate({ questions: distributePoints(block.questions) })}
                         title="Распределить 100 баллов равномерно"
-                      >
-                        сбросить (÷{block.questions.length})
-                      </button>
+                      >÷{block.questions.length}</button>
                     </div>
                   )}
                 </div>
@@ -1678,9 +1709,35 @@ function TaskEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: 
             </div>
           )
         })}
-        <Button variant="ghost" size="sm" className="text-xs h-7" onClick={addQuestion}>
-          <Plus className="w-3 h-3 mr-1" />Добавить вопрос
-        </Button>
+
+        {/* ── Кнопка добавить / пикер типа ── */}
+        {typePicker === "add" ? (
+          <div className="border border-dashed border-primary/40 rounded-lg p-3 space-y-2 bg-background">
+            <p className="text-xs text-muted-foreground font-medium">Выберите тип вопроса:</p>
+            <div className="grid grid-cols-3 gap-2">
+              {TASK_QTYPES.map(({ type, icon, label, desc }) => (
+                <button
+                  key={type}
+                  onClick={() => addQuestion(type)}
+                  className="flex flex-col items-center gap-1 px-2 py-3 rounded-xl border border-border hover:border-primary/50 hover:bg-primary/5 transition-all group"
+                >
+                  <span className="text-xl font-mono leading-none group-hover:scale-110 transition-transform">{icon}</span>
+                  <span className="text-[11px] font-medium text-foreground leading-tight">{label}</span>
+                  <span className="text-[10px] text-muted-foreground leading-none">{desc}</span>
+                </button>
+              ))}
+            </div>
+            <button className="text-xs text-muted-foreground hover:text-foreground"
+              onClick={() => setTypePicker(null)}
+            >Отмена</button>
+          </div>
+        ) : (
+          <Button variant="ghost" size="sm" className="text-xs h-7 text-muted-foreground"
+            onClick={() => setTypePicker("add")}
+          >
+            <Plus className="w-3 h-3 mr-1" />Добавить вопрос
+          </Button>
+        )}
       </div>
     </div>
   )
