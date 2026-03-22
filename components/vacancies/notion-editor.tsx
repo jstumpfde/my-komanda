@@ -1667,8 +1667,22 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
                 />
                 <div ref={fileContainerRef} className="flex items-center gap-3 p-3 bg-background rounded-lg border border-border">
                   <FileText className="w-8 h-8 text-primary shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{block.fileName || "Файл"}</p>
+                  <div className="flex-1 min-w-0 space-y-1">
+                    <div className="relative">
+                      <input
+                        className="w-full text-sm font-medium bg-transparent outline-none border-b border-transparent hover:border-border focus:border-primary transition-colors pr-10 truncate"
+                        value={block.fileName || ""}
+                        maxLength={80}
+                        placeholder="Название файла..."
+                        onChange={(e) => onUpdate({ fileName: e.target.value })}
+                      />
+                      <span className={cn(
+                        "absolute right-0 top-0 text-[10px] tabular-nums transition-colors",
+                        (block.fileName?.length ?? 0) >= 72 ? (block.fileName?.length ?? 0) >= 80 ? "text-destructive" : "text-amber-500" : "text-muted-foreground/40"
+                      )}>
+                        {block.fileName?.length ?? 0}/80
+                      </span>
+                    </div>
                     <a href={block.fileUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">Открыть</a>
                   </div>
                 </div>
@@ -2476,7 +2490,7 @@ function SimplePreviewBlock({ block }: { block: Block }) {
       return (
         <div className={cn("flex gap-3 items-start", isSide ? (layout === "file-left" ? "flex-row" : "flex-row-reverse") : "flex-col")}>
           <div className={cn("flex flex-col gap-1.5", isSide ? "w-1/2 shrink-0" : "w-full")}>
-            {block.imageCaption && <p className="text-xs text-muted-foreground leading-snug mb-0">{block.imageCaption}</p>}
+            {block.fileTitleTop && <p className="text-xs text-muted-foreground leading-snug">{block.fileTitleTop}</p>}
             <div className="flex items-center gap-3 p-3 bg-muted/30 rounded-xl border border-border">
               <FileText className="w-7 h-7 text-primary shrink-0" />
               <div className="flex-1 min-w-0">
@@ -2484,6 +2498,7 @@ function SimplePreviewBlock({ block }: { block: Block }) {
                 <a href={block.fileUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">Открыть</a>
               </div>
             </div>
+            {block.fileCaption && <p className="text-xs text-muted-foreground leading-snug">{block.fileCaption}</p>}
           </div>
           {isSide && block.content && (
             <p className="flex-1 text-sm leading-relaxed whitespace-pre-wrap">{block.content}</p>
