@@ -1984,12 +1984,12 @@ const QUICK_EMOJIS = ["👋","🚀","🏢","💰","📈","✅","🎯","⚙️","
 // ─── InfoBlock ──────────────────────────────────────────────────────────────
 
 const INFO_ICONS: { symbol: string; label: string }[] = [
-  { symbol: "✅", label: "Галочка" },
-  { symbol: "❓", label: "Вопрос" },
-  { symbol: "❌", label: "Крест" },
-  { symbol: "❗", label: "Восклицание" },
-  { symbol: "ℹ️", label: "Информация" },
-  { symbol: "⚠️", label: "Предупреждение" },
+  { symbol: "✓", label: "Галочка" },
+  { symbol: "?", label: "Вопрос" },
+  { symbol: "✗", label: "Крест" },
+  { symbol: "!", label: "Восклицание" },
+  { symbol: "i", label: "Информация" },
+  { symbol: "△", label: "Предупреждение" },
   { symbol: "★", label: "Звезда" },
   { symbol: "♥", label: "Сердце" },
   { symbol: "→", label: "Стрелка" },
@@ -2134,16 +2134,19 @@ function InfoBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: Partia
     return () => document.removeEventListener("mousedown", handler)
   }, [showEmoji, showTags])
 
-  // light background: color at 10% opacity approximation via hex
-  const bgStyle = { borderColor: activeColor, backgroundColor: activeColor + "18" }
-  const iconBgStyle = { backgroundColor: activeColor }
+  const cardStyle: React.CSSProperties = {
+    borderLeft: `4px solid ${activeColor}`,
+    background: `${activeColor}1A`,
+    borderRadius: "8px",
+    padding: "16px",
+  }
 
   return (
-    <div className="relative rounded-2xl border-2 p-4 flex gap-4 items-center" style={bgStyle}>
-      {/* Иконка слева — всегда по центру высоты */}
+    <div className="relative flex gap-3 items-start" style={cardStyle}>
+      {/* Иконка слева — символ 24px цвета акцента, без кружка */}
       <div
-        className="flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-xl select-none self-center"
-        style={iconBgStyle}
+        className="flex-shrink-0 flex items-center justify-center font-bold select-none leading-none mt-0.5"
+        style={{ fontSize: 24, color: activeColor, minWidth: 28 }}
       >
         {activeIcon}
       </div>
@@ -2156,7 +2159,7 @@ function InfoBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: Partia
           suppressContentEditableWarning
           data-main-editor="true"
           onInput={syncContent}
-          className="text-sm leading-relaxed outline-none min-h-[2rem] empty:before:content-['Введите_текст...'] empty:before:text-muted-foreground/50"
+          className="text-base leading-relaxed outline-none min-h-[1.5rem] empty:before:content-['Введите_текст...'] empty:before:text-muted-foreground/50"
           style={{ direction: "ltr", unicodeBidi: "plaintext" }}
         />
 
@@ -2250,7 +2253,7 @@ function InfoBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: Partia
       <button
         ref={btnRef}
         onClick={() => setShowSettings((v) => !v)}
-        className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded hover:bg-black/10 transition-colors text-foreground/50 self-start"
+        className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded hover:bg-black/10 transition-colors text-foreground/50"
         title="Настройки"
       >
         <MoreHorizontal className="w-4 h-4" />
@@ -2260,7 +2263,7 @@ function InfoBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: Partia
       {showSettings && (
         <div
           ref={settingsRef}
-          className="absolute right-0 top-8 z-50 bg-popover border border-border rounded-xl shadow-xl p-3 w-64"
+          className="absolute right-0 top-8 z-50 bg-popover border border-border rounded-xl shadow-xl p-3 w-[272px]"
           onMouseDown={(e) => e.stopPropagation()}
         >
           {/* Выбор иконки */}
@@ -2272,12 +2275,12 @@ function InfoBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: Partia
                 title={label}
                 onClick={() => onUpdate({ infoIcon: symbol })}
                 className={cn(
-                  "flex items-center justify-center rounded-lg transition-all leading-none",
+                  "flex items-center justify-center rounded-lg transition-all leading-none font-bold",
                   activeIcon === symbol
                     ? "bg-primary/10 ring-1 ring-primary"
                     : "hover:bg-muted"
                 )}
-                style={{ fontSize: 28, width: 44, height: 44 }}
+                style={{ fontSize: 22, width: 40, height: 40, color: activeColor }}
               >
                 {symbol}
               </button>
@@ -2286,23 +2289,23 @@ function InfoBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: Partia
 
           {/* Пресеты цветов */}
           <p className="text-xs font-medium text-muted-foreground mb-2">Цвет</p>
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex items-end gap-1.5 flex-wrap">
             {INFO_PRESET_COLORS.map(({ hex, label }) => (
               <button
                 key={hex}
                 title={label}
                 onClick={() => applyColor(hex)}
                 className={cn(
-                  "w-8 h-8 rounded-full border-2 transition-all",
+                  "w-8 h-8 rounded-full border-2 transition-all flex-shrink-0",
                   activeColor.toLowerCase() === hex
-                    ? "ring-2 ring-offset-2 ring-foreground/40 border-transparent"
+                    ? "ring-2 ring-offset-2 ring-foreground/40 border-transparent scale-110"
                     : "border-transparent hover:scale-105"
                 )}
                 style={{ backgroundColor: hex }}
               />
             ))}
             {/* Произвольный цвет */}
-            <label title="Свой цвет" className="flex flex-col items-center gap-0.5 cursor-pointer">
+            <label title="Свой цвет" className="flex flex-col items-center gap-0.5 cursor-pointer flex-shrink-0">
               <input
                 type="color"
                 value={activeColor}
@@ -2488,17 +2491,17 @@ function SimplePreviewBlock({ block }: { block: Block }) {
       const icon = block.infoIcon || "i"
       return (
         <div
-          className="rounded-2xl border-2 p-4 flex gap-4 items-start"
-          style={{ borderColor: color, backgroundColor: color + "18" }}
+          className="flex gap-3 items-start"
+          style={{ borderLeft: `4px solid ${color}`, background: `${color}1A`, borderRadius: "8px", padding: "16px" }}
         >
           <div
-            className="flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-xl select-none"
-            style={{ backgroundColor: color }}
+            className="flex-shrink-0 flex items-center justify-center font-bold select-none leading-none mt-0.5"
+            style={{ fontSize: 24, color, minWidth: 28 }}
           >
             {icon}
           </div>
           <div
-            className="flex-1 min-w-0 text-sm leading-relaxed pt-2"
+            className="flex-1 min-w-0 text-base leading-relaxed"
             dangerouslySetInnerHTML={{ __html: block.content }}
           />
         </div>
