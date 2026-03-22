@@ -381,7 +381,12 @@ function NotionLessonEditor({ lesson, onUpdateLesson, onUpdateBlock, onInsertBlo
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null)
   const [floatingToolbar, setFloatingToolbar] = useState<{ x: number; y: number } | null>(null)
   const [floatingBlockId, setFloatingBlockId] = useState<string | null>(null)
+  const [showForeColors, setShowForeColors] = useState(false)
+  const [showBgColors, setShowBgColors] = useState(false)
   const editorAreaRef = useRef<HTMLDivElement>(null)
+
+  const FORE_COLORS = ["#000000", "#ef4444", "#f97316", "#eab308", "#22c55e", "#3b82f6", "#8b5cf6", "#6b7280"]
+  const BG_COLORS = ["transparent", "#fef08a", "#fed7aa", "#fecaca", "#bbf7d0", "#bfdbfe", "#e9d5ff", "#f1f5f9"]
 
   // Close slash menu on click outside
   useEffect(() => {
@@ -427,6 +432,21 @@ function NotionLessonEditor({ lesson, onUpdateLesson, onUpdateBlock, onInsertBlo
 
   const execFmt = (cmd: string, value?: string) => {
     document.execCommand(cmd, false, value)
+    setShowForeColors(false)
+    setShowBgColors(false)
+  }
+
+  const toggleBlock = (tag: string) => {
+    try {
+      const cur = document.queryCommandValue("formatBlock").toLowerCase()
+      execFmt("formatBlock", cur === tag ? "p" : tag)
+    } catch {
+      execFmt("formatBlock", tag)
+    }
+  }
+
+  const currentBlock = () => {
+    try { return document.queryCommandValue("formatBlock").toLowerCase() } catch { return "" }
   }
 
   return (
@@ -442,10 +462,45 @@ function NotionLessonEditor({ lesson, onUpdateLesson, onUpdateBlock, onInsertBlo
           <FmtBtn icon={Italic} tip="Курсив" cmd={() => execFmt("italic")} />
           <FmtBtn icon={Underline} tip="Подчёркнутый" cmd={() => execFmt("underline")} />
           <FmtBtn icon={Strikethrough} tip="Зачёркнутый" cmd={() => execFmt("strikeThrough")} />
+          {/* Foreground color */}
+          <div className="relative">
+            <button
+              className="w-7 h-7 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors text-xs font-bold"
+              title="Цвет текста"
+              onMouseDown={(e) => { e.preventDefault(); setShowForeColors(v => !v); setShowBgColors(false) }}
+            >A</button>
+            {showForeColors && (
+              <div className="absolute bottom-full mb-1 left-0 z-50 bg-popover border border-border rounded-lg shadow-lg p-1.5 flex gap-1" onMouseDown={e => e.preventDefault()}>
+                {FORE_COLORS.map(c => (
+                  <button key={c} onMouseDown={(e) => { e.preventDefault(); execFmt("foreColor", c) }}
+                    className="w-5 h-5 rounded-full border border-border shadow-sm hover:scale-110 transition-transform"
+                    style={{ background: c }} title={c} />
+                ))}
+              </div>
+            )}
+          </div>
+          {/* Background color */}
+          <div className="relative">
+            <button
+              className="w-7 h-7 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              title="Цвет фона"
+              onMouseDown={(e) => { e.preventDefault(); setShowBgColors(v => !v); setShowForeColors(false) }}
+            >🖍</button>
+            {showBgColors && (
+              <div className="absolute bottom-full mb-1 left-0 z-50 bg-popover border border-border rounded-lg shadow-lg p-1.5 flex gap-1" onMouseDown={e => e.preventDefault()}>
+                {BG_COLORS.map(c => (
+                  <button key={c} onMouseDown={(e) => { e.preventDefault(); execFmt("hiliteColor", c) }}
+                    className="w-5 h-5 rounded-full border border-border shadow-sm hover:scale-110 transition-transform"
+                    style={{ background: c === "transparent" ? "repeating-conic-gradient(#ccc 0% 25%, #fff 0% 50%) 0 0 / 8px 8px" : c }}
+                    title={c === "transparent" ? "Без фона" : c} />
+                ))}
+              </div>
+            )}
+          </div>
           <div className="w-px h-4 bg-border mx-0.5" />
-          <FmtBtn icon={Heading1} tip="Заголовок 1" cmd={() => execFmt("formatBlock", "h1")} />
-          <FmtBtn icon={Heading2} tip="Заголовок 2" cmd={() => execFmt("formatBlock", "h2")} />
-          <FmtBtn icon={Heading3} tip="Заголовок 3" cmd={() => execFmt("formatBlock", "h3")} />
+          <button className={cn("w-7 h-7 rounded flex items-center justify-center transition-colors", currentBlock() === "h1" ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted")} title="Заголовок 1" onMouseDown={(e) => { e.preventDefault(); toggleBlock("h1") }}><Heading1 className="w-3.5 h-3.5" /></button>
+          <button className={cn("w-7 h-7 rounded flex items-center justify-center transition-colors", currentBlock() === "h2" ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted")} title="Заголовок 2" onMouseDown={(e) => { e.preventDefault(); toggleBlock("h2") }}><Heading2 className="w-3.5 h-3.5" /></button>
+          <button className={cn("w-7 h-7 rounded flex items-center justify-center transition-colors", currentBlock() === "h3" ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted")} title="Заголовок 3" onMouseDown={(e) => { e.preventDefault(); toggleBlock("h3") }}><Heading3 className="w-3.5 h-3.5" /></button>
           <div className="w-px h-4 bg-border mx-0.5" />
           <FmtBtn icon={ListIcon} tip="Маркированный список" cmd={() => execFmt("insertUnorderedList")} />
           <FmtBtn icon={ListOrdered} tip="Нумерованный список" cmd={() => execFmt("insertOrderedList")} />
@@ -600,11 +655,15 @@ function NotionBlock({ block, idx, totalBlocks, isHovered, isDragging, isDragOve
       const cr = container?.getBoundingClientRect() || { left: 0, top: 0 }
       onSlashTrigger(rect.left - cr.left, rect.bottom - cr.top + 4, "")
     }
-    if (e.key === "Enter" && !e.shiftKey && block.type === "text") {
-      // Insert new text block below
+    if (e.key === "Enter" && block.type === "text") {
       e.preventDefault()
-      syncContent()
-      onInsertBelow("text")
+      if (e.shiftKey) {
+        // Shift+Enter — абзацный отступ (двойной br)
+        document.execCommand("insertHTML", false, "<br><br>")
+      } else {
+        // Enter — мягкий перенос строки
+        document.execCommand("insertHTML", false, "<br>")
+      }
     }
     if (e.key === "Backspace" && block.type === "text" && editorRef.current) {
       const html = editorRef.current.innerHTML
