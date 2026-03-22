@@ -1856,9 +1856,16 @@ function hslToHex(h: number, s: number, l: number): string {
 
 function InfoBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: Partial<Block>) => void }) {
   const [showSettings, setShowSettings] = useState(false)
+  const [showEmoji, setShowEmoji] = useState(false)
+  const [showTags, setShowTags] = useState(false)
+  const [emojiOpenUpward, setEmojiOpenUpward] = useState(false)
+  const [tagsOpenUpward, setTagsOpenUpward] = useState(false)
   const settingsRef = useRef<HTMLDivElement>(null)
   const btnRef = useRef<HTMLButtonElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
+  const emojiBtnRef = useRef<HTMLButtonElement>(null)
+  const tagsBtnRef = useRef<HTMLButtonElement>(null)
+  const savedRangeRef = useRef<Range | null>(null)
   // отслеживаем id блока чтобы сбросить DOM только при смене блока
   const blockIdRef = useRef(block.id)
 
@@ -1925,6 +1932,36 @@ function InfoBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: Partia
     }
   }
 
+  const saveSelection = () => {
+    const sel = window.getSelection()
+    if (sel && sel.rangeCount > 0) savedRangeRef.current = sel.getRangeAt(0).cloneRange()
+  }
+
+  const insertAndSync = (text: string) => {
+    if (!contentRef.current) return
+    contentRef.current.focus()
+    if (savedRangeRef.current) {
+      const sel = window.getSelection()
+      if (sel) { sel.removeAllRanges(); sel.addRange(savedRangeRef.current) }
+    }
+    insertAtCursor(contentRef, text, syncContent)
+    setShowEmoji(false)
+    setShowTags(false)
+  }
+
+  // Закрытие emoji/tags попапов по клику вне
+  useEffect(() => {
+    if (!showEmoji && !showTags) return
+    const handler = (e: MouseEvent) => {
+      if (!(e.target as HTMLElement).closest("[data-info-popup]")) {
+        setShowEmoji(false)
+        setShowTags(false)
+      }
+    }
+    document.addEventListener("mousedown", handler)
+    return () => document.removeEventListener("mousedown", handler)
+  }, [showEmoji, showTags])
+
   // light background: color at 10% opacity approximation via hex
   const bgStyle = { borderColor: activeColor, backgroundColor: activeColor + "18" }
   const iconBgStyle = { backgroundColor: activeColor }
@@ -1950,6 +1987,91 @@ function InfoBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: Partia
           className="text-sm leading-relaxed outline-none min-h-[2rem] empty:before:content-['Введите_текст...'] empty:before:text-muted-foreground/50"
           style={{ direction: "ltr", unicodeBidi: "plaintext" }}
         />
+
+        {/* Emoji & tag buttons — bottom-right of text area */}
+        <div className="flex items-center gap-0.5 justify-end mt-1">
+          {/* Emoji button */}
+          <div className="relative" data-info-popup>
+            <button
+              ref={emojiBtnRef}
+              onMouseDown={(e) => {
+                e.preventDefault()
+                saveSelection()
+                setShowTags(false)
+                if (!showEmoji && emojiBtnRef.current) {
+                  const rect = emojiBtnRef.current.getBoundingClientRect()
+                  setEmojiOpenUpward(window.innerHeight - rect.bottom < 360)
+                }
+                setShowEmoji((v) => !v)
+              }}
+              title="Вставить эмодзи"
+              className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-black/10 transition-colors text-sm"
+            >😊</button>
+            {showEmoji && (
+              <div
+                data-info-popup
+                className={cn(
+                  "absolute right-0 z-50 bg-popover border border-border rounded-xl shadow-xl p-2",
+                  emojiOpenUpward ? "bottom-full mb-1" : "top-full mt-1"
+                )}
+                style={{ width: "calc(9 * 2.25rem + 1rem)" }}
+              >
+                <div className="grid grid-cols-9 gap-0.5 pb-1.5 mb-1.5 border-b border-border">
+                  {QUICK_ACCESS_EMOJIS.map((e) => (
+                    <button key={`qa-${e}`} onMouseDown={(ev) => { ev.preventDefault(); insertAndSync(e) }}
+                      className="w-9 h-9 text-2xl flex items-center justify-center rounded hover:bg-muted transition-colors leading-none">{e}</button>
+                  ))}
+                </div>
+                <div className="grid grid-cols-9 gap-0.5 max-h-52 overflow-y-auto">
+                  {QUICK_INSERT_EMOJIS.map((e, i) => (
+                    <button key={`${e}-${i}`} onMouseDown={(ev) => { ev.preventDefault(); insertAndSync(e) }}
+                      className="w-9 h-9 text-2xl flex items-center justify-center rounded hover:bg-muted transition-colors leading-none">{e}</button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+          {/* Tag button */}
+          <div className="relative" data-info-popup>
+            <button
+              ref={tagsBtnRef}
+              onMouseDown={(e) => {
+                e.preventDefault()
+                saveSelection()
+                setShowEmoji(false)
+                if (!showTags && tagsBtnRef.current) {
+                  const rect = tagsBtnRef.current.getBoundingClientRect()
+                  setTagsOpenUpward(window.innerHeight - rect.bottom < 300)
+                }
+                setShowTags((v) => !v)
+              }}
+              title="Вставить переменную"
+              className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-black/10 transition-colors text-xs font-bold"
+            >#</button>
+            {showTags && (
+              <div
+                data-info-popup
+                className={cn(
+                  "absolute right-0 z-50 bg-popover border border-border rounded-xl shadow-xl overflow-hidden w-52",
+                  tagsOpenUpward ? "bottom-full mb-1" : "top-full mt-1"
+                )}
+              >
+                <div className="px-3 py-1.5 border-b border-border">
+                  <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Переменные</span>
+                </div>
+                <div className="p-1">
+                  {QUICK_TAGS.map((t) => (
+                    <button key={t.tag} onMouseDown={(ev) => { ev.preventDefault(); insertAndSync(t.tag) }}
+                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left hover:bg-muted transition-colors">
+                      <span className="font-mono text-[11px] text-primary bg-primary/10 rounded px-1 py-0.5 shrink-0">{t.tag}</span>
+                      <span className="text-xs text-muted-foreground truncate">{t.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Кнопка ⋮ настроек */}
