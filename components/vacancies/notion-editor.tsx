@@ -784,24 +784,60 @@ function NotionBlock({ block, idx, totalBlocks, isHovered, isDragging, isDragOve
 
 // ─── Emoji & tag insertion helpers ────────────────────────────────────────
 
-const QUICK_INSERT_EMOJIS = [
-  // Смайлы и эмоции
-  "😊","😄","😂","🥰","😍","🤩","😎","🤔","😅","🥳","😇","🤗","😏","😢","😤","😱",
-  // Жесты и люди
-  "👋","👍","👎","👏","🙌","🤝","🙏","💪","🫶","✌️","🤞","👊","🫂","👤","👥","🧠",
-  // Животные
-  "🐱","🐶","🦊","🐻","🐼","🦁","🐯","🐸","🐧","🦋","🐝","🦄","🦅","🐠","🦀","🐙",
-  // Еда и напитки
-  "🍎","🍕","🍔","🍣","🍜","☕","🎂","🍰","🍇","🥑","🌮","🍦","🧃","🍺","🥂","🍩",
-  // Природа и погода
-  "🌸","🌺","🌻","🌿","🍀","🌊","⛰️","🌙","⭐","☀️","🌈","❄️","🔥","⚡","🌪️","🌍",
-  // Объекты и инструменты
-  "💡","🔑","🔒","📱","💻","⚙️","🔧","🛠️","📷","🎵","🎸","🎮","🎯","🎲","🧩","🔍",
-  // Символы и знаки
-  "✅","❌","⚠️","💰","📊","🎉","❤️","💔","⚡","🔗","📌","🔖","💬","📢","🔔","🚫",
-  // Транспорт и места
-  "🚀","✈️","🚗","🏠","🏢","🏆","🏅","🎓","💼","📍","🗓","📅","🕐","📞","📧","📝",
+const EMOJI_CATEGORIES: { icon: string; label: string; emojis: string[] }[] = [
+  {
+    icon: "😊", label: "Эмоции",
+    emojis: ["😊","😄","😂","🥰","😍","🤩","😎","🤔","😅","🥳","😇","🤗","😏","😢","😤","😱","🫡","🤯","😬","🥸","🤠","😴","🤧","🥹","😵","🫠"],
+  },
+  {
+    icon: "👋", label: "Жесты",
+    emojis: ["👋","👍","👎","👏","🙌","🤝","🙏","💪","🫶","✌️","🤞","👊","🫂","👤","👥","🧠","🦾","🫴","🤲","👐","🫱","🙋","🧑","👩","👨","🧑‍💼","👩‍💼","👨‍💼"],
+  },
+  {
+    icon: "💼", label: "Бизнес",
+    emojis: [
+      "💼","📊","📈","📉","💰","💵","💳","🏦","🤑","💹","📋","📌","📍","🗂️","🗃️",
+      "📁","📂","🗄️","📎","📏","📐","✂️","🖊️","🖋️","✏️","📝","📄","📃","📑","📜",
+      "📬","📭","📮","📧","📨","📩","📤","📥","🗳️","📅","🗓","🕐","⏰","⏱️","⌚",
+      "🔖","🏷️","💡","🔍","🔎","🔐","🔑","🗝️","🔓","🔒","🛡️","⚖️","🏛️",
+    ],
+  },
+  {
+    icon: "📝", label: "Канцелярия",
+    emojis: [
+      "📝","📄","📃","📑","📋","📊","📈","📉","📌","📍","📎","🖇️","✂️","📏","📐",
+      "🖊️","🖋️","✒️","✏️","🖌️","🖍️","📓","📔","📒","📕","📗","📘","📙","📚","📖",
+      "🗒️","🗓","📅","📆","🗑️","🗃️","🗂️","🗄️","💾","💿","📀","🖨️","🖥️","💻","⌨️","🖱️",
+    ],
+  },
+  {
+    icon: "✅", label: "Символы",
+    emojis: [
+      "✅","❌","⚠️","ℹ️","❓","❗","🔴","🟡","🟢","🔵","⚡","🔥","💯","🆕","🆗","🆙",
+      "🔗","📢","📣","🔔","🔕","💬","💭","🗨️","🗯️","📢","🚫","⛔","🚷","🚳","🚱",
+      "✨","🌟","⭐","💫","❤️","🧡","💛","💚","💙","💜","🖤","🤍","💔","❣️","🎯","🎉",
+    ],
+  },
+  {
+    icon: "🚀", label: "Транспорт",
+    emojis: ["🚀","✈️","🚗","🚕","🚙","🚌","🏎️","🚂","🚢","🛸","🚁","🛺","🛵","🚲","🛴","🏍️","⛵","🛥️","🚤","🛩️","🪂","🏠","🏢","🏬","🏦","🏨","🏪","🏫","🏗️","🏙️","🗼","🗽","🌆","🌇","🌉"],
+  },
+  {
+    icon: "🐱", label: "Животные",
+    emojis: ["🐱","🐶","🦊","🐻","🐼","🦁","🐯","🐸","🐧","🦋","🐝","🦄","🦅","🐠","🦀","🐙","🐮","🐷","🐔","🦆","🦉","🦇","🐺","🦝","🦨","🦡","🦦","🦥","🐿️","🦔"],
+  },
+  {
+    icon: "🍎", label: "Еда",
+    emojis: ["🍎","🍕","🍔","🍣","🍜","☕","🎂","🍰","🍇","🥑","🌮","🍦","🧃","🍺","🥂","🍩","🥐","🧁","🍫","🍬","🍭","🥗","🍱","🥩","🍗","🥚","🧀","🥞","🥓","🌯","🥙"],
+  },
+  {
+    icon: "🌸", label: "Природа",
+    emojis: ["🌸","🌺","🌻","🌿","🍀","🌊","⛰️","🌙","⭐","☀️","🌈","❄️","🔥","⚡","🌪️","🌍","🌲","🌴","🌵","🌾","🍁","🍂","🍃","🌱","🌰","🍄","🌶️","🌺","🌼","💐","🌷"],
+  },
 ]
+
+// Flat list for inline text block emoji picker (all emojis)
+const QUICK_INSERT_EMOJIS = EMOJI_CATEGORIES.flatMap(c => c.emojis)
 
 const QUICK_TAGS = [
   { tag: "{{имя}}", label: "Имя кандидата" },
@@ -1795,6 +1831,8 @@ const QUICK_EMOJIS = ["👋","🚀","🏢","💰","📈","✅","🎯","⚙️","
 
 function EmojiBtn({ current, onSelect }: { current: string; onSelect: (v: string) => void }) {
   const [open, setOpen] = useState(false)
+  const [catIdx, setCatIdx] = useState(0)
+  const activeCat = EMOJI_CATEGORIES[catIdx]
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
@@ -1803,16 +1841,37 @@ function EmojiBtn({ current, onSelect }: { current: string; onSelect: (v: string
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="p-2" style={{ width: "calc(9 * 2.25rem + 1rem)" }}>
-        {/* Быстрый доступ */}
-        <div className="grid grid-cols-9 gap-0.5 mb-1.5 pb-1.5 border-b border-border">
-          {QUICK_ACCESS_EMOJIS.map((e) => (
-            <button key={e} className={cn("w-9 h-9 text-xl flex items-center justify-center rounded hover:bg-muted transition-colors leading-none", current === e && "bg-primary/10 ring-1 ring-primary")} onClick={() => { onSelect(e); setOpen(false) }}>{e}</button>
+        {/* Строка категорий */}
+        <div className="flex gap-0.5 mb-1.5 pb-1.5 border-b border-border overflow-x-auto">
+          {EMOJI_CATEGORIES.map((cat, i) => (
+            <button
+              key={cat.label}
+              title={cat.label}
+              onClick={() => setCatIdx(i)}
+              className={cn(
+                "w-9 h-9 text-xl flex items-center justify-center rounded transition-colors leading-none flex-shrink-0",
+                i === catIdx ? "bg-primary/15 ring-1 ring-primary/40" : "hover:bg-muted"
+              )}
+            >
+              {cat.icon}
+            </button>
           ))}
         </div>
-        {/* Полная сетка по категориям */}
-        <div className="grid grid-cols-9 gap-0.5 max-h-52 overflow-y-auto">
-          {QUICK_INSERT_EMOJIS.map((e) => (
-            <button key={e} className={cn("w-9 h-9 text-xl flex items-center justify-center rounded hover:bg-muted transition-colors leading-none", current === e && "bg-primary/10 ring-1 ring-primary")} onClick={() => { onSelect(e); setOpen(false) }}>{e}</button>
+        {/* Название категории */}
+        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide px-1 mb-1">{activeCat.label}</p>
+        {/* Сетка эмодзи выбранной категории */}
+        <div className="grid grid-cols-9 gap-0.5 max-h-56 overflow-y-auto">
+          {activeCat.emojis.map((e) => (
+            <button
+              key={e}
+              onClick={() => { onSelect(e); setOpen(false) }}
+              className={cn(
+                "w-9 h-9 text-xl flex items-center justify-center rounded hover:bg-muted transition-colors leading-none",
+                current === e && "bg-primary/10 ring-1 ring-primary"
+              )}
+            >
+              {e}
+            </button>
           ))}
         </div>
       </DropdownMenuContent>
