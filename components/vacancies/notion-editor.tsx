@@ -1838,74 +1838,126 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
       )
     }
 
-    case "task":
+    case "task": {
+      const QTYPES: { type: import("@/lib/course-types").QuestionAnswerType; label: string; title: string }[] = [
+        { type: "short",    label: "T",    title: "Короткий текст" },
+        { type: "long",     label: "≡",    title: "Длинный текст" },
+        { type: "yesno",    label: "Да/Нет", title: "Да / Нет" },
+        { type: "single",   label: "◉",    title: "Один из списка" },
+        { type: "multiple", label: "☑",    title: "Несколько из списка" },
+        { type: "sort",     label: "↕",    title: "Расставить по порядку" },
+      ]
+      const updateQ = (qi: number, patch: Partial<import("@/lib/course-types").Question>) => {
+        const nq = [...block.questions]; nq[qi] = { ...nq[qi], ...patch }; onUpdate({ questions: nq })
+      }
+      const moveQ = (qi: number, dir: -1 | 1) => {
+        const t = qi + dir; if (t < 0 || t >= block.questions.length) return
+        const nq = [...block.questions];[nq[qi], nq[t]] = [nq[t], nq[qi]]; onUpdate({ questions: nq })
+      }
       return (
         <div className="rounded-xl border border-dashed border-border bg-muted/20 p-4 space-y-3">
           <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
             <CheckSquare className="w-4 h-4" /><span>Задание и вопросы</span>
           </div>
+          {/* Заголовок */}
+          <Input
+            placeholder="Заголовок задания..."
+            value={block.taskTitle || ""}
+            onChange={(e) => onUpdate({ taskTitle: e.target.value })}
+            className="text-sm font-medium"
+          />
+          {/* Описание */}
           <textarea
-            className="w-full text-sm bg-background border border-border rounded-lg p-2 outline-none resize-none min-h-[60px]"
+            className="w-full text-sm bg-background border border-border rounded-lg p-2 outline-none resize-none min-h-[52px]"
             value={block.taskDescription}
             onChange={(e) => onUpdate({ taskDescription: e.target.value })}
             placeholder="Описание задания..."
           />
+          {/* Вопросы */}
           <div className="space-y-2">
             {block.questions.map((q, qi) => {
-              const qType = q.questionType ?? "short"
-              const setQType = (t: "short" | "long") => {
-                const nq = [...block.questions]; nq[qi] = { ...nq[qi], questionType: t }; onUpdate({ questions: nq })
-              }
+              const hasOptions = q.answerType === "single" || q.answerType === "multiple" || q.answerType === "sort"
               return (
-                <div key={q.id} className="bg-background rounded-lg border border-border p-2 space-y-2">
-                  {/* Строка: номер + текст вопроса + удалить */}
-                  <div className="flex items-center gap-2">
+                <div key={q.id} className="bg-background rounded-lg border border-border p-2.5 space-y-2">
+                  {/* Строка 1: drag handle + номер + текст + обязательный + удалить */}
+                  <div className="flex items-center gap-1.5">
+                    {/* drag handle */}
+                    <div className="flex flex-col gap-0.5 text-muted-foreground/40 shrink-0 cursor-grab">
+                      <button className="hover:text-muted-foreground" onClick={() => moveQ(qi, -1)} title="Вверх" disabled={qi === 0}><ArrowUp className="w-3 h-3" /></button>
+                      <button className="hover:text-muted-foreground" onClick={() => moveQ(qi, 1)} title="Вниз" disabled={qi === block.questions.length - 1}><ArrowDown className="w-3 h-3" /></button>
+                    </div>
                     <span className="text-xs font-bold text-muted-foreground w-5 shrink-0">{qi + 1}.</span>
                     <input
                       className="flex-1 text-sm bg-transparent outline-none"
                       value={q.text}
-                      onChange={(e) => {
-                        const nq = [...block.questions]; nq[qi] = { ...nq[qi], text: e.target.value }; onUpdate({ questions: nq })
-                      }}
+                      onChange={(e) => updateQ(qi, { text: e.target.value })}
                       placeholder="Вопрос кандидату..."
                     />
+                    {/* Обязательный */}
+                    <button
+                      title={q.required ? "Обязательный" : "Не обязательный"}
+                      onClick={() => updateQ(qi, { required: !q.required })}
+                      className={cn(
+                        "shrink-0 w-5 h-5 rounded flex items-center justify-center text-sm font-bold transition-colors",
+                        q.required ? "text-destructive" : "text-muted-foreground/30 hover:text-muted-foreground"
+                      )}
+                    >*</button>
                     <button
                       className="text-muted-foreground hover:text-destructive shrink-0"
                       onClick={() => onUpdate({ questions: block.questions.filter((_, j) => j !== qi) })}
                     ><X className="w-3.5 h-3.5" /></button>
                   </div>
-                  {/* Переключатель типа ответа */}
-                  <div className="flex items-center gap-1 pl-7">
-                    <button
-                      onClick={() => setQType("short")}
-                      title="Короткий ответ"
-                      className={cn(
-                        "flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium border transition-all",
-                        qType === "short"
-                          ? "bg-primary/10 border-primary text-primary"
-                          : "border-border text-muted-foreground hover:border-primary/50 hover:text-foreground"
-                      )}
-                    >
-                      <span className="font-mono">〔T〕</span>Короткий
-                    </button>
-                    <button
-                      onClick={() => setQType("long")}
-                      title="Длинный ответ"
-                      className={cn(
-                        "flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium border transition-all",
-                        qType === "long"
-                          ? "bg-primary/10 border-primary text-primary"
-                          : "border-border text-muted-foreground hover:border-primary/50 hover:text-foreground"
-                      )}
-                    >
-                      <span className="font-mono">〔≡〕</span>Длинный
-                    </button>
+                  {/* Строка 2: переключатель типа */}
+                  <div className="flex items-center gap-1 pl-8 flex-wrap">
+                    {QTYPES.map(({ type, label, title }) => (
+                      <button
+                        key={type}
+                        title={title}
+                        onClick={() => updateQ(qi, { answerType: type, options: (type === "single" || type === "multiple" || type === "sort") && q.options.length === 0 ? [""] : q.options })}
+                        className={cn(
+                          "px-2 py-0.5 rounded text-xs font-medium border transition-all",
+                          q.answerType === type
+                            ? "bg-primary/10 border-primary text-primary"
+                            : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                        )}
+                      >{label}</button>
+                    ))}
                   </div>
+                  {/* Варианты ответов (single / multiple / sort) */}
+                  {hasOptions && (
+                    <div className="pl-8 space-y-1.5">
+                      {q.options.map((opt, oi) => (
+                        <div key={oi} className="flex items-center gap-1.5">
+                          <span className="text-xs text-muted-foreground w-4 shrink-0">
+                            {q.answerType === "sort" ? `${oi + 1}.` : q.answerType === "single" ? "◉" : "☑"}
+                          </span>
+                          <input
+                            className="flex-1 text-xs bg-muted/30 border border-border rounded px-2 py-1 outline-none focus:border-primary/50"
+                            value={opt}
+                            onChange={(e) => {
+                              const no = [...q.options]; no[oi] = e.target.value; updateQ(qi, { options: no })
+                            }}
+                            placeholder={`Вариант ${oi + 1}...`}
+                          />
+                          <button
+                            className="text-muted-foreground/40 hover:text-destructive shrink-0"
+                            onClick={() => updateQ(qi, { options: q.options.filter((_, j) => j !== oi) })}
+                          ><X className="w-3 h-3" /></button>
+                        </div>
+                      ))}
+                      <button
+                        className="text-xs text-primary/70 hover:text-primary flex items-center gap-1 pl-5"
+                        onClick={() => updateQ(qi, { options: [...q.options, ""] })}
+                      >
+                        <Plus className="w-3 h-3" />{q.answerType === "sort" ? "Добавить пункт" : "Добавить вариант"}
+                      </button>
+                    </div>
+                  )}
                 </div>
               )
             })}
             <Button variant="ghost" size="sm" className="text-xs h-7" onClick={() => {
-              const nq = [...block.questions, { id: `q-${Date.now()}`, text: "", answerType: "text" as const, questionType: "short" as const, options: [], correctOptions: [], textMatchMode: "ai" as const, correctText: "", aiCriteria: "", weight: 1 }]
+              const nq = [...block.questions, { id: `q-${Date.now()}`, text: "", answerType: "short" as const, required: false, options: [] }]
               onUpdate({ questions: nq })
             }}>
               <Plus className="w-3 h-3 mr-1" />Добавить вопрос
@@ -1913,6 +1965,7 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
           </div>
         </div>
       )
+    }
 
     default:
       return (
@@ -2467,6 +2520,157 @@ function EmojiBtn({ current, onSelect }: { current: string; onSelect: (v: string
 }
 
 
+// ─── Task preview (interactive, candidate view) ────────────────────────────
+
+function TaskPreviewBlock({ block }: { block: Block }) {
+  const [yesno, setYesno] = useState<Record<string, "yes" | "no" | null>>({})
+  const [single, setSingle] = useState<Record<string, number>>({})
+  const [multi, setMulti] = useState<Record<string, Set<number>>>({})
+  const [sortItems, setSortItems] = useState<Record<string, string[]>>(() => {
+    const init: Record<string, string[]> = {}
+    block.questions.forEach((q) => { if (q.answerType === "sort") init[q.id] = [...q.options] })
+    return init
+  })
+  const [dragSortId, setDragSortId] = useState<string | null>(null)
+  const [dragSortIdx, setDragSortIdx] = useState<number | null>(null)
+
+  const moveSort = (qid: string, from: number, to: number) => {
+    setSortItems((prev) => {
+      const arr = [...(prev[qid] || [])]
+      const [item] = arr.splice(from, 1)
+      arr.splice(to, 0, item)
+      return { ...prev, [qid]: arr }
+    })
+  }
+
+  return (
+    <div className="rounded-xl border border-border p-4 space-y-4">
+      {block.taskTitle?.trim() && (
+        <h3 className="text-base font-semibold">{block.taskTitle}</h3>
+      )}
+      {block.taskDescription?.trim() && (
+        <p className="text-sm text-muted-foreground">{block.taskDescription}</p>
+      )}
+      {block.questions.map((q, i) => (
+        <div key={q.id} className="space-y-2">
+          <p className="text-sm font-medium">
+            {i + 1}. {q.text}
+            {q.required && <span className="text-destructive ml-0.5">*</span>}
+          </p>
+          {/* Короткий текст */}
+          {q.answerType === "short" && (
+            <input
+              className="w-full border border-border rounded-lg px-3 h-9 text-sm bg-background outline-none focus:border-primary/50 placeholder:text-muted-foreground/40"
+              placeholder="Ответ кандидата..."
+            />
+          )}
+          {/* Длинный текст */}
+          {q.answerType === "long" && (
+            <textarea
+              rows={3}
+              className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background outline-none focus:border-primary/50 resize-y placeholder:text-muted-foreground/40"
+              placeholder="Развёрнутый ответ кандидата..."
+            />
+          )}
+          {/* Да/Нет */}
+          {q.answerType === "yesno" && (
+            <div className="flex gap-2">
+              {(["yes", "no"] as const).map((v) => (
+                <button
+                  key={v}
+                  onClick={() => setYesno((p) => ({ ...p, [q.id]: p[q.id] === v ? null : v }))}
+                  className={cn(
+                    "px-6 py-2 rounded-lg text-sm font-medium border transition-all",
+                    yesno[q.id] === v
+                      ? v === "yes" ? "bg-green-500 border-green-500 text-white" : "bg-destructive border-destructive text-white"
+                      : "border-border hover:border-primary/50"
+                  )}
+                >{v === "yes" ? "Да" : "Нет"}</button>
+              ))}
+            </div>
+          )}
+          {/* Один из списка */}
+          {q.answerType === "single" && q.options.length > 0 && (
+            <div className="space-y-1.5">
+              {q.options.map((opt, oi) => (
+                <label key={oi} className="flex items-center gap-2.5 cursor-pointer group">
+                  <div
+                    onClick={() => setSingle((p) => ({ ...p, [q.id]: oi }))}
+                    className={cn(
+                      "w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 transition-all",
+                      single[q.id] === oi ? "border-primary" : "border-border group-hover:border-primary/50"
+                    )}
+                  >
+                    {single[q.id] === oi && <div className="w-2 h-2 rounded-full bg-primary" />}
+                  </div>
+                  <span className="text-sm">{opt}</span>
+                </label>
+              ))}
+            </div>
+          )}
+          {/* Несколько из списка */}
+          {q.answerType === "multiple" && q.options.length > 0 && (
+            <div className="space-y-1.5">
+              {q.options.map((opt, oi) => {
+                const checked = multi[q.id]?.has(oi)
+                return (
+                  <label key={oi} className="flex items-center gap-2.5 cursor-pointer group">
+                    <div
+                      onClick={() => setMulti((p) => {
+                        const s = new Set(p[q.id] || [])
+                        checked ? s.delete(oi) : s.add(oi)
+                        return { ...p, [q.id]: s }
+                      })}
+                      className={cn(
+                        "w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-all",
+                        checked ? "border-primary bg-primary" : "border-border group-hover:border-primary/50"
+                      )}
+                    >
+                      {checked && <span className="text-white text-[10px] leading-none">✓</span>}
+                    </div>
+                    <span className="text-sm">{opt}</span>
+                  </label>
+                )
+              })}
+            </div>
+          )}
+          {/* Расставить по порядку */}
+          {q.answerType === "sort" && (
+            <div className="space-y-1.5">
+              {(sortItems[q.id] || q.options).map((item, oi) => (
+                <div
+                  key={`${q.id}-${oi}`}
+                  draggable
+                  onDragStart={() => { setDragSortId(q.id); setDragSortIdx(oi) }}
+                  onDragOver={(e) => { e.preventDefault() }}
+                  onDrop={() => {
+                    if (dragSortId === q.id && dragSortIdx !== null && dragSortIdx !== oi)
+                      moveSort(q.id, dragSortIdx, oi)
+                    setDragSortId(null); setDragSortIdx(null)
+                  }}
+                  className="flex items-center gap-2 border border-border rounded-lg px-3 py-2 bg-background cursor-grab active:cursor-grabbing hover:border-primary/40 transition-colors"
+                >
+                  <GripVertical className="w-4 h-4 text-muted-foreground/40 shrink-0" />
+                  <span className="text-sm flex-1">{item}</span>
+                  {/* Мобильные кнопки ↑↓ */}
+                  <div className="flex gap-1 sm:hidden">
+                    <button onClick={() => oi > 0 && moveSort(q.id, oi, oi - 1)} className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted">
+                      <ArrowUp className="w-3 h-3" />
+                    </button>
+                    <button onClick={() => oi < (sortItems[q.id] || q.options).length - 1 && moveSort(q.id, oi, oi + 1)} className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted">
+                      <ArrowDown className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 // ─── Preview block (candidate view) ───────────────────────────────────────
 
 function SimplePreviewBlock({ block }: { block: Block }) {
@@ -2615,29 +2819,8 @@ function SimplePreviewBlock({ block }: { block: Block }) {
       )
     }
     case "task":
-      if (!block.taskDescription?.trim() && block.questions.length === 0) return null
-      return (
-        <div className="rounded-xl border border-border p-4 space-y-3">
-          {block.taskDescription && <p className="text-sm font-medium">{block.taskDescription}</p>}
-          {block.questions.map((q, i) => (
-            <div key={q.id} className="space-y-1.5">
-              <p className="text-sm text-muted-foreground">{i + 1}. {q.text}</p>
-              {(q.questionType ?? "short") === "long" ? (
-                <textarea
-                  disabled
-                  rows={3}
-                  placeholder="Развёрнутый ответ кандидата..."
-                  className="w-full border border-border rounded-lg bg-muted/20 text-xs px-3 py-2 text-muted-foreground/50 resize-y outline-none placeholder:text-muted-foreground/40"
-                />
-              ) : (
-                <div className="h-9 border border-border rounded-lg bg-muted/20 text-xs flex items-center px-3 text-muted-foreground/40">
-                  Ответ кандидата...
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      )
+      if (!block.taskTitle?.trim() && !block.taskDescription?.trim() && block.questions.length === 0) return null
+      return <TaskPreviewBlock block={block} />
     default:
       return null
   }
