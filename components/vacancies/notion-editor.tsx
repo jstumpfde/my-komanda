@@ -1904,10 +1904,10 @@ function InfoBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: Partia
   const iconBgStyle = { backgroundColor: activeColor }
 
   return (
-    <div className="relative rounded-2xl border-2 p-4 flex gap-4 items-start" style={bgStyle}>
-      {/* Иконка слева */}
+    <div className="relative rounded-2xl border-2 p-4 flex gap-4 items-center" style={bgStyle}>
+      {/* Иконка слева — всегда по центру высоты */}
       <div
-        className="flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-xl select-none"
+        className="flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-xl select-none self-center"
         style={iconBgStyle}
       >
         {activeIcon}
@@ -1919,12 +1919,11 @@ function InfoBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: Partia
           ref={contentRef}
           contentEditable
           suppressContentEditableWarning
-          dir="ltr"
           data-main-editor="true"
           onInput={syncContent}
-          onBlur={syncContent}
           dangerouslySetInnerHTML={{ __html: block.content || "" }}
           className="text-sm leading-relaxed outline-none min-h-[2rem] empty:before:content-['Введите_текст...'] empty:before:text-muted-foreground/50"
+          style={{ direction: "ltr", unicodeBidi: "embed" }}
         />
       </div>
 
