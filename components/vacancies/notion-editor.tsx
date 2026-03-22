@@ -381,6 +381,7 @@ function NotionLessonEditor({ lesson, onUpdateLesson, onUpdateBlock, onInsertBlo
   const [floatingBlockId, setFloatingBlockId] = useState<string | null>(null)
   const [floatingInInfoBlock, setFloatingInInfoBlock] = useState(false)
   const [floatingAlign, setFloatingAlign] = useState<"left" | "center" | "right">("left")
+  const [floatingHeading, setFloatingHeading] = useState<"" | "h1" | "h2" | "h3">("")
   const [showForeColors, setShowForeColors] = useState(false)
   const [showBgColors, setShowBgColors] = useState(false)
   const [currentTextColor, setCurrentTextColor] = useState("#000000")
@@ -394,6 +395,7 @@ function NotionLessonEditor({ lesson, onUpdateLesson, onUpdateBlock, onInsertBlo
   const toolbarTagsBtnRef = useRef<HTMLButtonElement>(null)
   const savedRangeToolbarRef = useRef<Range | null>(null)
   const savedAlignRef = useRef<"left" | "center" | "right">("left")
+  const savedHeadingRef = useRef<"" | "h1" | "h2" | "h3">("")
   const editorAreaRef = useRef<HTMLDivElement>(null)
 
   const FORE_COLORS = ["#000000", "#ef4444", "#f97316", "#eab308", "#22c55e", "#3b82f6", "#8b5cf6", "#6b7280"]
@@ -485,17 +487,16 @@ function NotionLessonEditor({ lesson, onUpdateLesson, onUpdateBlock, onInsertBlo
     try { return document.queryCommandValue("formatBlock").toLowerCase() } catch { return "" }
   }
 
-  // Cycle heading: H1 → H2 → H3 → p → H1 ...
+  // Cycle heading: H → H1 → H2 → H3 → H (reset) ...
   const cycleHeading = () => {
-    const cur = currentBlock()
-    const next = cur === "h1" ? "h2" : cur === "h2" ? "h3" : cur === "h3" ? "p" : "h1"
-    execFmt("formatBlock", next)
+    const cur = savedHeadingRef.current
+    const next: "" | "h1" | "h2" | "h3" = cur === "" ? "h1" : cur === "h1" ? "h2" : cur === "h2" ? "h3" : ""
+    savedHeadingRef.current = next
+    setFloatingHeading(next)
+    execFmt("formatBlock", next === "" ? "p" : next)
   }
-  const headingLabel = () => {
-    const cur = currentBlock()
-    return cur === "h1" ? "H1" : cur === "h2" ? "H2" : cur === "h3" ? "H3" : "H"
-  }
-  const headingActive = () => ["h1","h2","h3"].includes(currentBlock())
+  const headingLabel = () => floatingHeading === "h1" ? "H1" : floatingHeading === "h2" ? "H2" : floatingHeading === "h3" ? "H3" : "H"
+  const headingActive = () => floatingHeading !== ""
 
   // Cycle alignment: left → center → right → left ...
   const currentAlign = () => {
@@ -517,10 +518,14 @@ function NotionLessonEditor({ lesson, onUpdateLesson, onUpdateBlock, onInsertBlo
   const saveToolbarSelection = () => {
     const sel = window.getSelection()
     if (sel && sel.rangeCount > 0) savedRangeToolbarRef.current = sel.getRangeAt(0).cloneRange()
-    // Snapshot alignment while contentEditable still has focus
+    // Snapshot alignment and heading while contentEditable still has focus
     const align = currentAlign()
     savedAlignRef.current = align
     setFloatingAlign(align)
+    const blk = currentBlock()
+    const h = (blk === "h1" || blk === "h2" || blk === "h3") ? blk : ""
+    savedHeadingRef.current = h as "" | "h1" | "h2" | "h3"
+    setFloatingHeading(h as "" | "h1" | "h2" | "h3")
   }
   const insertAtToolbarCursor = (text: string) => {
     if (savedRangeToolbarRef.current) {
