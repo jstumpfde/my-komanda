@@ -1102,7 +1102,7 @@ function NotionTextBlock({ block, editorRef, isHovered, onSync, onKeyDown }: Not
               setShowEmoji((v) => !v)
             }}
             title="Вставить эмодзи"
-            className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors text-sm"
+            className="w-8 h-8 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors text-base"
           >
             😊
           </button>
@@ -1130,7 +1130,7 @@ function NotionTextBlock({ block, editorRef, isHovered, onSync, onKeyDown }: Not
               setShowTags((v) => !v)
             }}
             title="Вставить переменную"
-            className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors text-xs font-bold"
+            className="w-8 h-8 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors text-sm font-bold"
           >
             #
           </button>
