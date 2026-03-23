@@ -1,168 +1,64 @@
-# Моя Команда — HR Рекрутинговая платформа
+# CLAUDE.md
 
-## Стек
-
-- **Framework:** Next.js 16 (App Router) + React 19 + TypeScript
-- **Styling:** Tailwind CSS 4 + CSS-переменные (oklch) + tw-animate-css
-- **UI Kit:** shadcn/ui (стиль new-york) — ~50 компонентов в `components/ui/`
-- **Icons:** Lucide React
-- **Charts:** Recharts 2.15
-- **Font:** Inter (latin + cyrillic)
-- **Package manager:** pnpm
-- **Language:** русский (весь UI на русском)
-
-## Маршруты (25 страниц)
-
-### Основные
-
-| Путь | Страница | Файл |
-|------|----------|------|
-| `/` | Дашборд вакансии (канбан) | `app/page.tsx` |
-| `/overview` | Главный дашборд (KPI, активность) | `app/overview/page.tsx` |
-| `/candidates` | Все кандидаты (сводно по вакансиям) | `app/candidates/page.tsx` |
-| `/interviews` | Собеседования | `app/interviews/page.tsx` |
-| `/analytics` | Аналитика (воронка/источники/сценарии) | `app/analytics/page.tsx` |
-| `/sources` | UTM-конструктор ссылок | `app/sources/page.tsx` |
-| `/referrals` | Реферальная программа | `app/referrals/page.tsx` |
-| `/vacancies/new` | Wizard создания вакансии (5 шагов) | `app/vacancies/new/page.tsx` |
-| `/vacancies/[id]` | Страница вакансии (канбан/курс/аналитика/автоматизация/публикация/настройки) | `app/vacancies/[id]/page.tsx` |
-
-### Настройки
-
-| Путь | Страница |
-|------|----------|
-| `/settings/company` | Профиль компании + ИНН + брендинг |
-| `/settings/team` | Команда и роли |
-| `/settings/integrations` | Интеграции CRM (Bitrix24/AmoCRM) |
-| `/settings/schedule` | Планировщик слотов + напоминания |
-| `/settings/notifications` | Каналы и события уведомлений |
-| `/settings/billing` | Тарифы и оплата + брендинг |
-
-### Админ-панель
-
-| Путь | Страница |
-|------|----------|
-| `/admin/tariffs` | Управление тарифами |
-| `/admin/clients` | Список клиентов |
-
-### Публичные страницы (без авторизации)
-
-| Путь | Страница |
-|------|----------|
-| `/vacancy/[slug]` | Лендинг вакансии (UTM-aware) |
-| `/candidate/[token]` | Демонстрация должности (3 экрана) |
-| `/schedule/[token]` | Выбор слота интервью |
-| `/ref/[id]` | Личная страница реферера |
-| `/register` | Регистрация |
-| `/login` | Вход + восстановление пароля |
-| `/onboarding` | 5-шаговый онбординг |
-
-## Логика воронки (автоматическая)
-
-Кандидат движется по воронке автоматически, HR только принимает решения.
-
-### 7 колонок канбана
-
-1. **Новые** — откликнулся → авто: бот пишет → «Ожидает ответа»
-2. **Ожидает ответа** — бот написал → авто: открыл ссылку → «Демонстрация»
-3. **Демонстрация** — проходит курс (прогресс-бар) → авто: завершил → «Решение HR»
-4. **Решение HR** — красный бейдж, кнопки: Пригласить / Отказать / Резерв / Подумать
-5. **Интервью** — выбрал слот, дата на карточке → авто: прошло → «Финальное решение»
-6. **Финальное решение** — кнопки: Нанять / Отказать / Резерв
-7. **Нанят 🎉** — финал
-
-### При получении кандидата
-
-- Генерируется уникальный токен (12 символов)
-- Определяется источник из UTM
-- Запускается сценарий воронки
-- Бот пишет первое сообщение (задержка из настроек)
-- Если CRM подключена → создаётся лид
-- HR получает уведомление
-
-## Роли
-
-| Роль | Источник | Описание |
-|------|----------|----------|
-| Владелец | Платформа | Полный доступ + управление тарифом |
-| Клиентский менеджер | Платформа | Ведение назначенных клиентов |
-| HR-менеджер (главный) | Клиент | Видит всех + управление командой |
-| HR-менеджер | Клиент | Только свои кандидаты (настраивается) |
-| Руководитель отдела | Клиент | Просмотр категории + одобрение |
-| Наблюдатель | Клиент | Только аналитика |
-
-## Тарифы
-
-| Тариф | Цена | Вакансий | Кандидатов | Брендинг | Домен |
-|-------|------|----------|------------|----------|-------|
-| Trial | 0 (7 дней) | 2 | 300 | ❌ | ❌ |
-| Starter | 19 900 ₽ | 3 | 300 | ❌ | ❌ |
-| Business | 49 900 ₽ | 10 | 2 000 | ✅ | ❌ |
-| Pro | 99 900 ₽ | ∞ | 10 000 | ✅ | ✅ |
-
-## Интеграции
-
-- **hh.ru** — множественные аккаунты, синхронизация откликов, автосообщения
-- **Telegram** — множественные каналы/боты как источники
-- **Bitrix24** — лиды, маппинг статусов, двусторонняя синхронизация
-- **AmoCRM** — OAuth подключение, синхронизация воронки
-- **UTM-ссылки** — конструктор для любых источников с аналитикой
-
-## Брендинг (глобальный)
-
-CSS-переменные `--brand-primary`, `--brand-bg`, `--brand-text` из `lib/branding.ts`.
-Настраивается в `/settings/company`. Применяется к: лендинг вакансии, страница кандидата, выбор слота, реферальная страница, embed-виджет.
-
-## Структура компонентов
-
-```
-components/
-  dashboard/
-    sidebar.tsx           — навигация (меню/найм/настройки/админ)
-    header.tsx            — шапка + уведомления (Popover с лентой)
-    kanban-board.tsx       — 4 вида (канбан/список/воронка/плитки), без drag-n-drop
-    candidate-card.tsx     — карточка кандидата (контекстные кнопки по колонке)
-    candidate-profile.tsx  — боковая панель (профиль/демо/чат/история + планировщик)
-    funnel-view.tsx        — визуализация воронки
-    list-view.tsx          — табличный вид
-    tiles-view.tsx         — плитки
-    send-demo-dialog.tsx   — отправка демонстрации
-    command-palette.tsx    — Ctrl+K поиск
-  vacancies/
-    automation-settings.tsx — сценарии + дожим + конструктор
-    hh-integration.tsx      — hh.ru + Telegram множественные аккаунты
-    publish-tab.tsx         — публикация (embed HTML + CMS инструкции)
-    course-tab.tsx          — редактор демонстрации
-    step-*.tsx              — шаги wizard создания вакансии
-  providers.tsx            — ThemeProvider + AuthProvider
-
-lib/
-  auth.tsx                — AuthContext, 3 роли, переключатель
-  branding.ts             — BrandConfig, пресеты, CSS-переменные
-  candidate-tokens.ts     — генерация токенов, тестовый кандидат
-  column-config.ts        — 7 колонок воронки, действия, маппинг
-  course-types.ts         — уроки, блоки, шаблоны демонстрации
-  onboarding.ts           — 5 шагов онбординга, localStorage
-  referral-types.ts       — рефереры, триггеры выплат
-  tariff-types.ts         — тарифы, клиенты
-  utm-types.ts            — UTM-ссылки, аналитика
-  vacancy-storage.ts      — категории вакансий
-```
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Команды
 
 ```bash
-pnpm dev          # запуск dev-сервера
-pnpm build        # сборка
-pnpm start        # продакшн-сервер
-pnpm lint         # линтинг
+pnpm dev          # запуск dev-сервера (Next.js 16, порт 3000)
+pnpm build        # продакшн-сборка (TypeScript-ошибки НЕ блокируют — ignoreBuildErrors: true)
+pnpm lint         # ESLint
 ```
+
+Тестов нет — проект без тестового фреймворка.
+
+## Архитектура
+
+**Frontend-only приложение** — бэкенда нет. Все данные хранятся in-memory + localStorage. Демо-данные захардкожены в компонентах (например, `initialColumns` в `app/page.tsx`).
+
+### Стек
+
+- Next.js 16 (App Router) + React 19 + TypeScript (strict)
+- Tailwind CSS 4 (oklch-переменные) + shadcn/ui (стиль new-york, ~50 компонентов в `components/ui/`)
+- Иконки: только Lucide React. Графики: Recharts
+- Формы: React Hook Form + Zod
+- Пакетный менеджер: pnpm
+
+### Состояние и данные
+
+- Кастомный хук `useLocalStorage<T>` (`hooks/use-local-storage.ts`) — основной паттерн хранения. Автоматически десериализует Date-строки.
+- Нет Redux/Zustand/других стейт-менеджеров — только React Context + useState + useLocalStorage.
+- Контексты оборачиваются в `components/providers.tsx`: ThemeProvider (light/dark/warm) + AuthProvider.
+
+### Аутентификация (демо)
+
+`lib/auth.tsx` — AuthContext с 5 ролями: admin, manager, client, client_hr, candidate. Захардкоженные демо-пользователи, переключение ролей через localStorage (`hireflow-view-role`). `realRole` всегда "admin" в демо-режиме.
+
+### Воронка кандидатов
+
+Канбан-доска с 5 колонками в коде (`lib/column-config.ts`): `new` → `demo` → `scheduled` → `interviewed` → `hired`. Каждая колонка имеет цветовой градиент, процент прогресса и набор доступных действий. Авто-продвижение для колонок: new, demo, scheduled. HR-решение — в колонке `interviewed`.
+
+4 режима отображения: канбан, список, воронка, плитки — без drag-and-drop.
+
+### Темы и брендинг
+
+- 3 темы (light/dark/warm) через next-themes, CSS-переменные в `app/globals.css` с `@custom-variant`
+- Брендинг клиента (`lib/branding.ts`): CSS-переменные `--brand-primary`, `--brand-bg`, `--brand-text`. Хранится в localStorage (`hireflow-brand`). Доступен на тарифах business/pro. Применяется к публичным страницам.
+
+### Маршруты (25 страниц)
+
+Все страницы — `"use client"` (нет серверных компонентов кроме layout).
+
+- **Дашборд**: `/` (канбан), `/overview` (KPI), `/candidates`, `/interviews`, `/analytics`, `/sources`, `/referrals`
+- **Вакансии**: `/vacancies/new` (wizard 5 шагов), `/vacancies/[id]` (канбан/курс/аналитика/автоматизация/публикация/настройки)
+- **Настройки**: `/settings/company`, `/settings/team`, `/settings/integrations`, `/settings/schedule`, `/settings/notifications`, `/settings/billing`
+- **Админ**: `/admin/tariffs`, `/admin/clients`
+- **Публичные** (без авторизации): `/vacancy/[slug]`, `/candidate/[token]`, `/schedule/[token]`, `/ref/[id]`, `/register`, `/login`, `/onboarding`
 
 ## Соглашения
 
-- Все компоненты — `"use client"` (нет серверных кроме layout)
+- Весь UI на русском (захардкожен, без i18n)
 - Файлы: kebab-case, экспорт: named exports
-- Стилизация: Tailwind + `cn()` для условных классов
-- Иконки: только Lucide React
-- Пути: `@/components`, `@/lib`, `@/hooks`
-- Данные: in-memory + localStorage, нет бэкенда
+- Стилизация: Tailwind + `cn()` из `lib/utils.ts` для условных классов
+- Импорты: `@/components`, `@/lib`, `@/hooks`
+- next.config.mjs: `ignoreBuildErrors: true`, `images.unoptimized: true`
