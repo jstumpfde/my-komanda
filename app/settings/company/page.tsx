@@ -194,6 +194,8 @@ export default function CompanyProfilePage() {
   // Почтовый адрес
   const [postalSameAsLegal, setPostalSameAsLegal] = useState(false)
   const [postalAddress, setPostalAddress] = useState("")
+  const [postalIndex, setPostalIndex] = useState("")
+  const [postalCity, setPostalCity] = useState("")
 
   // Банк — список счетов
   const [accounts, setAccounts] = useState<BankAccount[]>([
@@ -377,10 +379,6 @@ export default function CompanyProfilePage() {
                       <Label className="text-sm">КПП</Label>
                       <Input value={kpp} onChange={e => setKpp(e.target.value)} placeholder="770701001" className="font-mono" />
                     </div>
-                    <div className="space-y-1">
-                      <Label className="text-sm">Полное название</Label>
-                      <Input value={fullName} onChange={e => setFullName(e.target.value)} placeholder='ООО «РОМАШКА»' />
-                    </div>
                     <div className="space-y-1 relative" ref={nameContainerRef}>
                       <Label className="text-sm">Краткое название</Label>
                       <Input
@@ -406,6 +404,10 @@ export default function CompanyProfilePage() {
                       )}
                     </div>
                     <div className="space-y-1">
+                      <Label className="text-sm">Полное название</Label>
+                      <Input value={fullName} onChange={e => setFullName(e.target.value)} placeholder='ООО «РОМАШКА»' />
+                    </div>
+                    <div className="space-y-1">
                       <Label className="text-sm">ОГРН</Label>
                       <Input value={ogrn} onChange={e => setOgrn(e.target.value)} placeholder="1037707049388" className="font-mono" />
                     </div>
@@ -427,7 +429,6 @@ export default function CompanyProfilePage() {
                           checked={postalSameAsLegal}
                           onChange={e => {
                             setPostalSameAsLegal(e.target.checked)
-                            if (e.target.checked) setPostalAddress(legalAddress)
                           }}
                           className="w-4 h-4 rounded border-border accent-primary cursor-pointer"
                         />
@@ -435,13 +436,38 @@ export default function CompanyProfilePage() {
                           Совпадает с юридическим
                         </label>
                       </div>
-                      {!postalSameAsLegal && (
+                      {postalSameAsLegal ? (
+                        <Input
+                          value={legalAddress}
+                          readOnly
+                          className="bg-muted/50 text-muted-foreground cursor-default select-none"
+                        />
+                      ) : (
                         <Input
                           value={postalAddress}
                           onChange={e => setPostalAddress(e.target.value)}
                           placeholder="125009, г. Москва, ул. Тверская, д. 1"
                         />
                       )}
+                    </div>
+                    {/* Индекс и Город */}
+                    <div className="space-y-1">
+                      <Label className="text-sm">Почтовый индекс</Label>
+                      <Input
+                        value={postalIndex}
+                        onChange={e => setPostalIndex(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                        placeholder="125009"
+                        className="font-mono"
+                        maxLength={6}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-sm flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5 text-muted-foreground" /> Город</Label>
+                      <Input
+                        value={postalCity}
+                        onChange={e => setPostalCity(e.target.value)}
+                        placeholder="Москва"
+                      />
                     </div>
                     {/* Контакты */}
                     <div className="space-y-1">
@@ -455,10 +481,6 @@ export default function CompanyProfilePage() {
                     <div className="space-y-1">
                       <Label className="text-sm flex items-center gap-1.5"><Globe className="w-3.5 h-3.5 text-muted-foreground" /> Сайт</Label>
                       <Input value={website} onChange={e => setWebsite(e.target.value)} placeholder="https://romashka.ru" />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-sm flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5 text-muted-foreground" /> Город</Label>
-                      <Input value={city} onChange={e => setCity(e.target.value)} placeholder="Москва" />
                     </div>
                   </div>
                 </CardContent>
