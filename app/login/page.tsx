@@ -1,26 +1,21 @@
 "use client"
 
 import { useState } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
+import { signIn } from "next-auth/react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { toast } from "sonner"
-import { Briefcase, ArrowRight, Eye, EyeOff, Info } from "lucide-react"
-import { useAuth } from "@/lib/auth"
-
-// Список пользователей (в реальном проекте — бэкенд)
-const USERS = [
-  { login: "admin", password: "admin", role: "admin" as const },
-  { login: "manager", password: "manager", role: "manager" as const },
-  { login: "client", password: "client", role: "client" as const },
-]
+import { Briefcase, ArrowRight, Eye, EyeOff } from "lucide-react"
+import Link from "next/link"
 
 export default function LoginPage() {
   const router = useRouter()
-  const { login } = useAuth()
-  const [loginVal, setLoginVal] = useState("")
+  const searchParams = useSearchParams()
+  const callbackUrl = searchParams.get("callbackUrl") ?? "/"
+
+  const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [showPw, setShowPw] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -30,30 +25,28 @@ export default function LoginPage() {
     e.preventDefault()
     setError("")
 
-    if (!loginVal.trim() || !password) {
-      setError("Введите логин и пароль")
+    if (!email.trim() || !password) {
+      setError("Введите email и пароль")
       return
     }
 
     setLoading(true)
-    await new Promise(r => setTimeout(r, 600))
 
-    const found = USERS.find(u => u.login === loginVal.trim() && u.password === password)
-    if (!found) {
-      setLoading(false)
-      setError("Неверный логин или пароль")
+    const result = await signIn("credentials", {
+      email: email.trim().toLowerCase(),
+      password,
+      redirect: false,
+    })
+
+    setLoading(false)
+
+    if (result?.error) {
+      setError("Неверный email или пароль")
       return
     }
 
-    login(found.role)
-    toast.success("Добро пожаловать!")
-    router.push("/")
-  }
-
-  const fillAdmin = () => {
-    setLoginVal("admin")
-    setPassword("admin")
-    setError("")
+    router.push(callbackUrl)
+    router.refresh()
   }
 
   return (
@@ -76,20 +69,20 @@ export default function LoginPage() {
           <CardContent className="pt-6 pb-6 space-y-5">
             <div>
               <h2 className="text-lg font-semibold text-foreground">Вход в систему</h2>
-              <p className="text-sm text-muted-foreground">Введите логин и пароль для доступа</p>
+              <p className="text-sm text-muted-foreground">Введите email и пароль для доступа</p>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-1.5">
-                <Label htmlFor="login" className="text-sm font-medium">Логин</Label>
+                <Label htmlFor="email" className="text-sm font-medium">Email</Label>
                 <Input
-                  id="login"
-                  type="text"
-                  value={loginVal}
-                  onChange={e => { setLoginVal(e.target.value); setError("") }}
-                  placeholder="Введите логин"
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={e => { setEmail(e.target.value); setError("") }}
+                  placeholder="you@company.ru"
                   autoFocus
-                  autoComplete="username"
+                  autoComplete="email"
                   className={error ? "border-destructive focus-visible:ring-destructive" : ""}
                 />
               </div>
@@ -140,31 +133,12 @@ export default function LoginPage() {
               </Button>
             </form>
 
-            {/* Hint block */}
-            <div className="rounded-xl border border-blue-100 bg-blue-50 dark:border-blue-900/40 dark:bg-blue-950/30 p-3 space-y-2">
-              <div className="flex items-center gap-1.5 text-blue-700 dark:text-blue-400">
-                <Info className="w-3.5 h-3.5 shrink-0" />
-                <span className="text-xs font-semibold">Демо-доступ</span>
-              </div>
-              <div className="space-y-1">
-                {USERS.map(u => (
-                  <div key={u.login} className="flex items-center justify-between text-xs">
-                    <span className="text-muted-foreground">
-                      <span className="font-mono bg-muted/60 px-1 rounded">{u.login}</span>
-                      {" / "}
-                      <span className="font-mono bg-muted/60 px-1 rounded">{u.password}</span>
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => { setLoginVal(u.login); setPassword(u.password); setError("") }}
-                      className="text-blue-600 dark:text-blue-400 hover:underline text-[11px] font-medium"
-                    >
-                      Заполнить
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
+            <p className="text-center text-sm text-muted-foreground">
+              Нет аккаунта?{" "}
+              <Link href="/register" className="text-primary hover:underline font-medium">
+                Зарегистрироваться
+              </Link>
+            </p>
           </CardContent>
         </Card>
 

@@ -1,13 +1,13 @@
 "use client"
 
+import { SessionProvider } from "next-auth/react"
 import { ThemeProvider } from "@/components/theme-provider"
-import { AuthProvider, useAuth } from "@/lib/auth"
+import { AuthProvider } from "@/lib/auth"
 import { MobileBottomNav } from "@/components/dashboard/mobile-nav"
 import type { ReactNode } from "react"
-import { usePathname, useRouter } from "next/navigation"
-import { useEffect } from "react"
+import { usePathname } from "next/navigation"
 
-// Public pages — доступны без авторизации
+// Public pages — доступны без авторизации (guard теперь в middleware.ts)
 const PUBLIC_PATHS = [
   "/candidate/", "/schedule/", "/vacancy/", "/ref/",
   "/register", "/login", "/onboarding",
@@ -15,24 +15,6 @@ const PUBLIC_PATHS = [
 
 function isPublicPath(pathname: string) {
   return PUBLIC_PATHS.some(p => pathname === p || pathname.startsWith(p))
-}
-
-// Guard: редирект на /login если не авторизован
-function AuthGuard({ children }: { children: ReactNode }) {
-  const { isLoggedIn } = useAuth()
-  const pathname = usePathname()
-  const router = useRouter()
-
-  useEffect(() => {
-    if (!isLoggedIn && !isPublicPath(pathname)) {
-      router.replace("/login")
-    }
-  }, [isLoggedIn, pathname, router])
-
-  // Показываем публичные страницы всегда, защищённые — только если авторизован
-  if (!isLoggedIn && !isPublicPath(pathname)) return null
-
-  return <>{children}</>
 }
 
 function MobileNavWrapper() {
@@ -43,18 +25,18 @@ function MobileNavWrapper() {
 
 export function Providers({ children }: { children: ReactNode }) {
   return (
-    <ThemeProvider
-      attribute="class"
-      defaultTheme="light"
-      themes={["light", "dark", "warm"]}
-      disableTransitionOnChange
-    >
-      <AuthProvider>
-        <AuthGuard>
+    <SessionProvider>
+      <ThemeProvider
+        attribute="class"
+        defaultTheme="light"
+        themes={["light", "dark", "warm"]}
+        disableTransitionOnChange
+      >
+        <AuthProvider>
           {children}
           <MobileNavWrapper />
-        </AuthGuard>
-      </AuthProvider>
-    </ThemeProvider>
+        </AuthProvider>
+      </ThemeProvider>
+    </SessionProvider>
   )
 }

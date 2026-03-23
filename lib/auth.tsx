@@ -1,6 +1,8 @@
 "use client"
 
-import { createContext, useContext, useState, useEffect, type ReactNode } from "react"
+import { createContext, useContext, useState, type ReactNode } from "react"
+import { useSession } from "next-auth/react"
+import { signOut as nextAuthSignOut } from "next-auth/react"
 
 export type UserRole = "admin" | "manager" | "client" | "client_hr" | "candidate"
 
@@ -9,16 +11,9 @@ export interface User {
   name: string
   email: string
   role: UserRole
+  companyId?: string | null
   company?: string
   avatar?: string
-}
-
-const defaultUsers: Record<UserRole, User> = {
-  admin: { id: "u-admin", name: "Анна Иванова", email: "anna@hireflow.ru", role: "admin" },
-  manager: { id: "u-manager", name: "Дмитрий Козлов", email: "dmitry@hireflow.ru", role: "manager" },
-  client: { id: "u-client", name: "Елена Смирнова", email: "elena@romashka.ru", role: "client", company: "ООО Ромашка" },
-  client_hr: { id: "u-client-hr", name: "Ольга Тихонова", email: "olga@romashka.ru", role: "client_hr", company: "ООО Ромашка" },
-  candidate: { id: "u-candidate", name: "Иван Петров", email: "ivan@mail.ru", role: "candidate" },
 }
 
 interface AuthContextValue {
@@ -36,70 +31,74 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null)
 
-const STORAGE_LOGGED_IN = "hireflow-logged-in"
 const STORAGE_VIEW_ROLE = "hireflow-view-role"
-const STORAGE_AUTH_ROLE = "hireflow-auth-role"
+
+// Fallback пользователь пока сессия загружается
+const FALLBACK_USER: User = {
+  id: "",
+  name: "Загрузка...",
+  email: "",
+  role: "admin",
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [role, setRoleState] = useState<UserRole>("admin")
-  const [realRole, setRealRole] = useState<UserRole>("admin")
-  const [isLoggedIn, setIsLoggedIn] = useState(false)
-  const [hydrated, setHydrated] = useState(false)
+  const { data: session, status } = useSession()
+  const [viewRole, setViewRoleState] = useState<UserRole | null>(null)
 
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const loggedIn = localStorage.getItem(STORAGE_LOGGED_IN) === "true"
-      const savedAuthRole = localStorage.getItem(STORAGE_AUTH_ROLE) as UserRole | null
-      const savedViewRole = localStorage.getItem(STORAGE_VIEW_ROLE) as UserRole | null
+  // Реальная роль из сессии
+  const realRole = (session?.user?.role ?? "admin") as UserRole
 
-      if (loggedIn && savedAuthRole && defaultUsers[savedAuthRole]) {
-        setIsLoggedIn(true)
-        setRealRole(savedAuthRole)
-        const viewRole = savedViewRole && defaultUsers[savedViewRole] ? savedViewRole : savedAuthRole
-        setRoleState(viewRole)
+  // Отображаемая роль — может быть переключена для демо (только для admin)
+  const role: UserRole = (viewRole ?? realRole)
+
+  const isLoggedIn = status === "authenticated" && !!session?.user
+
+  const user: User = session?.user
+    ? {
+        id: session.user.id,
+        name: session.user.name ?? "",
+        email: session.user.email ?? "",
+        role,
+        companyId: session.user.companyId ?? null,
       }
-      setHydrated(true)
-    }
-  }, [])
-
-  const login = (r: UserRole) => {
-    setIsLoggedIn(true)
-    setRealRole(r)
-    setRoleState(r)
-    if (typeof window !== "undefined") {
-      localStorage.setItem(STORAGE_LOGGED_IN, "true")
-      localStorage.setItem(STORAGE_AUTH_ROLE, r)
-      localStorage.setItem(STORAGE_VIEW_ROLE, r)
-    }
-  }
-
-  const logout = () => {
-    setIsLoggedIn(false)
-    setRealRole("admin")
-    setRoleState("admin")
-    if (typeof window !== "undefined") {
-      localStorage.removeItem(STORAGE_LOGGED_IN)
-      localStorage.removeItem(STORAGE_AUTH_ROLE)
-      localStorage.removeItem(STORAGE_VIEW_ROLE)
-    }
-  }
+    : FALLBACK_USER
 
   const setRole = (r: UserRole) => {
-    setRoleState(r)
+    setViewRoleState(r)
     if (typeof window !== "undefined") localStorage.setItem(STORAGE_VIEW_ROLE, r)
   }
 
-  const returnToAdmin = () => setRole(realRole)
+  const returnToAdmin = () => {
+    setViewRoleState(null)
+    if (typeof window !== "undefined") localStorage.removeItem(STORAGE_VIEW_ROLE)
+  }
 
-  const user = defaultUsers[role]
-  const isViewingAs = role !== realRole
+  const login = (_r: UserRole) => {
+    // Реальный логин — через NextAuth signIn("credentials", ...) в login page
+    // Эта заглушка сохранена для обратной совместимости
+  }
+
+  const logout = () => {
+    setViewRoleState(null)
+    nextAuthSignOut({ callbackUrl: "/login" })
+  }
+
+  const isViewingAs = viewRole !== null && viewRole !== realRole
   const hasAccess = (allowed: UserRole[]) => allowed.includes(role)
 
-  // Prevent rendering with wrong state before hydration
-  if (!hydrated) return null
-
   return (
-    <AuthContext.Provider value={{ user, role, realRole, isLoggedIn, isViewingAs, setRole, hasAccess, returnToAdmin, login, logout }}>
+    <AuthContext.Provider value={{
+      user,
+      role,
+      realRole,
+      isLoggedIn,
+      isViewingAs,
+      setRole,
+      hasAccess,
+      returnToAdmin,
+      login,
+      logout,
+    }}>
       {children}
     </AuthContext.Provider>
   )
