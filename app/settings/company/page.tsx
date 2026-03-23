@@ -20,59 +20,7 @@ import {
 } from "lucide-react"
 import { saveBrand, BRAND_PRESETS, canCustomizeBrand, canCustomDomain, type BrandConfig } from "@/lib/branding"
 
-// ─── Мок-данные DaData ──────────────────────────────────────
-
-const DADATA_MOCK: Record<string, DadataResult & { inn: string }> = {
-  "7707083893": {
-    inn: "7707083893",
-    fullName: 'ООО «РОМАШКА»',
-    shortName: 'ООО «Ромашка»',
-    kpp: "770701001",
-    ogrn: "1037707049388",
-    legalAddress: "125009, г. Москва, ул. Тверская, д. 1",
-    director: "Иванов Александр Сергеевич",
-    status: "active",
-  },
-  "7736050003": {
-    inn: "7736050003",
-    fullName: 'ПАО «ГАЗПРОМ»',
-    shortName: "ПАО «Газпром»",
-    kpp: "773601001",
-    ogrn: "1027700070518",
-    legalAddress: "117997, г. Москва, ул. Наметкина, д. 16",
-    director: "Миллер Алексей Борисович",
-    status: "active",
-  },
-  "7710140679": {
-    inn: "7710140679",
-    fullName: 'ООО «ЯНДЕКС»',
-    shortName: 'ООО «Яндекс»',
-    kpp: "771001001",
-    ogrn: "1027739850962",
-    legalAddress: "119021, г. Москва, ул. Льва Толстого, д. 16",
-    director: "Тигипко Артём Александрович",
-    status: "active",
-  },
-  "7743013901": {
-    inn: "7743013901",
-    fullName: 'ПАО «СБЕРБАНК РОССИИ»',
-    shortName: 'ПАО «Сбербанк»',
-    kpp: "774301001",
-    ogrn: "1027700132195",
-    legalAddress: "117312, г. Москва, ул. Вавилова, д. 19",
-    director: "Греф Герман Оскарович",
-    status: "active",
-  },
-}
-
-// Поиск по названию (fuzzy, case-insensitive)
-function searchByName(query: string): Array<DadataResult & { inn: string }> {
-  if (!query.trim() || query.trim().length < 2) return []
-  const q = query.toLowerCase()
-  return Object.values(DADATA_MOCK).filter(r =>
-    r.shortName.toLowerCase().includes(q) || r.fullName.toLowerCase().includes(q)
-  ).slice(0, 5)
-}
+// ─── DaData API ──────────────────────────────────────────────
 
 interface DadataResult {
   fullName: string
@@ -83,6 +31,80 @@ interface DadataResult {
   director: string
   status: "active" | "liquidated"
   inn?: string
+  postalCode?: string
+  city?: string
+}
+
+const DADATA_TOKEN = process.env.NEXT_PUBLIC_DADATA_TOKEN ?? ""
+const DADATA_FIND_URL = "https://suggestions.dadata.ru/suggestions/api/4_1/rs/findById/party"
+const DADATA_SUGGEST_URL = "https://suggestions.dadata.ru/suggestions/api/4_1/rs/suggest/party"
+
+// Парсинг ответа DaData → DadataResult
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function parseDadataSuggestion(s: any): DadataResult & { inn: string } {
+  const d = s.data ?? {}
+  const managementName: string = d.management?.name ?? d.managers?.[0]?.name ?? ""
+  const address: string = d.address?.value ?? d.address?.unrestricted_value ?? ""
+  const addrData = d.address?.data ?? {}
+  const postalCode: string = addrData.postal_code ?? ""
+  const city: string = addrData.city ?? addrData.settlement ?? addrData.region_with_type ?? ""
+  const statusRaw: string = d.state?.status ?? ""
+  return {
+    inn: d.inn ?? "",
+    fullName: s.unrestricted_value ?? s.value ?? "",
+    shortName: s.value ?? "",
+    kpp: d.kpp ?? "",
+    ogrn: d.ogrn ?? "",
+    legalAddress: address,
+    director: managementName,
+    status: statusRaw === "ACTIVE" ? "active" : statusRaw === "LIQUIDATED" ? "liquidated" : "active",
+    postalCode,
+    city,
+  }
+}
+
+// Поиск по ИНН через DaData findById
+async function dadataFindByInn(inn: string): Promise<(DadataResult & { inn: string }) | null> {
+  if (!DADATA_TOKEN) return null
+  try {
+    const res = await fetch(DADATA_FIND_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "Authorization": `Token ${DADATA_TOKEN}`,
+      },
+      body: JSON.stringify({ query: inn, count: 1 }),
+    })
+    if (!res.ok) return null
+    const json = await res.json()
+    const suggestions = json.suggestions ?? []
+    if (!suggestions.length) return null
+    return parseDadataSuggestion(suggestions[0])
+  } catch {
+    return null
+  }
+}
+
+// Поиск по названию через DaData suggest
+async function dadataSuggestByName(query: string): Promise<Array<DadataResult & { inn: string }>> {
+  if (!DADATA_TOKEN || query.trim().length < 2) return []
+  try {
+    const res = await fetch(DADATA_SUGGEST_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "Authorization": `Token ${DADATA_TOKEN}`,
+      },
+      body: JSON.stringify({ query: query.trim(), count: 5 }),
+    })
+    if (!res.ok) return []
+    const json = await res.json()
+    return (json.suggestions ?? []).map(parseDadataSuggestion)
+  } catch {
+    return []
+  }
 }
 
 // ─── Банковский счёт ─────────────────────────────────────────
@@ -238,10 +260,12 @@ export default function CompanyProfilePage() {
     setDirector(result.director)
     setCompanyStatus(result.status)
     if (result.inn) setInn(result.inn)
+    if (result.postalCode) setPostalIndex(result.postalCode)
+    if (result.city) setPostalCity(result.city)
     setFound(true)
     setNameDropdownOpen(false)
     setNameSuggestions([])
-    toast.success("Компания найдена")
+    toast.success("Компания найдена — все поля заполнены")
   }
 
   const handleSearch = async () => {
@@ -250,13 +274,11 @@ export default function CompanyProfilePage() {
       return
     }
     setSearching(true)
-    await new Promise(r => setTimeout(r, 1000))
-
-    const result = DADATA_MOCK[inn.trim()]
+    const result = await dadataFindByInn(inn.trim())
     if (result) {
       applyDadataResult(result)
     } else {
-      toast.error("Компания не найдена. Проверьте ИНН.")
+      toast.error("Компания не найдена. Проверьте ИНН или токен DaData.")
       setFound(false)
     }
     setSearching(false)
@@ -268,8 +290,8 @@ export default function CompanyProfilePage() {
     setNameDropdownOpen(false)
     if (nameDebounceRef.current) clearTimeout(nameDebounceRef.current)
     if (value.trim().length >= 2) {
-      nameDebounceRef.current = setTimeout(() => {
-        const suggestions = searchByName(value)
+      nameDebounceRef.current = setTimeout(async () => {
+        const suggestions = await dadataSuggestByName(value)
         setNameSuggestions(suggestions)
         setNameDropdownOpen(suggestions.length > 0)
       }, 400)
