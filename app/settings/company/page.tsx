@@ -283,9 +283,14 @@ export default function CompanyProfilePage() {
                       <div className="relative">
                         <Input
                           value={inn}
-                          onChange={e => setInn(e.target.value.replace(/\D/g, ""))}
+                          onChange={e => setInn(e.target.value.replace(/\D/g, "").slice(0, 12))}
+                          onPaste={e => {
+                            e.preventDefault()
+                            const pasted = e.clipboardData.getData("text")
+                            const digits = pasted.replace(/\D/g, "").slice(0, 12)
+                            setInn(digits)
+                          }}
                           placeholder="7707083893"
-                          maxLength={12}
                           className="font-mono pr-8"
                           onKeyDown={e => { if (e.key === "Enter") handleSearch() }}
                         />
