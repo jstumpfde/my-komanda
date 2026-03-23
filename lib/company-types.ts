@@ -209,6 +209,8 @@ export interface Vacancy {
   // Candidate portrait
   ideal_candidate?: string
   first_month_expectations?: string
+  // Adaptive fields (position-classifier driven)
+  adaptive_fields?: Record<string, unknown>
   // Meta
   snapshot?: VacancySnapshot
   created_at: string
