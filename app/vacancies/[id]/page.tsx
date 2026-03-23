@@ -23,7 +23,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Checkbox } from "@/components/ui/checkbox"
 import { Slider } from "@/components/ui/slider"
 import { Input } from "@/components/ui/input"
-import { Plus, Clock, Pause, Play, Archive, RotateCcw, Trash2, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, Zap, Globe, AlertTriangle, TrendingUp, Calendar, MapPin, DollarSign, Filter, X, Link2, Copy, Save, Sparkles, Eye } from "lucide-react"
+import { Plus, Clock, Pause, Play, Archive, RotateCcw, Trash2, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, Zap, Globe, AlertTriangle, TrendingUp, Calendar, MapPin, DollarSign, Filter, X, Link2, Copy, Save, Sparkles, Eye, Check, Loader2 } from "lucide-react"
 import { toast } from "sonner"
 import { defaultColumnColors, type CandidateAction, getNextColumnId, PROGRESS_BY_COLUMN } from "@/lib/column-config"
 import type { Candidate } from "@/components/dashboard/candidate-card"
@@ -390,17 +390,19 @@ export default function VacancyPage() {
                 )}
                 {activeTab === "course" && (
                   <div className="flex items-center gap-1.5 shrink-0">
-                    <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8" onClick={() => courseEditorRef.current?.save()}>
-                      <Save className="w-3.5 h-3.5" />
-                      <span className="flex flex-col items-start leading-none">
-                        <span>Сохранить</span>
+                    <div className="flex flex-col items-center gap-0.5">
+                      <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8" onClick={() => courseEditorRef.current?.save()}>
                         {courseEditorSaveStatus === "saving" ? (
-                          <span className="text-[9px] text-amber-500 font-normal">Сохранение...</span>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
                         ) : (
-                          <span className="text-[9px] text-muted-foreground/50 font-normal">✓ Сохранено</span>
+                          <Check className="w-3.5 h-3.5 text-emerald-500" />
                         )}
+                        Сохранить
+                      </Button>
+                      <span className={cn("text-[10px] leading-none transition-colors", courseEditorSaveStatus === "saving" ? "text-amber-500" : "text-muted-foreground/40")}>
+                        {courseEditorSaveStatus === "saving" ? "Сохранение..." : "✓ Сохранено"}
                       </span>
-                    </Button>
+                    </div>
                     <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8">
                       <BookOpen className="w-3.5 h-3.5" />Библиотека
                     </Button>
