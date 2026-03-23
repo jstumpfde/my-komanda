@@ -202,3 +202,86 @@ export function addVacancyToCategory(sectionName: string, vacancyId: string, vac
 export function resetCategories() {
   categories = [...defaultCategories]
 }
+
+// ─── API CRUD (fetch-based, replaces localStorage vacancy operations) ─────────
+// These functions map to the API routes created in app/api/vacancies/
+
+export interface ApiVacancyPayload {
+  title: string
+  city?: string
+  format?: string
+  employment?: string
+  category?: string
+  salary_min?: number
+  salary_max?: number
+}
+
+export interface ApiVacancyUpdatePayload {
+  title?: string
+  city?: string
+  format?: string
+  employment?: string
+  category?: string
+  salary_min?: number
+  salary_max?: number
+  status?: string
+  description_json?: unknown
+}
+
+/** GET /api/vacancies?page=&limit= */
+export async function fetchVacancies(page = 1, limit = 20) {
+  const res = await fetch(`/api/vacancies?page=${page}&limit=${limit}`)
+  if (!res.ok) {
+    const d = await res.json() as { error?: string }
+    throw new Error(d.error ?? `HTTP ${res.status}`)
+  }
+  return res.json() as Promise<{ vacancies: unknown[]; total: number; page: number; limit: number }>
+}
+
+/** GET /api/vacancies/[id] */
+export async function fetchVacancy(id: string) {
+  const res = await fetch(`/api/vacancies/${id}`)
+  if (!res.ok) {
+    const d = await res.json() as { error?: string }
+    throw new Error(d.error ?? `HTTP ${res.status}`)
+  }
+  return res.json() as Promise<unknown>
+}
+
+/** POST /api/vacancies */
+export async function createVacancyApi(payload: ApiVacancyPayload) {
+  const res = await fetch("/api/vacancies", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) {
+    const d = await res.json() as { error?: string }
+    throw new Error(d.error ?? `HTTP ${res.status}`)
+  }
+  return res.json() as Promise<unknown>
+}
+
+/** PUT /api/vacancies/[id] */
+export async function updateVacancyApi(id: string, payload: ApiVacancyUpdatePayload) {
+  const res = await fetch(`/api/vacancies/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) {
+    const d = await res.json() as { error?: string }
+    throw new Error(d.error ?? `HTTP ${res.status}`)
+  }
+  return res.json() as Promise<unknown>
+}
+
+/** DELETE /api/vacancies/[id] */
+export async function deleteVacancyApi(id: string) {
+  const res = await fetch(`/api/vacancies/${id}`, { method: "DELETE" })
+  if (!res.ok) {
+    const d = await res.json() as { error?: string }
+    throw new Error(d.error ?? `HTTP ${res.status}`)
+  }
+  return res.json() as Promise<{ deleted: boolean }>
+}

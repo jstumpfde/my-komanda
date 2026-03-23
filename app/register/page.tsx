@@ -2,110 +2,232 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
+import { signIn } from "next-auth/react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Separator } from "@/components/ui/separator"
-import { toast } from "sonner"
 import { Briefcase, ArrowRight, Eye, EyeOff } from "lucide-react"
 import Link from "next/link"
+import { cn } from "@/lib/utils"
+
+function Spinner() {
+  return (
+    <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+    </svg>
+  )
+}
 
 export default function RegisterPage() {
   const router = useRouter()
+
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
-  const [company, setCompany] = useState("")
+  const [confirm, setConfirm] = useState("")
   const [showPw, setShowPw] = useState(false)
+  const [showConfirm, setShowConfirm] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState("")
+
+  const validate = (): string => {
+    if (!name.trim()) return "Введите имя"
+    if (!email.trim()) return "Введите email"
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return "Некорректный формат email"
+    if (!password) return "Введите пароль"
+    if (password.length < 6) return "Пароль должен содержать минимум 6 символов"
+    if (password !== confirm) return "Пароли не совпадают"
+    return ""
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!name || !email || !password || !company) { toast.error("Заполните все поля"); return }
-    setLoading(true)
-    await new Promise(r => setTimeout(r, 1000))
-    toast.success("Аккаунт создан!")
-    router.push("/onboarding")
-  }
+    setError("")
 
-  const handleSocial = (provider: string) => {
-    toast.info(`Вход через ${provider} (заглушка)`)
-    setTimeout(() => router.push("/onboarding"), 500)
+    const validationError = validate()
+    if (validationError) {
+      setError(validationError)
+      return
+    }
+
+    setLoading(true)
+
+    try {
+      // 1. Register
+      const res = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: name.trim(), email: email.trim().toLowerCase(), password }),
+      })
+
+      const data = await res.json() as { error?: string; success?: boolean }
+
+      if (!res.ok) {
+        setError(data.error ?? "Ошибка регистрации")
+        return
+      }
+
+      // 2. Auto-login
+      const result = await signIn("credentials", {
+        email: email.trim().toLowerCase(),
+        password,
+        redirect: false,
+      })
+
+      if (result?.error) {
+        setError("Аккаунт создан, но не удалось войти. Попробуйте войти вручную.")
+        router.push("/login")
+        return
+      }
+
+      // 3. Redirect to onboarding
+      router.push("/onboarding")
+      router.refresh()
+    } catch {
+      setError("Ошибка соединения. Попробуйте ещё раз.")
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-blue-50 via-white to-indigo-50">
-      <div className="w-full max-w-md space-y-6">
+    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-blue-50 via-white to-indigo-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
+      <div className="w-full max-w-sm space-y-6">
+
         {/* Logo */}
-        <div className="flex justify-center">
-          <div className="flex items-center gap-2">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white font-bold">
-              <Briefcase className="w-5 h-5" />
-            </div>
-            <span className="text-xl font-bold text-foreground">Моя Команда</span>
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center shadow-lg">
+            <Briefcase className="w-6 h-6 text-white" />
+          </div>
+          <div className="text-center">
+            <h1 className="text-2xl font-bold text-foreground">Моя Команда</h1>
+            <p className="text-sm text-muted-foreground mt-0.5">HR-платформа для найма</p>
           </div>
         </div>
 
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-foreground">Начните бесплатно — 7 дней Trial</h1>
-          <p className="text-muted-foreground text-sm mt-1">Создайте аккаунт и начните нанимать за 5 минут</p>
-        </div>
+        {/* Card */}
+        <Card className="border shadow-xl">
+          <CardContent className="pt-6 pb-6 space-y-5">
+            <div>
+              <h2 className="text-lg font-semibold text-foreground">Создать аккаунт</h2>
+              <p className="text-sm text-muted-foreground">Начните нанимать бесплатно — 7 дней Trial</p>
+            </div>
 
-        <Card className="border-none shadow-lg">
-          <CardContent className="pt-6 pb-6">
             <form onSubmit={handleSubmit} className="space-y-4">
+              {/* Name */}
               <div className="space-y-1.5">
-                <Label className="text-sm">Имя</Label>
-                <Input value={name} onChange={e => setName(e.target.value)} placeholder="Как вас зовут?" autoFocus />
+                <Label htmlFor="reg-name" className="text-sm font-medium">Имя</Label>
+                <Input
+                  id="reg-name"
+                  type="text"
+                  value={name}
+                  onChange={e => { setName(e.target.value); setError("") }}
+                  placeholder="Иван Иванов"
+                  autoFocus
+                  autoComplete="name"
+                />
               </div>
+
+              {/* Email */}
               <div className="space-y-1.5">
-                <Label className="text-sm">Email</Label>
-                <Input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="email@company.ru" />
+                <Label htmlFor="reg-email" className="text-sm font-medium">Email</Label>
+                <Input
+                  id="reg-email"
+                  type="email"
+                  value={email}
+                  onChange={e => { setEmail(e.target.value); setError("") }}
+                  placeholder="you@company.ru"
+                  autoComplete="email"
+                />
               </div>
+
+              {/* Password */}
               <div className="space-y-1.5">
-                <Label className="text-sm">Пароль</Label>
+                <Label htmlFor="reg-password" className="text-sm font-medium">Пароль</Label>
                 <div className="relative">
-                  <Input type={showPw ? "text" : "password"} value={password} onChange={e => setPassword(e.target.value)} placeholder="Минимум 8 символов" />
-                  <button type="button" className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" onClick={() => setShowPw(!showPw)}>
+                  <Input
+                    id="reg-password"
+                    type={showPw ? "text" : "password"}
+                    value={password}
+                    onChange={e => { setPassword(e.target.value); setError("") }}
+                    placeholder="Минимум 6 символов"
+                    autoComplete="new-password"
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                    onClick={() => setShowPw(!showPw)}
+                  >
                     {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
               </div>
+
+              {/* Confirm password */}
               <div className="space-y-1.5">
-                <Label className="text-sm">Название компании</Label>
-                <Input value={company} onChange={e => setCompany(e.target.value)} placeholder="ООО Ромашка" />
+                <Label htmlFor="reg-confirm" className="text-sm font-medium">Подтвердите пароль</Label>
+                <div className="relative">
+                  <Input
+                    id="reg-confirm"
+                    type={showConfirm ? "text" : "password"}
+                    value={confirm}
+                    onChange={e => { setConfirm(e.target.value); setError("") }}
+                    placeholder="Повторите пароль"
+                    autoComplete="new-password"
+                    className={cn(
+                      "pr-10",
+                      confirm && confirm !== password ? "border-destructive focus-visible:ring-destructive" : ""
+                    )}
+                  />
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                    onClick={() => setShowConfirm(!showConfirm)}
+                  >
+                    {showConfirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+                {confirm && confirm !== password && (
+                  <p className="text-xs text-destructive">Пароли не совпадают</p>
+                )}
               </div>
+
+              {/* Error */}
+              {error && (
+                <p className="text-sm text-destructive flex items-center gap-1.5">
+                  <span className="text-base">⚠️</span> {error}
+                </p>
+              )}
+
               <Button type="submit" className="w-full h-11 font-semibold" disabled={loading}>
-                {loading ? "Создаём..." : "Создать аккаунт"} <ArrowRight className="w-4 h-4 ml-2" />
+                {loading ? (
+                  <span className="flex items-center gap-2">
+                    <Spinner /> Создаём аккаунт...
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-2">
+                    Создать аккаунт <ArrowRight className="w-4 h-4" />
+                  </span>
+                )}
               </Button>
             </form>
 
-            <div className="relative my-5">
-              <div className="absolute inset-0 flex items-center"><Separator /></div>
-              <div className="relative flex justify-center"><span className="bg-card px-3 text-xs text-muted-foreground">или</span></div>
-            </div>
-
-            <div className="space-y-2">
-              <Button variant="outline" className="w-full h-10 gap-2" onClick={() => handleSocial("VK ID")}>
-                <div className="w-5 h-5 rounded bg-blue-600 flex items-center justify-center text-white text-[10px] font-bold">VK</div>
-                Войти через VK ID
-              </Button>
-              <Button variant="outline" className="w-full h-10 gap-2" onClick={() => handleSocial("Яндекс")}>
-                <div className="w-5 h-5 rounded bg-amber-400 flex items-center justify-center text-white text-[10px] font-bold">Я</div>
-                Войти через Яндекс
-              </Button>
-              <Button variant="outline" className="w-full h-10 gap-2" onClick={() => handleSocial("Google")}>
-                <div className="w-5 h-5 rounded bg-blue-500 flex items-center justify-center text-white text-[10px] font-bold">G</div>
-                Войти через Google
-              </Button>
-            </div>
+            <p className="text-center text-sm text-muted-foreground">
+              Уже есть аккаунт?{" "}
+              <Link href="/login" className="text-primary hover:underline font-medium">
+                Войти
+              </Link>
+            </p>
           </CardContent>
         </Card>
 
-        <p className="text-center text-sm text-muted-foreground">
-          Уже есть аккаунт?{" "}
-          <Link href="/login" className="text-primary hover:underline font-medium">Войти</Link>
+        <p className="text-center text-xs text-muted-foreground">
+          © 2025 Моя Команда. Все права защищены.
         </p>
       </div>
     </div>

@@ -183,3 +183,61 @@ export function computeCompletionPct(draft: WizardDraft): number {
   const total = required.length + bonus.length // 23
   return Math.round(((filledRequired + filledBonus) / total) * 100)
 }
+
+// ─── API CRUD (fetch-based, replaces localStorage company operations) ─────────
+// These functions map to the API routes in app/api/companies/
+
+export interface ApiCompanyUpdatePayload {
+  name?: string
+  inn?: string
+  kpp?: string
+  legal_address?: string
+  city?: string
+  industry?: string
+  logo_url?: string
+  brand_primary_color?: string
+  brand_bg_color?: string
+  brand_text_color?: string
+}
+
+/** GET /api/companies — fetch the current user's company from the DB */
+export async function fetchCompanyApi() {
+  const res = await fetch("/api/companies")
+  if (!res.ok) {
+    const d = await res.json() as { error?: string }
+    throw new Error(d.error ?? `HTTP ${res.status}`)
+  }
+  return res.json() as Promise<unknown>
+}
+
+/** PUT /api/companies — update the current user's company */
+export async function updateCompanyApi(payload: ApiCompanyUpdatePayload) {
+  const res = await fetch("/api/companies", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) {
+    const d = await res.json() as { error?: string }
+    throw new Error(d.error ?? `HTTP ${res.status}`)
+  }
+  return res.json() as Promise<unknown>
+}
+
+/** GET /api/companies/by-inn?inn=... — server-proxied DaData lookup */
+export async function fetchCompanyByInn(inn: string) {
+  const res = await fetch(`/api/companies/by-inn?inn=${encodeURIComponent(inn)}`)
+  if (!res.ok) {
+    const d = await res.json() as { error?: string }
+    throw new Error(d.error ?? `HTTP ${res.status}`)
+  }
+  return res.json() as Promise<unknown>
+}
+
+/** GET /api/companies/by-inn proxied suggest (uses ?inn= with partial name query) */
+export async function suggestCompaniesByName(query: string) {
+  // The by-inn endpoint is for exact INN lookup; for name suggestions we
+  // need a separate endpoint. For now return empty — full suggest endpoint
+  // can be added later as /api/companies/suggest
+  return [] as unknown[]
+}

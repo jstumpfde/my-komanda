@@ -19,8 +19,10 @@ import {
   Plus,
 } from "lucide-react"
 import { saveBrand, BRAND_PRESETS, canCustomizeBrand, canCustomDomain, type BrandConfig } from "@/lib/branding"
+import { fetchCompanyApi, updateCompanyApi, fetchCompanyByInn } from "@/lib/company-storage"
+import { SettingsSubNav } from "@/components/settings/settings-sub-nav"
 
-// ─── DaData API ──────────────────────────────────────────────
+// ─── DaData result type ───────────────────────────────────────
 
 interface DadataResult {
   fullName: string
@@ -35,11 +37,7 @@ interface DadataResult {
   city?: string
 }
 
-const DADATA_TOKEN = process.env.NEXT_PUBLIC_DADATA_TOKEN ?? ""
-const DADATA_FIND_URL = "https://suggestions.dadata.ru/suggestions/api/4_1/rs/findById/party"
-const DADATA_SUGGEST_URL = "https://suggestions.dadata.ru/suggestions/api/4_1/rs/suggest/party"
-
-// Парсинг ответа DaData → DadataResult
+// Парсинг ответа DaData (проксированного через /api/companies/by-inn) → DadataResult
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function parseDadataSuggestion(s: any): DadataResult & { inn: string } {
   const d = s.data ?? {}
@@ -60,50 +58,6 @@ function parseDadataSuggestion(s: any): DadataResult & { inn: string } {
     status: statusRaw === "ACTIVE" ? "active" : statusRaw === "LIQUIDATED" ? "liquidated" : "active",
     postalCode,
     city,
-  }
-}
-
-// Поиск по ИНН через DaData findById
-async function dadataFindByInn(inn: string): Promise<(DadataResult & { inn: string }) | null> {
-  if (!DADATA_TOKEN) return null
-  try {
-    const res = await fetch(DADATA_FIND_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-        "Authorization": `Token ${DADATA_TOKEN}`,
-      },
-      body: JSON.stringify({ query: inn, count: 1 }),
-    })
-    if (!res.ok) return null
-    const json = await res.json()
-    const suggestions = json.suggestions ?? []
-    if (!suggestions.length) return null
-    return parseDadataSuggestion(suggestions[0])
-  } catch {
-    return null
-  }
-}
-
-// Поиск по названию через DaData suggest
-async function dadataSuggestByName(query: string): Promise<Array<DadataResult & { inn: string }>> {
-  if (!DADATA_TOKEN || query.trim().length < 2) return []
-  try {
-    const res = await fetch(DADATA_SUGGEST_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-        "Authorization": `Token ${DADATA_TOKEN}`,
-      },
-      body: JSON.stringify({ query: query.trim(), count: 5 }),
-    })
-    if (!res.ok) return []
-    const json = await res.json()
-    return (json.suggestions ?? []).map(parseDadataSuggestion)
-  } catch {
-    return []
   }
 }
 
@@ -274,31 +228,54 @@ export default function CompanyProfilePage() {
       return
     }
     setSearching(true)
-    const result = await dadataFindByInn(inn.trim())
-    if (result) {
-      applyDadataResult(result)
-    } else {
-      toast.error("Компания не найдена. Проверьте ИНН или токен DaData.")
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const json = await fetchCompanyByInn(inn.trim()) as any
+      const suggestions = json?.suggestions ?? []
+      if (suggestions.length > 0) {
+        applyDadataResult(parseDadataSuggestion(suggestions[0]))
+      } else {
+        toast.error("Компания не найдена. Проверьте ИНН.")
+        setFound(false)
+      }
+    } catch {
+      toast.error("Ошибка поиска. Попробуйте ещё раз.")
       setFound(false)
     }
     setSearching(false)
   }
 
   // Дебаунс поиска по краткому названию
+  // (suggest-эндпоинт на сервере ещё не реализован — поиск по названию через поле ИНН)
   const handleShortNameChange = (value: string) => {
     setShortName(value)
     setNameDropdownOpen(false)
+    setNameSuggestions([])
     if (nameDebounceRef.current) clearTimeout(nameDebounceRef.current)
-    if (value.trim().length >= 2) {
-      nameDebounceRef.current = setTimeout(async () => {
-        const suggestions = await dadataSuggestByName(value)
-        setNameSuggestions(suggestions)
-        setNameDropdownOpen(suggestions.length > 0)
-      }, 400)
-    } else {
-      setNameSuggestions([])
-    }
   }
+
+  // Загрузить данные компании из API при монтировании
+  useEffect(() => {
+    fetchCompanyApi()
+      .then((data: unknown) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const c = data as any
+        if (!c) return
+        if (c.inn) setInn(c.inn)
+        if (c.kpp) setKpp(c.kpp)
+        if (c.name) { setShortName(c.name); setFullName(c.name) }
+        if (c.legalAddress) setLegalAddress(c.legalAddress)
+        if (c.city) setPostalCity(c.city)
+        if (c.industry) setIndustry(c.industry)
+        if (c.brandPrimaryColor) setBrandPrimary(c.brandPrimaryColor)
+        if (c.brandBgColor) setBrandBg(c.brandBgColor)
+        if (c.brandTextColor) setBrandText(c.brandTextColor)
+        if (c.logoUrl) setLogoPreview(c.logoUrl)
+      })
+      .catch(() => {
+        // Игнорируем ошибки загрузки (например, компания ещё не создана)
+      })
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Закрыть dropdown по клику снаружи
   useEffect(() => {
@@ -323,9 +300,38 @@ export default function CompanyProfilePage() {
     reader.readAsDataURL(file)
   }
 
-  const handleSave = () => {
-    saveBrand({ primaryColor: brandPrimary, bgColor: brandBg, textColor: brandText, logoUrl: logoPreview, companyName: shortName || fullName })
-    toast.success("Профиль компании сохранён")
+  const [saving, setSaving] = useState(false)
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      await updateCompanyApi({
+        name: shortName || fullName || undefined,
+        inn: inn || undefined,
+        kpp: kpp || undefined,
+        legal_address: legalAddress || undefined,
+        city: postalCity || undefined,
+        industry: industry || undefined,
+        logo_url: logoPreview || undefined,
+        brand_primary_color: brandPrimary,
+        brand_bg_color: brandBg,
+        brand_text_color: brandText,
+      })
+      saveBrand({ primaryColor: brandPrimary, bgColor: brandBg, textColor: brandText, logoUrl: logoPreview, companyName: shortName || fullName })
+      toast.success("Профиль компании сохранён")
+    } catch (err) {
+      // Если API вернул ошибку (например, нет компании) — всё равно сохраняем брендинг локально
+      saveBrand({ primaryColor: brandPrimary, bgColor: brandBg, textColor: brandText, logoUrl: logoPreview, companyName: shortName || fullName })
+      const msg = err instanceof Error ? err.message : "Ошибка сохранения"
+      // 404 = компания ещё не привязана к аккаунту, сохраняем только брендинг
+      if (msg.includes("404") || msg.toLowerCase().includes("no company")) {
+        toast.success("Брендинг сохранён (профиль компании будет создан после онбординга)")
+      } else {
+        toast.error(`Ошибка сохранения: ${msg}`)
+      }
+    } finally {
+      setSaving(false)
+    }
   }
 
   const addAccount = () => {
@@ -352,6 +358,7 @@ export default function CompanyProfilePage() {
         <DashboardHeader />
         <main className="flex-1 overflow-auto bg-background">
           <div className="p-4 sm:p-6">
+            <SettingsSubNav />
             <div className="mb-4">
               <h1 className="text-2xl font-semibold text-foreground mb-1">Профиль компании</h1>
               <p className="text-muted-foreground text-sm">Данные организации и настройки для демонстраций</p>
@@ -749,9 +756,9 @@ export default function CompanyProfilePage() {
 
               {/* ═══ Сохранить ══════════════════════════════════ */}
               <div className="flex justify-end pb-4">
-                <Button size="lg" className="gap-2" onClick={handleSave}>
-                  <Save className="w-4 h-4" />
-                  Сохранить профиль
+                <Button size="lg" className="gap-2" onClick={handleSave} disabled={saving}>
+                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                  {saving ? "Сохранение..." : "Сохранить профиль"}
                 </Button>
               </div>
             </div>

@@ -1,9 +1,11 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { useParams } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth"
+import { useVacancy } from "@/hooks/use-vacancies"
+import { useCandidates, type ApiCandidate } from "@/hooks/use-candidates"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
@@ -138,17 +140,65 @@ const STATUS_CONFIG: Record<VacancyStatus, { label: string; color: string }> = {
   archived: { label: "В архиве", color: "bg-muted text-muted-foreground border-border" },
 }
 
+// Map ApiCandidate → Candidate (for the kanban card)
+function apiCandidateToCard(c: ApiCandidate, columnId: string): Candidate {
+  const progress = { new: 10, demo: 30, scheduled: 55, interviewed: 80, hired: 100 }[columnId] ?? 10
+  return {
+    id: c.id,
+    name: c.name,
+    city: c.city ?? "",
+    salaryMin: c.salaryMin ?? 0,
+    salaryMax: c.salaryMax ?? 0,
+    score: c.score ?? 50,
+    progress,
+    source: c.source ?? "Прямая ссылка",
+    experience: c.experience ?? "",
+    skills: c.skills ?? [],
+    addedAt: c.createdAt ? new Date(c.createdAt) : new Date(),
+    lastSeen: c.updatedAt ? new Date(c.updatedAt) : new Date(),
+    workFormat: "office" as const,
+  }
+}
+
+// DEMO IDs that use seeded mock data (no API calls)
+const DEMO_IDS = new Set(["1", "new-vacancy"])
+
 export default function VacancyPage() {
   const params = useParams()
   const id = params.id as string
-  const vacancy = vacancyData[id] || {
+  const isDemo = DEMO_IDS.has(id)
+
+  // ── Real API data (skipped for demo IDs) ──────────────────
+  const { vacancy: apiVacancy } = useVacancy(isDemo ? null : id)
+  const { candidates: apiCandidates, updateStage } = useCandidates(isDemo ? null : id)
+
+  const mockVacancy = vacancyData[id] || {
     ...vacancyData["new-vacancy"],
     title: "Новая вакансия",
     status: "draft" as VacancyStatus,
   }
 
-  const [status, setStatus] = useState(vacancy.status)
-  const [columns, setColumns] = useState(vacancy.columns)
+  const [status, setStatus] = useState<VacancyStatus>(mockVacancy.status)
+  const [columns, setColumns] = useState<ColumnData[]>(isDemo ? mockVacancy.columns : emptyColumns())
+
+  // Sync vacancy status from API
+  useEffect(() => {
+    if (apiVacancy?.status) {
+      const s = apiVacancy.status as VacancyStatus
+      if (["draft", "active", "archived"].includes(s)) setStatus(s)
+    }
+  }, [apiVacancy])
+
+  // Populate columns from API candidates
+  useEffect(() => {
+    if (isDemo || apiCandidates.length === 0) return
+    setColumns(prev => prev.map(col => {
+      const colCandidates = apiCandidates
+        .filter(c => c.stage === col.id)
+        .map(c => apiCandidateToCard(c, col.id))
+      return { ...col, candidates: colCandidates, count: colCandidates.length }
+    }))
+  }, [apiCandidates, isDemo])
   const [viewMode, setViewMode] = useState<ViewMode>("kanban")
   const [cardSettings, setCardSettings] = useState(defaultSettings)
   const [filters, setFilters] = useState<FilterState>({ searchText: "", cities: [], salaryMin: 0, salaryMax: 250000, scoreMin: 0, sources: [], workFormats: [] })
@@ -194,14 +244,17 @@ export default function VacancyPage() {
     setMessageLogs(prev => [...prev, log])
   }
 
-  const handleAction = (candidateId: string, columnId: string, action: CandidateAction) => {
+  const handleAction = async (candidateId: string, columnId: string, action: CandidateAction) => {
     const sourceCol = columns.find((c) => c.id === columnId)
     const candidate = sourceCol?.candidates.find((c) => c.id === candidateId)
     if (!candidate || !sourceCol) return
 
     if (action === "reject") {
+      // Optimistic UI
       setColumns((p) => p.map((c) => c.id !== columnId ? c : { ...c, candidates: c.candidates.filter((x) => x.id !== candidateId), count: c.candidates.filter((x) => x.id !== candidateId).length }))
       toast.error(`${candidate.name} — отказ`)
+      // Persist to API (non-demo)
+      if (!isDemo) await updateStage(candidateId, "rejected")
       return
     }
     if (action === "reserve") {
@@ -221,6 +274,8 @@ export default function VacancyPage() {
         return c
       }))
       toast.success(`🎉 ${candidate.name} — нанят!`)
+      // Persist to API (non-demo)
+      if (!isDemo) await updateStage(candidateId, "hired")
       return
     }
     if (action === "advance") {
@@ -228,6 +283,7 @@ export default function VacancyPage() {
       if (!nextId) {
         setColumns((p) => p.map((c) => c.id !== columnId ? c : { ...c, candidates: c.candidates.filter((x) => x.id !== candidateId), count: c.candidates.filter((x) => x.id !== candidateId).length }))
         toast.success(`${candidate.name} — нанят!`)
+        if (!isDemo) await updateStage(candidateId, "hired")
         return
       }
       const moved = { ...candidate, progress: PROGRESS_BY_COLUMN[nextId] ?? candidate.progress }
@@ -237,6 +293,8 @@ export default function VacancyPage() {
         return c
       }))
       toast.success(`${candidate.name} → следующий этап`)
+      // Persist to API (non-demo)
+      if (!isDemo) await updateStage(candidateId, nextId)
     }
   }
 
@@ -284,6 +342,9 @@ export default function VacancyPage() {
 
   const statusCfg = STATUS_CONFIG[status]
 
+  // Use real API title if available, fall back to mock title
+  const vacancyTitle = apiVacancy?.title ?? mockVacancy.title
+
   return (
     <SidebarProvider defaultOpen={true}>
       <DashboardSidebar />
@@ -299,14 +360,14 @@ export default function VacancyPage() {
                     <input autoFocus className="text-xl sm:text-2xl font-semibold text-foreground bg-transparent border-b-2 border-primary outline-none px-0 py-0.5 min-w-[200px]" value={internalName} onChange={(e) => setInternalName(e.target.value)} onBlur={() => setIsEditingName(false)} onKeyDown={(e) => { if (e.key === "Enter") setIsEditingName(false) }} placeholder="Название" />
                   ) : (
                     <button className="flex items-center gap-2 group text-left" onClick={() => setIsEditingName(true)}>
-                      <h1 className="text-xl sm:text-2xl font-semibold text-foreground">{internalName || vacancy.title}</h1>
+                      <h1 className="text-xl sm:text-2xl font-semibold text-foreground">{internalName || vacancyTitle}</h1>
                       <Pencil className="size-3.5 text-muted-foreground/0 group-hover:text-muted-foreground transition-colors" />
                     </button>
                   )}
                   <Badge variant="outline" className={statusCfg.color}>{statusCfg.label}</Badge>
-                  {status === "active" && <span className="flex items-center gap-1.5 text-xs text-muted-foreground"><Clock className="size-3.5" />{vacancy.daysActive} дн.</span>}
+                  {status === "active" && <span className="flex items-center gap-1.5 text-xs text-muted-foreground"><Clock className="size-3.5" />{mockVacancy.daysActive} дн.</span>}
                 </div>
-                <p className="text-muted-foreground text-xs">{totalCandidates} кандидатов · {vacancy.title} · Москва</p>
+                <p className="text-muted-foreground text-xs">{totalCandidates} кандидатов · {vacancyTitle} · {apiVacancy?.city ?? "Москва"}</p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 {status === "draft" && <>
@@ -552,7 +613,7 @@ export default function VacancyPage() {
                           <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Всего кандидатов</p><p className="text-2xl font-bold text-blue-600 mt-1">{totalCandidates}</p></CardContent></Card>
                           <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Конверсия воронки</p><p className="text-2xl font-bold text-emerald-600 mt-1">{overallConv}%</p></CardContent></Card>
                           <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Ср. AI-скор</p><p className="text-2xl font-bold text-purple-600 mt-1">{allCands.length > 0 ? Math.round(allCands.reduce((a, c) => a + c.score, 0) / allCands.length) : 0}</p></CardContent></Card>
-                          <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Дней активна</p><p className="text-2xl font-bold text-amber-600 mt-1">{vacancy.daysActive}</p></CardContent></Card>
+                          <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Дней активна</p><p className="text-2xl font-bold text-amber-600 mt-1">{mockVacancy.daysActive}</p></CardContent></Card>
                         </div>
                       </div>
 
@@ -663,7 +724,7 @@ export default function VacancyPage() {
 
               <TabsContent value="publish">
                 <PublishTab
-                  vacancyTitle={internalName || vacancy.title}
+                  vacancyTitle={internalName || vacancyTitle}
                   vacancySlug={id}
                   vacancyCity="Москва"
                   salaryFrom={80000}

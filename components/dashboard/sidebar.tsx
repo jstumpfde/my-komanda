@@ -69,6 +69,7 @@ import {
   iconMap,
   type VacancyCategory,
 } from "@/lib/vacancy-storage"
+import { useVacancies, type ApiVacancy } from "@/hooks/use-vacancies"
 import { cn } from "@/lib/utils"
 import { useAuth, getVisibleSections, getVisibleSettings, ROLE_LABELS } from "@/lib/auth"
 
@@ -84,6 +85,7 @@ const mainNavItems = [
 
 const settingsNavItems = [
   { name: "Компания", icon: Building2, href: "/settings/company" },
+  { name: "Профиль", icon: Users, href: "/settings/profile" },
   { name: "Команда", icon: Users, href: "/settings/team" },
   { name: "Интеграции", icon: Plug, href: "/settings/integrations" },
   { name: "Расписание", icon: Clock, href: "/settings/schedule" },
@@ -136,6 +138,9 @@ export function DashboardSidebar() {
   const [dragState, setDragState] = useState<DragState | null>(null)
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
   const [dragOverVacancy, setDragOverVacancy] = useState<{ categoryId: string; index: number } | null>(null)
+
+  // Real vacancies from API
+  const { vacancies: apiVacancies, loading: vacanciesLoading } = useVacancies(1, 50)
 
   useEffect(() => {
     setCategories(getVacancyCategories())
@@ -250,7 +255,7 @@ export function DashboardSidebar() {
                     <UserPlus className="size-4" />
                     <span className="flex-1 font-medium">Найм</span>
                     <Badge className="bg-sidebar-primary/20 text-sidebar-primary text-[12.5px] px-1.5 h-4">
-                      {categories.reduce((acc, c) => acc + c.candidates, 0)}
+                      {apiVacancies.length > 0 ? apiVacancies.length : categories.reduce((acc, c) => acc + c.candidates, 0)}
                     </Badge>
                     <ChevronDown className="size-3.5 transition-transform duration-200 group-data-[state=open]/trigger:rotate-180 text-sidebar-foreground/40" />
                   </SidebarMenuButton>
@@ -270,97 +275,155 @@ export function DashboardSidebar() {
               <CollapsibleContent>
                 <SidebarGroupContent className="mt-0.5">
                   <SidebarMenu className="gap-0.5">
-                    {categories.map((category, index) => {
-                      const IconComponent = getIconComponent(category.iconName)
-                      return (
-                        <Collapsible key={category.id} defaultOpen={index === 0}>
-                          <SidebarMenuItem
-                            draggable
-                            onDragStart={() => handleDragStart("category", index)}
-                            onDragOver={handleDragOver}
-                            onDragEnter={() => handleDragEnterCategory(index)}
-                            onDragEnd={handleDragEnd}
-                            onDrop={() => handleDropCategory(index)}
-                            className={cn(
-                              "group/item transition-all",
-                              dragState?.type === "category" && dragState.index === index && "opacity-40",
-                              dragState?.type === "category" && dragOverIndex === index && dragState.index !== index && "ring-1 ring-primary/50 rounded-lg bg-sidebar-accent/30"
-                            )}
-                          >
-                            <div className="flex items-center gap-1 mb-0">
-                              <GripVertical className="size-3.5 text-sidebar-foreground/30 opacity-0 group-hover/item:opacity-100 transition-opacity cursor-move flex-shrink-0" />
-                              <CollapsibleTrigger asChild>
-                                <SidebarMenuButton className="text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground h-8 flex-1 group/trigger text-xs">
-                                  <IconComponent className="size-4" />
-                                  <span className="flex-1">{category.name}</span>
-                                  <div className="flex items-center gap-1">
-                                    <Badge 
-                                      variant="outline" 
-                                      className="border-sidebar-border/50 text-sidebar-foreground/50 text-[10px] px-1 h-4 min-w-5 justify-center"
-                                    >
-                                      {category.vacancies}
-                                    </Badge>
-                                    <Badge 
-                                      className="bg-sidebar-primary/20 text-sidebar-primary text-[10px] px-1 h-4 min-w-6 justify-center"
-                                    >
-                                      {category.candidates}
-                                    </Badge>
-                                    <ChevronDown className="size-3 transition-transform duration-200 group-data-[state=open]/trigger:rotate-180 text-sidebar-foreground/40" />
-                                  </div>
-                                </SidebarMenuButton>
-                              </CollapsibleTrigger>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="size-6 opacity-0 group-hover/item:opacity-100 transition-opacity shrink-0 text-sidebar-foreground/40 hover:text-sidebar-foreground hover:bg-sidebar-accent"
-                                onClick={() => handleOpenEdit(category.id, category.name, category.iconName)}
+                    {/* ── Real API vacancies ── */}
+                    {vacanciesLoading && (
+                      <SidebarMenuItem>
+                        <div className="flex items-center gap-2 px-3 py-1.5">
+                          <div className="h-3 w-3 rounded-full bg-sidebar-foreground/20 animate-pulse" />
+                          <div className="h-2.5 flex-1 rounded bg-sidebar-foreground/10 animate-pulse" />
+                        </div>
+                        <div className="flex items-center gap-2 px-3 py-1.5">
+                          <div className="h-3 w-3 rounded-full bg-sidebar-foreground/20 animate-pulse" />
+                          <div className="h-2.5 w-3/4 rounded bg-sidebar-foreground/10 animate-pulse" />
+                        </div>
+                      </SidebarMenuItem>
+                    )}
+                    {!vacanciesLoading && apiVacancies.length > 0 && (
+                      <>
+                        {apiVacancies.map((v: ApiVacancy) => (
+                          <SidebarMenuSubItem key={v.id}>
+                            <SidebarMenuSubButton
+                              asChild
+                              isActive={pathname === `/vacancies/${v.id}`}
+                              className="text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground data-[active=true]:bg-sidebar-primary data-[active=true]:text-sidebar-primary-foreground h-7 text-xs"
+                            >
+                              <Link href={`/vacancies/${v.id}`}>
+                                <span className="truncate flex-1">{v.title}</span>
+                                <Badge
+                                  variant="outline"
+                                  className={cn(
+                                    "ml-auto text-[9px] px-1 h-4 border-0",
+                                    v.status === "active"
+                                      ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
+                                      : v.status === "archived"
+                                      ? "bg-muted text-muted-foreground"
+                                      : "bg-amber-500/15 text-amber-700 dark:text-amber-400"
+                                  )}
+                                >
+                                  {v.status === "active" ? "актив" : v.status === "archived" ? "архив" : "черновик"}
+                                </Badge>
+                              </Link>
+                            </SidebarMenuSubButton>
+                          </SidebarMenuSubItem>
+                        ))}
+                      </>
+                    )}
+                    {!vacanciesLoading && apiVacancies.length === 0 && (
+                      <>
+                        {/* Fallback: in-memory categories when no API vacancies */}
+                        {categories.map((category, index) => {
+                          const IconComponent = getIconComponent(category.iconName)
+                          return (
+                            <Collapsible key={category.id} defaultOpen={index === 0}>
+                              <SidebarMenuItem
+                                draggable
+                                onDragStart={() => handleDragStart("category", index)}
+                                onDragOver={handleDragOver}
+                                onDragEnter={() => handleDragEnterCategory(index)}
+                                onDragEnd={handleDragEnd}
+                                onDrop={() => handleDropCategory(index)}
+                                className={cn(
+                                  "group/item transition-all",
+                                  dragState?.type === "category" && dragState.index === index && "opacity-40",
+                                  dragState?.type === "category" && dragOverIndex === index && dragState.index !== index && "ring-1 ring-primary/50 rounded-lg bg-sidebar-accent/30"
+                                )}
                               >
-                                <Edit2 className="size-3" />
-                              </Button>
-                            </div>
-                            <CollapsibleContent>
-                              <SidebarMenuSub className="gap-0.5 mt-0.5">
-                                {category.items.map((item, itemIndex) => (
-                                  <SidebarMenuSubItem 
-                                    key={item.id}
-                                    draggable
-                                    onDragStart={() => handleDragStart("vacancy", itemIndex, category.id)}
-                                    onDragOver={handleDragOver}
-                                    onDragEnter={() => handleDragEnterVacancy(category.id, itemIndex)}
-                                    onDragEnd={handleDragEnd}
-                                    onDrop={() => handleDropVacancy(category.id, itemIndex)}
-                                    className={cn(
-                                      "group/subitem transition-all",
-                                      dragState?.type === "vacancy" && dragState.categoryId === category.id && dragState.index === itemIndex && "opacity-40",
-                                      dragState?.type === "vacancy" && dragOverVacancy?.categoryId === category.id && dragOverVacancy?.index === itemIndex && dragState.index !== itemIndex && "ring-1 ring-primary/50 rounded-md bg-sidebar-accent/30"
-                                    )}
+                                <div className="flex items-center gap-1 mb-0">
+                                  <GripVertical className="size-3.5 text-sidebar-foreground/30 opacity-0 group-hover/item:opacity-100 transition-opacity cursor-move flex-shrink-0" />
+                                  <CollapsibleTrigger asChild>
+                                    <SidebarMenuButton className="text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground h-8 flex-1 group/trigger text-xs">
+                                      <IconComponent className="size-4" />
+                                      <span className="flex-1">{category.name}</span>
+                                      <div className="flex items-center gap-1">
+                                        <Badge
+                                          variant="outline"
+                                          className="border-sidebar-border/50 text-sidebar-foreground/50 text-[10px] px-1 h-4 min-w-5 justify-center"
+                                        >
+                                          {category.vacancies}
+                                        </Badge>
+                                        <Badge
+                                          className="bg-sidebar-primary/20 text-sidebar-primary text-[10px] px-1 h-4 min-w-6 justify-center"
+                                        >
+                                          {category.candidates}
+                                        </Badge>
+                                        <ChevronDown className="size-3 transition-transform duration-200 group-data-[state=open]/trigger:rotate-180 text-sidebar-foreground/40" />
+                                      </div>
+                                    </SidebarMenuButton>
+                                  </CollapsibleTrigger>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="size-6 opacity-0 group-hover/item:opacity-100 transition-opacity shrink-0 text-sidebar-foreground/40 hover:text-sidebar-foreground hover:bg-sidebar-accent"
+                                    onClick={() => handleOpenEdit(category.id, category.name, category.iconName)}
                                   >
-                                    <div className="flex items-center gap-1.5 w-full">
-                                      <GripVertical className="size-3 text-sidebar-foreground/25 opacity-0 group-hover/subitem:opacity-100 transition-opacity cursor-move flex-shrink-0" />
-                                      <SidebarMenuSubButton
-                                        asChild
-                                        isActive={pathname === `/vacancies/${item.id}`}
-                                        className="text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground data-[active=true]:bg-sidebar-primary data-[active=true]:text-sidebar-primary-foreground h-7 text-xs flex-1"
+                                    <Edit2 className="size-3" />
+                                  </Button>
+                                </div>
+                                <CollapsibleContent>
+                                  <SidebarMenuSub className="gap-0.5 mt-0.5">
+                                    {category.items.map((item, itemIndex) => (
+                                      <SidebarMenuSubItem
+                                        key={item.id}
+                                        draggable
+                                        onDragStart={() => handleDragStart("vacancy", itemIndex, category.id)}
+                                        onDragOver={handleDragOver}
+                                        onDragEnter={() => handleDragEnterVacancy(category.id, itemIndex)}
+                                        onDragEnd={handleDragEnd}
+                                        onDrop={() => handleDropVacancy(category.id, itemIndex)}
+                                        className={cn(
+                                          "group/subitem transition-all",
+                                          dragState?.type === "vacancy" && dragState.categoryId === category.id && dragState.index === itemIndex && "opacity-40",
+                                          dragState?.type === "vacancy" && dragOverVacancy?.categoryId === category.id && dragOverVacancy?.index === itemIndex && dragState.index !== itemIndex && "ring-1 ring-primary/50 rounded-md bg-sidebar-accent/30"
+                                        )}
                                       >
-                                        <Link href={`/vacancies/${item.id}`}>
-                                          <span className="truncate">{item.name}</span>
-                                          <Badge
-                                            variant="secondary"
-                                            className="ml-auto bg-sidebar-accent/40 text-sidebar-accent-foreground/70 text-[10px] px-1 h-4"
+                                        <div className="flex items-center gap-1.5 w-full">
+                                          <GripVertical className="size-3 text-sidebar-foreground/25 opacity-0 group-hover/subitem:opacity-100 transition-opacity cursor-move flex-shrink-0" />
+                                          <SidebarMenuSubButton
+                                            asChild
+                                            isActive={pathname === `/vacancies/${item.id}`}
+                                            className="text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground data-[active=true]:bg-sidebar-primary data-[active=true]:text-sidebar-primary-foreground h-7 text-xs flex-1"
                                           >
-                                            {item.candidates}
-                                          </Badge>
-                                        </Link>
-                                      </SidebarMenuSubButton>
-                                    </div>
-                                  </SidebarMenuSubItem>
-                                ))}
-                              </SidebarMenuSub>
-                            </CollapsibleContent>
+                                            <Link href={`/vacancies/${item.id}`}>
+                                              <span className="truncate">{item.name}</span>
+                                              <Badge
+                                                variant="secondary"
+                                                className="ml-auto bg-sidebar-accent/40 text-sidebar-accent-foreground/70 text-[10px] px-1 h-4"
+                                              >
+                                                {item.candidates}
+                                              </Badge>
+                                            </Link>
+                                          </SidebarMenuSubButton>
+                                        </div>
+                                      </SidebarMenuSubItem>
+                                    ))}
+                                  </SidebarMenuSub>
+                                </CollapsibleContent>
+                              </SidebarMenuItem>
+                            </Collapsible>
+                          )
+                        })}
+                        {categories.every(c => c.items.length === 0) && (
+                          <SidebarMenuItem>
+                            <p className="text-[11px] text-sidebar-foreground/40 px-3 py-2">
+                              Нет вакансий.{" "}
+                              <Link href="/vacancies/create" className="text-sidebar-primary hover:underline">
+                                Создать первую
+                              </Link>
+                            </p>
                           </SidebarMenuItem>
-                        </Collapsible>
-                      )
-                    })}
+                        )}
+                      </>
+                    )}
                   </SidebarMenu>
                 </SidebarGroupContent>
               </CollapsibleContent>

@@ -31,8 +31,9 @@ import {
   computeSnapshot,
   computeCompletionPct,
   generateId,
+  updateCompanyApi,
 } from "@/lib/company-storage"
-import { addVacancyToCategory } from "@/lib/vacancy-storage"
+import { addVacancyToCategory, createVacancyApi } from "@/lib/vacancy-storage"
 
 import { StepCompany } from "@/components/vacancies/create/step-company"
 import { StepProduct } from "@/components/vacancies/create/step-product"
@@ -248,10 +249,10 @@ export default function CreateVacancyPage() {
         saveProduct(product)
       }
 
-      // 3. Create and save vacancy
-      const vacancyId = generateId("vac")
+      // 3. Create and save vacancy (localStorage + API)
+      const localVacancyId = generateId("vac")
       const vacancy: Vacancy = {
-        id: vacancyId,
+        id: localVacancyId,
         company_id: companyId,
         product_id: productId,
         status: "active",
@@ -302,10 +303,35 @@ export default function CreateVacancyPage() {
       }
       saveVacancy(vacancy)
 
-      // 4. Add to sidebar categories
+      // 3a. Also save to API and get the real DB ID
+      let redirectId = localVacancyId
+      try {
+        // Update company profile via API (fire-and-forget, no blocking)
+        updateCompanyApi({
+          name: company.name,
+          city: company.city,
+          industry: company.industry,
+        }).catch(() => { /* best-effort */ })
+
+        // Create vacancy in DB
+        const apiResult = await createVacancyApi({
+          title: vacancy.position_title,
+          city: company.city || undefined,
+          format: vacancy.work_format,
+          salary_min: vacancy.salary_fix > 0 ? vacancy.salary_fix : undefined,
+          salary_max: vacancy.avg_income ?? undefined,
+        }) as { id?: string }
+        if (apiResult?.id) {
+          redirectId = apiResult.id
+        }
+      } catch {
+        // API failed — keep local ID, vacancy is still in localStorage
+      }
+
+      // 4. Add to sidebar categories (in-memory)
       addVacancyToCategory(
         industryToSection(company.industry as Industry),
-        vacancyId,
+        redirectId,
         vacancy.position_title
       )
 
@@ -314,7 +340,7 @@ export default function CreateVacancyPage() {
       toast.success("Вакансия опубликована!")
 
       setTimeout(() => {
-        router.push(`/vacancies/${vacancyId}`)
+        router.push(`/vacancies/${redirectId}`)
       }, 800)
     } catch (err) {
       console.error("Publish error:", err)

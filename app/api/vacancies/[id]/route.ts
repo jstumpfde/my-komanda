@@ -1,0 +1,112 @@
+import { NextRequest } from "next/server"
+import { eq, and } from "drizzle-orm"
+import { db } from "@/lib/db"
+import { vacancies } from "@/lib/db/schema"
+import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
+
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const user = await requireCompany()
+    const { id } = await params
+
+    const [vacancy] = await db
+      .select()
+      .from(vacancies)
+      .where(and(eq(vacancies.id, id), eq(vacancies.companyId, user.companyId)))
+      .limit(1)
+
+    if (!vacancy) {
+      return apiError("Vacancy not found", 404)
+    }
+
+    return apiSuccess(vacancy)
+  } catch (err) {
+    if (err instanceof Response) return err
+    return apiError("Internal server error", 500)
+  }
+}
+
+export async function PUT(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const user = await requireCompany()
+    const { id } = await params
+
+    // Verify ownership
+    const [existing] = await db
+      .select({ id: vacancies.id })
+      .from(vacancies)
+      .where(and(eq(vacancies.id, id), eq(vacancies.companyId, user.companyId)))
+      .limit(1)
+
+    if (!existing) {
+      return apiError("Vacancy not found", 404)
+    }
+
+    const body = await req.json() as {
+      title?: string
+      city?: string
+      format?: string
+      employment?: string
+      category?: string
+      salary_min?: number
+      salary_max?: number
+      status?: string
+      description_json?: unknown
+    }
+
+    const updates: Record<string, unknown> = {
+      updatedAt: new Date(),
+    }
+
+    if (body.title !== undefined) updates.title = body.title
+    if (body.city !== undefined) updates.city = body.city
+    if (body.format !== undefined) updates.format = body.format
+    if (body.employment !== undefined) updates.employment = body.employment
+    if (body.category !== undefined) updates.category = body.category
+    if (body.salary_min !== undefined) updates.salaryMin = body.salary_min
+    if (body.salary_max !== undefined) updates.salaryMax = body.salary_max
+    if (body.status !== undefined) updates.status = body.status
+    if (body.description_json !== undefined) updates.descriptionJson = body.description_json
+
+    const [updated] = await db
+      .update(vacancies)
+      .set(updates)
+      .where(eq(vacancies.id, id))
+      .returning()
+
+    return apiSuccess(updated)
+  } catch (err) {
+    if (err instanceof Response) return err
+    return apiError("Internal server error", 500)
+  }
+}
+
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const user = await requireCompany()
+    const { id } = await params
+
+    const [deleted] = await db
+      .delete(vacancies)
+      .where(and(eq(vacancies.id, id), eq(vacancies.companyId, user.companyId)))
+      .returning({ id: vacancies.id })
+
+    if (!deleted) {
+      return apiError("Vacancy not found", 404)
+    }
+
+    return apiSuccess({ deleted: true })
+  } catch (err) {
+    if (err instanceof Response) return err
+    return apiError("Internal server error", 500)
+  }
+}
