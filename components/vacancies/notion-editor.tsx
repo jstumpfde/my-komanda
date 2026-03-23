@@ -804,13 +804,44 @@ function NotionBlock({ block, idx, totalBlocks, isHovered, isDragging, isDragOve
     }
     if (e.key === "Enter" && block.type === "text") {
       e.preventDefault()
+      const el = editorRef.current
+      if (!el) return
+      const sel = window.getSelection()
+      if (!sel || sel.rangeCount === 0) return
+      const range = sel.getRangeAt(0)
+      range.deleteContents()
+
+      // Detect if cursor is at the very end of the element
+      const endRange = document.createRange()
+      endRange.selectNodeContents(el)
+      endRange.collapse(false)
+      const atEnd = range.compareBoundaryPoints(Range.START_TO_START, endRange) >= 0
+
       if (e.shiftKey) {
-        // Shift+Enter — абзацный отступ (двойной br)
-        document.execCommand("insertHTML", false, "<br><br>")
+        // Shift+Enter — двойной перенос (новый абзац)
+        const br1 = document.createElement("br")
+        const br2 = document.createElement("br")
+        range.insertNode(br2)
+        range.insertNode(br1)
+        range.setStartAfter(br2)
+        range.setEndAfter(br2)
       } else {
-        // Enter — мягкий перенос строки
-        document.execCommand("insertHTML", false, "<br>")
+        // Enter — одиночный перенос
+        const br = document.createElement("br")
+        range.insertNode(br)
+        range.setStartAfter(br)
+        range.setEndAfter(br)
+        // At end of block the browser won't render cursor on new line
+        // without a trailing <br> sentinel — add one, cursor sits before it
+        if (atEnd) {
+          const sentinel = document.createElement("br")
+          range.insertNode(sentinel)
+          range.setStartBefore(sentinel)
+          range.setEndBefore(sentinel)
+        }
       }
+      sel.removeAllRanges()
+      sel.addRange(range)
     }
     if (e.key === "Backspace" && block.type === "text" && editorRef.current) {
       const html = editorRef.current.innerHTML
