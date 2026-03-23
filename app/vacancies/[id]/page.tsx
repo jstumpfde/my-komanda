@@ -390,7 +390,7 @@ export default function VacancyPage() {
                 )}
                 {activeTab === "course" && (
                   <div className="flex items-center gap-1.5 shrink-0">
-                    <div className="flex flex-col items-center gap-0.5">
+                    <div className="relative">
                       <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8" onClick={() => courseEditorRef.current?.save()}>
                         {courseEditorSaveStatus === "saving" ? (
                           <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -399,7 +399,7 @@ export default function VacancyPage() {
                         )}
                         Сохранить
                       </Button>
-                      <span className={cn("text-[10px] leading-none transition-colors", courseEditorSaveStatus === "saving" ? "text-amber-500" : "text-muted-foreground/40")}>
+                      <span className={cn("absolute left-1/2 -translate-x-1/2 top-full mt-0.5 text-[10px] leading-none whitespace-nowrap transition-colors", courseEditorSaveStatus === "saving" ? "text-amber-500" : "text-muted-foreground/40")}>
                         {courseEditorSaveStatus === "saving" ? "Сохранение..." : "✓ Сохранено"}
                       </span>
                     </div>
