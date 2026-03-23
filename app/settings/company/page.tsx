@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useRef, useEffect } from "react"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
@@ -22,8 +22,9 @@ import { saveBrand, BRAND_PRESETS, canCustomizeBrand, canCustomDomain, type Bran
 
 // ─── Мок-данные DaData ──────────────────────────────────────
 
-const DADATA_MOCK: Record<string, DadataResult> = {
+const DADATA_MOCK: Record<string, DadataResult & { inn: string }> = {
   "7707083893": {
+    inn: "7707083893",
     fullName: 'ООО «РОМАШКА»',
     shortName: 'ООО «Ромашка»',
     kpp: "770701001",
@@ -33,6 +34,7 @@ const DADATA_MOCK: Record<string, DadataResult> = {
     status: "active",
   },
   "7736050003": {
+    inn: "7736050003",
     fullName: 'ПАО «ГАЗПРОМ»',
     shortName: "ПАО «Газпром»",
     kpp: "773601001",
@@ -41,6 +43,35 @@ const DADATA_MOCK: Record<string, DadataResult> = {
     director: "Миллер Алексей Борисович",
     status: "active",
   },
+  "7710140679": {
+    inn: "7710140679",
+    fullName: 'ООО «ЯНДЕКС»',
+    shortName: 'ООО «Яндекс»',
+    kpp: "771001001",
+    ogrn: "1027739850962",
+    legalAddress: "119021, г. Москва, ул. Льва Толстого, д. 16",
+    director: "Тигипко Артём Александрович",
+    status: "active",
+  },
+  "7743013901": {
+    inn: "7743013901",
+    fullName: 'ПАО «СБЕРБАНК РОССИИ»',
+    shortName: 'ПАО «Сбербанк»',
+    kpp: "774301001",
+    ogrn: "1027700132195",
+    legalAddress: "117312, г. Москва, ул. Вавилова, д. 19",
+    director: "Греф Герман Оскарович",
+    status: "active",
+  },
+}
+
+// Поиск по названию (fuzzy, case-insensitive)
+function searchByName(query: string): Array<DadataResult & { inn: string }> {
+  if (!query.trim() || query.trim().length < 2) return []
+  const q = query.toLowerCase()
+  return Object.values(DADATA_MOCK).filter(r =>
+    r.shortName.toLowerCase().includes(q) || r.fullName.toLowerCase().includes(q)
+  ).slice(0, 5)
 }
 
 interface DadataResult {
@@ -51,6 +82,7 @@ interface DadataResult {
   legalAddress: string
   director: string
   status: "active" | "liquidated"
+  inn?: string
 }
 
 // ─── Банковский счёт ─────────────────────────────────────────
@@ -144,6 +176,12 @@ export default function CompanyProfilePage() {
   const [searching, setSearching] = useState(false)
   const [found, setFound] = useState(false)
 
+  // Поиск по краткому названию
+  const [nameSuggestions, setNameSuggestions] = useState<Array<DadataResult & { inn: string }>>([])
+  const [nameDropdownOpen, setNameDropdownOpen] = useState(false)
+  const nameDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const nameContainerRef = useRef<HTMLDivElement>(null)
+
   // Юрлицо
   const [fullName, setFullName] = useState("")
   const [shortName, setShortName] = useState("")
@@ -188,6 +226,22 @@ export default function CompanyProfilePage() {
   const canBrand = canCustomizeBrand(brandPlan)
   const canDomain = canCustomDomain(brandPlan)
 
+  // Заполнить поля из результата DaData
+  const applyDadataResult = (result: DadataResult & { inn?: string }) => {
+    setFullName(result.fullName)
+    setShortName(result.shortName)
+    setKpp(result.kpp)
+    setOgrn(result.ogrn)
+    setLegalAddress(result.legalAddress)
+    setDirector(result.director)
+    setCompanyStatus(result.status)
+    if (result.inn) setInn(result.inn)
+    setFound(true)
+    setNameDropdownOpen(false)
+    setNameSuggestions([])
+    toast.success("Компания найдена")
+  }
+
   const handleSearch = async () => {
     if (!inn.trim()) {
       toast.error("Введите ИНН")
@@ -198,21 +252,40 @@ export default function CompanyProfilePage() {
 
     const result = DADATA_MOCK[inn.trim()]
     if (result) {
-      setFullName(result.fullName)
-      setShortName(result.shortName)
-      setKpp(result.kpp)
-      setOgrn(result.ogrn)
-      setLegalAddress(result.legalAddress)
-      setDirector(result.director)
-      setCompanyStatus(result.status)
-      setFound(true)
-      toast.success("Компания найдена")
+      applyDadataResult(result)
     } else {
       toast.error("Компания не найдена. Проверьте ИНН.")
       setFound(false)
     }
     setSearching(false)
   }
+
+  // Дебаунс поиска по краткому названию
+  const handleShortNameChange = (value: string) => {
+    setShortName(value)
+    setNameDropdownOpen(false)
+    if (nameDebounceRef.current) clearTimeout(nameDebounceRef.current)
+    if (value.trim().length >= 2) {
+      nameDebounceRef.current = setTimeout(() => {
+        const suggestions = searchByName(value)
+        setNameSuggestions(suggestions)
+        setNameDropdownOpen(suggestions.length > 0)
+      }, 400)
+    } else {
+      setNameSuggestions([])
+    }
+  }
+
+  // Закрыть dropdown по клику снаружи
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (nameContainerRef.current && !nameContainerRef.current.contains(e.target as Node)) {
+        setNameDropdownOpen(false)
+      }
+    }
+    document.addEventListener("mousedown", handler)
+    return () => document.removeEventListener("mousedown", handler)
+  }, [])
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -308,9 +381,29 @@ export default function CompanyProfilePage() {
                       <Label className="text-sm">Полное название</Label>
                       <Input value={fullName} onChange={e => setFullName(e.target.value)} placeholder='ООО «РОМАШКА»' />
                     </div>
-                    <div className="space-y-1">
+                    <div className="space-y-1 relative" ref={nameContainerRef}>
                       <Label className="text-sm">Краткое название</Label>
-                      <Input value={shortName} onChange={e => setShortName(e.target.value)} placeholder='ООО «Ромашка»' />
+                      <Input
+                        value={shortName}
+                        onChange={e => handleShortNameChange(e.target.value)}
+                        placeholder='ООО «Ромашка»'
+                        autoComplete="off"
+                      />
+                      {nameDropdownOpen && nameSuggestions.length > 0 && (
+                        <div className="absolute left-0 right-0 top-full mt-1 z-50 bg-popover border border-border rounded-xl shadow-xl overflow-hidden">
+                          {nameSuggestions.map(s => (
+                            <button
+                              key={s.inn}
+                              type="button"
+                              onMouseDown={e => { e.preventDefault(); applyDadataResult(s) }}
+                              className="w-full text-left px-3 py-2.5 hover:bg-muted transition-colors flex flex-col gap-0.5"
+                            >
+                              <span className="text-sm font-medium text-foreground">{s.shortName}</span>
+                              <span className="text-xs text-muted-foreground">ИНН {s.inn} · {s.legalAddress.split(",").slice(0, 2).join(", ")}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
                     <div className="space-y-1">
                       <Label className="text-sm">ОГРН</Label>
