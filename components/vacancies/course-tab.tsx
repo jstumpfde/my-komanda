@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import React, { useState, useEffect, useCallback, forwardRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -13,7 +13,7 @@ import {
 import { Plus, GraduationCap } from "lucide-react"
 import { toast } from "sonner"
 import { type Demo, type Block, createDemo } from "@/lib/course-types"
-import { NotionEditor } from "./notion-editor"
+import { NotionEditor, type NotionEditorHandle } from "./notion-editor"
 
 const STORAGE_KEY = "hireflow-demos"
 
@@ -95,7 +95,12 @@ function saveDemos(demos: Demo[]) {
   }
 }
 
-export function CourseTab() {
+interface CourseTabProps {
+  editorRef?: React.Ref<NotionEditorHandle>
+  onSaveStatusChange?: (status: "saved" | "saving") => void
+}
+
+export const CourseTab = forwardRef<NotionEditorHandle, CourseTabProps>(function CourseTab({ editorRef, onSaveStatusChange }, _ref) {
   const [demos, setDemos] = useState<Demo[]>([])
   const [hydrated, setHydrated] = useState(false)
   const [selectedDemoId, setSelectedDemoId] = useState<string | null>(null)
@@ -146,6 +151,7 @@ export function CourseTab() {
   if (selectedDemo) {
     return (
       <NotionEditor
+        ref={editorRef}
         demo={selectedDemo}
         onBack={() => {
           // If single demo, stay in editor (no list to go back to)
@@ -153,6 +159,8 @@ export function CourseTab() {
           setSelectedDemoId(null)
         }}
         onUpdate={handleUpdateDemo}
+        onSaveStatusChange={onSaveStatusChange}
+        hideToolbar
       />
     )
   }
@@ -182,4 +190,4 @@ export function CourseTab() {
       </Dialog>
     </div>
   )
-}
+})

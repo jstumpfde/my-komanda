@@ -75,7 +75,7 @@ const CHANNEL_METHODS: ChannelMethod[] = [
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-export default function ChannelSelectionPage() {
+export default function OnboardingScreenClient() {
   const router = useRouter()
   const [telegramDialogOpen, setTelegramDialogOpen] = useState(false)
   const [copied, setCopied] = useState(false)

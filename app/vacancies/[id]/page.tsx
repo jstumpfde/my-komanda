@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useRef } from "react"
 import { useParams } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth"
@@ -17,12 +17,13 @@ import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { CourseTab } from "@/components/vacancies/course-tab"
+import type { NotionEditorHandle } from "@/components/vacancies/notion-editor"
 import { NotionCourseTab } from "@/components/vacancies/notion-course-tab"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Slider } from "@/components/ui/slider"
 import { Input } from "@/components/ui/input"
-import { Plus, Clock, Pause, Play, Archive, RotateCcw, Trash2, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, Zap, Globe, AlertTriangle, TrendingUp, Calendar, MapPin, DollarSign, Filter, X, Link2, Copy } from "lucide-react"
+import { Plus, Clock, Pause, Play, Archive, RotateCcw, Trash2, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, Zap, Globe, AlertTriangle, TrendingUp, Calendar, MapPin, DollarSign, Filter, X, Link2, Copy, Save, Sparkles, Eye } from "lucide-react"
 import { toast } from "sonner"
 import { defaultColumnColors, type CandidateAction, getNextColumnId, PROGRESS_BY_COLUMN } from "@/lib/column-config"
 import type { Candidate } from "@/components/dashboard/candidate-card"
@@ -173,6 +174,9 @@ export default function VacancyPage() {
   const [anSalaryMax, setAnSalaryMax] = useState(300000)
   const [anScoreMin, setAnScoreMin] = useState(0)
   const [anStages, setAnStages] = useState<string[]>([])
+  // Course editor toolbar state
+  const courseEditorRef = useRef<NotionEditorHandle>(null)
+  const [courseEditorSaveStatus, setCourseEditorSaveStatus] = useState<"saved" | "saving">("saved")
   const { role } = useAuth()
   const canAdd = role === "admin" || role === "manager"
 
@@ -360,8 +364,8 @@ export default function VacancyPage() {
               <div className="flex items-center justify-between gap-3 mb-3 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
                 <TabsList className="shrink-0">
                   <TabsTrigger value="candidates" className="gap-1.5"><Kanban className="w-3.5 h-3.5" />Кандидаты</TabsTrigger>
-                  <TabsTrigger value="course" className="gap-1.5"><BookOpen className="w-3.5 h-3.5" />Демонстрация</TabsTrigger>
-                  <TabsTrigger value="course2" className="gap-1.5"><BookOpen className="w-3.5 h-3.5" />Демонстрация 2</TabsTrigger>
+                  <TabsTrigger value="course" className="gap-1.5"><BookOpen className="w-3.5 h-3.5" />Демодолжности</TabsTrigger>
+                  <TabsTrigger value="course2" className="gap-1.5"><BookOpen className="w-3.5 h-3.5" />Демо 2</TabsTrigger>
                   <TabsTrigger value="analytics" className="gap-1.5"><BarChart3 className="w-3.5 h-3.5" />Аналитика</TabsTrigger>
                   <TabsTrigger value="automation" className="gap-1.5"><Zap className="w-3.5 h-3.5" />Автоматизация</TabsTrigger>
                   <TabsTrigger value="publish" className="gap-1.5"><Globe className="w-3.5 h-3.5" />Публикация</TabsTrigger>
@@ -382,6 +386,30 @@ export default function VacancyPage() {
                         <button key={v.mode} className={cn("h-7 px-2.5 rounded-md text-xs font-medium transition-all whitespace-nowrap", viewMode === v.mode ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground")} onClick={() => setViewMode(v.mode)}>{v.label}</button>
                       ))}
                     </div>
+                  </div>
+                )}
+                {activeTab === "course" && (
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8" onClick={() => courseEditorRef.current?.save()}>
+                      <Save className="w-3.5 h-3.5" />
+                      <span className="flex flex-col items-start leading-none">
+                        <span>Сохранить</span>
+                        {courseEditorSaveStatus === "saving" ? (
+                          <span className="text-[9px] text-amber-500 font-normal">Сохранение...</span>
+                        ) : (
+                          <span className="text-[9px] text-muted-foreground/50 font-normal">✓ Сохранено</span>
+                        )}
+                      </span>
+                    </Button>
+                    <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8">
+                      <BookOpen className="w-3.5 h-3.5" />Библиотека
+                    </Button>
+                    <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8">
+                      <Sparkles className="w-3.5 h-3.5" />AI
+                    </Button>
+                    <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8" onClick={() => courseEditorRef.current?.openPreview()}>
+                      <Eye className="w-3.5 h-3.5" />Превью
+                    </Button>
                   </div>
                 )}
                 {activeTab === "analytics" && (
@@ -414,7 +442,10 @@ export default function VacancyPage() {
               </TabsContent>
 
               <TabsContent value="course">
-                <CourseTab />
+                <CourseTab
+                  editorRef={courseEditorRef}
+                  onSaveStatusChange={setCourseEditorSaveStatus}
+                />
               </TabsContent>
 
               <TabsContent value="course2" className="p-0 border-0 mt-0">

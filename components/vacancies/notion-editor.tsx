@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useEffect, useCallback, useId } from "react"
+import { useState, useRef, useEffect, useCallback, useId, forwardRef, useImperativeHandle } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
@@ -25,10 +25,18 @@ import { VARIABLES, BLOCK_TYPE_META, createBlock } from "@/lib/course-types"
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
+export interface NotionEditorHandle {
+  save: () => void
+  openPreview: () => void
+  openLibrary: () => void
+}
+
 interface NotionEditorProps {
   demo: Demo
   onBack: () => void
   onUpdate: (demo: Demo) => void
+  onSaveStatusChange?: (status: "saved" | "saving") => void
+  hideToolbar?: boolean
 }
 
 // ─── Slash command menu ────────────────────────────────────────────────────
@@ -46,7 +54,7 @@ const SLASH_ITEMS = [
 
 // ─── Main component ────────────────────────────────────────────────────────
 
-export function NotionEditor({ demo, onBack, onUpdate }: NotionEditorProps) {
+export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(function NotionEditorInner({ demo, onBack, onUpdate, onSaveStatusChange, hideToolbar = false }, ref) {
   const [activeLessonId, setActiveLessonId] = useState(demo.lessons[0]?.id || "")
   const [previewMode, setPreviewMode] = useState(false)
   const [previewIdx, setPreviewIdx] = useState(0)
@@ -64,12 +72,26 @@ export function NotionEditor({ demo, onBack, onUpdate }: NotionEditorProps) {
   // Save helper
   const save = useCallback((lessons: Lesson[]) => {
     setSaveStatus("saving")
+    onSaveStatusChange?.("saving")
     onUpdate({ ...demo, lessons, updatedAt: new Date() })
     if (debounceRef.current) clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(() => setSaveStatus("saved"), 800)
-  }, [demo, onUpdate])
+    debounceRef.current = setTimeout(() => { setSaveStatus("saved"); onSaveStatusChange?.("saved") }, 800)
+  }, [demo, onUpdate, onSaveStatusChange])
+
+  const saveNow = useCallback(() => {
+    setSaveStatus("saved")
+    onSaveStatusChange?.("saved")
+    toast.success("Сохранено")
+  }, [onSaveStatusChange])
 
   useEffect(() => () => { if (debounceRef.current) clearTimeout(debounceRef.current) }, [])
+
+  // Expose imperative handle for parent toolbar
+  useImperativeHandle(ref, () => ({
+    save: saveNow,
+    openPreview: () => { setPreviewIdx(0); setPreviewMode(true) },
+    openLibrary: () => { /* placeholder */ },
+  }), [saveNow])
 
   // Lesson ops
   const updateLesson = (lessonId: string, patch: Partial<Lesson>) =>
@@ -200,34 +222,36 @@ export function NotionEditor({ demo, onBack, onUpdate }: NotionEditorProps) {
 
   return (
     <div className="flex flex-col" style={{ height: "calc(100vh - 180px)" }}>
-      {/* Top bar */}
-      <div className="flex items-center justify-between mb-3 flex-shrink-0">
-        <div className="flex items-center gap-3">
-          <div>
-            <span className="text-xs font-medium">{demo.title}</span>
-            <Badge variant="outline" className={cn("ml-2 text-[10px]", demo.status === "published" ? "bg-emerald-500/10 text-emerald-700 border-emerald-200" : "bg-amber-500/10 text-amber-700 border-amber-200")}>
-              {demo.status === "published" ? "Опубликована" : "Черновик"}
-            </Badge>
+      {/* Top bar — shown only when not embedded in parent toolbar */}
+      {!hideToolbar && (
+        <div className="flex items-center justify-between mb-3 flex-shrink-0">
+          <div className="flex items-center gap-3">
+            <div>
+              <span className="text-xs font-medium">{demo.title}</span>
+              <Badge variant="outline" className={cn("ml-2 text-[10px]", demo.status === "published" ? "bg-emerald-500/10 text-emerald-700 border-emerald-200" : "bg-amber-500/10 text-amber-700 border-amber-200")}>
+                {demo.status === "published" ? "Опубликована" : "Черновик"}
+              </Badge>
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className={cn("text-[11px] mr-1 transition-colors", saveStatus === "saving" ? "text-amber-500" : "text-muted-foreground/40")}>
+              {saveStatus === "saving" ? "Сохранение..." : "✓ Сохранено"}
+            </span>
+            <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8" onClick={saveNow}>
+              <Save className="w-3.5 h-3.5" />Сохранить
+            </Button>
+            <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8">
+              <BookOpen className="w-3.5 h-3.5" />Библиотека
+            </Button>
+            <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8">
+              <Sparkles className="w-3.5 h-3.5" />AI
+            </Button>
+            <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8" onClick={() => { setPreviewIdx(0); setPreviewMode(true) }}>
+              <Eye className="w-3.5 h-3.5" />Превью
+            </Button>
           </div>
         </div>
-        <div className="flex items-center gap-1.5">
-          <span className={cn("text-[11px] mr-1 transition-colors", saveStatus === "saving" ? "text-amber-500" : "text-muted-foreground/40")}>
-            {saveStatus === "saving" ? "Сохранение..." : "✓ Сохранено"}
-          </span>
-          <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8" onClick={() => { setSaveStatus("saved"); toast.success("Сохранено") }}>
-            <Save className="w-3.5 h-3.5" />Сохранить
-          </Button>
-          <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8">
-            <BookOpen className="w-3.5 h-3.5" />Библиотека
-          </Button>
-          <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8">
-            <Sparkles className="w-3.5 h-3.5" />AI
-          </Button>
-          <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8" onClick={() => { setPreviewIdx(0); setPreviewMode(true) }}>
-            <Eye className="w-3.5 h-3.5" />Превью
-          </Button>
-        </div>
-      </div>
+      )}
 
       {/* Two-column layout */}
       <div className="flex gap-4 flex-1 min-h-0">
@@ -357,7 +381,7 @@ export function NotionEditor({ demo, onBack, onUpdate }: NotionEditorProps) {
       </Dialog>
     </div>
   )
-}
+})
 
 // ─── Notion lesson editor (right pane) ─────────────────────────────────────
 
