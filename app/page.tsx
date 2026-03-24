@@ -7,16 +7,13 @@ import { KanbanBoard, type ViewMode } from "@/components/dashboard/kanban-board"
 import { CardSettings, type CardDisplaySettings } from "@/components/dashboard/card-settings"
 import { CandidateFilters, type FilterState } from "@/components/dashboard/candidate-filters"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Plus, Filter, Clock, AlertCircle } from "lucide-react"
+import { Plus, Filter } from "lucide-react"
 import { toast } from "sonner"
 import { defaultColumnColors, getNextColumnId, PROGRESS_BY_COLUMN, type CandidateAction } from "@/lib/column-config"
 import type { Candidate } from "@/components/dashboard/candidate-card"
 import { CandidateProfile } from "@/components/dashboard/candidate-profile"
 import { AddCandidateDialog } from "@/components/dashboard/add-candidate-dialog"
-import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert"
-import { useLocalStorage } from "@/hooks/use-local-storage"
 import { getOnboarding, isOnboardingComplete, remainingSteps } from "@/lib/onboarding"
 import { Rocket } from "lucide-react"
 import Link from "next/link"
@@ -43,58 +40,17 @@ const defaultSettings: CardDisplaySettings = {
   showActions: true,
 }
 
-const initialColumns: ColumnData[] = [
-  {
-    id: "new", title: "Всего откликов", count: 5,
-    colorFrom: defaultColumnColors.new.from, colorTo: defaultColumnColors.new.to,
-    candidates: [
-      { id: "1", name: "Иван Петров", city: "Москва", salaryMin: 150000, salaryMax: 180000, score: 88, progress: 10, source: "hh.ru", experience: "5 лет в B2B", skills: ["CRM", "B2B", "Переговоры"], addedAt: new Date(Date.now() - 3600000), lastSeen: "online" },
-      { id: "2", name: "Мария Сидорова", city: "СПб", salaryMin: 140000, salaryMax: 170000, score: 76, progress: 10, source: "Avito", experience: "3 года в ритейле", skills: ["Продажи", "Сервис"], addedAt: new Date(Date.now() - 7200000), lastSeen: new Date(Date.now() - 3600000) },
-      { id: "3", name: "Алексей Козлов", city: "Москва", salaryMin: 160000, salaryMax: 190000, score: 92, progress: 10, source: "Telegram", experience: "7 лет, Team Lead", skills: ["Управление", "SaaS"], addedAt: new Date(Date.now() - 86400000), lastSeen: new Date(Date.now() - 900000) },
-      { id: "6", name: "Ольга Новикова", city: "Москва", salaryMin: 150000, salaryMax: 180000, score: 85, progress: 10, source: "hh.ru", experience: "6 лет в FMCG", skills: ["FMCG", "Дистрибуция"], addedAt: new Date(Date.now() - 30 * 86400000), lastSeen: new Date(Date.now() - 1800000) },
-      { id: "7", name: "Дмитрий Смирнов", city: "СПб", salaryMin: 140000, salaryMax: 170000, score: 72, progress: 10, source: "Avito", experience: "3 года в телекоме", skills: ["B2C", "Upselling"], addedAt: new Date(Date.now() - 25 * 86400000), lastSeen: new Date(Date.now() - 18000000) },
-    ],
-  },
-  {
-    id: "demo", title: "Прошли демонстрацию", count: 3,
-    colorFrom: defaultColumnColors.demo.from, colorTo: defaultColumnColors.demo.to,
-    candidates: [
-      { id: "4", name: "Елена Волкова", city: "Москва", salaryMin: 155000, salaryMax: 185000, score: 81, progress: 40, source: "hh.ru", experience: "4 года в IT-продажах", skills: ["IT Sales", "Enterprise"], addedAt: new Date(Date.now() - 14 * 86400000), lastSeen: "online" },
-      { id: "5", name: "Сергей Морозов", city: "Казань", salaryMin: 145000, salaryMax: 175000, score: 68, progress: 40, source: "LinkedIn", experience: "2 года", skills: ["Звонки", "CRM"], addedAt: new Date(Date.now() - 21 * 86400000), lastSeen: new Date(Date.now() - 86400000) },
-      { id: "8", name: "Виктор Лебедев", city: "Москва", salaryMin: 160000, salaryMax: 190000, score: 79, progress: 40, source: "hh.ru", experience: "5 лет, Key Account", skills: ["Key Account", "Переговоры"], addedAt: new Date(Date.now() - 45 * 86400000), lastSeen: "online" },
-    ],
-  },
-  {
-    id: "scheduled", title: "Назначено интервью", count: 1,
-    colorFrom: defaultColumnColors.scheduled.from, colorTo: defaultColumnColors.scheduled.to,
-    candidates: [
-      { id: "9", name: "Юлия Орлова", city: "Москва", salaryMin: 170000, salaryMax: 200000, score: 94, progress: 55, source: "hh.ru", experience: "8 лет, Head of Sales", skills: ["Управление", "Стратегия", "P&L"], addedAt: new Date(Date.now() - 60 * 86400000), lastSeen: new Date(Date.now() - 600000) },
-    ],
-  },
-  {
-    id: "interviewed", title: "Прошли интервью", count: 1,
-    colorFrom: defaultColumnColors.interviewed.from, colorTo: defaultColumnColors.interviewed.to,
-    candidates: [
-      { id: "10", name: "Анна Белова", city: "Казань", salaryMin: 120000, salaryMax: 150000, score: 71, progress: 80, source: "hh.ru", experience: "2 года в продажах", skills: ["Звонки", "CRM"], addedAt: new Date(Date.now() - 50 * 86400000), lastSeen: new Date(Date.now() - 7200000) },
-    ],
-  },
-  {
-    id: "hired", title: "Нанято", count: 1,
-    colorFrom: defaultColumnColors.hired.from, colorTo: defaultColumnColors.hired.to,
-    candidates: [
-      { id: "11", name: "Павел Соколов", city: "Москва", salaryMin: 155000, salaryMax: 180000, score: 87, progress: 100, source: "hh.ru", experience: "4 года B2B", skills: ["B2B", "CRM"], addedAt: new Date(Date.now() - 90 * 86400000), lastSeen: new Date(Date.now() - 86400000) },
-    ],
-  },
-]
-
-const VACANCY_OPENED_AT = new Date(Date.now() - 18 * 24 * 60 * 60 * 1000)
-const VACANCY_DURATION_DAYS = 30
-const VACANCY_EXPIRES_AT = new Date(VACANCY_OPENED_AT.getTime() + VACANCY_DURATION_DAYS * 24 * 60 * 60 * 1000)
+function emptyColumns(): ColumnData[] {
+  return Object.entries(defaultColumnColors).map(([id, c]) => ({
+    id, title: c.label, count: 0,
+    colorFrom: c.from, colorTo: c.to, candidates: [],
+  }))
+}
 
 export default function DashboardPage() {
   const [cardSettings, setCardSettings] = useState<CardDisplaySettings>(defaultSettings)
   const [viewMode, setViewMode] = useState<ViewMode>("funnel")
-  const [columns, setColumns] = useLocalStorage<ColumnData[]>("hireflow-columns", initialColumns)
+  const [columns, setColumns] = useState<ColumnData[]>(emptyColumns)
   const [filters, setFilters] = useState<FilterState>({
     searchText: "",
     cities: [],
@@ -305,10 +261,6 @@ export default function DashboardPage() {
 
   const filteredColumns = applyFilters(columns)
 
-  const daysRemaining = Math.ceil((VACANCY_EXPIRES_AT.getTime() - Date.now()) / 86400000)
-  const isExpiringSoon = daysRemaining <= 3 && daysRemaining > 0
-  const isExpired = daysRemaining <= 0
-
   return (
     <SidebarProvider defaultOpen={true}>
       <DashboardSidebar />
@@ -316,36 +268,6 @@ export default function DashboardPage() {
         <DashboardHeader />
         <main className="flex-1 overflow-auto bg-background">
           <div className="p-4 sm:p-6">
-            {/* Expiring warning */}
-            {isExpiringSoon && (
-              <Alert variant="destructive" className="mb-6 border-indigo-200 bg-indigo-50 dark:bg-indigo-950 dark:border-indigo-800">
-                <AlertCircle className="text-indigo-600 dark:text-indigo-400" />
-                <AlertTitle className="text-indigo-900 dark:text-indigo-100">
-                  Вакансия истекает через {daysRemaining} {daysRemaining === 1 ? "день" : "дня"}
-                </AlertTitle>
-                <AlertDescription className="text-indigo-800 dark:text-indigo-200">
-                  Продлите вакансию, чтобы продолжить получать откликы от кандидатов
-                </AlertDescription>
-                <Button size="sm" className="mt-2 ml-auto col-start-2">
-                  Продлить на 30 дней
-                </Button>
-              </Alert>
-            )}
-
-            {isExpired && (
-              <Alert variant="destructive" className="mb-6">
-                <AlertCircle className="text-red-600 dark:text-red-400" />
-                <AlertTitle className="text-red-900 dark:text-red-100">
-                  Вакансия истекла
-                </AlertTitle>
-                <AlertDescription className="text-red-800 dark:text-red-200">
-                  Вакансия больше не активна. Переоткройте вакансию, чтобы продолжить поиск
-                </AlertDescription>
-                <Button size="sm" className="mt-2 ml-auto col-start-2">
-                  Переоткрыть вакансию
-                </Button>
-              </Alert>
-            )}
             {/* Onboarding checklist */}
             {!onboardingDone && onboardingRemaining > 0 && (
               <div className="mb-6 flex items-center justify-between p-4 rounded-xl bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 border border-blue-200 dark:border-blue-800">
@@ -367,18 +289,11 @@ export default function DashboardPage() {
               <div>
                 <div className="flex flex-wrap items-center gap-3 mb-2">
                   <h1 className="text-xl sm:text-2xl font-semibold text-foreground">
-                    Менеджер по продажам
+                    Воронка найма
                   </h1>
-                  <Badge variant="secondary" className="text-xs">
-                    Активна
-                  </Badge>
-                  <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <Clock className="size-3.5" />
-                    {Math.floor((Date.now() - VACANCY_OPENED_AT.getTime()) / 86400000)} дн. активна
-                  </span>
                 </div>
                 <p className="text-muted-foreground text-sm">
-                  {columns.reduce((acc, col) => acc + col.candidates.length, 0)} кандидат в воронке найма
+                  {columns.reduce((acc, col) => acc + col.candidates.length, 0)} кандидатов в воронке
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">

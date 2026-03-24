@@ -56,77 +56,12 @@ interface ColumnData {
   candidates: Candidate[]
 }
 
-// Mock vacancy data based on ID
-type VacancyStatus = "draft" | "active" | "archived"
+type VacancyStatus = "draft" | "active" | "archived" | "published" | "paused" | "closed"
 
 function emptyColumns(): ColumnData[] {
   return Object.entries(defaultColumnColors).map(([id, c]) => ({
     id, title: c.label, count: 0, colorFrom: c.from, colorTo: c.to, candidates: [],
   }))
-}
-
-// ─── Seed generator for test data ───
-const FIRST_NAMES = ["Иван","Мария","Алексей","Елена","Сергей","Ольга","Дмитрий","Анна","Виктор","Юлия","Павел","Татьяна","Андрей","Наталья","Михаил","Екатерина","Артём","Светлана","Максим","Ирина","Никита","Вероника","Роман","Ксения","Денис","Полина","Кирилл","Дарья","Владимир","Валерия"]
-const LAST_NAMES = ["Иванов","Петров","Сидоров","Козлов","Морозов","Волков","Новиков","Соколов","Лебедев","Орлов","Белов","Смирнов","Кузнецов","Попов","Васильев","Фёдоров","Николаев","Егоров","Макаров","Павлов","Зайцев","Степанов","Семёнов","Голубев","Виноградов","Антонов","Тихонов","Крылов","Комаров","Жуков"]
-const SEED_CITIES = ["Москва","СПб","Казань","Екатеринбург","Новосибирск"]
-const SEED_SOURCES = ["hh.ru","Avito","Реферал","Прямая ссылка"]
-const SEED_SKILLS_POOL = ["CRM","B2B","Переговоры","Excel","1C","Холодные звонки","Презентации","Upselling","Key Account","Тендеры","FMCG","IT Sales","SaaS","Аналитика","Управление","Стратегия","Клиентский сервис","Дистрибуция","Телемаркетинг","P&L"]
-const SEED_EXP = ["1 год","2 года","3 года","4 года","5 лет","6 лет","7 лет","8 лет","10 лет","Без опыта","1.5 года","2.5 года"]
-
-function seededRandom(seed: number) {
-  let s = seed
-  return () => { s = (s * 16807 + 0) % 2147483647; return (s - 1) / 2147483646 }
-}
-
-function generateCandidates(count: number, columnId: string, progress: number, startId: number, seed: number): Candidate[] {
-  const rng = seededRandom(seed)
-  const pick = <T,>(arr: T[]) => arr[Math.floor(rng() * arr.length)]
-  const candidates: Candidate[] = []
-  for (let i = 0; i < count; i++) {
-    const salaryBase = 80000 + Math.floor(rng() * 120000)
-    const daysAgo = Math.floor(rng() * 90) + 1
-    const hoursAgo = Math.floor(rng() * 72)
-    const isOnline = rng() < 0.15
-    const skillCount = 1 + Math.floor(rng() * 4)
-    const skills: string[] = []
-    while (skills.length < skillCount) { const sk = pick(SEED_SKILLS_POOL); if (!skills.includes(sk)) skills.push(sk) }
-    candidates.push({
-      id: `v1-${startId + i}`,
-      name: `${pick(FIRST_NAMES)} ${pick(LAST_NAMES)}`,
-      city: pick(SEED_CITIES),
-      salaryMin: salaryBase,
-      salaryMax: salaryBase + 20000 + Math.floor(rng() * 50000),
-      score: 40 + Math.floor(rng() * 60),
-      progress,
-      source: pick(SEED_SOURCES),
-      experience: pick(SEED_EXP),
-      skills,
-      addedAt: new Date(Date.now() - daysAgo * 86400000),
-      lastSeen: isOnline ? "online" as const : new Date(Date.now() - hoursAgo * 3600000),
-      workFormat: pick(["office", "remote", "hybrid"] as const),
-    })
-  }
-  return candidates
-}
-
-const v1New = generateCandidates(400, "new", 10, 100, 42)
-const v1Demo = generateCandidates(300, "demo", 30, 600, 77)
-const v1Scheduled = generateCandidates(180, "scheduled", 55, 1000, 123)
-const v1Interviewed = generateCandidates(80, "interviewed", 80, 1300, 256)
-const v1Hired = generateCandidates(41, "hired", 100, 1500, 512)
-
-const vacancyData: Record<string, { title: string; status: VacancyStatus; daysActive: number; columns: ColumnData[] }> = {
-  "new-vacancy": { title: "Новая вакансия", status: "draft", daysActive: 0, columns: emptyColumns() },
-  "1": {
-    title: "Менеджер по продажам", status: "active", daysActive: 18,
-    columns: [
-      { id: "new", title: "Всего откликов", count: v1New.length, colorFrom: defaultColumnColors.new.from, colorTo: defaultColumnColors.new.to, candidates: v1New },
-      { id: "demo", title: "Прошли демонстрацию", count: v1Demo.length, colorFrom: defaultColumnColors.demo.from, colorTo: defaultColumnColors.demo.to, candidates: v1Demo },
-      { id: "scheduled", title: "Назначено интервью", count: v1Scheduled.length, colorFrom: defaultColumnColors.scheduled.from, colorTo: defaultColumnColors.scheduled.to, candidates: v1Scheduled },
-      { id: "interviewed", title: "Прошли интервью", count: v1Interviewed.length, colorFrom: defaultColumnColors.interviewed.from, colorTo: defaultColumnColors.interviewed.to, candidates: v1Interviewed },
-      { id: "hired", title: "Нанято", count: v1Hired.length, colorFrom: defaultColumnColors.hired.from, colorTo: defaultColumnColors.hired.to, candidates: v1Hired },
-    ],
-  },
 }
 
 const defaultSettings: CardDisplaySettings = {
@@ -137,6 +72,9 @@ const defaultSettings: CardDisplaySettings = {
 const STATUS_CONFIG: Record<VacancyStatus, { label: string; color: string }> = {
   draft: { label: "Не опубликована", color: "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800" },
   active: { label: "Активна", color: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800" },
+  published: { label: "Активна", color: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800" },
+  paused: { label: "Остановлена", color: "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800" },
+  closed: { label: "Закрыта", color: "bg-muted text-muted-foreground border-border" },
   archived: { label: "В архиве", color: "bg-muted text-muted-foreground border-border" },
 }
 
@@ -160,45 +98,34 @@ function apiCandidateToCard(c: ApiCandidate, columnId: string): Candidate {
   }
 }
 
-// DEMO IDs that use seeded mock data (no API calls)
-const DEMO_IDS = new Set(["1", "new-vacancy"])
-
 export default function VacancyPage() {
   const params = useParams()
   const id = params.id as string
-  const isDemo = DEMO_IDS.has(id)
 
-  // ── Real API data (skipped for demo IDs) ──────────────────
-  const { vacancy: apiVacancy } = useVacancy(isDemo ? null : id)
-  const { candidates: apiCandidates, updateStage } = useCandidates(isDemo ? null : id)
+  // ── Real API data ──────────────────────────────────────────
+  const { vacancy: apiVacancy, loading: vacancyLoading, error: vacancyError } = useVacancy(id)
+  const { candidates: apiCandidates, updateStage } = useCandidates(id)
 
-  const mockVacancy = vacancyData[id] || {
-    ...vacancyData["new-vacancy"],
-    title: "Новая вакансия",
-    status: "draft" as VacancyStatus,
-  }
-
-  const [status, setStatus] = useState<VacancyStatus>(mockVacancy.status)
-  const [columns, setColumns] = useState<ColumnData[]>(isDemo ? mockVacancy.columns : emptyColumns())
+  const [status, setStatus] = useState<VacancyStatus>("draft")
+  const [columns, setColumns] = useState<ColumnData[]>(emptyColumns())
 
   // Sync vacancy status from API
   useEffect(() => {
     if (apiVacancy?.status) {
-      const s = apiVacancy.status as VacancyStatus
-      if (["draft", "active", "archived"].includes(s)) setStatus(s)
+      setStatus(apiVacancy.status as VacancyStatus)
     }
   }, [apiVacancy])
 
   // Populate columns from API candidates
   useEffect(() => {
-    if (isDemo || apiCandidates.length === 0) return
+    if (apiCandidates.length === 0) return
     setColumns(prev => prev.map(col => {
       const colCandidates = apiCandidates
         .filter(c => c.stage === col.id)
         .map(c => apiCandidateToCard(c, col.id))
       return { ...col, candidates: colCandidates, count: colCandidates.length }
     }))
-  }, [apiCandidates, isDemo])
+  }, [apiCandidates])
   const [viewMode, setViewMode] = useState<ViewMode>("kanban")
   const [cardSettings, setCardSettings] = useState(defaultSettings)
   const [filters, setFilters] = useState<FilterState>({ searchText: "", cities: [], salaryMin: 0, salaryMax: 250000, scoreMin: 0, sources: [], workFormats: [] })
@@ -253,8 +180,7 @@ export default function VacancyPage() {
       // Optimistic UI
       setColumns((p) => p.map((c) => c.id !== columnId ? c : { ...c, candidates: c.candidates.filter((x) => x.id !== candidateId), count: c.candidates.filter((x) => x.id !== candidateId).length }))
       toast.error(`${candidate.name} — отказ`)
-      // Persist to API (non-demo)
-      if (!isDemo) await updateStage(candidateId, "rejected")
+      await updateStage(candidateId, "rejected")
       return
     }
     if (action === "reserve") {
@@ -274,8 +200,7 @@ export default function VacancyPage() {
         return c
       }))
       toast.success(`🎉 ${candidate.name} — нанят!`)
-      // Persist to API (non-demo)
-      if (!isDemo) await updateStage(candidateId, "hired")
+      await updateStage(candidateId, "hired")
       return
     }
     if (action === "advance") {
@@ -283,7 +208,7 @@ export default function VacancyPage() {
       if (!nextId) {
         setColumns((p) => p.map((c) => c.id !== columnId ? c : { ...c, candidates: c.candidates.filter((x) => x.id !== candidateId), count: c.candidates.filter((x) => x.id !== candidateId).length }))
         toast.success(`${candidate.name} — нанят!`)
-        if (!isDemo) await updateStage(candidateId, "hired")
+        await updateStage(candidateId, "hired")
         return
       }
       const moved = { ...candidate, progress: PROGRESS_BY_COLUMN[nextId] ?? candidate.progress }
@@ -293,8 +218,7 @@ export default function VacancyPage() {
         return c
       }))
       toast.success(`${candidate.name} → следующий этап`)
-      // Persist to API (non-demo)
-      if (!isDemo) await updateStage(candidateId, nextId)
+      await updateStage(candidateId, nextId)
     }
   }
 
@@ -342,8 +266,51 @@ export default function VacancyPage() {
 
   const statusCfg = STATUS_CONFIG[status]
 
-  // Use real API title if available, fall back to mock title
-  const vacancyTitle = apiVacancy?.title ?? mockVacancy.title
+  const vacancyTitle = apiVacancy?.title ?? "Вакансия"
+
+  // ── Loading / 404 guard ────────────────────────────────────
+  const isLoadingVacancy = vacancyLoading || (!apiVacancy && !vacancyError)
+
+  if (isLoadingVacancy) {
+    return (
+      <SidebarProvider defaultOpen={true}>
+        <DashboardSidebar />
+        <SidebarInset>
+          <DashboardHeader />
+          <main className="flex-1 overflow-auto bg-background">
+            <div className="p-4 sm:p-6 space-y-4 animate-pulse">
+              <div className="h-8 w-64 bg-muted rounded" />
+              <div className="h-4 w-40 bg-muted rounded" />
+              <div className="flex gap-4 mt-6">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} className="flex-1 h-24 bg-muted rounded-xl" />
+                ))}
+              </div>
+            </div>
+          </main>
+        </SidebarInset>
+      </SidebarProvider>
+    )
+  }
+
+  if (!apiVacancy) {
+    return (
+      <SidebarProvider defaultOpen={true}>
+        <DashboardSidebar />
+        <SidebarInset>
+          <DashboardHeader />
+          <main className="flex-1 overflow-auto bg-background">
+            <div className="p-4 sm:p-6 flex flex-col items-center justify-center min-h-[60vh] gap-4 text-center">
+              <AlertTriangle className="w-12 h-12 text-muted-foreground/40" />
+              <h2 className="text-xl font-semibold text-foreground">Вакансия не найдена</h2>
+              <p className="text-sm text-muted-foreground">Вакансия не существует или у вас нет доступа к ней</p>
+              <Button variant="outline" onClick={() => window.history.back()}>Назад</Button>
+            </div>
+          </main>
+        </SidebarInset>
+      </SidebarProvider>
+    )
+  }
 
   return (
     <SidebarProvider defaultOpen={true}>
@@ -365,7 +332,7 @@ export default function VacancyPage() {
                     </button>
                   )}
                   <Badge variant="outline" className={statusCfg.color}>{statusCfg.label}</Badge>
-                  {status === "active" && <span className="flex items-center gap-1.5 text-xs text-muted-foreground"><Clock className="size-3.5" />{mockVacancy.daysActive} дн.</span>}
+                  {(status === "active" || status === "published") && apiVacancy?.createdAt && <span className="flex items-center gap-1.5 text-xs text-muted-foreground"><Clock className="size-3.5" />{Math.floor((Date.now() - new Date(apiVacancy.createdAt).getTime()) / 86400000)} дн.</span>}
                 </div>
                 <p className="text-muted-foreground text-xs">{totalCandidates} кандидатов · {vacancyTitle} · {apiVacancy?.city ?? "Москва"}</p>
               </div>
@@ -614,7 +581,7 @@ export default function VacancyPage() {
                           <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Всего кандидатов</p><p className="text-2xl font-bold text-blue-600 mt-1">{totalCandidates}</p></CardContent></Card>
                           <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Конверсия воронки</p><p className="text-2xl font-bold text-emerald-600 mt-1">{overallConv}%</p></CardContent></Card>
                           <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Ср. AI-скор</p><p className="text-2xl font-bold text-purple-600 mt-1">{allCands.length > 0 ? Math.round(allCands.reduce((a, c) => a + c.score, 0) / allCands.length) : 0}</p></CardContent></Card>
-                          <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Дней активна</p><p className="text-2xl font-bold text-amber-600 mt-1">{mockVacancy.daysActive}</p></CardContent></Card>
+                          <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Дней активна</p><p className="text-2xl font-bold text-amber-600 mt-1">{apiVacancy?.createdAt ? Math.floor((Date.now() - new Date(apiVacancy.createdAt).getTime()) / 86400000) : 0}</p></CardContent></Card>
                         </div>
                       </div>
 
