@@ -6,6 +6,21 @@ import { db } from "@/lib/db"
 import { users } from "@/lib/db/schema"
 import type { UserRole } from "@/lib/auth"
 
+// Expose a stable ref so the JWT callback can read the DB
+// (needed when updateSession() is called after onboarding saves companyId)
+const getCompanyId = async (userId: string): Promise<string | null> => {
+  try {
+    const [row] = await db
+      .select({ companyId: users.companyId })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1)
+    return row?.companyId ?? null
+  } catch {
+    return null
+  }
+}
+
 // ─── Расширяем типы NextAuth ──────────────────────────────────────────────────
 
 declare module "next-auth" {
@@ -72,11 +87,19 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
   ],
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger }) {
       if (user) {
+        // Initial sign-in: populate token from the user returned by authorize()
         token.id = user.id as string
         token.role = ((user.role as UserRole) ?? "client") as string
         token.companyId = (user.companyId ?? null) as string | null
+      }
+      // updateSession() fires with trigger === "update".
+      // After onboarding saves companyId via PATCH /api/auth/me we must
+      // re-read the DB so the JWT (and middleware) see the new companyId.
+      if (trigger === "update" && token.id) {
+        const fresh = await getCompanyId(token.id as string)
+        token.companyId = fresh
       }
       return token
     },

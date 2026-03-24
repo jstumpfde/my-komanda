@@ -32,6 +32,11 @@ export default auth((req) => {
     return Response.redirect(loginUrl)
   }
 
+  // API-маршруты пропускаем без редиректа на /onboarding —
+  // иначе POST /api/companies и POST /api/vacancies во время онбординга
+  // получали бы 307 → HTML → res.json() кидал исключение → тихий fallback
+  if (pathname.startsWith("/api/")) return
+
   // Авторизован, нет company_id, не на /onboarding → /onboarding
   // Исключение: кука mk_onboarded=1 означает что онбординг завершён
   // (ставится когда сессия ещё не обновилась или работает демо-режим)

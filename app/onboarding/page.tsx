@@ -195,61 +195,57 @@ export default function OnboardingPage() {
     setError("")
     setSaving(true)
     try {
-      let id: string | null = null
+      console.log("[onboarding] step 1 — creating company", { name: companyName.trim(), city: city.trim() })
 
-      // Try API — if unavailable (no auth / no DB), fall back to localStorage
-      try {
-        const res = await fetch("/api/companies", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: companyName.trim(),
-            inn: inn || undefined,
-            kpp: kpp || undefined,
-            legal_address: legalAddress || undefined,
-            city: city.trim(),
-            industry: industry || undefined,
-          }),
-        })
+      const res = await fetch("/api/companies", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: companyName.trim(),
+          inn: inn || undefined,
+          kpp: kpp || undefined,
+          legal_address: legalAddress || undefined,
+          city: city.trim(),
+          industry: industry || undefined,
+        }),
+      })
 
-        if (res.ok) {
-          const company = await res.json() as { id: string }
-          id = company.id
+      console.log("[onboarding] POST /api/companies →", res.status)
 
-          // Update user's companyId (best-effort)
-          await fetch("/api/auth/me", {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ companyId: company.id }),
-          }).catch(() => {})
-
-          // Refresh session (best-effort)
-          await updateSession().catch(() => {})
-        }
-      } catch {
-        // API unavailable — will use localStorage fallback
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({})) as { error?: string }
+        const msg = errBody.error || `Ошибка сервера (${res.status})`
+        console.error("[onboarding] company create failed:", msg, errBody)
+        throw new Error(msg)
       }
 
-      // localStorage fallback (demo mode)
-      if (!id) {
-        id = `company_${Date.now()}`
-        try {
-          localStorage.setItem("onboarding_company", JSON.stringify({
-            id,
-            name: companyName.trim(),
-            inn: inn || undefined,
-            kpp: kpp || undefined,
-            legalAddress: legalAddress || undefined,
-            city: city.trim(),
-            industry: industry || undefined,
-          }))
-        } catch { /* ignore */ }
+      const company = await res.json() as { id: string; name: string }
+      console.log("[onboarding] company created, id =", company.id)
+
+      // Bind company to the current user
+      console.log("[onboarding] patching session companyId →", company.id)
+      const patchRes = await fetch("/api/auth/me", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyId: company.id }),
+      })
+      console.log("[onboarding] PATCH /api/auth/me →", patchRes.status)
+      if (!patchRes.ok) {
+        const errBody = await patchRes.json().catch(() => ({})) as { error?: string }
+        console.error("[onboarding] patch me failed:", patchRes.status, errBody)
+        throw new Error(errBody.error || `Не удалось привязать компанию к аккаунту (${patchRes.status})`)
       }
 
-      setCompanyId(id)
+      // Refresh JWT so subsequent API calls include companyId
+      console.log("[onboarding] calling updateSession()")
+      await updateSession()
+      console.log("[onboarding] session refreshed")
+
+      setCompanyId(company.id)
       setStep(2)
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Ошибка сохранения")
+      console.error("[onboarding] handleStep1 error:", err)
+      setError(err instanceof Error ? err.message : "Ошибка сохранения данных компании")
     } finally {
       setSaving(false)
     }
@@ -270,48 +266,37 @@ export default function OnboardingPage() {
     }
     setSaving(true)
     try {
-      let id: string | null = null
+      console.log("[onboarding] step 2 — creating vacancy", { title: vacancyTitle.trim() })
 
-      // Try API — fall back to localStorage if unavailable
-      try {
-        const res = await fetch("/api/vacancies", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            title: vacancyTitle.trim(),
-            city: vacancyCity || undefined,
-            format: vacancyFormat || undefined,
-            salary_min: salaryMin ? parseInt(salaryMin) : undefined,
-            salary_max: salaryMax ? parseInt(salaryMax) : undefined,
-          }),
-        })
-        if (res.ok) {
-          const v = await res.json() as { id: string }
-          id = v.id
-        }
-      } catch {
-        // API unavailable — will use localStorage fallback
+      const res = await fetch("/api/vacancies", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: vacancyTitle.trim(),
+          city: vacancyCity || undefined,
+          format: vacancyFormat || undefined,
+          salary_min: salaryMin ? parseInt(salaryMin) : undefined,
+          salary_max: salaryMax ? parseInt(salaryMax) : undefined,
+        }),
+      })
+
+      console.log("[onboarding] POST /api/vacancies →", res.status)
+
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({})) as { error?: string }
+        const msg = errBody.error || `Ошибка сервера (${res.status})`
+        console.error("[onboarding] vacancy create failed:", msg, errBody)
+        throw new Error(msg)
       }
 
-      // localStorage fallback (demo mode)
-      if (!id) {
-        id = `vacancy_${Date.now()}`
-        try {
-          localStorage.setItem("onboarding_vacancy", JSON.stringify({
-            id,
-            title: vacancyTitle.trim(),
-            city: vacancyCity || undefined,
-            format: vacancyFormat || undefined,
-            salary_min: salaryMin ? parseInt(salaryMin) : undefined,
-            salary_max: salaryMax ? parseInt(salaryMax) : undefined,
-          }))
-        } catch { /* ignore */ }
-      }
+      const vacancy = await res.json() as { id: string }
+      console.log("[onboarding] vacancy created, id =", vacancy.id)
 
-      setVacancyId(id)
+      setVacancyId(vacancy.id)
       setStep(3)
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Ошибка сохранения")
+      console.error("[onboarding] handleStep2 error:", err)
+      setError(err instanceof Error ? err.message : "Ошибка создания вакансии")
     } finally {
       setSaving(false)
     }
