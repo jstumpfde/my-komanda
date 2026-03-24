@@ -13,6 +13,7 @@ import { KanbanBoard, type ViewMode } from "@/components/dashboard/kanban-board"
 import { CardSettings, type CardDisplaySettings } from "@/components/dashboard/card-settings"
 import { CandidateFilters, type FilterState } from "@/components/dashboard/candidate-filters"
 import { CandidateProfile } from "@/components/dashboard/candidate-profile"
+import { CandidateDrawer } from "@/components/candidates/candidate-drawer"
 import { AddCandidateDialog } from "@/components/dashboard/add-candidate-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -131,6 +132,8 @@ export default function VacancyPage() {
   const [filters, setFilters] = useState<FilterState>({ searchText: "", cities: [], salaryMin: 0, salaryMax: 250000, scoreMin: 0, sources: [], workFormats: [] })
   const [profileCandidate, setProfileCandidate] = useState<Candidate | null>(null)
   const [profileColumnId, setProfileColumnId] = useState<string | null>(null)
+  const [drawerCandidateId, setDrawerCandidateId] = useState<string | null>(null)
+  const [drawerOpen, setDrawerOpen] = useState(false)
   const [addDialogOpen, setAddDialogOpen] = useState(false)
   const [internalName, setInternalName] = useState("")
   const [isEditingName, setIsEditingName] = useState(false)
@@ -465,7 +468,14 @@ export default function VacancyPage() {
                   onViewModeChange={setViewMode}
                   columns={filteredColumns}
                   onColumnsChange={setColumns}
-                  onOpenProfile={(c, colId) => { setProfileCandidate(c); setProfileColumnId(colId) }}
+                  onOpenProfile={(c, colId) => {
+                    // Open the candidate drawer with real API data
+                    setDrawerCandidateId(c.id)
+                    setDrawerOpen(true)
+                    // Also keep profile state for CandidateProfile fallback
+                    setProfileCandidate(c)
+                    setProfileColumnId(colId)
+                  }}
                   onAction={handleAction}
                   hideViewSwitcher
                 />
@@ -877,16 +887,48 @@ export default function VacancyPage() {
 
       <AddCandidateDialog open={addDialogOpen} onOpenChange={setAddDialogOpen} onAdd={handleAddCandidate} />
 
+      {/* Candidate Drawer — opens with real API data when "Открыть профиль" is clicked */}
+      <CandidateDrawer
+        candidateId={drawerCandidateId}
+        open={drawerOpen}
+        onOpenChange={(open) => {
+          setDrawerOpen(open)
+          if (!open) setDrawerCandidateId(null)
+        }}
+        onStageChange={(candidateId, newStage) => {
+          // Sync kanban columns when stage changes in drawer
+          setColumns((prev) => {
+            const targetStage = newStage === "rejected" ? null : newStage
+            return prev.map((col) => {
+              // Remove from old column
+              const filtered = col.candidates.filter((c) => c.id !== candidateId)
+              // Add to new column (if not rejected)
+              if (targetStage && col.id === targetStage) {
+                const moved = prev
+                  .flatMap((c) => c.candidates)
+                  .find((c) => c.id === candidateId)
+                if (moved) {
+                  const updated = { ...moved, progress: { new: 10, demo: 30, scheduled: 55, interviewed: 80, hired: 100 }[targetStage] ?? moved.progress }
+                  return { ...col, candidates: [...filtered, updated], count: filtered.length + 1 }
+                }
+              }
+              return { ...col, candidates: filtered, count: filtered.length }
+            })
+          })
+        }}
+      />
+
+      {/* Legacy CandidateProfile sheet (kept for backward compat) */}
       {(() => {
         const col = profileColumnId ? columns.find((c) => c.id === profileColumnId) : null
         return (
           <CandidateProfile
-            candidate={profileCandidate}
+            candidate={drawerOpen ? null : profileCandidate}
             columnId={profileColumnId ?? undefined}
             columnTitle={col?.title}
             columnColorFrom={col?.colorFrom}
             columnColorTo={col?.colorTo}
-            open={!!profileCandidate}
+            open={!drawerOpen && !!profileCandidate}
             onOpenChange={(open) => { if (!open) { setProfileCandidate(null); setProfileColumnId(null) } }}
             onAction={handleAction}
           />

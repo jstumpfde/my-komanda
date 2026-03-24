@@ -116,20 +116,40 @@ export function CandidateCard({ candidate, settings, columnId, onOpenProfile, on
         isDecisionColumn && "border-primary/20"
       )}
     >
-      {/* Header: Name + Score */}
+      {/* Header: Avatar + Name + Score */}
       <div className="flex items-start justify-between mb-2">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <h4 className="font-semibold text-foreground text-sm leading-tight truncate">{candidate.name}</h4>
-            {isOnline ? (
-              <span className="flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400 shrink-0">
-                <Circle className="w-2 h-2 fill-current" /> онлайн
-              </span>
-            ) : (
-              <span className="text-[10px] text-muted-foreground shrink-0">
-                {formatTimeAgo(candidate.lastSeen as Date)}
-              </span>
-            )}
+        <div className="flex items-start gap-2 flex-1 min-w-0">
+          {/* Initials avatar */}
+          {(() => {
+            const initials = candidate.name.split(" ").slice(0, 2).map((n) => n[0]?.toUpperCase() ?? "").join("")
+            const colors = [
+              "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
+              "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300",
+              "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
+              "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
+              "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300",
+              "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300",
+            ]
+            const colorIdx = candidate.name.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0) % colors.length
+            return (
+              <div className={cn("w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-semibold shrink-0 mt-0.5", colors[colorIdx])}>
+                {initials || "?"}
+              </div>
+            )
+          })()}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <h4 className="font-semibold text-foreground text-sm leading-tight truncate">{candidate.name}</h4>
+              {isOnline ? (
+                <span className="flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400 shrink-0">
+                  <Circle className="w-2 h-2 fill-current" /> онлайн
+                </span>
+              ) : (
+                <span className="text-[10px] text-muted-foreground shrink-0">
+                  {formatTimeAgo(candidate.lastSeen as Date)}
+                </span>
+              )}
+            </div>
           </div>
         </div>
         {/* AI Score — large in decision columns */}
