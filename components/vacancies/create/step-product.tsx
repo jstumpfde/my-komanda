@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { Plus } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -17,7 +17,6 @@ import {
 import { cn } from "@/lib/utils"
 import type { CompanyProduct, Segment } from "@/lib/company-types"
 import { SALES_TYPES, DEAL_CYCLES, SEGMENTS } from "@/lib/company-types"
-import { getProducts } from "@/lib/company-storage"
 
 export interface StepProductProps {
   data: Partial<CompanyProduct>
@@ -210,14 +209,9 @@ export function StepProduct({
   selectedProductId,
   onSelectProduct,
 }: StepProductProps) {
-  const [existingProducts, setExistingProducts] = useState<CompanyProduct[]>([])
+  // Products are managed server-side via API; no localStorage loading
+  const [existingProducts] = useState<CompanyProduct[]>([])
   const [showNewForm, setShowNewForm] = useState(false)
-
-  useEffect(() => {
-    if (isMultiProduct && companyId) {
-      setExistingProducts(getProducts(companyId))
-    }
-  }, [isMultiProduct, companyId])
 
   if (!isMultiProduct) {
     // Single product — show inline form directly

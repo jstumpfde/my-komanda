@@ -1,11 +1,12 @@
 "use client"
 
-import { Info } from "lucide-react"
+import { useState } from "react"
+import { Search, Loader2, Info } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { Switch } from "@/components/ui/switch"
+import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
+import { Switch } from "@/components/ui/switch"
 import {
   Select,
   SelectContent,
@@ -20,6 +21,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
+import { toast } from "sonner"
 import type { Company } from "@/lib/company-types"
 import {
   INDUSTRIES,
@@ -28,11 +30,41 @@ import {
   YES_PARTIAL_NO,
   SALES_MANAGER_TYPES,
 } from "@/lib/company-types"
+import { fetchCompanyByInn } from "@/lib/company-storage"
+
+// ─── DaData types ─────────────────────────────────────────────────────────────
+
+interface DadataSuggestion {
+  value: string
+  data?: {
+    inn?: string
+    kpp?: string
+    name?: {
+      full_with_opf?: string
+      full?: string
+      short_with_opf?: string
+    }
+    address?: {
+      value?: string
+      data?: {
+        city?: string
+        settlement?: string
+        region_with_type?: string
+      }
+    }
+  }
+}
+
+// ─── Props ────────────────────────────────────────────────────────────────────
 
 export interface StepCompanyProps {
   data: Partial<Company>
   onChange: (data: Partial<Company>) => void
+  /** True while company data is being fetched from API on mount */
+  isLoading?: boolean
 }
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
 
 function RadioGroup({
   label,
@@ -87,7 +119,54 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
   )
 }
 
-export function StepCompany({ data, onChange }: StepCompanyProps) {
+// ─── Loading skeleton ─────────────────────────────────────────────────────────
+
+function LoadingSkeleton() {
+  return (
+    <div className="space-y-8 animate-pulse">
+      {/* INN search placeholder */}
+      <div className="h-24 rounded-xl bg-muted/50" />
+      {/* Section */}
+      <div className="space-y-4">
+        <div className="h-5 w-40 bg-muted rounded" />
+        <div className="h-10 bg-muted rounded-md" />
+        <div className="grid grid-cols-2 gap-4">
+          <div className="h-10 bg-muted rounded-md" />
+          <div className="h-10 bg-muted rounded-md" />
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="h-10 bg-muted rounded-md" />
+          <div className="h-10 bg-muted rounded-md" />
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="h-10 bg-muted rounded-md" />
+          <div className="h-10 bg-muted rounded-md" />
+        </div>
+      </div>
+      {/* Section 2 */}
+      <div className="space-y-4">
+        <div className="h-5 w-48 bg-muted rounded" />
+        <div className="flex gap-2">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="h-8 w-20 bg-muted rounded-lg" />
+          ))}
+        </div>
+        <div className="flex gap-2">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="h-8 w-24 bg-muted rounded-lg" />
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Main component ───────────────────────────────────────────────────────────
+
+export function StepCompany({ data, onChange, isLoading }: StepCompanyProps) {
+  const [inn, setInn] = useState("")
+  const [innSearching, setInnSearching] = useState(false)
+
   const update = <K extends keyof Company>(field: K, value: Company[K]) =>
     onChange({ ...data, [field]: value })
 
@@ -99,9 +178,91 @@ export function StepCompany({ data, onChange }: StepCompanyProps) {
 
   const showCrmName = data.crm_status === "active" || data.crm_status === "exists_unused"
 
+  // ── INN search ────────────────────────────────────────────────
+
+  const handleInnSearch = async () => {
+    const digits = inn.replace(/\D/g, "")
+    if (digits.length !== 10 && digits.length !== 12) {
+      toast.error("ИНН должен содержать 10 цифр (ООО/АО) или 12 цифр (ИП)")
+      return
+    }
+    setInnSearching(true)
+    try {
+      const raw = await fetchCompanyByInn(digits) as {
+        data?: { suggestions?: DadataSuggestion[] }
+      }
+      const suggestions = raw?.data?.suggestions ?? []
+      const s = suggestions[0]
+      if (!s) {
+        toast.error("Компания не найдена по ИНН")
+        return
+      }
+      const fullName =
+        s.data?.name?.full_with_opf ||
+        s.data?.name?.full ||
+        s.data?.name?.short_with_opf ||
+        ""
+      const city =
+        s.data?.address?.data?.city ||
+        s.data?.address?.data?.settlement ||
+        s.data?.address?.data?.region_with_type ||
+        ""
+
+      onChange({
+        ...data,
+        name: fullName || data.name,
+        city: city || data.city,
+      })
+      if (fullName) toast.success("Данные компании загружены из DaData")
+    } catch {
+      toast.error("Не удалось загрузить данные из DaData")
+    } finally {
+      setInnSearching(false)
+    }
+  }
+
+  // ── Render ────────────────────────────────────────────────────
+
+  if (isLoading) {
+    return <LoadingSkeleton />
+  }
+
   return (
     <TooltipProvider>
       <div className="space-y-8">
+
+        {/* ── Быстрое заполнение по ИНН ── */}
+        <div className="p-4 rounded-xl bg-muted/30 border border-border space-y-3">
+          <div className="flex items-center gap-2">
+            <Search className="w-4 h-4 text-muted-foreground" />
+            <span className="text-sm font-medium text-foreground">Быстрое заполнение по ИНН</span>
+            <span className="text-xs text-muted-foreground ml-auto">необязательно</span>
+          </div>
+          <div className="flex gap-2">
+            <Input
+              placeholder="7707083893 (ООО/АО) или 123456789012 (ИП)"
+              value={inn}
+              onChange={(e) => setInn(e.target.value.replace(/\D/g, "").slice(0, 12))}
+              className="font-mono text-sm"
+              onKeyDown={(e) => { if (e.key === "Enter") handleInnSearch() }}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              className="shrink-0"
+              onClick={handleInnSearch}
+              disabled={innSearching}
+            >
+              {innSearching
+                ? <Loader2 className="w-4 h-4 animate-spin" />
+                : <Search className="w-4 h-4" />
+              }
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Автоматически заполнит название компании и город по данным ФНС
+          </p>
+        </div>
 
         {/* ── Основная информация ── */}
         <div className="space-y-4">

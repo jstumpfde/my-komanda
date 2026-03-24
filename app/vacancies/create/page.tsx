@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
@@ -15,7 +15,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
-import { ChevronLeft, ChevronRight, Check, Save } from "lucide-react"
+import { ChevronLeft, ChevronRight, Check, Save, Loader2 } from "lucide-react"
 import { toast } from "sonner"
 
 import type { Company, CompanyProduct, Vacancy, WizardDraft, Industry } from "@/lib/company-types"
@@ -114,6 +114,11 @@ export default function CreateVacancyPage() {
   const [completionPct, setCompletionPct] = useState(0)
   const [isPublishing, setIsPublishing] = useState(false)
 
+  // Loading state while company data is being fetched from API on mount
+  const [companyLoading, setCompanyLoading] = useState(true)
+  // Saving state while step 1 data is being PUT to API on "Далее"
+  const [stepSaving, setStepSaving] = useState(false)
+
   // Company modal (Scenario 2: company data changed since draft)
   const [showCompanyModal, setShowCompanyModal] = useState(false)
   const [savedCompanyForModal, setSavedCompanyForModal] = useState<Company | null>(null)
@@ -159,6 +164,9 @@ export default function CreateVacancyPage() {
         if (existingDraft) {
           setDraft(existingDraft)
         }
+      })
+      .finally(() => {
+        setCompanyLoading(false)
       })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -212,9 +220,29 @@ export default function CreateVacancyPage() {
     return true
   }
 
-  const handleNext = () => {
-    if (step < 5 && canGoNext()) setStep(step + 1)
-  }
+  const handleNext = useCallback(async () => {
+    if (!canGoNext()) return
+
+    // On step 1: save company data to API before advancing
+    if (step === 1) {
+      setStepSaving(true)
+      try {
+        await updateCompanyApi({
+          name: draft.company.name?.trim(),
+          city: draft.company.city?.trim(),
+          industry: draft.company.industry,
+        })
+      } catch {
+        // Non-critical: wizard can continue even if API save fails
+        toast.error("Не удалось сохранить данные компании в базе", { duration: 3000 })
+      } finally {
+        setStepSaving(false)
+      }
+    }
+
+    if (step < 5) setStep((s) => s + 1)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, draft.company])
 
   const handleBack = () => {
     if (step > 1) setStep(step - 1)
@@ -484,6 +512,7 @@ export default function CreateVacancyPage() {
                 <StepCompany
                   data={draft.company}
                   onChange={(company) => setDraft((prev) => ({ ...prev, company }))}
+                  isLoading={companyLoading}
                 />
               )}
               {step === 2 && (
@@ -541,12 +570,21 @@ export default function CreateVacancyPage() {
                 </span>
 
                 <Button
-                  onClick={handleNext}
-                  disabled={!canGoNext()}
+                  onClick={() => { void handleNext() }}
+                  disabled={!canGoNext() || stepSaving}
                   className="gap-1.5"
                 >
-                  Далее
-                  <ChevronRight className="w-4 h-4" />
+                  {stepSaving ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Сохраняем...
+                    </>
+                  ) : (
+                    <>
+                      Далее
+                      <ChevronRight className="w-4 h-4" />
+                    </>
+                  )}
                 </Button>
               </div>
             )}
