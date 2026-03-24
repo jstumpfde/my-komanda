@@ -506,6 +506,7 @@ export default function VacancyPage() {
 
               <TabsContent value="course">
                 <CourseTab
+                  vacancyId={id}
                   editorRef={courseEditorRef}
                   onSaveStatusChange={setCourseEditorSaveStatus}
                 />
