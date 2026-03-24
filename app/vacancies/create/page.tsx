@@ -21,7 +21,6 @@ import { toast } from "sonner"
 import type { Company, CompanyProduct, Vacancy, WizardDraft, Industry } from "@/lib/company-types"
 import { EMPTY_WIZARD_DRAFT } from "@/lib/company-types"
 import {
-  getCompany,
   getWizardDraft,
   saveCompany,
   saveProduct,
@@ -32,6 +31,7 @@ import {
   computeCompletionPct,
   generateId,
   updateCompanyApi,
+  fetchCompanyApi,
 } from "@/lib/company-storage"
 import { addVacancyToCategory, createVacancyApi } from "@/lib/vacancy-storage"
 
@@ -91,6 +91,19 @@ function CompletionBadge({ pct }: { pct: number }) {
   )
 }
 
+// Shape returned by GET /api/companies
+interface ApiCompany {
+  id: string
+  name: string
+  city: string | null
+  industry: string | null
+}
+
+// Shape returned by POST /api/vacancies
+interface ApiVacancy {
+  id: string
+}
+
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 export default function CreateVacancyPage() {
@@ -101,38 +114,53 @@ export default function CreateVacancyPage() {
   const [completionPct, setCompletionPct] = useState(0)
   const [isPublishing, setIsPublishing] = useState(false)
 
-  // Scenario 2: company profile changed since draft was saved
+  // Company modal (Scenario 2: company data changed since draft)
   const [showCompanyModal, setShowCompanyModal] = useState(false)
   const [savedCompanyForModal, setSavedCompanyForModal] = useState<Company | null>(null)
 
-  // Mounted state to prevent SSR flash
+  // Mounted flag to prevent SSR flash
   const [mounted, setMounted] = useState(false)
 
-  // ── On mount: restore draft or prefill from company profile ──
+  // ── On mount: load company from API, then restore/prefill draft ──
   useEffect(() => {
     setMounted(true)
-    const existingDraft = getWizardDraft()
-    const existingCompany = getCompany()
 
-    if (existingDraft) {
-      setDraft(existingDraft)
-      // Check if company profile changed since draft was saved
-      if (
-        existingCompany &&
-        existingDraft.company.id &&
-        existingDraft.company.id === existingCompany.id
-      ) {
-        const hasChanged = JSON.stringify(existingDraft.company) !== JSON.stringify(existingCompany)
-        if (hasChanged) {
-          setSavedCompanyForModal(existingCompany)
-          setShowCompanyModal(true)
+    const existingDraft = getWizardDraft()
+
+    fetchCompanyApi()
+      .then((json) => {
+        const apiData = (json as { data?: ApiCompany }).data ?? (json as ApiCompany)
+
+        // Build a partial Company from the API response to prefill step 1
+        const apiCompanyPartial: Partial<Company> = {
+          name: apiData.name ?? undefined,
+          city: apiData.city ?? undefined,
+          industry: (apiData.industry as Company["industry"]) ?? undefined,
         }
-      }
-    } else if (existingCompany) {
-      // New wizard, but company profile exists — prefill step 1
-      setDraft((prev) => ({ ...prev, company: existingCompany }))
-    }
-  }, [])
+
+        if (existingDraft) {
+          setDraft(existingDraft)
+          // Show modal if API company name differs from draft name
+          const draftName = existingDraft.company.name
+          if (draftName && apiData.name && draftName !== apiData.name) {
+            setSavedCompanyForModal({ ...existingDraft.company, ...apiCompanyPartial } as Company)
+            setShowCompanyModal(true)
+          }
+        } else {
+          // Fresh wizard — prefill company data from API
+          setDraft((prev) => ({
+            ...prev,
+            company: { ...prev.company, ...apiCompanyPartial },
+          }))
+        }
+      })
+      .catch(() => {
+        // API unavailable or no company yet — fall back to localStorage draft
+        if (existingDraft) {
+          setDraft(existingDraft)
+        }
+      })
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Autosave + recompute completion on every draft change ──
   useEffect(() => {
@@ -208,7 +236,7 @@ export default function CreateVacancyPage() {
     try {
       const now = new Date().toISOString()
 
-      // 1. Save company
+      // 1. Build & persist company locally
       const companyId = draft.company.id ?? generateId("comp")
       const company: Company = {
         id: companyId,
@@ -229,7 +257,7 @@ export default function CreateVacancyPage() {
       }
       saveCompany(company)
 
-      // 2. Save product (if new, not selecting an existing one)
+      // 2. Save product locally
       let productId: string | undefined = draft.selected_product_id
       let product: CompanyProduct | undefined
 
@@ -249,7 +277,7 @@ export default function CreateVacancyPage() {
         saveProduct(product)
       }
 
-      // 3. Create and save vacancy (localStorage + API)
+      // 3. Build & persist vacancy locally
       const localVacancyId = generateId("vac")
       const vacancy: Vacancy = {
         id: localVacancyId,
@@ -303,39 +331,57 @@ export default function CreateVacancyPage() {
       }
       saveVacancy(vacancy)
 
-      // 3a. Also save to API and get the real DB ID
+      // 4. API calls: company → vacancy → demo (sequential)
       let redirectId = localVacancyId
+
       try {
-        // Update company profile via API (fire-and-forget, no blocking)
-        updateCompanyApi({
+        // 4a. Sync company to DB (best-effort)
+        await updateCompanyApi({
           name: company.name,
           city: company.city,
           industry: company.industry,
-        }).catch(() => { /* best-effort */ })
+        }).catch(() => { /* non-critical */ })
 
-        // Create vacancy in DB
-        const apiResult = await createVacancyApi({
+        // 4b. Create vacancy in DB — must succeed for real ID
+        const vacancyResult = await createVacancyApi({
           title: vacancy.position_title,
           city: company.city || undefined,
           format: vacancy.work_format,
           salary_min: vacancy.salary_fix > 0 ? vacancy.salary_fix : undefined,
           salary_max: vacancy.avg_income ?? undefined,
-        }) as { id?: string }
-        if (apiResult?.id) {
-          redirectId = apiResult.id
+        }) as { data?: ApiVacancy } | ApiVacancy
+
+        const apiVacancy =
+          (vacancyResult as { data?: ApiVacancy }).data ?? (vacancyResult as ApiVacancy)
+
+        if (apiVacancy?.id) {
+          redirectId = apiVacancy.id
+
+          // 4c. Create a blank demo linked to the real vacancy ID
+          await fetch("/api/demos", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              vacancy_id: apiVacancy.id,
+              title: `${vacancy.position_title} — Демонстрация должности`,
+              lessons_json: [],
+            }),
+          }).catch(() => { /* demo creation is non-critical */ })
         }
-      } catch {
-        // API failed — keep local ID, vacancy is still in localStorage
+      } catch (apiErr) {
+        // API failed — keep local ID (vacancy is in localStorage as fallback)
+        console.warn("[CreateVacancy] API error, using local ID:", apiErr)
+        toast.error("Сервер недоступен — вакансия сохранена локально")
       }
 
-      // 4. Add to sidebar categories (in-memory)
+      // 5. Add to sidebar in-memory categories
       addVacancyToCategory(
         industryToSection(company.industry as Industry),
         redirectId,
         vacancy.position_title
       )
 
-      // 5. Cleanup + redirect
+      // 6. Cleanup + redirect
       clearWizardDraft()
       toast.success("Вакансия опубликована!")
 
