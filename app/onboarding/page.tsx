@@ -349,15 +349,15 @@ export default function OnboardingPage() {
       <div className="flex-1 flex items-start justify-center p-4 pt-8 pb-12">
         <div className="max-w-lg w-full space-y-6">
 
-          {/* ════ ШАГ 1: Данные компании ════════════════════════════════ */}
+          {/* ════ ШАГ 1: Регистрация ════════════════════════════════ */}
           {step === 1 && (
             <>
               <div className="text-center space-y-1.5">
                 <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center mx-auto">
                   <Building2 className="w-6 h-6 text-foreground" />
                 </div>
-                <h1 className="text-2xl font-semibold text-foreground mt-3">Данные компании</h1>
-                <p className="text-muted-foreground text-sm">Введите ИНН — остальное заполним автоматически</p>
+                <h1 className="text-2xl font-semibold text-foreground mt-3">Регистрация</h1>
+                <p className="text-muted-foreground text-sm">Заполните данные компании для начала работы</p>
               </div>
 
               <Card>
