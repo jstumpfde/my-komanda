@@ -165,9 +165,9 @@ export default function OnboardingPage() {
       setKpp(s.data.kpp ?? "")
       setLegalAddress(s.data.address?.value ?? "")
       // Extract city from address
-      const addressParts = (s.data.address?.value ?? "").split(",")
-      const cityPart = addressParts.find(p => p.trim().startsWith("г."))
-      if (cityPart) setCity(cityPart.trim().replace(/^г\.\s*/, ""))
+      const addrData = s.data.address?.data
+      const extractedCity = addrData?.city || addrData?.settlement || addrData?.region_with_type || ""
+      if (extractedCity) setCity(extractedCity)
       setInn(digits)
     } catch {
       setError("Не удалось загрузить данные из DaData")
