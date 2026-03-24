@@ -33,7 +33,10 @@ export default auth((req) => {
   }
 
   // Авторизован, нет company_id, не на /onboarding → /onboarding
-  if (!session.user.companyId && !pathname.startsWith("/onboarding")) {
+  // Исключение: кука mk_onboarded=1 означает что онбординг завершён
+  // (ставится когда сессия ещё не обновилась или работает демо-режим)
+  const onboardingDone = req.cookies.get("mk_onboarded")?.value === "1"
+  if (!session.user.companyId && !pathname.startsWith("/onboarding") && !onboardingDone) {
     return Response.redirect(new URL("/onboarding", req.url))
   }
 })

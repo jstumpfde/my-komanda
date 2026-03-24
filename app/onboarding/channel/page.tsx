@@ -102,13 +102,13 @@ export default function OnboardingScreenClient() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 flex flex-col">
+    <div className="min-h-screen bg-background flex flex-col">
       {/* ── Top bar ── */}
-      <div className="border-b bg-white/80 backdrop-blur-md sticky top-0 z-10">
+      <div className="border-b bg-card sticky top-0 z-10">
         <div className="max-w-2xl mx-auto px-4 py-4 flex items-center justify-between">
           {/* Logo */}
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white font-bold text-sm">
+            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-primary-foreground font-bold text-sm">
               М
             </div>
             <span className="text-lg font-bold text-foreground">Моя Команда</span>

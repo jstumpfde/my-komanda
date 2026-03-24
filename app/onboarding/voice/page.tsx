@@ -185,9 +185,9 @@ export default function VoicePage() {
   // ─────────────────────────────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 flex flex-col">
+    <div className="min-h-screen bg-background flex flex-col">
       {/* ── Top bar ── */}
-      <div className="border-b bg-white/80 backdrop-blur-md sticky top-0 z-10">
+      <div className="border-b bg-card sticky top-0 z-10">
         <div className="max-w-2xl mx-auto px-4 py-4 flex items-center gap-3">
           <Button
             variant="ghost"
@@ -199,7 +199,7 @@ export default function VoicePage() {
             Назад
           </Button>
           <div className="flex items-center gap-2 ml-auto">
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white font-bold text-xs">
+            <div className="w-7 h-7 rounded-lg bg-primary flex items-center justify-center text-primary-foreground font-bold text-xs">
               М
             </div>
             <span className="text-sm font-semibold text-foreground">Моя Команда</span>
