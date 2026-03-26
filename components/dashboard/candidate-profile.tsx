@@ -14,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import type { CandidateAction } from "@/lib/column-config"
-import { useAuth } from "@/lib/auth"
+import { useAuth, isPlatformRole } from "@/lib/auth"
 import { Input } from "@/components/ui/input"
 import {
   MapPin, Briefcase, Circle, Calendar, Star, ExternalLink, Archive,
@@ -179,7 +179,7 @@ export function CandidateProfile({ candidate, columnId, columnTitle, columnColor
   const [thresholds, setThresholds] = useState<ScoreThreshold>(() => globalThresholds)
   const scorePopRef = useRef<HTMLDivElement>(null)
   const { role } = useAuth()
-  const canEditThresholds = role === "admin" || role === "manager"
+  const canEditThresholds = isPlatformRole(role)
 
   useEffect(() => {
     if (!scorePopup) return

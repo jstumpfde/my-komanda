@@ -1,17 +1,14 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { useTheme } from "next-themes"
-import { useSidebar } from "@/components/ui/sidebar"
-import { Button } from "@/components/ui/button"
-import { Sun, Moon, Coffee, PanelLeftClose, PanelLeft, Bell, Building2, CreditCard, Users, Plug, Clock } from "lucide-react"
+import { Building2, CreditCard, Users, Plug, Clock, Bell, User } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
-import { useAuth } from "@/lib/auth"
+import { DashboardHeader } from "@/components/dashboard/header"
 
 const navItems = [
   { href: "/settings/company",       label: "Компания",    icon: Building2 },
+  { href: "/settings/profile",       label: "Профиль",     icon: User },
   { href: "/settings/team",          label: "Команда",     icon: Users },
   { href: "/settings/billing",       label: "Тариф",       icon: CreditCard },
   { href: "/settings/integrations",  label: "Интеграции",  icon: Plug },
@@ -20,36 +17,23 @@ const navItems = [
 ]
 
 export function SettingsHeader() {
-  const { theme, setTheme } = useTheme()
-  const { state, toggleSidebar } = useSidebar()
   const pathname = usePathname()
-  const { user } = useAuth()
-  const [mounted, setMounted] = useState(false)
-
-  useEffect(() => { setMounted(true) }, [])
-
-  const initials = user?.name
-    ? user.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase()
-    : "?"
 
   return (
-    <header className="sticky top-0 z-40 border-b border-amber-900/20 bg-background">
-      <div className="flex items-center justify-between h-14 px-4 sm:px-6">
-
-        <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0" onClick={toggleSidebar}>
-          {state === "expanded" ? <PanelLeftClose className="h-5 w-5" /> : <PanelLeft className="h-5 w-5" />}
-        </Button>
-
-        <nav className="hidden md:flex items-center gap-0.5">
+    <div className="sticky top-0 z-40 bg-background">
+      <DashboardHeader />
+      {/* Settings tabs */}
+      <div className="border-b border-border overflow-x-auto">
+        <nav className="flex items-center gap-0.5 px-4 sm:px-6">
           {navItems.map(({ href, label, icon: Icon }) => (
             <Link
               key={href}
               href={href}
               className={cn(
-                "flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-colors",
+                "flex items-center gap-1.5 px-3 py-3 text-sm font-medium whitespace-nowrap transition-colors border-b-2",
                 pathname === href
-                  ? "text-primary border-b-2 border-primary"
-                  : "text-muted-foreground hover:text-foreground"
+                  ? "text-primary border-primary"
+                  : "text-muted-foreground hover:text-foreground border-transparent"
               )}
             >
               <Icon className="w-3.5 h-3.5" />
@@ -57,45 +41,7 @@ export function SettingsHeader() {
             </Link>
           ))}
         </nav>
-
-        <div className="flex items-center gap-2">
-          {mounted && (
-            <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
-              <Button
-                variant={theme === "light" ? "default" : "ghost"}
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => setTheme("light")}
-                title="Светлая"
-              >
-                <Sun className="h-4 w-4" />
-              </Button>
-              <Button
-                variant={theme === "dark" ? "default" : "ghost"}
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => setTheme("dark")}
-                title="Тёмная"
-              >
-                <Moon className="h-4 w-4" />
-              </Button>
-              <Button
-                variant={theme === "warm" ? "default" : "ghost"}
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => setTheme("warm")}
-                title="Кофе"
-              >
-                <Coffee className="h-4 w-4" />
-              </Button>
-            </div>
-          )}
-
-          <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-xs font-semibold">
-            {initials}
-          </div>
-        </div>
       </div>
-    </header>
+    </div>
   )
 }

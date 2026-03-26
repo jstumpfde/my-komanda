@@ -2,9 +2,6 @@
 
 import { useState, useEffect } from "react"
 import { useSession } from "next-auth/react"
-import { DashboardSidebar } from "@/components/dashboard/sidebar"
-import { DashboardHeader } from "@/components/dashboard/header"
-import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -14,7 +11,6 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Separator } from "@/components/ui/separator"
 import { toast } from "sonner"
 import { Loader2, User, Mail, Lock, Shield, Save, Eye, EyeOff } from "lucide-react"
-import { SettingsSubNav } from "@/components/settings/settings-sub-nav"
 
 // ─── Helpers ──────────────────────────────────────────────────
 
@@ -157,13 +153,7 @@ export default function ProfileSettingsPage() {
     .slice(0, 2)
 
   return (
-    <SidebarProvider defaultOpen={true}>
-      <DashboardSidebar />
-      <SidebarInset>
-        <DashboardHeader />
-        <main className="flex-1 overflow-auto bg-background">
-          <div className="p-4 sm:p-6 max-w-2xl">
-            <SettingsSubNav />
+        <>
             <div className="mb-6">
               <h1 className="text-2xl font-semibold text-foreground mb-1">Профиль</h1>
               <p className="text-muted-foreground text-sm">Личные данные и настройки безопасности</p>
@@ -409,9 +399,6 @@ export default function ProfileSettingsPage() {
                 </CardContent>
               </Card>
             </div>
-          </div>
-        </main>
-      </SidebarInset>
-    </SidebarProvider>
+    </>
   )
 }

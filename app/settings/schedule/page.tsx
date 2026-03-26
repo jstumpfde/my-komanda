@@ -1,9 +1,6 @@
 "use client"
 
 import { useState } from "react"
-import { DashboardSidebar } from "@/components/dashboard/sidebar"
-import { DashboardHeader } from "@/components/dashboard/header"
-import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -49,13 +46,8 @@ export default function ScheduleSettingsPage() {
   }
 
   return (
-    <SidebarProvider defaultOpen={true}>
-      <DashboardSidebar />
-      <SidebarInset>
-        <DashboardHeader />
-        <main className="flex-1 overflow-auto bg-background">
-          <div className="p-4 sm:p-6 max-w-3xl">
-            <div className="mb-6">
+        <>
+<div className="mb-6">
               <h1 className="text-2xl font-semibold text-foreground mb-1">Планировщик слотов</h1>
               <p className="text-muted-foreground text-sm">Настройки расписания и напоминаний для интервью</p>
             </div>
@@ -218,9 +210,6 @@ export default function ScheduleSettingsPage() {
                 <Button className="gap-1.5" onClick={() => toast.success("Настройки расписания сохранены")}><Save className="w-4 h-4" /> Сохранить</Button>
               </div>
             </div>
-          </div>
-        </main>
-      </SidebarInset>
-    </SidebarProvider>
+    </>
   )
 }

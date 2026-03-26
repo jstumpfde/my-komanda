@@ -131,8 +131,8 @@ export function DashboardSidebar() {
     logout()
     router.push("/login")
   }
-  const vis = getVisibleSections(role)
-  const visSettings = getVisibleSettings(role)
+  const vis = getVisibleSections(role) ?? { main: true, hiring: false, tools: false, settings: false, admin: false }
+  const visSettings = getVisibleSettings(role) ?? ["profile"]
   const [categories, setCategories] = useState<VacancyCategory[]>([])
   const [editingCategory, setEditingCategory] = useState<CategoryEditState | null>(null)
   const [dragState, setDragState] = useState<DragState | null>(null)

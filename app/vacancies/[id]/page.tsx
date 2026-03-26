@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from "react"
 import { useParams } from "next/navigation"
 import { cn } from "@/lib/utils"
-import { useAuth } from "@/lib/auth"
+import { useAuth, isPlatformRole } from "@/lib/auth"
 import { useVacancy } from "@/hooks/use-vacancies"
 import { useCandidates, type ApiCandidate } from "@/hooks/use-candidates"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
@@ -158,7 +158,7 @@ export default function VacancyPage() {
   const courseEditorRef = useRef<NotionEditorHandle>(null)
   const [courseEditorSaveStatus, setCourseEditorSaveStatus] = useState<"saved" | "saving">("saved")
   const { role } = useAuth()
-  const canAdd = role === "admin" || role === "manager"
+  const canAdd = isPlatformRole(role)
 
   const totalCandidates = columns.reduce((acc, col) => acc + col.candidates.length, 0)
 

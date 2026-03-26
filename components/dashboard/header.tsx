@@ -1,7 +1,6 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
-import { CommandPalette } from "./command-palette"
 import { Bell, Moon, Sun, Coffee, LogOut, PanelLeftClose, PanelLeft, ChevronDown, ArrowLeft } from "lucide-react"
 import { useTheme } from "next-themes"
 import { useEffect, useState } from "react"
@@ -11,7 +10,7 @@ import {
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { useSidebar } from "@/components/ui/sidebar"
 import { Badge } from "@/components/ui/badge"
 import { useAuth, ROLE_LABELS, ROLE_ICONS, type UserRole } from "@/lib/auth"
@@ -65,6 +64,10 @@ export function DashboardHeader() {
     else router.push("/")
   }
 
+  const initials = user?.name
+    ? user.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase()
+    : "?"
+
   if (!mounted) return null
 
   return (
@@ -82,16 +85,14 @@ export function DashboardHeader() {
         </div>
       )}
 
-      <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <header className="sticky top-0 z-40 border-b border-border bg-background">
         <div className="flex items-center justify-between h-14 px-4 sm:px-6">
-          <Button variant="ghost" size="icon" className="h-9 w-9" onClick={toggleSidebar}>
+          <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0" onClick={toggleSidebar}>
             {state === "expanded" ? <PanelLeftClose className="h-5 w-5" /> : <PanelLeft className="h-5 w-5" />}
           </Button>
 
-          <div className="flex items-center gap-1.5 sm:gap-2">
-            <div className="hidden sm:block"><CommandPalette /></div>
-
-            {/* Role Switcher — dropdown */}
+          <div className="flex items-center gap-2">
+            {/* Role Switcher */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs">
@@ -121,15 +122,15 @@ export function DashboardHeader() {
               </DropdownMenuContent>
             </DropdownMenu>
 
-            {/* Theme Switcher — hidden on mobile */}
+            {/* Theme Switcher */}
             <div className="hidden md:flex items-center gap-1 bg-muted rounded-lg p-1">
-              <Button variant={theme === "light" ? "default" : "ghost"} size="icon" className="h-8 w-8" onClick={() => setTheme("light")} title="Светлая тема" style={theme === "light" ? { backgroundColor: "#C0622F", color: "#fff" } : undefined}>
+              <Button variant={theme === "light" ? "default" : "ghost"} size="icon" className="h-8 w-8" onClick={() => setTheme("light")} title="Светлая" style={theme === "light" ? { backgroundColor: "#C0622F", color: "#fff" } : undefined}>
                 <Sun className="h-4 w-4" />
               </Button>
-              <Button variant={theme === "dark" ? "default" : "ghost"} size="icon" className="h-8 w-8" onClick={() => setTheme("dark")} title="Тёмная тема" style={theme === "dark" ? { backgroundColor: "#C0622F", color: "#fff" } : undefined}>
+              <Button variant={theme === "dark" ? "default" : "ghost"} size="icon" className="h-8 w-8" onClick={() => setTheme("dark")} title="Тёмная" style={theme === "dark" ? { backgroundColor: "#C0622F", color: "#fff" } : undefined}>
                 <Moon className="h-4 w-4" />
               </Button>
-              <Button variant={theme === "warm" ? "default" : "ghost"} size="icon" className="h-8 w-8" onClick={() => setTheme("warm")} title="Тёплая тема" style={theme === "warm" ? { backgroundColor: "#C0622F", color: "#fff" } : undefined}>
+              <Button variant={theme === "warm" ? "default" : "ghost"} size="icon" className="h-8 w-8" onClick={() => setTheme("warm")} title="Кофе" style={theme === "warm" ? { backgroundColor: "#C0622F", color: "#fff" } : undefined}>
                 <Coffee className="h-4 w-4" />
               </Button>
             </div>
@@ -166,19 +167,19 @@ export function DashboardHeader() {
               </PopoverContent>
             </Popover>
 
-            {/* User Menu */}
+            {/* User Avatar */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="h-9 w-9 rounded-full p-0">
-                  <Avatar className="h-8 w-8">
-                    <AvatarFallback className="text-xs">{user.name.split(" ").map(n => n[0]).join("")}</AvatarFallback>
+                <Button variant="ghost" className="h-10 w-10 rounded-full p-0">
+                  <Avatar className="h-10 w-10">
+                    <AvatarFallback className="text-sm font-semibold">{initials}</AvatarFallback>
                   </Avatar>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
                 <div className="flex items-center gap-3 p-3 border-b">
                   <Avatar className="h-10 w-10">
-                    <AvatarFallback className="text-xs">{user.name.split(" ").map(n => n[0]).join("")}</AvatarFallback>
+                    <AvatarFallback className="text-xs">{initials}</AvatarFallback>
                   </Avatar>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-foreground truncate">{user.name}</p>
@@ -186,7 +187,7 @@ export function DashboardHeader() {
                     <Badge variant="secondary" className="text-[10px] mt-1 h-4 px-1.5">{ROLE_LABELS[role]}</Badge>
                   </div>
                 </div>
-                <DropdownMenuItem className="text-sm">Профиль</DropdownMenuItem>
+                <DropdownMenuItem className="text-sm" asChild><Link href="/settings/profile">Профиль</Link></DropdownMenuItem>
                 <DropdownMenuItem className="text-sm" asChild><Link href="/settings/company">Настройки</Link></DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem className="text-sm cursor-pointer"><LogOut className="w-4 h-4 mr-2" />Выход</DropdownMenuItem>

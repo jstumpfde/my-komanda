@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
         email,
         name,
         passwordHash,
-        role: "client",
+        role: "director",
         isActive: true,
         companyId: null,
       })

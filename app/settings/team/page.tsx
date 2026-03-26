@@ -1,9 +1,6 @@
 "use client"
 
 import { useState } from "react"
-import { DashboardSidebar } from "@/components/dashboard/sidebar"
-import { DashboardHeader } from "@/components/dashboard/header"
-import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -20,15 +17,14 @@ import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import {
   Users, Plus, Settings, Trash2, Save, Shield, Eye, UserPlus,
-  Mail, AlertTriangle, Check, ChevronRight, Crown, Briefcase,
-  Building2, CalendarClock,
+  Mail, AlertTriangle, Check, ChevronRight, Briefcase,
+  CalendarClock,
 } from "lucide-react"
 
 // ─── Типы ────────────────────────────────────────────────────
 
 type TeamRole =
-  | "owner"
-  | "client_manager"
+  | "director"
   | "hr_lead"
   | "hr_manager"
   | "department_head"
@@ -51,42 +47,31 @@ interface TeamMember {
 
 // ─── Конфиг ролей ───────────────────────────────────────────
 
-const ROLE_CONFIG: Record<TeamRole, { label: string; description: string; color: string; source: string }> = {
-  owner: {
-    label: "Владелец",
-    description: "Полный доступ без ограничений + управление тарифом",
+const ROLE_CONFIG: Record<TeamRole, { label: string; description: string; color: string }> = {
+  director: {
+    label: "Директор",
+    description: "Полный доступ + управление тарифом и настройками",
     color: "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800",
-    source: "Платформа",
-  },
-  client_manager: {
-    label: "Клиентский менеджер",
-    description: "Ведение воронки назначенных клиентов, помощь и контроль",
-    color: "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800",
-    source: "Платформа",
   },
   hr_lead: {
-    label: "HR-менеджер (главный)",
-    description: "Видит всех кандидатов + управление командой клиента",
+    label: "Главный HR",
+    description: "Видит всех кандидатов + управление командой",
     color: "bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-200 dark:border-purple-800",
-    source: "Клиент",
   },
   hr_manager: {
     label: "HR-менеджер",
     description: "Работа с кандидатами (настраивается по категориям)",
     color: "bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800",
-    source: "Клиент",
   },
   department_head: {
     label: "Руководитель отдела",
     description: "Просмотр своей категории + одобрение/отклонение",
     color: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800",
-    source: "Клиент",
   },
   observer: {
     label: "Наблюдатель",
     description: "Только просмотр аналитики",
     color: "bg-muted text-muted-foreground border-border",
-    source: "Клиент",
   },
 }
 
@@ -190,13 +175,8 @@ export default function TeamPage() {
   }
 
   return (
-    <SidebarProvider defaultOpen={true}>
-      <DashboardSidebar />
-      <SidebarInset>
-        <DashboardHeader />
-        <main className="flex-1 overflow-auto bg-background">
-          <div className="p-4 sm:p-6 max-w-5xl">
-            {/* Header */}
+        <>
+{/* Header */}
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
               <div>
                 <h1 className="text-2xl font-semibold text-foreground mb-1">Команда</h1>
@@ -240,12 +220,9 @@ export default function TeamPage() {
                               </div>
                             </td>
                             <td className="px-4 py-3">
-                              <div className="space-y-1">
-                                <Badge variant="outline" className={cn("text-xs", roleCfg.color)}>
-                                  {roleCfg.label}
-                                </Badge>
-                                <p className="text-[10px] text-muted-foreground">{roleCfg.source}</p>
-                              </div>
+                              <Badge variant="outline" className={cn("text-xs", roleCfg.color)}>
+                                {roleCfg.label}
+                              </Badge>
                             </td>
                             <td className="px-4 py-3 text-sm text-muted-foreground">{member.email}</td>
                             <td className="text-center px-4 py-3">
@@ -268,36 +245,7 @@ export default function TeamPage() {
               </CardContent>
             </Card>
 
-            {/* Роли и права */}
-            <h3 className="text-lg font-semibold text-foreground mb-4">Роли и права</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-8">
-              {(Object.entries(ROLE_CONFIG) as [TeamRole, typeof ROLE_CONFIG[TeamRole]][]).map(([key, cfg]) => (
-                <Card key={key} className="transition-all hover:shadow-sm">
-                  <CardContent className="p-4">
-                    <div className="flex items-start gap-3">
-                      <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5", cfg.color)}>
-                        {key === "owner" && <Crown className="w-4 h-4" />}
-                        {key === "client_manager" && <Building2 className="w-4 h-4" />}
-                        {key === "hr_lead" && <Shield className="w-4 h-4" />}
-                        {key === "hr_manager" && <Briefcase className="w-4 h-4" />}
-                        {key === "department_head" && <Users className="w-4 h-4" />}
-                        {key === "observer" && <Eye className="w-4 h-4" />}
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <p className="text-sm font-medium text-foreground">{cfg.label}</p>
-                          <Badge variant="outline" className="text-[10px]">{cfg.source}</Badge>
-                        </div>
-                        <p className="text-xs text-muted-foreground mt-0.5">{cfg.description}</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </div>
-        </main>
-      </SidebarInset>
+
 
       {/* ═══ Sheet редактирования участника ════════════════════ */}
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
@@ -334,7 +282,6 @@ export default function TeamPage() {
                     {(Object.entries(ROLE_CONFIG) as [TeamRole, typeof ROLE_CONFIG[TeamRole]][]).map(([key, cfg]) => (
                       <SelectItem key={key} value={key}>
                         <span>{cfg.label}</span>
-                        <span className="text-muted-foreground ml-1 text-xs">({cfg.source})</span>
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -508,7 +455,7 @@ export default function TeamPage() {
                 <SelectContent>
                   {(Object.entries(ROLE_CONFIG) as [TeamRole, typeof ROLE_CONFIG[TeamRole]][]).map(([key, cfg]) => (
                     <SelectItem key={key} value={key}>
-                      {cfg.label} ({cfg.source})
+                      {cfg.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -540,6 +487,6 @@ export default function TeamPage() {
           </div>
         </DialogContent>
       </Dialog>
-    </SidebarProvider>
+    </>
   )
 }

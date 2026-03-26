@@ -1,9 +1,6 @@
 "use client"
 
 import { useState } from "react"
-import { DashboardSidebar } from "@/components/dashboard/sidebar"
-import { DashboardHeader } from "@/components/dashboard/header"
-import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -82,13 +79,8 @@ export default function IntegrationsPage() {
   }
 
   return (
-    <SidebarProvider defaultOpen={true}>
-      <DashboardSidebar />
-      <SidebarInset>
-        <DashboardHeader />
-        <main className="flex-1 overflow-auto bg-background">
-          <div className="p-4 sm:p-6 max-w-4xl">
-            <div className="mb-6">
+        <>
+<div className="mb-6">
               <h1 className="text-2xl font-semibold text-foreground mb-1">Интеграции с CRM</h1>
               <p className="text-muted-foreground text-sm">Автоматическая синхронизация кандидатов с вашей CRM</p>
             </div>
@@ -245,9 +237,7 @@ export default function IntegrationsPage() {
                 </>
               )}
             </div>
-          </div>
-        </main>
-      </SidebarInset>
+
 
       {/* Connect Bitrix Dialog */}
       <Dialog open={connectDialog === "bitrix"} onOpenChange={o => { if (!o) setConnectDialog(null) }}>
@@ -287,6 +277,6 @@ export default function IntegrationsPage() {
           </div>
         </DialogContent>
       </Dialog>
-    </SidebarProvider>
+    </>
   )
 }

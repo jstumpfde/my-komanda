@@ -1,9 +1,6 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
-import { DashboardSidebar } from "@/components/dashboard/sidebar"
-import { DashboardHeader } from "@/components/dashboard/header"
-import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -20,7 +17,6 @@ import {
 } from "lucide-react"
 import { saveBrand, BRAND_PRESETS, canCustomizeBrand, canCustomDomain, type BrandConfig } from "@/lib/branding"
 import { fetchCompanyApi, updateCompanyApi, fetchCompanyByInn } from "@/lib/company-storage"
-import { SettingsSubNav } from "@/components/settings/settings-sub-nav"
 
 // ─── DaData result type ───────────────────────────────────────
 
@@ -352,14 +348,8 @@ export default function CompanyProfilePage() {
   }
 
   return (
-    <SidebarProvider defaultOpen={true}>
-      <DashboardSidebar />
-      <SidebarInset>
-        <DashboardHeader />
-        <main className="flex-1 overflow-auto bg-background">
-          <div className="p-4 sm:p-6">
-            <SettingsSubNav />
-            <div className="mb-4">
+        <>
+<div className="mb-4">
               <h1 className="text-2xl font-semibold text-foreground mb-1">Профиль компании</h1>
               <p className="text-muted-foreground text-sm">Данные организации и настройки для демонстраций</p>
             </div>
@@ -762,9 +752,6 @@ export default function CompanyProfilePage() {
                 </Button>
               </div>
             </div>
-          </div>
-        </main>
-      </SidebarInset>
-    </SidebarProvider>
+    </>
   )
 }
