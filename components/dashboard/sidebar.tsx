@@ -94,7 +94,8 @@ const settingsNavItems = [
 ]
 
 const adminNavItems = [
-  { name: "Тарифы", icon: Shield, href: "/admin/tariffs" },
+  { name: "Роли и доступ", icon: Shield, href: "/admin/roles" },
+  { name: "Тарифы", icon: CreditCard, href: "/admin/tariffs" },
   { name: "Клиенты", icon: Building2, href: "/admin/clients" },
 ]
 
@@ -566,14 +567,14 @@ export function DashboardSidebar() {
         </SidebarGroup>
 
         }
-        {/* Администрирование */}
+        {/* Настройки платформы */}
         {vis.admin && <SidebarGroup className="py-0 mb-0">
           <Collapsible>
             <SidebarMenuItem className="list-none">
               <CollapsibleTrigger asChild>
                 <SidebarMenuButton className="text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground h-8 group/trigger text-sm">
                   <Shield className="size-4" />
-                  <span className="flex-1 font-medium">Админ</span>
+                  <span className="flex-1 font-medium">Настройки платформы</span>
                   <ChevronDown className="size-3.5 transition-transform duration-200 group-data-[state=open]/trigger:rotate-180 text-sidebar-foreground/40" />
                 </SidebarMenuButton>
               </CollapsibleTrigger>
