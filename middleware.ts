@@ -37,12 +37,12 @@ export default auth((req) => {
   // получали бы 307 → HTML → res.json() кидал исключение → тихий fallback
   if (pathname.startsWith("/api/")) return
 
-  // Авторизован, нет company_id, не на /onboarding → /onboarding
+  // Авторизован, нет company_id, не на /register → /register (шаг 2: компания)
   // Исключение: кука mk_onboarded=1 означает что онбординг завершён
   // (ставится когда сессия ещё не обновилась или работает демо-режим)
   const onboardingDone = req.cookies.get("mk_onboarded")?.value === "1"
-  if (!session.user.companyId && !pathname.startsWith("/onboarding") && !onboardingDone) {
-    return Response.redirect(new URL("/onboarding", req.url))
+  if (!session.user.companyId && !pathname.startsWith("/register") && !onboardingDone) {
+    return Response.redirect(new URL("/register", req.url))
   }
 })
 

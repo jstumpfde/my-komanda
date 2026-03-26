@@ -92,7 +92,7 @@ export default function OverviewPage() {
                     <p className="text-xs text-muted-foreground">Завершите настройку для максимума от Моя Команда</p>
                   </div>
                 </div>
-                <Button size="sm" asChild><Link href="/onboarding">Продолжить</Link></Button>
+                <Button size="sm" asChild><Link href="/register">Продолжить</Link></Button>
               </div>
             )}
 

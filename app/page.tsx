@@ -279,7 +279,7 @@ export default function DashboardPage() {
                   </div>
                 </div>
                 <Button size="sm" asChild>
-                  <Link href="/onboarding">Продолжить настройку</Link>
+                  <Link href="/register">Продолжить настройку</Link>
                 </Button>
               </div>
             )}
