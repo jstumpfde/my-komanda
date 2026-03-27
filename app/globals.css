@@ -76,14 +76,14 @@
   --chart-3: oklch(0.7 0.14 75);
   --chart-4: oklch(0.53 0.22 25);
   --chart-5: oklch(0.53 0.14 300);
-  --sidebar: oklch(0.18 0.045 55);
-  --sidebar-foreground: oklch(0.88 0.015 60);
-  --sidebar-primary: oklch(0.88 0.015 60);
-  --sidebar-primary-foreground: oklch(0.18 0.045 55);
-  --sidebar-accent: oklch(0.26 0.04 55);
-  --sidebar-accent-foreground: oklch(0.88 0.015 60);
-  --sidebar-border: oklch(0.28 0.035 55);
-  --sidebar-ring: oklch(0.88 0.015 60);
+  --sidebar: oklch(0.15 0.05 280);
+  --sidebar-foreground: oklch(0.88 0.015 280);
+  --sidebar-primary: oklch(0.88 0.015 280);
+  --sidebar-primary-foreground: oklch(0.15 0.05 280);
+  --sidebar-accent: oklch(0.23 0.05 280);
+  --sidebar-accent-foreground: oklch(0.88 0.015 280);
+  --sidebar-border: oklch(0.27 0.05 280);
+  --sidebar-ring: oklch(0.88 0.015 280);
 }
 
 /* Warm/Beige theme - мягкий тёплый */
