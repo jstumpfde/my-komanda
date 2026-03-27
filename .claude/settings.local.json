@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find /Users/juri/my-komanda/hooks -type f -name *.ts -o -name *.tsx)",
+      "Bash(pnpm install:*)",
+      "Bash(pnpm dev:*)",
+      "Bash(command -v nvm)",
+      "Read(//Users/juri/.nvm/versions/node/**)",
+      "Bash(source ~/.nvm/nvm.sh)",
+      "Bash(nvm ls:*)",
+      "Bash(nvm use:*)",
+      "Bash(pnpm add:*)",
+      "Bash(pkill -f \"next dev\")"
+    ]
+  }
+}

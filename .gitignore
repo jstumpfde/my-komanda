@@ -18,4 +18,4 @@ next.user-config.*
 node_modules/
 .next/
 .DS_Store
-.claude/
+.claude/my-komanda
