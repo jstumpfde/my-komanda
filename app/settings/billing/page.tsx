@@ -32,10 +32,11 @@ const SLIDER_MAX: Record<string, number> = {
   solo: 1,      // до 2 вакансий
   starter: 6,   // до 9 вакансий
   business: 11, // до 21 вакансии
-  pro: 25,      // до 50 вакансий
+  pro: 78,      // от 22 до 100 вакансий
 }
-const EXTRA_VAC_PRICE = 4000  // ₽/мес за доп. вакансию
-const CANDS_PER_VAC = 400     // кандидатов на вакансию
+const EXTRA_VAC_PRICE = 4000      // ₽/мес за доп. вакансию (solo/starter/business)
+const EXTRA_VAC_PRICE_PRO = 1500  // ₽/мес за доп. вакансию (pro)
+const CANDS_PER_VAC = 400         // кандидатов на вакансию
 
 // Текущий тариф клиента (захардкожен)
 const currentTariffId = "business"
@@ -480,9 +481,10 @@ export default function BillingPage() {
             const periodIdx = getCardPeriodIdx(tariff.id)
             const period = PERIODS[periodIdx]
             const extra = getExtraVacancies(tariff.id)
-            const totalVacancies = tariff.maxVacancies === 999 ? 999 : tariff.maxVacancies + extra
-            const totalCandidates = tariff.maxVacancies === 999 ? tariff.maxCandidates : (tariff.maxVacancies + extra) * CANDS_PER_VAC
-            const extraMonthly = extra * EXTRA_VAC_PRICE
+            const totalVacancies = tariff.maxVacancies + extra
+            const totalCandidates = (tariff.maxVacancies + extra) * CANDS_PER_VAC
+            const vacPrice = tariff.id === "pro" ? EXTRA_VAC_PRICE_PRO : EXTRA_VAC_PRICE
+            const extraMonthly = extra * vacPrice
             const baseMonthly = tariff.price + extraMonthly
             const baseAmount = baseMonthly * period.months
             const discountAmount = Math.round(baseAmount * (period.discount + promoDiscount) / 100)
@@ -512,7 +514,7 @@ export default function BillingPage() {
                       <span className="text-2xl font-bold text-foreground">{baseMonthly.toLocaleString("ru-RU")}</span>
                       <span className="text-sm text-muted-foreground"> ₽/мес</span>
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        До {totalCandidates === 999 ? "∞" : totalCandidates.toLocaleString("ru-RU")} кандидатов
+                        От {totalCandidates.toLocaleString("ru-RU")} кандидатов
                       </p>
                       {(period.discount > 0 || promoDiscount > 0) && (
                         <p className="text-xs text-emerald-600 font-medium mt-0.5">
@@ -525,29 +527,22 @@ export default function BillingPage() {
                   <Separator className="mb-3" />
 
                   {/* Слайдер вакансий */}
-                  {tariff.maxVacancies !== 999 ? (
-                    <div className="mb-3 space-y-1.5">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-medium text-foreground">Вакансии</span>
-                        <span className="text-xs font-bold text-foreground">{totalVacancies}</span>
-                      </div>
-                      <Slider
-                        min={0} max={SLIDER_MAX[tariff.id] ?? 10} step={1}
-                        value={[extra]}
-                        onValueChange={([v]) => setExtraVacancies(prev => ({ ...prev, [tariff.id]: v }))}
-                        className="w-full"
-                      />
-                      <div className="flex justify-between text-[10px] text-muted-foreground">
-                        <span>{tariff.maxVacancies} включено</span>
-                        <span>+{extra} доп. × {EXTRA_VAC_PRICE.toLocaleString("ru-RU")} ₽</span>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="mb-3 flex items-center justify-between">
+                  <div className="mb-3 space-y-1.5">
+                    <div className="flex items-center justify-between">
                       <span className="text-xs font-medium text-foreground">Вакансии</span>
-                      <span className="text-xs font-bold text-foreground">без лимита</span>
+                      <span className="text-xs font-bold text-foreground">{totalVacancies}</span>
                     </div>
-                  )}
+                    <Slider
+                      min={0} max={SLIDER_MAX[tariff.id] ?? 10} step={1}
+                      value={[extra]}
+                      onValueChange={([v]) => setExtraVacancies(prev => ({ ...prev, [tariff.id]: v }))}
+                      className="w-full"
+                    />
+                    <div className="flex justify-between text-[10px] text-muted-foreground">
+                      <span>{tariff.maxVacancies} включено</span>
+                      <span>+{extra} доп. × {vacPrice.toLocaleString("ru-RU")} ₽</span>
+                    </div>
+                  </div>
 
                   <Separator className="mb-3" />
 
@@ -814,10 +809,9 @@ export default function BillingPage() {
 }
 
 function getTariffFeatures(tariff: Tariff): { label: string; included: boolean }[] {
-  const v = tariff.maxVacancies === 999 ? "Безлимит" : `До ${tariff.maxVacancies}`
   return [
-    { label: `${v} вакансий`, included: true },
-    { label: `До ${tariff.maxCandidates.toLocaleString("ru-RU")} кандидатов`, included: true },
+    { label: `От ${tariff.maxVacancies} вакансий`, included: true },
+    { label: `От ${tariff.maxCandidates.toLocaleString("ru-RU")} кандидатов`, included: true },
     { label: "Все базовые функции", included: true },
     { label: "Полный брендинг (логотип + цвета)", included: true },
     { label: "Имя AI-рекрутера", included: true },

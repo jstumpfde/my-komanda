@@ -74,7 +74,7 @@ export const DEFAULT_TARIFFS: Tariff[] = [
     name: "Pro",
     price: 99900,
     trialDays: 0,
-    maxVacancies: 999,
+    maxVacancies: 22,
     maxCandidates: 10000,
     features: { branding: true, customDomain: true, aiVideoInterview: true, api: true },
     active: true,
