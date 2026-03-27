@@ -12,7 +12,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
-import { Calendar, Clock, Save, Plus, X, Bell, MessageSquare } from "lucide-react"
+import { Calendar, Clock, Save, Plus, X, Bell, MessageSquare, Link2, Trash2, RefreshCw, CheckCircle2 } from "lucide-react"
 
 const WEEKDAYS = [
   { id: "mon", label: "Пн" }, { id: "tue", label: "Вт" }, { id: "wed", label: "Ср" },
@@ -34,6 +34,48 @@ export default function ScheduleSettingsPage() {
   const [newBlockedDate, setNewBlockedDate] = useState("")
   const [rangeFrom, setRangeFrom] = useState("")
   const [rangeTo, setRangeTo] = useState("")
+
+  // Интеграции с календарями
+  type CalProvider = "google" | "outlook" | "apple" | "caldav"
+  type CalIntegration = { id: string; provider: CalProvider; label: string; url?: string; status: "connected" | "syncing" | "error" }
+  const [calIntegrations, setCalIntegrations] = useState<CalIntegration[]>([])
+  const [calProvider, setCalProvider] = useState<CalProvider>("google")
+  const [calUrl, setCalUrl] = useState("")
+
+  const CAL_PROVIDERS: Record<CalProvider, { label: string; icon: string; needsUrl: boolean; hint: string }> = {
+    google:  { label: "Google Calendar",  icon: "🗓️", needsUrl: false, hint: "Подключение через OAuth" },
+    outlook: { label: "Outlook / Microsoft 365", icon: "📅", needsUrl: false, hint: "Подключение через Microsoft OAuth" },
+    apple:   { label: "Apple Calendar (iCloud)", icon: "🍎", needsUrl: true,  hint: "Вставьте CalDAV URL из настроек iCloud" },
+    caldav:  { label: "Другой CalDAV",    icon: "🔗", needsUrl: true,  hint: "URL-адрес CalDAV-сервера" },
+  }
+
+  const addCalIntegration = () => {
+    const p = CAL_PROVIDERS[calProvider]
+    if (p.needsUrl && !calUrl.trim()) { toast.error("Введите URL календаря"); return }
+    const newInt: CalIntegration = {
+      id: Date.now().toString(),
+      provider: calProvider,
+      label: p.label,
+      url: calUrl || undefined,
+      status: "connected",
+    }
+    setCalIntegrations(prev => [...prev, newInt])
+    setCalUrl("")
+    toast.success(`${p.label} подключён`)
+  }
+
+  const removeCalIntegration = (id: string) => {
+    setCalIntegrations(prev => prev.filter(c => c.id !== id))
+    toast.info("Календарь отключён")
+  }
+
+  const syncCalIntegration = (id: string) => {
+    setCalIntegrations(prev => prev.map(c => c.id === id ? { ...c, status: "syncing" } : c))
+    setTimeout(() => {
+      setCalIntegrations(prev => prev.map(c => c.id === id ? { ...c, status: "connected" } : c))
+      toast.success("Синхронизация завершена")
+    }, 1500)
+  }
 
   // Напоминания
   const [remind24h, setRemind24h] = useState(true)
@@ -252,6 +294,96 @@ export default function ScheduleSettingsPage() {
                       </Select>
                     </div>
                   )}
+                </CardContent>
+              </Card>
+
+              {/* Интеграции с календарями */}
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Link2 className="w-4 h-4" /> Интеграции с календарями
+                  </CardTitle>
+                  <p className="text-xs text-muted-foreground">Подключите внешние календари — занятое время автоматически блокируется для записи</p>
+                </CardHeader>
+                <CardContent className="space-y-4">
+
+                  {/* Подключённые */}
+                  {calIntegrations.length > 0 && (
+                    <div className="space-y-2">
+                      {calIntegrations.map(cal => (
+                        <div key={cal.id} className="flex items-center gap-3 p-3 rounded-lg border bg-muted/20">
+                          <span className="text-lg shrink-0">{CAL_PROVIDERS[cal.provider].icon}</span>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-foreground">{cal.label}</p>
+                            {cal.url && <p className="text-xs text-muted-foreground truncate">{cal.url}</p>}
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {cal.status === "connected" && <CheckCircle2 className="w-4 h-4 text-emerald-600" />}
+                            {cal.status === "syncing" && <RefreshCw className="w-4 h-4 text-primary animate-spin" />}
+                            {cal.status === "error" && <X className="w-4 h-4 text-destructive" />}
+                            <button
+                              onClick={() => syncCalIntegration(cal.id)}
+                              className="p-1 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+                              title="Синхронизировать"
+                            >
+                              <RefreshCw className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => removeCalIntegration(cal.id)}
+                              className="p-1 rounded hover:bg-destructive/10 transition-colors text-muted-foreground hover:text-destructive"
+                              title="Отключить"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Добавить */}
+                  <div className="space-y-3 p-3 rounded-lg border border-dashed">
+                    <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Добавить календарь</Label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {(Object.entries(CAL_PROVIDERS) as [CalProvider, typeof CAL_PROVIDERS[CalProvider]][]).map(([key, p]) => (
+                        <button
+                          key={key}
+                          onClick={() => { setCalProvider(key); setCalUrl("") }}
+                          className={cn(
+                            "flex items-center gap-2 p-2.5 rounded-lg border text-left text-sm transition-all",
+                            calProvider === key
+                              ? "border-primary bg-primary/5 text-foreground"
+                              : "border-border hover:border-primary/30 text-muted-foreground"
+                          )}
+                        >
+                          <span>{p.icon}</span>
+                          <span className="text-xs font-medium leading-tight">{p.label}</span>
+                        </button>
+                      ))}
+                    </div>
+
+                    {CAL_PROVIDERS[calProvider].needsUrl && (
+                      <div className="space-y-1">
+                        <Input
+                          placeholder={calProvider === "apple" ? "https://caldav.icloud.com/…" : "https://your-server/caldav/…"}
+                          value={calUrl}
+                          onChange={e => setCalUrl(e.target.value)}
+                          className="h-9 text-sm"
+                        />
+                        <p className="text-[11px] text-muted-foreground">{CAL_PROVIDERS[calProvider].hint}</p>
+                      </div>
+                    )}
+
+                    {!CAL_PROVIDERS[calProvider].needsUrl && (
+                      <p className="text-xs text-muted-foreground">{CAL_PROVIDERS[calProvider].hint}</p>
+                    )}
+
+                    <Button size="sm" className="gap-1.5 w-full" onClick={addCalIntegration}>
+                      <Plus className="w-3.5 h-3.5" />
+                      Подключить {CAL_PROVIDERS[calProvider].label}
+                    </Button>
+                  </div>
+
                 </CardContent>
               </Card>
 
