@@ -4,18 +4,26 @@ import { useState, useEffect, useRef } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Progress } from "@/components/ui/progress"
 import { Label } from "@/components/ui/label"
+import { Slider } from "@/components/ui/slider"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { DEFAULT_TARIFFS, formatPrice, type Tariff } from "@/lib/tariff-types"
 import {
   CreditCard, Smartphone, Building2, FileText, Check, X,
-  Crown, Sparkles, Receipt, Clock,
+  Crown, Sparkles, Receipt, Clock, Tag,
 } from "lucide-react"
 import type QRCodeType from "qrcode"
+
+const PROMO_CODES: Record<string, number> = {
+  "WELCOME10": 10,
+  "SAVE20": 20,
+  "HR2026": 15,
+}
 
 // Текущий тариф клиента (захардкожен)
 const currentTariffId = "business"
@@ -169,12 +177,29 @@ export default function BillingPage() {
   const [showHistory, setShowHistory] = useState(false)
   const [showInvoice, setShowInvoice] = useState(false)
   const [cardPeriods, setCardPeriods] = useState<Record<string, number>>({})
+  const [extraVacancies, setExtraVacancies] = useState<Record<string, number>>({})
+  const [promoCode, setPromoCode] = useState("")
+  const [promoDiscount, setPromoDiscount] = useState(0)
+  const [promoApplied, setPromoApplied] = useState(false)
 
   const current = tariffs.find(t => t.id === activeTariff)!
 
   const getCardPeriodIdx = (tariffId: string) => cardPeriods[tariffId] ?? 0
   const setCardPeriodIdx = (tariffId: string, idx: number) =>
     setCardPeriods(prev => ({ ...prev, [tariffId]: idx }))
+
+  const getExtraVacancies = (tariffId: string) => extraVacancies[tariffId] ?? 0
+
+  const applyPromo = () => {
+    const discount = PROMO_CODES[promoCode.toUpperCase()]
+    if (discount) {
+      setPromoDiscount(discount)
+      setPromoApplied(true)
+      toast.success(`Промокод применён: −${discount}%`)
+    } else {
+      toast.error("Промокод не найден")
+    }
+  }
 
   const handleSelectTariff = (tariff: Tariff) => {
     if (tariff.id === activeTariff) return
@@ -258,8 +283,10 @@ export default function BillingPage() {
             const features = getTariffFeatures(tariff)
             const periodIdx = getCardPeriodIdx(tariff.id)
             const period = PERIODS[periodIdx]
-            const baseAmount = tariff.price * period.months
-            const discountAmount = Math.round(baseAmount * period.discount / 100)
+            const extra = getExtraVacancies(tariff.id)
+            const extraPrice = extra * 990 * period.months
+            const baseAmount = (tariff.price * period.months) + extraPrice
+            const discountAmount = Math.round(baseAmount * (period.discount + promoDiscount) / 100)
             const totalAmount = baseAmount - discountAmount
             return (
               <Card
@@ -323,6 +350,24 @@ export default function BillingPage() {
                     ))}
                   </div>
 
+                  {/* Ползунок доп. вакансий */}
+                  {tariff.price > 0 && tariff.maxVacancies !== 999 && (
+                    <div className="mb-3 space-y-1.5">
+                      <div className="flex justify-between text-xs text-muted-foreground">
+                        <span>Доп. вакансии</span>
+                        <span className="font-medium text-foreground">
+                          {extra > 0 ? `+${extra} (+${(extra * 990).toLocaleString("ru-RU")} ₽/мес)` : "не добавлено"}
+                        </span>
+                      </div>
+                      <Slider
+                        min={0} max={20} step={1}
+                        value={[extra]}
+                        onValueChange={([v]) => setExtraVacancies(prev => ({ ...prev, [tariff.id]: v }))}
+                        className="w-full"
+                      />
+                    </div>
+                  )}
+
                   {/* Выбор периода */}
                   {tariff.price > 0 && (
                     <div className="flex gap-1 mb-3">
@@ -363,6 +408,33 @@ export default function BillingPage() {
             )
           })}
         </div>
+      </div>
+
+      {/* ═══ Промокод ════════════════════════════════════ */}
+      <div className="mb-8">
+        <h3 className="text-lg font-semibold text-foreground mb-4">Промокод</h3>
+        <div className="flex gap-2 max-w-sm">
+          <div className="relative flex-1">
+            <Tag className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              value={promoCode}
+              onChange={e => { setPromoCode(e.target.value.toUpperCase()); setPromoApplied(false); setPromoDiscount(0) }}
+              placeholder="Введите промокод"
+              className="pl-9 uppercase font-mono"
+              disabled={promoApplied}
+            />
+          </div>
+          <Button
+            variant={promoApplied ? "outline" : "default"}
+            onClick={promoApplied ? () => { setPromoApplied(false); setPromoDiscount(0); setPromoCode("") } : applyPromo}
+            className={promoApplied ? "text-emerald-600 border-emerald-300" : ""}
+          >
+            {promoApplied ? `−${promoDiscount}% ✕` : "Применить"}
+          </Button>
+        </div>
+        {promoApplied && (
+          <p className="text-xs text-emerald-600 mt-1.5 font-medium">Скидка {promoDiscount}% применена ко всем тарифам</p>
+        )}
       </div>
 
       {/* ═══ Способы оплаты ══════════════════════════════ */}
