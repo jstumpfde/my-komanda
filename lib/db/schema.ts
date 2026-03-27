@@ -8,6 +8,19 @@ import {
   jsonb,
 } from "drizzle-orm/pg-core"
 
+export const paymentRequisites = pgTable("payment_requisites", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  inn: text("inn").notNull(),
+  bankAccount: text("bank_account").notNull(),
+  bankName: text("bank_name").notNull(),
+  bik: text("bik").notNull(),
+  corrAccount: text("corr_account").notNull(),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+})
+
 export const companies = pgTable("companies", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
