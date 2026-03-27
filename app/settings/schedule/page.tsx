@@ -96,9 +96,12 @@ export default function ScheduleSettingsPage() {
                       <Select value={defaultDuration} onValueChange={setDefaultDuration}>
                         <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                         <SelectContent>
+                          <SelectItem value="15">15 мин</SelectItem>
                           <SelectItem value="30">30 мин</SelectItem>
                           <SelectItem value="45">45 мин</SelectItem>
                           <SelectItem value="60">60 мин</SelectItem>
+                          <SelectItem value="90">90 мин</SelectItem>
+                          <SelectItem value="120">120 мин</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -107,12 +110,15 @@ export default function ScheduleSettingsPage() {
                       <Select value={buffer} onValueChange={setBuffer}>
                         <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="0">0 мин</SelectItem>
                           <SelectItem value="5">5 мин</SelectItem>
                           <SelectItem value="10">10 мин</SelectItem>
                           <SelectItem value="15">15 мин</SelectItem>
+                          <SelectItem value="20">20 мин</SelectItem>
                           <SelectItem value="30">30 мин</SelectItem>
+                          <SelectItem value="45">45 мин</SelectItem>
                           <SelectItem value="60">60 мин</SelectItem>
+                          <SelectItem value="90">90 мин</SelectItem>
+                          <SelectItem value="120">120 мин</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
