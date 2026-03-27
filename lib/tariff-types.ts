@@ -36,16 +36,6 @@ export interface ClientCompany {
 
 export const DEFAULT_TARIFFS: Tariff[] = [
   {
-    id: "trial",
-    name: "Trial",
-    price: 0,
-    trialDays: 7,
-    maxVacancies: 2,
-    maxCandidates: 300,
-    features: { branding: false, customDomain: false, aiVideoInterview: false, api: false },
-    active: true,
-  },
-  {
     id: "solo",
     name: "Solo",
     price: 14900,
