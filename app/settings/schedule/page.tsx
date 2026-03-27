@@ -20,9 +20,19 @@ const WEEKDAYS = [
 ]
 
 export default function ScheduleSettingsPage() {
-  const [workDays, setWorkDays] = useState(["mon", "tue", "wed", "thu", "fri"])
-  const [startTime, setStartTime] = useState("09:00")
-  const [endTime, setEndTime] = useState("20:00")
+  type DaySchedule = { enabled: boolean; start: string; end: string }
+  const [daySchedule, setDaySchedule] = useState<Record<string, DaySchedule>>({
+    mon: { enabled: true,  start: "09:00", end: "19:00" },
+    tue: { enabled: true,  start: "09:00", end: "18:00" },
+    wed: { enabled: true,  start: "09:00", end: "19:00" },
+    thu: { enabled: true,  start: "09:00", end: "18:00" },
+    fri: { enabled: true,  start: "09:00", end: "18:00" },
+    sat: { enabled: false, start: "10:00", end: "15:00" },
+    sun: { enabled: false, start: "10:00", end: "15:00" },
+  })
+  const workDays = Object.entries(daySchedule).filter(([, v]) => v.enabled).map(([k]) => k)
+  const updateDay = (id: string, patch: Partial<DaySchedule>) =>
+    setDaySchedule(prev => ({ ...prev, [id]: { ...prev[id], ...patch } }))
   const [defaultDuration, setDefaultDuration] = useState("45")
   const [buffer, setBuffer] = useState("15")
   type BlockedEntry = { id: string } & ({ type: "date"; date: string } | { type: "range"; from: string; to: string })
@@ -104,9 +114,6 @@ export default function ScheduleSettingsPage() {
   const [remindNoShow, setRemindNoShow] = useState(false)
   const [noShowDelay, setNoShowDelay] = useState("15")
 
-  const toggleDay = (id: string) => {
-    setWorkDays(prev => prev.includes(id) ? prev.filter(d => d !== id) : [...prev, id])
-  }
 
   const addBlockedDate = () => {
     if (addMode === "date") {
@@ -135,36 +142,54 @@ export default function ScheduleSettingsPage() {
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base flex items-center gap-2"><Calendar className="w-4 h-4" /> Рабочее расписание</CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-5">
+                <CardContent className="space-y-4">
+                  <Label className="text-sm font-medium">Рабочие дни и часы</Label>
                   <div className="space-y-2">
-                    <Label className="text-sm font-medium">Рабочие дни</Label>
-                    <div className="flex gap-2">
-                      {WEEKDAYS.map(d => (
-                        <button
-                          key={d.id}
-                          className={cn(
-                            "w-10 h-10 rounded-lg border text-sm font-medium transition-all",
-                            workDays.includes(d.id)
-                              ? "border-primary bg-primary/10 text-primary"
-                              : "border-border text-muted-foreground hover:border-primary/30"
-                          )}
-                          onClick={() => toggleDay(d.id)}
-                        >
-                          {d.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+                    {WEEKDAYS.map(d => {
+                      const s = daySchedule[d.id]
+                      return (
+                        <div key={d.id} className={cn(
+                          "grid grid-cols-[2.5rem_1fr] sm:grid-cols-[2.5rem_auto_auto_1fr] items-center gap-2 p-2.5 rounded-lg border transition-all",
+                          s.enabled ? "border-primary/30 bg-primary/5" : "border-border bg-muted/10 opacity-60"
+                        )}>
+                          {/* День + тоггл */}
+                          <button
+                            onClick={() => updateDay(d.id, { enabled: !s.enabled })}
+                            className={cn(
+                              "w-9 h-9 rounded-md border text-sm font-semibold transition-all shrink-0",
+                              s.enabled ? "border-primary bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:border-primary/40"
+                            )}
+                          >{d.label}</button>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                      <Label className="text-sm">Начало рабочего дня</Label>
-                      <Input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} className="h-9" />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-sm">Конец рабочего дня</Label>
-                      <Input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} className="h-9" />
-                    </div>
+                          {/* Время начала */}
+                          <div className="flex items-center gap-1.5">
+                            <Label className="text-xs text-muted-foreground whitespace-nowrap w-6">с</Label>
+                            <Input
+                              type="time" value={s.start}
+                              onChange={e => updateDay(d.id, { start: e.target.value })}
+                              disabled={!s.enabled}
+                              className="h-8 w-28 text-sm"
+                            />
+                          </div>
+
+                          {/* Время конца */}
+                          <div className="flex items-center gap-1.5">
+                            <Label className="text-xs text-muted-foreground whitespace-nowrap w-6">до</Label>
+                            <Input
+                              type="time" value={s.end}
+                              onChange={e => updateDay(d.id, { end: e.target.value })}
+                              disabled={!s.enabled}
+                              className="h-8 w-28 text-sm"
+                            />
+                          </div>
+
+                          {/* Статус */}
+                          <span className="text-xs text-muted-foreground hidden sm:block">
+                            {s.enabled ? `${s.start} — ${s.end}` : "выходной"}
+                          </span>
+                        </div>
+                      )
+                    })}
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
