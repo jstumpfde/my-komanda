@@ -32,10 +32,10 @@ const REQUISITES = {
 }
 
 const PERIODS = [
-  { label: "1 месяц", months: 1, discount: 0 },
-  { label: "3 месяца", months: 3, discount: 5 },
-  { label: "6 месяцев", months: 6, discount: 10 },
-  { label: "12 месяцев", months: 12, discount: 15 },
+  { label: "1 мес", months: 1, discount: 0 },
+  { label: "3 мес", months: 3, discount: 5 },
+  { label: "6 мес", months: 6, discount: 10 },
+  { label: "12 мес", months: 12, discount: 20 },
 ]
 
 function InvoiceModal({
@@ -168,8 +168,13 @@ export default function BillingPage() {
   const [pendingTariff, setPendingTariff] = useState<Tariff | null>(null)
   const [showHistory, setShowHistory] = useState(false)
   const [showInvoice, setShowInvoice] = useState(false)
+  const [cardPeriods, setCardPeriods] = useState<Record<string, number>>({})
 
   const current = tariffs.find(t => t.id === activeTariff)!
+
+  const getCardPeriodIdx = (tariffId: string) => cardPeriods[tariffId] ?? 0
+  const setCardPeriodIdx = (tariffId: string, idx: number) =>
+    setCardPeriods(prev => ({ ...prev, [tariffId]: idx }))
 
   const handleSelectTariff = (tariff: Tariff) => {
     if (tariff.id === activeTariff) return
@@ -251,6 +256,11 @@ export default function BillingPage() {
           {tariffs.map(tariff => {
             const isCurrent = tariff.id === activeTariff
             const features = getTariffFeatures(tariff)
+            const periodIdx = getCardPeriodIdx(tariff.id)
+            const period = PERIODS[periodIdx]
+            const baseAmount = tariff.price * period.months
+            const discountAmount = Math.round(baseAmount * period.discount / 100)
+            const totalAmount = baseAmount - discountAmount
             return (
               <Card
                 key={tariff.id}
@@ -268,7 +278,8 @@ export default function BillingPage() {
                     </Badge>
                   </div>
                 )}
-                <CardContent className="p-5 pt-6">
+                <CardContent className="p-5 pt-6 flex flex-col h-full">
+                  {/* Название и цена */}
                   <div className="text-center mb-4">
                     <h4 className="text-lg font-bold text-foreground">{tariff.name}</h4>
                     <div className="mt-1">
@@ -279,8 +290,16 @@ export default function BillingPage() {
                         </div>
                       ) : (
                         <div>
-                          <span className="text-2xl font-bold text-foreground">{tariff.price.toLocaleString("ru-RU")}</span>
-                          <span className="text-sm text-muted-foreground"> ₽/мес</span>
+                          <span className="text-2xl font-bold text-foreground">{totalAmount.toLocaleString("ru-RU")}</span>
+                          <span className="text-sm text-muted-foreground"> ₽</span>
+                          {period.months > 1 && (
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              {tariff.price.toLocaleString("ru-RU")} ₽/мес × {period.months}
+                            </p>
+                          )}
+                          {period.discount > 0 && (
+                            <p className="text-xs text-emerald-600 font-medium">−{discountAmount.toLocaleString("ru-RU")} ₽ ({period.discount}%)</p>
+                          )}
                         </div>
                       )}
                     </div>
@@ -288,7 +307,8 @@ export default function BillingPage() {
 
                   <Separator className="mb-4" />
 
-                  <div className="space-y-2 mb-5">
+                  {/* Фичи */}
+                  <div className="space-y-2 mb-4 flex-1">
                     {features.map((f, i) => (
                       <div key={i} className="flex items-start gap-2">
                         {f.included ? (
@@ -303,6 +323,28 @@ export default function BillingPage() {
                     ))}
                   </div>
 
+                  {/* Выбор периода */}
+                  {tariff.price > 0 && (
+                    <div className="flex gap-1 mb-3">
+                      {PERIODS.map((p, i) => (
+                        <button
+                          key={i}
+                          onClick={() => setCardPeriodIdx(tariff.id, i)}
+                          className={cn(
+                            "flex-1 text-[10px] py-1 rounded border transition-all font-medium",
+                            periodIdx === i
+                              ? "border-primary bg-primary text-primary-foreground"
+                              : "border-border text-muted-foreground hover:border-primary/50"
+                          )}
+                        >
+                          {p.label}
+                          {p.discount > 0 && <span className="block text-[9px] leading-none opacity-80">−{p.discount}%</span>}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Кнопка */}
                   {isCurrent ? (
                     <Button variant="outline" className="w-full" disabled>
                       Текущий тариф
