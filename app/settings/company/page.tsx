@@ -185,7 +185,7 @@ export default function CompanyProfilePage() {
   const updateDaySchedule = (i: number, patch: Partial<DaySchedule>) => { setWeekSchedule(prev => prev.map((d, idx) => idx === i ? { ...d, ...patch } : d)) }
 
   const years = yearsFromDate(registrationDate)
-  const ph = "[&::placeholder]:text-muted-foreground/30"
+  const ph = "[&::placeholder]:text-muted-foreground/55"
 
   return (
     <>
