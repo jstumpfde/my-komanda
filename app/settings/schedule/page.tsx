@@ -25,8 +25,15 @@ export default function ScheduleSettingsPage() {
   const [endTime, setEndTime] = useState("20:00")
   const [defaultDuration, setDefaultDuration] = useState("45")
   const [buffer, setBuffer] = useState("15")
-  const [blockedDates, setBlockedDates] = useState<string[]>(["2026-03-20", "2026-04-01"])
+  type BlockedEntry = { id: string } & ({ type: "date"; date: string } | { type: "range"; from: string; to: string })
+  const [blockedDates, setBlockedDates] = useState<BlockedEntry[]>([
+    { id: "b1", type: "date", date: "2026-03-20" },
+    { id: "b2", type: "date", date: "2026-04-01" },
+  ])
+  const [addMode, setAddMode] = useState<"date" | "range">("date")
   const [newBlockedDate, setNewBlockedDate] = useState("")
+  const [rangeFrom, setRangeFrom] = useState("")
+  const [rangeTo, setRangeTo] = useState("")
 
   // Напоминания
   const [remind24h, setRemind24h] = useState(true)
@@ -40,10 +47,18 @@ export default function ScheduleSettingsPage() {
   }
 
   const addBlockedDate = () => {
-    if (!newBlockedDate || blockedDates.includes(newBlockedDate)) return
-    setBlockedDates(prev => [...prev, newBlockedDate])
-    setNewBlockedDate("")
+    if (addMode === "date") {
+      if (!newBlockedDate) return
+      setBlockedDates(prev => [...prev, { id: Date.now().toString(), type: "date", date: newBlockedDate }])
+      setNewBlockedDate("")
+    } else {
+      if (!rangeFrom || !rangeTo || rangeFrom > rangeTo) { toast.error("Укажите корректный период"); return }
+      setBlockedDates(prev => [...prev, { id: Date.now().toString(), type: "range", from: rangeFrom, to: rangeTo }])
+      setRangeFrom(""); setRangeTo("")
+    }
   }
+
+  const fmtDate = (d: string) => new Date(d + "T00:00:00").toLocaleDateString("ru-RU", { day: "numeric", month: "short" })
 
   return (
         <>
@@ -133,19 +148,47 @@ export default function ScheduleSettingsPage() {
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <div className="flex flex-wrap gap-2">
-                    {blockedDates.map(d => (
-                      <Badge key={d} variant="outline" className="gap-1.5 text-xs">
-                        {new Date(d).toLocaleDateString("ru-RU", { day: "numeric", month: "short" })}
-                        <button onClick={() => setBlockedDates(prev => prev.filter(x => x !== d))}>
+                    {blockedDates.map(entry => (
+                      <Badge key={entry.id} variant="outline" className="gap-1.5 text-xs">
+                        {entry.type === "date"
+                          ? fmtDate(entry.date)
+                          : `${fmtDate(entry.from)} — ${fmtDate(entry.to)}`}
+                        <button onClick={() => setBlockedDates(prev => prev.filter(x => x.id !== entry.id))}>
                           <X className="w-3 h-3" />
                         </button>
                       </Badge>
                     ))}
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Input type="date" value={newBlockedDate} onChange={e => setNewBlockedDate(e.target.value)} className="h-9 w-48" />
-                    <Button variant="outline" size="sm" onClick={addBlockedDate}><Plus className="w-3.5 h-3.5 mr-1" /> Добавить</Button>
+                  {/* Переключатель режима */}
+                  <div className="flex gap-1 p-1 rounded-lg bg-muted/50 w-fit">
+                    <button
+                      className={cn("px-3 py-1 rounded-md text-xs font-medium transition-all", addMode === "date" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground")}
+                      onClick={() => setAddMode("date")}
+                    >Дата</button>
+                    <button
+                      className={cn("px-3 py-1 rounded-md text-xs font-medium transition-all", addMode === "range" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground")}
+                      onClick={() => setAddMode("range")}
+                    >Период (отпуск)</button>
                   </div>
+
+                  {addMode === "date" ? (
+                    <div className="flex items-center gap-2">
+                      <Input type="date" value={newBlockedDate} onChange={e => setNewBlockedDate(e.target.value)} className="h-9 w-48" />
+                      <Button variant="outline" size="sm" onClick={addBlockedDate}><Plus className="w-3.5 h-3.5 mr-1" /> Добавить</Button>
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="flex items-center gap-2">
+                        <Label className="text-xs text-muted-foreground whitespace-nowrap">с</Label>
+                        <Input type="date" value={rangeFrom} onChange={e => setRangeFrom(e.target.value)} className="h-9 w-44" />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Label className="text-xs text-muted-foreground whitespace-nowrap">по</Label>
+                        <Input type="date" value={rangeTo} onChange={e => setRangeTo(e.target.value)} className="h-9 w-44" />
+                      </div>
+                      <Button variant="outline" size="sm" onClick={addBlockedDate}><Plus className="w-3.5 h-3.5 mr-1" /> Добавить</Button>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 
