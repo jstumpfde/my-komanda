@@ -143,7 +143,7 @@ function LoginForm() {
         </Card>
 
         <p className="text-center text-xs text-muted-foreground">
-          © 2025 Моя Команда. Все права защищены.
+          © 2026 Моя Команда. Все права защищены.
         </p>
       </div>
     </div>
