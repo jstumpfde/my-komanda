@@ -18,8 +18,10 @@ import { toast } from "sonner"
 import {
   Users, Plus, Settings, Trash2, Save, Shield, Eye, UserPlus,
   Mail, AlertTriangle, Check, ChevronRight, Briefcase,
-  CalendarClock,
+  CalendarClock, ChevronDown,
 } from "lucide-react"
+import { getVacancyCategories, type VacancyCategory } from "@/lib/vacancy-storage"
+import { useLocalStorage } from "@/hooks/use-local-storage"
 
 // ─── Типы ────────────────────────────────────────────────────
 
@@ -40,7 +42,8 @@ interface TeamMember {
   role: TeamRole
   status: MemberStatus
   avatar: string
-  categories: string[]
+  vacancyIds: string[]       // ID конкретных вакансий
+  categories: string[]       // оставляем для совместимости
   candidateVisibility: CandidateVisibility
   substituteId?: string
 }
@@ -81,37 +84,34 @@ const STATUS_CONFIG: Record<MemberStatus, { label: string; icon: typeof Check; c
   disabled: { label: "Отключён", icon: AlertTriangle, color: "bg-red-500/10 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800" },
 }
 
-const VACANCY_CATEGORIES = [
-  { id: "sales", name: "Продажи" },
-  { id: "it", name: "IT" },
-  { id: "operations", name: "Операции" },
-  { id: "marketing", name: "Маркетинг" },
-  { id: "hr", name: "HR" },
-  { id: "finance", name: "Финансы" },
-]
-
 // ─── Тестовые данные ────────────────────────────────────────
 
 const INITIAL_MEMBERS: TeamMember[] = [
-  { id: "m1", name: "Анна Иванова", email: "anna@romashka.ru", role: "hr_lead", status: "active", avatar: "АИ", categories: ["sales", "it", "operations", "marketing", "hr", "finance"], candidateVisibility: "all" },
-  { id: "m2", name: "Дмитрий Козлов", email: "dmitry@romashka.ru", role: "hr_manager", status: "active", avatar: "ДК", categories: ["sales", "it"], candidateVisibility: "own" },
-  { id: "m3", name: "Михаил Романов", email: "mikhail@romashka.ru", role: "department_head", status: "active", avatar: "МР", categories: ["sales"], candidateVisibility: "categories" },
-  { id: "m4", name: "Ольга Тихонова", email: "olga@romashka.ru", role: "observer", status: "invited", avatar: "ОТ", categories: [], candidateVisibility: "all" },
+  { id: "m1", name: "Анна Иванова", email: "anna@romashka.ru", role: "hr_lead", status: "active", avatar: "АИ", vacancyIds: [], categories: [], candidateVisibility: "all" },
+  { id: "m2", name: "Дмитрий Козлов", email: "dmitry@romashka.ru", role: "hr_manager", status: "active", avatar: "ДК", vacancyIds: [], categories: [], candidateVisibility: "own" },
+  { id: "m3", name: "Михаил Романов", email: "mikhail@romashka.ru", role: "department_head", status: "active", avatar: "МР", vacancyIds: [], categories: [], candidateVisibility: "categories" },
+  { id: "m4", name: "Ольга Тихонова", email: "olga@romashka.ru", role: "observer", status: "invited", avatar: "ОТ", vacancyIds: [], categories: [], candidateVisibility: "all" },
 ]
 
 // ─── Компонент ──────────────────────────────────────────────
 
 export default function TeamPage() {
-  const [members, setMembers] = useState<TeamMember[]>(INITIAL_MEMBERS)
+  const [members, setMembers] = useLocalStorage<TeamMember[]>("team-members", INITIAL_MEMBERS)
   const [editMember, setEditMember] = useState<TeamMember | null>(null)
   const [sheetOpen, setSheetOpen] = useState(false)
   const [inviteOpen, setInviteOpen] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [expandedCats, setExpandedCats] = useState<string[]>([])
+
+  const vacancyCategories = getVacancyCategories()
+
+  const toggleCatExpand = (catId: string) =>
+    setExpandedCats(prev => prev.includes(catId) ? prev.filter(c => c !== catId) : [...prev, catId])
 
   // Invite form
   const [inviteEmail, setInviteEmail] = useState("")
   const [inviteRole, setInviteRole] = useState<TeamRole>("hr_manager")
-  const [inviteCategories, setInviteCategories] = useState<string[]>([])
+  const [inviteVacancyIds, setInviteVacancyIds] = useState<string[]>([])
 
   const openEdit = (member: TeamMember) => {
     setEditMember({ ...member })
@@ -146,13 +146,14 @@ export default function TeamPage() {
       role: inviteRole,
       status: "invited",
       avatar: initials,
-      categories: inviteCategories,
+      vacancyIds: inviteVacancyIds,
+      categories: [],
       candidateVisibility: inviteRole === "observer" ? "all" : "own",
     }
     setMembers(prev => [...prev, newMember])
     setInviteOpen(false)
     setInviteEmail("")
-    setInviteCategories([])
+    setInviteVacancyIds([])
     toast.success(`Приглашение отправлено на ${inviteEmail}`)
   }
 
@@ -160,17 +161,27 @@ export default function TeamPage() {
     setEditMember(prev => prev ? { ...prev, ...patch } : null)
   }
 
-  const toggleEditCategory = (catId: string) => {
+  const toggleEditVacancy = (vacId: string) => {
     if (!editMember) return
-    const cats = editMember.categories.includes(catId)
-      ? editMember.categories.filter(c => c !== catId)
-      : [...editMember.categories, catId]
-    updateEdit({ categories: cats })
+    const ids = editMember.vacancyIds.includes(vacId)
+      ? editMember.vacancyIds.filter(v => v !== vacId)
+      : [...editMember.vacancyIds, vacId]
+    updateEdit({ vacancyIds: ids })
   }
 
-  const toggleInviteCategory = (catId: string) => {
-    setInviteCategories(prev =>
-      prev.includes(catId) ? prev.filter(c => c !== catId) : [...prev, catId]
+  const toggleAllCatVacancies = (cat: VacancyCategory) => {
+    if (!editMember) return
+    const catIds = cat.items.map(v => v.id)
+    const allChecked = catIds.every(id => editMember.vacancyIds.includes(id))
+    const newIds = allChecked
+      ? editMember.vacancyIds.filter(id => !catIds.includes(id))
+      : [...new Set([...editMember.vacancyIds, ...catIds])]
+    updateEdit({ vacancyIds: newIds })
+  }
+
+  const toggleInviteVacancy = (vacId: string) => {
+    setInviteVacancyIds(prev =>
+      prev.includes(vacId) ? prev.filter(v => v !== vacId) : [...prev, vacId]
     )
   }
 
@@ -291,20 +302,64 @@ export default function TeamPage() {
 
               <Separator />
 
-              {/* Категории вакансий */}
+              {/* Вакансии */}
               <div className="space-y-3">
-                <Label className="text-sm font-medium">Категории вакансий</Label>
-                <div className="space-y-2">
-                  {VACANCY_CATEGORIES.map(cat => (
-                    <label key={cat.id} className="flex items-center gap-2.5 cursor-pointer">
-                      <Checkbox
-                        checked={editMember.categories.includes(cat.id)}
-                        onCheckedChange={() => toggleEditCategory(cat.id)}
-                      />
-                      <span className="text-sm text-foreground">{cat.name}</span>
-                    </label>
-                  ))}
-                </div>
+                <Label className="text-sm font-medium">Доступные вакансии</Label>
+                {vacancyCategories.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">Нет созданных вакансий</p>
+                ) : (
+                  <div className="space-y-1">
+                    {vacancyCategories.map(cat => {
+                      const catIds = cat.items.map(v => v.id)
+                      const checkedCount = catIds.filter(id => editMember.vacancyIds.includes(id)).length
+                      const allChecked = catIds.length > 0 && checkedCount === catIds.length
+                      const someChecked = checkedCount > 0 && !allChecked
+                      const isExpanded = expandedCats.includes(cat.id)
+                      return (
+                        <div key={cat.id} className="border rounded-lg overflow-hidden">
+                          {/* Заголовок категории */}
+                          <div className="flex items-center gap-2 px-3 py-2 bg-muted/30">
+                            <Checkbox
+                              checked={allChecked}
+                              data-state={someChecked ? "indeterminate" : undefined}
+                              onCheckedChange={() => toggleAllCatVacancies(cat)}
+                              className={someChecked ? "opacity-60" : ""}
+                            />
+                            <button
+                              className="flex-1 flex items-center justify-between text-left"
+                              onClick={() => toggleCatExpand(cat.id)}
+                            >
+                              <span className="text-sm font-medium text-foreground">{cat.name}</span>
+                              <div className="flex items-center gap-2">
+                                {checkedCount > 0 && (
+                                  <span className="text-xs text-primary font-medium">{checkedCount}/{cat.items.length}</span>
+                                )}
+                                <ChevronDown className={cn("w-3.5 h-3.5 text-muted-foreground transition-transform", isExpanded && "rotate-180")} />
+                              </div>
+                            </button>
+                          </div>
+                          {/* Список вакансий */}
+                          {isExpanded && (
+                            <div className="divide-y">
+                              {cat.items.length === 0 ? (
+                                <p className="px-3 py-2 text-xs text-muted-foreground">Нет вакансий</p>
+                              ) : cat.items.map(vac => (
+                                <label key={vac.id} className="flex items-center gap-2.5 px-3 py-2 hover:bg-muted/20 cursor-pointer">
+                                  <Checkbox
+                                    checked={editMember.vacancyIds.includes(vac.id)}
+                                    onCheckedChange={() => toggleEditVacancy(vac.id)}
+                                  />
+                                  <span className="text-sm text-foreground flex-1">{vac.name}</span>
+                                  <span className="text-xs text-muted-foreground">{vac.candidates} канд.</span>
+                                </label>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
 
               <Separator />
@@ -466,18 +521,27 @@ export default function TeamPage() {
             </div>
 
             <div className="space-y-2">
-              <Label className="text-sm">Категории вакансий</Label>
-              <div className="grid grid-cols-2 gap-2">
-                {VACANCY_CATEGORIES.map(cat => (
-                  <label key={cat.id} className="flex items-center gap-2 cursor-pointer">
-                    <Checkbox
-                      checked={inviteCategories.includes(cat.id)}
-                      onCheckedChange={() => toggleInviteCategory(cat.id)}
-                    />
-                    <span className="text-sm text-foreground">{cat.name}</span>
-                  </label>
-                ))}
-              </div>
+              <Label className="text-sm">Доступные вакансии</Label>
+              {vacancyCategories.length === 0 ? (
+                <p className="text-xs text-muted-foreground">Нет созданных вакансий</p>
+              ) : (
+                <div className="space-y-1 max-h-48 overflow-y-auto">
+                  {vacancyCategories.map(cat => (
+                    <div key={cat.id}>
+                      <p className="text-xs font-medium text-muted-foreground px-1 pt-1">{cat.name}</p>
+                      {cat.items.map(vac => (
+                        <label key={vac.id} className="flex items-center gap-2 px-1 py-1 cursor-pointer hover:bg-muted/20 rounded">
+                          <Checkbox
+                            checked={inviteVacancyIds.includes(vac.id)}
+                            onCheckedChange={() => toggleInviteVacancy(vac.id)}
+                          />
+                          <span className="text-sm text-foreground">{vac.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             <Button className="w-full gap-1.5" onClick={handleInvite}>
