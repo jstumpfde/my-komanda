@@ -10,7 +10,7 @@ import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import {
-  Loader2, Building2, CheckCircle2, Save,
+  Loader2, Building2, CheckCircle2, Save, Search,
   Phone, Mail, Globe, MapPin, Calendar, Users, Briefcase,
   FileText, CreditCard, Info, Eye, Plus, X, ChevronDown, ChevronUp,
 } from "lucide-react"
@@ -188,10 +188,12 @@ export default function CompanyProfilePage() {
               <div className="space-y-1">
                 <Label className="text-sm">ИНН</Label>
                 <div className="relative">
-                  <Input value={inn} onChange={e => setInn(e.target.value.replace(/\D/g, "").slice(0, 12))} onPaste={e => { e.preventDefault(); setInn(e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 12)) }} placeholder="7707083893" className={cn("font-mono pr-8", ph)} onKeyDown={e => { if (e.key === "Enter") handleSearch() }} />
-                  {searching && <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-muted-foreground" />}
+                  <Input value={inn} onChange={e => setInn(e.target.value.replace(/\D/g, "").slice(0, 12))} onPaste={e => { e.preventDefault(); setInn(e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 12)) }} placeholder="Введите ИНН и нажмите Enter для автозаполнения" className={cn("font-mono pr-9", ph)} onKeyDown={e => { if (e.key === "Enter") handleSearch() }} />
+                  {searching
+                    ? <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-muted-foreground" />
+                    : <button type="button" onClick={handleSearch} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"><Search className="w-4 h-4" /></button>
+                  }
                 </div>
-                <p className="text-[11px] text-muted-foreground/50">Введите ИНН и нажмите Enter для автозаполнения</p>
               </div>
               <div className="space-y-1"><Label className="text-sm">КПП</Label><Input value={kpp} onChange={e => setKpp(e.target.value)} placeholder="770701001" className={cn("font-mono", ph)} /></div>
               <div className="space-y-1 relative" ref={nameContainerRef}>
