@@ -46,21 +46,21 @@
   --sidebar-ring: oklch(0.92 0.015 60);
 }
 
-/* Dark theme - тёмно-синий/серый (не чёрный) как ZenithPro */
+/* Dark theme - тёмно-фиолетовый/серый */
 .dark {
-  --background: oklch(0.15 0.025 260);
-  --foreground: oklch(0.93 0.005 250);
-  --card: oklch(0.2 0.025 260);
-  --card-foreground: oklch(0.93 0.005 250);
-  --popover: oklch(0.2 0.025 260);
-  --popover-foreground: oklch(0.93 0.005 250);
+  --background: oklch(0.2 0.04 280);
+  --foreground: oklch(0.92 0.008 280);
+  --card: oklch(0.25 0.04 280);
+  --card-foreground: oklch(0.92 0.008 280);
+  --popover: oklch(0.25 0.04 280);
+  --popover-foreground: oklch(0.92 0.008 280);
   --primary: oklch(0.56 0.18 280);
   --primary-foreground: oklch(0.99 0 0);
-  --secondary: oklch(0.25 0.025 260);
-  --secondary-foreground: oklch(0.91 0.005 250);
-  --muted: oklch(0.25 0.025 260);
-  --muted-foreground: oklch(0.65 0.01 250);
-  --accent: oklch(0.27 0.03 260);
+  --secondary: oklch(0.28 0.04 280);
+  --secondary-foreground: oklch(0.91 0.008 280);
+  --muted: oklch(0.28 0.04 280);
+  --muted-foreground: oklch(0.65 0.015 280);
+  --accent: oklch(0.3 0.045 280);
   --accent-foreground: oklch(0.93 0 0);
   --destructive: oklch(0.53 0.22 25);
   --destructive-foreground: oklch(0.95 0 0);
@@ -68,8 +68,8 @@
   --success-foreground: oklch(0.99 0 0);
   --warning: oklch(0.7 0.14 75);
   --warning-foreground: oklch(0.18 0.05 75);
-  --border: oklch(0.36 0.025 260);
-  --input: oklch(0.22 0.025 260);
+  --border: oklch(0.38 0.04 280);
+  --input: oklch(0.27 0.04 280);
   --ring: oklch(0.56 0.18 280);
   --chart-1: oklch(0.56 0.18 280);
   --chart-2: oklch(0.56 0.16 145);
@@ -178,6 +178,11 @@
   body {
     @apply bg-background text-foreground;
   }
+}
+
+/* Динамический фон инпутов — читает --input напрямую, работает в dark/warm */
+.input-bg {
+  background-color: var(--input);
 }
 
 /* Mobile: bottom nav padding */
