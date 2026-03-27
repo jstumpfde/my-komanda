@@ -15,7 +15,7 @@ import {
   CreditCard, Smartphone, Building2, FileText, Check, X,
   Crown, Sparkles, Receipt, Clock,
 } from "lucide-react"
-import QRCode from "qrcode"
+import type QRCodeType from "qrcode"
 
 // Текущий тариф клиента (захардкожен)
 const currentTariffId = "business"
@@ -58,8 +58,10 @@ function InvoiceModal({
 
   useEffect(() => {
     if (!open || !canvasRef.current) return
-    QRCode.toCanvas(canvasRef.current, qrText, { width: 160, margin: 1 }, (err) => {
-      if (err) console.error(err)
+    import("qrcode").then((QRCode: { default: typeof QRCodeType }) => {
+      QRCode.default.toCanvas(canvasRef.current!, qrText, { width: 160, margin: 1 }, (err: Error | null) => {
+        if (err) console.error(err)
+      })
     })
   }, [open, qrText])
 
