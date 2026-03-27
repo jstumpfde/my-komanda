@@ -100,7 +100,7 @@ export default function CompanyProfilePage() {
   const [fullName, setFullName] = useState(""); const [shortName, setShortName] = useState(""); const [kpp, setKpp] = useState(""); const [ogrn, setOgrn] = useState("")
   const [legalAddress, setLegalAddress] = useState(""); const [director, setDirector] = useState(""); const [companyStatus, setCompanyStatus] = useState<"active"|"liquidated"|"">("")
   const [postalSameAsLegal, setPostalSameAsLegal] = useState(false); const [postalAddress, setPostalAddress] = useState(""); const [postalIndex, setPostalIndex] = useState(""); const [postalCity, setPostalCity] = useState("")
-  const [accounts, setAccounts] = useState<BankAccount[]>([{ id: "1", bankName: "", bik: "", rs: "", ks: "" }]); const [defaultAccountId, setDefaultAccountId] = useState("1"); const [bikSearching, setBikSearching] = useState<string|null>(null)
+  const [accounts, setAccounts] = useState<BankAccount[]>([{ id: "1", bankName: "", bik: "", rs: "", ks: "" }]); const [defaultAccountId, setDefaultAccountId] = useState("1"); const [bikSearching, setBikSearching] = useState<string|null>(null); const [bankNameSearching, setBankNameSearching] = useState<string|null>(null)
   const [email, setEmail] = useState(""); const [phone, setPhone] = useState(""); const [website, setWebsite] = useState("")
   const [description, setDescription] = useState(""); const [registrationDate, setRegistrationDate] = useState(""); const [employeeCount, setEmployeeCount] = useState("")
   const [industry, setIndustry] = useState(""); const [officeAddress, setOfficeAddress] = useState(""); const [weekSchedule, setWeekSchedule] = useState<DaySchedule[]>(DEFAULT_SCHEDULE); const [scheduleExpanded, setScheduleExpanded] = useState(false)
@@ -135,7 +135,8 @@ export default function CompanyProfilePage() {
   useEffect(() => { const handler = (e: MouseEvent) => { if (nameContainerRef.current && !nameContainerRef.current.contains(e.target as Node)) setNameDropdownOpen(false) }; document.addEventListener("mousedown", handler); return () => document.removeEventListener("mousedown", handler) }, [])
 
   const handleBikSearch = useCallback(async (accountId: string, bik: string) => {
-    if (bik.length !== 9) return; setBikSearching(accountId)
+    if (bik.length !== 9) { toast.error("БИК должен содержать 9 цифр"); return }
+    setBikSearching(accountId)
     try {
       const resp = await fetch(`/api/companies/by-bik?bik=${bik}`); if (!resp.ok) throw new Error()
       const json = await resp.json(); const suggestions = json?.data?.suggestions ?? json?.suggestions ?? []
@@ -143,8 +144,27 @@ export default function CompanyProfilePage() {
         const bank = suggestions[0]; const bankData = bank.data ?? {}
         setAccounts(prev => prev.map(a => a.id === accountId ? { ...a, bankName: bank.value ?? bankData.name?.short ?? "", ks: bankData.correspondent_account ?? "" } : a))
         toast.success("Банк найден")
-      }
-    } catch {} setBikSearching(null)
+      } else { toast.error("Банк не найден") }
+    } catch { toast.error("Ошибка поиска") } setBikSearching(null)
+  }, [])
+
+  const handleBankNameSearch = useCallback(async (accountId: string, name: string) => {
+    if (!name.trim()) { toast.error("Введите название банка"); return }
+    setBankNameSearching(accountId)
+    try {
+      const resp = await fetch(`/api/companies/by-bank-name?q=${encodeURIComponent(name)}`); if (!resp.ok) throw new Error()
+      const json = await resp.json(); const suggestions = json?.data?.suggestions ?? json?.suggestions ?? []
+      if (suggestions.length > 0) {
+        const bank = suggestions[0]; const bankData = bank.data ?? {}
+        setAccounts(prev => prev.map(a => a.id === accountId ? {
+          ...a,
+          bankName: bank.value ?? bankData.name?.short ?? a.bankName,
+          bik: bankData.bic ?? a.bik,
+          ks: bankData.correspondent_account ?? a.ks,
+        } : a))
+        toast.success("Банк найден")
+      } else { toast.error("Банк не найден") }
+    } catch { toast.error("Ошибка поиска") } setBankNameSearching(null)
   }, [])
 
   const handleSave = async () => {
@@ -241,18 +261,39 @@ export default function CompanyProfilePage() {
                   </div>
                   {accounts.length > 1 && <button type="button" onClick={() => removeAccount(account.id)} className="text-muted-foreground/50 hover:text-destructive transition-colors"><X className="w-4 h-4" /></button>}
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <div className="space-y-1"><Label className="text-xs text-muted-foreground">Название банка</Label><Input value={account.bankName} onChange={e => updateAccount({ ...account, bankName: e.target.value })} placeholder="ПАО Сбербанк" className={cn("h-9 text-sm", ph)} /></div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2">
+                  {/* Название банка */}
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Название банка</Label>
+                    <div className="relative">
+                      <Input value={account.bankName} onChange={e => updateAccount({ ...account, bankName: e.target.value })} onKeyDown={e => { if (e.key === "Enter") handleBankNameSearch(account.id, account.bankName) }} placeholder="ПАО Сбербанк" className={cn("h-9 text-sm pr-9", ph)} />
+                      {bankNameSearching === account.id
+                        ? <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 animate-spin text-muted-foreground" />
+                        : <button type="button" onClick={() => handleBankNameSearch(account.id, account.bankName)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"><Search className="w-3.5 h-3.5" /></button>
+                      }
+                    </div>
+                  </div>
+                  {/* БИК */}
                   <div className="space-y-1">
                     <Label className="text-xs text-muted-foreground">БИК</Label>
                     <div className="relative">
-                      <Input value={account.bik} onChange={e => { const v = e.target.value.replace(/\D/g, "").slice(0, 9); updateAccount({ ...account, bik: v }); if (v.length === 9) handleBikSearch(account.id, v) }} placeholder="044525225" className={cn("h-9 text-sm font-mono pr-8", ph)} maxLength={9} />
-                      {bikSearching === account.id && <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 animate-spin text-muted-foreground" />}
+                      <Input value={account.bik} onChange={e => { const v = e.target.value.replace(/\D/g, "").slice(0, 9); updateAccount({ ...account, bik: v }); if (v.length === 9) handleBikSearch(account.id, v) }} placeholder="044525225" className={cn("h-9 text-sm font-mono pr-9", ph)} maxLength={9} />
+                      {bikSearching === account.id
+                        ? <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 animate-spin text-muted-foreground" />
+                        : <button type="button" onClick={() => handleBikSearch(account.id, account.bik)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"><Search className="w-3.5 h-3.5" /></button>
+                      }
                     </div>
-                    <p className="text-[10px] text-muted-foreground/40">9 цифр — банк заполнится автоматически</p>
                   </div>
-                  <div className="space-y-1"><Label className="text-xs text-muted-foreground">Корр. счёт</Label><Input value={account.ks} onChange={e => updateAccount({ ...account, ks: e.target.value })} placeholder="30101810400000000225" className={cn("h-9 text-sm font-mono", ph)} /></div>
-                  <div className="space-y-1"><Label className="text-xs text-muted-foreground">Расчётный счёт</Label><Input value={account.rs} onChange={e => updateAccount({ ...account, rs: e.target.value })} placeholder="40702810100000012345" className={cn("h-9 text-sm font-mono", ph)} /></div>
+                  {/* Корр. счёт */}
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Корр. счёт</Label>
+                    <Input value={account.ks} onChange={e => updateAccount({ ...account, ks: e.target.value })} placeholder="30101810400000000225" className={cn("h-9 text-sm font-mono", ph)} />
+                  </div>
+                  {/* Расчётный счёт */}
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Расчётный счёт</Label>
+                    <Input value={account.rs} onChange={e => updateAccount({ ...account, rs: e.target.value })} placeholder="40702810100000012345" className={cn("h-9 text-sm font-mono", ph)} />
+                  </div>
                 </div>
               </div>
             ))}
