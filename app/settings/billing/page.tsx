@@ -819,11 +819,11 @@ function getTariffFeatures(tariff: Tariff): { label: string; included: boolean }
     { label: `${v} вакансий`, included: true },
     { label: `До ${tariff.maxCandidates.toLocaleString("ru-RU")} кандидатов`, included: true },
     { label: "Все базовые функции", included: true },
-    { label: "Полный брендинг (логотип + цвета)", included: tariff.features.branding },
-    { label: "Имя AI-рекрутера", included: !!tariff.aiRecruiterName },
+    { label: "Полный брендинг (логотип + цвета)", included: true },
+    { label: "Имя AI-рекрутера", included: true },
+    { label: "Кастомный домен", included: true },
+    { label: "API доступ", included: true },
     { label: "Приоритетная поддержка", included: !!tariff.prioritySupport },
     { label: "Персональный менеджер", included: !!tariff.personalManager },
-    { label: "Кастомный домен", included: tariff.features.customDomain },
-    { label: "API доступ", included: tariff.features.api },
   ]
 }
