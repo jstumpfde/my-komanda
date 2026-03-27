@@ -553,16 +553,10 @@ export default function BillingPage() {
 
                   {/* Фичи */}
                   <div className="space-y-2 mb-4 flex-1">
-                    {features.map((f, i) => (
+                    {features.filter(f => f.included).map((f, i) => (
                       <div key={i} className="flex items-start gap-2">
-                        {f.included ? (
-                          <Check className="w-4 h-4 text-emerald-600 mt-0.5 shrink-0" />
-                        ) : (
-                          <X className="w-4 h-4 text-muted-foreground/40 mt-0.5 shrink-0" />
-                        )}
-                        <span className={cn("text-xs", f.included ? "text-foreground" : "text-muted-foreground/60 line-through")}>
-                          {f.label}
-                        </span>
+                        <Check className="w-4 h-4 text-emerald-600 mt-0.5 shrink-0" />
+                        <span className="text-xs text-foreground">{f.label}</span>
                       </div>
                     ))}
                   </div>
