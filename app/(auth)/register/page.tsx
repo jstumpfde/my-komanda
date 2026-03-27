@@ -60,7 +60,7 @@ export default function RegisterPage() {
       if (result?.error) { setError("Аккаунт создан, но не удалось войти. Попробуйте войти вручную."); router.push("/login"); return }
       document.cookie = "mk_onboarded=1; path=/; max-age=604800; SameSite=Lax"
       await updateSession()
-      router.push("/")
+      router.push("/settings/company")
       router.refresh()
     } catch (err) {
       setError(err instanceof Error ? err.message : "Ошибка соединения. Попробуйте ещё раз.")
