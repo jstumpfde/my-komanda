@@ -30,10 +30,30 @@ export default function ScheduleSettingsPage() {
     { id: "b1", type: "date", date: "2026-03-20" },
     { id: "b2", type: "date", date: "2026-04-01" },
   ])
-  const [addMode, setAddMode] = useState<"date" | "range">("date")
+  const [addMode, setAddMode] = useState<"date" | "range" | "hours">("date")
   const [newBlockedDate, setNewBlockedDate] = useState("")
   const [rangeFrom, setRangeFrom] = useState("")
   const [rangeTo, setRangeTo] = useState("")
+  // Недоступные часы
+  type BlockedHour = { id: string; day: string; from: string; to: string }
+  const [blockedHours, setBlockedHours] = useState<BlockedHour[]>([])
+  const [hourDay, setHourDay] = useState("everyday")
+  const [hourFrom, setHourFrom] = useState("12:00")
+  const [hourTo, setHourTo] = useState("13:00")
+  const DAY_OPTIONS = [
+    { value: "everyday", label: "Каждый день" },
+    { value: "mon", label: "Пн" }, { value: "tue", label: "Вт" }, { value: "wed", label: "Ср" },
+    { value: "thu", label: "Чт" }, { value: "fri", label: "Пт" }, { value: "sat", label: "Сб" }, { value: "sun", label: "Вс" },
+  ]
+  const addBlockedHour = () => {
+    if (!hourFrom || !hourTo || hourFrom >= hourTo) { toast.error("Укажите корректный диапазон часов"); return }
+    setBlockedHours(prev => [...prev, { id: Date.now().toString(), day: hourDay, from: hourFrom, to: hourTo }])
+    toast.success("Временной блок добавлен")
+  }
+  // Обед
+  const [lunchEnabled, setLunchEnabled] = useState(true)
+  const [lunchFrom, setLunchFrom] = useState("13:00")
+  const [lunchTo, setLunchTo] = useState("14:00")
 
   // Интеграции с календарями
   type CalProvider = "google" | "outlook" | "apple" | "caldav"
@@ -186,51 +206,116 @@ export default function ScheduleSettingsPage() {
               {/* Недоступные даты */}
               <Card>
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-base flex items-center gap-2"><X className="w-4 h-4" /> Недоступные даты</CardTitle>
+                  <CardTitle className="text-base flex items-center gap-2"><X className="w-4 h-4" /> Недоступное время</CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="flex flex-wrap gap-2">
-                    {blockedDates.map(entry => (
-                      <Badge key={entry.id} variant="outline" className="gap-1.5 text-xs">
-                        {entry.type === "date"
-                          ? fmtDate(entry.date)
-                          : `${fmtDate(entry.from)} — ${fmtDate(entry.to)}`}
-                        <button onClick={() => setBlockedDates(prev => prev.filter(x => x.id !== entry.id))}>
-                          <X className="w-3 h-3" />
-                        </button>
-                      </Badge>
-                    ))}
-                  </div>
-                  {/* Переключатель режима */}
-                  <div className="flex gap-1 p-1 rounded-lg bg-muted/50 w-fit">
-                    <button
-                      className={cn("px-3 py-1 rounded-md text-xs font-medium transition-all", addMode === "date" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground")}
-                      onClick={() => setAddMode("date")}
-                    >Дата</button>
-                    <button
-                      className={cn("px-3 py-1 rounded-md text-xs font-medium transition-all", addMode === "range" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground")}
-                      onClick={() => setAddMode("range")}
-                    >Период (отпуск)</button>
+                <CardContent className="space-y-4">
+
+                  {/* Обед */}
+                  <div className="p-3 rounded-lg border bg-muted/20 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-sm font-medium flex items-center gap-2">
+                        🍽️ Перерыв на обед
+                      </Label>
+                      <Switch checked={lunchEnabled} onCheckedChange={setLunchEnabled} />
+                    </div>
+                    {lunchEnabled && (
+                      <div className="flex items-center gap-2 pt-1">
+                        <Label className="text-xs text-muted-foreground whitespace-nowrap">с</Label>
+                        <Input type="time" value={lunchFrom} onChange={e => setLunchFrom(e.target.value)} className="h-8 w-32 text-sm" />
+                        <Label className="text-xs text-muted-foreground whitespace-nowrap">до</Label>
+                        <Input type="time" value={lunchTo} onChange={e => setLunchTo(e.target.value)} className="h-8 w-32 text-sm" />
+                        <span className="text-xs text-muted-foreground">каждый день</span>
+                      </div>
+                    )}
                   </div>
 
-                  {addMode === "date" ? (
-                    <div className="flex items-center gap-2">
-                      <Input type="date" value={newBlockedDate} onChange={e => setNewBlockedDate(e.target.value)} className="h-9 w-48" />
-                      <Button variant="outline" size="sm" onClick={addBlockedDate}><Plus className="w-3.5 h-3.5 mr-1" /> Добавить</Button>
-                    </div>
-                  ) : (
-                    <div className="flex flex-wrap items-center gap-2">
-                      <div className="flex items-center gap-2">
-                        <Label className="text-xs text-muted-foreground whitespace-nowrap">с</Label>
-                        <Input type="date" value={rangeFrom} onChange={e => setRangeFrom(e.target.value)} className="h-9 w-44" />
+                  {/* Переключатель режима */}
+                  <div className="flex gap-1 p-1 rounded-lg bg-muted/50 w-fit">
+                    {(["date", "range", "hours"] as const).map(m => (
+                      <button key={m}
+                        className={cn("px-3 py-1 rounded-md text-xs font-medium transition-all",
+                          addMode === m ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground")}
+                        onClick={() => setAddMode(m)}
+                      >
+                        {m === "date" ? "Дата" : m === "range" ? "Период (отпуск)" : "Часы"}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Добавленные даты */}
+                  {(addMode === "date" || addMode === "range") && (
+                    <>
+                      <div className="flex flex-wrap gap-2">
+                        {blockedDates.map(entry => (
+                          <Badge key={entry.id} variant="outline" className="gap-1.5 text-xs">
+                            {entry.type === "date" ? fmtDate(entry.date) : `${fmtDate(entry.from)} — ${fmtDate(entry.to)}`}
+                            <button onClick={() => setBlockedDates(prev => prev.filter(x => x.id !== entry.id))}><X className="w-3 h-3" /></button>
+                          </Badge>
+                        ))}
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Label className="text-xs text-muted-foreground whitespace-nowrap">по</Label>
-                        <Input type="date" value={rangeTo} onChange={e => setRangeTo(e.target.value)} className="h-9 w-44" />
+                      {addMode === "date" ? (
+                        <div className="flex items-center gap-2">
+                          <Input type="date" value={newBlockedDate} onChange={e => setNewBlockedDate(e.target.value)} className="h-9 w-48" />
+                          <Button variant="outline" size="sm" onClick={addBlockedDate}><Plus className="w-3.5 h-3.5 mr-1" /> Добавить</Button>
+                        </div>
+                      ) : (
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="flex items-center gap-2">
+                            <Label className="text-xs text-muted-foreground whitespace-nowrap">с</Label>
+                            <Input type="date" value={rangeFrom} onChange={e => setRangeFrom(e.target.value)} className="h-9 w-44" />
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Label className="text-xs text-muted-foreground whitespace-nowrap">по</Label>
+                            <Input type="date" value={rangeTo} onChange={e => setRangeTo(e.target.value)} className="h-9 w-44" />
+                          </div>
+                          <Button variant="outline" size="sm" onClick={addBlockedDate}><Plus className="w-3.5 h-3.5 mr-1" /> Добавить</Button>
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {/* Недоступные часы */}
+                  {addMode === "hours" && (
+                    <div className="space-y-3">
+                      {blockedHours.length > 0 && (
+                        <div className="space-y-1.5">
+                          {blockedHours.map(h => {
+                            const dayLabel = DAY_OPTIONS.find(d => d.value === h.day)?.label ?? h.day
+                            return (
+                              <div key={h.id} className="flex items-center gap-2 p-2 rounded-lg border bg-muted/20 text-sm">
+                                <span className="text-xs font-medium text-muted-foreground w-20 shrink-0">{dayLabel}</span>
+                                <span className="flex-1">{h.from} — {h.to}</span>
+                                <button onClick={() => setBlockedHours(prev => prev.filter(x => x.id !== h.id))} className="text-muted-foreground hover:text-destructive transition-colors">
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+                      <div className="flex flex-wrap items-end gap-2">
+                        <div className="space-y-1">
+                          <Label className="text-xs text-muted-foreground">День недели</Label>
+                          <Select value={hourDay} onValueChange={setHourDay}>
+                            <SelectTrigger className="h-9 w-40"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              {DAY_OPTIONS.map(d => <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs text-muted-foreground">с</Label>
+                          <Input type="time" value={hourFrom} onChange={e => setHourFrom(e.target.value)} className="h-9 w-32 text-sm" />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs text-muted-foreground">до</Label>
+                          <Input type="time" value={hourTo} onChange={e => setHourTo(e.target.value)} className="h-9 w-32 text-sm" />
+                        </div>
+                        <Button variant="outline" size="sm" className="h-9" onClick={addBlockedHour}><Plus className="w-3.5 h-3.5 mr-1" /> Добавить</Button>
                       </div>
-                      <Button variant="outline" size="sm" onClick={addBlockedDate}><Plus className="w-3.5 h-3.5 mr-1" /> Добавить</Button>
                     </div>
                   )}
+
                 </CardContent>
               </Card>
 
