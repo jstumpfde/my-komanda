@@ -142,55 +142,27 @@ export default function ScheduleSettingsPage() {
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base flex items-center gap-2"><Calendar className="w-4 h-4" /> Рабочее расписание</CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  <Label className="text-sm font-medium">Рабочие дни и часы</Label>
-                  <div className="space-y-2">
-                    {WEEKDAYS.map(d => {
-                      const s = daySchedule[d.id]
-                      return (
-                        <div key={d.id} className={cn(
-                          "grid grid-cols-[2.5rem_1fr] sm:grid-cols-[2.5rem_auto_auto_1fr] items-center gap-2 p-2.5 rounded-lg border transition-all",
-                          s.enabled ? "border-primary/30 bg-primary/5" : "border-border bg-muted/10 opacity-60"
-                        )}>
-                          {/* День + тоггл */}
-                          <button
-                            onClick={() => updateDay(d.id, { enabled: !s.enabled })}
-                            className={cn(
-                              "w-9 h-9 rounded-md border text-sm font-semibold transition-all shrink-0",
-                              s.enabled ? "border-primary bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:border-primary/40"
-                            )}
-                          >{d.label}</button>
-
-                          {/* Время начала */}
-                          <div className="flex items-center gap-1.5">
-                            <Label className="text-xs text-muted-foreground whitespace-nowrap w-6">с</Label>
-                            <Input
-                              type="time" value={s.start}
-                              onChange={e => updateDay(d.id, { start: e.target.value })}
-                              disabled={!s.enabled}
-                              className="h-8 w-28 text-sm"
-                            />
+                <CardContent className="space-y-1">
+                  {WEEKDAYS.map(d => {
+                    const s = daySchedule[d.id]
+                    return (
+                      <div key={d.id} className="flex items-center gap-3 py-2">
+                        <span className="w-6 text-sm font-medium text-foreground shrink-0">{d.label}</span>
+                        <Switch checked={s.enabled} onCheckedChange={v => updateDay(d.id, { enabled: v })} />
+                        {s.enabled ? (
+                          <div className="flex items-center gap-2">
+                            <Input type="time" value={s.start} onChange={e => updateDay(d.id, { start: e.target.value })} className="h-9 w-28 text-sm" />
+                            <span className="text-muted-foreground">—</span>
+                            <Input type="time" value={s.end} onChange={e => updateDay(d.id, { end: e.target.value })} className="h-9 w-28 text-sm" />
                           </div>
-
-                          {/* Время конца */}
-                          <div className="flex items-center gap-1.5">
-                            <Label className="text-xs text-muted-foreground whitespace-nowrap w-6">до</Label>
-                            <Input
-                              type="time" value={s.end}
-                              onChange={e => updateDay(d.id, { end: e.target.value })}
-                              disabled={!s.enabled}
-                              className="h-8 w-28 text-sm"
-                            />
-                          </div>
-
-                          {/* Статус */}
-                          <span className="text-xs text-muted-foreground hidden sm:block">
-                            {s.enabled ? `${s.start} — ${s.end}` : "выходной"}
-                          </span>
-                        </div>
-                      )
-                    })}
-                  </div>
+                        ) : (
+                          <span className="text-sm text-muted-foreground">Выходной</span>
+                        )}
+                      </div>
+                    )
+                  })}
+                </CardContent>
+                <CardContent className="pt-0 space-y-4">
 
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1.5">
