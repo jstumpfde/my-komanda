@@ -506,91 +506,97 @@ export default function BillingPage() {
                     </Badge>
                   </div>
                 )}
-                <CardContent className="p-5 pt-6 flex flex-col h-full">
-                  {/* Название и цена */}
-                  <div className="text-center mb-3">
-                    <h4 className="text-lg font-bold text-foreground">{tariff.name}</h4>
-                    <div className="mt-1">
-                      <span className="text-2xl font-bold text-foreground">{baseMonthly.toLocaleString("ru-RU")}</span>
-                      <span className="text-sm text-muted-foreground"> ₽/мес</span>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        От {totalCandidates.toLocaleString("ru-RU")} кандидатов
-                      </p>
-                      {(period.discount > 0 || promoDiscount > 0) && (
-                        <p className="text-xs text-emerald-600 font-medium mt-0.5">
-                          Итого: {totalAmount.toLocaleString("ru-RU")} ₽ (−{discountAmount.toLocaleString("ru-RU")} ₽)
+                <CardContent className="p-5 pt-6 flex flex-col h-full min-h-[520px]">
+                  {/* Верхняя часть — растягивается */}
+                  <div className="flex-1 flex flex-col">
+                    {/* Название и цена */}
+                    <div className="text-center mb-3">
+                      <h4 className="text-lg font-bold text-foreground">{tariff.name}</h4>
+                      <div className="mt-1">
+                        <span className="text-2xl font-bold text-foreground">{baseMonthly.toLocaleString("ru-RU")}</span>
+                        <span className="text-sm text-muted-foreground"> ₽/мес</span>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          От {totalCandidates.toLocaleString("ru-RU")} кандидатов
                         </p>
-                      )}
-                    </div>
-                  </div>
-
-                  <Separator className="mb-3" />
-
-                  {/* Слайдер вакансий */}
-                  <div className="mb-3 space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-medium text-foreground">Вакансии</span>
-                      <span className="text-xs font-bold text-foreground">{totalVacancies}</span>
-                    </div>
-                    <Slider
-                      min={0} max={SLIDER_MAX[tariff.id] ?? 10} step={1}
-                      value={[extra]}
-                      onValueChange={([v]) => setExtraVacancies(prev => ({ ...prev, [tariff.id]: v }))}
-                      className="w-full"
-                    />
-                    <div className="flex justify-between text-[10px] text-muted-foreground">
-                      <span>{tariff.maxVacancies} включено</span>
-                      <span>+{extra} доп. × {vacPrice.toLocaleString("ru-RU")} ₽</span>
-                    </div>
-                  </div>
-
-                  <Separator className="mb-3" />
-
-                  {/* Фичи */}
-                  <div className="space-y-2 mb-4 flex-1">
-                    {features.filter(f => f.included).map((f, i) => (
-                      <div key={i} className="flex items-start gap-2">
-                        <Check className="w-4 h-4 text-emerald-600 mt-0.5 shrink-0" />
-                        <span className="text-xs text-foreground">{f.label}</span>
+                        {(period.discount > 0 || promoDiscount > 0) && (
+                          <p className="text-xs text-emerald-600 font-medium mt-0.5">
+                            Итого: {totalAmount.toLocaleString("ru-RU")} ₽ (−{discountAmount.toLocaleString("ru-RU")} ₽)
+                          </p>
+                        )}
                       </div>
-                    ))}
-                  </div>
+                    </div>
 
-                  {/* Выбор периода */}
-                  {tariff.price > 0 && (
-                    <div className="flex gap-1 mb-3">
-                      {PERIODS.map((p, i) => (
-                        <button
-                          key={i}
-                          onClick={() => setCardPeriodIdx(tariff.id, i)}
-                          className={cn(
-                            "flex-1 text-[10px] py-1 rounded border transition-all font-medium",
-                            periodIdx === i
-                              ? "border-primary bg-primary text-primary-foreground"
-                              : "border-border text-muted-foreground hover:border-primary/50"
-                          )}
-                        >
-                          {p.label}
-                          {p.discount > 0 && <span className="block text-[9px] leading-none opacity-80">−{p.discount}%</span>}
-                        </button>
+                    <Separator className="mb-3" />
+
+                    {/* Слайдер вакансий */}
+                    <div className="mb-3 space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-medium text-foreground">Вакансии</span>
+                        <span className="text-xs font-bold text-foreground">{totalVacancies}</span>
+                      </div>
+                      <Slider
+                        min={0} max={SLIDER_MAX[tariff.id] ?? 10} step={1}
+                        value={[extra]}
+                        onValueChange={([v]) => setExtraVacancies(prev => ({ ...prev, [tariff.id]: v }))}
+                        className="w-full"
+                      />
+                      <div className="flex justify-between text-[10px] text-muted-foreground">
+                        <span>{tariff.maxVacancies} включено</span>
+                        <span>+{extra} доп. × {vacPrice.toLocaleString("ru-RU")} ₽</span>
+                      </div>
+                    </div>
+
+                    <Separator className="mb-3" />
+
+                    {/* Фичи */}
+                    <div className="space-y-2 flex-1">
+                      {features.filter(f => f.included).map((f, i) => (
+                        <div key={i} className="flex items-start gap-2">
+                          <Check className="w-4 h-4 text-emerald-600 mt-0.5 shrink-0" />
+                          <span className="text-xs text-foreground">{f.label}</span>
+                        </div>
                       ))}
                     </div>
-                  )}
+                  </div>
 
-                  {/* Кнопка */}
-                  {isCurrent ? (
-                    <Button variant="outline" className="w-full" disabled>
-                      Текущий тариф
-                    </Button>
-                  ) : (
-                    <Button
-                      className={cn("w-full", tariff.badge && "bg-primary hover:bg-primary/90")}
-                      variant={tariff.badge ? "default" : "outline"}
-                      onClick={() => handleSelectTariff(tariff)}
-                    >
-                      {tariff.price === 0 ? "Начать Trial" : "Выбрать"}
-                    </Button>
-                  )}
+                  {/* Нижняя часть — всегда внизу */}
+                  <div className="mt-4">
+                    {/* Выбор периода */}
+                    {tariff.price > 0 && (
+                      <div className="flex gap-1 mb-3">
+                        {PERIODS.map((p, i) => (
+                          <button
+                            key={i}
+                            onClick={() => setCardPeriodIdx(tariff.id, i)}
+                            className={cn(
+                              "flex-1 text-[10px] py-1 rounded border transition-all font-medium",
+                              periodIdx === i
+                                ? "border-primary bg-primary text-primary-foreground"
+                                : "border-border text-muted-foreground hover:border-primary/50"
+                            )}
+                          >
+                            {p.label}
+                            {p.discount > 0 && <span className="block text-[9px] leading-none opacity-80">−{p.discount}%</span>}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Кнопка */}
+                    {isCurrent ? (
+                      <Button variant="outline" className="w-full" disabled>
+                        Текущий тариф
+                      </Button>
+                    ) : (
+                      <Button
+                        className={cn("w-full", tariff.badge && "bg-primary hover:bg-primary/90")}
+                        variant={tariff.badge ? "default" : "outline"}
+                        onClick={() => handleSelectTariff(tariff)}
+                      >
+                        {tariff.price === 0 ? "Начать Trial" : "Выбрать"}
+                      </Button>
+                    )}
+                  </div>
                 </CardContent>
               </Card>
             )
