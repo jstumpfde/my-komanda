@@ -199,7 +199,7 @@ export default function RegisterPage() {
           <CardContent className="pt-6 pb-6 space-y-5">
             <div>
               <h2 className="text-lg font-semibold text-foreground">Создать аккаунт</h2>
-              <p className="text-sm text-muted-foreground">Начните нанимать бесплатно — 7 дней Trial</p>
+              <p className="text-sm text-muted-foreground">Начните нанимать бесплатно — 14 дней Trial</p>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
