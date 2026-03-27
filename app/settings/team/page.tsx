@@ -10,17 +10,16 @@ import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import {
-  Users, Plus, Settings, Trash2, Save, Shield, Eye, UserPlus,
-  Mail, AlertTriangle, Check, ChevronRight, Briefcase,
-  CalendarClock, ChevronDown,
+  Users, Plus, Settings, Trash2, Save, UserPlus,
+  Mail, AlertTriangle, Check,
+  CalendarClock,
 } from "lucide-react"
-import { getVacancyCategories, type VacancyCategory } from "@/lib/vacancy-storage"
+import { getVacancyCategories } from "@/lib/vacancy-storage"
 import { useLocalStorage } from "@/hooks/use-local-storage"
 
 // ─── Типы ────────────────────────────────────────────────────
@@ -101,12 +100,8 @@ export default function TeamPage() {
   const [sheetOpen, setSheetOpen] = useState(false)
   const [inviteOpen, setInviteOpen] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
-  const [expandedCats, setExpandedCats] = useState<string[]>([])
-
   const vacancyCategories = getVacancyCategories()
-
-  const toggleCatExpand = (catId: string) =>
-    setExpandedCats(prev => prev.includes(catId) ? prev.filter(c => c !== catId) : [...prev, catId])
+  const allVacancies = vacancyCategories.flatMap(cat => cat.items)
 
   // Invite form
   const [inviteEmail, setInviteEmail] = useState("")
@@ -167,16 +162,6 @@ export default function TeamPage() {
       ? editMember.vacancyIds.filter(v => v !== vacId)
       : [...editMember.vacancyIds, vacId]
     updateEdit({ vacancyIds: ids })
-  }
-
-  const toggleAllCatVacancies = (cat: VacancyCategory) => {
-    if (!editMember) return
-    const catIds = cat.items.map(v => v.id)
-    const allChecked = catIds.every(id => editMember.vacancyIds.includes(id))
-    const newIds = allChecked
-      ? editMember.vacancyIds.filter(id => !catIds.includes(id))
-      : [...new Set([...editMember.vacancyIds, ...catIds])]
-    updateEdit({ vacancyIds: newIds })
   }
 
   const toggleInviteVacancy = (vacId: string) => {
@@ -258,15 +243,15 @@ export default function TeamPage() {
 
 
 
-      {/* ═══ Sheet редактирования участника ════════════════════ */}
-      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-        <SheetContent className="w-full sm:max-w-md overflow-y-auto">
-          <SheetHeader>
-            <SheetTitle>Настройки участника</SheetTitle>
-          </SheetHeader>
+      {/* ═══ Диалог редактирования участника ════════════════════ */}
+      <Dialog open={sheetOpen} onOpenChange={setSheetOpen}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Настройки участника</DialogTitle>
+          </DialogHeader>
 
           {editMember && (
-            <div className="space-y-6 mt-6">
+            <div className="space-y-6 mt-2">
               {/* Info */}
               <div className="flex items-center gap-3">
                 <Avatar className="w-12 h-12">
@@ -305,59 +290,20 @@ export default function TeamPage() {
               {/* Вакансии */}
               <div className="space-y-3">
                 <Label className="text-sm font-medium">Доступные вакансии</Label>
-                {vacancyCategories.length === 0 ? (
+                {allVacancies.length === 0 ? (
                   <p className="text-xs text-muted-foreground">Нет созданных вакансий</p>
                 ) : (
-                  <div className="space-y-1">
-                    {vacancyCategories.map(cat => {
-                      const catIds = cat.items.map(v => v.id)
-                      const checkedCount = catIds.filter(id => editMember.vacancyIds.includes(id)).length
-                      const allChecked = catIds.length > 0 && checkedCount === catIds.length
-                      const someChecked = checkedCount > 0 && !allChecked
-                      const isExpanded = expandedCats.includes(cat.id)
-                      return (
-                        <div key={cat.id} className="border rounded-lg overflow-hidden">
-                          {/* Заголовок категории */}
-                          <div className="flex items-center gap-2 px-3 py-2 bg-muted/30">
-                            <Checkbox
-                              checked={allChecked}
-                              data-state={someChecked ? "indeterminate" : undefined}
-                              onCheckedChange={() => toggleAllCatVacancies(cat)}
-                              className={someChecked ? "opacity-60" : ""}
-                            />
-                            <button
-                              className="flex-1 flex items-center justify-between text-left"
-                              onClick={() => toggleCatExpand(cat.id)}
-                            >
-                              <span className="text-sm font-medium text-foreground">{cat.name}</span>
-                              <div className="flex items-center gap-2">
-                                {checkedCount > 0 && (
-                                  <span className="text-xs text-primary font-medium">{checkedCount}/{cat.items.length}</span>
-                                )}
-                                <ChevronDown className={cn("w-3.5 h-3.5 text-muted-foreground transition-transform", isExpanded && "rotate-180")} />
-                              </div>
-                            </button>
-                          </div>
-                          {/* Список вакансий */}
-                          {isExpanded && (
-                            <div className="divide-y">
-                              {cat.items.length === 0 ? (
-                                <p className="px-3 py-2 text-xs text-muted-foreground">Нет вакансий</p>
-                              ) : cat.items.map(vac => (
-                                <label key={vac.id} className="flex items-center gap-2.5 px-3 py-2 hover:bg-muted/20 cursor-pointer">
-                                  <Checkbox
-                                    checked={editMember.vacancyIds.includes(vac.id)}
-                                    onCheckedChange={() => toggleEditVacancy(vac.id)}
-                                  />
-                                  <span className="text-sm text-foreground flex-1">{vac.name}</span>
-                                  <span className="text-xs text-muted-foreground">{vac.candidates} канд.</span>
-                                </label>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      )
-                    })}
+                  <div className="border rounded-lg divide-y max-h-48 overflow-y-auto">
+                    {allVacancies.map(vac => (
+                      <label key={vac.id} className="flex items-center gap-2.5 px-3 py-2 hover:bg-muted/20 cursor-pointer">
+                        <Checkbox
+                          checked={editMember.vacancyIds.includes(vac.id)}
+                          onCheckedChange={() => toggleEditVacancy(vac.id)}
+                        />
+                        <span className="text-sm text-foreground flex-1">{vac.name}</span>
+                        <span className="text-xs text-muted-foreground">{vac.candidates} канд.</span>
+                      </label>
+                    ))}
                   </div>
                 )}
               </div>
@@ -477,8 +423,8 @@ export default function TeamPage() {
               </div>
             </div>
           )}
-        </SheetContent>
-      </Sheet>
+        </DialogContent>
+      </Dialog>
 
       {/* ═══ Диалог приглашения ════════════════════════════════ */}
       <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
