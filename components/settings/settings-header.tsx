@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
 import { useTheme } from "next-themes"
 import { useSidebar } from "@/components/ui/sidebar"
 import { Button } from "@/components/ui/button"
-import { Sun, Moon, Coffee, PanelLeftClose, PanelLeft, Bell, Building2, CreditCard, Users, Plug, Clock, User, LogOut, Palette } from "lucide-react"
+import { Sun, Moon, Coffee, PanelLeftClose, PanelLeft, Bell, Building2, CreditCard, Users, Plug, Clock, User, LogOut } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
@@ -21,7 +21,6 @@ const navItems = [
   { href: "/settings/integrations",  label: "Интеграции",  icon: Plug },
   { href: "/settings/schedule",      label: "Расписание",  icon: Clock },
   { href: "/settings/notifications", label: "Уведомления", icon: Bell },
-  { href: "/settings/branding",      label: "Брендинг",    icon: Palette },
 ]
 
 const NOTIFICATIONS = [
