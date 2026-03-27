@@ -17,7 +17,7 @@ const navItems = [
   { href: "/settings/company",       label: "Компания",    icon: Building2 },
   { href: "/settings/profile",       label: "Профиль",     icon: User },
   { href: "/settings/team",          label: "Команда",     icon: Users },
-  { href: "/settings/billing",       label: "Тариф",       icon: CreditCard },
+  { href: "/settings/billing",       label: "Тариф и оплата", icon: CreditCard },
   { href: "/settings/integrations",  label: "Интеграции",  icon: Plug },
   { href: "/settings/schedule",      label: "Расписание",  icon: Clock },
   { href: "/settings/notifications", label: "Уведомления", icon: Bell },
