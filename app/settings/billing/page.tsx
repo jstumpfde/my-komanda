@@ -454,27 +454,39 @@ export default function BillingPage() {
       <div className="mb-8">
         <h3 className="text-lg font-semibold text-foreground mb-4">Способы оплаты</h3>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <button className="flex items-center gap-3 p-4 rounded-xl border border-border hover:border-primary/30 hover:bg-primary/5 transition-all text-left" onClick={() => toast.info("Оплата картой (заглушка)")}>
-            <CreditCard className="w-5 h-5 text-blue-600" />
-            <div>
-              <p className="text-sm font-medium text-foreground">Карта (ЮKassa)</p>
-              <p className="text-xs text-muted-foreground">Visa, MasterCard, МИР</p>
-            </div>
-          </button>
-          <button className="flex items-center gap-3 p-4 rounded-xl border border-border hover:border-primary/30 hover:bg-primary/5 transition-all text-left" onClick={() => toast.info("Оплата через СБП (заглушка)")}>
-            <Smartphone className="w-5 h-5 text-emerald-600" />
-            <div>
-              <p className="text-sm font-medium text-foreground">СБП — без комиссии</p>
-              <p className="text-xs text-muted-foreground">Моментальное зачисление</p>
-            </div>
-          </button>
-          <button className="flex items-center gap-3 p-4 rounded-xl border border-border hover:border-primary/30 hover:bg-primary/5 transition-all text-left" onClick={() => toast.info("Выставлен счёт (заглушка)")}>
+          {/* Расчётный счёт — активен */}
+          <button className="flex items-center gap-3 p-4 rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/20 text-left cursor-default" disabled>
             <Building2 className="w-5 h-5 text-amber-600" />
-            <div>
-              <p className="text-sm font-medium text-foreground">Расчётный счёт</p>
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-medium text-foreground">Расчётный счёт</p>
+                <Check className="w-3.5 h-3.5 text-emerald-600" />
+              </div>
               <p className="text-xs text-muted-foreground">Для юридических лиц</p>
             </div>
           </button>
+          {/* СБП — скоро */}
+          <div className="flex items-center gap-3 p-4 rounded-xl border border-dashed border-border bg-muted/20 opacity-60">
+            <Smartphone className="w-5 h-5 text-emerald-600" />
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-medium text-foreground">СБП — без комиссии</p>
+                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400">скоро</span>
+              </div>
+              <p className="text-xs text-muted-foreground">Моментальное зачисление</p>
+            </div>
+          </div>
+          {/* Карта — скоро */}
+          <div className="flex items-center gap-3 p-4 rounded-xl border border-dashed border-border bg-muted/20 opacity-60">
+            <CreditCard className="w-5 h-5 text-blue-600" />
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-medium text-foreground">Карта (ЮKassa)</p>
+                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400">скоро</span>
+              </div>
+              <p className="text-xs text-muted-foreground">Visa, MasterCard, МИР</p>
+            </div>
+          </div>
         </div>
       </div>
 
