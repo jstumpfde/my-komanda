@@ -13,6 +13,7 @@ import { Slider } from "@/components/ui/slider"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { DEFAULT_TARIFFS, formatPrice, type Tariff } from "@/lib/tariff-types"
+import { getCompany } from "@/lib/company-storage"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   CreditCard, Smartphone, Building2, FileText, Check, X,
@@ -85,7 +86,7 @@ function InvoiceModal({
   tariff: Tariff
 }) {
   const [periodIdx, setPeriodIdx] = useState(0)
-  const [companyName, setCompanyName] = useState("")
+  const [companyName, setCompanyName] = useState(() => getCompany()?.name ?? "")
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const period = PERIODS[periodIdx]
   const baseAmount = tariff.price * period.months
@@ -241,7 +242,7 @@ function ActModal({
   const months = ["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"]
   const [month, setMonth] = useState(String(now.getMonth()))
   const [year, setYear] = useState(String(now.getFullYear()))
-  const [companyName, setCompanyName] = useState("")
+  const [companyName, setCompanyName] = useState(() => getCompany()?.name ?? "")
   const amount = tariff.price
 
   const handlePdf = () => {
