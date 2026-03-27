@@ -35,15 +35,15 @@
   --chart-4: oklch(0.55 0.22 25);
   --chart-5: oklch(0.55 0.14 300);
   --radius: 0.5rem;
-  /* Sidebar - тёмный шоколад #2C1810 */
-  --sidebar: oklch(0.18 0.045 55);
-  --sidebar-foreground: oklch(0.92 0.015 60);
-  --sidebar-primary: oklch(0.92 0.015 60);
-  --sidebar-primary-foreground: oklch(0.18 0.045 55);
-  --sidebar-accent: oklch(0.26 0.04 55);
-  --sidebar-accent-foreground: oklch(0.92 0.015 60);
-  --sidebar-border: oklch(0.28 0.035 55);
-  --sidebar-ring: oklch(0.92 0.015 60);
+  /* Sidebar - тёмно-синий */
+  --sidebar: oklch(0.16 0.06 260);
+  --sidebar-foreground: oklch(0.92 0.015 260);
+  --sidebar-primary: oklch(0.92 0.015 260);
+  --sidebar-primary-foreground: oklch(0.16 0.06 260);
+  --sidebar-accent: oklch(0.24 0.06 260);
+  --sidebar-accent-foreground: oklch(0.92 0.015 260);
+  --sidebar-border: oklch(0.28 0.05 260);
+  --sidebar-ring: oklch(0.92 0.015 260);
 }
 
 /* Dark theme - тёмно-фиолетовый/серый */
