@@ -52,7 +52,7 @@ export function useDemo(vacancyId: string | null): UseDemoResult {
     setLoading(true)
     setError(null)
 
-    fetch(`/api/demos?vacancy_id=${encodeURIComponent(vacancyId)}`)
+    fetch(`/api/modules/hr/demos?vacancy_id=${encodeURIComponent(vacancyId)}`)
       .then(res => res.ok ? res.json() : Promise.reject(res))
       .then((json: { data?: ApiDemo[] }) => {
         const rows = json.data ?? (json as unknown as ApiDemo[])
@@ -70,7 +70,7 @@ export function useDemo(vacancyId: string | null): UseDemoResult {
   const persistUpdate = useCallback(async (updated: Demo) => {
     setSaveStatus("saving")
     try {
-      const res = await fetch(`/api/demos/${updated.id}`, {
+      const res = await fetch(`/api/modules/hr/demos/${updated.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -103,7 +103,7 @@ export function useDemo(vacancyId: string | null): UseDemoResult {
     if (!vacancyId) return null
     setSaveStatus("saving")
     try {
-      const res = await fetch("/api/demos", {
+      const res = await fetch("/api/modules/hr/demos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ vacancy_id: vacancyId, title, lessons_json: lessons }),

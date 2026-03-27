@@ -60,11 +60,11 @@ export function CommandPalette() {
               <LayoutDashboard className="mr-2 h-4 w-4" />
               <span>Обзор</span>
             </CommandItem>
-            <CommandItem onSelect={() => navigate("/candidates")}>
+            <CommandItem onSelect={() => navigate("/hr/candidates")}>
               <Users className="mr-2 h-4 w-4" />
               <span>Все кандидаты</span>
             </CommandItem>
-            <CommandItem onSelect={() => navigate("/interviews")}>
+            <CommandItem onSelect={() => navigate("/hr/interviews")}>
               <Calendar className="mr-2 h-4 w-4" />
               <span>Собеседования</span>
             </CommandItem>

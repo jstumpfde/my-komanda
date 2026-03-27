@@ -75,11 +75,11 @@ import { useAuth, getVisibleSections, getVisibleSettings, ROLE_LABELS } from "@/
 
 const mainNavItems = [
   { name: "Обзор", icon: LayoutDashboard, href: "/overview" },
-  { name: "Кандидаты", icon: Users, href: "/candidates" },
-  { name: "Интервью", icon: Calendar, href: "/interviews" },
+  { name: "Кандидаты", icon: Users, href: "/hr/candidates" },
+  { name: "Интервью", icon: Calendar, href: "/hr/interviews" },
   { name: "Аналитика", icon: BarChart3, href: "/analytics" },
-  { name: "Talent Pool", icon: Database, href: "/talent-pool" },
-  { name: "Источники", icon: Link2, href: "/sources" },
+  { name: "Talent Pool", icon: Database, href: "/hr/talent-pool" },
+  { name: "Источники", icon: Link2, href: "/hr/sources" },
   { name: "Рефералы", icon: Gift, href: "/referrals" },
 ]
 
@@ -268,7 +268,7 @@ export function DashboardSidebar() {
                   title="Создать вакансию"
                   asChild
                 >
-                  <Link href="/vacancies/create">
+                  <Link href="/hr/vacancies/create">
                     <Plus className="size-3.5" />
                   </Link>
                 </Button>
@@ -417,7 +417,7 @@ export function DashboardSidebar() {
                           <SidebarMenuItem>
                             <p className="text-[11px] text-sidebar-foreground/40 px-3 py-2">
                               Нет вакансий.{" "}
-                              <Link href="/vacancies/create" className="text-sidebar-primary hover:underline">
+                              <Link href="/hr/vacancies/create" className="text-sidebar-primary hover:underline">
                                 Создать первую
                               </Link>
                             </p>

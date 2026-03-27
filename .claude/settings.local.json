@@ -10,7 +10,11 @@
       "Bash(nvm ls:*)",
       "Bash(nvm use:*)",
       "Bash(pnpm add:*)",
-      "Bash(pkill -f \"next dev\")"
+      "Bash(pkill -f \"next dev\")",
+      "Bash(pnpm list:*)",
+      "Bash(pnpm build:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ]
   }
 }

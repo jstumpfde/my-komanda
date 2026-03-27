@@ -1,0 +1,49 @@
+import type { ModuleConfig, ModuleId } from './types'
+
+export const MODULE_REGISTRY: Record<ModuleId, ModuleConfig> = {
+  hr: {
+    id: 'hr',
+    name: 'HR и найм',
+    description: 'Управление вакансиями, кандидатами и процессом найма',
+    icon: 'Users',
+    basePath: '/hr',
+    menuItems: [
+      { label: 'Вакансии',      href: '/hr/vacancies',   icon: 'Briefcase' },
+      { label: 'Кандидаты',     href: '/hr/candidates',  icon: 'UserCheck' },
+      { label: 'Демо-редактор', href: '/hr/demo-editor', icon: 'Layers' },
+      { label: 'Интервью',      href: '/hr/interviews',  icon: 'MessageSquare' },
+      { label: 'Источники',     href: '/hr/sources',     icon: 'Globe' },
+      { label: 'Talent Pool',   href: '/hr/talent-pool', icon: 'Database' },
+      { label: 'Онбординг',     href: '/hr/onboarding',  icon: 'Rocket' },
+      { label: 'Аналитика',     href: '/hr/analytics',   icon: 'BarChart3' },
+    ],
+  },
+  marketing: {
+    id: 'marketing',
+    name: 'Маркетинг',
+    description: 'Контент, SEO и маркетинговая аналитика',
+    icon: 'Megaphone',
+    basePath: '/marketing',
+    menuItems: [
+      { label: 'Контент',   href: '/marketing/content',  icon: 'FileText' },
+      { label: 'SEO',       href: '/marketing/seo',      icon: 'Search' },
+      { label: 'Аналитика', href: '/marketing/analytics',icon: 'TrendingUp' },
+    ],
+  },
+  sales: {
+    id: 'sales',
+    name: 'Продажи',
+    description: 'Управление продажами и клиентской базой',
+    icon: 'DollarSign',
+    basePath: '/sales',
+    menuItems: [],
+  },
+  logistics: {
+    id: 'logistics',
+    name: 'Логистика',
+    description: 'Управление доставкой и складом',
+    icon: 'Truck',
+    basePath: '/logistics',
+    menuItems: [],
+  },
+}

@@ -10,7 +10,7 @@ import { usePathname } from "next/navigation"
 // Public pages — доступны без авторизации (guard теперь в middleware.ts)
 const PUBLIC_PATHS = [
   "/candidate/", "/schedule/", "/vacancy/", "/ref/",
-  "/register", "/login", "/onboarding",
+  "/register", "/login", "/hr/onboarding",
 ]
 
 function isPublicPath(pathname: string) {

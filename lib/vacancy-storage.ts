@@ -204,7 +204,7 @@ export function resetCategories() {
 }
 
 // ─── API CRUD (fetch-based, replaces localStorage vacancy operations) ─────────
-// These functions map to the API routes created in app/api/vacancies/
+// These functions map to the API routes created in app/api/modules/hr/vacancies/
 
 export interface ApiVacancyPayload {
   title: string
@@ -228,9 +228,9 @@ export interface ApiVacancyUpdatePayload {
   description_json?: unknown
 }
 
-/** GET /api/vacancies?page=&limit= */
+/** GET /api/modules/hr/vacancies?page=&limit= */
 export async function fetchVacancies(page = 1, limit = 20) {
-  const res = await fetch(`/api/vacancies?page=${page}&limit=${limit}`)
+  const res = await fetch(`/api/modules/hr/vacancies?page=${page}&limit=${limit}`)
   if (!res.ok) {
     const d = await res.json() as { error?: string }
     throw new Error(d.error ?? `HTTP ${res.status}`)
@@ -238,9 +238,9 @@ export async function fetchVacancies(page = 1, limit = 20) {
   return res.json() as Promise<{ vacancies: unknown[]; total: number; page: number; limit: number }>
 }
 
-/** GET /api/vacancies/[id] */
+/** GET /api/modules/hr/vacancies/[id] */
 export async function fetchVacancy(id: string) {
-  const res = await fetch(`/api/vacancies/${id}`)
+  const res = await fetch(`/api/modules/hr/vacancies/${id}`)
   if (!res.ok) {
     const d = await res.json() as { error?: string }
     throw new Error(d.error ?? `HTTP ${res.status}`)
@@ -248,9 +248,9 @@ export async function fetchVacancy(id: string) {
   return res.json() as Promise<unknown>
 }
 
-/** POST /api/vacancies */
+/** POST /api/modules/hr/vacancies */
 export async function createVacancyApi(payload: ApiVacancyPayload) {
-  const res = await fetch("/api/vacancies", {
+  const res = await fetch("/api/modules/hr/vacancies", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -262,9 +262,9 @@ export async function createVacancyApi(payload: ApiVacancyPayload) {
   return res.json() as Promise<unknown>
 }
 
-/** PUT /api/vacancies/[id] */
+/** PUT /api/modules/hr/vacancies/[id] */
 export async function updateVacancyApi(id: string, payload: ApiVacancyUpdatePayload) {
-  const res = await fetch(`/api/vacancies/${id}`, {
+  const res = await fetch(`/api/modules/hr/vacancies/${id}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -276,9 +276,9 @@ export async function updateVacancyApi(id: string, payload: ApiVacancyUpdatePayl
   return res.json() as Promise<unknown>
 }
 
-/** DELETE /api/vacancies/[id] */
+/** DELETE /api/modules/hr/vacancies/[id] */
 export async function deleteVacancyApi(id: string) {
-  const res = await fetch(`/api/vacancies/${id}`, { method: "DELETE" })
+  const res = await fetch(`/api/modules/hr/vacancies/${id}`, { method: "DELETE" })
   if (!res.ok) {
     const d = await res.json() as { error?: string }
     throw new Error(d.error ?? `HTTP ${res.status}`)

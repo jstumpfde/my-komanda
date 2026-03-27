@@ -42,7 +42,7 @@ export function useVacancies(page = 1, limit = 20) {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch(`/api/vacancies?page=${page}&limit=${limit}`)
+      const res = await fetch(`/api/modules/hr/vacancies?page=${page}&limit=${limit}`)
       if (!res.ok) {
         const d = await res.json() as { error?: string }
         throw new Error(d.error ?? `HTTP ${res.status}`)
@@ -76,7 +76,7 @@ export function useVacancy(id: string | null) {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch(`/api/vacancies/${id}`)
+      const res = await fetch(`/api/modules/hr/vacancies/${id}`)
       if (!res.ok) {
         const d = await res.json() as { error?: string }
         throw new Error(d.error ?? `HTTP ${res.status}`)

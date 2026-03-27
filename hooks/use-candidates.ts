@@ -46,7 +46,7 @@ export function useCandidates(
       if (stageFilter && stageFilter.length > 0) {
         params.set("stage", stageFilter.join(","))
       }
-      const res = await fetch(`/api/candidates?${params.toString()}`)
+      const res = await fetch(`/api/modules/hr/candidates?${params.toString()}`)
       if (!res.ok) {
         const d = await res.json() as { error?: string }
         throw new Error(d.error ?? `HTTP ${res.status}`)
@@ -68,7 +68,7 @@ export function useCandidates(
 
   const updateStage = useCallback(async (candidateId: string, stage: string): Promise<boolean> => {
     try {
-      const res = await fetch(`/api/candidates/${candidateId}/stage`, {
+      const res = await fetch(`/api/modules/hr/candidates/${candidateId}/stage`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ stage }),
