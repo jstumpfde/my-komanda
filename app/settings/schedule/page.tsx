@@ -33,6 +33,26 @@ export default function ScheduleSettingsPage() {
   const workDays = Object.entries(daySchedule).filter(([, v]) => v.enabled).map(([k]) => k)
   const updateDay = (id: string, patch: Partial<DaySchedule>) =>
     setDaySchedule(prev => ({ ...prev, [id]: { ...prev[id], ...patch } }))
+  const [scheduleExpanded, setScheduleExpanded] = useState(false)
+
+  // Краткое описание расписания для свёрнутого вида
+  const scheduleSummary = (() => {
+    const enabled = WEEKDAYS.filter(d => daySchedule[d.id].enabled)
+    if (enabled.length === 0) return "Нет рабочих дней"
+    // группируем дни с одинаковым временем
+    const groups: { days: string[]; start: string; end: string }[] = []
+    enabled.forEach(d => {
+      const s = daySchedule[d.id]
+      const g = groups.find(g => g.start === s.start && g.end === s.end)
+      if (g) g.days.push(d.label)
+      else groups.push({ days: [d.label], start: s.start, end: s.end })
+    })
+    return groups.map(g =>
+      g.days.length > 2
+        ? `${g.days[0]}–${g.days[g.days.length - 1]} ${g.start}–${g.end}`
+        : `${g.days.join(", ")} ${g.start}–${g.end}`
+    ).join("  •  ")
+  })()
   const [defaultDuration, setDefaultDuration] = useState("45")
   const [buffer, setBuffer] = useState("15")
   type BlockedEntry = { id: string } & ({ type: "date"; date: string } | { type: "range"; from: string; to: string })
@@ -140,28 +160,48 @@ export default function ScheduleSettingsPage() {
               {/* Рабочие дни */}
               <Card>
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-base flex items-center gap-2"><Calendar className="w-4 h-4" /> Рабочее расписание</CardTitle>
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-base flex items-center gap-2"><Calendar className="w-4 h-4" /> Рабочее расписание</CardTitle>
+                    <button
+                      onClick={() => setScheduleExpanded(p => !p)}
+                      className="text-xs text-primary hover:underline flex items-center gap-1"
+                    >
+                      {scheduleExpanded ? "∧ Свернуть" : "∨ Настроить"}
+                    </button>
+                  </div>
                 </CardHeader>
-                <CardContent className="space-y-1">
-                  {WEEKDAYS.map(d => {
-                    const s = daySchedule[d.id]
-                    return (
-                      <div key={d.id} className="flex items-center gap-3 py-2">
-                        <span className="w-6 text-sm font-medium text-foreground shrink-0">{d.label}</span>
-                        <Switch checked={s.enabled} onCheckedChange={v => updateDay(d.id, { enabled: v })} />
-                        {s.enabled ? (
-                          <div className="flex items-center gap-2">
-                            <Input type="time" value={s.start} onChange={e => updateDay(d.id, { start: e.target.value })} className="h-9 w-28 text-sm" />
-                            <span className="text-muted-foreground">—</span>
-                            <Input type="time" value={s.end} onChange={e => updateDay(d.id, { end: e.target.value })} className="h-9 w-28 text-sm" />
-                          </div>
-                        ) : (
-                          <span className="text-sm text-muted-foreground">Выходной</span>
-                        )}
-                      </div>
-                    )
-                  })}
-                </CardContent>
+
+                {/* Свёрнутый вид */}
+                {!scheduleExpanded && (
+                  <CardContent className="pt-0 pb-4">
+                    <p className="text-sm text-foreground">{scheduleSummary}</p>
+                  </CardContent>
+                )}
+
+                {/* Развёрнутый вид */}
+                {scheduleExpanded && (
+                  <CardContent className="space-y-1 pt-0">
+                    {WEEKDAYS.map(d => {
+                      const s = daySchedule[d.id]
+                      return (
+                        <div key={d.id} className="flex items-center gap-3 py-2">
+                          <span className="w-6 text-sm font-medium text-foreground shrink-0">{d.label}</span>
+                          <Switch checked={s.enabled} onCheckedChange={v => updateDay(d.id, { enabled: v })} />
+                          {s.enabled ? (
+                            <div className="flex items-center gap-2">
+                              <Input type="time" value={s.start} onChange={e => updateDay(d.id, { start: e.target.value })} className="h-9 w-28 text-sm" />
+                              <span className="text-muted-foreground">—</span>
+                              <Input type="time" value={s.end} onChange={e => updateDay(d.id, { end: e.target.value })} className="h-9 w-28 text-sm" />
+                            </div>
+                          ) : (
+                            <span className="text-sm text-muted-foreground">Выходной</span>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </CardContent>
+                )}
+
                 <CardContent className="pt-0 space-y-4">
 
                   <div className="grid grid-cols-2 gap-4">
