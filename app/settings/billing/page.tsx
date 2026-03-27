@@ -25,6 +25,16 @@ const PROMO_CODES: Record<string, number> = {
   "HR2026": 15,
 }
 
+// Конфиг слайдера: сколько доп. вакансий можно добавить
+const SLIDER_MAX: Record<string, number> = {
+  solo: 1,      // до 2 вакансий
+  starter: 6,   // до 9 вакансий
+  business: 11, // до 21 вакансии
+  pro: 25,      // до 50 вакансий
+}
+const EXTRA_VAC_PRICE = 4000  // ₽/мес за доп. вакансию
+const CANDS_PER_VAC = 400     // кандидатов на вакансию
+
 // Текущий тариф клиента (захардкожен)
 const currentTariffId = "business"
 const usage = { vacancies: 7, candidates: 847 }
@@ -274,6 +284,33 @@ export default function BillingPage() {
         </CardContent>
       </Card>
 
+      {/* ═══ Промокод ════════════════════════════════════ */}
+      <div className="mb-6">
+        <h3 className="text-lg font-semibold text-foreground mb-3">Промокод</h3>
+        <div className="flex gap-2 max-w-sm">
+          <div className="relative flex-1">
+            <Tag className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              value={promoCode}
+              onChange={e => { setPromoCode(e.target.value.toUpperCase()); setPromoApplied(false); setPromoDiscount(0) }}
+              placeholder="Введите промокод"
+              className="pl-9 uppercase font-mono"
+              disabled={promoApplied}
+            />
+          </div>
+          <Button
+            variant={promoApplied ? "outline" : "default"}
+            onClick={promoApplied ? () => { setPromoApplied(false); setPromoDiscount(0); setPromoCode("") } : applyPromo}
+            className={promoApplied ? "text-emerald-600 border-emerald-300" : ""}
+          >
+            {promoApplied ? `−${promoDiscount}% ✕` : "Применить"}
+          </Button>
+        </div>
+        {promoApplied && (
+          <p className="text-xs text-emerald-600 mt-1.5 font-medium">Скидка {promoDiscount}% применена ко всем тарифам</p>
+        )}
+      </div>
+
       {/* ═══ Выбор тарифа ════════════════════════════════ */}
       <div id="tariff-cards" className="mb-8">
         <h3 className="text-lg font-semibold text-foreground mb-4">Выбор тарифа</h3>
@@ -284,8 +321,11 @@ export default function BillingPage() {
             const periodIdx = getCardPeriodIdx(tariff.id)
             const period = PERIODS[periodIdx]
             const extra = getExtraVacancies(tariff.id)
-            const extraPrice = extra * 990 * period.months
-            const baseAmount = (tariff.price * period.months) + extraPrice
+            const totalVacancies = tariff.maxVacancies === 999 ? 999 : tariff.maxVacancies + extra
+            const totalCandidates = tariff.maxVacancies === 999 ? tariff.maxCandidates : (tariff.maxVacancies + extra) * CANDS_PER_VAC
+            const extraMonthly = extra * EXTRA_VAC_PRICE
+            const baseMonthly = tariff.price + extraMonthly
+            const baseAmount = baseMonthly * period.months
             const discountAmount = Math.round(baseAmount * (period.discount + promoDiscount) / 100)
             const totalAmount = baseAmount - discountAmount
             return (
@@ -307,32 +347,50 @@ export default function BillingPage() {
                 )}
                 <CardContent className="p-5 pt-6 flex flex-col h-full">
                   {/* Название и цена */}
-                  <div className="text-center mb-4">
+                  <div className="text-center mb-3">
                     <h4 className="text-lg font-bold text-foreground">{tariff.name}</h4>
                     <div className="mt-1">
-                      {tariff.price === 0 ? (
-                        <div>
-                          <span className="text-2xl font-bold text-foreground">Бесплатно</span>
-                          <p className="text-xs text-muted-foreground">{tariff.trialDays} дней</p>
-                        </div>
-                      ) : (
-                        <div>
-                          <span className="text-2xl font-bold text-foreground">{totalAmount.toLocaleString("ru-RU")}</span>
-                          <span className="text-sm text-muted-foreground"> ₽</span>
-                          {period.months > 1 && (
-                            <p className="text-xs text-muted-foreground mt-0.5">
-                              {tariff.price.toLocaleString("ru-RU")} ₽/мес × {period.months}
-                            </p>
-                          )}
-                          {period.discount > 0 && (
-                            <p className="text-xs text-emerald-600 font-medium">−{discountAmount.toLocaleString("ru-RU")} ₽ ({period.discount}%)</p>
-                          )}
-                        </div>
+                      <span className="text-2xl font-bold text-foreground">{baseMonthly.toLocaleString("ru-RU")}</span>
+                      <span className="text-sm text-muted-foreground"> ₽/мес</span>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        До {totalCandidates === 999 ? "∞" : totalCandidates.toLocaleString("ru-RU")} кандидатов
+                      </p>
+                      {(period.discount > 0 || promoDiscount > 0) && (
+                        <p className="text-xs text-emerald-600 font-medium mt-0.5">
+                          Итого: {totalAmount.toLocaleString("ru-RU")} ₽ (−{discountAmount.toLocaleString("ru-RU")} ₽)
+                        </p>
                       )}
                     </div>
                   </div>
 
-                  <Separator className="mb-4" />
+                  <Separator className="mb-3" />
+
+                  {/* Слайдер вакансий */}
+                  {tariff.maxVacancies !== 999 ? (
+                    <div className="mb-3 space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-medium text-foreground">Вакансии</span>
+                        <span className="text-xs font-bold text-foreground">{totalVacancies}</span>
+                      </div>
+                      <Slider
+                        min={0} max={SLIDER_MAX[tariff.id] ?? 10} step={1}
+                        value={[extra]}
+                        onValueChange={([v]) => setExtraVacancies(prev => ({ ...prev, [tariff.id]: v }))}
+                        className="w-full"
+                      />
+                      <div className="flex justify-between text-[10px] text-muted-foreground">
+                        <span>{tariff.maxVacancies} включено</span>
+                        <span>+{extra} доп. × {EXTRA_VAC_PRICE.toLocaleString("ru-RU")} ₽</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mb-3 flex items-center justify-between">
+                      <span className="text-xs font-medium text-foreground">Вакансии</span>
+                      <span className="text-xs font-bold text-foreground">без лимита</span>
+                    </div>
+                  )}
+
+                  <Separator className="mb-3" />
 
                   {/* Фичи */}
                   <div className="space-y-2 mb-4 flex-1">
@@ -349,24 +407,6 @@ export default function BillingPage() {
                       </div>
                     ))}
                   </div>
-
-                  {/* Ползунок доп. вакансий */}
-                  {tariff.price > 0 && tariff.maxVacancies !== 999 && (
-                    <div className="mb-3 space-y-1.5">
-                      <div className="flex justify-between text-xs text-muted-foreground">
-                        <span>Доп. вакансии</span>
-                        <span className="font-medium text-foreground">
-                          {extra > 0 ? `+${extra} (+${(extra * 990).toLocaleString("ru-RU")} ₽/мес)` : "не добавлено"}
-                        </span>
-                      </div>
-                      <Slider
-                        min={0} max={20} step={1}
-                        value={[extra]}
-                        onValueChange={([v]) => setExtraVacancies(prev => ({ ...prev, [tariff.id]: v }))}
-                        className="w-full"
-                      />
-                    </div>
-                  )}
 
                   {/* Выбор периода */}
                   {tariff.price > 0 && (
@@ -408,33 +448,6 @@ export default function BillingPage() {
             )
           })}
         </div>
-      </div>
-
-      {/* ═══ Промокод ════════════════════════════════════ */}
-      <div className="mb-8">
-        <h3 className="text-lg font-semibold text-foreground mb-4">Промокод</h3>
-        <div className="flex gap-2 max-w-sm">
-          <div className="relative flex-1">
-            <Tag className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              value={promoCode}
-              onChange={e => { setPromoCode(e.target.value.toUpperCase()); setPromoApplied(false); setPromoDiscount(0) }}
-              placeholder="Введите промокод"
-              className="pl-9 uppercase font-mono"
-              disabled={promoApplied}
-            />
-          </div>
-          <Button
-            variant={promoApplied ? "outline" : "default"}
-            onClick={promoApplied ? () => { setPromoApplied(false); setPromoDiscount(0); setPromoCode("") } : applyPromo}
-            className={promoApplied ? "text-emerald-600 border-emerald-300" : ""}
-          >
-            {promoApplied ? `−${promoDiscount}% ✕` : "Применить"}
-          </Button>
-        </div>
-        {promoApplied && (
-          <p className="text-xs text-emerald-600 mt-1.5 font-medium">Скидка {promoDiscount}% применена ко всем тарифам</p>
-        )}
       </div>
 
       {/* ═══ Способы оплаты ══════════════════════════════ */}
