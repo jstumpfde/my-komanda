@@ -9,8 +9,8 @@ import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
-import { Palette, Lock, Globe, Upload, Play, Save, Loader2 } from "lucide-react"
-import { saveBrand, BRAND_PRESETS, canCustomizeBrand, canCustomDomain, type BrandConfig } from "@/lib/branding"
+import { Palette, Lock, Globe, Upload, Play, Save, Loader2, CheckCircle2, XCircle, RefreshCw, Copy, AlertCircle } from "lucide-react"
+import { saveBrand, BRAND_PRESETS, canCustomizeBrand, type BrandConfig } from "@/lib/branding"
 import { fetchCompanyApi, updateCompanyApi } from "@/lib/company-storage"
 
 export default function BrandingPage() {
@@ -19,8 +19,10 @@ export default function BrandingPage() {
   const [brandText, setBrandText] = useState("#1e293b")
   const [brandPlan] = useState<BrandConfig["plan"]>("business")
   const canBrand = canCustomizeBrand(brandPlan)
-  const canDomain = canCustomDomain(brandPlan)
   const [logoPreview, setLogoPreview] = useState<string | null>(null)
+  const [customDomain, setCustomDomain] = useState("")
+  const [domainStatus, setDomainStatus] = useState<"idle" | "checking" | "verified" | "error">("idle")
+  const [verifying, setVerifying] = useState(false)
   const [shortName, setShortName] = useState("")
   const [greetingTemplate, setGreetingTemplate] = useState("Привет, {name}! 👋")
   const [saving, setSaving] = useState(false)
@@ -48,6 +50,16 @@ export default function BrandingPage() {
     const reader = new FileReader()
     reader.onload = () => setLogoPreview(reader.result as string)
     reader.readAsDataURL(file)
+  }
+
+  const verifyDomain = async () => {
+    if (!customDomain.trim()) return
+    setVerifying(true)
+    setDomainStatus("checking")
+    await new Promise(r => setTimeout(r, 2000))
+    // Демо: домены на .ru верифицируются успешно
+    setDomainStatus(customDomain.endsWith(".ru") ? "verified" : "error")
+    setVerifying(false)
   }
 
   const handleSave = async () => {
@@ -173,12 +185,84 @@ export default function BrandingPage() {
             </div>
 
             {/* Кастомный домен */}
-            <div className="space-y-1">
-              <Label className="text-sm flex items-center gap-2">
+            <div className="space-y-3">
+              <Label className="text-sm font-medium flex items-center gap-2">
                 <Globe className="w-3.5 h-3.5 text-muted-foreground" /> Кастомный домен
-                {!canDomain && <Badge variant="outline" className="text-[10px]">только Pro</Badge>}
               </Label>
-              <Input value="hr.romashka.ru" disabled={!canDomain} className="h-9 w-64" placeholder="hr.company.ru" />
+
+              {/* Ввод домена */}
+              <div className="flex gap-2 max-w-lg">
+                <Input
+                  value={customDomain}
+                  onChange={e => { setCustomDomain(e.target.value); setDomainStatus("idle") }}
+                  placeholder="hr.company.ru"
+                  className="h-9 font-mono text-sm"
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0 h-9 gap-1.5"
+                  onClick={verifyDomain}
+                  disabled={!customDomain.trim() || verifying}
+                >
+                  {verifying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                  Проверить
+                </Button>
+              </div>
+
+              {/* Статус */}
+              {domainStatus === "verified" && (
+                <div className="flex items-center gap-2 text-sm text-emerald-600 font-medium">
+                  <CheckCircle2 className="w-4 h-4" />
+                  Домен подтверждён и активен
+                </div>
+              )}
+              {domainStatus === "error" && (
+                <div className="flex items-center gap-2 text-sm text-destructive">
+                  <XCircle className="w-4 h-4" />
+                  DNS-записи не найдены. Проверьте настройки и попробуйте снова.
+                </div>
+              )}
+              {domainStatus === "checking" && (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Проверяем DNS-записи...
+                </div>
+              )}
+
+              {/* Инструкция по настройке */}
+              {domainStatus !== "verified" && (
+                <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3 max-w-lg">
+                  <div className="flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
+                    <p className="text-xs text-muted-foreground">Добавьте CNAME-запись в DNS вашего домена, затем нажмите «Проверить»</p>
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold text-foreground uppercase tracking-wide">CNAME-запись</p>
+                    <div className="grid grid-cols-[80px_1fr] gap-x-4 gap-y-1 text-xs">
+                      <span className="text-muted-foreground">Тип</span>
+                      <code className="font-mono text-foreground">CNAME</code>
+                      <span className="text-muted-foreground">Имя</span>
+                      <div className="flex items-center gap-1.5">
+                        <code className="font-mono text-foreground">{customDomain ? customDomain.split(".")[0] : "hr"}</code>
+                        <button onClick={() => { navigator.clipboard.writeText(customDomain ? customDomain.split(".")[0] : "hr"); toast.success("Скопировано") }} className="text-muted-foreground hover:text-foreground">
+                          <Copy className="w-3 h-3" />
+                        </button>
+                      </div>
+                      <span className="text-muted-foreground">Значение</span>
+                      <div className="flex items-center gap-1.5">
+                        <code className="font-mono text-foreground">cname.my-komanda.ru</code>
+                        <button onClick={() => { navigator.clipboard.writeText("cname.my-komanda.ru"); toast.success("Скопировано") }} className="text-muted-foreground hover:text-foreground">
+                          <Copy className="w-3 h-3" />
+                        </button>
+                      </div>
+                      <span className="text-muted-foreground">TTL</span>
+                      <code className="font-mono text-foreground">3600</code>
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">Изменения DNS могут применяться до 48 часов. SSL-сертификат выпускается автоматически после проверки.</p>
+                </div>
+              )}
             </div>
 
             <Separator />
