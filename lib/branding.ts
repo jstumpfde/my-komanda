@@ -4,6 +4,7 @@ export interface BrandConfig {
   textColor: string
   logoUrl: string | null
   companyName: string
+  greetingTemplate: string
   plan: "trial" | "starter" | "business" | "pro"
 }
 
@@ -13,6 +14,7 @@ export const DEFAULT_BRAND: BrandConfig = {
   textColor: "#1e293b",
   logoUrl: null,
   companyName: "ООО Ромашка",
+  greetingTemplate: "Привет, {name}! 👋",
   plan: "business",
 }
 

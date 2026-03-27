@@ -22,6 +22,7 @@ export default function BrandingPage() {
   const canDomain = canCustomDomain(brandPlan)
   const [logoPreview, setLogoPreview] = useState<string | null>(null)
   const [shortName, setShortName] = useState("")
+  const [greetingTemplate, setGreetingTemplate] = useState("Привет, {name}! 👋")
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
@@ -35,6 +36,7 @@ export default function BrandingPage() {
         if (c.brandBgColor) setBrandBg(c.brandBgColor)
         if (c.brandTextColor) setBrandText(c.brandTextColor)
         if (c.logoUrl) setLogoPreview(c.logoUrl)
+        if (c.greetingTemplate) setGreetingTemplate(c.greetingTemplate)
       })
       .catch(() => {})
   }, [])
@@ -57,10 +59,10 @@ export default function BrandingPage() {
         brand_bg_color: brandBg,
         brand_text_color: brandText,
       })
-      saveBrand({ primaryColor: brandPrimary, bgColor: brandBg, textColor: brandText, logoUrl: logoPreview, companyName: shortName })
+      saveBrand({ primaryColor: brandPrimary, bgColor: brandBg, textColor: brandText, logoUrl: logoPreview, companyName: shortName, greetingTemplate })
       toast.success("Брендинг сохранён")
     } catch {
-      saveBrand({ primaryColor: brandPrimary, bgColor: brandBg, textColor: brandText, logoUrl: logoPreview, companyName: shortName })
+      saveBrand({ primaryColor: brandPrimary, bgColor: brandBg, textColor: brandText, logoUrl: logoPreview, companyName: shortName, greetingTemplate })
       toast.success("Брендинг сохранён локально")
     } finally { setSaving(false) }
   }
@@ -87,6 +89,29 @@ export default function BrandingPage() {
                 <span className="text-sm text-amber-700 dark:text-amber-400">Брендинг доступен с тарифа Business</span>
               </div>
             )}
+
+            {/* Название компании */}
+            <div className="space-y-1">
+              <Label className="text-sm font-medium">Название компании</Label>
+              <Input
+                value={shortName}
+                onChange={e => setShortName(e.target.value)}
+                placeholder="ООО Ромашка"
+                className="h-9 max-w-sm"
+              />
+            </div>
+
+            {/* Приветствие */}
+            <div className="space-y-1">
+              <Label className="text-sm font-medium">Приветствие</Label>
+              <Input
+                value={greetingTemplate}
+                onChange={e => setGreetingTemplate(e.target.value)}
+                placeholder="Привет, {name}! 👋"
+                className="h-9 max-w-sm"
+              />
+              <p className="text-[11px] text-muted-foreground"><code className="bg-muted px-1 rounded">{"{name}"}</code> — будет заменено на имя кандидата</p>
+            </div>
 
             {/* Пресеты */}
             <div className="space-y-2">
@@ -168,7 +193,7 @@ export default function BrandingPage() {
                     <span className="text-base font-bold" style={{ color: canBrand ? brandText : "#1e293b" }}>{shortName || "Название компании"}</span>
                   </div>
                   <div>
-                    <h3 className="text-lg font-bold" style={{ color: canBrand ? brandText : "#1e293b" }}>Привет, Иван! 👋</h3>
+                    <h3 className="text-lg font-bold" style={{ color: canBrand ? brandText : "#1e293b" }}>{greetingTemplate.replace("{name}", "Иван")}</h3>
                     <p className="text-sm mt-1" style={{ color: canBrand ? brandText + "99" : "#64748b" }}>Менеджер по продажам · {shortName || "Компания"}</p>
                   </div>
                   <div className="flex gap-2">
