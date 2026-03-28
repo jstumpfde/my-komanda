@@ -7,7 +7,7 @@ import {
   LayoutDashboard, Users, User, Briefcase, UserCheck, Layers, MessageSquare,
   Globe, Database, Rocket, BarChart3, FileText, Search, TrendingUp, Megaphone,
   DollarSign, Truck, Gift, Building2, CreditCard, Plug, Clock, Bell,
-  Settings, Shield, ChevronDown, LogOut, type LucideIcon,
+  Settings, Shield, ChevronDown, LogOut, Calendar, Share2, type LucideIcon,
 } from "lucide-react"
 import {
   Sidebar,
@@ -36,14 +36,14 @@ import { useAuth, getVisibleSections, getVisibleSettings, ROLE_LABELS } from "@/
 import { MODULE_REGISTRY } from "@/lib/modules/registry"
 import type { ModuleId } from "@/lib/modules/types"
 import { getModuleGroups } from "@/lib/sidebar/module-menus"
-import { PLATFORM_MENU, SETTINGS_MENU, ADMIN_MENU } from "@/lib/sidebar/config"
+import { SETTINGS_MENU, ADMIN_MENU } from "@/lib/sidebar/config"
 
 // ── Icon resolver ──────────────────────────────────────────────────────────
 const ICON_MAP: Record<string, LucideIcon> = {
   LayoutDashboard, Users, User, Briefcase, UserCheck, Layers, MessageSquare,
   Globe, Database, Rocket, BarChart3, FileText, Search, TrendingUp, Megaphone,
   DollarSign, Truck, Gift, Building2, CreditCard, Plug, Clock, Bell,
-  Settings, Shield,
+  Settings, Shield, Calendar, Share2,
 }
 function getIcon(name: string): LucideIcon {
   return ICON_MAP[name] ?? Settings
@@ -219,36 +219,6 @@ export function DashboardSidebar() {
           </SidebarGroup>
         ))}
 
-        {/* ── Platform items (Обзор, Рефералы) ── */}
-        {vis.main && (
-          <SidebarGroup className="py-0 mb-0 mt-1">
-            <SidebarGroupLabel className="text-sidebar-foreground/40 text-[10px] font-medium uppercase tracking-widest px-3 mb-1 group-data-[collapsible=icon]:hidden">
-              Платформа
-            </SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu className="gap-0.5">
-                {PLATFORM_MENU.map((item) => {
-                  const ItemIcon = getIcon(item.icon)
-                  return (
-                    <SidebarMenuItem key={item.href}>
-                      <SidebarMenuButton
-                        asChild
-                        isActive={pathname === item.href}
-                        tooltip={item.name}
-                        className="text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground h-8"
-                      >
-                        <Link href={item.href}>
-                          <ItemIcon className="size-4" />
-                          <span className="text-sm">{item.name}</span>
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  )
-                })}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        )}
 
       </SidebarContent>
 
