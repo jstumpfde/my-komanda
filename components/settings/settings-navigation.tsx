@@ -3,12 +3,13 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
-import { Building2, Users, CreditCard, Plug, Clock, Bell } from "lucide-react"
+import { Building2, Users, CreditCard, Plug, Clock, Bell, LayoutGrid } from "lucide-react"
 
 const navItems = [
   { href: "/settings/company", label: "Компания", icon: Building2 },
   { href: "/settings/team", label: "Команда", icon: Users },
-  { href: "/settings/billing", label: "Тариф", icon: CreditCard },
+  { href: "/settings/plan", label: "Тариф", icon: LayoutGrid },
+  { href: "/settings/billing", label: "Оплата", icon: CreditCard },
   { href: "/settings/integrations", label: "Интеграции", icon: Plug },
   { href: "/settings/schedule", label: "Расписание", icon: Clock },
   { href: "/settings/notifications", label: "Уведомления", icon: Bell },
