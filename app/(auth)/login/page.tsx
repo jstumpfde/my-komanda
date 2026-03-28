@@ -41,7 +41,7 @@ function LoginForm() {
     setLoading(false)
 
     if (result?.error) {
-      setError("Неверный email/имя или пароль")
+      setError("Неверный логин или пароль")
       return
     }
 
