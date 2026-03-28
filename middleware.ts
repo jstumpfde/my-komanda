@@ -1,4 +1,8 @@
 import { auth } from "@/auth"
+import { hasAnyModule, HR_MODULE_SLUGS } from "@/lib/modules/access"
+
+// Node.js runtime — нужен для DB-запросов в middleware
+export const runtime = "nodejs"
 
 // Маршруты доступны без авторизации
 const PUBLIC_PREFIXES = [
@@ -21,7 +25,7 @@ function isPublic(pathname: string): boolean {
   )
 }
 
-export default auth((req) => {
+export default auth(async (req) => {
   const { pathname } = req.nextUrl
   const session = req.auth
 
@@ -46,6 +50,18 @@ export default auth((req) => {
   const onboardingDone = req.cookies.get("mk_onboarded")?.value === "1"
   if (!session.user.companyId && !pathname.startsWith("/register") && !onboardingDone) {
     return Response.redirect(new URL("/register", req.url))
+  }
+
+  // Проверка доступа к HR-модулям: /hr/* требует хотя бы одного активного HR-модуля
+  if (
+    session.user.companyId &&
+    pathname.startsWith("/hr/") &&
+    !pathname.startsWith("/upgrade")
+  ) {
+    const hasHR = await hasAnyModule(session.user.companyId, HR_MODULE_SLUGS)
+    if (!hasHR) {
+      return Response.redirect(new URL("/upgrade?module=recruiting", req.url))
+    }
   }
 })
 
