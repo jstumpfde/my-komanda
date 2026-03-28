@@ -53,8 +53,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     newUser: "/register",
   },
   providers: [
-    // Dev-only: вход без пароля по userId
-    ...(process.env.NODE_ENV === "development"
+    // Dev-only: вход без пароля по userId (development или ALLOW_DEV_LOGIN=true)
+    ...(process.env.NODE_ENV === "development" ||
+        process.env.ALLOW_DEV_LOGIN === "true" ||
+        process.env.NEXT_PUBLIC_ALLOW_DEV_LOGIN === "true"
       ? [
           Credentials({
             id: "dev",

@@ -22,7 +22,10 @@ function LoginForm() {
   const [devLoading, setDevLoading] = useState(false)
   const [error, setError] = useState("")
 
-  const isDev = process.env.NODE_ENV === "development"
+  // NEXT_PUBLIC_ нужен для client-компонентов; сервер может читать ALLOW_DEV_LOGIN
+  const isDev =
+    process.env.NODE_ENV === "development" ||
+    process.env.NEXT_PUBLIC_ALLOW_DEV_LOGIN === "true"
 
   const handleDevLogin = async () => {
     setDevLoading(true)

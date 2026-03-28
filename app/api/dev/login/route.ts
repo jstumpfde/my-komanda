@@ -4,11 +4,16 @@ import bcrypt from "bcryptjs"
 import { db } from "@/lib/db"
 import { users, companies, plans, planModules, tenantModules } from "@/lib/db/schema"
 
-// POST /api/dev/login — только в development
+// POST /api/dev/login — только в development или при ALLOW_DEV_LOGIN=true
 // Возвращает userId первого активного пользователя с компанией.
 // Применяет тариф "pro" + все модули ко ВСЕМ компаниям в БД.
+const isDevAllowed =
+  process.env.NODE_ENV === "development" ||
+  process.env.ALLOW_DEV_LOGIN === "true" ||
+  process.env.NEXT_PUBLIC_ALLOW_DEV_LOGIN === "true"
+
 export async function POST() {
-  if (process.env.NODE_ENV !== "development") {
+  if (!isDevAllowed) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 
