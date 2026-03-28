@@ -28,3 +28,12 @@ export async function requireCompany() {
   }
   return user as typeof user & { companyId: string }
 }
+
+export async function requirePlatformAdmin() {
+  const user = await requireAuth()
+  // DB role "admin" maps to platform_admin in the client migration
+  if (user.role !== "platform_admin" && user.role !== "admin") {
+    throw apiError("Forbidden", 403)
+  }
+  return user
+}

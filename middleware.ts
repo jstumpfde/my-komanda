@@ -10,6 +10,8 @@ const PUBLIC_PREFIXES = [
   "/ref/",
   "/onboarding",
   "/api/auth",
+  "/api/modules",
+  "/api/plans",
 ]
 
 function isPublic(pathname: string): boolean {
