@@ -104,7 +104,11 @@
       "Bash(curl -s -X POST \"http://localhost:61882/api/dev/seed-gamification\")",
       "Bash(cat:*)",
       "Bash(psql postgresql://juri:@localhost:5432/mykomanda -c \"INSERT INTO drizzle.__drizzle_migrations \\(hash, created_at\\) VALUES \\(''0005_buddy_ugc'', 1774800000000\\) ON CONFLICT DO NOTHING;\")",
-      "Bash(psql postgresql://juri:@localhost:5432/mykomanda -c \"INSERT INTO drizzle.__drizzle_migrations \\(hash, created_at\\) VALUES \\(''0006_lms_courses'', 1774900000000\\) ON CONFLICT DO NOTHING;\")"
+      "Bash(psql postgresql://juri:@localhost:5432/mykomanda -c \"INSERT INTO drizzle.__drizzle_migrations \\(hash, created_at\\) VALUES \\(''0006_lms_courses'', 1774900000000\\) ON CONFLICT DO NOTHING;\")",
+      "Bash(psql \"$DATABASE_URL\" -f drizzle/0007_skills_assessments.sql)",
+      "Bash(grep -r DATABASE_URL .env*)",
+      "Bash(psql \"postgresql://juri:@localhost:5432/mykomanda\" -f /Users/juri/my-komanda/.claude/worktrees/objective-elgamal/drizzle/0007_skills_assessments.sql)",
+      "Bash(psql \"postgresql://juri:@localhost:5432/mykomanda\" -c \"INSERT INTO drizzle.__drizzle_migrations \\(hash, created_at\\) VALUES \\(''0007_skills_assessments'', 1775000000000\\);\")"
     ]
   }
 }

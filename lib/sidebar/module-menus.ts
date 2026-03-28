@@ -12,7 +12,7 @@ const MODULE_GROUP_DEFS: Partial<Record<ModuleId, { label: string; hrefs: string
     { label: 'Найм',      hrefs: ['/hr/vacancies', '/hr/candidates', '/hr/demo-editor'] },
     { label: 'Адаптация', hrefs: ['/hr/onboarding', '/hr/adaptation/plans', '/hr/adaptation/assignments', '/hr/adaptation/gamification', '/hr/adaptation/analytics', '/hr/buddy'] },
     { label: 'Обучение',  hrefs: ['/hr/courses', '/hr/certificates'] },
-    { label: 'Развитие',  hrefs: ['/hr/talent-pool'] },
+    { label: 'Развитие',  hrefs: ['/hr/talent-pool', '/hr/skills', '/hr/assessments'] },
     { label: 'Обзор',     hrefs: ['/overview', '/hr/interviews', '/hr/analytics', '/referrals'] },
   ],
 }

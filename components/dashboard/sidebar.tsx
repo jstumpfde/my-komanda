@@ -7,7 +7,7 @@ import {
   LayoutDashboard, Users, User, Briefcase, UserCheck, Layers, MessageSquare,
   Globe, Database, Rocket, BarChart3, BarChart2, FileText, Search, TrendingUp, Megaphone,
   DollarSign, Truck, Gift, Building2, CreditCard, Plug, Clock, Bell,
-  Settings, Shield, ChevronDown, LogOut, Calendar, Share2, ShieldCheck, ClipboardList, UserCheck2, Trophy, HeartHandshake, BookOpen, Award, type LucideIcon,
+  Settings, Shield, ChevronDown, LogOut, Calendar, Share2, ShieldCheck, ClipboardList, ClipboardCheck, UserCheck2, Trophy, HeartHandshake, BookOpen, Award, Zap, type LucideIcon,
 } from "lucide-react"
 import {
   Sidebar,
@@ -43,7 +43,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   LayoutDashboard, Users, User, Briefcase, UserCheck, Layers, MessageSquare,
   Globe, Database, Rocket, BarChart3, FileText, Search, TrendingUp, Megaphone,
   DollarSign, Truck, Gift, Building2, CreditCard, Plug, Clock, Bell,
-  Settings, Shield, Calendar, Share2, ShieldCheck, ClipboardList, UserCheck2, Trophy, BarChart2, HeartHandshake, BookOpen, Award,
+  Settings, Shield, Calendar, Share2, ShieldCheck, ClipboardList, ClipboardCheck, UserCheck2, Trophy, BarChart2, HeartHandshake, BookOpen, Award, Zap,
 }
 function getIcon(name: string): LucideIcon {
   return ICON_MAP[name] ?? Settings

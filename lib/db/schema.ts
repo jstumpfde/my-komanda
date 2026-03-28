@@ -370,3 +370,50 @@ export const certificates = pgTable("certificates", {
   validUntil: timestamp("valid_until"),
   pdfUrl:     text("pdf_url"),
 })
+
+// ─── Skills & Assessments ─────────────────────────────────────────────────────
+
+export const skills = pgTable("skills", {
+  id:          uuid("id").primaryKey().defaultRandom(),
+  tenantId:    uuid("tenant_id").references(() => companies.id, { onDelete: "cascade" }), // null = системный
+  name:        text("name").notNull(),
+  category:    text("category").notNull().default("soft"), // hard/soft/tool/domain
+  description: text("description"),
+})
+
+export const positionSkills = pgTable("position_skills", {
+  id:            uuid("id").primaryKey().defaultRandom(),
+  positionId:    text("position_id").notNull(), // текст — без FK, позиция задаётся произвольно
+  skillId:       uuid("skill_id").references(() => skills.id, { onDelete: "cascade" }).notNull(),
+  requiredLevel: integer("required_level").notNull().default(3), // 1-5
+}, (t) => [unique().on(t.positionId, t.skillId)])
+
+export const assessments = pgTable("assessments", {
+  id:          uuid("id").primaryKey().defaultRandom(),
+  tenantId:    uuid("tenant_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  employeeId:  text("employee_id").notNull(),
+  type:        text("type").notNull().default("self"), // self/manager/peer/360
+  status:      text("status").notNull().default("draft"), // draft/in_progress/completed
+  period:      text("period"), // e.g. "2026-Q1"
+  createdBy:   uuid("created_by").references(() => users.id),
+  createdAt:   timestamp("created_at").defaultNow(),
+  completedAt: timestamp("completed_at"),
+})
+
+export const skillAssessments = pgTable("skill_assessments", {
+  id:           uuid("id").primaryKey().defaultRandom(),
+  assessmentId: uuid("assessment_id").references(() => assessments.id, { onDelete: "cascade" }).notNull(),
+  skillId:      uuid("skill_id").references(() => skills.id, { onDelete: "cascade" }).notNull(),
+  score:        integer("score"),  // 1-5
+  comment:      text("comment"),
+  assessorId:   text("assessor_id"),
+})
+
+export const assessmentReviewers = pgTable("assessment_reviewers", {
+  id:           uuid("id").primaryKey().defaultRandom(),
+  assessmentId: uuid("assessment_id").references(() => assessments.id, { onDelete: "cascade" }).notNull(),
+  reviewerId:   text("reviewer_id").notNull(),
+  role:         text("role").notNull().default("peer"), // self/manager/peer/subordinate
+  status:       text("status").notNull().default("pending"), // pending/completed/declined
+  completedAt:  timestamp("completed_at"),
+})

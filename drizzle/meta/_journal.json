@@ -50,6 +50,13 @@
       "when": 1774900000000,
       "tag": "0006_lms_courses",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1775000000000,
+      "tag": "0007_skills_assessments",
+      "breakpoints": true
     }
   ]
 }
