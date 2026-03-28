@@ -21,7 +21,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { CourseTab } from "@/components/vacancies/course-tab"
 import type { NotionEditorHandle } from "@/components/vacancies/notion-editor"
-import { NotionCourseTab } from "@/components/vacancies/notion-course-tab"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Slider } from "@/components/ui/slider"
@@ -69,6 +68,15 @@ const defaultSettings: CardDisplaySettings = {
   showSalary: true, showSalaryFull: false, showScore: true, showProgress: true,
   showSource: true, showCity: true, showExperience: true, showSkills: true, showActions: true,
 }
+
+const VACANCY_SOURCES = [
+  { id: "hh",       name: "hh.ru",             color: "#ef4444", utmSource: "hh",       mockClicks: 312, mockResponses: 24 },
+  { id: "avito",    name: "Авито Работа",       color: "#22c55e", utmSource: "avito",    mockClicks: 187, mockResponses: 15 },
+  { id: "superjob", name: "SuperJob",           color: "#3b82f6", utmSource: "superjob", mockClicks: 94,  mockResponses: 7 },
+  { id: "telegram", name: "Telegram",           color: "#0088cc", utmSource: "telegram", mockClicks: 56,  mockResponses: 4 },
+  { id: "site",     name: "Сайт компании",      color: "#8b5cf6", utmSource: "site",     mockClicks: 43,  mockResponses: 3 },
+  { id: "referral", name: "Реферальная ссылка", color: "#f59e0b", utmSource: "referral", mockClicks: 28,  mockResponses: 2 },
+]
 
 const STATUS_CONFIG: Record<VacancyStatus, { label: string; color: string }> = {
   draft: { label: "Не опубликована", color: "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800" },
@@ -139,13 +147,9 @@ export default function VacancyPage() {
   const [isEditingName, setIsEditingName] = useState(false)
   const [messageLogs, setMessageLogs] = useState<HhMessageLog[]>([])
   const [activeTab, setActiveTab] = useState("candidates")
-  const [utmLinks, setUtmLinks] = useState([
-    { id: "u1", resource: "Telegram", channel: "hh", tag: "tghh", clicks: 234, responses: 18, conversion: 7.7 },
-    { id: "u2", resource: "Avito", channel: "promo", tag: "avitopromo", clicks: 156, responses: 12, conversion: 7.7 },
-    { id: "u3", resource: "VK", channel: "group", tag: "vkgroup", clicks: 89, responses: 5, conversion: 5.6 },
-  ])
-  const [utmResource, setUtmResource] = useState("")
-  const [utmChannel, setUtmChannel] = useState("")
+  const [sourceStatuses, setSourceStatuses] = useState<Record<string, boolean>>({
+    hh: false, avito: false, superjob: false, telegram: false, site: false, referral: false,
+  })
   const [anPeriod, setAnPeriod] = useState("all")
   const [anSources, setAnSources] = useState<string[]>([])
   const [anCities, setAnCities] = useState<string[]>([])
@@ -395,8 +399,7 @@ export default function VacancyPage() {
               <div className="flex items-center justify-between gap-3 mb-3 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
                 <TabsList className="shrink-0">
                   <TabsTrigger value="candidates" className="gap-1.5"><Kanban className="w-3.5 h-3.5" />Кандидаты</TabsTrigger>
-                  <TabsTrigger value="course" className="gap-1.5"><BookOpen className="w-3.5 h-3.5" />Демодолжности</TabsTrigger>
-                  <TabsTrigger value="course2" className="gap-1.5"><BookOpen className="w-3.5 h-3.5" />Демо 2</TabsTrigger>
+                  <TabsTrigger value="course" className="gap-1.5"><BookOpen className="w-3.5 h-3.5" />Демонстрация</TabsTrigger>
                   <TabsTrigger value="analytics" className="gap-1.5"><BarChart3 className="w-3.5 h-3.5" />Аналитика</TabsTrigger>
                   <TabsTrigger value="automation" className="gap-1.5"><Zap className="w-3.5 h-3.5" />Автоматизация</TabsTrigger>
                   <TabsTrigger value="publish" className="gap-1.5"><Globe className="w-3.5 h-3.5" />Публикация</TabsTrigger>
@@ -487,10 +490,6 @@ export default function VacancyPage() {
                   editorRef={courseEditorRef}
                   onSaveStatusChange={setCourseEditorSaveStatus}
                 />
-              </TabsContent>
-
-              <TabsContent value="course2" className="p-0 border-0 mt-0">
-                <NotionCourseTab />
               </TabsContent>
 
               <TabsContent value="analytics">
@@ -701,13 +700,126 @@ export default function VacancyPage() {
               </TabsContent>
 
               <TabsContent value="publish">
-                <PublishTab
-                  vacancyTitle={internalName || vacancyTitle}
-                  vacancySlug={id}
-                  vacancyCity="Москва"
-                  salaryFrom={80000}
-                  salaryTo={150000}
-                />
+                <div className="space-y-6">
+                  {/* Страница вакансии */}
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-base flex items-center gap-2">
+                          <Globe className="w-4 h-4" />
+                          Публичная страница вакансии
+                        </CardTitle>
+                        <div className="flex items-center gap-2">
+                          <button
+                            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors"
+                            onClick={() => {
+                              const url = `${window.location.origin}/vacancy/${id}`
+                              navigator.clipboard.writeText(url)
+                              toast.success("Ссылка скопирована")
+                            }}
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                            Скопировать ссылку
+                          </button>
+                          <Button size="sm" className="gap-1.5 h-8 text-xs" onClick={() => window.open(`/vacancy/${id}`, "_blank")}>
+                            <Globe className="w-3.5 h-3.5" />
+                            Открыть страницу
+                          </Button>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/50 border text-xs font-mono text-muted-foreground">
+                        <Globe className="w-3.5 h-3.5 shrink-0" />
+                        {typeof window !== "undefined" ? window.location.origin : "https://mykomanda.ru"}/vacancy/{id}
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Источники */}
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <Link2 className="w-4 h-4" />
+                        Источники размещения
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-0">
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b bg-muted/30">
+                              <th className="text-left px-4 py-2.5 font-medium text-muted-foreground text-xs">Источник</th>
+                              <th className="text-left px-4 py-2.5 font-medium text-muted-foreground text-xs">UTM-ссылка</th>
+                              <th className="text-center px-4 py-2.5 font-medium text-muted-foreground text-xs">Статус</th>
+                              <th className="text-right px-4 py-2.5 font-medium text-muted-foreground text-xs">Переходы</th>
+                              <th className="text-right px-4 py-2.5 font-medium text-muted-foreground text-xs">Отклики</th>
+                              <th className="px-4 py-2.5"></th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {VACANCY_SOURCES.map((src, i) => {
+                              const utmUrl = `${typeof window !== "undefined" ? window.location.origin : "https://mykomanda.ru"}/vacancy/${id}?utm_source=${src.utmSource}&utm_medium=job_board`
+                              const isPublished = sourceStatuses[src.id] ?? false
+                              return (
+                                <tr key={src.id} className={cn("border-b last:border-0 hover:bg-muted/20", i % 2 === 1 && "bg-muted/10")}>
+                                  <td className="px-4 py-3">
+                                    <div className="flex items-center gap-2">
+                                      <div className="w-7 h-7 rounded-md flex items-center justify-center text-white text-[10px] font-bold shrink-0" style={{ backgroundColor: src.color }}>
+                                        {src.name.slice(0, 2).toUpperCase()}
+                                      </div>
+                                      <span className="font-medium">{src.name}</span>
+                                    </div>
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-xs text-muted-foreground font-mono truncate max-w-[220px]">
+                                        {`...?utm_source=${src.utmSource}&utm_medium=job_board`}
+                                      </span>
+                                    </div>
+                                  </td>
+                                  <td className="px-4 py-3 text-center">
+                                    <button
+                                      onClick={() => setSourceStatuses(p => ({ ...p, [src.id]: !p[src.id] }))}
+                                      className={cn(
+                                        "px-2.5 py-1 rounded-full text-[11px] font-medium border transition-colors",
+                                        isPublished
+                                          ? "bg-emerald-500/10 text-emerald-700 border-emerald-200 dark:text-emerald-400 dark:border-emerald-800"
+                                          : "bg-muted text-muted-foreground border-border"
+                                      )}
+                                    >
+                                      {isPublished ? "Опубликовано" : "Черновик"}
+                                    </button>
+                                  </td>
+                                  <td className="px-4 py-3 text-right text-sm text-muted-foreground">{isPublished ? src.mockClicks : "—"}</td>
+                                  <td className="px-4 py-3 text-right text-sm font-medium">{isPublished ? src.mockResponses : "—"}</td>
+                                  <td className="px-4 py-3">
+                                    <button
+                                      className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors whitespace-nowrap"
+                                      onClick={() => { navigator.clipboard.writeText(utmUrl); toast.success("Ссылка скопирована") }}
+                                    >
+                                      <Copy className="w-3 h-3" />
+                                      Скопировать
+                                    </button>
+                                  </td>
+                                </tr>
+                              )
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* HTML-страница */}
+                  <PublishTab
+                    vacancyTitle={internalName || vacancyTitle}
+                    vacancySlug={id}
+                    vacancyCity={apiVacancy?.city ?? "Москва"}
+                    salaryFrom={80000}
+                    salaryTo={150000}
+                  />
+                </div>
               </TabsContent>
 
               <TabsContent value="settings">
@@ -760,81 +872,6 @@ export default function VacancyPage() {
                       <Button variant="outline" size="sm" className="h-8 text-[12px] gap-1 text-indigo-600 border-indigo-300 hover:bg-indigo-50 shrink-0" onClick={() => toast.info("Подключение AmoCRM (заглушка)")}>Подключить</Button>
                     </CardContent></Card>
 
-                    {/* UTM Links */}
-                    <div className="pt-2">
-                      <h3 className="text-lg font-semibold text-foreground mb-1">UTM-ссылки и источники трафика</h3>
-                      <p className="text-sm text-muted-foreground mb-4">Создайте ссылки для отслеживания кандидатов из любого канала</p>
-                    </div>
-
-                    <Card>
-                      <CardContent className="p-4 space-y-4">
-                        {/* Create form */}
-                        <div className="flex items-end gap-2">
-                          <div className="flex-1 space-y-1">
-                            <label className="text-[11px] text-muted-foreground font-medium">Ресурс</label>
-                            <Input value={utmResource} onChange={(e) => setUtmResource(e.target.value)} placeholder="например: telegram" className="h-8 text-sm" />
-                          </div>
-                          <div className="flex-1 space-y-1">
-                            <label className="text-[11px] text-muted-foreground font-medium">Канал</label>
-                            <Input value={utmChannel} onChange={(e) => setUtmChannel(e.target.value)} placeholder="например: superjob" className="h-8 text-sm" />
-                          </div>
-                          <Button size="sm" className="h-8 gap-1 text-xs shrink-0" disabled={!utmResource.trim() || !utmChannel.trim()} onClick={() => {
-                            const tag = (utmResource.trim() + utmChannel.trim()).toLowerCase().replace(/\s+/g, "")
-                            setUtmLinks((prev) => [...prev, { id: `u-${Date.now()}`, resource: utmResource.trim(), channel: utmChannel.trim(), tag, clicks: 0, responses: 0, conversion: 0 }])
-                            setUtmResource(""); setUtmChannel("")
-                            toast.success("UTM-ссылка создана")
-                          }}>
-                            <Plus className="w-3 h-3" />Создать
-                          </Button>
-                        </div>
-
-                        {/* Table */}
-                        {utmLinks.length > 0 && (
-                          <div className="overflow-x-auto">
-                            <table className="w-full">
-                              <thead>
-                                <tr className="border-b bg-muted/30">
-                                  <th className="text-left text-[11px] font-semibold text-muted-foreground px-3 py-2">Название</th>
-                                  <th className="text-left text-[11px] font-semibold text-muted-foreground px-3 py-2">UTM</th>
-                                  <th className="text-left text-[11px] font-semibold text-muted-foreground px-3 py-2">Ссылка</th>
-                                  <th className="text-right text-[11px] font-semibold text-muted-foreground px-3 py-2">Переходы</th>
-                                  <th className="text-right text-[11px] font-semibold text-muted-foreground px-3 py-2">Отклики</th>
-                                  <th className="text-right text-[11px] font-semibold text-muted-foreground px-3 py-2">Конв.</th>
-                                  <th className="px-2 py-2"></th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {utmLinks.map((link) => {
-                                  const fullUrl = `https://hireflow.ru/v/${id}?utm_source=${link.tag}`
-                                  return (
-                                    <tr key={link.id} className="border-b last:border-0 hover:bg-muted/20">
-                                      <td className="px-3 py-2 text-sm font-medium">{link.resource} + {link.channel}</td>
-                                      <td className="px-3 py-2"><Badge variant="secondary" className="text-[10px] font-mono">{link.tag}</Badge></td>
-                                      <td className="px-3 py-2">
-                                        <div className="flex items-center gap-1.5">
-                                          <span className="text-[11px] text-muted-foreground truncate max-w-[180px]">{fullUrl}</span>
-                                          <button className="shrink-0 text-muted-foreground hover:text-primary" title="Копировать" onClick={() => { navigator.clipboard.writeText(fullUrl); toast.success("Ссылка скопирована") }}>
-                                            <Copy className="w-3 h-3" />
-                                          </button>
-                                        </div>
-                                      </td>
-                                      <td className="text-right px-3 py-2 text-sm">{link.clicks}</td>
-                                      <td className="text-right px-3 py-2 text-sm">{link.responses}</td>
-                                      <td className="text-right px-3 py-2 text-sm font-medium">{link.conversion}%</td>
-                                      <td className="px-2 py-2">
-                                        <button className="text-muted-foreground hover:text-destructive" onClick={() => setUtmLinks((p) => p.filter((l) => l.id !== link.id))}>
-                                          <Trash2 className="w-3.5 h-3.5" />
-                                        </button>
-                                      </td>
-                                    </tr>
-                                  )
-                                })}
-                              </tbody>
-                            </table>
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
                   </div>
 
                   {/* Правая колонка — Лог сообщений + прочие настройки */}
