@@ -10,7 +10,7 @@ export interface MenuGroup {
 const MODULE_GROUP_DEFS: Partial<Record<ModuleId, { label: string; hrefs: string[] }[]>> = {
   hr: [
     { label: 'Найм',      hrefs: ['/hr/vacancies', '/hr/candidates', '/hr/demo-editor'] },
-    { label: 'Адаптация', hrefs: ['/hr/onboarding', '/hr/adaptation/plans', '/hr/adaptation/assignments'] },
+    { label: 'Адаптация', hrefs: ['/hr/onboarding', '/hr/adaptation/plans', '/hr/adaptation/assignments', '/hr/adaptation/gamification'] },
     { label: 'Обучение',  hrefs: [] },
     { label: 'Развитие',  hrefs: ['/hr/talent-pool'] },
     { label: 'Обзор',     hrefs: ['/overview', '/hr/interviews', '/hr/analytics', '/referrals'] },

@@ -207,6 +207,46 @@ export const stepCompletions = pgTable("step_completions", {
   feedback:     text("feedback"),
 }, (t) => [unique().on(t.assignmentId, t.stepId)])
 
+// ─── Gamification ─────────────────────────────────────────────────────────────
+
+export const employeePoints = pgTable("employee_points", {
+  id:             uuid("id").primaryKey().defaultRandom(),
+  tenantId:       uuid("tenant_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  employeeId:     text("employee_id").notNull(),
+  totalPoints:    integer("total_points").default(0),
+  level:          integer("level").default(1),
+  streak:         integer("streak").default(0),
+  lastActiveDate: timestamp("last_active_date"),
+}, (t) => [unique().on(t.tenantId, t.employeeId)])
+
+export const pointsHistory = pgTable("points_history", {
+  id:         uuid("id").primaryKey().defaultRandom(),
+  pointsId:   uuid("points_id").references(() => employeePoints.id, { onDelete: "cascade" }).notNull(),
+  amount:     integer("amount").notNull(),
+  reason:     text("reason").notNull(),
+  sourceType: text("source_type"),
+  sourceId:   text("source_id"),
+  createdAt:  timestamp("created_at").defaultNow(),
+})
+
+export const badges = pgTable("badges", {
+  id:          uuid("id").primaryKey().defaultRandom(),
+  tenantId:    uuid("tenant_id").references(() => companies.id, { onDelete: "cascade" }),
+  slug:        text("slug").unique().notNull(),
+  name:        text("name").notNull(),
+  description: text("description"),
+  icon:        text("icon").notNull(),
+  condition:   jsonb("condition"),
+  points:      integer("points").default(0),
+})
+
+export const employeeBadges = pgTable("employee_badges", {
+  id:       uuid("id").primaryKey().defaultRandom(),
+  pointsId: uuid("points_id").references(() => employeePoints.id, { onDelete: "cascade" }).notNull(),
+  badgeId:  uuid("badge_id").references(() => badges.id, { onDelete: "cascade" }).notNull(),
+  earnedAt: timestamp("earned_at").defaultNow(),
+}, (t) => [unique().on(t.pointsId, t.badgeId)])
+
 // ─── Tenant Modules ───────────────────────────────────────────────────────────
 
 export const tenantModules = pgTable("tenant_modules", {

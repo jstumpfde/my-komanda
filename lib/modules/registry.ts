@@ -16,6 +16,7 @@ export const MODULE_REGISTRY: Record<ModuleId, ModuleConfig> = {
       { label: 'Онбординг',     href: '/hr/onboarding',            icon: 'Rocket' },
       { label: 'Планы',         href: '/hr/adaptation/plans',      icon: 'ClipboardList' },
       { label: 'Назначения',    href: '/hr/adaptation/assignments', icon: 'UserCheck2' },
+      { label: 'Геймификация',  href: '/hr/adaptation/gamification', icon: 'Trophy' },
       { label: 'Аналитика',     href: '/hr/analytics',   icon: 'BarChart3' },
       { label: 'Обзор',         href: '/overview',       icon: 'LayoutDashboard' },
       { label: 'Рефералы',      href: '/referrals',      icon: 'Share2' },
