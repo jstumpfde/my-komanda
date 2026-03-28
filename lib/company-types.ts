@@ -236,5 +236,7 @@ export const EMPTY_WIZARD_DRAFT: WizardDraft = {
     segment_experience: [],
     headcount: 1,
     salary_fix: 0,
+    work_format: "office",
+    experience: "none",
   },
 }

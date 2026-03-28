@@ -202,14 +202,15 @@ export default function CreateVacancyPage() {
       )
     }
     if (step === 3) {
+      const ropFunctions = (vacancy.adaptive_fields?.rop_functions as string[] | undefined) ?? []
+      const hasFunctions = (vacancy.functions?.length ?? 0) >= 1 || ropFunctions.length >= 1
       return !!(
         vacancy.position_title?.trim() &&
         vacancy.headcount &&
         vacancy.headcount >= 1 &&
         vacancy.hiring_goals &&
         vacancy.hiring_goals.length >= 1 &&
-        vacancy.functions &&
-        vacancy.functions.length >= 1 &&
+        hasFunctions &&
         vacancy.salary_fix &&
         vacancy.salary_fix > 0 &&
         vacancy.work_format &&
@@ -218,6 +219,19 @@ export default function CreateVacancyPage() {
     }
     // Steps 4 and 5 are optional — always allow next
     return true
+  }
+
+  const getMissingStep3 = (): string[] => {
+    const { vacancy } = draft
+    const missing: string[] = []
+    if (!vacancy.position_title?.trim()) missing.push("Должность")
+    if (!vacancy.hiring_goals?.length) missing.push("Цели найма")
+    const ropFunctions = (vacancy.adaptive_fields?.rop_functions as string[] | undefined) ?? []
+    if (!((vacancy.functions?.length ?? 0) >= 1 || ropFunctions.length >= 1)) missing.push("Функционал")
+    if (!vacancy.salary_fix || vacancy.salary_fix <= 0) missing.push("Оклад")
+    if (!vacancy.work_format) missing.push("Формат работы")
+    if (!vacancy.experience) missing.push("Опыт в продажах")
+    return missing
   }
 
   const handleNext = useCallback(async () => {
@@ -570,8 +584,17 @@ export default function CreateVacancyPage() {
                 </span>
 
                 <Button
-                  onClick={() => { void handleNext() }}
-                  disabled={!canGoNext() || stepSaving}
+                  onClick={() => {
+                    if (!canGoNext()) {
+                      if (step === 3) {
+                        const missing = getMissingStep3()
+                        toast.error(`Заполните обязательные поля: ${missing.join(", ")}`)
+                      }
+                      return
+                    }
+                    void handleNext()
+                  }}
+                  disabled={stepSaving}
                   className="gap-1.5"
                 >
                   {stepSaving ? (
