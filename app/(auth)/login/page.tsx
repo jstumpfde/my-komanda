@@ -35,8 +35,7 @@ function LoginForm() {
         setError("Dev-вход не удался")
         return
       }
-      router.push(callbackUrl)
-      router.refresh()
+      window.location.href = callbackUrl
     } catch {
       setError("Dev-вход не удался")
     } finally {
