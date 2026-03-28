@@ -19,7 +19,30 @@ function LoginForm() {
   const [password, setPassword] = useState("")
   const [showPw, setShowPw] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [devLoading, setDevLoading] = useState(false)
   const [error, setError] = useState("")
+
+  const isDev = process.env.NODE_ENV === "development"
+
+  const handleDevLogin = async () => {
+    setDevLoading(true)
+    setError("")
+    try {
+      const res = await fetch("/api/dev/login", { method: "POST" })
+      const { userId } = await res.json()
+      const result = await signIn("dev", { userId, redirect: false })
+      if (result?.error) {
+        setError("Dev-вход не удался")
+        return
+      }
+      router.push(callbackUrl)
+      router.refresh()
+    } catch {
+      setError("Dev-вход не удался")
+    } finally {
+      setDevLoading(false)
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -139,6 +162,21 @@ function LoginForm() {
                 Зарегистрироваться
               </Link>
             </p>
+
+            {isDev && (
+              <div className="border-t pt-4 space-y-2">
+                <p className="text-center text-xs text-muted-foreground font-mono">⚙ DEV MODE</p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full h-10 text-sm font-medium border-dashed border-slate-400 bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-slate-700 dark:bg-slate-900 dark:text-slate-400 dark:hover:bg-slate-800"
+                  onClick={handleDevLogin}
+                  disabled={devLoading}
+                >
+                  {devLoading ? "Входим..." : "🔧 Войти как демо"}
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
 

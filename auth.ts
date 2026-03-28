@@ -53,6 +53,33 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     newUser: "/register",
   },
   providers: [
+    // Dev-only: вход без пароля по userId
+    ...(process.env.NODE_ENV === "development"
+      ? [
+          Credentials({
+            id: "dev",
+            name: "dev",
+            credentials: { userId: { label: "User ID", type: "text" } },
+            async authorize(credentials) {
+              const userId = credentials?.userId as string | undefined
+              if (!userId) return null
+              const [user] = await db
+                .select()
+                .from(users)
+                .where(eq(users.id, userId))
+                .limit(1)
+              if (!user || !user.isActive) return null
+              return {
+                id: user.id,
+                email: user.email,
+                name: user.name,
+                role: user.role as UserRole,
+                companyId: user.companyId ?? null,
+              }
+            },
+          }),
+        ]
+      : []),
     Credentials({
       name: "credentials",
       credentials: {
