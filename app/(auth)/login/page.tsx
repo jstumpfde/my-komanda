@@ -26,7 +26,7 @@ function LoginForm() {
     setError("")
 
     if (!email.trim() || !password) {
-      setError("Введите email и пароль")
+      setError("Введите email/имя и пароль")
       return
     }
 
@@ -41,7 +41,7 @@ function LoginForm() {
     setLoading(false)
 
     if (result?.error) {
-      setError("Неверный email или пароль")
+      setError("Неверный email/имя или пароль")
       return
     }
 
@@ -69,18 +69,18 @@ function LoginForm() {
           <CardContent className="pt-6 pb-6 space-y-5">
             <div>
               <h2 className="text-lg font-semibold text-foreground">Вход в систему</h2>
-              <p className="text-sm text-muted-foreground">Введите email и пароль для доступа</p>
+              <p className="text-sm text-muted-foreground">Введите email или имя и пароль для доступа</p>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-1.5">
-                <Label htmlFor="email" className="text-sm font-medium">Email</Label>
+                <Label htmlFor="email" className="text-sm font-medium">Email или имя</Label>
                 <Input
                   id="email"
-                  type="email"
+                  type="text"
                   value={email}
                   onChange={e => { setEmail(e.target.value); setError("") }}
-                  placeholder="you@company.ru"
+                  placeholder="you@company.ru или Иван"
                   autoFocus
                   autoComplete="email"
                   className={error ? "border-destructive focus-visible:ring-destructive" : ""}

@@ -1,6 +1,6 @@
 import NextAuth, { type DefaultSession } from "next-auth"
 import Credentials from "next-auth/providers/credentials"
-import { eq } from "drizzle-orm"
+import { eq, or, ilike } from "drizzle-orm"
 import bcrypt from "bcryptjs"
 import { db } from "@/lib/db"
 import { users } from "@/lib/db/schema"
@@ -60,15 +60,20 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         password: { label: "Пароль", type: "password" },
       },
       async authorize(credentials) {
-        const email = credentials?.email as string | undefined
+        const login = (credentials?.email as string | undefined)?.trim()
         const password = credentials?.password as string | undefined
 
-        if (!email || !password) return null
+        if (!login || !password) return null
 
         const [user] = await db
           .select()
           .from(users)
-          .where(eq(users.email, email.toLowerCase().trim()))
+          .where(
+            or(
+              eq(users.email, login.toLowerCase()),
+              ilike(users.name, login),
+            ),
+          )
           .limit(1)
 
         if (!user || !user.isActive) return null
