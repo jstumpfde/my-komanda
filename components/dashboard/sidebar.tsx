@@ -50,7 +50,16 @@ function getIcon(name: string): LucideIcon {
 }
 
 // ── Module config ──────────────────────────────────────────────────────────
-const ACTIVE_MODULES: ModuleId[] = ['hr'] // TODO: from tariff/subscription
+
+// Maps DB module slugs → sidebar ModuleId
+const SLUG_TO_MODULE_ID: Partial<Record<string, ModuleId>> = {
+  'recruiting':  'hr',
+  'hr-ops':      'hr',
+  'talent-pool': 'hr',
+  'marketing':   'marketing',
+  'sales':       'sales',
+  'logistics':   'logistics',
+}
 
 const MODULE_SHORT: Record<ModuleId, string> = {
   hr: 'HR',
@@ -68,16 +77,35 @@ export function DashboardSidebar() {
   const vis = getVisibleSections(role) ?? { main: true, hiring: false, tools: false, settings: false, admin: false }
   const visSettings = getVisibleSettings(role) ?? ['profile']
 
+  // Active modules fetched from API
+  const [activeModules, setActiveModules] = useState<ModuleId[]>(['hr'])
+  useEffect(() => {
+    fetch('/api/tenant/modules')
+      .then(r => r.json())
+      .then((json: unknown) => {
+        const rows = (json as { data?: { slug: string; isActive: boolean }[] }).data
+          ?? (json as { slug: string; isActive: boolean }[])
+        const ids = Array.from(new Set(
+          rows
+            .filter(m => m.isActive)
+            .map(m => SLUG_TO_MODULE_ID[m.slug])
+            .filter((id): id is ModuleId => !!id)
+        ))
+        if (ids.length > 0) setActiveModules(ids)
+      })
+      .catch(() => { /* keep default */ })
+  }, [])
+
   // Derive active module from pathname
   const [activeModule, setActiveModule] = useState<ModuleId>('hr')
   useEffect(() => {
-    for (const id of ACTIVE_MODULES) {
+    for (const id of activeModules) {
       if (pathname.startsWith(MODULE_REGISTRY[id].basePath)) {
         setActiveModule(id)
         return
       }
     }
-  }, [pathname])
+  }, [pathname, activeModules])
 
   const groups = getModuleGroups(activeModule)
   const currentModule = MODULE_REGISTRY[activeModule]
@@ -108,7 +136,7 @@ export function DashboardSidebar() {
 
         {/* ── Module switcher: collapsed → vertical icons ── */}
         <div className="hidden group-data-[collapsible=icon]:flex flex-col gap-1 mb-2">
-          {ACTIVE_MODULES.map((id) => {
+          {activeModules.map((id) => {
             const mod = MODULE_REGISTRY[id]
             const Icon = getIcon(mod.icon)
             return (
@@ -129,7 +157,7 @@ export function DashboardSidebar() {
         {/* ── Module switcher: expanded → horizontal tabs ── */}
         <div className="group-data-[collapsible=icon]:hidden mb-3 px-1">
           <div className="flex gap-1 flex-wrap">
-            {ACTIVE_MODULES.map((id) => {
+            {activeModules.map((id) => {
               const mod = MODULE_REGISTRY[id]
               const Icon = getIcon(mod.icon)
               return (

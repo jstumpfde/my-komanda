@@ -155,11 +155,13 @@ function UpgradeContent() {
 
           {/* Карточки тарифов */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            {PLANS.map((plan) => (
+            {PLANS.map((plan) => {
+              const hasModule = plan.modules.includes(moduleSlug)
+              return (
               <div
                 key={plan.slug}
                 className={`relative rounded-xl border p-5 flex flex-col gap-4 transition-shadow ${
-                  plan.highlight
+                  hasModule
                     ? "border-primary shadow-lg shadow-primary/10 bg-primary/5"
                     : "border-border"
                 }`}
@@ -181,16 +183,17 @@ function UpgradeContent() {
                 <Button
                   asChild
                   size="sm"
-                  variant={plan.highlight ? "default" : "outline"}
+                  variant={hasModule ? "default" : "outline"}
                   className="w-full"
                 >
-                  <Link href="/settings/billing">
+                  <Link href="/settings/plan">
                     <Zap className="w-3.5 h-3.5 mr-1.5" />
-                    Выбрать
+                    Обновить тариф
                   </Link>
                 </Button>
               </div>
-            ))}
+              )
+            })}
           </div>
 
           {/* Сравнительная таблица */}
@@ -205,7 +208,7 @@ function UpgradeContent() {
                     <th
                       key={plan.slug}
                       className={`px-4 py-3 font-semibold text-center ${
-                        plan.highlight ? "text-primary" : ""
+                        plan.modules.includes(moduleSlug) ? "text-primary" : ""
                       }`}
                     >
                       {plan.name}
@@ -224,6 +227,7 @@ function UpgradeContent() {
                     </td>
                     {PLANS.map((plan) => {
                       const val = (plan.features as Record<string, string | boolean>)[row.key]
+                      const hasModule = plan.modules.includes(moduleSlug)
                       return (
                         <td key={plan.slug} className="px-4 py-2.5 text-center">
                           {row.boolean ? (
@@ -233,7 +237,7 @@ function UpgradeContent() {
                               <X className="w-4 h-4 text-muted-foreground/40 mx-auto" />
                             )
                           ) : (
-                            <span className={plan.highlight ? "font-semibold" : ""}>
+                            <span className={hasModule ? "font-semibold" : ""}>
                               {val as string}
                             </span>
                           )}
