@@ -306,3 +306,67 @@ export const tenantModules = pgTable("tenant_modules", {
   maxScenarios:  integer("max_scenarios"),
   maxUsers:      integer("max_users"),
 }, (t) => [unique().on(t.tenantId, t.moduleId)])
+
+// ─── LMS — Курсы ──────────────────────────────────────────────────────────────
+
+export const courses = pgTable("courses", {
+  id:           uuid("id").primaryKey().defaultRandom(),
+  tenantId:     uuid("tenant_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  title:        text("title").notNull(),
+  description:  text("description"),
+  coverImage:   text("cover_image"),
+  category:     text("category").default("custom"), // 'sales'|'product'|'soft_skills'|'compliance'|'custom'
+  difficulty:   text("difficulty").default("beginner"), // 'beginner'|'intermediate'|'advanced'
+  durationMin:  integer("duration_min"),
+  isPublished:  boolean("is_published").default(false),
+  isRequired:   boolean("is_required").default(false),
+  requiredFor:  jsonb("required_for"),  // { roles?, departments? }
+  sortOrder:    integer("sort_order").default(0),
+  createdBy:    uuid("created_by").references(() => users.id),
+  createdAt:    timestamp("created_at").defaultNow(),
+  updatedAt:    timestamp("updated_at").defaultNow(),
+})
+
+export const lessons = pgTable("lessons", {
+  id:          uuid("id").primaryKey().defaultRandom(),
+  courseId:    uuid("course_id").references(() => courses.id, { onDelete: "cascade" }).notNull(),
+  title:       text("title").notNull(),
+  sortOrder:   integer("sort_order").default(0),
+  type:        text("type").default("content"), // 'content'|'video'|'quiz'|'assignment'
+  content:     jsonb("content"),
+  durationMin: integer("duration_min"),
+  isRequired:  boolean("is_required").default(true),
+})
+
+export const courseEnrollments = pgTable("course_enrollments", {
+  id:           uuid("id").primaryKey().defaultRandom(),
+  courseId:     uuid("course_id").references(() => courses.id, { onDelete: "cascade" }).notNull(),
+  employeeId:   text("employee_id").notNull(),
+  status:       text("status").default("enrolled"), // 'enrolled'|'in_progress'|'completed'|'dropped'
+  completionPct:integer("completion_pct").default(0),
+  enrolledAt:   timestamp("enrolled_at").defaultNow(),
+  startedAt:    timestamp("started_at"),
+  completedAt:  timestamp("completed_at"),
+  lastAccessAt: timestamp("last_access_at"),
+}, (t) => [unique().on(t.courseId, t.employeeId)])
+
+export const lessonCompletions = pgTable("lesson_completions", {
+  id:           uuid("id").primaryKey().defaultRandom(),
+  enrollmentId: uuid("enrollment_id").references(() => courseEnrollments.id, { onDelete: "cascade" }).notNull(),
+  lessonId:     uuid("lesson_id").references(() => lessons.id, { onDelete: "cascade" }).notNull(),
+  status:       text("status").default("not_started"), // 'not_started'|'in_progress'|'completed'
+  score:        integer("score"),
+  answer:       jsonb("answer"),
+  completedAt:  timestamp("completed_at"),
+  timeSpentSec: integer("time_spent_sec"),
+}, (t) => [unique().on(t.enrollmentId, t.lessonId)])
+
+export const certificates = pgTable("certificates", {
+  id:         uuid("id").primaryKey().defaultRandom(),
+  courseId:   uuid("course_id").references(() => courses.id, { onDelete: "cascade" }).notNull(),
+  employeeId: text("employee_id").notNull(),
+  number:     text("number").unique().notNull(), // MK-2026-XXXXX
+  issuedAt:   timestamp("issued_at").defaultNow(),
+  validUntil: timestamp("valid_until"),
+  pdfUrl:     text("pdf_url"),
+})
