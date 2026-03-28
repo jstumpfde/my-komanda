@@ -16,7 +16,12 @@
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(git remote:*)",
-      "Bash(scp:*)"
+      "Bash(scp:*)",
+      "Bash(pnpm exec:*)",
+      "Bash(pnpm next:*)",
+      "Bash(pnpm run:*)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(lsof -i :3000 -sTCP:LISTEN)"
     ]
   }
 }
