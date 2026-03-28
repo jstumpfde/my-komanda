@@ -583,18 +583,17 @@ export default function CreateVacancyPage() {
                   Шаг {step} из {STEPS.length}
                 </span>
 
-                <Button
-                  onClick={() => {
-                    if (!canGoNext()) {
-                      if (step === 3) {
-                        const missing = getMissingStep3()
-                        toast.error(`Заполните обязательные поля: ${missing.join(", ")}`)
-                      }
-                      return
+                <div
+                  onClickCapture={() => {
+                    if (step === 3 && !canGoNext()) {
+                      const missing = getMissingStep3()
+                      toast.error(`Заполните обязательные поля: ${missing.join(", ")}`)
                     }
-                    void handleNext()
                   }}
-                  disabled={stepSaving}
+                >
+                <Button
+                  onClick={() => { void handleNext() }}
+                  disabled={!canGoNext() || stepSaving}
                   className="gap-1.5"
                 >
                   {stepSaving ? (
@@ -609,6 +608,7 @@ export default function CreateVacancyPage() {
                     </>
                   )}
                 </Button>
+                </div>
               </div>
             )}
 
