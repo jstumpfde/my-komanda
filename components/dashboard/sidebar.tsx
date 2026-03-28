@@ -5,7 +5,7 @@ import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import {
   LayoutDashboard, Users, User, Briefcase, UserCheck, Layers, MessageSquare,
-  Globe, Database, Rocket, BarChart3, FileText, Search, TrendingUp, Megaphone,
+  Globe, Database, Rocket, BarChart3, BarChart2, FileText, Search, TrendingUp, Megaphone,
   DollarSign, Truck, Gift, Building2, CreditCard, Plug, Clock, Bell,
   Settings, Shield, ChevronDown, LogOut, Calendar, Share2, ShieldCheck, ClipboardList, UserCheck2, Trophy, type LucideIcon,
 } from "lucide-react"
@@ -43,7 +43,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   LayoutDashboard, Users, User, Briefcase, UserCheck, Layers, MessageSquare,
   Globe, Database, Rocket, BarChart3, FileText, Search, TrendingUp, Megaphone,
   DollarSign, Truck, Gift, Building2, CreditCard, Plug, Clock, Bell,
-  Settings, Shield, Calendar, Share2, ShieldCheck, ClipboardList, UserCheck2, Trophy,
+  Settings, Shield, Calendar, Share2, ShieldCheck, ClipboardList, UserCheck2, Trophy, BarChart2,
 }
 function getIcon(name: string): LucideIcon {
   return ICON_MAP[name] ?? Settings
