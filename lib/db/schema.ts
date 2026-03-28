@@ -147,6 +147,66 @@ export const candidates = pgTable("candidates", {
   updatedAt: timestamp("updated_at").defaultNow(),
 })
 
+// ─── Adaptation ───────────────────────────────────────────────────────────────
+
+export const adaptationPlans = pgTable("adaptation_plans", {
+  id:          uuid("id").primaryKey().defaultRandom(),
+  tenantId:    uuid("tenant_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  title:       text("title").notNull(),
+  description: text("description"),
+  positionId:  text("position_id"),
+  durationDays:integer("duration_days").default(14),
+  planType:    text("plan_type").default("onboarding"), // 'onboarding'|'preboarding'|'reboarding'
+  isTemplate:  boolean("is_template").default(false),
+  isActive:    boolean("is_active").default(true),
+  createdBy:   uuid("created_by").references(() => users.id),
+  createdAt:   timestamp("created_at").defaultNow(),
+  updatedAt:   timestamp("updated_at").defaultNow(),
+})
+
+export const adaptationSteps = pgTable("adaptation_steps", {
+  id:          uuid("id").primaryKey().defaultRandom(),
+  planId:      uuid("plan_id").references(() => adaptationPlans.id, { onDelete: "cascade" }).notNull(),
+  dayNumber:   integer("day_number").notNull(),
+  sortOrder:   integer("sort_order").default(0),
+  title:       text("title").notNull(),
+  type:        text("type").default("lesson"), // 'lesson'|'task'|'quiz'|'video'|'checklist'|'meeting'
+  content:     jsonb("content"),
+  channel:     text("channel").default("auto"),
+  durationMin: integer("duration_min"),
+  isRequired:  boolean("is_required").default(true),
+})
+
+export const adaptationAssignments = pgTable("adaptation_assignments", {
+  id:               uuid("id").primaryKey().defaultRandom(),
+  planId:           uuid("plan_id").references(() => adaptationPlans.id, { onDelete: "cascade" }).notNull(),
+  employeeId:       uuid("employee_id"),
+  buddyId:          uuid("buddy_id"),
+  startDate:        timestamp("start_date"),
+  status:           text("status").default("active"), // 'active'|'paused'|'cancelled'|'completed'
+  currentDay:       integer("current_day").default(1),
+  completionPct:    integer("completion_pct").default(0),
+  totalSteps:       integer("total_steps"),
+  completedSteps:   integer("completed_steps").default(0),
+  avgResponseTime:  integer("avg_response_time"),
+  completedAt:      timestamp("completed_at"),
+  createdAt:        timestamp("created_at").defaultNow(),
+  updatedAt:        timestamp("updated_at").defaultNow(),
+})
+
+export const stepCompletions = pgTable("step_completions", {
+  id:           uuid("id").primaryKey().defaultRandom(),
+  assignmentId: uuid("assignment_id").references(() => adaptationAssignments.id, { onDelete: "cascade" }).notNull(),
+  stepId:       uuid("step_id").references(() => adaptationSteps.id, { onDelete: "cascade" }).notNull(),
+  status:       text("status").default("pending"), // 'pending'|'sent'|'viewed'|'completed'|'skipped'
+  sentAt:       timestamp("sent_at"),
+  viewedAt:     timestamp("viewed_at"),
+  completedAt:  timestamp("completed_at"),
+  answer:       jsonb("answer"),
+  score:        integer("score"),
+  feedback:     text("feedback"),
+}, (t) => [unique().on(t.assignmentId, t.stepId)])
+
 // ─── Tenant Modules ───────────────────────────────────────────────────────────
 
 export const tenantModules = pgTable("tenant_modules", {
