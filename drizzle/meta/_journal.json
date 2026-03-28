@@ -36,6 +36,13 @@
       "when": 1774711569920,
       "tag": "0004_empty_sandman",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1774800000000,
+      "tag": "0005_buddy_ugc",
+      "breakpoints": true
     }
   ]
 }

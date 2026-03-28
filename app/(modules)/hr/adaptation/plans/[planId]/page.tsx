@@ -28,6 +28,8 @@ interface AdaptationStep {
   channel: string
   durationMin: number | null
   isRequired: boolean
+  isApproved: boolean
+  createdByRole: string
 }
 
 interface AdaptationPlan {
@@ -77,7 +79,14 @@ function StepCard({
         <Icon className="w-3.5 h-3.5" />
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium truncate">{step.title}</p>
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <p className="text-sm font-medium truncate">{step.title}</p>
+          {step.isApproved === false && (
+            <Badge variant="outline" className="text-[9px] border-amber-300 text-amber-700 bg-amber-50 dark:bg-amber-950/30 shrink-0">
+              На модерации
+            </Badge>
+          )}
+        </div>
         <div className="flex items-center gap-2 mt-0.5">
           <span className="text-[10px] text-muted-foreground">{info.label}</span>
           {step.durationMin && <span className="text-[10px] text-muted-foreground">{step.durationMin} мин</span>}

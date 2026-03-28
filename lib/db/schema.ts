@@ -165,16 +165,23 @@ export const adaptationPlans = pgTable("adaptation_plans", {
 })
 
 export const adaptationSteps = pgTable("adaptation_steps", {
-  id:          uuid("id").primaryKey().defaultRandom(),
-  planId:      uuid("plan_id").references(() => adaptationPlans.id, { onDelete: "cascade" }).notNull(),
-  dayNumber:   integer("day_number").notNull(),
-  sortOrder:   integer("sort_order").default(0),
-  title:       text("title").notNull(),
-  type:        text("type").default("lesson"), // 'lesson'|'task'|'quiz'|'video'|'checklist'|'meeting'
-  content:     jsonb("content"),
-  channel:     text("channel").default("auto"),
-  durationMin: integer("duration_min"),
-  isRequired:  boolean("is_required").default(true),
+  id:             uuid("id").primaryKey().defaultRandom(),
+  planId:         uuid("plan_id").references(() => adaptationPlans.id, { onDelete: "cascade" }).notNull(),
+  dayNumber:      integer("day_number").notNull(),
+  sortOrder:      integer("sort_order").default(0),
+  title:          text("title").notNull(),
+  type:           text("type").default("lesson"), // 'lesson'|'task'|'quiz'|'video'|'checklist'|'meeting'
+  content:        jsonb("content"),
+  channel:        text("channel").default("auto"),
+  durationMin:    integer("duration_min"),
+  isRequired:     boolean("is_required").default(true),
+  // D1: Adaptive tracks
+  conditions:     jsonb("conditions"),            // { roles?, departments?, minScore? }
+  // D4: UGC
+  createdByRole:  text("created_by_role").default("hr"), // 'hr'|'buddy'|'employee'
+  isApproved:     boolean("is_approved").default(true),
+  approvedBy:     uuid("approved_by").references(() => users.id),
+  approvedAt:     timestamp("approved_at"),
 })
 
 export const adaptationAssignments = pgTable("adaptation_assignments", {
@@ -206,6 +213,43 @@ export const stepCompletions = pgTable("step_completions", {
   score:        integer("score"),
   feedback:     text("feedback"),
 }, (t) => [unique().on(t.assignmentId, t.stepId)])
+
+// ─── Buddy-система ────────────────────────────────────────────────────────────
+
+export const buddyChecklists = pgTable("buddy_checklists", {
+  id:        uuid("id").primaryKey().defaultRandom(),
+  tenantId:  uuid("tenant_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  title:     text("title").notNull(),
+  items:     jsonb("items").notNull().default("[]"), // { id, text, order }[]
+  isDefault: boolean("is_default").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+})
+
+export const buddyTasks = pgTable("buddy_tasks", {
+  id:              uuid("id").primaryKey().defaultRandom(),
+  assignmentId:    uuid("assignment_id").references(() => adaptationAssignments.id, { onDelete: "cascade" }).notNull(),
+  checklistItemId: text("checklist_item_id"),
+  title:           text("title").notNull(),
+  description:     text("description"),
+  dayNumber:       integer("day_number"),
+  status:          text("status").default("pending"), // 'pending'|'done'|'skipped'
+  completedAt:     timestamp("completed_at"),
+  note:            text("note"),
+  createdAt:       timestamp("created_at").defaultNow(),
+})
+
+export const buddyMeetings = pgTable("buddy_meetings", {
+  id:           uuid("id").primaryKey().defaultRandom(),
+  assignmentId: uuid("assignment_id").references(() => adaptationAssignments.id, { onDelete: "cascade" }).notNull(),
+  title:        text("title").notNull(),
+  scheduledAt:  timestamp("scheduled_at"),
+  completedAt:  timestamp("completed_at"),
+  status:       text("status").default("scheduled"), // 'scheduled'|'completed'|'cancelled'|'rescheduled'
+  notes:        text("notes"),
+  rating:       integer("rating"),   // 1-5
+  feedback:     text("feedback"),
+  createdAt:    timestamp("created_at").defaultNow(),
+})
 
 // ─── Gamification ─────────────────────────────────────────────────────────────
 
