@@ -8,7 +8,7 @@ import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
 import { Loader2, Flame, Trophy, Star, Medal } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { LEVELS, levelInfo, nextLevelPoints } from "@/lib/gamification/points"
+import { LEVELS, levelInfo, nextLevelPoints } from "@/lib/gamification/levels"
 
 interface BadgeItem {
   id: string

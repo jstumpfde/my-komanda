@@ -1,12 +1,11 @@
 import { NextResponse } from "next/server"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
+import { requireCompany } from "@/lib/api-helpers"
 import { getLeaderboard } from "@/lib/gamification/points"
 
 export async function GET() {
-  const session = await getServerSession(authOptions)
-  if (!session?.user?.companyId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  let user: { companyId: string }
+  try { user = await requireCompany() } catch { return NextResponse.json({ error: "Unauthorized" }, { status: 401 }) }
 
-  const rows = await getLeaderboard(session.user.companyId, 10)
+  const rows = await getLeaderboard(user.companyId, 10)
   return NextResponse.json(rows)
 }
