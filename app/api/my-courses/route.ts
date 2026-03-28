@@ -25,7 +25,7 @@ export async function GET() {
       difficulty: courses.difficulty,
       durationMin: courses.durationMin,
       coverImage: courses.coverImage,
-      lessonsCount: sql<number>`(select count(*) from lessons where course_id = ${courses.id})`,
+      lessonsCount: sql<number>`(select count(*) from "lessons" where "course_id" = "courses"."id")`,
     })
     .from(courseEnrollments)
     .innerJoin(courses, eq(courseEnrollments.courseId, courses.id))

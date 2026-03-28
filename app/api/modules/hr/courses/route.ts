@@ -21,7 +21,7 @@ export async function GET() {
       isRequired: courses.isRequired,
       sortOrder: courses.sortOrder,
       createdAt: courses.createdAt,
-      lessonsCount: sql<number>`(select count(*) from lessons where course_id = ${courses.id})`,
+      lessonsCount: sql<number>`(select count(*) from "lessons" where "course_id" = "courses"."id")`,
     })
     .from(courses)
     .where(eq(courses.tenantId, user.companyId))
