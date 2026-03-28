@@ -126,7 +126,7 @@ function UpgradeContent() {
     <SidebarProvider>
       <DashboardSidebar />
       <SidebarInset>
-        <DashboardHeader title="Обновление тарифа" />
+        <DashboardHeader />
 
         <div className="p-6 max-w-5xl mx-auto space-y-8">
 
