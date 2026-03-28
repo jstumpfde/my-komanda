@@ -6,7 +6,51 @@ import {
   boolean,
   timestamp,
   jsonb,
+  unique,
 } from "drizzle-orm/pg-core"
+
+// ─── Modules ──────────────────────────────────────────────────────────────────
+
+export const modules = pgTable("modules", {
+  id:          uuid("id").primaryKey().defaultRandom(),
+  slug:        text("slug").unique().notNull(),
+  name:        text("name").notNull(),
+  description: text("description"),
+  icon:        text("icon"),
+  isActive:    boolean("is_active").default(true),
+  sortOrder:   integer("sort_order").default(0),
+  createdAt:   timestamp("created_at").defaultNow(),
+})
+
+// ─── Plans ────────────────────────────────────────────────────────────────────
+
+export const plans = pgTable("plans", {
+  id:        uuid("id").primaryKey().defaultRandom(),
+  slug:      text("slug").unique().notNull(),
+  name:      text("name").notNull(),
+  price:     integer("price").notNull(), // в копейках
+  currency:  text("currency").default("RUB"),
+  interval:  text("interval").default("month"), // 'month' | 'year'
+  isPublic:  boolean("is_public").default(true),
+  sortOrder: integer("sort_order").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+})
+
+// ─── Plan → Modules (лимиты по тарифу) ───────────────────────────────────────
+
+export const planModules = pgTable("plan_modules", {
+  id:            uuid("id").primaryKey().defaultRandom(),
+  planId:        uuid("plan_id").references(() => plans.id, { onDelete: "cascade" }).notNull(),
+  moduleId:      uuid("module_id").references(() => modules.id, { onDelete: "cascade" }).notNull(),
+  maxVacancies:  integer("max_vacancies"),   // null = безлимит
+  maxCandidates: integer("max_candidates"),
+  maxEmployees:  integer("max_employees"),
+  maxScenarios:  integer("max_scenarios"),
+  maxUsers:      integer("max_users"),
+}, (t) => [unique().on(t.planId, t.moduleId)])
+
+// ─── Tenant → Modules (активированные у клиента) ─────────────────────────────
+// tenantId → companies.id  (companies выступают как tenant)
 
 export const paymentRequisites = pgTable("payment_requisites", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -22,19 +66,24 @@ export const paymentRequisites = pgTable("payment_requisites", {
 })
 
 export const companies = pgTable("companies", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  name: text("name").notNull(),
-  inn: text("inn").unique(),
-  kpp: text("kpp"),
-  legalAddress: text("legal_address"),
-  city: text("city"),
-  industry: text("industry"),
-  logoUrl: text("logo_url"),
-  brandPrimaryColor: text("brand_primary_color").default("#3b82f6"),
-  brandBgColor: text("brand_bg_color").default("#f0f4ff"),
-  brandTextColor: text("brand_text_color").default("#1e293b"),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
+  id:                 uuid("id").primaryKey().defaultRandom(),
+  name:               text("name").notNull(),
+  inn:                text("inn").unique(),
+  kpp:                text("kpp"),
+  legalAddress:       text("legal_address"),
+  city:               text("city"),
+  industry:           text("industry"),
+  logoUrl:            text("logo_url"),
+  brandPrimaryColor:  text("brand_primary_color").default("#3b82f6"),
+  brandBgColor:       text("brand_bg_color").default("#f0f4ff"),
+  brandTextColor:     text("brand_text_color").default("#1e293b"),
+  // billing / subscription
+  planId:             uuid("plan_id").references(() => plans.id),
+  billingEmail:       text("billing_email"),
+  trialEndsAt:        timestamp("trial_ends_at"),
+  subscriptionStatus: text("subscription_status").default("trial"), // 'trial'|'active'|'paused'|'cancelled'
+  createdAt:          timestamp("created_at").defaultNow(),
+  updatedAt:          timestamp("updated_at").defaultNow(),
 })
 
 export const users = pgTable("users", {
@@ -97,3 +146,19 @@ export const candidates = pgTable("candidates", {
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 })
+
+// ─── Tenant Modules ───────────────────────────────────────────────────────────
+
+export const tenantModules = pgTable("tenant_modules", {
+  id:            uuid("id").primaryKey().defaultRandom(),
+  tenantId:      uuid("tenant_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  moduleId:      uuid("module_id").references(() => modules.id, { onDelete: "cascade" }).notNull(),
+  isActive:      boolean("is_active").default(true),
+  activatedAt:   timestamp("activated_at"),
+  expiresAt:     timestamp("expires_at"),
+  maxVacancies:  integer("max_vacancies"),   // null = безлимит
+  maxCandidates: integer("max_candidates"),
+  maxEmployees:  integer("max_employees"),
+  maxScenarios:  integer("max_scenarios"),
+  maxUsers:      integer("max_users"),
+}, (t) => [unique().on(t.tenantId, t.moduleId)])

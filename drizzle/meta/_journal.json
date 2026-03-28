@@ -15,6 +15,13 @@
       "when": 1774618864684,
       "tag": "0001_powerful_vulture",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1774699887878,
+      "tag": "0002_organic_warstar",
+      "breakpoints": true
     }
   ]
 }
