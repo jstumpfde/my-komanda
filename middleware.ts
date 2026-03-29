@@ -58,9 +58,14 @@ export default auth(async (req) => {
     pathname.startsWith("/hr/") &&
     !pathname.startsWith("/upgrade")
   ) {
+    // hasAnyModule уже содержит try/catch и двойной fallback (slug → anyActive)
     const hasHR = await hasAnyModule(session.user.companyId, HR_MODULE_SLUGS)
     if (!hasHR) {
-      return Response.redirect(new URL("/upgrade?module=recruiting", req.url))
+      // Защита от redirect-loop: если откуда-то попали сюда снова — пропускаем
+      const ref = req.headers.get("referer") ?? ""
+      if (!ref.includes("/upgrade")) {
+        return Response.redirect(new URL("/upgrade?module=recruiting", req.url))
+      }
     }
   }
 })

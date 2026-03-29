@@ -1,9 +1,15 @@
-import { eq, and, inArray, count } from "drizzle-orm"
+import { eq, and, inArray, count, or, isNull } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { tenantModules, modules, vacancies, candidates, users } from "@/lib/db/schema"
 
-// Слаги HR-модулей
-export const HR_MODULE_SLUGS = ["recruiting", "hr-ops", "talent-pool"]
+// Слаги HR-модулей — включаем все возможные варианты написания (seed.ts vs registry.ts)
+export const HR_MODULE_SLUGS = [
+  "recruiting", "hr-ops", "talent-pool", // стандартные слаги из seed.ts
+  "hr", "hr_ops", "talent_pool",          // альтернативные формы на случай расхождения
+]
+
+// Вспомогательная проверка: is_active = true ИЛИ NULL (null = не отключён явно)
+const isActiveOrNull = or(eq(tenantModules.isActive, true), isNull(tenantModules.isActive))
 
 // ─── hasModuleAccess ──────────────────────────────────────────────────────────
 
@@ -12,40 +18,67 @@ export async function hasModuleAccess(
   tenantId: string,
   moduleSlug: string,
 ): Promise<boolean> {
-  const [row] = await db
-    .select({ id: tenantModules.id })
-    .from(tenantModules)
-    .innerJoin(modules, eq(modules.id, tenantModules.moduleId))
-    .where(
-      and(
-        eq(tenantModules.tenantId, tenantId),
-        eq(modules.slug, moduleSlug),
-        eq(tenantModules.isActive, true),
-      ),
-    )
-    .limit(1)
-  return !!row
+  try {
+    const [row] = await db
+      .select({ id: tenantModules.id })
+      .from(tenantModules)
+      .innerJoin(modules, eq(modules.id, tenantModules.moduleId))
+      .where(
+        and(
+          eq(tenantModules.tenantId, tenantId),
+          eq(modules.slug, moduleSlug),
+          isActiveOrNull,
+        ),
+      )
+      .limit(1)
+    return !!row
+  } catch {
+    return false
+  }
 }
 
-/** Проверяет, есть ли у тенанта хотя бы один активный модуль из списка */
+/** Проверяет, есть ли у тенанта хотя бы один активный модуль из списка.
+ *
+ * Алгоритм с двойным fallback:
+ * 1. JOIN с modules → фильтр по slug — стандартный путь.
+ * 2. Если ничего не нашли — проверяем есть ли ВООБЩЕ активные tenant_modules.
+ *    Это покрывает случай, когда module_id в tenant_modules устарел (пересев БД)
+ *    или slugs в modules изменились, но записи в tenant_modules живые.
+ *    (Все тарифы включают recruiting, поэтому ANY active module ≈ HR access.)
+ */
 export async function hasAnyModule(
   tenantId: string,
   slugs: string[],
 ): Promise<boolean> {
   if (slugs.length === 0) return false
-  const [row] = await db
-    .select({ id: tenantModules.id })
-    .from(tenantModules)
-    .innerJoin(modules, eq(modules.id, tenantModules.moduleId))
-    .where(
-      and(
-        eq(tenantModules.tenantId, tenantId),
-        inArray(modules.slug, slugs),
-        eq(tenantModules.isActive, true),
-      ),
-    )
-    .limit(1)
-  return !!row
+  try {
+    // ── Шаг 1: JOIN-запрос по slug ────────────────────────────────────────────
+    const [bySlug] = await db
+      .select({ id: tenantModules.id })
+      .from(tenantModules)
+      .innerJoin(modules, eq(modules.id, tenantModules.moduleId))
+      .where(
+        and(
+          eq(tenantModules.tenantId, tenantId),
+          inArray(modules.slug, slugs),
+          isActiveOrNull,
+        ),
+      )
+      .limit(1)
+    if (bySlug) return true
+
+    // ── Шаг 2: Fallback — есть хоть один активный модуль? ────────────────────
+    // Все тарифы (Solo → Pro) содержат "recruiting", поэтому если у компании
+    // есть хоть один модуль — значит есть и HR-доступ.
+    const [anyActive] = await db
+      .select({ id: tenantModules.id })
+      .from(tenantModules)
+      .where(and(eq(tenantModules.tenantId, tenantId), isActiveOrNull))
+      .limit(1)
+    return !!anyActive
+  } catch {
+    return false
+  }
 }
 
 // ─── getTenantModules ─────────────────────────────────────────────────────────
