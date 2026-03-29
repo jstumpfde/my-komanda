@@ -82,6 +82,17 @@ export const MODULE_REGISTRY: Record<ModuleId, ModuleConfig> = {
     description: 'Управление доставкой и складом',
     icon: 'Truck',
     basePath: '/logistics',
-    menuItems: [],
+    menuItems: [
+      { label: 'Дашборд',      href: '/logistics/dashboard',  icon: 'LayoutDashboard' },
+      { label: 'Товары',       href: '/logistics/inventory',  icon: 'Package' },
+      { label: 'Склады',       href: '/logistics/warehouses', icon: 'Warehouse' },
+      { label: 'Заказы',       href: '/logistics/orders',     icon: 'ShoppingCart' },
+      { label: 'Отгрузки',     href: '/logistics/shipments',  icon: 'Truck' },
+      { label: 'Возвраты',     href: '/logistics/returns',    icon: 'RotateCcw' },
+      { label: 'Поставщики',   href: '/logistics/suppliers',  icon: 'Users' },
+      { label: 'Закупки',      href: '/logistics/purchases',  icon: 'ClipboardList' },
+      { label: 'Аналитика',    href: '/logistics/analytics',  icon: 'BarChart3' },
+      { label: 'Отчёты',       href: '/logistics/reports',    icon: 'FileText' },
+    ],
   },
 }

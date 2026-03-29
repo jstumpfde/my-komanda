@@ -29,6 +29,12 @@ const MODULE_GROUP_DEFS: Partial<Record<ModuleId, { label: string; hrefs: string
     { label: 'Активности',  hrefs: ['/sales/tasks', '/sales/meetings', '/sales/products'] },
     { label: 'Аналитика',   hrefs: ['/sales/analytics', '/sales/forecasts'] },
   ],
+  logistics: [
+    { label: 'Склад',       hrefs: ['/logistics/dashboard', '/logistics/inventory', '/logistics/warehouses'] },
+    { label: 'Заказы',      hrefs: ['/logistics/orders', '/logistics/shipments', '/logistics/returns'] },
+    { label: 'Поставщики',  hrefs: ['/logistics/suppliers', '/logistics/purchases'] },
+    { label: 'Аналитика',   hrefs: ['/logistics/analytics', '/logistics/reports'] },
+  ],
 }
 
 export function getModuleMenuItems(activeModules: ModuleId[]) {
