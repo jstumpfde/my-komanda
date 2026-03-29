@@ -537,3 +537,54 @@ export const exitSurveys = pgTable("exit_surveys", {
   isAnonymous:   boolean("is_anonymous").default(false),
   createdAt:     timestamp("created_at").defaultNow(),
 })
+
+// ─── Блок I: Reskilling Center ──────────────────────────────────────────────
+
+export const reskillingAssessments = pgTable("reskilling_assessments", {
+  id:                uuid("id").primaryKey().defaultRandom(),
+  tenantId:          uuid("tenant_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  position:          text("position").notNull(),
+  department:        text("department"),
+  automationRisk:    integer("automation_risk").default(0),    // 0-100%
+  riskLevel:         text("risk_level").default("low"),        // low/medium/high/critical
+  aiImpactSummary:   text("ai_impact_summary"),                // описание влияния AI
+  tasksAtRisk:       jsonb("tasks_at_risk"),                    // { task, riskPct, alternative }[]
+  recommendedSkills: jsonb("recommended_skills"),               // { skillName, priority, courseId? }[]
+  calculatedAt:      timestamp("calculated_at").defaultNow(),
+  createdAt:         timestamp("created_at").defaultNow(),
+})
+
+export const reskillingPlans = pgTable("reskilling_plans", {
+  id:             uuid("id").primaryKey().defaultRandom(),
+  tenantId:       uuid("tenant_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  employeeId:     text("employee_id").notNull(),
+  employeeName:   text("employee_name"),
+  currentPosition:text("current_position"),
+  targetPosition: text("target_position"),
+  status:         text("status").default("draft"),    // draft/active/completed/cancelled
+  progress:       integer("progress").default(0),      // 0-100
+  skills:         jsonb("skills"),                      // { skillId, name, currentLevel, targetLevel, courseId? }[]
+  dueDate:        timestamp("due_date"),
+  completedAt:    timestamp("completed_at"),
+  createdBy:      uuid("created_by").references(() => users.id),
+  createdAt:      timestamp("created_at").defaultNow(),
+  updatedAt:      timestamp("updated_at").defaultNow(),
+})
+
+// ─── Блок I: Predictive Hiring ──────────────────────────────────────────────
+
+export const predictiveHiringAlerts = pgTable("predictive_hiring_alerts", {
+  id:             uuid("id").primaryKey().defaultRandom(),
+  tenantId:       uuid("tenant_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  flightRiskId:   uuid("flight_risk_id").references(() => flightRiskScores.id),
+  employeeId:     text("employee_id").notNull(),
+  employeeName:   text("employee_name"),
+  position:       text("position"),
+  department:     text("department"),
+  riskScore:      integer("risk_score"),
+  status:         text("status").default("new"),       // new/vacancy_created/talent_pool_matched/resolved/dismissed
+  vacancyId:      uuid("vacancy_id").references(() => vacancies.id),  // auto-created draft
+  talentPoolMatch:jsonb("talent_pool_match"),           // matched candidates from pool
+  createdAt:      timestamp("created_at").defaultNow(),
+  resolvedAt:     timestamp("resolved_at"),
+})

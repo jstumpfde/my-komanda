@@ -14,7 +14,7 @@ const MODULE_GROUP_DEFS: Partial<Record<ModuleId, { label: string; hrefs: string
     { label: 'Lifecycle',     hrefs: ['/hr/preboarding', '/hr/offboarding'] },
     { label: 'Обучение',      hrefs: ['/hr/courses', '/hr/certificates'] },
     { label: 'Развитие',      hrefs: ['/hr/talent-pool', '/hr/skills', '/hr/assessments'] },
-    { label: 'Аналитика HR',  hrefs: ['/hr/flight-risk', '/hr/pulse-surveys', '/hr/analytics'] },
+    { label: 'Аналитика HR',  hrefs: ['/hr/flight-risk', '/hr/pulse-surveys', '/hr/reskilling', '/hr/predictive-hiring', '/hr/analytics'] },
     { label: 'Обзор',         hrefs: ['/overview', '/hr/interviews', '/referrals'] },
   ],
 }

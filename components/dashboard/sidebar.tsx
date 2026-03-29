@@ -10,7 +10,7 @@ import {
   DollarSign, Truck, Gift, Building2, CreditCard, Plug, Clock, Bell, Palette, LayoutGrid,
   Settings, Shield, ChevronRight, ChevronDown, LogOut, Calendar, Share2, ShieldCheck,
   ClipboardList, ClipboardCheck, UserCheck2, Trophy, HeartHandshake, BookOpen, Award, Zap,
-  AlertTriangle, UserMinus,
+  AlertTriangle, UserMinus, Brain, Radar,
   type LucideIcon,
 } from "lucide-react"
 import {
@@ -43,7 +43,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   DollarSign, Truck, Gift, Building2, CreditCard, Plug, Clock, Bell, Palette, LayoutGrid,
   Settings, Shield, Calendar, Share2, ShieldCheck, ClipboardList, ClipboardCheck,
   UserCheck2, Trophy, BarChart2, HeartHandshake, BookOpen, Award, Zap, ChevronRight,
-  AlertTriangle, MessageSquare, UserMinus,
+  AlertTriangle, MessageSquare, UserMinus, Brain, Radar,
 }
 function getIcon(name: string): LucideIcon {
   return ICON_MAP[name] ?? Settings
