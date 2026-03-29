@@ -109,6 +109,11 @@ export default function FlightRiskPage() {
     load()
   }
 
+  const recalculate = async () => {
+    await fetch("/api/cron/recalculate-flight-risk", { method: "POST" })
+    load()
+  }
+
   const moveAction = async (id: string, newStatus: string) => {
     await fetch(`/api/modules/hr/flight-risk/retention-actions/${id}`, {
       method: "PATCH",
@@ -191,6 +196,11 @@ export default function FlightRiskPage() {
               Retention-план ({actions.length})
             </button>
             <div className="flex-1" />
+            {scores.length > 0 && (
+              <Button size="sm" variant="outline" onClick={recalculate}>
+                Пересчитать скоры
+              </Button>
+            )}
             {scores.length === 0 && !loading && (
               <Button size="sm" variant="outline" onClick={seedDemo}>
                 Загрузить демо
