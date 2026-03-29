@@ -25,7 +25,9 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Checkbox } from "@/components/ui/checkbox"
 import { Slider } from "@/components/ui/slider"
 import { Input } from "@/components/ui/input"
-import { Plus, Clock, Pause, Play, Archive, RotateCcw, Trash2, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, Zap, Globe, AlertTriangle, TrendingUp, Calendar, MapPin, DollarSign, Filter, X, Link2, Copy, Save, Sparkles, Eye, Check, Loader2 } from "lucide-react"
+import { Plus, Clock, Pause, Play, Archive, RotateCcw, Trash2, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, Zap, Globe, AlertTriangle, TrendingUp, Calendar, MapPin, DollarSign, Filter, X, Link2, Copy, Save, Sparkles, Eye, Check, Loader2, Download, ExternalLink } from "lucide-react"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
 import { defaultColumnColors, type CandidateAction, getNextColumnId, PROGRESS_BY_COLUMN } from "@/lib/column-config"
 import type { Candidate } from "@/components/dashboard/candidate-card"
@@ -161,6 +163,83 @@ export default function VacancyPage() {
   // Course editor toolbar state
   const courseEditorRef = useRef<NotionEditorHandle>(null)
   const [courseEditorSaveStatus, setCourseEditorSaveStatus] = useState<"saved" | "saving">("saved")
+
+  // HH.ru integration state
+  const [hhConnected, setHhConnected] = useState<boolean | null>(null)
+  const [hhPublished, setHhPublished] = useState<{ hhVacancyId: string; views: number; responses: number; publishedAt: string } | null>(null)
+  const [hhPublishing, setHhPublishing] = useState(false)
+  const [hhImporting, setHhImporting] = useState(false)
+  const [hhLastImport, setHhLastImport] = useState<Date | null>(null)
+  const [hhSalaryFrom, setHhSalaryFrom] = useState("")
+  const [hhSalaryTo, setHhSalaryTo] = useState("")
+  const [hhSchedule, setHhSchedule] = useState("fullDay")
+
+  useEffect(() => {
+    // Fetch hh.ru connection status
+    fetch("/api/integrations/hh/status")
+      .then((r) => r.json())
+      .then((data) => setHhConnected(data.connected))
+      .catch(() => setHhConnected(false))
+
+    // Fetch published status for this vacancy
+    fetch("/api/integrations/hh/vacancies")
+      .then((r) => r.json())
+      .then((rows: Array<{ vacancyId: string; hhVacancyId: string; views: number; responses: number; publishedAt: string }>) => {
+        const found = rows.find((r) => r.vacancyId === id)
+        if (found) setHhPublished(found)
+      })
+      .catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id])
+
+  const handleHhPublish = async () => {
+    setHhPublishing(true)
+    try {
+      const res = await fetch(`/api/integrations/hh/vacancies/${id}/publish`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          salaryFrom: hhSalaryFrom ? parseInt(hhSalaryFrom) : undefined,
+          salaryTo: hhSalaryTo ? parseInt(hhSalaryTo) : undefined,
+          schedule: hhSchedule,
+        }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setHhPublished({ hhVacancyId: data.hh_id, views: 0, responses: 0, publishedAt: new Date().toISOString() })
+        toast.success("Вакансия опубликована на hh.ru")
+      } else {
+        toast.error(data.error ?? "Ошибка публикации")
+      }
+    } catch {
+      toast.error("Ошибка публикации на hh.ru")
+    } finally {
+      setHhPublishing(false)
+    }
+  }
+
+  const handleHhImport = async () => {
+    setHhImporting(true)
+    try {
+      const res = await fetch(`/api/integrations/hh/vacancies/${id}/import`, { method: "POST" })
+      const data = await res.json()
+      if (res.ok) {
+        setHhLastImport(new Date())
+        if (data.imported > 0) {
+          toast.success(`Импортировано ${data.imported} кандидатов с hh.ru`)
+        } else {
+          toast("Новых откликов не найдено")
+        }
+      } else {
+        toast.error(data.error ?? "Ошибка импорта")
+      }
+    } catch {
+      toast.error("Ошибка импорта с hh.ru")
+    } finally {
+      setHhImporting(false)
+    }
+  }
+
   const { role } = useAuth()
   const canAdd = isPlatformRole(role)
 
@@ -819,6 +898,126 @@ export default function VacancyPage() {
                     salaryFrom={80000}
                     salaryTo={150000}
                   />
+
+                  {/* HH.ru Section */}
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-full bg-red-500 flex items-center justify-center text-white text-[10px] font-bold shrink-0">hh</div>
+                        Публикация на hh.ru
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {hhConnected === null ? (
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Загрузка...
+                        </div>
+                      ) : !hhConnected ? (
+                        <div className="p-4 rounded-lg bg-muted/50 border border-dashed border-border text-sm text-center space-y-2">
+                          <p className="text-muted-foreground">Подключите hh.ru для публикации вакансий напрямую из платформы</p>
+                          <Button variant="outline" size="sm" asChild>
+                            <a href="/settings/integrations">
+                              <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
+                              Настройки интеграций
+                            </a>
+                          </Button>
+                        </div>
+                      ) : hhPublished ? (
+                        <div className="space-y-4">
+                          <div className="flex items-center gap-2">
+                            <Check className="w-4 h-4 text-emerald-500" />
+                            <span className="text-sm font-medium text-emerald-700 dark:text-emerald-400">Опубликовано на hh.ru</span>
+                            <span className="text-xs text-muted-foreground">· ID: {hhPublished.hhVacancyId}</span>
+                          </div>
+                          <div className="grid grid-cols-3 gap-3">
+                            <div className="rounded-lg bg-muted/50 p-3 text-center">
+                              <p className="text-2xl font-bold">{hhPublished.views}</p>
+                              <p className="text-xs text-muted-foreground mt-0.5">Просмотров</p>
+                            </div>
+                            <div className="rounded-lg bg-muted/50 p-3 text-center">
+                              <p className="text-2xl font-bold">{hhPublished.responses}</p>
+                              <p className="text-xs text-muted-foreground mt-0.5">Откликов</p>
+                            </div>
+                            <div className="rounded-lg bg-muted/50 p-3 text-center">
+                              <p className="text-sm font-medium">{new Date(hhPublished.publishedAt).toLocaleDateString("ru-RU")}</p>
+                              <p className="text-xs text-muted-foreground mt-0.5">Дата публикации</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-between pt-1">
+                            {hhLastImport && (
+                              <p className="text-xs text-muted-foreground">
+                                Последний импорт: {hhLastImport.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}
+                              </p>
+                            )}
+                            <Button
+                              size="sm"
+                              className="gap-1.5 ml-auto"
+                              onClick={handleHhImport}
+                              disabled={hhImporting}
+                            >
+                              {hhImporting ? (
+                                <><Loader2 className="w-3.5 h-3.5 animate-spin" />Импорт...</>
+                              ) : (
+                                <><Download className="w-3.5 h-3.5" />Импортировать отклики</>
+                              )}
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-1.5">
+                              <Label className="text-xs">Зарплата от (₽)</Label>
+                              <Input
+                                type="number"
+                                placeholder="80 000"
+                                value={hhSalaryFrom}
+                                onChange={(e) => setHhSalaryFrom(e.target.value)}
+                                className="h-8 text-sm"
+                              />
+                            </div>
+                            <div className="space-y-1.5">
+                              <Label className="text-xs">Зарплата до (₽)</Label>
+                              <Input
+                                type="number"
+                                placeholder="150 000"
+                                value={hhSalaryTo}
+                                onChange={(e) => setHhSalaryTo(e.target.value)}
+                                className="h-8 text-sm"
+                              />
+                            </div>
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label className="text-xs">График работы</Label>
+                            <Select value={hhSchedule} onValueChange={setHhSchedule}>
+                              <SelectTrigger className="h-8 text-sm">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="fullDay">Полный день</SelectItem>
+                                <SelectItem value="shift">Сменный график</SelectItem>
+                                <SelectItem value="flexible">Гибкий график</SelectItem>
+                                <SelectItem value="remote">Удалённая работа</SelectItem>
+                                <SelectItem value="flyInFlyOut">Вахтовый метод</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <Button
+                            className="w-full gap-1.5 bg-red-500 hover:bg-red-600 text-white"
+                            onClick={handleHhPublish}
+                            disabled={hhPublishing}
+                          >
+                            {hhPublishing ? (
+                              <><Loader2 className="w-4 h-4 animate-spin" />Публикация...</>
+                            ) : (
+                              <>Опубликовать на hh.ru</>
+                            )}
+                          </Button>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
                 </div>
               </TabsContent>
 

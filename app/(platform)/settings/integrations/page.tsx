@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -16,6 +16,12 @@ import {
   Link2, CheckCircle2, XCircle, Loader2, Lock, ExternalLink,
   RefreshCw, Save, ArrowRight, Info,
 } from "lucide-react"
+
+interface HhStatus {
+  connected: boolean
+  employerId?: string
+  tokenExpiresAt?: string
+}
 
 interface CrmConnection {
   name: string
@@ -34,6 +40,36 @@ export default function IntegrationsPage() {
   const [portalUrl, setPortalUrl] = useState("")
   const [apiKey, setApiKey] = useState("")
   const [connecting, setConnecting] = useState(false)
+
+  // hh.ru integration state
+  const [hhStatus, setHhStatus] = useState<HhStatus | null>(null)
+  const [hhLoading, setHhLoading] = useState(true)
+  const [hhDisconnecting, setHhDisconnecting] = useState(false)
+
+  useEffect(() => {
+    fetch("/api/integrations/hh/status")
+      .then((r) => r.json())
+      .then((data) => setHhStatus(data))
+      .catch(() => setHhStatus({ connected: false }))
+      .finally(() => setHhLoading(false))
+  }, [])
+
+  const handleHhDisconnect = async () => {
+    setHhDisconnecting(true)
+    try {
+      const res = await fetch("/api/integrations/hh/disconnect", { method: "POST" })
+      if (res.ok) {
+        setHhStatus({ connected: false })
+        toast.success("hh.ru отключён")
+      } else {
+        toast.error("Ошибка при отключении")
+      }
+    } catch {
+      toast.error("Ошибка при отключении")
+    } finally {
+      setHhDisconnecting(false)
+    }
+  }
 
   // Sync settings
   const [syncNewCandidate, setSyncNewCandidate] = useState(true)
@@ -81,12 +117,69 @@ export default function IntegrationsPage() {
   return (
         <>
 <div className="mb-6">
-              <h1 className="text-2xl font-semibold text-foreground mb-1">Интеграции с CRM</h1>
-              <p className="text-muted-foreground text-sm">Автоматическая синхронизация кандидатов с вашей CRM</p>
+              <h1 className="text-2xl font-semibold text-foreground mb-1">Интеграции</h1>
+              <p className="text-muted-foreground text-sm">Подключение внешних сервисов и синхронизация данных</p>
             </div>
 
             <div className="space-y-6">
+
+              {/* hh.ru */}
+              <div>
+                <h2 className="text-base font-semibold text-foreground mb-3">Джоб-борды</h2>
+                <Card>
+                  <CardContent className="p-5">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-10 h-10 rounded-full bg-red-500 flex items-center justify-center text-white font-bold text-sm shrink-0">hh</div>
+                      <div className="flex-1">
+                        <p className="text-sm font-semibold text-foreground">HeadHunter (hh.ru)</p>
+                        <p className="text-xs text-muted-foreground">Публикация вакансий и импорт откликов</p>
+                      </div>
+                      {hhLoading ? (
+                        <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                      ) : (
+                        <Badge variant="outline" className={cn("text-xs", hhStatus?.connected ? "bg-emerald-500/10 text-emerald-700 border-emerald-200 dark:text-emerald-400 dark:border-emerald-800" : "")}>
+                          {hhStatus?.connected ? <><CheckCircle2 className="w-3 h-3 mr-1" />Подключено</> : "Не подключено"}
+                        </Badge>
+                      )}
+                    </div>
+                    {hhStatus?.connected ? (
+                      <div className="space-y-2">
+                        <div className="text-xs text-muted-foreground space-y-0.5">
+                          {hhStatus.employerId && <p>ID работодателя: <span className="font-mono">{hhStatus.employerId}</span></p>}
+                          {hhStatus.tokenExpiresAt && (
+                            <p>Токен действует до: {new Date(hhStatus.tokenExpiresAt).toLocaleDateString("ru-RU")}</p>
+                          )}
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="w-full text-destructive hover:text-destructive"
+                          onClick={handleHhDisconnect}
+                          disabled={hhDisconnecting}
+                        >
+                          {hhDisconnecting ? <><Loader2 className="w-3 h-3 animate-spin mr-2" />Отключение...</> : "Отключить"}
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <p className="text-xs text-muted-foreground">
+                          Подключите hh.ru для публикации вакансий и автоматического импорта откликов от кандидатов.
+                        </p>
+                        <Button className="w-full gap-1.5 bg-red-500 hover:bg-red-600 text-white" asChild>
+                          <a href="/api/integrations/hh/auth">
+                            <ExternalLink className="w-4 h-4" /> Подключить hh.ru
+                          </a>
+                        </Button>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+
               {/* CRM Cards */}
+              <div>
+                <h2 className="text-base font-semibold text-foreground mb-3">Интеграции с CRM</h2>
+              </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {/* Bitrix24 */}
                 <Card>

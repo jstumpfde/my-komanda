@@ -818,3 +818,36 @@ export const subscriptionHistory = pgTable("subscription_history", {
   reason:      text("reason"),
   createdAt:   timestamp("created_at").defaultNow(),
 })
+
+// ─── HH.ru Integration ────────────────────────────────────────────────────────
+
+export const hhTokens = pgTable("hh_tokens", {
+  id:             uuid("id").primaryKey().defaultRandom(),
+  companyId:      uuid("company_id").references(() => companies.id).notNull().unique(),
+  accessToken:    text("access_token").notNull(),
+  refreshToken:   text("refresh_token").notNull(),
+  expiresAt:      timestamp("expires_at", { withTimezone: true }).notNull(),
+  hhEmployerId:   text("hh_employer_id"),
+  createdAt:      timestamp("created_at").defaultNow(),
+  updatedAt:      timestamp("updated_at").defaultNow(),
+})
+
+export const hhVacancies = pgTable("hh_vacancies", {
+  id:           uuid("id").primaryKey().defaultRandom(),
+  vacancyId:    uuid("vacancy_id").references(() => vacancies.id).notNull(),
+  hhVacancyId:  text("hh_vacancy_id").notNull(),
+  hhStatus:     text("hh_status").default("active"),
+  publishedAt:  timestamp("published_at", { withTimezone: true }).defaultNow(),
+  expiresAt:    timestamp("expires_at", { withTimezone: true }),
+  views:        integer("views").default(0),
+  responses:    integer("responses").default(0),
+  updatedAt:    timestamp("updated_at").defaultNow(),
+})
+
+export const hhCandidates = pgTable("hh_candidates", {
+  id:              uuid("id").primaryKey().defaultRandom(),
+  candidateId:     uuid("candidate_id").references(() => candidates.id).notNull(),
+  hhResumeId:      text("hh_resume_id").notNull().unique(),
+  hhApplicationId: text("hh_application_id"),
+  importedAt:      timestamp("imported_at").defaultNow(),
+})
