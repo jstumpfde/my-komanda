@@ -39,14 +39,16 @@ export const plans = pgTable("plans", {
 // ─── Plan → Modules (лимиты по тарифу) ───────────────────────────────────────
 
 export const planModules = pgTable("plan_modules", {
-  id:            uuid("id").primaryKey().defaultRandom(),
-  planId:        uuid("plan_id").references(() => plans.id, { onDelete: "cascade" }).notNull(),
-  moduleId:      uuid("module_id").references(() => modules.id, { onDelete: "cascade" }).notNull(),
-  maxVacancies:  integer("max_vacancies"),   // null = безлимит
-  maxCandidates: integer("max_candidates"),
-  maxEmployees:  integer("max_employees"),
-  maxScenarios:  integer("max_scenarios"),
-  maxUsers:      integer("max_users"),
+  id:                  uuid("id").primaryKey().defaultRandom(),
+  planId:              uuid("plan_id").references(() => plans.id, { onDelete: "cascade" }).notNull(),
+  moduleId:            uuid("module_id").references(() => modules.id, { onDelete: "cascade" }).notNull(),
+  maxVacancies:        integer("max_vacancies"),   // null = безлимит
+  maxCandidates:       integer("max_candidates"),
+  maxEmployees:        integer("max_employees"),
+  maxScenarios:        integer("max_scenarios"),
+  maxUsers:            integer("max_users"),
+  allowCustomBranding: boolean("allow_custom_branding").default(false),
+  allowCustomColors:   boolean("allow_custom_colors").default(false),
 }, (t) => [unique().on(t.planId, t.moduleId)])
 
 // ─── Tenant → Modules (активированные у клиента) ─────────────────────────────
@@ -78,6 +80,7 @@ export const companies = pgTable("companies", {
   brandPrimaryColor:  text("brand_primary_color").default("#3b82f6"),
   brandBgColor:       text("brand_bg_color").default("#f0f4ff"),
   brandTextColor:     text("brand_text_color").default("#1e293b"),
+  customTheme:        jsonb("custom_theme"),       // { primary, background, foreground, sidebar, accent }
   // billing / subscription
   planId:             uuid("plan_id").references(() => plans.id),
   billingEmail:       text("billing_email"),
@@ -665,4 +668,64 @@ export const inviteLinks = pgTable("invite_links", {
   isActive:   boolean("is_active").default(true),
   expiresAt:  timestamp("expires_at"),          // null = бессрочно
   createdAt:  timestamp("created_at").defaultNow(),
+})
+
+// ─── Notification Preferences ────────────────────────────────────────────────
+
+export const notificationPreferences = pgTable("notification_preferences", {
+  id:               uuid("id").primaryKey().defaultRandom(),
+  userId:           uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  module:           text("module").notNull(),   // hr, marketing, sales, logistics, general
+  category:         text("category").notNull(), // hiring, adaptation, pulse, flight_risk, courses, etc.
+  channelEmail:     boolean("channel_email").default(true),
+  channelTelegram:  boolean("channel_telegram").default(false),
+  channelPush:      boolean("channel_push").default(false),
+  channelWeb:       boolean("channel_web").default(true),
+  createdAt:        timestamp("created_at").defaultNow(),
+  updatedAt:        timestamp("updated_at").defaultNow(),
+}, (t) => [unique().on(t.userId, t.module, t.category)])
+
+// ─── Integrators ──────────────────────────────────────────────────────────────
+
+export const integratorLevels = pgTable("integrator_levels", {
+  id:               uuid("id").primaryKey().defaultRandom(),
+  name:             text("name").notNull(),
+  minClients:       integer("min_clients").default(0),
+  minMrrKopecks:    integer("min_mrr_kopecks").default(0),
+  commissionPercent:text("commission_percent").notNull(), // numeric as text
+  sortOrder:        integer("sort_order").default(0),
+  isActive:         boolean("is_active").default(true),
+  createdAt:        timestamp("created_at").defaultNow(),
+})
+
+export const integrators = pgTable("integrators", {
+  id:           uuid("id").primaryKey().defaultRandom(),
+  companyId:    uuid("company_id").references(() => companies.id, { onDelete: "cascade" }).unique().notNull(),
+  levelId:      uuid("level_id").references(() => integratorLevels.id),
+  contactName:  text("contact_name"),
+  contactEmail: text("contact_email"),
+  contactPhone: text("contact_phone"),
+  status:       text("status").default("active"), // active, suspended, terminated
+  joinedAt:     timestamp("joined_at").defaultNow(),
+  createdAt:    timestamp("created_at").defaultNow(),
+})
+
+export const integratorClients = pgTable("integrator_clients", {
+  id:              uuid("id").primaryKey().defaultRandom(),
+  integratorId:    uuid("integrator_id").references(() => integrators.id, { onDelete: "cascade" }).notNull(),
+  clientCompanyId: uuid("client_company_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  referredAt:      timestamp("referred_at").defaultNow(),
+}, (t) => [unique().on(t.integratorId, t.clientCompanyId)])
+
+export const integratorPayouts = pgTable("integrator_payouts", {
+  id:               uuid("id").primaryKey().defaultRandom(),
+  integratorId:     uuid("integrator_id").references(() => integrators.id, { onDelete: "cascade" }).notNull(),
+  periodStart:      timestamp("period_start").notNull(),
+  periodEnd:        timestamp("period_end").notNull(),
+  totalMrrKopecks:  integer("total_mrr_kopecks").default(0),
+  commissionPercent:text("commission_percent"),
+  payoutKopecks:    integer("payout_kopecks").default(0),
+  status:           text("status").default("pending"), // pending, approved, paid
+  paidAt:           timestamp("paid_at"),
+  createdAt:        timestamp("created_at").defaultNow(),
 })

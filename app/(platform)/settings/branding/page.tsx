@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -9,9 +9,18 @@ import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
-import { Palette, Lock, Globe, Upload, Play, Save, Loader2, CheckCircle2, XCircle, RefreshCw, Copy, AlertCircle } from "lucide-react"
+import { Palette, Lock, Globe, Play, Save, Loader2, CheckCircle2, XCircle, RefreshCw, Copy, AlertCircle, Upload, Trash2, RotateCcw } from "lucide-react"
 import { saveBrand, BRAND_PRESETS, canCustomizeBrand, type BrandConfig } from "@/lib/branding"
 import { fetchCompanyApi, updateCompanyApi } from "@/lib/company-storage"
+import { CompanyLogo } from "@/components/company-logo"
+
+const DEFAULT_COLORS = {
+  primary:    "#6366f1",
+  background: "#ffffff",
+  foreground: "#0f172a",
+  sidebar:    "#1e1b4b",
+  accent:     "#818cf8",
+}
 
 export default function BrandingPage() {
   const [brandPrimary, setBrandPrimary] = useState("#3b82f6")
@@ -20,12 +29,18 @@ export default function BrandingPage() {
   const [brandPlan] = useState<BrandConfig["plan"]>("business")
   const canBrand = canCustomizeBrand(brandPlan)
   const [logoPreview, setLogoPreview] = useState<string | null>(null)
+  const [uploadingLogo, setUploadingLogo] = useState(false)
   const [customDomain, setCustomDomain] = useState("")
   const [domainStatus, setDomainStatus] = useState<"idle" | "checking" | "verified" | "error">("idle")
   const [verifying, setVerifying] = useState(false)
   const [shortName, setShortName] = useState("")
   const [greetingTemplate, setGreetingTemplate] = useState("Привет, {name}! 👋")
   const [saving, setSaving] = useState(false)
+  const [isDragging, setIsDragging] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Custom colors (Задача 9)
+  const [customColors, setCustomColors] = useState({ ...DEFAULT_COLORS })
 
   useEffect(() => {
     fetchCompanyApi()
@@ -39,17 +54,60 @@ export default function BrandingPage() {
         if (c.brandTextColor) setBrandText(c.brandTextColor)
         if (c.logoUrl) setLogoPreview(c.logoUrl)
         if (c.greetingTemplate) setGreetingTemplate(c.greetingTemplate)
+        if (c.customTheme) setCustomColors({ ...DEFAULT_COLORS, ...c.customTheme })
       })
       .catch(() => {})
   }, [])
 
-  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
+  const uploadLogoFile = async (file: File) => {
     if (file.size > 2 * 1024 * 1024) { toast.error("Файл слишком большой. Максимум 2 МБ"); return }
+    const ext = file.name.split(".").pop()?.toLowerCase() ?? ""
+    if (!["png", "jpg", "jpeg", "svg", "webp"].includes(ext)) {
+      toast.error("Формат не поддерживается. Используйте PNG, SVG, JPG или WebP")
+      return
+    }
+    // Show local preview immediately
     const reader = new FileReader()
     reader.onload = () => setLogoPreview(reader.result as string)
     reader.readAsDataURL(file)
+
+    // Upload to server
+    setUploadingLogo(true)
+    try {
+      const formData = new FormData()
+      formData.append("file", file)
+      const res = await fetch("/api/upload/logo", { method: "POST", body: formData })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || "Ошибка загрузки")
+      }
+      const { logoUrl } = await res.json()
+      setLogoPreview(logoUrl)
+      toast.success("Логотип загружен")
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Ошибка загрузки логотипа")
+    } finally {
+      setUploadingLogo(false)
+    }
+  }
+
+  const handleLogoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) uploadLogoFile(file)
+  }
+
+  const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(true) }
+  const handleDragLeave = () => setIsDragging(false)
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(false)
+    const file = e.dataTransfer.files?.[0]
+    if (file) uploadLogoFile(file)
+  }
+
+  const removeLogo = () => {
+    setLogoPreview(null)
+    if (fileInputRef.current) fileInputRef.current.value = ""
   }
 
   const verifyDomain = async () => {
@@ -57,7 +115,6 @@ export default function BrandingPage() {
     setVerifying(true)
     setDomainStatus("checking")
     await new Promise(r => setTimeout(r, 2000))
-    // Демо: домены на .ru верифицируются успешно
     setDomainStatus(customDomain.endsWith(".ru") ? "verified" : "error")
     setVerifying(false)
   }
@@ -70,6 +127,7 @@ export default function BrandingPage() {
         brand_primary_color: brandPrimary,
         brand_bg_color: brandBg,
         brand_text_color: brandText,
+        custom_theme: customColors,
       })
       saveBrand({ primaryColor: brandPrimary, bgColor: brandBg, textColor: brandText, logoUrl: logoPreview, companyName: shortName, greetingTemplate })
       toast.success("Брендинг сохранён")
@@ -172,15 +230,76 @@ export default function BrandingPage() {
               </div>
             </div>
 
-            {/* Логотип */}
-            <div className="space-y-1.5">
+            {/* Логотип — расширенная секция (Задача 8) */}
+            <div className="space-y-3">
               <Label className="text-sm font-medium">Логотип</Label>
-              <div className="flex items-center gap-4">
-                <label className={cn("flex flex-col items-center justify-center w-20 h-20 rounded-xl border-2 border-dashed transition-all", canBrand ? "border-border hover:border-primary/30 cursor-pointer bg-muted/20 hover:bg-muted/40" : "border-border/50 bg-muted/10 cursor-not-allowed")}>
-                  <input type="file" accept=".png,.svg,.jpg,.jpeg" className="hidden" onChange={handleLogoUpload} disabled={!canBrand} />
-                  {logoPreview ? <img src={logoPreview} alt="Логотип" className="w-full h-full object-contain rounded-xl p-1.5" /> : <Upload className="w-5 h-5 text-muted-foreground" />}
-                </label>
-                <div className="text-xs text-muted-foreground">PNG / SVG, до 2 МБ<br />Рекомендуем 200×200px</div>
+
+              {/* Drag-and-drop зона */}
+              <div
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                onClick={() => canBrand && fileInputRef.current?.click()}
+                className={cn(
+                  "relative flex flex-col items-center justify-center gap-2 p-6 rounded-xl border-2 border-dashed transition-all max-w-xs",
+                  canBrand ? "cursor-pointer hover:border-primary/40 hover:bg-muted/20" : "cursor-not-allowed opacity-60",
+                  isDragging && "border-primary bg-primary/5"
+                )}
+              >
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".png,.svg,.jpg,.jpeg,.webp"
+                  className="hidden"
+                  onChange={handleLogoFileChange}
+                  disabled={!canBrand}
+                />
+                {uploadingLogo ? (
+                  <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                ) : logoPreview ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={logoPreview} alt="Логотип" className="w-16 h-16 object-contain rounded-lg" />
+                ) : (
+                  <Upload className="w-6 h-6 text-muted-foreground" />
+                )}
+                <div className="text-center">
+                  <p className="text-xs font-medium text-foreground">{logoPreview ? "Нажмите для замены" : "Перетащите или нажмите"}</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">PNG или SVG, минимум 200×200px, до 2 МБ</p>
+                </div>
+              </div>
+
+              {/* Кнопка удаления */}
+              {logoPreview && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="gap-1.5 text-destructive hover:text-destructive hover:bg-destructive/10 h-7 text-xs"
+                  onClick={removeLogo}
+                >
+                  <Trash2 className="w-3.5 h-3.5" /> Удалить логотип
+                </Button>
+              )}
+
+              {/* Три контекстных превью */}
+              <div className="flex items-start gap-4 pt-1">
+                <div className="flex flex-col items-center gap-1.5">
+                  <div className="w-10 h-10 rounded-lg border bg-muted/20 flex items-center justify-center overflow-hidden">
+                    <CompanyLogo logoUrl={logoPreview} companyName={shortName} size="md" rounded="md" />
+                  </div>
+                  <span className="text-[10px] text-muted-foreground">Sidebar (40×40)</span>
+                </div>
+                <div className="flex flex-col items-center gap-1.5">
+                  <div className="w-[120px] h-[120px] rounded-xl border bg-muted/20 flex items-center justify-center overflow-hidden">
+                    <CompanyLogo logoUrl={logoPreview} companyName={shortName} size="lg" rounded="md" className="!w-[100px] !h-[100px]" />
+                  </div>
+                  <span className="text-[10px] text-muted-foreground">Вакансия (120×120)</span>
+                </div>
+                <div className="flex flex-col items-center gap-1.5">
+                  <div className="w-8 h-8 rounded-md border bg-muted/20 flex items-center justify-center overflow-hidden">
+                    <CompanyLogo logoUrl={logoPreview} companyName={shortName} size="sm" rounded="sm" />
+                  </div>
+                  <span className="text-[10px] text-muted-foreground">Мобильный (32×32)</span>
+                </div>
               </div>
             </div>
 
@@ -190,7 +309,6 @@ export default function BrandingPage() {
                 <Globe className="w-3.5 h-3.5 text-muted-foreground" /> Кастомный домен
               </Label>
 
-              {/* Ввод домена */}
               <div className="flex gap-2 max-w-lg">
                 <Input
                   value={customDomain}
@@ -210,7 +328,6 @@ export default function BrandingPage() {
                 </Button>
               </div>
 
-              {/* Статус */}
               {domainStatus === "verified" && (
                 <div className="flex items-center gap-2 text-sm text-emerald-600 font-medium">
                   <CheckCircle2 className="w-4 h-4" />
@@ -230,7 +347,6 @@ export default function BrandingPage() {
                 </div>
               )}
 
-              {/* Инструкция по настройке */}
               {domainStatus !== "verified" && (
                 <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3 max-w-lg">
                   <div className="flex items-start gap-2">
@@ -295,6 +411,108 @@ export default function BrandingPage() {
               </div>
               <p className="text-[10px] text-muted-foreground mt-2">Применяется к: лендинг вакансии, страница кандидата, выбор слота, реферальная страница</p>
             </div>
+          </CardContent>
+        </Card>
+
+        {/* ─── Цвета платформы (beta) — Задача 9 ────────────────────────────── */}
+        <Card>
+          <CardHeader className="pb-2 pt-4 px-4">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Palette className="w-4 h-4 text-violet-500" />
+              Цвета платформы
+              <Badge variant="outline" className="text-[10px]">beta</Badge>
+              {!canBrand && <Badge variant="outline" className="text-[10px] ml-1"><Lock className="w-3 h-3 mr-1" /> Pro</Badge>}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-4 pt-0 space-y-4">
+            {!canBrand ? (
+              /* Стандартные темы как карточки */
+              <div className="space-y-3">
+                <p className="text-xs text-muted-foreground">Выберите одну из стандартных тем интерфейса платформы</p>
+                <div className="grid grid-cols-3 gap-3">
+                  {[
+                    { id: "light", label: "Светлая", sidebar: "#1e1b4b", bg: "#ffffff", primary: "#6366f1" },
+                    { id: "dark",  label: "Тёмная",  sidebar: "#0f0f1a", bg: "#1a1a2e", primary: "#818cf8" },
+                    { id: "warm",  label: "Тёплая",  sidebar: "#1c1917", bg: "#faf9f7", primary: "#d97706" },
+                  ].map(theme => (
+                    <div key={theme.id} className="rounded-xl border overflow-hidden cursor-pointer hover:border-primary/50 transition-colors">
+                      <div className="flex h-16">
+                        <div className="w-8 shrink-0" style={{ background: theme.sidebar }} />
+                        <div className="flex-1 flex items-center justify-center" style={{ background: theme.bg }}>
+                          <div className="w-6 h-6 rounded-full" style={{ background: theme.primary }} />
+                        </div>
+                      </div>
+                      <div className="px-2 py-1.5 text-center text-xs font-medium text-foreground">{theme.label}</div>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex items-center gap-2 p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
+                  <Lock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                  <span className="text-xs text-amber-700 dark:text-amber-400">Кастомизация цветов платформы доступна на тарифе Pro</span>
+                </div>
+              </div>
+            ) : (
+              /* Полная кастомизация */
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {[
+                    { key: "primary" as const,    label: "Основной" },
+                    { key: "background" as const, label: "Фон" },
+                    { key: "foreground" as const, label: "Текст" },
+                    { key: "sidebar" as const,    label: "Сайдбар" },
+                    { key: "accent" as const,     label: "Акцент" },
+                  ].map(({ key, label }) => (
+                    <div key={key} className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">{label}</Label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="color"
+                          value={customColors[key]}
+                          onChange={e => setCustomColors(prev => ({ ...prev, [key]: e.target.value }))}
+                          className="w-9 h-9 rounded-lg border cursor-pointer"
+                        />
+                        <Input
+                          value={customColors[key]}
+                          onChange={e => setCustomColors(prev => ({ ...prev, [key]: e.target.value }))}
+                          className="h-9 font-mono text-xs flex-1"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Живой CSS-превью */}
+                <div>
+                  <Label className="text-xs text-muted-foreground mb-2 block">Превью интерфейса</Label>
+                  <div className="rounded-xl border overflow-hidden flex h-28" style={{ background: customColors.background }}>
+                    {/* Sidebar */}
+                    <div className="w-14 shrink-0 flex flex-col items-center gap-2 py-3" style={{ background: customColors.sidebar }}>
+                      {[1,2,3].map(i => (
+                        <div key={i} className="w-7 h-7 rounded-lg" style={{ background: i === 1 ? customColors.accent : customColors.accent + "30" }} />
+                      ))}
+                    </div>
+                    {/* Content */}
+                    <div className="flex-1 p-3 space-y-2">
+                      <div className="h-4 rounded-md w-24" style={{ background: customColors.foreground + "20" }} />
+                      <div className="h-3 rounded-md w-32" style={{ background: customColors.foreground + "15" }} />
+                      <div className="flex gap-2 mt-2">
+                        <div className="h-7 w-20 rounded-lg" style={{ background: customColors.primary }} />
+                        <div className="h-7 w-16 rounded-lg border" style={{ borderColor: customColors.primary + "60" }} />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5 text-xs h-8"
+                  onClick={() => setCustomColors({ ...DEFAULT_COLORS })}
+                >
+                  <RotateCcw className="w-3.5 h-3.5" /> Сбросить к стандартным
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
 

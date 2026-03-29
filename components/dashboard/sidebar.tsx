@@ -10,7 +10,7 @@ import {
   DollarSign, Truck, Gift, Building2, CreditCard, Plug, Clock, Bell, Palette, LayoutGrid,
   Settings, Shield, ChevronRight, ChevronDown, LogOut, Calendar, Share2, ShieldCheck,
   ClipboardList, ClipboardCheck, UserCheck2, Trophy, HeartHandshake, BookOpen, Award, Zap,
-  AlertTriangle, UserMinus, Brain, Radar, Bot, Store, TrendingDown,
+  AlertTriangle, UserMinus, Brain, Radar, Bot, Store, TrendingDown, Handshake,
   type LucideIcon,
 } from "lucide-react"
 import {
@@ -31,6 +31,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { cn } from "@/lib/utils"
 import { useAuth, getVisibleSections, getVisibleSettings, ROLE_LABELS } from "@/lib/auth"
+import { PlatformBadge } from "@/components/platform-badge"
 import { MODULE_REGISTRY } from "@/lib/modules/registry"
 import type { ModuleId } from "@/lib/modules/types"
 import { getModuleGroups } from "@/lib/sidebar/module-menus"
@@ -43,7 +44,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   DollarSign, Truck, Gift, Building2, CreditCard, Plug, Clock, Bell, Palette, LayoutGrid,
   Settings, Shield, Calendar, Share2, ShieldCheck, ClipboardList, ClipboardCheck,
   UserCheck2, Trophy, BarChart2, HeartHandshake, BookOpen, Award, Zap, ChevronRight,
-  AlertTriangle, MessageSquare, UserMinus, Brain, Radar, Bot, Store, TrendingDown,
+  AlertTriangle, UserMinus, Brain, Radar, Bot, Store, TrendingDown, Handshake,
 }
 function getIcon(name: string): LucideIcon {
   return ICON_MAP[name] ?? Settings
@@ -605,6 +606,7 @@ export function DashboardSidebar() {
           </button>
         </div>
 
+        <PlatformBadge />
       </SidebarFooter>
 
       <SidebarRail />

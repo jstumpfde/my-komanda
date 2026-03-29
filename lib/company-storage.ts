@@ -199,6 +199,7 @@ export interface ApiCompanyUpdatePayload {
   brand_primary_color?: string
   brand_bg_color?: string
   brand_text_color?: string
+  custom_theme?: Record<string, string>
 }
 
 /** GET /api/companies — fetch the current user's company from the DB */

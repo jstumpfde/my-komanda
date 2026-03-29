@@ -108,7 +108,16 @@
       "Bash(psql \"$DATABASE_URL\" -f drizzle/0007_skills_assessments.sql)",
       "Bash(grep -r DATABASE_URL .env*)",
       "Bash(psql \"postgresql://juri:@localhost:5432/mykomanda\" -f /Users/juri/my-komanda/.claude/worktrees/objective-elgamal/drizzle/0007_skills_assessments.sql)",
-      "Bash(psql \"postgresql://juri:@localhost:5432/mykomanda\" -c \"INSERT INTO drizzle.__drizzle_migrations \\(hash, created_at\\) VALUES \\(''0007_skills_assessments'', 1775000000000\\);\")"
+      "Bash(psql \"postgresql://juri:@localhost:5432/mykomanda\" -c \"INSERT INTO drizzle.__drizzle_migrations \\(hash, created_at\\) VALUES \\(''0007_skills_assessments'', 1775000000000\\);\")",
+      "Bash(find /Users/juri/Downloads -name *.md)",
+      "Bash(find /Users/juri/my-komanda -maxdepth 4 -name *.md)",
+      "Bash(find /Users/juri -maxdepth 3 \\\\\\(-name *TZ* -o -name *ALL-TASKS* -o -name *tasks* \\\\\\))",
+      "Bash(tar -tzf /Users/juri/Downloads/mk-src.tar.gz)",
+      "Bash(grep -E \"\\\\.md$|TZ|TASK|task\")",
+      "Bash(ls /Users/juri/Downloads/*.tar.gz /Users/juri/Downloads/*.zip /Users/juri/Downloads/*.md)",
+      "Bash(mkdir -p \"/Users/juri/my-komanda/.claude/worktrees/objective-elgamal/app/api/admin/integrators/[id]/clients\")",
+      "Bash(mkdir -p \"/Users/juri/my-komanda/.claude/worktrees/objective-elgamal/app/api/admin/integrators/[id]/payouts\")",
+      "Bash(mkdir -p \"/Users/juri/my-komanda/.claude/worktrees/objective-elgamal/app/\\(admin\\)/admin/integrators/[id]\")"
     ]
   }
 }

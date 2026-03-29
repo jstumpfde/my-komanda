@@ -41,7 +41,7 @@ export default function AdminTariffsPage() {
       trialDays: 0,
       maxVacancies: 5,
       maxCandidates: 500,
-      features: { branding: false, customDomain: false, aiVideoInterview: false, api: false },
+      features: { branding: false, customDomain: false, aiVideoInterview: false, api: false, allowCustomBranding: false, allowCustomColors: false },
       active: true,
     })
     setSheetOpen(true)
@@ -265,6 +265,8 @@ export default function AdminTariffsPage() {
                   { key: "customDomain" as const, label: "Кастомный домен" },
                   { key: "aiVideoInterview" as const, label: "AI-видеоинтервью" },
                   { key: "api" as const, label: "API доступ" },
+                  { key: "allowCustomBranding" as const, label: "Убрать брендинг платформы" },
+                  { key: "allowCustomColors" as const, label: "Кастомные цвета" },
                 ]).map(f => (
                   <div key={f.key} className="flex items-center justify-between">
                     <Label className="text-sm">{f.label}</Label>

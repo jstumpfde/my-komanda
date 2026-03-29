@@ -3,6 +3,8 @@ export interface TariffFeatures {
   customDomain: boolean
   aiVideoInterview: boolean
   api: boolean
+  allowCustomBranding: boolean
+  allowCustomColors: boolean
 }
 
 export interface Tariff {
@@ -42,7 +44,7 @@ export const DEFAULT_TARIFFS: Tariff[] = [
     trialDays: 0,
     maxVacancies: 1,
     maxCandidates: 400,
-    features: { branding: false, customDomain: false, aiVideoInterview: false, api: false },
+    features: { branding: false, customDomain: false, aiVideoInterview: false, api: false, allowCustomBranding: false, allowCustomColors: false },
     active: true,
   },
   {
@@ -52,7 +54,7 @@ export const DEFAULT_TARIFFS: Tariff[] = [
     trialDays: 0,
     maxVacancies: 3,
     maxCandidates: 1200,
-    features: { branding: false, customDomain: false, aiVideoInterview: false, api: false },
+    features: { branding: false, customDomain: false, aiVideoInterview: false, api: false, allowCustomBranding: false, allowCustomColors: false },
     active: true,
   },
   {
@@ -62,7 +64,7 @@ export const DEFAULT_TARIFFS: Tariff[] = [
     trialDays: 0,
     maxVacancies: 10,
     maxCandidates: 4000,
-    features: { branding: true, customDomain: false, aiVideoInterview: true, api: false },
+    features: { branding: true, customDomain: false, aiVideoInterview: true, api: false, allowCustomBranding: true, allowCustomColors: false },
     badge: "Популярный",
     badgeColor: "bg-primary text-primary-foreground",
     active: true,
@@ -76,7 +78,7 @@ export const DEFAULT_TARIFFS: Tariff[] = [
     trialDays: 0,
     maxVacancies: 22,
     maxCandidates: 10000,
-    features: { branding: true, customDomain: true, aiVideoInterview: true, api: true },
+    features: { branding: true, customDomain: true, aiVideoInterview: true, api: true, allowCustomBranding: true, allowCustomColors: true },
     active: true,
     personalManager: true,
     prioritySupport: true,
