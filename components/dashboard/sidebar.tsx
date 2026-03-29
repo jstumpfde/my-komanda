@@ -82,10 +82,10 @@ const MODULE_BG_COLORS: Record<ModuleId, string> = {
 }
 
 const MODULE_BORDER_COLORS: Record<ModuleId, string> = {
-  hr:        'border-l-blue-500',
-  marketing: 'border-l-purple-500',
-  sales:     'border-l-emerald-500',
-  logistics: 'border-l-orange-500',
+  hr:        '#3b82f6',
+  marketing: '#a855f7',
+  sales:     '#10b981',
+  logistics: '#f97316',
 }
 
 // Group colors for style C (colored icons + badge)
@@ -296,30 +296,28 @@ export function DashboardSidebar() {
           })}
           <div className="my-1 w-6 border-t border-sidebar-border" />
 
-          {/* Active module menu items as icons */}
+          {/* Active module GROUP icons (one per group) */}
           {(() => {
-            // Find active module from pathname
             const activeId = activeModules.find(id => pathname.startsWith(MODULE_REGISTRY[id].basePath)) || activeModules[0]
             if (!activeId) return null
-            const items = MODULE_REGISTRY[activeId]?.menuItems ?? []
-            // Deduplicate by href, limit to avoid overflow
-            const seen = new Set<string>()
-            return items.filter(item => {
-              if (seen.has(item.href)) return false
-              seen.add(item.href)
-              return true
-            }).map((item) => {
-              const ItemIcon = getIcon(item.icon)
-              const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
+            const groups = getModuleGroups(activeId)
+            return groups.filter(g => g.items.length > 0).map((group) => {
+              const firstItem = group.items[0]
+              const GroupIcon = getIcon(firstItem.icon)
+              const gc = GROUP_COLORS[group.label]
+              const hasActiveItem = group.items.some(
+                item => pathname === item.href || pathname.startsWith(item.href + '/')
+              )
+              // Click → navigate to first item in group
               return (
                 <SidebarMenuButton
-                  key={item.href}
-                  tooltip={item.label}
-                  isActive={isActive}
-                  onClick={() => router.push(item.href)}
-                  className="justify-center h-9 w-9"
+                  key={group.label || '__root'}
+                  tooltip={group.label || firstItem.label}
+                  isActive={hasActiveItem}
+                  onClick={() => router.push(firstItem.href)}
+                  className={cn("justify-center h-9 w-9", gc?.text)}
                 >
-                  <ItemIcon className="size-4" />
+                  <GroupIcon className="size-4" />
                 </SidebarMenuButton>
               )
             })
@@ -347,13 +345,15 @@ export function DashboardSidebar() {
                 onOpenChange={() => toggleModule(id)}
               >
                 {/* ── Module header (accordion trigger) — Style A: color bar left ── */}
-                <CollapsibleTrigger className={cn(
-                  "flex items-center gap-2.5 w-full px-3 py-2.5 text-sm font-semibold transition-all duration-150 border-l-[3px] border-l-transparent rounded-none rounded-r-lg",
-                  "hover:bg-sidebar-accent",
-                  isModuleActive
-                    ? cn(MODULE_BG_COLORS[id], MODULE_COLORS[id], MODULE_BORDER_COLORS[id])
-                    : "text-sidebar-foreground/70"
-                )}>
+                <CollapsibleTrigger
+                  style={isModuleActive ? { borderLeft: `3px solid ${MODULE_BORDER_COLORS[id]}` } : { borderLeft: '3px solid transparent' }}
+                  className={cn(
+                    "flex items-center gap-2.5 w-full px-3 py-2.5 text-sm font-semibold transition-all duration-150 rounded-none rounded-r-lg",
+                    "hover:bg-sidebar-accent",
+                    isModuleActive
+                      ? cn(MODULE_BG_COLORS[id], MODULE_COLORS[id])
+                      : "text-sidebar-foreground/70"
+                  )}>
                   <ModIcon className={cn("size-4 shrink-0", isModuleActive && MODULE_COLORS[id])} />
                   <span className="flex-1 text-left">{mod.name}</span>
                   {!hasItems ? (
@@ -389,7 +389,7 @@ export function DashboardSidebar() {
                                   <SidebarMenuButton
                                     asChild
                                     isActive={isActive}
-                                    className="text-sidebar-foreground/85 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground h-9 pl-4"
+                                    className="text-sidebar-foreground/90 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground h-9 pl-4"
                                   >
                                     <Link href={item.href}>
                                       <ItemIcon className="size-4" />
@@ -414,7 +414,7 @@ export function DashboardSidebar() {
                             "flex items-center gap-2 w-full px-3 py-2 rounded-md text-xs font-semibold uppercase tracking-wider transition-colors",
                             hasActiveItem
                               ? "text-sidebar-foreground/90 bg-sidebar-accent/40"
-                              : "text-sidebar-foreground/65 hover:text-sidebar-foreground/90 hover:bg-sidebar-accent/50"
+                              : "text-sidebar-foreground/80 hover:text-sidebar-foreground/90 hover:bg-sidebar-accent/50"
                           )}>
                             {(() => {
                               const gc = GROUP_COLORS[group.label]
@@ -443,7 +443,7 @@ export function DashboardSidebar() {
                                     <SidebarMenuButton
                                       asChild
                                       isActive={isActive}
-                                      className="text-sidebar-foreground/85 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground h-9 pl-6"
+                                      className="text-sidebar-foreground/90 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground h-9 pl-6"
                                     >
                                       <Link href={item.href}>
                                         <ItemIcon className="size-4" />
