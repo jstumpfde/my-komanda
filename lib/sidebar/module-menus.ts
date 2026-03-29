@@ -18,6 +18,17 @@ const MODULE_GROUP_DEFS: Partial<Record<ModuleId, { label: string; hrefs: string
     { label: 'Инструменты',  hrefs: ['/hr/marketplace', '/hr/ai-assistant'] },
     { label: 'Обзор',         hrefs: ['/overview', '/hr/interviews', '/referrals'] },
   ],
+  marketing: [
+    { label: 'Контент',    hrefs: ['/marketing/dashboard', '/marketing/content', '/marketing/landings'] },
+    { label: 'Продвижение', hrefs: ['/marketing/seo', '/marketing/campaigns', '/marketing/social', '/marketing/email'] },
+    { label: 'Аналитика',  hrefs: ['/marketing/reviews', '/marketing/analytics', '/marketing/budget'] },
+  ],
+  sales: [
+    { label: 'CRM',         hrefs: ['/sales/dashboard', '/sales/deals', '/sales/pipeline'] },
+    { label: 'Клиенты',     hrefs: ['/sales/clients', '/sales/contacts'] },
+    { label: 'Активности',  hrefs: ['/sales/tasks', '/sales/meetings', '/sales/products'] },
+    { label: 'Аналитика',   hrefs: ['/sales/analytics', '/sales/forecasts'] },
+  ],
 }
 
 export function getModuleMenuItems(activeModules: ModuleId[]) {

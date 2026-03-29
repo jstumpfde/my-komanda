@@ -90,6 +90,7 @@ const MODULE_BORDER_COLORS: Record<ModuleId, string> = {
 
 // Group colors for style C (colored icons + badge)
 const GROUP_COLORS: Record<string, { text: string; bg: string }> = {
+  // HR groups
   'Найм':          { text: 'text-blue-400',    bg: 'bg-blue-500/15 text-blue-400' },
   'Адаптация':     { text: 'text-teal-400',    bg: 'bg-teal-500/15 text-teal-400' },
   'Lifecycle':     { text: 'text-violet-400',   bg: 'bg-violet-500/15 text-violet-400' },
@@ -98,6 +99,15 @@ const GROUP_COLORS: Record<string, { text: string; bg: string }> = {
   'Аналитика HR':  { text: 'text-red-400',     bg: 'bg-red-500/15 text-red-400' },
   'Инструменты':   { text: 'text-emerald-400', bg: 'bg-emerald-500/15 text-emerald-400' },
   'Обзор':         { text: 'text-gray-400',    bg: 'bg-gray-500/15 text-gray-400' },
+  // Marketing groups
+  'Контент':       { text: 'text-purple-400',  bg: 'bg-purple-500/15 text-purple-400' },
+  'Продвижение':   { text: 'text-fuchsia-400', bg: 'bg-fuchsia-500/15 text-fuchsia-400' },
+  // Sales groups
+  'CRM':           { text: 'text-emerald-400', bg: 'bg-emerald-500/15 text-emerald-400' },
+  'Клиенты':       { text: 'text-cyan-400',    bg: 'bg-cyan-500/15 text-cyan-400' },
+  'Активности':    { text: 'text-orange-400',  bg: 'bg-orange-500/15 text-orange-400' },
+  // Shared
+  'Аналитика':     { text: 'text-blue-400',    bg: 'bg-blue-500/15 text-blue-400' },
 }
 
 // ── Component ──────────────────────────────────────────────────────────────
