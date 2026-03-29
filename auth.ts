@@ -1,10 +1,12 @@
 import NextAuth, { type DefaultSession } from "next-auth"
 import Credentials from "next-auth/providers/credentials"
+import GoogleProvider from "next-auth/providers/google"
 import { eq, or, ilike } from "drizzle-orm"
 import bcrypt from "bcryptjs"
 import { db } from "@/lib/db"
 import { users } from "@/lib/db/schema"
 import type { UserRole } from "@/lib/auth"
+import { VKProvider } from "@/lib/auth/vk-provider"
 
 // Expose a stable ref so the JWT callback can read the DB
 // (needed when updateSession() is called after onboarding saves companyId)
@@ -53,6 +55,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     newUser: "/register",
   },
   providers: [
+    GoogleProvider({
+      clientId: process.env.GOOGLE_CLIENT_ID ?? "",
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
+    }),
+    VKProvider({
+      clientId: process.env.VK_CLIENT_ID ?? "",
+      clientSecret: process.env.VK_CLIENT_SECRET ?? "",
+    }),
     // Dev-only: вход без пароля по userId (development или ALLOW_DEV_LOGIN=true)
     ...(process.env.NODE_ENV === "development" ||
         process.env.ALLOW_DEV_LOGIN === "true" ||

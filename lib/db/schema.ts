@@ -767,3 +767,15 @@ export const calendarEventParticipants = pgTable("calendar_event_participants", 
   userId:  uuid("user_id").references(() => users.id).notNull(),
   status:  text("status").default("pending"), // pending|accepted|declined
 }, (t) => [unique().on(t.eventId, t.userId)])
+
+// ─── SMS Codes ────────────────────────────────────────────────────────────────
+
+export const smsCodes = pgTable("sms_codes", {
+  id:        uuid("id").primaryKey().defaultRandom(),
+  phone:     text("phone").notNull(),
+  code:      text("code").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  used:      boolean("used").default(false),
+  attempts:  integer("attempts").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+})
