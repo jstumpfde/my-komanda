@@ -24,6 +24,7 @@ export const SETTINGS_MENU: PlatformMenuItem[] = [
 ]
 
 export const ADMIN_MENU: PlatformMenuItem[] = [
+  { name: 'Дашборд',        href: '/admin/dashboard',    icon: 'LayoutDashboard' },
   { name: 'Клиенты',        href: '/admin/clients',      icon: 'Building2' },
   { name: 'Тарифы',         href: '/admin/tariffs',      icon: 'CreditCard' },
   { name: 'Роли и доступ',  href: '/admin/roles',        icon: 'ShieldCheck' },
