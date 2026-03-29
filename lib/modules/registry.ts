@@ -23,6 +23,8 @@ export const MODULE_REGISTRY: Record<ModuleId, ModuleConfig> = {
       { label: 'Сертификаты',  href: '/hr/certificates',            icon: 'Award' },
       { label: 'Навыки',       href: '/hr/skills',                  icon: 'Zap' },
       { label: 'Оценки',       href: '/hr/assessments',             icon: 'ClipboardCheck' },
+      { label: 'Flight Risk',  href: '/hr/flight-risk',             icon: 'AlertTriangle' },
+      { label: 'Пульс-опросы', href: '/hr/pulse-surveys',           icon: 'MessageSquare' },
       { label: 'Аналитика',     href: '/hr/analytics',   icon: 'BarChart3' },
       { label: 'Обзор',         href: '/overview',       icon: 'LayoutDashboard' },
       { label: 'Рефералы',      href: '/referrals',      icon: 'Share2' },

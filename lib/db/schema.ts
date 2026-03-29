@@ -417,3 +417,86 @@ export const assessmentReviewers = pgTable("assessment_reviewers", {
   status:       text("status").notNull().default("pending"), // pending/completed/declined
   completedAt:  timestamp("completed_at"),
 })
+
+// ─── Блок G: Пульс-опросы ───────────────────────────────────────────────────
+
+export const pulseQuestions = pgTable("pulse_questions", {
+  id:         uuid("id").primaryKey().defaultRandom(),
+  tenantId:   uuid("tenant_id").references(() => companies.id, { onDelete: "cascade" }),  // null = системный
+  text:       text("text").notNull(),
+  category:   text("category").default("engagement"), // engagement/satisfaction/management/culture/workload/growth/communication/wellbeing/team
+  isSystem:   boolean("is_system").default(false),
+  isActive:   boolean("is_active").default(true),
+  sortOrder:  integer("sort_order").default(0),
+})
+
+export const pulseSurveys = pgTable("pulse_surveys", {
+  id:           uuid("id").primaryKey().defaultRandom(),
+  tenantId:     uuid("tenant_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  title:        text("title"),
+  scheduledAt:  timestamp("scheduled_at"),
+  sentAt:       timestamp("sent_at"),
+  closesAt:     timestamp("closes_at"),
+  status:       text("status").default("draft"),    // draft/scheduled/sent/closed
+  channel:      text("channel").default("telegram"), // telegram/whatsapp/email/web
+  questionIds:  jsonb("question_ids"),               // uuid[] — 2 вопроса + открытый
+  responseCount:integer("response_count").default(0),
+  createdAt:    timestamp("created_at").defaultNow(),
+})
+
+export const pulseResponses = pgTable("pulse_responses", {
+  id:          uuid("id").primaryKey().defaultRandom(),
+  surveyId:    uuid("survey_id").references(() => pulseSurveys.id, { onDelete: "cascade" }).notNull(),
+  employeeId:  text("employee_id").notNull(),
+  questionId:  uuid("question_id").references(() => pulseQuestions.id).notNull(),
+  score:       integer("score"),          // 1-5 (шкала настроения)
+  openText:    text("open_text"),         // ответ на открытый вопрос
+  isAnonymous: boolean("is_anonymous").default(true),
+  respondedAt: timestamp("responded_at").defaultNow(),
+}, (t) => [unique().on(t.surveyId, t.employeeId, t.questionId)])
+
+// ─── Блок G: Flight Risk ────────────────────────────────────────────────────
+
+export const flightRiskScores = pgTable("flight_risk_scores", {
+  id:            uuid("id").primaryKey().defaultRandom(),
+  tenantId:      uuid("tenant_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  employeeId:    text("employee_id").notNull(),
+  employeeName:  text("employee_name"),
+  department:    text("department"),
+  position:      text("position"),
+  score:         integer("score").notNull().default(0),  // 0-100
+  riskLevel:     text("risk_level").default("low"),       // low/medium/high/critical
+  factors:       jsonb("factors"),                         // { factorSlug: number }[]
+  previousScore: integer("previous_score"),
+  trend:         text("trend").default("stable"),          // improving/stable/declining
+  calculatedAt:  timestamp("calculated_at").defaultNow(),
+  createdAt:     timestamp("created_at").defaultNow(),
+  updatedAt:     timestamp("updated_at").defaultNow(),
+}, (t) => [unique().on(t.tenantId, t.employeeId)])
+
+export const flightRiskFactors = pgTable("flight_risk_factors", {
+  id:          uuid("id").primaryKey().defaultRandom(),
+  slug:        text("slug").unique().notNull(),
+  name:        text("name").notNull(),
+  category:    text("category").notNull(), // tenure/engagement/pulse/performance/organizational/compensation/development
+  weight:      integer("weight").default(1),  // вес фактора (1-10)
+  description: text("description"),
+  isActive:    boolean("is_active").default(true),
+})
+
+export const retentionActions = pgTable("retention_actions", {
+  id:          uuid("id").primaryKey().defaultRandom(),
+  tenantId:    uuid("tenant_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  employeeId:  text("employee_id").notNull(),
+  title:       text("title").notNull(),
+  description: text("description"),
+  type:        text("type").default("conversation"), // conversation/compensation/development/role_change/team_change/other
+  status:      text("status").default("planned"),     // planned/in_progress/completed/cancelled
+  priority:    text("priority").default("medium"),     // low/medium/high/urgent
+  assignedTo:  uuid("assigned_to").references(() => users.id),
+  dueDate:     timestamp("due_date"),
+  completedAt: timestamp("completed_at"),
+  outcome:     text("outcome"),
+  createdAt:   timestamp("created_at").defaultNow(),
+  updatedAt:   timestamp("updated_at").defaultNow(),
+})

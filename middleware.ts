@@ -12,7 +12,6 @@ const PUBLIC_PREFIXES = [
   "/candidate/",
   "/schedule/",
   "/ref/",
-  "/onboarding",
   "/api/auth",
   "/api/modules",
   "/api/plans",
@@ -24,6 +23,14 @@ function isPublic(pathname: string): boolean {
     (p) => pathname === p || pathname.startsWith(p)
   )
 }
+
+// Маппинг путей → модули (slugs для проверки в БД)
+const MODULE_PATH_MAP: { prefix: string; slugs: string[]; moduleParam: string }[] = [
+  { prefix: "/hr/",        slugs: HR_MODULE_SLUGS, moduleParam: "recruiting" },
+  { prefix: "/marketing/", slugs: ["marketing"],   moduleParam: "marketing" },
+  { prefix: "/sales/",     slugs: ["sales"],       moduleParam: "sales" },
+  { prefix: "/logistics/", slugs: ["logistics"],   moduleParam: "logistics" },
+]
 
 export default auth(async (req) => {
   const { pathname } = req.nextUrl
@@ -39,33 +46,29 @@ export default auth(async (req) => {
     return Response.redirect(loginUrl)
   }
 
-  // API-маршруты пропускаем без редиректа на /onboarding —
-  // иначе POST /api/companies и POST /api/vacancies во время онбординга
-  // получали бы 307 → HTML → res.json() кидал исключение → тихий fallback
+  // API-маршруты пропускаем без редиректа —
+  // иначе POST-запросы получают 307 → HTML → res.json() кидает исключение
   if (pathname.startsWith("/api/")) return
 
   // Авторизован, нет company_id, не на /register → /register (шаг 2: компания)
-  // Исключение: кука mk_onboarded=1 означает что онбординг завершён
-  // (ставится когда сессия ещё не обновилась или работает демо-режим)
   const onboardingDone = req.cookies.get("mk_onboarded")?.value === "1"
   if (!session.user.companyId && !pathname.startsWith("/register") && !onboardingDone) {
     return Response.redirect(new URL("/register", req.url))
   }
 
-  // Проверка доступа к HR-модулям: /hr/* требует хотя бы одного активного HR-модуля
-  if (
-    session.user.companyId &&
-    pathname.startsWith("/hr/") &&
-    !pathname.startsWith("/upgrade")
-  ) {
-    // hasAnyModule уже содержит try/catch и двойной fallback (slug → anyActive)
-    const hasHR = await hasAnyModule(session.user.companyId, HR_MODULE_SLUGS)
-    if (!hasHR) {
-      // Защита от redirect-loop: если откуда-то попали сюда снова — пропускаем
-      const ref = req.headers.get("referer") ?? ""
-      if (!ref.includes("/upgrade")) {
-        return Response.redirect(new URL("/upgrade?module=recruiting", req.url))
+  // ── Проверка доступа к модулям ──────────────────────────────────────────────
+  // Пропускаем /upgrade (иначе бесконечный редирект) и маршруты без companyId
+  if (!session.user.companyId || pathname.startsWith("/upgrade")) return
+
+  for (const { prefix, slugs, moduleParam } of MODULE_PATH_MAP) {
+    if (pathname.startsWith(prefix)) {
+      const hasAccess = await hasAnyModule(session.user.companyId, slugs)
+      if (!hasAccess) {
+        return Response.redirect(
+          new URL(`/upgrade?module=${moduleParam}`, req.url)
+        )
       }
+      break // matched — no need to check further
     }
   }
 })
