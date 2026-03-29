@@ -319,16 +319,19 @@ export function DashboardSidebar() {
 
                 {/* ── Module content: sub-groups as nested accordions ── */}
                 {hasItems && (
-                  <CollapsibleContent className="pl-2 mt-0.5">
+                  <CollapsibleContent className="pl-2 mt-1">
                     {groups.map((group) => {
                       if (group.items.length === 0) return null
                       const groupKey = `${id}:${group.label}`
                       const isGroupExpanded = expandedGroups.has(groupKey) || !group.label
+                      const hasActiveItem = group.items.some(
+                        item => pathname === item.href || pathname.startsWith(item.href + '/')
+                      )
 
                       // If no label → render items directly (root group)
                       if (!group.label) {
                         return (
-                          <SidebarMenu key="__root" className="gap-0.5 mt-0.5">
+                          <SidebarMenu key="__root" className="gap-0.5 mt-1">
                             {group.items.map((item) => {
                               const ItemIcon = getIcon(item.icon)
                               const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
@@ -337,11 +340,11 @@ export function DashboardSidebar() {
                                   <SidebarMenuButton
                                     asChild
                                     isActive={isActive}
-                                    className="text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground h-8 pl-4"
+                                    className="text-sidebar-foreground/85 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground h-9 pl-4"
                                   >
                                     <Link href={item.href}>
-                                      <ItemIcon className="size-3.5" />
-                                      <span className="text-[13px]">{item.label}</span>
+                                      <ItemIcon className="size-4" />
+                                      <span className="text-sm">{item.label}</span>
                                     </Link>
                                   </SidebarMenuButton>
                                 </SidebarMenuItem>
@@ -359,8 +362,10 @@ export function DashboardSidebar() {
                           onOpenChange={() => toggleGroup(groupKey)}
                         >
                           <CollapsibleTrigger className={cn(
-                            "flex items-center gap-2 w-full px-3 py-1.5 rounded-md text-xs font-medium uppercase tracking-wider transition-colors",
-                            "text-sidebar-foreground/45 hover:text-sidebar-foreground/70 hover:bg-sidebar-accent/50"
+                            "flex items-center gap-2 w-full px-3 py-2 rounded-md text-xs font-semibold uppercase tracking-wider transition-colors",
+                            hasActiveItem
+                              ? "text-sidebar-foreground/90 bg-sidebar-accent/40"
+                              : "text-sidebar-foreground/65 hover:text-sidebar-foreground/90 hover:bg-sidebar-accent/50"
                           )}>
                             <span className="flex-1 text-left">{group.label}</span>
                             <ChevronRight className={cn(
@@ -370,7 +375,7 @@ export function DashboardSidebar() {
                           </CollapsibleTrigger>
 
                           <CollapsibleContent>
-                            <SidebarMenu className="gap-0.5 mt-0.5">
+                            <SidebarMenu className="gap-0.5 mt-1">
                               {group.items.map((item) => {
                                 const ItemIcon = getIcon(item.icon)
                                 const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
@@ -379,11 +384,11 @@ export function DashboardSidebar() {
                                     <SidebarMenuButton
                                       asChild
                                       isActive={isActive}
-                                      className="text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground h-8 pl-6"
+                                      className="text-sidebar-foreground/85 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground h-9 pl-6"
                                     >
                                       <Link href={item.href}>
-                                        <ItemIcon className="size-3.5" />
-                                        <span className="text-[13px]">{item.label}</span>
+                                        <ItemIcon className="size-4" />
+                                        <span className="text-sm">{item.label}</span>
                                       </Link>
                                     </SidebarMenuButton>
                                   </SidebarMenuItem>
