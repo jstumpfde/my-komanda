@@ -310,9 +310,9 @@ export function DashboardSidebar() {
                   {!hasItems ? (
                     <span className="text-[10px] text-sidebar-foreground/30 font-normal">Скоро</span>
                   ) : (
-                    <ChevronDown className={cn(
+                    <ChevronRight className={cn(
                       "size-3.5 text-sidebar-foreground/40 transition-transform duration-200",
-                      isExpanded && "rotate-180"
+                      isExpanded && "rotate-90"
                     )} />
                   )}
                 </CollapsibleTrigger>
@@ -362,11 +362,11 @@ export function DashboardSidebar() {
                             "flex items-center gap-2 w-full px-3 py-1.5 rounded-md text-xs font-medium uppercase tracking-wider transition-colors",
                             "text-sidebar-foreground/45 hover:text-sidebar-foreground/70 hover:bg-sidebar-accent/50"
                           )}>
+                            <span className="flex-1 text-left">{group.label}</span>
                             <ChevronRight className={cn(
                               "size-3 shrink-0 transition-transform duration-150",
                               isGroupExpanded && "rotate-90"
                             )} />
-                            <span>{group.label}</span>
                           </CollapsibleTrigger>
 
                           <CollapsibleContent>
