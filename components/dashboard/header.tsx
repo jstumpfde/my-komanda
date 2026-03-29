@@ -18,17 +18,15 @@ import Link from "next/link"
 import { cn } from "@/lib/utils"
 
 interface Notification {
-  id: string; text: string; time: string; color: string; read: boolean
+  id: string; title: string; body: string | null; severity: string; href: string | null; isRead: boolean; createdAt: string
 }
 
-const INITIAL_NOTIFICATIONS: Notification[] = [
-  { id: "n1", text: "Иванов А. завершил демонстрацию (94%)", time: "5 мин назад", color: "bg-emerald-500", read: false },
-  { id: "n2", text: "Смирнова Е. выбрала слот: завтра 14:00", time: "12 мин назад", color: "bg-blue-500", read: false },
-  { id: "n3", text: "Козлов И. не пришёл на интервью", time: "1 час назад", color: "bg-red-500", read: false },
-  { id: "n4", text: "3 новых кандидата ожидают решения HR", time: "2 часа назад", color: "bg-amber-500", read: false },
-  { id: "n5", text: "Петрова О. ответила на сообщение в hh-чат", time: "3 часа назад", color: "bg-blue-500", read: true },
-  { id: "n6", text: "Новый отклик с hh.ru: Морозов С.", time: "5 часов назад", color: "bg-emerald-500", read: true },
-]
+const SEVERITY_COLORS: Record<string, string> = {
+  danger: "bg-red-500",
+  warning: "bg-amber-500",
+  info: "bg-blue-500",
+  success: "bg-emerald-500",
+}
 
 const ALL_ROLES: UserRole[] = ["platform_admin", "platform_manager", "director", "hr_lead", "hr_manager", "department_head", "observer"]
 
@@ -37,11 +35,46 @@ export function DashboardHeader() {
   const [mounted, setMounted] = useState(false)
   const { state, toggleSidebar } = useSidebar()
   const { user, role, isViewingAs, setRole, returnToAdmin } = useAuth()
-  const [notifications, setNotifications] = useState(INITIAL_NOTIFICATIONS)
+  const [notifications, setNotifications] = useState<Notification[]>([])
+  const [unreadCount, setUnreadCount] = useState(0)
   const router = useRouter()
 
-  const unreadCount = notifications.filter(n => !n.read).length
-  const markAllRead = () => setNotifications(prev => prev.map(n => ({ ...n, read: true })))
+  // Fetch notifications from API
+  useEffect(() => {
+    fetch("/api/notifications")
+      .then(r => r.json())
+      .then((data: Notification[]) => {
+        if (Array.isArray(data)) setNotifications(data)
+      })
+      .catch(() => {})
+    fetch("/api/notifications?count=true")
+      .then(r => r.json())
+      .then((data: { unreadCount?: number }) => {
+        setUnreadCount(data.unreadCount ?? 0)
+      })
+      .catch(() => {})
+  }, [])
+
+  const markAllRead = async () => {
+    await fetch("/api/notifications", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "mark-all-read" }),
+    })
+    setNotifications(prev => prev.map(n => ({ ...n, isRead: true })))
+    setUnreadCount(0)
+  }
+
+  function timeAgo(dateStr: string) {
+    const diff = Date.now() - new Date(dateStr).getTime()
+    const mins = Math.floor(diff / 60000)
+    if (mins < 1) return "только что"
+    if (mins < 60) return `${mins} мин назад`
+    const hours = Math.floor(mins / 60)
+    if (hours < 24) return `${hours} ч назад`
+    const days = Math.floor(hours / 24)
+    return `${days} дн назад`
+  }
 
   useEffect(() => { setMounted(true) }, [])
 
@@ -144,12 +177,21 @@ export function DashboardHeader() {
                   {unreadCount > 0 && <button className="text-xs text-primary hover:underline" onClick={markAllRead}>Прочитать все</button>}
                 </div>
                 <div className="max-h-[360px] overflow-y-auto">
-                  {notifications.map(n => (
-                    <div key={n.id} className={cn("flex items-start gap-3 px-4 py-3 border-b last:border-0 hover:bg-muted/30", !n.read && "bg-primary/5")}>
-                      <div className={cn("w-2.5 h-2.5 rounded-full mt-1.5 shrink-0", n.color)} />
+                  {notifications.length === 0 ? (
+                    <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+                      Нет уведомлений
+                    </div>
+                  ) : notifications.map(n => (
+                    <div
+                      key={n.id}
+                      className={cn("flex items-start gap-3 px-4 py-3 border-b last:border-0 hover:bg-muted/30 cursor-pointer", !n.isRead && "bg-primary/5")}
+                      onClick={() => n.href && router.push(n.href)}
+                    >
+                      <div className={cn("w-2.5 h-2.5 rounded-full mt-1.5 shrink-0", SEVERITY_COLORS[n.severity] || "bg-blue-500")} />
                       <div className="flex-1 min-w-0">
-                        <p className={cn("text-sm leading-snug", !n.read ? "text-foreground font-medium" : "text-muted-foreground")}>{n.text}</p>
-                        <p className="text-[10px] text-muted-foreground mt-0.5">{n.time}</p>
+                        <p className={cn("text-sm leading-snug", !n.isRead ? "text-foreground font-medium" : "text-muted-foreground")}>{n.title}</p>
+                        {n.body && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{n.body}</p>}
+                        <p className="text-[10px] text-muted-foreground mt-0.5">{timeAgo(n.createdAt)}</p>
                       </div>
                     </div>
                   ))}

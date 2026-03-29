@@ -632,3 +632,20 @@ export const aiChatMessages = pgTable("ai_chat_messages", {
   metadata:   jsonb("metadata"),                   // { tokensUsed, model, tools? }
   createdAt:  timestamp("created_at").defaultNow(),
 })
+
+// ─── Уведомления (реальные, из БД) ─────────────────────────────────────────
+
+export const notifications = pgTable("notifications", {
+  id:         uuid("id").primaryKey().defaultRandom(),
+  tenantId:   uuid("tenant_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  userId:     uuid("user_id").references(() => users.id),  // null = для всех HR в тенанте
+  type:       text("type").notNull(),                       // pulse_alert/flight_risk_alert/system/info
+  title:      text("title").notNull(),
+  body:       text("body"),
+  severity:   text("severity").default("info"),             // info/warning/danger/success
+  sourceType: text("source_type"),                          // pulse_response/flight_risk/retention_action
+  sourceId:   text("source_id"),
+  href:       text("href"),                                 // ссылка для перехода
+  isRead:     boolean("is_read").default(false),
+  createdAt:  timestamp("created_at").defaultNow(),
+})
