@@ -729,3 +729,41 @@ export const integratorPayouts = pgTable("integrator_payouts", {
   paidAt:           timestamp("paid_at"),
   createdAt:        timestamp("created_at").defaultNow(),
 })
+
+// ─── Calendar & Rooms ─────────────────────────────────────────────────────────
+
+export const rooms = pgTable("rooms", {
+  id:        uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id").references(() => companies.id).notNull(),
+  name:      text("name").notNull(),
+  capacity:  integer("capacity"),
+  equipment: text("equipment").array(),
+  floor:     text("floor"),
+  isActive:  boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+})
+
+export const calendarEvents = pgTable("calendar_events", {
+  id:          uuid("id").primaryKey().defaultRandom(),
+  companyId:   uuid("company_id").references(() => companies.id).notNull(),
+  title:       text("title").notNull(),
+  description: text("description"),
+  type:        text("type").notNull().default("meeting"), // meeting|interview|training|booking|other
+  startAt:     timestamp("start_at", { withTimezone: true }).notNull(),
+  endAt:       timestamp("end_at", { withTimezone: true }).notNull(),
+  allDay:      boolean("all_day").default(false),
+  roomId:      uuid("room_id").references(() => rooms.id),
+  createdBy:   uuid("created_by").references(() => users.id).notNull(),
+  color:       text("color"),
+  recurrence:  text("recurrence"),
+  status:      text("status").default("confirmed"), // confirmed|tentative|cancelled
+  createdAt:   timestamp("created_at").defaultNow(),
+  updatedAt:   timestamp("updated_at").defaultNow(),
+})
+
+export const calendarEventParticipants = pgTable("calendar_event_participants", {
+  id:      uuid("id").primaryKey().defaultRandom(),
+  eventId: uuid("event_id").references(() => calendarEvents.id, { onDelete: "cascade" }).notNull(),
+  userId:  uuid("user_id").references(() => users.id).notNull(),
+  status:  text("status").default("pending"), // pending|accepted|declined
+}, (t) => [unique().on(t.eventId, t.userId)])

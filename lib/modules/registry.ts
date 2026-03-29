@@ -13,6 +13,7 @@ export const MODULE_REGISTRY: Record<ModuleId, ModuleConfig> = {
       { label: 'Воронка',       href: '/hr/funnel',      icon: 'TrendingDown' },
       { label: 'Демо-редактор', href: '/hr/demo-editor', icon: 'Layers' },
       { label: 'Интервью',      href: '/hr/interviews',  icon: 'Calendar' },
+      { label: 'Календарь',     href: '/hr/calendar',    icon: 'CalendarDays' },
       { label: 'Talent Pool',   href: '/hr/talent-pool', icon: 'Database' },
       { label: 'Онбординг',     href: '/hr/onboarding',            icon: 'Rocket' },
       { label: 'Планы',         href: '/hr/adaptation/plans',      icon: 'ClipboardList' },
