@@ -100,3 +100,41 @@ export async function PUT(
     return apiError("Внутренняя ошибка сервера", 500)
   }
 }
+
+// PATCH /api/admin/plans/[planId] — частичное обновление (archiving, trialDays)
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ planId: string }> }
+) {
+  try {
+    await requirePlatformAdmin()
+    const { planId } = await params
+    const body = await req.json() as {
+      isArchived?: boolean
+      trialDays?: number
+    }
+
+    const updateData: Record<string, unknown> = {}
+    if (body.isArchived !== undefined) {
+      updateData.isArchived = body.isArchived
+      if (body.isArchived) updateData.archivedAt = new Date()
+      else updateData.archivedAt = null
+    }
+    if (body.trialDays !== undefined) {
+      updateData.trialDays = body.trialDays
+    }
+
+    const [updated] = await db
+      .update(plans)
+      .set(updateData)
+      .where(eq(plans.id, planId))
+      .returning()
+
+    if (!updated) return apiError("Тариф не найден", 404)
+    return apiSuccess(updated)
+  } catch (err) {
+    if (err instanceof Response) return err
+    console.error("[admin/plans/[planId] PATCH]", err)
+    return apiError("Внутренняя ошибка сервера", 500)
+  }
+}

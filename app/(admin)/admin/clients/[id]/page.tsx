@@ -19,7 +19,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion"
 import { Progress } from "@/components/ui/progress"
-import { ArrowLeft, Building2, Loader2, Save, Plus } from "lucide-react"
+import { ArrowLeft, Building2, Loader2, Save, Plus, CalendarDays, RotateCcw, CheckCircle } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 
@@ -137,6 +137,10 @@ export default function AdminClientPage() {
   const [savedId, setSavedId]       = useState<string | null>(null)
   const [error, setError]           = useState("")
 
+  // Subscription management state
+  const [subSaving, setSubSaving]         = useState(false)
+  const [trialEndsAt, setTrialEndsAt]     = useState<string>("")
+
   // Загружаем данные компании (используем существующий endpoint)
   useEffect(() => {
     fetch(`/api/admin/tenant/${clientId}`)
@@ -144,6 +148,11 @@ export default function AdminClientPage() {
       .then(data => {
         setCompany(data.company)
         setAllPlans(data.allPlans ?? [])
+        if (data.company?.trialEndsAt) {
+          // Convert to YYYY-MM-DD for date input
+          const d = new Date(data.company.trialEndsAt)
+          setTrialEndsAt(d.toISOString().split("T")[0])
+        }
       })
       .catch(() => {})
   }, [clientId])
@@ -283,6 +292,38 @@ export default function AdminClientPage() {
     }
   }
 
+  async function patchSubscription(patch: {
+    subscriptionStatus?: string
+    trialEndsAt?: string | null
+    currentPlanId?: string | null
+  }) {
+    setSubSaving(true)
+    setError("")
+    try {
+      const res = await fetch(`/api/admin/clients/${clientId}/subscription`, {
+        method:  "PUT",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify(patch),
+      })
+      if (!res.ok) {
+        const d = await res.json()
+        setError(d.error ?? "Ошибка сохранения подписки")
+        return
+      }
+      const updated = await res.json()
+      setCompany(prev => prev ? {
+        ...prev,
+        subscriptionStatus: updated.subscriptionStatus ?? prev.subscriptionStatus,
+        trialEndsAt:        updated.trialEndsAt ?? prev.trialEndsAt,
+        planId:             updated.currentPlanId ?? prev.planId,
+      } : prev)
+    } catch {
+      setError("Ошибка сохранения")
+    } finally {
+      setSubSaving(false)
+    }
+  }
+
   // ─── Render ───────────────────────────────────────────────────────────────
 
   if (loading) {
@@ -336,6 +377,89 @@ export default function AdminClientPage() {
             {error && (
               <p className="text-sm text-destructive font-medium">{error}</p>
             )}
+
+            {/* Управление подпиской */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Управление подпиской</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Current status */}
+                <div className="flex items-center gap-3 flex-wrap">
+                  <span className="text-sm text-muted-foreground">Статус:</span>
+                  <Badge variant="outline" className={cn("text-xs", status.cls)}>
+                    {status.label}
+                  </Badge>
+                </div>
+
+                {/* Trial end date */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Дата окончания trial</Label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="date"
+                      className="h-8 text-sm border rounded px-2 bg-background flex-1 max-w-[180px]"
+                      value={trialEndsAt}
+                      onChange={e => setTrialEndsAt(e.target.value)}
+                    />
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="gap-1.5 h-8"
+                      disabled={subSaving || !trialEndsAt}
+                      onClick={() => patchSubscription({ trialEndsAt: trialEndsAt ? new Date(trialEndsAt).toISOString() : null })}
+                    >
+                      <Save className="w-3 h-3" />
+                      Сохранить
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Quick extend +14 days */}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-1.5"
+                  disabled={subSaving}
+                  onClick={() => {
+                    const base = company?.trialEndsAt
+                      ? new Date(company.trialEndsAt)
+                      : new Date()
+                    const newDate = new Date(base.getTime() + 14 * 24 * 60 * 60 * 1000)
+                    const iso = newDate.toISOString()
+                    setTrialEndsAt(iso.split("T")[0])
+                    patchSubscription({ trialEndsAt: iso })
+                  }}
+                >
+                  <CalendarDays className="w-3.5 h-3.5" />
+                  Продлить на 14 дней
+                </Button>
+
+                {/* Status actions */}
+                <div className="flex flex-wrap gap-2 pt-1 border-t">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="gap-1.5 text-emerald-700 border-emerald-300 hover:bg-emerald-50"
+                    disabled={subSaving || company?.subscriptionStatus === "active"}
+                    onClick={() => patchSubscription({ subscriptionStatus: "active" })}
+                  >
+                    <CheckCircle className="w-3.5 h-3.5" />
+                    Активировать
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="gap-1.5 text-blue-700 border-blue-300 hover:bg-blue-50"
+                    disabled={subSaving || company?.subscriptionStatus === "trial"}
+                    onClick={() => patchSubscription({ subscriptionStatus: "trial" })}
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    Сбросить в trial
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
 
             {/* Модули — аккордеон */}
             <Card>

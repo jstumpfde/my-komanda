@@ -15,9 +15,9 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { DEFAULT_TARIFFS, formatPrice, type Tariff, type TariffFeatures } from "@/lib/tariff-types"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import {
-  Plus, Pencil, Trash2, Check, X, Shield, Save, UserPlus,
+  Plus, Pencil, Trash2, Check, X, Shield, Save, UserPlus, Archive,
 } from "lucide-react"
 
 export default function AdminTariffsPage() {
@@ -27,6 +27,9 @@ export default function AdminTariffsPage() {
   const [buyCandidatesOpen, setBuyCandidatesOpen] = useState(false)
   const [buyTariffId, setBuyTariffId] = useState<string | null>(null)
   const [buyPackage, setBuyPackage] = useState(10)
+  const [archiveConfirmId, setArchiveConfirmId] = useState<string | null>(null)
+  const [archiving, setArchiving] = useState(false)
+  const [editingTrialDays, setEditingTrialDays] = useState<Record<string, string>>({})
 
   const openEdit = (tariff: Tariff) => {
     setEditingTariff({ ...tariff })
@@ -80,6 +83,49 @@ export default function AdminTariffsPage() {
     setEditingTariff(prev => prev ? { ...prev, features: { ...prev.features, [key]: value } } : null)
   }
 
+  const handleArchive = async (tariffId: string) => {
+    setArchiving(true)
+    try {
+      const res = await fetch(`/api/admin/plans/${tariffId}`, {
+        method:  "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ isArchived: true }),
+      })
+      if (!res.ok) {
+        toast.error("Ошибка архивирования")
+        return
+      }
+      setTariffs(prev => prev.map(t => t.id === tariffId ? { ...t, active: false } : t))
+      toast.success("Тариф архивирован")
+    } catch {
+      toast.error("Ошибка архивирования")
+    } finally {
+      setArchiving(false)
+      setArchiveConfirmId(null)
+    }
+  }
+
+  const handleSaveTrialDays = async (tariffId: string) => {
+    const days = parseInt(editingTrialDays[tariffId] ?? "")
+    if (isNaN(days)) return
+    try {
+      const res = await fetch(`/api/admin/plans/${tariffId}`, {
+        method:  "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ trialDays: days }),
+      })
+      if (!res.ok) {
+        toast.error("Ошибка сохранения")
+        return
+      }
+      setTariffs(prev => prev.map(t => t.id === tariffId ? { ...t, trialDays: days } : t))
+      setEditingTrialDays(prev => { const n = { ...prev }; delete n[tariffId]; return n })
+      toast.success("Trial дней сохранено")
+    } catch {
+      toast.error("Ошибка сохранения")
+    }
+  }
+
   return (
     <SidebarProvider defaultOpen={true}>
       <DashboardSidebar />
@@ -119,8 +165,12 @@ export default function AdminTariffsPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {tariffs.map(tariff => (
-                        <tr key={tariff.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
+                      {tariffs.map(tariff => {
+                        const isArchived = !tariff.active
+                        const trialVal = editingTrialDays[tariff.id] ?? String(tariff.trialDays ?? 14)
+                        const isEditingTrial = tariff.id in editingTrialDays
+                        return (
+                        <tr key={tariff.id} className={cn("border-b last:border-0 hover:bg-muted/20 transition-colors", isArchived && "opacity-60")}>
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-2">
                               <span className="text-sm font-medium text-foreground">{tariff.name}</span>
@@ -129,12 +179,28 @@ export default function AdminTariffsPage() {
                                   {tariff.badge}
                                 </Badge>
                               )}
+                              {isArchived && (
+                                <Badge variant="outline" className="text-[10px] border-amber-400 text-amber-700 bg-amber-50">
+                                  Архив
+                                </Badge>
+                              )}
                             </div>
                           </td>
                           <td className="text-right px-4 py-3 text-sm text-foreground font-medium">
                             {tariff.price === 0 ? "0 (бесплатно)" : `${tariff.price.toLocaleString("ru-RU")} ₽`}
                           </td>
-                          <td className="text-right px-4 py-3 text-sm text-muted-foreground">{tariff.trialDays}</td>
+                          <td className="text-right px-4 py-3 text-sm text-muted-foreground">
+                            <div className="flex items-center justify-end gap-1">
+                              <input
+                                type="number"
+                                className="w-14 h-7 text-right text-sm border rounded px-1.5 bg-background"
+                                value={trialVal}
+                                onChange={e => setEditingTrialDays(prev => ({ ...prev, [tariff.id]: e.target.value }))}
+                                onBlur={() => { if (isEditingTrial) handleSaveTrialDays(tariff.id) }}
+                                onKeyDown={e => { if (e.key === "Enter") handleSaveTrialDays(tariff.id) }}
+                              />
+                            </div>
+                          </td>
                           <td className="text-right px-4 py-3 text-sm text-foreground">{tariff.maxVacancies === 999 ? "∞" : tariff.maxVacancies}</td>
                           <td className="text-right px-4 py-3 text-sm text-foreground">{tariff.maxCandidates.toLocaleString("ru-RU")}</td>
                           <td className="text-center px-4 py-3">
@@ -161,10 +227,22 @@ export default function AdminTariffsPage() {
                                   <UserPlus className="w-3.5 h-3.5" />
                                 </Button>
                               )}
+                              {!isArchived && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 text-amber-600 hover:text-amber-700 hover:bg-amber-50"
+                                  title="Архивировать тариф"
+                                  onClick={() => setArchiveConfirmId(tariff.id)}
+                                >
+                                  <Archive className="w-3.5 h-3.5" />
+                                </Button>
+                              )}
                             </div>
                           </td>
                         </tr>
-                      ))}
+                        )
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -221,6 +299,30 @@ export default function AdminTariffsPage() {
               </div>
             )
           })()}
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog: Архивировать тариф */}
+      <Dialog open={!!archiveConfirmId} onOpenChange={open => !open && setArchiveConfirmId(null)}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Архивировать тариф</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground py-2">
+            Тариф будет помечен как устаревший и недоступен для новых клиентов. Существующие подписки не затрагиваются.
+          </p>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setArchiveConfirmId(null)} disabled={archiving}>
+              Отмена
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={archiving}
+              onClick={() => archiveConfirmId && handleArchive(archiveConfirmId)}
+            >
+              {archiving ? "Архивирование..." : "Архивировать"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

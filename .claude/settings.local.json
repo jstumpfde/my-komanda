@@ -121,7 +121,10 @@
       "Bash(ls /Users/juri/my-komanda/.claude/worktrees/objective-elgamal/drizzle/*.sql)",
       "Bash(mkdir -p /Users/juri/my-komanda/.claude/worktrees/objective-elgamal/app/api/modules/hr/calendar/[id])",
       "Bash(mkdir -p /Users/juri/my-komanda/.claude/worktrees/objective-elgamal/app/api/modules/hr/rooms/[id])",
-      "Bash(pnpm tsc:*)"
+      "Bash(pnpm tsc:*)",
+      "Bash(ls /Users/juri/my-komanda/.claude/worktrees/objective-elgamal/app/api/admin/clients/[id]/)",
+      "Bash(mkdir -p /Users/juri/my-komanda/.claude/worktrees/objective-elgamal/app/api/billing/invoices/[id]/pdf)",
+      "Bash(mkdir -p /Users/juri/my-komanda/.claude/worktrees/objective-elgamal/app/api/admin/clients/[id]/subscription)"
     ]
   }
 }

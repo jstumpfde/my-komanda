@@ -3,6 +3,7 @@ import {
   uuid,
   text,
   integer,
+  bigint,
   boolean,
   timestamp,
   jsonb,
@@ -25,15 +26,18 @@ export const modules = pgTable("modules", {
 // ─── Plans ────────────────────────────────────────────────────────────────────
 
 export const plans = pgTable("plans", {
-  id:        uuid("id").primaryKey().defaultRandom(),
-  slug:      text("slug").unique().notNull(),
-  name:      text("name").notNull(),
-  price:     integer("price").notNull(), // в копейках
-  currency:  text("currency").default("RUB"),
-  interval:  text("interval").default("month"), // 'month' | 'year'
-  isPublic:  boolean("is_public").default(true),
-  sortOrder: integer("sort_order").default(0),
-  createdAt: timestamp("created_at").defaultNow(),
+  id:         uuid("id").primaryKey().defaultRandom(),
+  slug:       text("slug").unique().notNull(),
+  name:       text("name").notNull(),
+  price:      integer("price").notNull(), // в копейках
+  currency:   text("currency").default("RUB"),
+  interval:   text("interval").default("month"), // 'month' | 'year'
+  isPublic:   boolean("is_public").default(true),
+  sortOrder:  integer("sort_order").default(0),
+  trialDays:  integer("trial_days").default(14),
+  isArchived: boolean("is_archived").default(false),
+  archivedAt: timestamp("archived_at"),
+  createdAt:  timestamp("created_at").defaultNow(),
 })
 
 // ─── Plan → Modules (лимиты по тарифу) ───────────────────────────────────────
@@ -86,7 +90,8 @@ export const companies = pgTable("companies", {
   planId:             uuid("plan_id").references(() => plans.id),
   billingEmail:       text("billing_email"),
   trialEndsAt:        timestamp("trial_ends_at"),
-  subscriptionStatus: text("subscription_status").default("trial"), // 'trial'|'active'|'paused'|'cancelled'
+  subscriptionStatus: text("subscription_status").default("trial"), // 'trial'|'active'|'paused'|'cancelled'|'expired'
+  currentPlanId:      uuid("current_plan_id").references(() => plans.id),
   createdAt:          timestamp("created_at").defaultNow(),
   updatedAt:          timestamp("updated_at").defaultNow(),
 })
@@ -782,4 +787,34 @@ export const smsCodes = pgTable("sms_codes", {
   used:      boolean("used").default(false),
   attempts:  integer("attempts").default(0),
   createdAt: timestamp("created_at").defaultNow(),
+})
+
+// ─── Billing ──────────────────────────────────────────────────────────────────
+
+export const invoices = pgTable("invoices", {
+  id:            uuid("id").primaryKey().defaultRandom(),
+  companyId:     uuid("company_id").references(() => companies.id).notNull(),
+  number:        text("number").notNull().unique(),
+  planId:        uuid("plan_id").references(() => plans.id),
+  amountKopecks: bigint("amount_kopecks", { mode: "number" }).notNull(),
+  status:        text("status").default("draft"), // 'draft'|'issued'|'paid'|'cancelled'
+  issuedAt:      timestamp("issued_at", { withTimezone: true }),
+  paidAt:        timestamp("paid_at", { withTimezone: true }),
+  dueDate:       timestamp("due_date", { withTimezone: true }),
+  paymentMethod: text("payment_method"),
+  pdfUrl:        text("pdf_url"),
+  notes:         text("notes"),
+  createdAt:     timestamp("created_at").defaultNow(),
+})
+
+export const subscriptionHistory = pgTable("subscription_history", {
+  id:          uuid("id").primaryKey().defaultRandom(),
+  companyId:   uuid("company_id").references(() => companies.id).notNull(),
+  planId:      uuid("plan_id").references(() => plans.id),
+  status:      text("status").notNull(),
+  startedAt:   timestamp("started_at", { withTimezone: true }).notNull(),
+  expiresAt:   timestamp("expires_at", { withTimezone: true }),
+  cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+  reason:      text("reason"),
+  createdAt:   timestamp("created_at").defaultNow(),
 })
