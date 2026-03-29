@@ -15,6 +15,7 @@ const MODULE_GROUP_DEFS: Partial<Record<ModuleId, { label: string; hrefs: string
     { label: 'Обучение',      hrefs: ['/hr/courses', '/hr/certificates'] },
     { label: 'Развитие',      hrefs: ['/hr/talent-pool', '/hr/skills', '/hr/assessments'] },
     { label: 'Аналитика HR',  hrefs: ['/hr/flight-risk', '/hr/pulse-surveys', '/hr/reskilling', '/hr/predictive-hiring', '/hr/analytics'] },
+    { label: 'Инструменты',  hrefs: ['/hr/marketplace', '/hr/ai-assistant'] },
     { label: 'Обзор',         hrefs: ['/overview', '/hr/interviews', '/referrals'] },
   ],
 }

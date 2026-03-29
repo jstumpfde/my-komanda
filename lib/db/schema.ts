@@ -588,3 +588,47 @@ export const predictiveHiringAlerts = pgTable("predictive_hiring_alerts", {
   createdAt:      timestamp("created_at").defaultNow(),
   resolvedAt:     timestamp("resolved_at"),
 })
+
+// ─── Блок J: Маркетплейс навыков ────────────────────────────────────────────
+
+export const internalProjects = pgTable("internal_projects", {
+  id:            uuid("id").primaryKey().defaultRandom(),
+  tenantId:      uuid("tenant_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  title:         text("title").notNull(),
+  description:   text("description"),
+  department:    text("department"),
+  requiredSkills:jsonb("required_skills"),       // { skillName, minLevel }[]
+  status:        text("status").default("open"), // open/in_progress/completed/cancelled
+  maxParticipants:integer("max_participants").default(5),
+  startDate:     timestamp("start_date"),
+  endDate:       timestamp("end_date"),
+  createdBy:     uuid("created_by").references(() => users.id),
+  createdAt:     timestamp("created_at").defaultNow(),
+  updatedAt:     timestamp("updated_at").defaultNow(),
+})
+
+export const projectApplications = pgTable("project_applications", {
+  id:           uuid("id").primaryKey().defaultRandom(),
+  projectId:    uuid("project_id").references(() => internalProjects.id, { onDelete: "cascade" }).notNull(),
+  employeeId:   text("employee_id").notNull(),
+  employeeName: text("employee_name"),
+  department:   text("department"),
+  motivation:   text("motivation"),
+  matchScore:   integer("match_score"),           // 0-100 auto-calculated
+  status:       text("status").default("pending"), // pending/accepted/rejected/withdrawn
+  appliedAt:    timestamp("applied_at").defaultNow(),
+  resolvedAt:   timestamp("resolved_at"),
+}, (t) => [unique().on(t.projectId, t.employeeId)])
+
+// ─── Блок J: AI-суперагент чат ──────────────────────────────────────────────
+
+export const aiChatMessages = pgTable("ai_chat_messages", {
+  id:         uuid("id").primaryKey().defaultRandom(),
+  tenantId:   uuid("tenant_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  userId:     uuid("user_id").references(() => users.id).notNull(),
+  role:       text("role").notNull(),              // user/assistant
+  content:    text("content").notNull(),
+  sessionId:  text("session_id"),                  // группировка по сессиям
+  metadata:   jsonb("metadata"),                   // { tokensUsed, model, tools? }
+  createdAt:  timestamp("created_at").defaultNow(),
+})

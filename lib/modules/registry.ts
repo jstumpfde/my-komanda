@@ -30,6 +30,8 @@ export const MODULE_REGISTRY: Record<ModuleId, ModuleConfig> = {
       { label: 'Reskilling',       href: '/hr/reskilling',              icon: 'Brain' },
       { label: 'Predictive Hiring',href: '/hr/predictive-hiring',       icon: 'Radar' },
       { label: 'Аналитика',     href: '/hr/analytics',   icon: 'BarChart3' },
+      { label: 'Маркетплейс',  href: '/hr/marketplace',             icon: 'Store' },
+      { label: 'AI-ассистент', href: '/hr/ai-assistant',             icon: 'Bot' },
       { label: 'Обзор',         href: '/overview',       icon: 'LayoutDashboard' },
       { label: 'Рефералы',      href: '/referrals',      icon: 'Share2' },
     ],
