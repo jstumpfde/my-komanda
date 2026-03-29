@@ -250,9 +250,10 @@ export function DashboardSidebar() {
       <SidebarContent className="px-2 py-2 overflow-y-auto">
 
         {/* ══════════════════════════════════════════════════════════════════
-            COLLAPSED STATE (56px): Vertical module icons
+            COLLAPSED STATE (56px): Module icons + active module menu items
            ══════════════════════════════════════════════════════════════════ */}
-        <div className="hidden group-data-[collapsible=icon]:flex flex-col gap-1 items-center">
+        <div className="hidden group-data-[collapsible=icon]:flex flex-col gap-0.5 items-center">
+          {/* Module switcher icons */}
           {activeModules
             .filter((id) => id !== 'hr' || vis.hiring)
             .map((id) => {
@@ -274,7 +275,36 @@ export function DashboardSidebar() {
               </SidebarMenuButton>
             )
           })}
-          <div className="my-1.5 w-6 border-t border-sidebar-border" />
+          <div className="my-1 w-6 border-t border-sidebar-border" />
+
+          {/* Active module menu items as icons */}
+          {(() => {
+            // Find active module from pathname
+            const activeId = activeModules.find(id => pathname.startsWith(MODULE_REGISTRY[id].basePath)) || activeModules[0]
+            if (!activeId) return null
+            const items = MODULE_REGISTRY[activeId]?.menuItems ?? []
+            // Deduplicate by href, limit to avoid overflow
+            const seen = new Set<string>()
+            return items.filter(item => {
+              if (seen.has(item.href)) return false
+              seen.add(item.href)
+              return true
+            }).map((item) => {
+              const ItemIcon = getIcon(item.icon)
+              const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
+              return (
+                <SidebarMenuButton
+                  key={item.href}
+                  tooltip={item.label}
+                  isActive={isActive}
+                  onClick={() => router.push(item.href)}
+                  className="justify-center h-9 w-9"
+                >
+                  <ItemIcon className="size-4" />
+                </SidebarMenuButton>
+              )
+            })
+          })()}
         </div>
 
         {/* ══════════════════════════════════════════════════════════════════
