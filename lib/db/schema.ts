@@ -73,6 +73,7 @@ export const companies = pgTable("companies", {
   legalAddress:       text("legal_address"),
   city:               text("city"),
   industry:           text("industry"),
+  postalCode:         text("postal_code"),
   logoUrl:            text("logo_url"),
   brandPrimaryColor:  text("brand_primary_color").default("#3b82f6"),
   brandBgColor:       text("brand_bg_color").default("#f0f4ff"),

@@ -194,6 +194,7 @@ export interface ApiCompanyUpdatePayload {
   legal_address?: string
   city?: string
   industry?: string
+  postal_code?: string
   logo_url?: string
   brand_primary_color?: string
   brand_bg_color?: string

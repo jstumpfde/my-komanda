@@ -15,6 +15,7 @@ export async function POST(req: NextRequest) {
       legal_address?: string
       city?: string
       industry?: string
+      postal_code?: string
     }
 
     if (!body.name?.trim()) {
@@ -30,6 +31,7 @@ export async function POST(req: NextRequest) {
         legalAddress: body.legal_address || null,
         city: body.city || null,
         industry: body.industry || null,
+        postalCode: body.postal_code || null,
       })
       .returning()
 
@@ -82,6 +84,7 @@ export async function PUT(req: NextRequest) {
       legal_address?: string
       city?: string
       industry?: string
+      postal_code?: string
       logo_url?: string
       brand_primary_color?: string
       brand_bg_color?: string
@@ -98,6 +101,7 @@ export async function PUT(req: NextRequest) {
     if (body.legal_address !== undefined) updates.legalAddress = body.legal_address
     if (body.city !== undefined) updates.city = body.city
     if (body.industry !== undefined) updates.industry = body.industry
+    if (body.postal_code !== undefined) updates.postalCode = body.postal_code
     if (body.logo_url !== undefined) updates.logoUrl = body.logo_url
     if (body.brand_primary_color !== undefined) updates.brandPrimaryColor = body.brand_primary_color
     if (body.brand_bg_color !== undefined) updates.brandBgColor = body.brand_bg_color

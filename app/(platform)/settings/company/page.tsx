@@ -131,7 +131,7 @@ export default function CompanyProfilePage() {
 
   const handleShortNameChange = (value: string) => { setShortName(value); setNameDropdownOpen(false); setNameSuggestions([]); if (nameDebounceRef.current) clearTimeout(nameDebounceRef.current) }
 
-  useEffect(() => { fetchCompanyApi().then((data: unknown) => { const c = data as Record<string, string> | null; if (!c) return; if (c.inn) setInn(c.inn); if (c.kpp) setKpp(c.kpp); if (c.name) { setShortName(c.name); setFullName(c.name) }; if (c.legalAddress) setLegalAddress(c.legalAddress); if (c.city) setPostalCity(c.city); if (c.industry) setIndustry(c.industry) }).catch(() => {}) }, [])
+  useEffect(() => { fetchCompanyApi().then((data: unknown) => { const c = data as Record<string, string> | null; if (!c) return; if (c.inn) setInn(c.inn); if (c.kpp) setKpp(c.kpp); if (c.name) { setShortName(c.name); setFullName(c.name) }; if (c.legalAddress) setLegalAddress(c.legalAddress); if (c.city) setPostalCity(c.city); if (c.postalCode) setPostalIndex(c.postalCode); if (c.industry) setIndustry(c.industry) }).catch(() => {}) }, [])
   useEffect(() => { const handler = (e: MouseEvent) => { if (nameContainerRef.current && !nameContainerRef.current.contains(e.target as Node)) setNameDropdownOpen(false) }; document.addEventListener("mousedown", handler); return () => document.removeEventListener("mousedown", handler) }, [])
 
   const handleBikSearch = useCallback(async (accountId: string, bik: string) => {
@@ -170,7 +170,7 @@ export default function CompanyProfilePage() {
   const handleSave = async () => {
     setSaving(true)
     try {
-      await updateCompanyApi({ name: shortName || fullName || undefined, inn: inn || undefined, kpp: kpp || undefined, legal_address: legalAddress || undefined, city: postalCity || undefined, industry: industry || undefined })
+      await updateCompanyApi({ name: shortName || fullName || undefined, inn: inn || undefined, kpp: kpp || undefined, legal_address: legalAddress || undefined, city: postalCity || undefined, postal_code: postalIndex || undefined, industry: industry || undefined })
       toast.success("Профиль компании сохранён")
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Ошибка"
