@@ -500,3 +500,40 @@ export const retentionActions = pgTable("retention_actions", {
   createdAt:   timestamp("created_at").defaultNow(),
   updatedAt:   timestamp("updated_at").defaultNow(),
 })
+
+// ─── Блок H: Offboarding ────────────────────────────────────────────────────
+
+export const offboardingCases = pgTable("offboarding_cases", {
+  id:              uuid("id").primaryKey().defaultRandom(),
+  tenantId:        uuid("tenant_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  employeeId:      text("employee_id").notNull(),
+  employeeName:    text("employee_name"),
+  department:      text("department"),
+  position:        text("position"),
+  reason:          text("reason").default("voluntary"),  // voluntary/involuntary/retirement/contract_end/mutual
+  lastWorkDay:     timestamp("last_work_day"),
+  status:          text("status").default("initiated"),  // initiated/in_progress/exit_interview/completed/cancelled
+  checklistJson:   jsonb("checklist_json"),               // { id, title, done, assignedTo }[]
+  referralBridge:  boolean("referral_bridge").default(false), // оставить как реферала?
+  rehireEligible:  boolean("rehire_eligible").default(true),
+  notes:           text("notes"),
+  createdBy:       uuid("created_by").references(() => users.id),
+  createdAt:       timestamp("created_at").defaultNow(),
+  updatedAt:       timestamp("updated_at").defaultNow(),
+})
+
+export const exitSurveys = pgTable("exit_surveys", {
+  id:            uuid("id").primaryKey().defaultRandom(),
+  caseId:        uuid("case_id").references(() => offboardingCases.id, { onDelete: "cascade" }).notNull(),
+  channel:       text("channel").default("web"),  // web/telegram/email
+  status:        text("status").default("pending"), // pending/sent/completed
+  sentAt:        timestamp("sent_at"),
+  completedAt:   timestamp("completed_at"),
+  responses:     jsonb("responses"),  // { questionId: string, question: string, answer: string | number }[]
+  overallScore:  integer("overall_score"),  // 1-10 общая оценка опыта
+  wouldReturn:   boolean("would_return"),
+  wouldRecommend:boolean("would_recommend"),
+  openFeedback:  text("open_feedback"),
+  isAnonymous:   boolean("is_anonymous").default(false),
+  createdAt:     timestamp("created_at").defaultNow(),
+})
