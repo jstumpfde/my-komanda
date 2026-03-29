@@ -49,6 +49,7 @@ export const planModules = pgTable("plan_modules", {
   maxUsers:            integer("max_users"),
   allowCustomBranding: boolean("allow_custom_branding").default(false),
   allowCustomColors:   boolean("allow_custom_colors").default(false),
+  limits:              jsonb("limits"),
 }, (t) => [unique().on(t.planId, t.moduleId)])
 
 // ─── Tenant → Modules (активированные у клиента) ─────────────────────────────
@@ -309,6 +310,9 @@ export const tenantModules = pgTable("tenant_modules", {
   maxEmployees:  integer("max_employees"),
   maxScenarios:  integer("max_scenarios"),
   maxUsers:      integer("max_users"),
+  customLimits:  jsonb("custom_limits"),
+  enabledAt:     timestamp("enabled_at", { withTimezone: true }),
+  disabledAt:    timestamp("disabled_at", { withTimezone: true }),
 }, (t) => [unique().on(t.tenantId, t.moduleId)])
 
 // ─── LMS — Курсы ──────────────────────────────────────────────────────────────

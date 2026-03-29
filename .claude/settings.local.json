@@ -117,7 +117,11 @@
       "Bash(ls /Users/juri/Downloads/*.tar.gz /Users/juri/Downloads/*.zip /Users/juri/Downloads/*.md)",
       "Bash(mkdir -p \"/Users/juri/my-komanda/.claude/worktrees/objective-elgamal/app/api/admin/integrators/[id]/clients\")",
       "Bash(mkdir -p \"/Users/juri/my-komanda/.claude/worktrees/objective-elgamal/app/api/admin/integrators/[id]/payouts\")",
-      "Bash(mkdir -p \"/Users/juri/my-komanda/.claude/worktrees/objective-elgamal/app/\\(admin\\)/admin/integrators/[id]\")"
+      "Bash(mkdir -p \"/Users/juri/my-komanda/.claude/worktrees/objective-elgamal/app/\\(admin\\)/admin/integrators/[id]\")",
+      "Bash(ls /Users/juri/my-komanda/.claude/worktrees/objective-elgamal/drizzle/*.sql)",
+      "Bash(mkdir -p /Users/juri/my-komanda/.claude/worktrees/objective-elgamal/app/api/modules/hr/calendar/[id])",
+      "Bash(mkdir -p /Users/juri/my-komanda/.claude/worktrees/objective-elgamal/app/api/modules/hr/rooms/[id])",
+      "Bash(pnpm tsc:*)"
     ]
   }
 }
