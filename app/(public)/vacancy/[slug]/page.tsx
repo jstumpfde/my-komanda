@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, use, useEffect } from "react"
+import { useState, use, useEffect, Suspense } from "react"
 import { useSearchParams } from "next/navigation"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -35,7 +35,7 @@ const VACANCY = {
 
 type ScreenState = "landing" | "form" | "done"
 
-export default function VacancyLandingPage({ params }: { params: Promise<{ slug: string }> }) {
+function VacancyLandingInner({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = use(params)
   const searchParams = useSearchParams()
   const utm = searchParams.get("utm_source") || searchParams.get("utm") || ""
@@ -242,5 +242,13 @@ export default function VacancyLandingPage({ params }: { params: Promise<{ slug:
         </div>
       </div>
     </div>
+  )
+}
+
+export default function VacancyLandingPage({ params }: { params: Promise<{ slug: string }> }) {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Загрузка...</div>}>
+      <VacancyLandingInner params={params} />
+    </Suspense>
   )
 }
