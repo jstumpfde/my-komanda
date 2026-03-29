@@ -10,6 +10,7 @@ export const MODULE_REGISTRY: Record<ModuleId, ModuleConfig> = {
     menuItems: [
       { label: 'Вакансии',      href: '/hr/vacancies',   icon: 'Briefcase' },
       { label: 'Кандидаты',     href: '/hr/candidates',  icon: 'UserCheck' },
+      { label: 'Воронка',       href: '/hr/funnel',      icon: 'TrendingDown' },
       { label: 'Демо-редактор', href: '/hr/demo-editor', icon: 'Layers' },
       { label: 'Интервью',      href: '/hr/interviews',  icon: 'Calendar' },
       { label: 'Talent Pool',   href: '/hr/talent-pool', icon: 'Database' },
