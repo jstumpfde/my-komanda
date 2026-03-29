@@ -3,7 +3,7 @@ import type { ModuleConfig, ModuleId } from './types'
 export const MODULE_REGISTRY: Record<ModuleId, ModuleConfig> = {
   hr: {
     id: 'hr',
-    name: 'HR и найм',
+    name: 'HR и команда',
     description: 'Управление вакансиями, кандидатами и процессом найма',
     icon: 'Users',
     basePath: '/hr',
@@ -38,7 +38,7 @@ export const MODULE_REGISTRY: Record<ModuleId, ModuleConfig> = {
   },
   marketing: {
     id: 'marketing',
-    name: 'Маркетинг',
+    name: 'Маркетинг и продвижение',
     description: 'Контент, SEO и маркетинговая аналитика',
     icon: 'Megaphone',
     basePath: '/marketing',
@@ -50,7 +50,7 @@ export const MODULE_REGISTRY: Record<ModuleId, ModuleConfig> = {
   },
   sales: {
     id: 'sales',
-    name: 'Продажи',
+    name: 'Продажи и развитие',
     description: 'Управление продажами и клиентской базой',
     icon: 'DollarSign',
     basePath: '/sales',
@@ -58,7 +58,7 @@ export const MODULE_REGISTRY: Record<ModuleId, ModuleConfig> = {
   },
   logistics: {
     id: 'logistics',
-    name: 'Логистика',
+    name: 'Логистика и склад',
     description: 'Управление доставкой и складом',
     icon: 'Truck',
     basePath: '/logistics',
