@@ -14,6 +14,9 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
+import { DashboardSidebar } from "@/components/dashboard/sidebar"
+import { DashboardHeader } from "@/components/dashboard/header"
+import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 
 interface Course {
   id: string
@@ -88,11 +91,17 @@ export default function CoursesPage() {
   }
 
   if (loading) return (
+    <SidebarProvider><DashboardSidebar /><SidebarInset><DashboardHeader />
     <div className="p-6 text-sm text-muted-foreground">Загрузка...</div>
+    </SidebarInset></SidebarProvider>
   )
 
   return (
-    <div className="p-6 space-y-6">
+    <SidebarProvider>
+      <DashboardSidebar />
+      <SidebarInset>
+        <DashboardHeader />
+        <main className="p-6 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -259,6 +268,8 @@ export default function CoursesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </main>
+    </SidebarInset>
+    </SidebarProvider>
   )
 }

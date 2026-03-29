@@ -15,6 +15,9 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table"
 import { cn } from "@/lib/utils"
+import { DashboardSidebar } from "@/components/dashboard/sidebar"
+import { DashboardHeader } from "@/components/dashboard/header"
+import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 
 interface Skill {
   id: string
@@ -79,7 +82,11 @@ export default function SkillsPage() {
   if (loading) return <div className="p-6 text-sm text-muted-foreground">Загрузка...</div>
 
   return (
-    <div className="p-6 space-y-6">
+    <SidebarProvider>
+      <DashboardSidebar />
+      <SidebarInset>
+        <DashboardHeader />
+        <main className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold">Справочник навыков</h1>
@@ -226,6 +233,8 @@ export default function SkillsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </main>
+    </SidebarInset>
+    </SidebarProvider>
   )
 }

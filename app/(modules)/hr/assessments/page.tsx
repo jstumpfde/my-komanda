@@ -16,6 +16,9 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
+import { DashboardSidebar } from "@/components/dashboard/sidebar"
+import { DashboardHeader } from "@/components/dashboard/header"
+import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 
 interface Assessment {
   id: string
@@ -93,7 +96,11 @@ export default function AssessmentsPage() {
   if (loading) return <div className="p-6 text-sm text-muted-foreground">Загрузка...</div>
 
   return (
-    <div className="p-6 space-y-6">
+    <SidebarProvider>
+      <DashboardSidebar />
+      <SidebarInset>
+        <DashboardHeader />
+        <main className="p-6 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -259,6 +266,8 @@ export default function AssessmentsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </main>
+    </SidebarInset>
+    </SidebarProvider>
   )
 }

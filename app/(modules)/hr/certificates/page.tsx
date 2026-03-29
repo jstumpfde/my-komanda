@@ -6,6 +6,9 @@ import { Award, BookOpen, Calendar, ExternalLink } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
+import { DashboardSidebar } from "@/components/dashboard/sidebar"
+import { DashboardHeader } from "@/components/dashboard/header"
+import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 
 interface Certificate {
   id: string
@@ -30,11 +33,17 @@ export default function CertificatesPage() {
   }, [])
 
   if (loading) return (
+    <SidebarProvider><DashboardSidebar /><SidebarInset><DashboardHeader />
     <div className="p-6 text-sm text-muted-foreground">Загрузка...</div>
+    </SidebarInset></SidebarProvider>
   )
 
   return (
-    <div className="p-6 space-y-6">
+    <SidebarProvider>
+      <DashboardSidebar />
+      <SidebarInset>
+        <DashboardHeader />
+        <main className="p-6 space-y-6">
       <div>
         <h1 className="text-xl font-semibold">Сертификаты</h1>
         <p className="text-sm text-muted-foreground mt-0.5">Выданные сертификаты об окончании курсов</p>
@@ -102,6 +111,8 @@ export default function CertificatesPage() {
           ))}
         </div>
       )}
-    </div>
+    </main>
+    </SidebarInset>
+    </SidebarProvider>
   )
 }
