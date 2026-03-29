@@ -30,7 +30,7 @@ const INITIAL_NOTIFICATIONS: Notification[] = [
   { id: "n6", text: "Новый отклик с hh.ru: Морозов С.", time: "5 часов назад", color: "bg-emerald-500", read: true },
 ]
 
-const ALL_ROLES: UserRole[] = ["admin", "manager", "client", "client_hr", "candidate"]
+const ALL_ROLES: UserRole[] = ["platform_admin", "platform_manager", "director", "hr_lead", "hr_manager", "department_head", "observer"]
 
 export function DashboardHeader() {
   const { theme, setTheme } = useTheme()
@@ -54,14 +54,8 @@ export function DashboardHeader() {
   }, [toggleSidebar])
 
   const handleRoleSwitch = (r: UserRole) => {
-    if (r === "candidate") {
-      window.open("/candidate/abc123xyz789", "_blank")
-      return
-    }
     setRole(r)
-    if (r === "admin") router.push("/overview")
-    else if (r === "manager") router.push("/overview")
-    else router.push("/")
+    router.push("/overview")
   }
 
   const initials = user?.name
@@ -103,7 +97,7 @@ export function DashboardHeader() {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-64">
                 {ALL_ROLES.map((r, i) => {
-                  const isSep = (i === 1 || i === 3)
+                  const isSep = (i === 2 || i === 5) // after platform roles, after main client roles
                   return (
                     <div key={r}>
                       {isSep && <DropdownMenuSeparator />}
@@ -114,7 +108,6 @@ export function DashboardHeader() {
                         <span className="text-base">{ROLE_ICONS[r]}</span>
                         <span className="flex-1 text-sm">{ROLE_LABELS[r]}</span>
                         {role === r && <Badge variant="secondary" className="text-[9px] h-4 px-1">текущая</Badge>}
-                        {r === "candidate" && <span className="text-[10px] text-muted-foreground">(новая вкладка)</span>}
                       </DropdownMenuItem>
                     </div>
                   )
