@@ -81,6 +81,25 @@ const MODULE_BG_COLORS: Record<ModuleId, string> = {
   logistics: 'bg-orange-500/10',
 }
 
+const MODULE_BORDER_COLORS: Record<ModuleId, string> = {
+  hr:        'border-l-blue-500',
+  marketing: 'border-l-purple-500',
+  sales:     'border-l-emerald-500',
+  logistics: 'border-l-orange-500',
+}
+
+// Group colors for style C (colored icons + badge)
+const GROUP_COLORS: Record<string, { text: string; bg: string }> = {
+  'Найм':          { text: 'text-blue-400',    bg: 'bg-blue-500/15 text-blue-400' },
+  'Адаптация':     { text: 'text-teal-400',    bg: 'bg-teal-500/15 text-teal-400' },
+  'Lifecycle':     { text: 'text-violet-400',   bg: 'bg-violet-500/15 text-violet-400' },
+  'Обучение':      { text: 'text-pink-400',    bg: 'bg-pink-500/15 text-pink-400' },
+  'Развитие':      { text: 'text-amber-400',   bg: 'bg-amber-500/15 text-amber-400' },
+  'Аналитика HR':  { text: 'text-red-400',     bg: 'bg-red-500/15 text-red-400' },
+  'Инструменты':   { text: 'text-emerald-400', bg: 'bg-emerald-500/15 text-emerald-400' },
+  'Обзор':         { text: 'text-gray-400',    bg: 'bg-gray-500/15 text-gray-400' },
+}
+
 // ── Component ──────────────────────────────────────────────────────────────
 export function DashboardSidebar() {
   const pathname = usePathname()
@@ -327,12 +346,12 @@ export function DashboardSidebar() {
                 open={isExpanded}
                 onOpenChange={() => toggleModule(id)}
               >
-                {/* ── Module header (accordion trigger) ── */}
+                {/* ── Module header (accordion trigger) — Style A: color bar left ── */}
                 <CollapsibleTrigger className={cn(
-                  "flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-sm font-semibold transition-all duration-150",
+                  "flex items-center gap-2.5 w-full px-3 py-2.5 text-sm font-semibold transition-all duration-150 border-l-[3px] border-l-transparent rounded-none rounded-r-lg",
                   "hover:bg-sidebar-accent",
                   isModuleActive
-                    ? cn(MODULE_BG_COLORS[id], MODULE_COLORS[id])
+                    ? cn(MODULE_BG_COLORS[id], MODULE_COLORS[id], MODULE_BORDER_COLORS[id])
                     : "text-sidebar-foreground/70"
                 )}>
                   <ModIcon className={cn("size-4 shrink-0", isModuleActive && MODULE_COLORS[id])} />
@@ -397,7 +416,17 @@ export function DashboardSidebar() {
                               ? "text-sidebar-foreground/90 bg-sidebar-accent/40"
                               : "text-sidebar-foreground/65 hover:text-sidebar-foreground/90 hover:bg-sidebar-accent/50"
                           )}>
+                            {(() => {
+                              const gc = GROUP_COLORS[group.label]
+                              const firstItem = group.items[0]
+                              const GroupIcon = firstItem ? getIcon(firstItem.icon) : null
+                              return GroupIcon ? <GroupIcon className={cn("size-3.5 shrink-0", gc?.text || "text-sidebar-foreground/50")} /> : null
+                            })()}
                             <span className="flex-1 text-left">{group.label}</span>
+                            <span className={cn(
+                              "text-[10px] font-medium px-1.5 py-0.5 rounded-full",
+                              GROUP_COLORS[group.label]?.bg || "bg-sidebar-accent/50 text-sidebar-foreground/50"
+                            )}>{group.items.length}</span>
                             <ChevronRight className={cn(
                               "size-3 shrink-0 transition-transform duration-150",
                               isGroupExpanded && "rotate-90"
