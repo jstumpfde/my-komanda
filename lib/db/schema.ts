@@ -649,3 +649,19 @@ export const notifications = pgTable("notifications", {
   isRead:     boolean("is_read").default(false),
   createdAt:  timestamp("created_at").defaultNow(),
 })
+
+// ─── Invite Links ─────────────────────────────────────────────────────────────
+
+export const inviteLinks = pgTable("invite_links", {
+  id:         uuid("id").primaryKey().defaultRandom(),
+  companyId:  uuid("company_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  createdBy:  uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+  token:      text("token").unique().notNull(),
+  role:       text("role").notNull(),           // director|hr_lead|hr_manager|department_head|observer
+  label:      text("label"),                    // необязательное описание (напр. «Для Ани»)
+  maxUses:    integer("max_uses").default(1),   // null = безлимит
+  usesCount:  integer("uses_count").default(0),
+  isActive:   boolean("is_active").default(true),
+  expiresAt:  timestamp("expires_at"),          // null = бессрочно
+  createdAt:  timestamp("created_at").defaultNow(),
+})
