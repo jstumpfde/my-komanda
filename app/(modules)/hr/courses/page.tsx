@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { BookOpen, Plus, Clock, Users, Award, Filter, ChevronRight, Layers } from "lucide-react"
+import { BookOpen, Plus, Clock, Users, Award, Filter, ChevronRight, Layers, Sparkles } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
@@ -111,6 +111,12 @@ export default function CoursesPage() {
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" asChild>
             <Link href="/api/dev/seed-courses">Загрузить демо</Link>
+          </Button>
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/hr/courses/ai-generate">
+              <Sparkles className="size-4 mr-1" />
+              AI-генерация
+            </Link>
           </Button>
           <Button size="sm" onClick={() => setCreateOpen(true)}>
             <Plus className="size-4 mr-1" />
