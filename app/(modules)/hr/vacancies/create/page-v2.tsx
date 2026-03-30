@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { DashboardSidebar } from "@/components/dashboard/sidebar"
+import { DashboardSidebarV2 } from "@/components/dashboard/sidebar-v2"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Button } from "@/components/ui/button"
@@ -104,7 +104,7 @@ export default function CreateVacancyPageV2() {
 
   return (
     <SidebarProvider defaultOpen={true}>
-      <DashboardSidebar />
+      <DashboardSidebarV2 />
       <SidebarInset>
         <DashboardHeader />
         <div className="flex flex-col items-center min-h-[calc(100vh-56px)] bg-muted/30 p-6">

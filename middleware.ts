@@ -4,6 +4,9 @@ import { hasAnyModule, HR_MODULE_SLUGS } from "@/lib/modules/access"
 // Node.js runtime — нужен для DB-запросов в middleware
 export const runtime = "nodejs"
 
+// DEV_MODE: пропускаем проверку модулей в разработке
+const DEV_MODE = process.env.ALLOW_DEV_LOGIN === "true" || process.env.NEXT_PUBLIC_ALLOW_DEV_LOGIN === "true"
+
 // Маршруты доступны без авторизации
 const PUBLIC_PREFIXES = [
   "/login",
@@ -59,6 +62,9 @@ export default auth(async (req) => {
   // ── Проверка доступа к модулям ──────────────────────────────────────────────
   // Пропускаем /upgrade (иначе бесконечный редирект) и маршруты без companyId
   if (!session.user.companyId || pathname.startsWith("/upgrade")) return
+
+  // В режиме разработки пропускаем проверку подписки на модули
+  if (DEV_MODE) return
 
   for (const { prefix, slugs, moduleParam } of MODULE_PATH_MAP) {
     if (pathname.startsWith(prefix)) {

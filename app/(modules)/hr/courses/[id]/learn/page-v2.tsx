@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { useParams } from "next/navigation"
 import Link from "next/link"
-import { DashboardSidebar } from "@/components/dashboard/sidebar"
+import { DashboardSidebarV2 } from "@/components/dashboard/sidebar-v2"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Button } from "@/components/ui/button"
@@ -69,7 +69,7 @@ export default function CourseLearnPageV2() {
   if (loading || !course) {
     return (
       <SidebarProvider defaultOpen={true}>
-        <DashboardSidebar /><SidebarInset><DashboardHeader />
+        <DashboardSidebarV2 /><SidebarInset><DashboardHeader />
         <div className="p-6 space-y-4"><Skeleton className="h-8 w-64" /><Skeleton className="h-64 w-full" /></div>
         </SidebarInset>
       </SidebarProvider>
@@ -81,7 +81,7 @@ export default function CourseLearnPageV2() {
 
   return (
     <SidebarProvider defaultOpen={true}>
-      <DashboardSidebar />
+      <DashboardSidebarV2 />
       <SidebarInset>
         <DashboardHeader />
         <div className="flex h-[calc(100vh-56px)]">

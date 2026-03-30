@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from "react"
 import { useSearchParams } from "next/navigation"
 import { Suspense } from "react"
-import { DashboardSidebar } from "@/components/dashboard/sidebar"
+import { DashboardSidebarV2 } from "@/components/dashboard/sidebar-v2"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Badge } from "@/components/ui/badge"
@@ -106,7 +106,7 @@ function KanbanBoard() {
 
   return (
     <SidebarProvider defaultOpen={true}>
-      <DashboardSidebar />
+      <DashboardSidebarV2 />
       <SidebarInset>
         <DashboardHeader />
         <div className="flex flex-col h-[calc(100vh-56px)]">

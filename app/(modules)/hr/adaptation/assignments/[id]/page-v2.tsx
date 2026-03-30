@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { useParams } from "next/navigation"
 import Link from "next/link"
-import { DashboardSidebar } from "@/components/dashboard/sidebar"
+import { DashboardSidebarV2 } from "@/components/dashboard/sidebar-v2"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Button } from "@/components/ui/button"
@@ -72,7 +72,7 @@ export default function AssignmentDetailPageV2() {
   if (loading || !data) {
     return (
       <SidebarProvider defaultOpen={true}>
-        <DashboardSidebar />
+        <DashboardSidebarV2 />
         <SidebarInset>
           <DashboardHeader />
           <div className="p-6 space-y-4">
@@ -98,7 +98,7 @@ export default function AssignmentDetailPageV2() {
 
   return (
     <SidebarProvider defaultOpen={true}>
-      <DashboardSidebar />
+      <DashboardSidebarV2 />
       <SidebarInset>
         <DashboardHeader />
         <div className="flex flex-col gap-6 p-6 max-w-3xl">
