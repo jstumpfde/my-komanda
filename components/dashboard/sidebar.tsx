@@ -61,9 +61,11 @@ const SLUG_TO_MODULE_ID: Partial<Record<string, ModuleId>> = {
 }
 
 const MODULE_SHORT: Record<ModuleId, string> = {
-  hr: 'HR',
+  hr:        'HR',
   marketing: 'МКТ',
-  sales: 'ПРД',
+  sales:     'ПРД',
+  b2b:       'B2B',
+  ecommerce: 'ECM',
   logistics: 'ЛГС',
 }
 
@@ -72,6 +74,8 @@ const MODULE_COLORS: Record<ModuleId, string> = {
   hr:        'text-blue-500',
   marketing: 'text-purple-500',
   sales:     'text-emerald-500',
+  b2b:       'text-cyan-500',
+  ecommerce: 'text-rose-500',
   logistics: 'text-orange-500',
 }
 
@@ -79,6 +83,8 @@ const MODULE_BG_COLORS: Record<ModuleId, string> = {
   hr:        'bg-blue-500/10',
   marketing: 'bg-purple-500/10',
   sales:     'bg-emerald-500/10',
+  b2b:       'bg-cyan-500/10',
+  ecommerce: 'bg-rose-500/10',
   logistics: 'bg-orange-500/10',
 }
 
@@ -86,6 +92,8 @@ const MODULE_BORDER_COLORS: Record<ModuleId, string> = {
   hr:        '#3b82f6',
   marketing: '#a855f7',
   sales:     '#10b981',
+  b2b:       '#06b6d4',
+  ecommerce: '#f43f5e',
   logistics: '#f97316',
 }
 
@@ -300,21 +308,22 @@ export function DashboardSidebar() {
            ══════════════════════════════════════════════════════════════════ */}
         <div className="hidden group-data-[collapsible=icon]:flex flex-col gap-0.5 items-center">
           {/* Module switcher icons */}
-          {activeModules
+          {(Object.keys(MODULE_REGISTRY) as ModuleId[])
             .filter((id) => id !== 'hr' || vis.hiring)
             .map((id) => {
             const mod = MODULE_REGISTRY[id]
             const Icon = getIcon(mod.icon)
             const isActive = pathname.startsWith(mod.basePath)
+            const isEnabled = activeModules.includes(id)
             return (
               <SidebarMenuButton
                 key={id}
-                tooltip={mod.name}
+                tooltip={isEnabled ? mod.name : `${mod.name} — скоро`}
                 isActive={isActive}
-                onClick={() => router.push(mod.basePath)}
+                onClick={() => isEnabled && router.push(mod.basePath)}
                 className={cn(
                   "justify-center h-10 w-10",
-                  isActive && MODULE_COLORS[id]
+                  isEnabled ? (isActive && MODULE_COLORS[id]) : "opacity-30 cursor-default"
                 )}
               >
                 <Icon className="size-5" />
@@ -355,35 +364,39 @@ export function DashboardSidebar() {
             EXPANDED STATE: Module accordions with nested group accordions
            ══════════════════════════════════════════════════════════════════ */}
         <div className="group-data-[collapsible=icon]:hidden space-y-1">
-          {activeModules
+          {(Object.keys(MODULE_REGISTRY) as ModuleId[])
             .filter((id) => id !== 'hr' || vis.hiring)
             .map((id) => {
+            const isModuleEnabled = activeModules.includes(id)
             const mod = MODULE_REGISTRY[id]
             const ModIcon = getIcon(mod.icon)
             const isExpanded = expandedModules.has(id)
             const isModuleActive = pathname.startsWith(mod.basePath)
-            const groups = getModuleGroups(id)
-            const hasItems = groups.some(g => g.items.length > 0)
+            const groups = isModuleEnabled ? getModuleGroups(id) : []
+            const hasItems = isModuleEnabled && groups.some(g => g.items.length > 0)
 
             return (
               <Collapsible
                 key={id}
-                open={isExpanded}
-                onOpenChange={() => toggleModule(id)}
+                open={isModuleEnabled && isExpanded}
+                onOpenChange={() => isModuleEnabled && toggleModule(id)}
               >
                 {/* ── Module header (accordion trigger) — Style A: color bar left ── */}
                 <CollapsibleTrigger
+                  disabled={!isModuleEnabled}
                   style={isModuleActive ? { borderLeft: `3px solid ${MODULE_BORDER_COLORS[id]}` } : { borderLeft: '3px solid transparent' }}
                   className={cn(
                     "flex items-center gap-2.5 w-full px-3 py-2.5 text-sm font-semibold transition-all duration-150 rounded-none rounded-r-lg",
-                    "hover:bg-sidebar-accent",
+                    isModuleEnabled ? "hover:bg-sidebar-accent" : "cursor-default opacity-50",
                     isModuleActive
                       ? cn(MODULE_BG_COLORS[id], MODULE_COLORS[id])
                       : "text-sidebar-foreground/70"
                   )}>
                   <ModIcon className={cn("size-4 shrink-0", isModuleActive && MODULE_COLORS[id])} />
                   <span className="flex-1 text-left">{mod.name}</span>
-                  {!hasItems ? (
+                  {!isModuleEnabled ? (
+                    <span className="text-[10px] text-sidebar-foreground/30 font-normal border border-sidebar-foreground/20 rounded px-1 py-0.5">Скоро</span>
+                  ) : !hasItems ? (
                     <span className="text-[10px] text-sidebar-foreground/30 font-normal">Скоро</span>
                   ) : (
                     <ChevronRight className={cn(

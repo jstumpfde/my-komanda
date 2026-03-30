@@ -102,6 +102,22 @@ export const MODULE_REGISTRY: Record<ModuleId, ModuleConfig> = {
       { label: 'Прогнозы',        href: '/sales/forecasts',   icon: 'TrendingUp' },
     ],
   },
+  b2b: {
+    id: 'b2b',
+    name: 'Торговля B2B',
+    description: 'Оптовые продажи, дилерская сеть и договоры',
+    icon: 'Handshake',
+    basePath: '/b2b',
+    menuItems: [],
+  },
+  ecommerce: {
+    id: 'ecommerce',
+    name: 'E-commerce',
+    description: 'Интернет-магазин, заказы и интеграции с маркетплейсами',
+    icon: 'Store',
+    basePath: '/ecommerce',
+    menuItems: [],
+  },
   logistics: {
     id: 'logistics',
     name: 'Логистика и склад',
