@@ -170,8 +170,20 @@ export function DashboardSidebar() {
     })
   }, [])
 
-  // ── Sub-group accordion state ──
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => new Set())
+  // ── Sub-group accordion state (persisted in sessionStorage) ──
+  const GROUPS_KEY = 'sidebar:expandedGroups'
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => {
+    if (typeof window === 'undefined') return new Set()
+    try {
+      const saved = sessionStorage.getItem('sidebar:expandedGroups')
+      return saved ? new Set(JSON.parse(saved) as string[]) : new Set()
+    } catch { return new Set() }
+  })
+
+  // Persist to sessionStorage on every change
+  useEffect(() => {
+    try { sessionStorage.setItem(GROUPS_KEY, JSON.stringify([...expandedGroups])) } catch {}
+  }, [expandedGroups])
 
   // Auto-expand group matching current path
   useEffect(() => {
