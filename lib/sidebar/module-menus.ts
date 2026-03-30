@@ -9,10 +9,10 @@ export interface MenuGroup {
 // Определение групп для каждого модуля (href → группа)
 const MODULE_GROUP_DEFS: Partial<Record<ModuleId, { label: string; hrefs: string[] }[]>> = {
   hr: [
-    { label: 'Найм',          hrefs: ['/hr/vacancies', '/hr/candidates', '/hr/funnel', '/hr/demo-editor', '/hr/interviews', '/hr/calendar'] },
-    { label: 'Адаптация',     hrefs: ['/hr/onboarding', '/hr/adaptation/plans', '/hr/adaptation/assignments', '/hr/buddy', '/hr/adaptation/gamification', '/hr/adaptation/analytics'] },
+    { label: 'Найм',          hrefs: ['/hr/vacancies', '/hr/candidates', '/hr/funnel', '/hr/demo-editor', '/hr/interviews', '/hr/calendar', '#v1-naim', '/hr/vacancies-old', '/hr/candidates-old', '/hr/funnel-old', '/hr/demo-editor-old'] },
+    { label: 'Адаптация',     hrefs: ['/hr/onboarding', '/hr/adaptation/plans', '/hr/adaptation/assignments', '/hr/buddy', '/hr/adaptation/gamification', '/hr/adaptation/analytics', '#v1-adaptaciya', '/hr/adaptation/plans-old', '/hr/adaptation/assignments-old', '/hr/adaptation/analytics-old'] },
     { label: 'Lifecycle',     hrefs: ['/hr/preboarding', '/hr/offboarding'] },
-    { label: 'Обучение',      hrefs: ['/hr/courses', '/hr/certificates'] },
+    { label: 'Обучение',      hrefs: ['/hr/courses', '/hr/certificates', '#v1-obuchenie', '/hr/courses-old'] },
     { label: 'Развитие',      hrefs: ['/hr/talent-pool', '/hr/skills', '/hr/assessments'] },
     { label: 'Аналитика HR',  hrefs: ['/hr/flight-risk', '/hr/pulse-surveys', '/hr/reskilling', '/hr/predictive-hiring', '/hr/analytics'] },
     { label: 'Инструменты',  hrefs: ['/hr/marketplace', '/hr/ai-assistant'] },

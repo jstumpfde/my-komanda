@@ -4,6 +4,8 @@ export interface MenuItem {
   label: string
   href: string
   icon: string
+  legacy?: boolean   // v1 items — grayed out in sidebar
+  divider?: boolean  // renders as a visual separator label, not a link
 }
 
 export interface ModuleConfig {

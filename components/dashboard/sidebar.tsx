@@ -175,7 +175,7 @@ export function DashboardSidebar() {
       const groups = getModuleGroups(id)
       for (const group of groups) {
         const match = group.items.some(
-          item => pathname === item.href || pathname.startsWith(item.href + '/')
+          item => !item.divider && (pathname === item.href || pathname.startsWith(item.href + '/'))
         )
         if (match && group.label) {
           const key = `${id}:${group.label}`
@@ -312,12 +312,12 @@ export function DashboardSidebar() {
             const activeId = activeModules.find(id => pathname.startsWith(MODULE_REGISTRY[id].basePath)) || activeModules[0]
             if (!activeId) return null
             const groups = getModuleGroups(activeId)
-            return groups.filter(g => g.items.length > 0).map((group) => {
-              const firstItem = group.items[0]
+            return groups.filter(g => g.items.some(i => !i.divider)).map((group) => {
+              const firstItem = group.items.find(i => !i.divider)!
               const GroupIcon = getIcon(firstItem.icon)
               const gc = GROUP_COLORS[group.label]
               const hasActiveItem = group.items.some(
-                item => pathname === item.href || pathname.startsWith(item.href + '/')
+                item => !item.divider && (pathname === item.href || pathname.startsWith(item.href + '/'))
               )
               // Click → navigate to first item in group
               return (
@@ -385,7 +385,7 @@ export function DashboardSidebar() {
                       const groupKey = `${id}:${group.label}`
                       const isGroupExpanded = expandedGroups.has(groupKey) || !group.label
                       const hasActiveItem = group.items.some(
-                        item => pathname === item.href || pathname.startsWith(item.href + '/')
+                        item => !item.divider && (pathname === item.href || pathname.startsWith(item.href + '/'))
                       )
 
                       // If no label → render items directly (root group)
@@ -393,6 +393,13 @@ export function DashboardSidebar() {
                         return (
                           <SidebarMenu key="__root" className="gap-0.5 mt-1">
                             {group.items.map((item) => {
+                              if (item.divider) {
+                                return (
+                                  <div key={item.href} className="px-4 py-1.5 text-[10px] text-sidebar-foreground/30 font-medium tracking-wide select-none">
+                                    {item.label}
+                                  </div>
+                                )
+                              }
                               const ItemIcon = getIcon(item.icon)
                               const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
                               return (
@@ -400,7 +407,12 @@ export function DashboardSidebar() {
                                   <SidebarMenuButton
                                     asChild
                                     isActive={isActive}
-                                    className="text-sidebar-foreground/90 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground h-9 pl-4"
+                                    className={cn(
+                                      "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground h-9 pl-4",
+                                      item.legacy
+                                        ? "text-sidebar-foreground/40 hover:text-sidebar-foreground/60"
+                                        : "text-sidebar-foreground/90"
+                                    )}
                                   >
                                     <Link href={item.href}>
                                       <ItemIcon className="size-4" />
@@ -429,7 +441,7 @@ export function DashboardSidebar() {
                           )}>
                             {(() => {
                               const gc = GROUP_COLORS[group.label]
-                              const firstItem = group.items[0]
+                              const firstItem = group.items.find(i => !i.divider)
                               const GroupIcon = firstItem ? getIcon(firstItem.icon) : null
                               return GroupIcon ? <GroupIcon className={cn("size-3.5 shrink-0", gc?.text || "text-sidebar-foreground/50")} /> : null
                             })()}
@@ -437,7 +449,7 @@ export function DashboardSidebar() {
                             <span className={cn(
                               "text-[10px] font-medium px-1.5 py-0.5 rounded-full",
                               GROUP_COLORS[group.label]?.bg || "bg-sidebar-accent/50 text-sidebar-foreground/50"
-                            )}>{group.items.length}</span>
+                            )}>{group.items.filter(i => !i.divider && !i.legacy).length}</span>
                             <ChevronRight className={cn(
                               "size-3 shrink-0 transition-transform duration-150",
                               isGroupExpanded && "rotate-90"
@@ -447,6 +459,13 @@ export function DashboardSidebar() {
                           <CollapsibleContent>
                             <SidebarMenu className="gap-0.5 mt-1">
                               {group.items.map((item) => {
+                                if (item.divider) {
+                                  return (
+                                    <div key={item.href} className="px-6 py-1.5 text-[10px] text-sidebar-foreground/30 font-medium tracking-wide select-none">
+                                      {item.label}
+                                    </div>
+                                  )
+                                }
                                 const ItemIcon = getIcon(item.icon)
                                 const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
                                 return (
@@ -454,7 +473,12 @@ export function DashboardSidebar() {
                                     <SidebarMenuButton
                                       asChild
                                       isActive={isActive}
-                                      className="text-sidebar-foreground/90 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground h-9 pl-6"
+                                      className={cn(
+                                        "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground h-9 pl-6",
+                                        item.legacy
+                                          ? "text-sidebar-foreground/40 hover:text-sidebar-foreground/60"
+                                          : "text-sidebar-foreground/90"
+                                      )}
                                     >
                                       <Link href={item.href}>
                                         <ItemIcon className="size-4" />

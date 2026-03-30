@@ -36,6 +36,18 @@ export const MODULE_REGISTRY: Record<ModuleId, ModuleConfig> = {
       { label: 'AI-ассистент', href: '/hr/ai-assistant',             icon: 'Bot' },
       { label: 'Обзор',         href: '/overview',       icon: 'LayoutDashboard' },
       { label: 'Рефералы',      href: '/referrals',      icon: 'Share2' },
+      // ── v1 legacy items ──
+      { label: '── v1 (старые) ──', href: '#v1-naim',        icon: 'ChevronRight', divider: true },
+      { label: 'Вакансии v1',    href: '/hr/vacancies-old',   icon: 'Briefcase',   legacy: true },
+      { label: 'Кандидаты v1',   href: '/hr/candidates-old',  icon: 'UserCheck',   legacy: true },
+      { label: 'Воронка v1',     href: '/hr/funnel-old',      icon: 'TrendingDown',legacy: true },
+      { label: 'Демо-редактор v1', href: '/hr/demo-editor-old', icon: 'Layers',    legacy: true },
+      { label: '── v1 (старые) ──', href: '#v1-adaptaciya',   icon: 'ChevronRight', divider: true },
+      { label: 'Планы v1',       href: '/hr/adaptation/plans-old',       icon: 'ClipboardList', legacy: true },
+      { label: 'Назначения v1',  href: '/hr/adaptation/assignments-old', icon: 'UserCheck2',    legacy: true },
+      { label: 'Аналитика v1',   href: '/hr/adaptation/analytics-old',   icon: 'BarChart2',     legacy: true },
+      { label: '── v1 (старые) ──', href: '#v1-obuchenie',    icon: 'ChevronRight', divider: true },
+      { label: 'Курсы v1',       href: '/hr/courses-old',     icon: 'BookOpen',    legacy: true },
     ],
   },
   marketing: {
