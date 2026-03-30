@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --webpack",
+    "dev:tunnel": "ssh -N -L 5433:localhost:5432 root@5.42.125.91",
+    "deploy": "git push origin main && ssh root@5.42.125.91 \"cd /var/www/my-komanda && git fetch origin && git reset --hard origin/main && rm -rf .next && pnpm build && pm2 restart my-komanda\"",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
