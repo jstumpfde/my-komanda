@@ -92,14 +92,18 @@ const MODULE_BORDER_COLORS: Record<ModuleId, string> = {
 // Group colors for style C (colored icons + badge)
 const GROUP_COLORS: Record<string, { text: string; bg: string }> = {
   // HR groups
-  'Найм':          { text: 'text-blue-400',    bg: 'bg-blue-500/15 text-blue-400' },
-  'Адаптация':     { text: 'text-teal-400',    bg: 'bg-teal-500/15 text-teal-400' },
-  'Lifecycle':     { text: 'text-violet-400',   bg: 'bg-violet-500/15 text-violet-400' },
-  'Обучение':      { text: 'text-pink-400',    bg: 'bg-pink-500/15 text-pink-400' },
-  'Развитие':      { text: 'text-amber-400',   bg: 'bg-amber-500/15 text-amber-400' },
-  'Аналитика HR':  { text: 'text-red-400',     bg: 'bg-red-500/15 text-red-400' },
-  'Инструменты':   { text: 'text-emerald-400', bg: 'bg-emerald-500/15 text-emerald-400' },
-  'Обзор':         { text: 'text-gray-400',    bg: 'bg-gray-500/15 text-gray-400' },
+  'Найм':           { text: 'text-blue-400',    bg: 'bg-blue-500/15 text-blue-400' },
+  'Адаптация':      { text: 'text-teal-400',    bg: 'bg-teal-500/15 text-teal-400' },
+  'Lifecycle':      { text: 'text-violet-400',  bg: 'bg-violet-500/15 text-violet-400' },
+  'Обучение':       { text: 'text-pink-400',    bg: 'bg-pink-500/15 text-pink-400' },
+  'Развитие':       { text: 'text-amber-400',   bg: 'bg-amber-500/15 text-amber-400' },
+  'Аналитика HR':   { text: 'text-red-400',     bg: 'bg-red-500/15 text-red-400' },
+  'Инструменты':    { text: 'text-emerald-400', bg: 'bg-emerald-500/15 text-emerald-400' },
+  'Обзор':          { text: 'text-gray-400',    bg: 'bg-gray-500/15 text-gray-400' },
+  // HR v1 accordion groups — muted slate
+  'Найм (v1)':      { text: 'text-slate-500',   bg: 'bg-slate-500/10 text-slate-500' },
+  'Адаптация (v1)': { text: 'text-slate-500',   bg: 'bg-slate-500/10 text-slate-500' },
+  'Обучение (v1)':  { text: 'text-slate-500',   bg: 'bg-slate-500/10 text-slate-500' },
   // Marketing groups
   'Контент':       { text: 'text-purple-400',  bg: 'bg-purple-500/15 text-purple-400' },
   'Продвижение':   { text: 'text-fuchsia-400', bg: 'bg-fuchsia-500/15 text-fuchsia-400' },
@@ -435,20 +439,28 @@ export function DashboardSidebar() {
                         >
                           <CollapsibleTrigger className={cn(
                             "flex items-center gap-2 w-full px-3 py-2 rounded-md text-xs font-semibold uppercase tracking-wider transition-colors",
-                            hasActiveItem
-                              ? "text-sidebar-foreground/90 bg-sidebar-accent/40"
-                              : "text-sidebar-foreground/80 hover:text-sidebar-foreground/90 hover:bg-sidebar-accent/50"
+                            group.legacy
+                              ? hasActiveItem
+                                ? "text-sidebar-foreground/50 bg-sidebar-accent/20"
+                                : "text-sidebar-foreground/35 hover:text-sidebar-foreground/50 hover:bg-sidebar-accent/20"
+                              : hasActiveItem
+                                ? "text-sidebar-foreground/90 bg-sidebar-accent/40"
+                                : "text-sidebar-foreground/80 hover:text-sidebar-foreground/90 hover:bg-sidebar-accent/50"
                           )}>
                             {(() => {
                               const gc = GROUP_COLORS[group.label]
                               const firstItem = group.items.find(i => !i.divider)
                               const GroupIcon = firstItem ? getIcon(firstItem.icon) : null
-                              return GroupIcon ? <GroupIcon className={cn("size-3.5 shrink-0", gc?.text || "text-sidebar-foreground/50")} /> : null
+                              return GroupIcon ? <GroupIcon className={cn("size-3.5 shrink-0", gc?.text || (group.legacy ? "text-sidebar-foreground/30" : "text-sidebar-foreground/50"))} /> : null
                             })()}
-                            <span className="flex-1 text-left">{group.label}</span>
+                            <span className="flex-1 text-left">
+                              {group.legacy
+                                ? <>{group.label.replace(' (v1)', '')}<span className="ml-1 text-[9px] font-normal normal-case opacity-50">(v1)</span></>
+                                : group.label}
+                            </span>
                             <span className={cn(
                               "text-[10px] font-medium px-1.5 py-0.5 rounded-full",
-                              GROUP_COLORS[group.label]?.bg || "bg-sidebar-accent/50 text-sidebar-foreground/50"
+                              GROUP_COLORS[group.label]?.bg || (group.legacy ? "bg-slate-500/10 text-sidebar-foreground/30" : "bg-sidebar-accent/50 text-sidebar-foreground/50")
                             )}>{group.items.filter(i => !i.divider && !i.legacy).length}</span>
                             <ChevronRight className={cn(
                               "size-3 shrink-0 transition-transform duration-150",

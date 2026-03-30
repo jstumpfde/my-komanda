@@ -8,6 +8,12 @@ export interface MenuItem {
   divider?: boolean  // renders as a visual separator label, not a link
 }
 
+export interface MenuGroup {
+  label: string
+  items: MenuItem[]
+  legacy?: boolean  // v1 accordion — muted/grayed header styling
+}
+
 export interface ModuleConfig {
   id: ModuleId
   name: string

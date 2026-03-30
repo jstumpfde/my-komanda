@@ -36,7 +36,7 @@ export const MODULE_REGISTRY: Record<ModuleId, ModuleConfig> = {
       { label: 'AI-ассистент', href: '/hr/ai-assistant',             icon: 'Bot' },
       { label: 'Обзор',         href: '/overview',       icon: 'LayoutDashboard' },
       { label: 'Рефералы',      href: '/referrals',      icon: 'Share2' },
-      // ── v1 legacy items ──
+      // ── inline v1 divider items (для старых -old групп) ──
       { label: '── v1 (старые) ──', href: '#v1-naim',        icon: 'ChevronRight', divider: true },
       { label: 'Вакансии v1',    href: '/hr/vacancies-old',   icon: 'Briefcase',   legacy: true },
       { label: 'Кандидаты v1',   href: '/hr/candidates-old',  icon: 'UserCheck',   legacy: true },
@@ -48,6 +48,20 @@ export const MODULE_REGISTRY: Record<ModuleId, ModuleConfig> = {
       { label: 'Аналитика v1',   href: '/hr/adaptation/analytics-old',   icon: 'BarChart2',     legacy: true },
       { label: '── v1 (старые) ──', href: '#v1-obuchenie',    icon: 'ChevronRight', divider: true },
       { label: 'Курсы v1',       href: '/hr/courses-old',     icon: 'BookOpen',    legacy: true },
+      // ── v1 accordion items (отдельные группы) ──
+      { label: 'Вакансии v1',      href: '/hr/vacancies-v1',              icon: 'Briefcase',     legacy: true },
+      { label: 'Кандидаты v1',     href: '/hr/candidates-v1',             icon: 'UserCheck',     legacy: true },
+      { label: 'Воронка v1',       href: '/hr/funnel-v1',                 icon: 'TrendingDown',  legacy: true },
+      { label: 'Демо-редактор v1', href: '/hr/demo-editor-v1',            icon: 'Layers',        legacy: true },
+      { label: 'Интервью v1',      href: '/hr/interviews-v1',             icon: 'Calendar',      legacy: true },
+      { label: 'Календарь v1',     href: '/hr/calendar-v1',               icon: 'CalendarDays',  legacy: true },
+      { label: 'Онбординг v1',     href: '/hr/adaptation/onboarding-v1',  icon: 'Rocket',        legacy: true },
+      { label: 'Планы v1',         href: '/hr/adaptation/plans-v1',       icon: 'ClipboardList', legacy: true },
+      { label: 'Назначения v1',    href: '/hr/adaptation/assignments-v1', icon: 'UserCheck2',    legacy: true },
+      { label: 'Аналитика v1',     href: '/hr/adaptation/analytics-v1',   icon: 'BarChart2',     legacy: true },
+      { label: 'Геймификация v1',  href: '/hr/adaptation/gamification-v1',icon: 'Trophy',        legacy: true },
+      { label: 'Курсы v1',         href: '/hr/courses-v1',                icon: 'BookOpen',      legacy: true },
+      { label: 'Сертификаты v1',   href: '/hr/certificates-v1',           icon: 'Award',         legacy: true },
     ],
   },
   marketing: {
