@@ -46,7 +46,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    const { companyId, userId } = await requireCompany()
+    const { companyId, id: userId } = await requireCompany()
     const body = await req.json()
     const { title, description, category = "custom", difficulty = "beginner", durationMin } = body
 

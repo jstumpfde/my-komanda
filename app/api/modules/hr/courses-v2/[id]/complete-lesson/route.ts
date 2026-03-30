@@ -13,7 +13,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { companyId, userId } = await requireCompany()
+    const { companyId, id: userId } = await requireCompany()
     const { id: courseId } = await params
     const { lessonId, answer } = await req.json()
 
