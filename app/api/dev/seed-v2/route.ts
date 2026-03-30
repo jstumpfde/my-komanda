@@ -18,9 +18,12 @@ import {
   vacancies, candidates,
   adaptationPlans, adaptationSteps, adaptationAssignments, stepCompletions,
   courses, lessons, courseEnrollments, lessonCompletions, certificates,
+  companies, users,
 } from "@/lib/db/schema"
 import { eq } from "drizzle-orm"
 import { randomBytes } from "crypto"
+
+const DEV_MODE = process.env.ALLOW_DEV_LOGIN === "true"
 
 function token() { return randomBytes(16).toString("hex") }
 function certNum() {
@@ -44,8 +47,18 @@ const CITIES = ["Москва","Санкт-Петербург","Казань","�
 
 export async function GET() {
   let user: { companyId: string; id: string }
-  try { user = await requireCompany() as { companyId: string; id: string } }
-  catch { return NextResponse.json({ error: "Unauthorized" }, { status: 401 }) }
+  if (DEV_MODE) {
+    // В dev-режиме берём первую компанию и первого пользователя из БД
+    const [company] = await db.select({ id: companies.id }).from(companies).limit(1)
+    const [u] = await db.select({ id: users.id }).from(users).limit(1)
+    if (!company || !u) {
+      return NextResponse.json({ error: "No company/user in DB. Run /api/dev/login first." }, { status: 400 })
+    }
+    user = { companyId: company.id, id: u.id }
+  } else {
+    try { user = await requireCompany() as { companyId: string; id: string } }
+    catch { return NextResponse.json({ error: "Unauthorized" }, { status: 401 }) }
+  }
 
   const cId = user.companyId
   const uId = user.id
