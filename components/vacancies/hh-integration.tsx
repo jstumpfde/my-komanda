@@ -545,7 +545,7 @@ export function HhIntegration({ onCandidatesImported, onMessageLog }: HhIntegrat
               <ol className="list-decimal list-inside space-y-2">
                 <li>Нажмите кнопку ниже — откроется страница авторизации hh.ru</li>
                 <li>Войдите в аккаунт работодателя</li>
-                <li>Разрешите доступ для Моя Команда</li>
+                <li>Разрешите доступ для Company24</li>
                 <li>Вы будете перенаправлены обратно</li>
               </ol>
             </div>
@@ -554,7 +554,7 @@ export function HhIntegration({ onCandidatesImported, onMessageLog }: HhIntegrat
               <div className="flex items-start gap-2">
                 <Info className="w-4 h-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
                 <p className="text-xs text-amber-700 dark:text-amber-400">
-                  Моя Команда получит доступ к откликам и переписке по вакансиям. Вы сможете отключить интеграцию в любой момент.
+                  Company24 получит доступ к откликам и переписке по вакансиям. Вы сможете отключить интеграцию в любой момент.
                 </p>
               </div>
             </div>

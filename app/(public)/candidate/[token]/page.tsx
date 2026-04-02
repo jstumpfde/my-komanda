@@ -49,7 +49,7 @@ function saveProgress(token: string, progress: CandidateProgress) {
 // Бренд — использует глобальные настройки
 function getBrandStyles(candidate: PublicCandidate, globalBrand?: BrandConfig | null) {
   if (candidate.brandPlan === "trial") {
-    return { color: "#3b82f6", bgColor: "#f0f4ff", textColor: "#1e293b", name: "Моя Команда", showBrandLogo: true, logoUrl: null as string | null }
+    return { color: "#3b82f6", bgColor: "#f0f4ff", textColor: "#1e293b", name: "Company24", showBrandLogo: true, logoUrl: null as string | null }
   }
   const color = globalBrand?.primaryColor || candidate.brandColor
   const bgColor = globalBrand?.bgColor || "#f0f4ff"
@@ -165,7 +165,7 @@ function WelcomeScreen({
           {brand.showBrandLogo ? (
             <div className="flex items-center gap-2">
               <div className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-lg" style={{ background: `linear-gradient(135deg, ${brand.color}, #6366f1)` }}>H</div>
-              <span className="text-2xl font-bold" style={{ color: brand.textColor }}>Моя Команда</span>
+              <span className="text-2xl font-bold" style={{ color: brand.textColor }}>Company24</span>
             </div>
           ) : (
             <div className="flex items-center gap-2">
@@ -225,7 +225,7 @@ function WelcomeScreen({
         {/* Футер */}
         {brand.showBrandLogo && (
           <p className="text-xs text-muted-foreground/50 pt-4">
-            Powered by Моя Команда
+            Powered by Company24
           </p>
         )}
       </div>
@@ -674,7 +674,7 @@ function FinalScreen({
         )}
 
         {brand.showBrandLogo && (
-          <p className="text-xs text-muted-foreground/50 pt-4">Powered by Моя Команда</p>
+          <p className="text-xs text-muted-foreground/50 pt-4">Powered by Company24</p>
         )}
       </div>
     </div>

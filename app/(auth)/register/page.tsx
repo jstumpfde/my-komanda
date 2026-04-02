@@ -282,8 +282,8 @@ export default function RegisterPage() {
             <Briefcase className="w-6 h-6 text-white" />
           </div>
           <div className="text-center">
-            <h1 className="text-2xl font-bold text-foreground">Моя Команда</h1>
-            <p className="text-sm text-muted-foreground mt-0.5">HR-платформа для найма</p>
+            <h1 className="text-2xl font-bold text-foreground">Company24</h1>
+            <p className="text-sm text-muted-foreground mt-0.5">AI Business OS</p>
           </div>
         </div>
         <Card className="border shadow-xl">
@@ -380,7 +380,7 @@ export default function RegisterPage() {
             </p>
           </CardContent>
         </Card>
-        <p className="text-center text-xs text-muted-foreground">© 2026 Моя Команда. Все права защищены.</p>
+        <p className="text-center text-xs text-muted-foreground">© 2026 Company24. Все права защищены.</p>
       </div>
     </div>
   )

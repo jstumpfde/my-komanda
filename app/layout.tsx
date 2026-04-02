@@ -8,7 +8,7 @@ import './globals.css'
 const inter = Inter({ subsets: ['latin', 'cyrillic'], variable: '--font-inter' })
 
 export const metadata: Metadata = {
-  title: 'Моя Команда — HR Рекрутинговая платформа',
+  title: 'Company24 — HR Рекрутинговая платформа',
   description: 'Современная платформа для управления процессом найма с AI-скорингом кандидатов',
   generator: 'v0.app',
   icons: {

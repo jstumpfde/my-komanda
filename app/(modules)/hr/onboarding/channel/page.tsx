@@ -111,7 +111,7 @@ export default function OnboardingScreenClient() {
             <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-primary-foreground font-bold text-sm">
               М
             </div>
-            <span className="text-lg font-bold text-foreground">Моя Команда</span>
+            <span className="text-lg font-bold text-foreground">Company24</span>
           </div>
 
           {/* Skip */}

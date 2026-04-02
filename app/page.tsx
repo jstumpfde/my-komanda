@@ -275,7 +275,7 @@ export default function DashboardPage() {
                   <Rocket className="w-6 h-6 text-blue-600" />
                   <div>
                     <p className="text-sm font-semibold text-foreground">Настройте платформу: осталось {onboardingRemaining} {onboardingRemaining === 1 ? "шаг" : onboardingRemaining < 5 ? "шага" : "шагов"}</p>
-                    <p className="text-xs text-muted-foreground">Завершите настройку, чтобы получить максимум от Моя Команда</p>
+                    <p className="text-xs text-muted-foreground">Завершите настройку, чтобы получить максимум от Company24</p>
                   </div>
                 </div>
                 <Button size="sm" asChild>

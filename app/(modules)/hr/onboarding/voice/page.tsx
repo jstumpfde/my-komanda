@@ -202,7 +202,7 @@ export default function VoicePage() {
             <div className="w-7 h-7 rounded-lg bg-primary flex items-center justify-center text-primary-foreground font-bold text-xs">
               М
             </div>
-            <span className="text-sm font-semibold text-foreground">Моя Команда</span>
+            <span className="text-sm font-semibold text-foreground">Company24</span>
           </div>
         </div>
       </div>

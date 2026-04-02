@@ -240,7 +240,7 @@ export function PostDemoSettings() {
                   </div>
                 </>
               )}
-              <p className="text-[10px] text-gray-300">Powered by Моя Команда</p>
+              <p className="text-[10px] text-gray-300">Powered by Company24</p>
             </div>
           </div>
         </CardContent>

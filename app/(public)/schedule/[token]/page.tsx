@@ -150,7 +150,7 @@ export default function SchedulePublicPage({ params }: { params: Promise<{ token
             Перенести встречу
           </button>
 
-          <p className="text-xs text-muted-foreground/50">Powered by Моя Команда</p>
+          <p className="text-xs text-muted-foreground/50">Powered by Company24</p>
         </div>
       </div>
     )
@@ -250,7 +250,7 @@ export default function SchedulePublicPage({ params }: { params: Promise<{ token
           <Calendar className="w-5 h-5 mr-2" /> Подтвердить время
         </Button>
 
-        <p className="text-center text-xs text-muted-foreground/50">Powered by Моя Команда</p>
+        <p className="text-center text-xs text-muted-foreground/50">Powered by Company24</p>
       </div>
     </div>
   )

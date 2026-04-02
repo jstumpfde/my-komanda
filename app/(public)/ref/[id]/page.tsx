@@ -31,7 +31,7 @@ export default function ReferrerPublicPage({ params }: { params: Promise<{ id: s
   const accentColor = brand?.primaryColor || "#3b82f6"
   const bgColor = brand?.bgColor || "#f0f4ff"
   const logoUrl = brand?.logoUrl
-  const companyName = brand?.companyName || "Моя Команда"
+  const companyName = brand?.companyName || "Company24"
 
   if (loading) {
     return (
@@ -262,7 +262,7 @@ export default function ReferrerPublicPage({ params }: { params: Promise<{ id: s
 
         {/* Footer */}
         <p className="text-center text-xs text-muted-foreground/50 py-4">
-          Powered by Моя Команда
+          Powered by Company24
         </p>
       </div>
     </div>

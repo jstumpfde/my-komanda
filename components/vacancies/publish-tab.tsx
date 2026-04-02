@@ -76,7 +76,7 @@ h1{font-size:28px;font-weight:800;color:${text};margin-bottom:8px;line-height:1.
 <input type="tel" id="hf-phone" placeholder="Телефон" />
 <button class="btn" onclick="handleSubmit()">Узнать подробнее →</button>
 </div>
-<p class="footer">Powered by Моя Команда</p>
+<p class="footer">Powered by Company24</p>
 </div>
 <script>
 function handleSubmit(){
@@ -279,7 +279,7 @@ export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, salaryFrom,
           {/* Что содержит код */}
           <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800">
             <p className="text-xs text-blue-700 dark:text-blue-400">
-              <strong>Код содержит:</strong> полный лендинг вакансии, форму отклика, все стили встроены (не нужны внешние CSS), цвета из брендинга, после отклика → редирект на демонстрацию Моя Команда.
+              <strong>Код содержит:</strong> полный лендинг вакансии, форму отклика, все стили встроены (не нужны внешние CSS), цвета из брендинга, после отклика → редирект на демонстрацию Company24.
             </p>
           </div>
         </CardContent>

@@ -12,7 +12,7 @@ export function PlatformBadge({ hidden, className }: PlatformBadgeProps) {
   return (
     <div className={cn("group-data-[collapsible=icon]:hidden px-2 pb-1", className)}>
       <Link
-        href="https://mycomanda24.ru"
+        href="https://company24.pro"
         target="_blank"
         rel="noopener noreferrer"
         className="flex items-center gap-1 text-[10px] text-sidebar-foreground/30 hover:text-sidebar-foreground/50 transition-colors"
