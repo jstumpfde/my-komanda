@@ -3,16 +3,10 @@
   "configurations": [
     {
       "name": "Next.js dev",
-      "runtimeExecutable": "/Users/juri/my-komanda/node_modules/.bin/next",
-      "runtimeArgs": ["dev"],
+      "runtimeExecutable": "/opt/homebrew/bin/node",
+      "runtimeArgs": ["/Users/juri/my-komanda/node_modules/next/dist/bin/next", "dev"],
       "port": 3000,
       "autoPort": true
-    },
-    {
-      "name": "Drizzle Studio",
-      "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["db:studio"],
-      "port": 4983
     }
   ]
 }

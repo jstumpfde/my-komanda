@@ -9,6 +9,7 @@ export interface ApiVacancy {
   companyId: string
   createdBy: string
   title: string
+  description: string | null
   city: string | null
   format: string | null
   employment: string | null
@@ -19,6 +20,7 @@ export interface ApiVacancy {
   status: string | null
   slug: string
   descriptionJson: unknown
+  deletedAt: string | null
   createdAt: string | null
   updatedAt: string | null
 }

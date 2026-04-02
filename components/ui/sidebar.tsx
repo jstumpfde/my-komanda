@@ -322,7 +322,7 @@ function SidebarRail({ className, ...props }: React.ComponentProps<'button'>) {
   )
 }
 
-function SidebarInset({ className, onClick, ...props }: React.ComponentProps<'main'>) {
+function SidebarInset({ className, onClick, children, ...props }: React.ComponentProps<'main'>) {
   const { setOpen, state, isMobile } = useSidebar()
 
   const handleClick = React.useCallback((e: React.MouseEvent<HTMLElement>) => {
@@ -337,13 +337,17 @@ function SidebarInset({ className, onClick, ...props }: React.ComponentProps<'ma
     <main
       data-slot="sidebar-inset"
       className={cn(
-        'bg-background relative flex w-full flex-1 flex-col',
+        'bg-background relative flex w-full flex-1 flex-col min-w-0',
         'md:peer-data-[variant=inset]:m-2 md:peer-data-[variant=inset]:ml-0 md:peer-data-[variant=inset]:rounded-xl md:peer-data-[variant=inset]:shadow-sm md:peer-data-[variant=inset]:peer-data-[state=collapsed]:ml-2',
         className,
       )}
       onClick={handleClick}
       {...props}
-    />
+    >
+      <div className="flex flex-1 flex-col min-w-0" style={{ paddingLeft: 40, paddingRight: 40 }}>
+        {children}
+      </div>
+    </main>
   )
 }
 

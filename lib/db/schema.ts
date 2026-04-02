@@ -81,6 +81,16 @@ export const companies = pgTable("companies", {
   city:               text("city"),
   industry:           text("industry"),
   postalCode:         text("postal_code"),
+  foundedYear:        integer("founded_year"),
+  revenueRange:       text("revenue_range"),           // Solo wizard step-1
+  website:            text("website"),
+  crmStatus:          text("crm_status"),              // 'active'|'exists_unused'|'none'
+  crmName:            text("crm_name"),
+  salesScripts:       text("sales_scripts"),           // 'yes'|'partial'|'no'
+  trainingSystem:     text("training_system"),         // 'yes'|'partial'|'no'
+  trainer:            text("trainer"),
+  salesManagerType:   text("sales_manager_type"),      // 'none'|'hunter'|...
+  isMultiProduct:     boolean("is_multi_product").default(false),
   logoUrl:            text("logo_url"),
   brandPrimaryColor:  text("brand_primary_color").default("#3b82f6"),
   brandBgColor:       text("brand_bg_color").default("#f0f4ff"),
@@ -113,6 +123,7 @@ export const vacancies = pgTable("vacancies", {
   companyId: uuid("company_id").references(() => companies.id).notNull(),
   createdBy: uuid("created_by").references(() => users.id).notNull(),
   title: text("title").notNull(),
+  description: text("description"),
   city: text("city"),
   format: text("format"), // 'office' | 'hybrid' | 'remote'
   employment: text("employment"), // 'full' | 'part'
@@ -123,6 +134,7 @@ export const vacancies = pgTable("vacancies", {
   status: text("status").default("draft"), // 'draft' | 'published' | 'paused' | 'closed'
   slug: text("slug").unique().notNull(),
   descriptionJson: jsonb("description_json"),
+  deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 })

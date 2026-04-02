@@ -195,6 +195,16 @@ export interface ApiCompanyUpdatePayload {
   city?: string
   industry?: string
   postal_code?: string
+  founded_year?: number
+  revenue_range?: string
+  website?: string
+  crm_status?: string
+  crm_name?: string
+  sales_scripts?: string
+  training_system?: string
+  trainer?: string
+  sales_manager_type?: string
+  is_multi_product?: boolean
   logo_url?: string
   brand_primary_color?: string
   brand_bg_color?: string

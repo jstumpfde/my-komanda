@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server"
-import { eq, and, count } from "drizzle-orm"
+import { eq, and, count, isNull, isNotNull } from "drizzle-orm"
 import { nanoid } from "nanoid"
 import { db } from "@/lib/db"
 import { vacancies } from "@/lib/db/schema"
@@ -31,15 +31,20 @@ export async function GET(req: NextRequest) {
     const limit = Math.min(100, Math.max(1, parseInt(req.nextUrl.searchParams.get("limit") ?? "20")))
     const offset = (page - 1) * limit
 
+    const showDeleted = req.nextUrl.searchParams.get("deleted") === "true"
+    const baseWhere = showDeleted
+      ? and(eq(vacancies.companyId, user.companyId), isNotNull(vacancies.deletedAt))
+      : and(eq(vacancies.companyId, user.companyId), isNull(vacancies.deletedAt))
+
     const [totalResult] = await db
       .select({ value: count() })
       .from(vacancies)
-      .where(eq(vacancies.companyId, user.companyId))
+      .where(baseWhere)
 
     const rows = await db
       .select()
       .from(vacancies)
-      .where(eq(vacancies.companyId, user.companyId))
+      .where(baseWhere)
       .orderBy(vacancies.createdAt)
       .limit(limit)
       .offset(offset)
@@ -62,6 +67,7 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json() as {
       title: string
+      description?: string
       city?: string
       format?: string
       employment?: string
@@ -82,13 +88,14 @@ export async function POST(req: NextRequest) {
         companyId: user.companyId,
         createdBy: user.id,
         title: body.title.trim(),
+        description: body.description?.trim() || null,
         city: body.city,
         format: body.format,
         employment: body.employment,
         category: body.category,
         salaryMin: body.salary_min,
         salaryMax: body.salary_max,
-        status: "draft",
+        status: "draft" as const,
         slug,
       })
       .returning()
@@ -96,6 +103,7 @@ export async function POST(req: NextRequest) {
     return apiSuccess(vacancy, 201)
   } catch (err) {
     if (err instanceof Response) return err
+    console.error("[POST /api/modules/hr/vacancies]", err)
     return apiError("Internal server error", 500)
   }
 }

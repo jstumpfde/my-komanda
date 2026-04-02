@@ -87,6 +87,33 @@ export async function PUT(
   }
 }
 
+// PATCH — restore from trash (clears deleted_at)
+export async function PATCH(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const user = await requireCompany()
+    const { id } = await params
+
+    const [restored] = await db
+      .update(vacancies)
+      .set({ deletedAt: null, updatedAt: new Date() })
+      .where(and(eq(vacancies.id, id), eq(vacancies.companyId, user.companyId)))
+      .returning({ id: vacancies.id })
+
+    if (!restored) {
+      return apiError("Vacancy not found", 404)
+    }
+
+    return apiSuccess({ restored: true })
+  } catch (err) {
+    if (err instanceof Response) return err
+    return apiError("Internal server error", 500)
+  }
+}
+
+// Soft delete — moves to trash (sets deleted_at)
 export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -96,7 +123,8 @@ export async function DELETE(
     const { id } = await params
 
     const [deleted] = await db
-      .delete(vacancies)
+      .update(vacancies)
+      .set({ deletedAt: new Date(), updatedAt: new Date() })
       .where(and(eq(vacancies.id, id), eq(vacancies.companyId, user.companyId)))
       .returning({ id: vacancies.id })
 

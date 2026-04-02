@@ -85,6 +85,16 @@ export async function PUT(req: NextRequest) {
       city?: string
       industry?: string
       postal_code?: string
+      founded_year?: number
+      revenue_range?: string
+      website?: string
+      crm_status?: string
+      crm_name?: string
+      sales_scripts?: string
+      training_system?: string
+      trainer?: string
+      sales_manager_type?: string
+      is_multi_product?: boolean
       logo_url?: string
       brand_primary_color?: string
       brand_bg_color?: string
@@ -102,6 +112,16 @@ export async function PUT(req: NextRequest) {
     if (body.city !== undefined) updates.city = body.city
     if (body.industry !== undefined) updates.industry = body.industry
     if (body.postal_code !== undefined) updates.postalCode = body.postal_code
+    if (body.founded_year !== undefined) updates.foundedYear = body.founded_year
+    if (body.revenue_range !== undefined) updates.revenueRange = body.revenue_range
+    if (body.website !== undefined) updates.website = body.website
+    if (body.crm_status !== undefined) updates.crmStatus = body.crm_status
+    if (body.crm_name !== undefined) updates.crmName = body.crm_name
+    if (body.sales_scripts !== undefined) updates.salesScripts = body.sales_scripts
+    if (body.training_system !== undefined) updates.trainingSystem = body.training_system
+    if (body.trainer !== undefined) updates.trainer = body.trainer
+    if (body.sales_manager_type !== undefined) updates.salesManagerType = body.sales_manager_type
+    if (body.is_multi_product !== undefined) updates.isMultiProduct = body.is_multi_product
     if (body.logo_url !== undefined) updates.logoUrl = body.logo_url
     if (body.brand_primary_color !== undefined) updates.brandPrimaryColor = body.brand_primary_color
     if (body.brand_bg_color !== undefined) updates.brandBgColor = body.brand_bg_color

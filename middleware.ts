@@ -57,6 +57,9 @@ export default auth(async (req) => {
   }
 
   // ── Проверка доступа к модулям ──────────────────────────────────────────────
+  // DEV_SKIP_MODULE_CHECK=true — пропускаем проверку модулей полностью
+  if (process.env.DEV_SKIP_MODULE_CHECK === "true") return
+
   // Пропускаем /upgrade (иначе бесконечный редирект) и маршруты без companyId
   if (!session.user.companyId || pathname.startsWith("/upgrade")) return
 

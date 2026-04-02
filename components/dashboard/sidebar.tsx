@@ -295,8 +295,8 @@ export function DashboardSidebar() {
             <Briefcase className="size-5" />
           </div>
           <div className="overflow-hidden group-data-[collapsible=icon]:hidden">
-            <span className="font-semibold text-sidebar-foreground text-base tracking-tight">Команда</span>
-            <p className="text-[11px] text-sidebar-foreground/50 tracking-wide truncate">my-komanda</p>
+            <span className="font-semibold text-sidebar-foreground text-base tracking-tight">Company24</span>
+            <p className="text-[11px] text-sidebar-foreground/50 tracking-wide truncate">AI Business OS</p>
           </div>
         </div>
       </SidebarHeader>

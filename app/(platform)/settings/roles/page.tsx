@@ -1,9 +1,13 @@
 "use client"
 
-import { Shield, Check, Info } from "lucide-react"
+import { useState, useEffect } from "react"
+import { Shield, Check, Info, Trash2 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Switch } from "@/components/ui/switch"
+import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
+import { toast } from "sonner"
 
 const ROLES = [
   {
@@ -57,7 +61,21 @@ const PERMISSIONS = [
   { label: "Обзор",              director: true,  hr_lead: true,  hr_manager: true,  department_head: true,  observer: true  },
 ]
 
+const TRASH_ACCESS_KEY = "mk_trash_access_hr_manager"
+
 export default function RolesPage() {
+  const [trashAccessHrManager, setTrashAccessHrManager] = useState(false)
+
+  useEffect(() => {
+    setTrashAccessHrManager(localStorage.getItem(TRASH_ACCESS_KEY) === "true")
+  }, [])
+
+  const toggleTrashAccess = (checked: boolean) => {
+    setTrashAccessHrManager(checked)
+    localStorage.setItem(TRASH_ACCESS_KEY, String(checked))
+    toast.success(checked ? "HR-менеджеры теперь видят корзину" : "Доступ к корзине для HR-менеджеров отключён")
+  }
+
   return (
     <div className="space-y-8">
       <div>
@@ -69,6 +87,26 @@ export default function RolesPage() {
         <Info className="size-4 mt-0.5 shrink-0" />
         <p>Роли назначаются в разделе <strong>Настройки → Команда</strong>. Здесь отображается справочник прав доступа для каждой роли.</p>
       </div>
+
+      {/* Trash access setting */}
+      <Card>
+        <CardContent className="pt-5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex items-center justify-center size-9 rounded-lg bg-muted shrink-0">
+                <Trash2 className="size-4 text-muted-foreground" />
+              </div>
+              <div>
+                <Label htmlFor="trash-access" className="text-sm font-medium">Разрешить HR-менеджерам доступ к корзине</Label>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  По умолчанию корзина доступна только администраторам и руководителям. Включите, чтобы HR-менеджеры тоже могли удалять и восстанавливать вакансии.
+                </p>
+              </div>
+            </div>
+            <Switch id="trash-access" checked={trashAccessHrManager} onCheckedChange={toggleTrashAccess} />
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Role cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

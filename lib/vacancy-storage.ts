@@ -208,6 +208,7 @@ export function resetCategories() {
 
 export interface ApiVacancyPayload {
   title: string
+  description?: string
   city?: string
   format?: string
   employment?: string
