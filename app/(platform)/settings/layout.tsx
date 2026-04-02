@@ -10,9 +10,9 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
       <DashboardSidebar />
       <SidebarInset>
         <SettingsHeader />
-        <main className="flex-1 overflow-auto bg-background [&_input]:bg-white [&_label]:font-medium [&_label]:text-foreground">
-          <div className="p-4 sm:p-6 max-w-6xl mx-auto">{children}</div>
-        </main>
+        <div className="flex-1 overflow-auto bg-background min-w-0">
+          <div className="py-6 max-w-5xl" style={{ paddingLeft: 56, paddingRight: 56 }}>{children}</div>
+        </div>
       </SidebarInset>
     </SidebarProvider>
   )

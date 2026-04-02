@@ -79,7 +79,7 @@ export default function RolesPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Роли и доступ</h1>
+        <h1 className="text-xl font-semibold tracking-tight">Роли и доступ</h1>
         <p className="text-muted-foreground mt-1">Управление правами доступа для каждой роли в системе</p>
       </div>
 

@@ -296,7 +296,7 @@ export function DashboardSidebar() {
           </div>
           <div className="overflow-hidden group-data-[collapsible=icon]:hidden">
             <span className="font-semibold text-sidebar-foreground text-base tracking-tight">Company24</span>
-            <p className="text-[11px] text-sidebar-foreground/50 tracking-wide truncate">AI Business OS</p>
+            <p className="text-xs text-sidebar-foreground/70 tracking-wide truncate">AI Business OS</p>
           </div>
         </div>
       </SidebarHeader>

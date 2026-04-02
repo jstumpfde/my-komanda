@@ -51,7 +51,7 @@ export function SettingsHeader() {
   return (
     <header className="sticky top-0 z-40 bg-background">
       {/* Row 1: Top bar */}
-      <div className="flex items-center justify-between h-14 px-4 sm:px-6 border-b border-border">
+      <div className="flex items-center justify-between h-14 border-b border-border" style={{ paddingLeft: 56, paddingRight: 56 }}>
         <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0" onClick={toggleSidebar}>
           {state === "expanded" ? <PanelLeftClose className="h-5 w-5" /> : <PanelLeft className="h-5 w-5" />}
         </Button>
@@ -132,7 +132,7 @@ export function SettingsHeader() {
 
       {/* Row 2: Settings tabs */}
       <div className="border-b border-border overflow-x-auto">
-        <nav className="flex items-center gap-0.5 px-4 sm:px-6">
+        <nav className="flex items-center gap-0.5" style={{ paddingLeft: 56, paddingRight: 56 }}>
           {navItems.map(({ href, label, icon: Icon }) => (
             <Link
               key={href}

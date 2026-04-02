@@ -95,7 +95,7 @@ export default function EditVacancyPage() {
       <SidebarInset>
         <DashboardHeader />
         <div className="flex-1 overflow-auto bg-background min-w-0">
-          <div className="py-6">
+          <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
             {/* Back link */}
             <Link href={`/hr/vacancies/${id}`} className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-4">
               <ArrowLeft className="size-4" />Назад к вакансии

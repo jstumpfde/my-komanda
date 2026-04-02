@@ -155,7 +155,7 @@ export default function ProfileSettingsPage() {
   return (
         <>
             <div className="mb-6">
-              <h1 className="text-2xl font-semibold text-foreground mb-1">Профиль</h1>
+              <h1 className="text-xl font-semibold text-foreground mb-1">Профиль</h1>
               <p className="text-muted-foreground text-sm">Личные данные и настройки безопасности</p>
             </div>
 

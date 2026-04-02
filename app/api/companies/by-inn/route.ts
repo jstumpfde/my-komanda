@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
       return apiError("Missing 'inn' query parameter", 400)
     }
 
-    const token = process.env.DADATA_TOKEN
+    const token = process.env.DADATA_API_KEY || process.env.DADATA_TOKEN
     if (!token) {
       return apiError("DaData token not configured", 500)
     }

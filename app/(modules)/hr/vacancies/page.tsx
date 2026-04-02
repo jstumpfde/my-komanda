@@ -463,7 +463,7 @@ export default function VacanciesPage() {
       <SidebarInset>
         <DashboardHeader />
         <div className="flex-1 overflow-auto bg-background min-w-0">
-          <div className="py-6">
+          <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
             {/* Header */}
             <div className="flex items-center justify-between mb-5">
               <div>

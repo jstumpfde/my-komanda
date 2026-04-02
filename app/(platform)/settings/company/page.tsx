@@ -18,9 +18,11 @@ import { fetchCompanyApi, updateCompanyApi, fetchCompanyByInn } from "@/lib/comp
 
 // ─── DaData types ────────────────────────────────────────────
 
+type CompanyStatus = "active" | "liquidating" | "liquidated" | "bankrupt" | "reorganizing" | ""
+
 interface DadataResult {
   fullName: string; shortName: string; kpp: string; ogrn: string
-  legalAddress: string; director: string; status: "active" | "liquidated"
+  legalAddress: string; director: string; status: CompanyStatus
   inn?: string; postalCode?: string; city?: string; foundedDate?: string
 }
 
@@ -37,7 +39,8 @@ function parseDadataSuggestion(s: any): DadataResult & { inn: string } {
     inn: d.inn ?? "", fullName: s.unrestricted_value ?? s.value ?? "",
     shortName: s.value ?? "", kpp: d.kpp ?? "", ogrn: d.ogrn ?? "",
     legalAddress: d.address?.value ?? d.address?.unrestricted_value ?? "",
-    director: d.management?.name ?? "", status: d.state?.status === "ACTIVE" ? "active" : "liquidated",
+    director: d.management?.name ?? "",
+    status: ({ ACTIVE: "active", LIQUIDATING: "liquidating", LIQUIDATED: "liquidated", BANKRUPT: "bankrupt", REORGANIZING: "reorganizing" } as Record<string, CompanyStatus>)[d.state?.status] ?? "",
     postalCode: addrData.postal_code ?? "", city: addrData.city ?? addrData.settlement ?? addrData.region_with_type ?? "",
     foundedDate,
   }
@@ -98,7 +101,7 @@ export default function CompanyProfilePage() {
   const [nameSuggestions, setNameSuggestions] = useState<Array<DadataResult & { inn: string }>>([]); const [nameDropdownOpen, setNameDropdownOpen] = useState(false)
   const nameDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null); const nameContainerRef = useRef<HTMLDivElement>(null)
   const [fullName, setFullName] = useState(""); const [shortName, setShortName] = useState(""); const [kpp, setKpp] = useState(""); const [ogrn, setOgrn] = useState("")
-  const [legalAddress, setLegalAddress] = useState(""); const [director, setDirector] = useState(""); const [companyStatus, setCompanyStatus] = useState<"active"|"liquidated"|"">("")
+  const [legalAddress, setLegalAddress] = useState(""); const [director, setDirector] = useState(""); const [companyStatus, setCompanyStatus] = useState<CompanyStatus>("")
   const [postalSameAsLegal, setPostalSameAsLegal] = useState(false); const [postalAddress, setPostalAddress] = useState(""); const [postalIndex, setPostalIndex] = useState(""); const [postalCity, setPostalCity] = useState("")
   const [accounts, setAccounts] = useState<BankAccount[]>([{ id: "1", bankName: "", bik: "", rs: "", ks: "" }]); const [defaultAccountId, setDefaultAccountId] = useState("1"); const [bikSearching, setBikSearching] = useState<string|null>(null); const [bankNameSearching, setBankNameSearching] = useState<string|null>(null)
   const [email, setEmail] = useState(""); const [phone, setPhone] = useState(""); const [website, setWebsite] = useState("")
@@ -190,7 +193,7 @@ export default function CompanyProfilePage() {
   return (
     <>
       <div className="mb-4">
-        <h1 className="text-2xl font-semibold text-foreground mb-1">Профиль компании</h1>
+        <h1 className="text-xl font-semibold text-foreground mb-1">Профиль компании</h1>
         <p className="text-muted-foreground text-sm">Данные организации и настройки для демонстраций</p>
       </div>
 
@@ -201,6 +204,10 @@ export default function CompanyProfilePage() {
             <CardTitle className="text-base flex items-center gap-2">
               <Building2 className="w-4 h-4" /> Компания
               {companyStatus === "active" && <Badge variant="outline" className="ml-2 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 text-xs"><CheckCircle2 className="w-3 h-3 mr-1" /> Действующая</Badge>}
+              {companyStatus === "liquidating" && <Badge variant="outline" className="ml-2 bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800 text-xs">В процессе ликвидации</Badge>}
+              {companyStatus === "liquidated" && <Badge variant="outline" className="ml-2 bg-red-500/10 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800 text-xs">Ликвидирована</Badge>}
+              {companyStatus === "bankrupt" && <Badge variant="outline" className="ml-2 bg-red-500/10 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800 text-xs">Банкротство</Badge>}
+              {companyStatus === "reorganizing" && <Badge variant="outline" className="ml-2 bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800 text-xs">Реорганизация</Badge>}
             </CardTitle>
           </CardHeader>
           <CardContent className="px-4 pb-4 pt-0">

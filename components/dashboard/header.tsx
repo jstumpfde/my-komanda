@@ -113,7 +113,7 @@ export function DashboardHeader() {
       )}
 
       <header className="sticky top-0 z-40 border-b border-border bg-background">
-        <div className="flex items-center justify-between h-14 px-4 sm:px-6">
+        <div className="flex items-center justify-between h-14" style={{ paddingLeft: 56, paddingRight: 56 }}>
           <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0" onClick={toggleSidebar}>
             {state === "expanded" ? <PanelLeftClose className="h-5 w-5" /> : <PanelLeft className="h-5 w-5" />}
           </Button>

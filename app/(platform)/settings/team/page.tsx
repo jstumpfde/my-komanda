@@ -252,7 +252,7 @@ export default function TeamPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-semibold text-foreground mb-1">Команда</h1>
+          <h1 className="text-xl font-semibold text-foreground mb-1">Команда</h1>
           <p className="text-muted-foreground text-sm">Управление участниками и ролями</p>
         </div>
         <div className="flex gap-2">

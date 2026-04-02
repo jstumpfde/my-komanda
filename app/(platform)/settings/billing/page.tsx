@@ -139,8 +139,8 @@ export default function BillingPage() {
       .finally(() => setLoadingSub(false))
 
     fetch("/api/plans")
-      .then(r => r.json())
-      .then((data: Plan[]) => setAllPlans(data))
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then((data: unknown) => setAllPlans(Array.isArray(data) ? data : []))
       .catch(() => {})
       .finally(() => setLoadingPlans(false))
 
@@ -194,9 +194,9 @@ export default function BillingPage() {
   const currentPlanId = subscription?.plan?.id
 
   return (
-    <div className="max-w-4xl space-y-6">
+    <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold text-foreground">Тариф и оплата</h1>
+        <h1 className="text-xl font-semibold text-foreground">Тариф и оплата</h1>
         <p className="text-sm text-muted-foreground mt-1">Управление подпиской и счетами</p>
       </div>
 

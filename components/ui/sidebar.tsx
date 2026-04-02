@@ -344,9 +344,7 @@ function SidebarInset({ className, onClick, children, ...props }: React.Componen
       onClick={handleClick}
       {...props}
     >
-      <div className="flex flex-1 flex-col min-w-0" style={{ paddingLeft: 40, paddingRight: 40 }}>
-        {children}
-      </div>
+      {children}
     </main>
   )
 }
