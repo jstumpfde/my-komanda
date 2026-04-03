@@ -131,6 +131,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
   ],
   callbacks: {
+    // Разрешаем все маршруты — контроль доступа в middleware.ts
+    authorized: () => true,
     async jwt({ token, user, trigger }) {
       if (user) {
         // Initial sign-in: populate token from the user returned by authorize()
