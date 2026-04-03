@@ -1,0 +1,658 @@
+"use client"
+
+import { useState, useEffect, useRef, useCallback } from "react"
+import Link from "next/link"
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { cn } from "@/lib/utils"
+import {
+  Users, Megaphone, DollarSign, Truck, Brain, MessageSquare, BarChart3,
+  Target, Zap, ArrowRight, Check, X, Minus,
+  Clock, TrendingUp, Award, Building2,
+  Bot, Handshake,
+  Menu, XIcon, TrendingDown, PhoneOff,
+} from "lucide-react"
+
+// ─── Count-up hook ───────────────────────────────────────────────────────────
+
+function useCountUp(end: number, duration = 2000) {
+  const [value, setValue] = useState(0)
+  const [started, setStarted] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const obs = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) { setStarted(true); obs.disconnect() } },
+      { threshold: 0.3 }
+    )
+    obs.observe(el)
+    return () => obs.disconnect()
+  }, [])
+
+  useEffect(() => {
+    if (!started) return
+    const startTime = performance.now()
+    const tick = (now: number) => {
+      const progress = Math.min((now - startTime) / duration, 1)
+      const eased = 1 - Math.pow(1 - progress, 3) // easeOutCubic
+      setValue(Math.round(eased * end))
+      if (progress < 1) requestAnimationFrame(tick)
+    }
+    requestAnimationFrame(tick)
+  }, [started, end, duration])
+
+  return { value, ref }
+}
+
+// ─── Data ────────────────────────────────────────────────────────────────────
+
+const NAV_ITEMS = [
+  { label: "Возможности", href: "#features" },
+  { label: "Модули", href: "#modules" },
+  { label: "Тарифы", href: "#pricing" },
+  { label: "О нас", href: "#about" },
+]
+
+const PROBLEMS = [
+  { icon: Users, title: "HR тонет в резюме", desc: "200+ откликов на вакансию, ручной скрининг каждого" },
+  { icon: TrendingDown, title: "Маркетинг без аналитики", desc: "Бюджеты сливаются, ROI непонятен" },
+  { icon: PhoneOff, title: "Продажи в хаосе", desc: "Лиды теряются, менеджеры забывают перезвонить" },
+  { icon: BarChart3, title: "Руководитель не видит картину", desc: "Данные в 10 табличках, отчёты раз в месяц" },
+]
+
+const COMPARISON_ROWS = [
+  { feature: "Автоматизация найма", c24: "check", crm: "no", erp: "partial", manual: "no" },
+  { feature: "AI-скоринг кандидатов", c24: "check", crm: "no", erp: "no", manual: "no" },
+  { feature: "Маркетинговая аналитика", c24: "check", crm: "partial", erp: "no", manual: "partial" },
+  { feature: "Воронка продаж", c24: "check", crm: "check", erp: "partial", manual: "no" },
+  { feature: "Управление складом", c24: "check", crm: "no", erp: "check", manual: "partial" },
+  { feature: "Стоимость внедрения", c24: "check", crm: "partial", erp: "no", manual: "check" },
+]
+
+const MODULES = [
+  {
+    id: "hr", icon: Users, label: "HR и команда", color: "text-violet-600", bg: "bg-violet-50",
+    features: [
+      "AI-скоринг кандидатов за секунды",
+      "Демо-курс «Один день в должности»",
+      "Автоматическая воронка найма",
+      "Интеграция с hh.ru, Авито, SuperJob",
+      "Адаптация и онбординг",
+      "Аналитика по каждой вакансии",
+    ],
+  },
+  {
+    id: "marketing", icon: Megaphone, label: "Маркетинг", color: "text-pink-600", bg: "bg-pink-50",
+    features: [
+      "Анализ конкурентов в реальном времени",
+      "ROI по каждому каналу",
+      "AI-генерация контента",
+      "UTM-аналитика и атрибуция",
+      "SEO-мониторинг",
+    ],
+  },
+  {
+    id: "sales", icon: DollarSign, label: "Продажи", color: "text-amber-600", bg: "bg-amber-50",
+    features: [
+      "AI-квалификация лидов",
+      "Автоматические follow-up",
+      "Воронка сделок с прогнозами",
+      "Интеграция с Битрикс24 и AmoCRM",
+      "Аналитика менеджеров",
+    ],
+  },
+  {
+    id: "logistics", icon: Truck, label: "Логистика и склад", color: "text-emerald-600", bg: "bg-emerald-50",
+    features: [
+      "Управление заказами",
+      "Складской учёт",
+      "Маршрутизация доставок",
+      "Аналитика закупок",
+      "Прогноз спроса",
+    ],
+  },
+]
+
+const STEPS = [
+  { num: "01", title: "Подключите", desc: "Регистрация за 2 минуты, импорт данных из CRM", icon: Zap },
+  { num: "02", title: "AI настроит", desc: "Агенты анализируют ваш бизнес и настраивают автоматизации", icon: Brain },
+  { num: "03", title: "Работает 24/7", desc: "AI ведёт рутину, вы принимаете решения", icon: Clock },
+]
+
+const AI_AGENTS = [
+  { icon: Brain, name: "Скоринг-агент", desc: "Оценивает кандидатов по 50+ параметрам" },
+  { icon: MessageSquare, name: "Коммуникатор", desc: "Отправляет сообщения, назначает интервью" },
+  { icon: BarChart3, name: "Аналитик", desc: "Строит отчёты, находит узкие места" },
+  { icon: Target, name: "Маркетолог", desc: "Анализирует конкурентов, оптимизирует бюджет" },
+  { icon: Handshake, name: "Продавец", desc: "Квалифицирует лиды, напоминает о follow-up" },
+  { icon: Truck, name: "Логист", desc: "Оптимизирует маршруты, прогнозирует спрос" },
+]
+
+const TARIFFS = [
+  { name: "Solo", price: "14 900", vacancies: "1 вакансия", candidates: "400 кандидатов", popular: false, features: ["1 пользователь", "Базовый AI-скоринг", "Email-поддержка"] },
+  { name: "Starter", price: "24 900", vacancies: "3 вакансии", candidates: "1 200 кандидатов", popular: false, features: ["3 пользователя", "Расширенный AI", "Интеграция hh.ru", "Чат-поддержка"] },
+  { name: "Business", price: "49 900", vacancies: "10 вакансий", candidates: "4 000 кандидатов", popular: true, features: ["10 пользователей", "Все AI-агенты", "Branding", "AI-видеоинтервью", "Приоритетная поддержка"] },
+  { name: "Pro", price: "99 900", vacancies: "22 вакансии", candidates: "10 000 кандидатов", popular: false, features: ["Безлимит пользователей", "Все модули", "Custom domain", "API доступ", "Персональный менеджер"] },
+]
+
+const COUNTER_METRICS = [
+  { end: 60, suffix: "%", prefix: "", label: "быстрее найм", icon: Clock },
+  { end: 3, suffix: "x", prefix: "", label: "меньше рутины", icon: TrendingUp },
+  { end: 4, suffix: "x", prefix: "ROI ", label: "за 3 месяца", icon: Award },
+  { end: 500, suffix: "+", prefix: "", label: "компаний доверяют", icon: Building2 },
+]
+
+const FOOTER_COLS = [
+  { title: "Продукт", links: ["Возможности", "Модули", "Тарифы", "API"] },
+  { title: "Компания", links: ["О нас", "Блог", "Карьера", "Контакты"] },
+  { title: "Юридическое", links: ["Политика конфиденциальности", "Условия использования", "Оферта"] },
+]
+
+function ComparisonIcon({ val }: { val: string }) {
+  if (val === "check") return <div className="flex justify-center"><Check className="w-5 h-5 text-emerald-500" /></div>
+  if (val === "no") return <div className="flex justify-center"><X className="w-5 h-5 text-red-300" /></div>
+  return <div className="flex justify-center"><Minus className="w-5 h-5 text-amber-400" /></div>
+}
+
+function MetricCounter({ end, suffix, prefix, label, icon: Icon }: typeof COUNTER_METRICS[number]) {
+  const { value, ref } = useCountUp(end, 2000)
+  return (
+    <div ref={ref} className="text-center">
+      <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#534AB7]/10 to-blue-500/10 flex items-center justify-center mx-auto mb-4">
+        <Icon className="w-7 h-7 text-[#534AB7]" />
+      </div>
+      <p className="text-5xl font-bold bg-gradient-to-r from-[#534AB7] to-blue-500 bg-clip-text text-transparent mb-2">
+        {prefix}{value}{suffix}
+      </p>
+      <p className="text-muted-foreground">{label}</p>
+    </div>
+  )
+}
+
+// ─── CSS Keyframes (injected via style tag) ──────────────────────────────────
+
+const BLOB_STYLES = `
+@keyframes blob1 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  25% { transform: translate(30px, -50px) scale(1.1); }
+  50% { transform: translate(-20px, 20px) scale(0.9); }
+  75% { transform: translate(20px, 40px) scale(1.05); }
+}
+@keyframes blob2 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  25% { transform: translate(-40px, 30px) scale(0.95); }
+  50% { transform: translate(30px, -30px) scale(1.1); }
+  75% { transform: translate(-10px, -40px) scale(1); }
+}
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(1.5); }
+}
+`
+
+// ─── Landing Page ────────────────────────────────────────────────────────────
+
+export default function LandingPage() {
+  const [activeModule, setActiveModule] = useState("hr")
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [scrolled, setScrolled] = useState(false)
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 20)
+    window.addEventListener("scroll", onScroll, { passive: true })
+    return () => window.removeEventListener("scroll", onScroll)
+  }, [])
+
+  return (
+    <div className="min-h-screen bg-white text-foreground antialiased scroll-smooth">
+      <style dangerouslySetInnerHTML={{ __html: BLOB_STYLES }} />
+
+      {/* ── HEADER ── */}
+      <header className={cn(
+        "sticky top-0 z-50 transition-all duration-300 border-b",
+        scrolled
+          ? "bg-white/90 backdrop-blur-xl border-border/60 shadow-sm"
+          : "bg-transparent border-transparent"
+      )}>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+          <Link href="/" className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#534AB7] to-blue-500 flex items-center justify-center shadow-lg shadow-[#534AB7]/20">
+              <span className="text-white font-bold text-base">C</span>
+            </div>
+            <span className="font-bold text-xl tracking-tight">Company24</span>
+          </Link>
+
+          <nav className="hidden md:flex items-center gap-8">
+            {NAV_ITEMS.map((item) => (
+              <a key={item.href} href={item.href} className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+                {item.label}
+              </a>
+            ))}
+          </nav>
+
+          <div className="hidden md:flex items-center gap-3">
+            <Button variant="ghost" size="sm" asChild>
+              <Link href="/login">Войти</Link>
+            </Button>
+            <Button size="sm" className="bg-gradient-to-r from-[#534AB7] to-blue-500 hover:from-[#4338a8] hover:to-blue-600 shadow-lg shadow-[#534AB7]/25" asChild>
+              <Link href="/register">Попробовать бесплатно</Link>
+            </Button>
+          </div>
+
+          <button className="md:hidden p-2" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
+            {mobileMenuOpen ? <XIcon className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          </button>
+        </div>
+
+        {mobileMenuOpen && (
+          <div className="md:hidden border-t border-border bg-white/95 backdrop-blur-xl px-4 py-4 space-y-3">
+            {NAV_ITEMS.map((item) => (
+              <a key={item.href} href={item.href} className="block text-sm font-medium text-muted-foreground" onClick={() => setMobileMenuOpen(false)}>
+                {item.label}
+              </a>
+            ))}
+            <div className="flex gap-2 pt-2">
+              <Button variant="outline" size="sm" className="flex-1" asChild>
+                <Link href="/login">Войти</Link>
+              </Button>
+              <Button size="sm" className="flex-1 bg-gradient-to-r from-[#534AB7] to-blue-500" asChild>
+                <Link href="/register">Бесплатно</Link>
+              </Button>
+            </div>
+          </div>
+        )}
+      </header>
+
+      {/* ── HERO ── */}
+      <section className="relative overflow-hidden min-h-[90vh] flex items-center">
+        {/* Animated blobs */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <div
+            className="absolute -top-32 -left-32 w-[500px] h-[500px] rounded-full bg-[#534AB7]/8 blur-[100px]"
+            style={{ animation: "blob1 20s ease-in-out infinite" }}
+          />
+          <div
+            className="absolute -bottom-32 -right-32 w-[600px] h-[600px] rounded-full bg-blue-500/8 blur-[120px]"
+            style={{ animation: "blob2 25s ease-in-out infinite" }}
+          />
+          <div
+            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] rounded-full bg-violet-400/5 blur-[80px]"
+            style={{ animation: "blob1 15s ease-in-out infinite reverse" }}
+          />
+        </div>
+
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-20 md:py-28 relative w-full">
+          <div className="grid lg:grid-cols-2 gap-16 items-center">
+            <div>
+              <Badge variant="outline" className="mb-6 text-[#534AB7] border-[#534AB7]/30 bg-[#534AB7]/5 px-4 py-1.5 text-sm font-medium">
+                AI Business OS
+              </Badge>
+              <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight leading-[1.05] mb-6">
+                AI-операционная система, которая ведёт бизнес{" "}
+                <span className="bg-gradient-to-r from-[#534AB7] to-blue-500 bg-clip-text text-transparent">24/7</span>
+              </h1>
+              <p className="text-xl text-muted-foreground mb-10 max-w-xl leading-relaxed">
+                Company24 автоматизирует HR, маркетинг, продажи и логистику. AI-агенты берут на себя 80% рутины — вы принимаете только ключевые решения.
+              </p>
+              <div className="flex flex-wrap gap-4 mb-8">
+                <Button size="lg" className="bg-gradient-to-r from-[#534AB7] to-blue-500 hover:from-[#4338a8] hover:to-blue-600 h-14 px-10 text-base shadow-xl shadow-[#534AB7]/25 transition-all hover:shadow-2xl hover:shadow-[#534AB7]/30 hover:scale-[1.02]" asChild>
+                  <Link href="/register">Начать бесплатно <ArrowRight className="w-5 h-5 ml-2" /></Link>
+                </Button>
+                <Button variant="outline" size="lg" className="h-14 px-10 text-base hover:bg-muted/50">
+                  Посмотреть демо
+                </Button>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Бесплатно 14 дней &middot; Без привязки карты &middot; 500+ компаний
+              </p>
+            </div>
+
+            {/* Dashboard mock */}
+            <div className="relative hidden lg:block">
+              <div className="bg-white/80 backdrop-blur-sm rounded-3xl shadow-2xl shadow-black/5 border border-border/40 p-8 space-y-5">
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="w-3 h-3 rounded-full bg-red-400" />
+                  <div className="w-3 h-3 rounded-full bg-amber-400" />
+                  <div className="w-3 h-3 rounded-full bg-emerald-400" />
+                  <span className="text-xs text-muted-foreground ml-3 font-medium">Company24 — Дашборд</span>
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  {[
+                    { label: "Вакансий", val: "8", color: "from-violet-500 to-violet-600" },
+                    { label: "Кандидатов", val: "1 247", color: "from-blue-500 to-blue-600" },
+                    { label: "Нанято", val: "41", color: "from-emerald-500 to-emerald-600" },
+                  ].map((m) => (
+                    <div key={m.label} className="bg-stone-50 rounded-xl p-4">
+                      <p className="text-[11px] text-muted-foreground mb-1">{m.label}</p>
+                      <p className={cn("text-2xl font-bold bg-gradient-to-r bg-clip-text text-transparent", m.color)}>{m.val}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="space-y-2.5">
+                  {[
+                    { text: "Скоринг: 14 обработано", online: true },
+                    { text: "Рассылка: 3 отправлено", online: true },
+                    { text: "Парсинг: 8 новых", online: true },
+                    { text: "hh.ru: ожидание API", online: false },
+                  ].map((t) => (
+                    <div key={t.text} className="flex items-center gap-2.5 text-xs">
+                      <span className={cn("w-2 h-2 rounded-full shrink-0", t.online ? "bg-emerald-500" : "bg-amber-400")} />
+                      <span className="text-muted-foreground">{t.text}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex gap-2 items-end h-24">
+                  {[85, 62, 78, 45, 30, 55, 18].map((h, i) => (
+                    <div key={i} className="flex-1 flex flex-col justify-end h-full">
+                      <div
+                        className="rounded-t-md bg-gradient-to-t from-[#534AB7] to-blue-400 w-full transition-all"
+                        style={{ height: `${h}%` }}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="absolute -bottom-6 -right-6 w-48 h-48 bg-gradient-to-br from-[#534AB7]/15 to-blue-500/15 rounded-full blur-3xl" />
+              <div className="absolute -top-6 -left-6 w-32 h-32 bg-violet-400/10 rounded-full blur-3xl" />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── ПРОБЛЕМЫ ── */}
+      <section id="features" className="bg-stone-50 py-24 md:py-28">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6">
+          <div className="text-center mb-14">
+            <Badge variant="outline" className="mb-4 text-red-500 border-red-200 bg-red-50">Знакомо?</Badge>
+            <h2 className="text-3xl md:text-4xl font-bold">С чем сталкиваются компании каждый день</h2>
+          </div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
+            {PROBLEMS.map((p) => (
+              <div key={p.title} className="bg-white rounded-2xl border border-border/60 p-7 transition-all duration-300 hover:shadow-xl hover:border-red-200 hover:-translate-y-1 group">
+                <div className="w-12 h-12 rounded-xl bg-red-50 flex items-center justify-center mb-5 group-hover:bg-red-100 transition-colors">
+                  <p.icon className="w-6 h-6 text-red-500" />
+                </div>
+                <h3 className="font-semibold text-lg mb-2">{p.title}</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">{p.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── РЕШЕНИЕ ── */}
+      <section className="py-24 md:py-28">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6">
+          <div className="text-center mb-14 max-w-3xl mx-auto">
+            <Badge variant="outline" className="mb-4 text-[#534AB7] border-[#534AB7]/30 bg-[#534AB7]/5">Company24 — всё в одном</Badge>
+            <h2 className="text-3xl md:text-4xl font-bold mb-4">Не CRM. Не ERP. AI Business OS.</h2>
+            <p className="text-muted-foreground text-lg">Операционная система для бизнеса, где AI делает работу, а не просто показывает графики.</p>
+          </div>
+
+          <div className="overflow-x-auto max-w-4xl mx-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="text-left py-4 pr-6 font-medium text-muted-foreground" />
+                  <th className="py-4 px-6">
+                    <span className="font-bold text-[#534AB7] bg-[#534AB7]/5 px-3 py-1 rounded-full text-xs">Company24</span>
+                  </th>
+                  <th className="py-4 px-6 font-medium text-muted-foreground">CRM</th>
+                  <th className="py-4 px-6 font-medium text-muted-foreground">ERP</th>
+                  <th className="py-4 px-6 font-medium text-muted-foreground">Вручную</th>
+                </tr>
+              </thead>
+              <tbody>
+                {COMPARISON_ROWS.map((r, i) => (
+                  <tr key={r.feature} className={cn("border-b border-border/50 last:border-0", i % 2 === 0 && "bg-stone-50/50")}>
+                    <td className="py-4 pr-6 font-medium">{r.feature}</td>
+                    <td className="py-4 px-6"><ComparisonIcon val={r.c24} /></td>
+                    <td className="py-4 px-6"><ComparisonIcon val={r.crm} /></td>
+                    <td className="py-4 px-6"><ComparisonIcon val={r.erp} /></td>
+                    <td className="py-4 px-6"><ComparisonIcon val={r.manual} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      {/* ── МОДУЛИ ── */}
+      <section id="modules" className="bg-stone-50 py-24 md:py-28">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6">
+          <div className="text-center mb-14">
+            <Badge variant="outline" className="mb-4">Модули</Badge>
+            <h2 className="text-3xl md:text-4xl font-bold">4 модуля — одна платформа</h2>
+          </div>
+
+          {/* Tabs */}
+          <div className="flex justify-center mb-10">
+            <div className="inline-flex bg-white rounded-2xl border border-border/60 p-1.5 shadow-sm gap-1">
+              {MODULES.map((m) => (
+                <button
+                  key={m.id}
+                  onClick={() => setActiveModule(m.id)}
+                  className={cn(
+                    "flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium transition-all duration-200",
+                    activeModule === m.id
+                      ? "bg-gradient-to-r from-[#534AB7] to-blue-500 text-white shadow-lg shadow-[#534AB7]/20"
+                      : "text-muted-foreground hover:text-foreground hover:bg-stone-50"
+                  )}
+                >
+                  <m.icon className="w-4 h-4" />
+                  <span className="hidden sm:inline">{m.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Module content */}
+          {MODULES.filter((m) => m.id === activeModule).map((m) => (
+            <div key={m.id} className="bg-white rounded-3xl border border-border/60 p-10 max-w-2xl mx-auto shadow-sm">
+              <div className="flex items-center gap-4 mb-8">
+                <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center", m.bg)}>
+                  <m.icon className={cn("w-6 h-6", m.color)} />
+                </div>
+                <h3 className="text-2xl font-bold">{m.label}</h3>
+              </div>
+              <ul className="space-y-4">
+                {m.features.map((f) => (
+                  <li key={f} className="flex items-start gap-3">
+                    <div className="w-5 h-5 rounded-full bg-[#534AB7]/10 flex items-center justify-center shrink-0 mt-0.5">
+                      <Check className="w-3 h-3 text-[#534AB7]" />
+                    </div>
+                    <span className="text-[15px]">{f}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ── 3 ШАГА ── */}
+      <section className="py-24 md:py-28">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6">
+          <div className="text-center mb-14">
+            <Badge variant="outline" className="mb-4">Как это работает</Badge>
+            <h2 className="text-3xl md:text-4xl font-bold">3 шага к автоматизации</h2>
+          </div>
+          <div className="grid md:grid-cols-3 gap-8">
+            {STEPS.map((s, i) => (
+              <div key={s.num} className="relative bg-white rounded-3xl border border-border/60 p-9 text-center transition-all duration-300 hover:shadow-xl hover:-translate-y-1">
+                <span className="text-6xl font-bold bg-gradient-to-b from-[#534AB7]/10 to-transparent bg-clip-text text-transparent absolute top-5 right-7">{s.num}</span>
+                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#534AB7]/10 to-blue-500/10 flex items-center justify-center mx-auto mb-5">
+                  <s.icon className="w-7 h-7 text-[#534AB7]" />
+                </div>
+                <h3 className="font-bold text-xl mb-3">{s.title}</h3>
+                <p className="text-muted-foreground leading-relaxed">{s.desc}</p>
+                {i < 2 && (
+                  <ArrowRight className="hidden md:block absolute -right-5 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground/30 z-10" />
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── AI-АГЕНТЫ ── */}
+      <section className="bg-stone-50 py-24 md:py-28">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6">
+          <div className="text-center mb-14">
+            <Badge variant="outline" className="mb-4 text-[#534AB7] border-[#534AB7]/30 bg-[#534AB7]/5">
+              <Bot className="w-3.5 h-3.5 mr-1.5" /> AI-агенты
+            </Badge>
+            <h2 className="text-3xl md:text-4xl font-bold">6 AI-агентов работают на вас</h2>
+          </div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            {AI_AGENTS.map((a) => (
+              <div key={a.name} className="bg-white rounded-2xl border border-border/60 p-7 flex items-start gap-5 transition-all duration-300 hover:shadow-xl hover:-translate-y-1 group">
+                <div className="relative shrink-0">
+                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#534AB7]/10 to-blue-500/10 flex items-center justify-center group-hover:from-[#534AB7]/15 group-hover:to-blue-500/15 transition-colors">
+                    <a.icon className="w-6 h-6 text-[#534AB7]" />
+                  </div>
+                  {/* Pulsing green dot */}
+                  <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5">
+                    <span className="absolute inset-0 rounded-full bg-emerald-400 opacity-75" style={{ animation: "pulse-dot 2s ease-in-out infinite" }} />
+                    <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-emerald-500 border-2 border-white" />
+                  </span>
+                </div>
+                <div>
+                  <h3 className="font-semibold text-base mb-1">{a.name}</h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed">{a.desc}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── ТАРИФЫ ── */}
+      <section id="pricing" className="py-24 md:py-28">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6">
+          <div className="text-center mb-14">
+            <Badge variant="outline" className="mb-4">Тарифы</Badge>
+            <h2 className="text-3xl md:text-4xl font-bold">Выберите свой план</h2>
+          </div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
+            {TARIFFS.map((t) => (
+              <div
+                key={t.name}
+                className={cn(
+                  "rounded-3xl p-7 flex flex-col relative transition-all duration-300 hover:scale-[1.02] hover:shadow-xl",
+                  t.popular
+                    ? "border-2 border-[#534AB7] shadow-xl shadow-[#534AB7]/10 bg-white"
+                    : "border border-border/60 bg-white hover:border-[#534AB7]/30"
+                )}
+              >
+                {t.popular && (
+                  <Badge className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-gradient-to-r from-[#534AB7] to-blue-500 px-4 py-1 text-xs shadow-lg">
+                    Популярный
+                  </Badge>
+                )}
+                <h3 className="font-bold text-xl mb-2">{t.name}</h3>
+                <div className="flex items-baseline gap-1.5 mb-5">
+                  <span className="text-4xl font-bold tracking-tight">{t.price}</span>
+                  <span className="text-sm text-muted-foreground">₽/мес</span>
+                </div>
+                <div className="text-xs text-muted-foreground mb-5 space-y-1 pb-5 border-b border-border/50">
+                  <p>{t.vacancies}</p>
+                  <p>{t.candidates}</p>
+                </div>
+                <ul className="space-y-3 mb-8 flex-1">
+                  {t.features.map((f) => (
+                    <li key={f} className="flex items-center gap-2.5 text-sm">
+                      <Check className="w-4 h-4 text-[#534AB7] shrink-0" />
+                      {f}
+                    </li>
+                  ))}
+                </ul>
+                <Button
+                  variant={t.popular ? "default" : "outline"}
+                  className={cn(
+                    "w-full h-11",
+                    t.popular && "bg-gradient-to-r from-[#534AB7] to-blue-500 hover:from-[#4338a8] hover:to-blue-600 shadow-lg shadow-[#534AB7]/20"
+                  )}
+                  asChild
+                >
+                  <Link href="/register">Выбрать</Link>
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── МЕТРИКИ ── */}
+      <section className="bg-stone-50 py-24 md:py-28">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-10">
+            {COUNTER_METRICS.map((m) => (
+              <MetricCounter key={m.label} {...m} />
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── CTA ── */}
+      <section className="py-24 md:py-28 relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-[#534AB7]/5 via-transparent to-blue-500/5 pointer-events-none" />
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 text-center relative">
+          <h2 className="text-3xl md:text-5xl font-bold mb-5">Попробуйте Company24 бесплатно</h2>
+          <p className="text-xl text-muted-foreground mb-10">14 дней полного доступа. Без привязки карты.</p>
+          <Button size="lg" className="bg-gradient-to-r from-[#534AB7] to-blue-500 hover:from-[#4338a8] hover:to-blue-600 h-14 px-12 text-lg shadow-xl shadow-[#534AB7]/25 transition-all hover:shadow-2xl hover:scale-[1.02]" asChild>
+            <Link href="/register">Начать бесплатно <ArrowRight className="w-5 h-5 ml-2" /></Link>
+          </Button>
+        </div>
+      </section>
+
+      {/* ── FOOTER ── */}
+      <footer id="about" className="bg-zinc-950 text-zinc-400 py-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6">
+          <div className="grid md:grid-cols-4 gap-10 mb-14">
+            <div>
+              <div className="flex items-center gap-2.5 mb-5">
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#534AB7] to-blue-500 flex items-center justify-center">
+                  <span className="text-white font-bold text-base">C</span>
+                </div>
+                <span className="font-bold text-xl text-white tracking-tight">Company24</span>
+              </div>
+              <p className="text-sm leading-relaxed mb-6">AI-операционная система для бизнеса. Автоматизация HR, маркетинга, продаж и логистики.</p>
+              {/* Social icons */}
+              <div className="flex gap-3">
+                <a href="#" className="w-9 h-9 rounded-lg bg-zinc-800 hover:bg-zinc-700 flex items-center justify-center transition-colors" aria-label="Telegram">
+                  <svg viewBox="0 0 24 24" className="w-4.5 h-4.5 fill-zinc-400">
+                    <path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z" />
+                  </svg>
+                </a>
+                <a href="#" className="w-9 h-9 rounded-lg bg-zinc-800 hover:bg-zinc-700 flex items-center justify-center transition-colors" aria-label="VK">
+                  <svg viewBox="0 0 24 24" className="w-4.5 h-4.5 fill-zinc-400">
+                    <path d="M15.684 0H8.316C1.592 0 0 1.592 0 8.316v7.368C0 22.408 1.592 24 8.316 24h7.368C22.408 24 24 22.408 24 15.684V8.316C24 1.592 22.391 0 15.684 0zm3.692 17.123h-1.744c-.66 0-.864-.525-2.05-1.727-1.033-1-1.49-1.135-1.744-1.135-.356 0-.458.102-.458.593v1.575c0 .424-.135.678-1.253.678-1.846 0-3.896-1.118-5.335-3.202C4.624 10.857 4.03 8.57 4.03 8.096c0-.254.102-.491.593-.491h1.744c.44 0 .61.203.78.677.863 2.49 2.303 4.675 2.896 4.675.22 0 .322-.102.322-.66V9.721c-.068-1.186-.695-1.287-.695-1.71 0-.203.17-.407.44-.407h2.744c.373 0 .508.203.508.643v3.473c0 .372.17.508.271.508.22 0 .407-.136.813-.542 1.253-1.406 2.15-3.574 2.15-3.574.119-.254.322-.491.763-.491h1.744c.525 0 .644.27.525.643-.22 1.017-2.354 4.031-2.354 4.031-.186.305-.254.44 0 .78.186.254.796.779 1.203 1.253.745.847 1.32 1.558 1.473 2.05.17.49-.085.744-.576.744z" />
+                  </svg>
+                </a>
+              </div>
+            </div>
+            {FOOTER_COLS.map((col) => (
+              <div key={col.title}>
+                <h4 className="font-semibold text-white text-sm mb-5">{col.title}</h4>
+                <ul className="space-y-3">
+                  {col.links.map((l) => (
+                    <li key={l}>
+                      <a href="#" className="text-sm hover:text-white transition-colors">{l}</a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+          <div className="border-t border-zinc-800 pt-8 text-center text-xs text-zinc-600">
+            &copy; 2026 Company24. Все права защищены.
+          </div>
+        </div>
+      </footer>
+    </div>
+  )
+}

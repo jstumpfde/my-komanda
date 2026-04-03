@@ -1,0 +1,853 @@
+"use client"
+
+import { useState, useEffect, useRef } from "react"
+import Link from "next/link"
+import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
+import {
+  Users, Megaphone, DollarSign, Truck, Brain, MessageSquare, BarChart3,
+  Target, Zap, ArrowRight, Check, X, Minus,
+  Clock, TrendingUp, Award, Building2,
+  Bot, Handshake,
+  Menu, X as XIcon, TrendingDown, PhoneOff, Play,
+} from "lucide-react"
+
+// ─── Scroll reveal hook ──────────────────────────────────────────────────────
+
+function useReveal(threshold = 0.15) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [visible, setVisible] = useState(false)
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const obs = new IntersectionObserver(
+      ([e]) => { if (e.isIntersecting) { setVisible(true); obs.disconnect() } },
+      { threshold }
+    )
+    obs.observe(el)
+    return () => obs.disconnect()
+  }, [threshold])
+  return { ref, visible }
+}
+
+// ─── Count-up hook ───────────────────────────────────────────────────────────
+
+function useCountUp(end: number, duration = 2000) {
+  const [value, setValue] = useState(0)
+  const [started, setStarted] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const obs = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) { setStarted(true); obs.disconnect() } },
+      { threshold: 0.3 }
+    )
+    obs.observe(el)
+    return () => obs.disconnect()
+  }, [])
+
+  useEffect(() => {
+    if (!started) return
+    const startTime = performance.now()
+    const tick = (now: number) => {
+      const progress = Math.min((now - startTime) / duration, 1)
+      const eased = 1 - Math.pow(1 - progress, 3)
+      setValue(Math.round(eased * end))
+      if (progress < 1) requestAnimationFrame(tick)
+    }
+    requestAnimationFrame(tick)
+  }, [started, end, duration])
+
+  return { value, ref }
+}
+
+// ─── Data ────────────────────────────────────────────────────────────────────
+
+const NAV_ITEMS = [
+  { label: "Возможности", href: "#features" },
+  { label: "Модули", href: "#modules" },
+  { label: "Тарифы", href: "#pricing" },
+  { label: "О нас", href: "#about" },
+]
+
+const PROBLEMS = [
+  { icon: Users, title: "HR тонет в резюме", desc: "200+ откликов на вакансию, ручной скрининг каждого", accent: "border-l-rose-500", iconBg: "bg-rose-50", iconColor: "text-rose-500", hoverBorder: "hover:border-rose-200" },
+  { icon: TrendingDown, title: "Маркетинг без аналитики", desc: "Бюджеты сливаются, ROI непонятен", accent: "border-l-amber-500", iconBg: "bg-amber-50", iconColor: "text-amber-500", hoverBorder: "hover:border-amber-200" },
+  { icon: PhoneOff, title: "Продажи в хаосе", desc: "Лиды теряются, менеджеры забывают перезвонить", accent: "border-l-violet-500", iconBg: "bg-violet-50", iconColor: "text-violet-500", hoverBorder: "hover:border-violet-200" },
+  { icon: BarChart3, title: "Нет общей картины", desc: "Данные в 10 табличках, отчёты раз в месяц", accent: "border-l-emerald-500", iconBg: "bg-emerald-50", iconColor: "text-emerald-500", hoverBorder: "hover:border-emerald-200" },
+]
+
+const COMPARISON_ROWS = [
+  { feature: "Автоматизация найма", c24: "check", crm: "no", erp: "partial", manual: "no" },
+  { feature: "AI-скоринг кандидатов", c24: "check", crm: "no", erp: "no", manual: "no" },
+  { feature: "Маркетинговая аналитика", c24: "check", crm: "partial", erp: "no", manual: "partial" },
+  { feature: "Воронка продаж", c24: "check", crm: "check", erp: "partial", manual: "no" },
+  { feature: "Управление складом", c24: "check", crm: "no", erp: "check", manual: "partial" },
+  { feature: "Стоимость внедрения", c24: "check", crm: "partial", erp: "no", manual: "check" },
+]
+
+const MODULES = [
+  {
+    id: "hr", icon: Users, label: "HR и команда",
+    gradient: "from-indigo-500 to-violet-500",
+    lightBg: "bg-indigo-50", lightColor: "text-indigo-600",
+    features: [
+      "AI-скоринг кандидатов за секунды",
+      "Демо-курс «Один день в должности»",
+      "Автоматическая воронка найма",
+      "Интеграция с hh.ru, Авито, SuperJob",
+      "Адаптация и онбординг",
+      "Аналитика по каждой вакансии",
+    ],
+  },
+  {
+    id: "marketing", icon: Megaphone, label: "Маркетинг",
+    gradient: "from-rose-500 to-pink-500",
+    lightBg: "bg-rose-50", lightColor: "text-rose-600",
+    features: [
+      "Анализ конкурентов в реальном времени",
+      "ROI по каждому каналу",
+      "AI-генерация контента",
+      "UTM-аналитика и атрибуция",
+      "SEO-мониторинг",
+    ],
+  },
+  {
+    id: "sales", icon: DollarSign, label: "Продажи",
+    gradient: "from-amber-500 to-orange-500",
+    lightBg: "bg-amber-50", lightColor: "text-amber-600",
+    features: [
+      "AI-квалификация лидов",
+      "Автоматические follow-up",
+      "Воронка сделок с прогнозами",
+      "Интеграция с Битрикс24 и AmoCRM",
+      "Аналитика менеджеров",
+    ],
+  },
+  {
+    id: "logistics", icon: Truck, label: "Логистика и склад",
+    gradient: "from-emerald-500 to-teal-500",
+    lightBg: "bg-emerald-50", lightColor: "text-emerald-600",
+    features: [
+      "Управление заказами",
+      "Складской учёт",
+      "Маршрутизация доставок",
+      "Аналитика закупок",
+      "Прогноз спроса",
+    ],
+  },
+]
+
+const STEPS = [
+  { num: "01", title: "Подключите", desc: "Регистрация за 2 минуты, импорт данных из CRM", icon: Zap, gradient: "from-indigo-500 to-violet-500" },
+  { num: "02", title: "AI настроит", desc: "Агенты анализируют ваш бизнес и настраивают автоматизации", icon: Brain, gradient: "from-rose-500 to-orange-500" },
+  { num: "03", title: "Работает 24/7", desc: "AI ведёт рутину, вы принимаете решения", icon: Clock, gradient: "from-emerald-500 to-teal-500" },
+]
+
+const AI_AGENTS = [
+  { icon: Brain, name: "Скоринг-агент", desc: "Оценивает кандидатов по 50+ параметрам", gradient: "from-indigo-500 to-violet-600", lightBg: "bg-indigo-50" },
+  { icon: MessageSquare, name: "Коммуникатор", desc: "Отправляет сообщения, назначает интервью", gradient: "from-rose-500 to-pink-600", lightBg: "bg-rose-50" },
+  { icon: BarChart3, name: "Аналитик", desc: "Строит отчёты, находит узкие места", gradient: "from-emerald-500 to-teal-600", lightBg: "bg-emerald-50" },
+  { icon: Target, name: "Маркетолог", desc: "Анализирует конкурентов, оптимизирует бюджет", gradient: "from-amber-500 to-orange-600", lightBg: "bg-amber-50" },
+  { icon: Handshake, name: "Продавец", desc: "Квалифицирует лиды, напоминает о follow-up", gradient: "from-violet-500 to-purple-600", lightBg: "bg-violet-50" },
+  { icon: Truck, name: "Логист", desc: "Оптимизирует маршруты, прогнозирует спрос", gradient: "from-cyan-500 to-blue-600", lightBg: "bg-cyan-50" },
+]
+
+const TARIFFS = [
+  { name: "Solo", price: "14 900", vacancies: "1 вакансия", candidates: "400 кандидатов", popular: false, features: ["1 пользователь", "Базовый AI-скоринг", "Email-поддержка"] },
+  { name: "Starter", price: "24 900", vacancies: "3 вакансии", candidates: "1 200 кандидатов", popular: false, features: ["3 пользователя", "Расширенный AI", "Интеграция hh.ru", "Чат-поддержка"] },
+  { name: "Business", price: "49 900", vacancies: "10 вакансий", candidates: "4 000 кандидатов", popular: true, features: ["10 пользователей", "Все AI-агенты", "Branding", "AI-видеоинтервью", "Приоритетная поддержка"] },
+  { name: "Pro", price: "99 900", vacancies: "22 вакансии", candidates: "10 000 кандидатов", popular: false, features: ["Безлимит пользователей", "Все модули", "Custom domain", "API доступ", "Персональный менеджер"] },
+]
+
+const COUNTER_METRICS = [
+  { end: 60, suffix: "%", prefix: "", label: "быстрее найм", icon: Clock },
+  { end: 3, suffix: "x", prefix: "", label: "меньше рутины", icon: TrendingUp },
+  { end: 4, suffix: "x", prefix: "ROI ", label: "за 3 месяца", icon: Award },
+  { end: 500, suffix: "+", prefix: "", label: "компаний доверяют", icon: Building2 },
+]
+
+const FOOTER_COLS = [
+  { title: "Продукт", links: ["Возможности", "Модули", "Тарифы", "API"] },
+  { title: "Компания", links: ["О нас", "Блог", "Карьера", "Контакты"] },
+  { title: "Юридическое", links: ["Политика конфиденциальности", "Условия использования", "Оферта"] },
+]
+
+// ─── Sub-components ──────────────────────────────────────────────────────────
+
+function ComparisonIcon({ val }: { val: string }) {
+  if (val === "check") return (
+    <div className="flex justify-center">
+      <div className="w-7 h-7 rounded-full bg-emerald-50 flex items-center justify-center">
+        <Check className="w-4 h-4 text-emerald-500" />
+      </div>
+    </div>
+  )
+  if (val === "no") return (
+    <div className="flex justify-center">
+      <div className="w-7 h-7 rounded-full bg-stone-50 flex items-center justify-center">
+        <X className="w-4 h-4 text-stone-300" />
+      </div>
+    </div>
+  )
+  return (
+    <div className="flex justify-center">
+      <div className="w-7 h-7 rounded-full bg-amber-50 flex items-center justify-center">
+        <Minus className="w-4 h-4 text-amber-400" />
+      </div>
+    </div>
+  )
+}
+
+function MetricCounter({ end, suffix, prefix, label, icon: Icon }: typeof COUNTER_METRICS[number]) {
+  const { value, ref } = useCountUp(end, 2000)
+  return (
+    <div ref={ref} className="text-center">
+      <p className="text-5xl font-bold text-white mb-2 tracking-tight">
+        {prefix}{value}{suffix}
+      </p>
+      <p className="text-white/60 text-sm">{label}</p>
+    </div>
+  )
+}
+
+// ─── Floating hero card ──────────────────────────────────────────────────────
+
+function FloatingCard({ children, className, delay = "0s" }: { children: React.ReactNode; className?: string; delay?: string }) {
+  return (
+    <div
+      className={cn(
+        "absolute bg-white/90 backdrop-blur-xl border border-white/60 rounded-2xl p-4 shadow-[0_8px_32px_rgba(0,0,0,0.06)]",
+        className
+      )}
+      style={{
+        animation: `float 7s ease-in-out infinite`,
+        animationDelay: delay,
+      }}
+    >
+      {children}
+    </div>
+  )
+}
+
+// ─── CSS Animations ──────────────────────────────────────────────────────────
+
+const CUSTOM_STYLES = `
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-12px); }
+}
+@keyframes blob-drift-1 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  25% { transform: translate(30px, -50px) scale(1.08); }
+  50% { transform: translate(-20px, 30px) scale(0.94); }
+  75% { transform: translate(40px, 20px) scale(1.04); }
+}
+@keyframes blob-drift-2 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  25% { transform: translate(-40px, 30px) scale(0.95); }
+  50% { transform: translate(30px, -40px) scale(1.1); }
+  75% { transform: translate(-20px, -30px) scale(1.02); }
+}
+@keyframes blob-drift-3 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(25px, -35px) scale(1.06); }
+  66% { transform: translate(-35px, 25px) scale(0.96); }
+}
+@keyframes pulse-ring {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(1.6); }
+}
+@keyframes bar-grow {
+  from { height: 0%; }
+}
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(30px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+`
+
+// ─── Landing Page ────────────────────────────────────────────────────────────
+
+export default function LandingPage() {
+  const [activeModule, setActiveModule] = useState("hr")
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [scrolled, setScrolled] = useState(false)
+
+  // Section reveals
+  const problems = useReveal()
+  const comparison = useReveal()
+  const modules = useReveal()
+  const steps = useReveal()
+  const agents = useReveal()
+  const pricing = useReveal()
+  const cta = useReveal()
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 20)
+    window.addEventListener("scroll", onScroll, { passive: true })
+    return () => window.removeEventListener("scroll", onScroll)
+  }, [])
+
+  const currentModule = MODULES.find((m) => m.id === activeModule) ?? MODULES[0]
+
+  return (
+    <div className="min-h-screen bg-[#FBF8F3] text-stone-900 antialiased scroll-smooth">
+      <style dangerouslySetInnerHTML={{ __html: CUSTOM_STYLES }} />
+
+      {/* ── HEADER ── */}
+      <header className={cn(
+        "sticky top-0 z-50 transition-all duration-300 border-b",
+        scrolled
+          ? "bg-[#FBF8F3]/90 backdrop-blur-xl border-stone-200/60 shadow-sm"
+          : "bg-transparent border-transparent"
+      )}>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+          <Link href="/" className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+              <span className="text-white font-bold text-base">C</span>
+            </div>
+            <span className="font-bold text-xl tracking-tight text-stone-800">Company24</span>
+          </Link>
+
+          <nav className="hidden md:flex items-center gap-8">
+            {NAV_ITEMS.map((item) => (
+              <a key={item.href} href={item.href} className="text-sm font-medium text-stone-500 hover:text-stone-800 transition-colors">
+                {item.label}
+              </a>
+            ))}
+          </nav>
+
+          <div className="hidden md:flex items-center gap-3">
+            <Button variant="ghost" size="sm" className="text-stone-600 hover:text-stone-800" asChild>
+              <Link href="/login">Войти</Link>
+            </Button>
+            <Button size="sm" className="bg-gradient-to-r from-indigo-500 to-violet-500 hover:from-indigo-600 hover:to-violet-600 shadow-lg shadow-indigo-500/20 text-white" asChild>
+              <Link href="/register">Попробовать бесплатно</Link>
+            </Button>
+          </div>
+
+          <button className="md:hidden p-2" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
+            {mobileMenuOpen ? <XIcon className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          </button>
+        </div>
+
+        {mobileMenuOpen && (
+          <div className="md:hidden border-t border-stone-200 bg-[#FBF8F3]/95 backdrop-blur-xl px-4 py-4 space-y-3">
+            {NAV_ITEMS.map((item) => (
+              <a key={item.href} href={item.href} className="block text-sm font-medium text-stone-500" onClick={() => setMobileMenuOpen(false)}>
+                {item.label}
+              </a>
+            ))}
+            <div className="flex gap-2 pt-2">
+              <Button variant="outline" size="sm" className="flex-1" asChild>
+                <Link href="/login">Войти</Link>
+              </Button>
+              <Button size="sm" className="flex-1 bg-gradient-to-r from-indigo-500 to-violet-500 text-white" asChild>
+                <Link href="/register">Бесплатно</Link>
+              </Button>
+            </div>
+          </div>
+        )}
+      </header>
+
+      {/* ── HERO ── */}
+      <section className="relative overflow-hidden min-h-[90vh] flex items-center">
+        {/* Gradient mesh blobs */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <div
+            className="absolute -top-32 right-[-10%] w-[500px] h-[500px] rounded-full opacity-40"
+            style={{ background: "radial-gradient(circle, rgba(99,102,241,0.3) 0%, transparent 70%)", animation: "blob-drift-1 18s ease-in-out infinite" }}
+          />
+          <div
+            className="absolute bottom-[-10%] left-[-5%] w-[450px] h-[450px] rounded-full opacity-35"
+            style={{ background: "radial-gradient(circle, rgba(244,114,82,0.25) 0%, transparent 70%)", animation: "blob-drift-2 22s ease-in-out infinite" }}
+          />
+          <div
+            className="absolute top-[30%] left-[40%] w-[350px] h-[350px] rounded-full opacity-25"
+            style={{ background: "radial-gradient(circle, rgba(16,185,129,0.2) 0%, transparent 70%)", animation: "blob-drift-3 15s ease-in-out infinite" }}
+          />
+          <div
+            className="absolute top-[15%] left-[15%] w-[250px] h-[250px] rounded-full opacity-30"
+            style={{ background: "radial-gradient(circle, rgba(251,191,36,0.2) 0%, transparent 70%)", animation: "blob-drift-1 20s ease-in-out infinite reverse" }}
+          />
+        </div>
+
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-20 md:py-28 relative w-full">
+          <div className="grid lg:grid-cols-2 gap-16 items-center">
+            <div style={{ animation: "fade-in-up 0.8s ease-out" }}>
+              <div className="inline-flex items-center gap-2 text-xs font-medium tracking-wide uppercase text-indigo-600 bg-indigo-50 border border-indigo-100 px-4 py-2 rounded-full mb-6">
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inset-0 rounded-full bg-emerald-400 opacity-75" style={{ animation: "pulse-ring 2s ease-in-out infinite" }} />
+                  <span className="relative rounded-full h-2 w-2 bg-emerald-500" />
+                </span>
+                AI Business OS
+              </div>
+
+              <h1 className="text-5xl md:text-6xl lg:text-[68px] font-bold tracking-tight leading-[1.05] mb-6 text-stone-800">
+                Бизнес работает.{" "}
+                <span className="bg-gradient-to-r from-indigo-500 via-violet-500 to-purple-500 bg-clip-text text-transparent italic">
+                  Даже когда
+                </span>{" "}
+                <span className="bg-gradient-to-r from-rose-500 to-orange-500 bg-clip-text text-transparent italic">
+                  вы спите.
+                </span>
+              </h1>
+
+              <p className="text-lg text-stone-500 mb-10 max-w-xl leading-relaxed">
+                Company24.pro автоматизирует HR, маркетинг, продажи и логистику. AI-агенты берут на себя 80% рутины. Снижаем затраты и увеличиваем эффективность.
+              </p>
+
+              <div className="flex flex-wrap gap-4 mb-8">
+                <Button size="lg" className="bg-gradient-to-r from-indigo-500 to-violet-500 hover:from-indigo-600 hover:to-violet-600 h-14 px-10 text-base shadow-xl shadow-indigo-500/20 transition-all hover:shadow-2xl hover:shadow-indigo-500/30 hover:scale-[1.02] text-white rounded-2xl" asChild>
+                  <Link href="/register">Начать бесплатно <ArrowRight className="w-5 h-5 ml-2" /></Link>
+                </Button>
+                <Button variant="outline" size="lg" className="h-14 px-10 text-base rounded-2xl border-stone-200 text-stone-600 hover:bg-white hover:border-indigo-200 hover:text-indigo-600 transition-all">
+                  <Play className="w-4 h-4 mr-2" /> Смотреть демо
+                </Button>
+              </div>
+
+              <p className="text-sm text-stone-400">
+                Бесплатно 14 дней · Без привязки карты · 500+ компаний
+              </p>
+            </div>
+
+            {/* Floating metric cards */}
+            <div className="relative hidden lg:block h-[500px]" style={{ animation: "fade-in-up 1s ease-out 0.3s both" }}>
+              {/* Card: Candidates */}
+              <FloatingCard className="top-0 left-4" delay="0s">
+                <p className="text-[10px] text-stone-400 uppercase tracking-wide mb-1">Кандидатов</p>
+                <p className="text-3xl font-bold bg-gradient-to-r from-indigo-500 to-violet-500 bg-clip-text text-transparent">1 247</p>
+                <div className="flex items-center gap-1 mt-2">
+                  <TrendingUp className="w-3 h-3 text-emerald-500" />
+                  <span className="text-xs text-emerald-500 font-medium">+23% за месяц</span>
+                </div>
+              </FloatingCard>
+
+              {/* Card: Conversion with mini chart */}
+              <FloatingCard className="top-2 right-0" delay="1.5s">
+                <p className="text-[10px] text-stone-400 uppercase tracking-wide mb-1">Конверсия воронки</p>
+                <p className="text-3xl font-bold text-emerald-500">34.2%</p>
+                <div className="flex items-end gap-[3px] h-7 mt-2">
+                  {[40, 60, 50, 75, 65, 90].map((h, i) => (
+                    <div
+                      key={i}
+                      className="w-[6px] rounded-sm bg-gradient-to-t from-emerald-500 to-emerald-300"
+                      style={{ height: `${h}%`, animation: `bar-grow 1s ease-out ${0.1 * i}s both` }}
+                    />
+                  ))}
+                </div>
+              </FloatingCard>
+
+              {/* Card: Agent status */}
+              <FloatingCard className="bottom-[120px] left-1/2 -translate-x-1/2 min-w-[240px]" delay="3s">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center">
+                    <Brain className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-stone-700">Скоринг-агент</p>
+                    <div className="flex items-center gap-1.5">
+                      <span className="relative flex h-2 w-2">
+                        <span className="absolute inset-0 rounded-full bg-emerald-400 opacity-75" style={{ animation: "pulse-ring 1.5s infinite" }} />
+                        <span className="relative rounded-full h-2 w-2 bg-emerald-500" />
+                      </span>
+                      <span className="text-xs text-emerald-500">Обрабатывает 12 резюме...</span>
+                    </div>
+                  </div>
+                </div>
+              </FloatingCard>
+
+              {/* Card: Time to hire */}
+              <FloatingCard className="bottom-[40px] left-8" delay="2s">
+                <p className="text-[10px] text-stone-400 uppercase tracking-wide mb-1">Время найма</p>
+                <p className="text-3xl font-bold text-rose-500">12 дн</p>
+                <div className="flex items-center gap-1 mt-2">
+                  <TrendingDown className="w-3 h-3 text-emerald-500" />
+                  <span className="text-xs text-emerald-500 font-medium">быстрее на 40%</span>
+                </div>
+              </FloatingCard>
+
+              {/* Card: Revenue */}
+              <FloatingCard className="top-[180px] right-4" delay="4.5s">
+                <p className="text-[10px] text-stone-400 uppercase tracking-wide mb-1">ROI</p>
+                <p className="text-3xl font-bold text-amber-500">4.2x</p>
+                <p className="text-xs text-stone-400 mt-1">за 3 месяца</p>
+              </FloatingCard>
+
+              {/* Background glow */}
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] bg-gradient-to-br from-indigo-200/20 to-violet-200/20 rounded-full blur-3xl pointer-events-none" />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── ПРОБЛЕМЫ ── */}
+      <section id="features" className="py-24 md:py-28 bg-white">
+        <div
+          ref={problems.ref}
+          className={cn(
+            "max-w-7xl mx-auto px-4 sm:px-6 transition-all duration-700",
+            problems.visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-10"
+          )}
+        >
+          <div className="text-center mb-14">
+            <span className="inline-block text-xs font-medium tracking-widest uppercase text-rose-500 bg-rose-50 border border-rose-100 px-4 py-1.5 rounded-full mb-4">
+              Знакомо?
+            </span>
+            <h2 className="text-3xl md:text-4xl font-bold text-stone-800">С чем сталкиваются компании каждый день</h2>
+          </div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
+            {PROBLEMS.map((p, i) => (
+              <div
+                key={p.title}
+                className={cn(
+                  "bg-[#FBF8F3] rounded-2xl border border-stone-100 border-l-4 p-7 transition-all duration-300 hover:shadow-xl hover:-translate-y-1 group",
+                  p.accent, p.hoverBorder
+                )}
+                style={{ animationDelay: `${i * 0.1}s` }}
+              >
+                <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center mb-5 transition-colors", p.iconBg)}>
+                  <p.icon className={cn("w-6 h-6", p.iconColor)} />
+                </div>
+                <h3 className="font-semibold text-lg mb-2 text-stone-800">{p.title}</h3>
+                <p className="text-sm text-stone-500 leading-relaxed">{p.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── РЕШЕНИЕ ── */}
+      <section className="py-24 md:py-28 bg-gradient-to-br from-violet-50/50 via-indigo-50/30 to-emerald-50/30">
+        <div
+          ref={comparison.ref}
+          className={cn(
+            "max-w-7xl mx-auto px-4 sm:px-6 transition-all duration-700",
+            comparison.visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-10"
+          )}
+        >
+          <div className="text-center mb-14 max-w-3xl mx-auto">
+            <span className="inline-block text-xs font-medium tracking-widest uppercase text-indigo-500 bg-indigo-50 border border-indigo-100 px-4 py-1.5 rounded-full mb-4">
+              Почему мы
+            </span>
+            <h2 className="text-3xl md:text-4xl font-bold mb-4 text-stone-800">
+              Не CRM. Не ERP.{" "}
+              <span className="bg-gradient-to-r from-indigo-500 to-violet-500 bg-clip-text text-transparent">AI Business OS.</span>
+            </h2>
+            <p className="text-stone-500 text-lg">Операционная система для бизнеса, где AI делает работу, а не просто показывает графики.</p>
+          </div>
+
+          <div className="overflow-x-auto max-w-4xl mx-auto">
+            <div className="bg-white rounded-3xl border border-stone-100 shadow-sm overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-stone-100">
+                    <th className="text-left py-4 px-6 font-medium text-stone-400 text-xs uppercase tracking-wide" />
+                    <th className="py-4 px-6">
+                      <span className="font-bold text-indigo-600 bg-indigo-50 px-4 py-1.5 rounded-full text-xs border border-indigo-100">Company24</span>
+                    </th>
+                    <th className="py-4 px-6 font-medium text-stone-400 text-xs uppercase tracking-wide">CRM</th>
+                    <th className="py-4 px-6 font-medium text-stone-400 text-xs uppercase tracking-wide">ERP</th>
+                    <th className="py-4 px-6 font-medium text-stone-400 text-xs uppercase tracking-wide">Вручную</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {COMPARISON_ROWS.map((r) => (
+                    <tr key={r.feature} className="border-b border-stone-50 last:border-0 hover:bg-stone-50/50 transition-colors">
+                      <td className="py-4 px-6 font-medium text-stone-700">{r.feature}</td>
+                      <td className="py-4 px-6"><ComparisonIcon val={r.c24} /></td>
+                      <td className="py-4 px-6"><ComparisonIcon val={r.crm} /></td>
+                      <td className="py-4 px-6"><ComparisonIcon val={r.erp} /></td>
+                      <td className="py-4 px-6"><ComparisonIcon val={r.manual} /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── МОДУЛИ ── */}
+      <section id="modules" className="bg-white py-24 md:py-28">
+        <div
+          ref={modules.ref}
+          className={cn(
+            "max-w-7xl mx-auto px-4 sm:px-6 transition-all duration-700",
+            modules.visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-10"
+          )}
+        >
+          <div className="text-center mb-14">
+            <span className="inline-block text-xs font-medium tracking-widest uppercase text-emerald-500 bg-emerald-50 border border-emerald-100 px-4 py-1.5 rounded-full mb-4">
+              Модули
+            </span>
+            <h2 className="text-3xl md:text-4xl font-bold text-stone-800">4 модуля — одна платформа</h2>
+          </div>
+
+          {/* Tabs */}
+          <div className="flex justify-center mb-10">
+            <div className="inline-flex bg-[#FBF8F3] rounded-2xl border border-stone-100 p-1.5 gap-1">
+              {MODULES.map((m) => (
+                <button
+                  key={m.id}
+                  onClick={() => setActiveModule(m.id)}
+                  className={cn(
+                    "flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium transition-all duration-200",
+                    activeModule === m.id
+                      ? `bg-gradient-to-r ${m.gradient} text-white shadow-lg`
+                      : "text-stone-500 hover:text-stone-700 hover:bg-white"
+                  )}
+                >
+                  <m.icon className="w-4 h-4" />
+                  <span className="hidden sm:inline">{m.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Module content */}
+          <div className="bg-[#FBF8F3] rounded-3xl border border-stone-100 p-10 max-w-2xl mx-auto transition-all duration-300">
+            <div className="flex items-center gap-4 mb-8">
+              <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center", currentModule.lightBg)}>
+                <currentModule.icon className={cn("w-6 h-6", currentModule.lightColor)} />
+              </div>
+              <h3 className="text-2xl font-bold text-stone-800">{currentModule.label}</h3>
+            </div>
+            <ul className="space-y-4">
+              {currentModule.features.map((f) => (
+                <li key={f} className="flex items-start gap-3">
+                  <div className={cn("w-6 h-6 rounded-lg flex items-center justify-center shrink-0 mt-0.5", currentModule.lightBg)}>
+                    <Check className={cn("w-3.5 h-3.5", currentModule.lightColor)} />
+                  </div>
+                  <span className="text-[15px] text-stone-700">{f}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      {/* ── 3 ШАГА ── */}
+      <section className="py-24 md:py-28 bg-[#F5F0E8]">
+        <div
+          ref={steps.ref}
+          className={cn(
+            "max-w-7xl mx-auto px-4 sm:px-6 transition-all duration-700",
+            steps.visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-10"
+          )}
+        >
+          <div className="text-center mb-14">
+            <span className="inline-block text-xs font-medium tracking-widest uppercase text-stone-500 bg-white border border-stone-100 px-4 py-1.5 rounded-full mb-4">
+              Как это работает
+            </span>
+            <h2 className="text-3xl md:text-4xl font-bold text-stone-800">3 шага к автоматизации</h2>
+          </div>
+          <div className="grid md:grid-cols-3 gap-8">
+            {STEPS.map((s, i) => (
+              <div key={s.num} className="relative bg-white rounded-3xl border border-stone-100 p-9 text-center transition-all duration-300 hover:shadow-xl hover:-translate-y-1">
+                <div className={cn("w-14 h-14 rounded-2xl bg-gradient-to-br flex items-center justify-center mx-auto mb-5 shadow-lg", s.gradient)}>
+                  <s.icon className="w-7 h-7 text-white" />
+                </div>
+                <h3 className="font-bold text-xl mb-3 text-stone-800">{s.title}</h3>
+                <p className="text-stone-500 leading-relaxed">{s.desc}</p>
+                {i < 2 && (
+                  <ArrowRight className="hidden md:block absolute -right-5 top-1/2 -translate-y-1/2 w-5 h-5 text-stone-300 z-10" />
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── AI-АГЕНТЫ ── */}
+      <section className="py-24 md:py-28 bg-gradient-to-br from-orange-50/40 via-rose-50/30 to-indigo-50/40">
+        <div
+          ref={agents.ref}
+          className={cn(
+            "max-w-7xl mx-auto px-4 sm:px-6 transition-all duration-700",
+            agents.visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-10"
+          )}
+        >
+          <div className="text-center mb-14">
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium tracking-widest uppercase text-violet-500 bg-violet-50 border border-violet-100 px-4 py-1.5 rounded-full mb-4">
+              <Bot className="w-3.5 h-3.5" /> AI-агенты
+            </span>
+            <h2 className="text-3xl md:text-4xl font-bold text-stone-800">6 агентов работают на вас</h2>
+          </div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            {AI_AGENTS.map((a) => (
+              <div key={a.name} className="bg-white/80 backdrop-blur-sm rounded-2xl border border-white/60 p-7 flex items-start gap-5 transition-all duration-300 hover:shadow-xl hover:-translate-y-1 group">
+                <div className="relative shrink-0">
+                  <div className={cn("w-12 h-12 rounded-xl bg-gradient-to-br flex items-center justify-center", a.gradient)}>
+                    <a.icon className="w-6 h-6 text-white" />
+                  </div>
+                  <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5">
+                    <span className="absolute inset-0 rounded-full bg-emerald-400 opacity-75" style={{ animation: "pulse-ring 2s ease-in-out infinite" }} />
+                    <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-emerald-500 border-2 border-white" />
+                  </span>
+                </div>
+                <div>
+                  <h3 className="font-semibold text-base mb-1 text-stone-800">{a.name}</h3>
+                  <p className="text-sm text-stone-500 leading-relaxed">{a.desc}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── МЕТРИКИ ── */}
+      <section className="py-20 md:py-24 bg-gradient-to-r from-indigo-500 via-violet-500 to-purple-500 relative overflow-hidden">
+        <div className="absolute inset-0 pointer-events-none">
+          <div className="absolute top-0 right-0 w-[300px] h-[300px] bg-white/5 rounded-full blur-3xl" />
+          <div className="absolute bottom-0 left-0 w-[200px] h-[200px] bg-white/5 rounded-full blur-3xl" />
+        </div>
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 relative">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-10">
+            {COUNTER_METRICS.map((m) => (
+              <MetricCounter key={m.label} {...m} />
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── ТАРИФЫ ── */}
+      <section id="pricing" className="py-24 md:py-28 bg-white">
+        <div
+          ref={pricing.ref}
+          className={cn(
+            "max-w-7xl mx-auto px-4 sm:px-6 transition-all duration-700",
+            pricing.visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-10"
+          )}
+        >
+          <div className="text-center mb-14">
+            <span className="inline-block text-xs font-medium tracking-widest uppercase text-amber-500 bg-amber-50 border border-amber-100 px-4 py-1.5 rounded-full mb-4">
+              Тарифы
+            </span>
+            <h2 className="text-3xl md:text-4xl font-bold text-stone-800">Выберите свой план</h2>
+          </div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
+            {TARIFFS.map((t) => (
+              <div
+                key={t.name}
+                className={cn(
+                  "rounded-3xl p-7 flex flex-col relative transition-all duration-300 hover:scale-[1.02] hover:shadow-xl",
+                  t.popular
+                    ? "border-2 border-indigo-400 shadow-xl shadow-indigo-500/10 bg-[#FBF8F3]"
+                    : "border border-stone-100 bg-[#FBF8F3] hover:border-indigo-200"
+                )}
+              >
+                {t.popular && (
+                  <span className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-gradient-to-r from-indigo-500 to-violet-500 text-white px-4 py-1 rounded-full text-xs font-medium shadow-lg">
+                    Популярный
+                  </span>
+                )}
+                <h3 className="font-bold text-xl mb-2 text-stone-800">{t.name}</h3>
+                <div className="flex items-baseline gap-1.5 mb-5">
+                  <span className="text-4xl font-bold tracking-tight text-stone-800">{t.price}</span>
+                  <span className="text-sm text-stone-400">₽/мес</span>
+                </div>
+                <div className="text-xs text-stone-400 mb-5 space-y-1 pb-5 border-b border-stone-100">
+                  <p>{t.vacancies}</p>
+                  <p>{t.candidates}</p>
+                </div>
+                <ul className="space-y-3 mb-8 flex-1">
+                  {t.features.map((f) => (
+                    <li key={f} className="flex items-center gap-2.5 text-sm text-stone-600">
+                      <div className="w-5 h-5 rounded-md bg-indigo-50 flex items-center justify-center">
+                        <Check className="w-3 h-3 text-indigo-500" />
+                      </div>
+                      {f}
+                    </li>
+                  ))}
+                </ul>
+                <Button
+                  variant={t.popular ? "default" : "outline"}
+                  className={cn(
+                    "w-full h-11 rounded-xl",
+                    t.popular
+                      ? "bg-gradient-to-r from-indigo-500 to-violet-500 hover:from-indigo-600 hover:to-violet-600 shadow-lg shadow-indigo-500/20 text-white"
+                      : "border-stone-200 text-stone-600 hover:border-indigo-200 hover:text-indigo-600 hover:bg-indigo-50/50"
+                  )}
+                  asChild
+                >
+                  <Link href="/register">Выбрать</Link>
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── CTA ── */}
+      <section className="py-24 md:py-28 relative overflow-hidden bg-[#FBF8F3]">
+        <div className="absolute inset-0 pointer-events-none">
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[400px] bg-gradient-to-br from-indigo-100/40 to-violet-100/40 rounded-full blur-3xl" />
+        </div>
+        <div
+          ref={cta.ref}
+          className={cn(
+            "max-w-3xl mx-auto px-4 sm:px-6 text-center relative transition-all duration-700",
+            cta.visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-10"
+          )}
+        >
+          <h2 className="text-3xl md:text-5xl font-bold mb-5 text-stone-800">
+            Попробуйте Company24{" "}
+            <span className="bg-gradient-to-r from-indigo-500 to-violet-500 bg-clip-text text-transparent">бесплатно</span>
+          </h2>
+          <p className="text-xl text-stone-500 mb-10">14 дней полного доступа. Без привязки карты.</p>
+          <Button size="lg" className="bg-gradient-to-r from-indigo-500 to-violet-500 hover:from-indigo-600 hover:to-violet-600 h-14 px-12 text-lg shadow-xl shadow-indigo-500/20 transition-all hover:shadow-2xl hover:scale-[1.02] text-white rounded-2xl" asChild>
+            <Link href="/register">Начать бесплатно <ArrowRight className="w-5 h-5 ml-2" /></Link>
+          </Button>
+        </div>
+      </section>
+
+      {/* ── FOOTER ── */}
+      <footer id="about" className="bg-stone-900 text-stone-400 py-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6">
+          <div className="grid md:grid-cols-4 gap-10 mb-14">
+            <div>
+              <div className="flex items-center gap-2.5 mb-5">
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center">
+                  <span className="text-white font-bold text-base">C</span>
+                </div>
+                <span className="font-bold text-xl text-white tracking-tight">Company24</span>
+              </div>
+              <p className="text-sm leading-relaxed mb-6">AI-операционная система для бизнеса. Автоматизация HR, маркетинга, продаж и логистики.</p>
+              <div className="flex gap-3">
+                <a href="#" className="w-9 h-9 rounded-lg bg-stone-800 hover:bg-stone-700 flex items-center justify-center transition-colors" aria-label="Telegram">
+                  <svg viewBox="0 0 24 24" className="w-4.5 h-4.5 fill-stone-400">
+                    <path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z" />
+                  </svg>
+                </a>
+                <a href="#" className="w-9 h-9 rounded-lg bg-stone-800 hover:bg-stone-700 flex items-center justify-center transition-colors" aria-label="VK">
+                  <svg viewBox="0 0 24 24" className="w-4.5 h-4.5 fill-stone-400">
+                    <path d="M15.684 0H8.316C1.592 0 0 1.592 0 8.316v7.368C0 22.408 1.592 24 8.316 24h7.368C22.408 24 24 22.408 24 15.684V8.316C24 1.592 22.391 0 15.684 0zm3.692 17.123h-1.744c-.66 0-.864-.525-2.05-1.727-1.033-1-1.49-1.135-1.744-1.135-.356 0-.458.102-.458.593v1.575c0 .424-.135.678-1.253.678-1.846 0-3.896-1.118-5.335-3.202C4.624 10.857 4.03 8.57 4.03 8.096c0-.254.102-.491.593-.491h1.744c.44 0 .61.203.78.677.863 2.49 2.303 4.675 2.896 4.675.22 0 .322-.102.322-.66V9.721c-.068-1.186-.695-1.287-.695-1.71 0-.203.17-.407.44-.407h2.744c.373 0 .508.203.508.643v3.473c0 .372.17.508.271.508.22 0 .407-.136.813-.542 1.253-1.406 2.15-3.574 2.15-3.574.119-.254.322-.491.763-.491h1.744c.525 0 .644.27.525.643-.22 1.017-2.354 4.031-2.354 4.031-.186.305-.254.44 0 .78.186.254.796.779 1.203 1.253.745.847 1.32 1.558 1.473 2.05.17.49-.085.744-.576.744z" />
+                  </svg>
+                </a>
+              </div>
+            </div>
+            {FOOTER_COLS.map((col) => (
+              <div key={col.title}>
+                <h4 className="font-semibold text-white text-sm mb-5">{col.title}</h4>
+                <ul className="space-y-3">
+                  {col.links.map((l) => (
+                    <li key={l}>
+                      <a href="#" className="text-sm hover:text-white transition-colors">{l}</a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+          <div className="border-t border-stone-800 pt-8 text-center text-xs text-stone-600">
+            &copy; 2026 Company24. Все права защищены.
+          </div>
+        </div>
+      </footer>
+    </div>
+  )
+}
