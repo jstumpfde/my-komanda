@@ -59,6 +59,22 @@ export default function DashboardPage() {
     scoreMin: 0,
     sources: [],
     workFormats: [],
+    relocation: "any",
+    businessTrips: "any",
+    experienceMin: 0,
+    experienceMax: 20,
+    funnelStatuses: [],
+    demoProgress: [],
+    dateRange: "",
+    dateFrom: "",
+    dateTo: "",
+    ageMin: 18,
+    ageMax: 65,
+    education: [],
+    languages: [],
+    otherLanguages: [],
+    skills: [],
+    industries: [],
   })
   const [profileCandidate, setProfileCandidate] = useState<Candidate | null>(null)
   const [profileColumnId, setProfileColumnId] = useState<string | null>(null)

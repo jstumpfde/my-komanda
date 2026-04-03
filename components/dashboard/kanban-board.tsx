@@ -42,7 +42,7 @@ const VIEW_BUTTONS: { mode: ViewMode; icon: React.ElementType; label: string }[]
   { mode: "tiles", icon: Grid3X3, label: "Плитки" },
 ]
 
-export function KanbanBoard({ settings, viewMode, onViewModeChange, columns, onColumnsChange, onOpenProfile, onAction, hideViewSwitcher }: KanbanBoardProps) {
+export function KanbanBoard({ settings, viewMode, onViewModeChange, columns = [], onColumnsChange, onOpenProfile, onAction, hideViewSwitcher }: KanbanBoardProps) {
   const handleColorChange = (colId: string, from: string, to: string) => {
     onColumnsChange(
       columns.map((col) => (col.id === colId ? { ...col, colorFrom: from, colorTo: to } : col))
@@ -133,7 +133,7 @@ export function KanbanBoard({ settings, viewMode, onViewModeChange, columns, onC
 
                   {/* Cards */}
                   <div className="space-y-3 flex-1 min-h-[100px] rounded-lg p-1">
-                    {column.candidates.map((candidate) => (
+                    {(column.candidates || []).map((candidate) => (
                       <CandidateCard
                         key={candidate.id}
                         candidate={candidate}
@@ -143,7 +143,7 @@ export function KanbanBoard({ settings, viewMode, onViewModeChange, columns, onC
                         onAction={onAction}
                       />
                     ))}
-                    {column.candidates.length === 0 && (
+                    {(column.candidates || []).length === 0 && (
                       <div className="flex items-center justify-center h-20 rounded-lg border-2 border-dashed border-border/50 text-muted-foreground/40">
                         <span className="text-xs">Пусто</span>
                       </div>
