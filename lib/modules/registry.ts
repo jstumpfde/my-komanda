@@ -9,6 +9,7 @@ export const MODULE_REGISTRY: Record<ModuleId, ModuleConfig> = {
     basePath: '/hr',
     menuItems: [
       { label: 'Обзор',          href: '/hr/overview',    icon: 'LayoutDashboard' },
+      { label: 'Overview2',      href: '/hr/overview2',   icon: 'LayoutDashboard' },
       { label: 'Вакансии',      href: '/hr/vacancies',   icon: 'Briefcase' },
       { label: 'Кандидаты',     href: '/hr/candidates',  icon: 'UserCheck' },
       { label: 'Воронка',       href: '/hr/funnel',      icon: 'TrendingDown' },

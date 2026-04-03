@@ -6,7 +6,7 @@ export type { MenuGroup }
 // Определение групп для каждого модуля (href → группа)
 const MODULE_GROUP_DEFS: Partial<Record<ModuleId, { label: string; hrefs: string[]; legacy?: boolean }[]>> = {
   hr: [
-    { label: 'Найм',          hrefs: ['/hr/overview', '/hr/vacancies', '/hr/candidates', '/hr/funnel', '/hr/demo-editor', '/hr/calendar'] },
+    { label: 'Найм',          hrefs: ['/hr/overview', '/hr/overview2', '/hr/vacancies', '/hr/candidates', '/hr/funnel', '/hr/demo-editor', '/hr/calendar'] },
     { label: 'Настройки HR',  hrefs: ['/hr/settings/notifications', '/hr/settings/schedule', '/hr/settings/funnel-stages', '/hr/settings/templates', '/hr/settings/sources'] },
     { label: 'Адаптация',     hrefs: ['/hr/onboarding', '/hr/adaptation/plans', '/hr/adaptation/assignments', '/hr/buddy', '/hr/adaptation/gamification', '/hr/adaptation/analytics'] },
     { label: 'Lifecycle',     hrefs: ['/hr/preboarding', '/hr/offboarding'] },

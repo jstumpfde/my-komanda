@@ -67,7 +67,7 @@ function emptyColumns(): ColumnData[] {
 }
 
 const defaultSettings: CardDisplaySettings = {
-  showSalary: true, showSalaryFull: false, showScore: true, showProgress: true,
+  showSalary: false, showSalaryFull: true, showScore: true, showProgress: true,
   showSource: true, showCity: true, showExperience: true, showSkills: true, showActions: true,
 }
 
@@ -139,7 +139,7 @@ export default function VacancyPage() {
   }, [apiCandidates])
   const [viewMode, setViewMode] = useState<ViewMode>("kanban")
   const [cardSettings, setCardSettings] = useState(defaultSettings)
-  const [filters, setFilters] = useState<FilterState>({ searchText: "", cities: [], salaryMin: 0, salaryMax: 250000, scoreMin: 0, sources: [], workFormats: [] })
+  const [filters, setFilters] = useState<FilterState>({ searchText: "", cities: [], salaryMin: 0, salaryMax: 250000, scoreMin: 0, sources: [], workFormats: [], relocation: "any", businessTrips: "any", experienceMin: 0, experienceMax: 20, funnelStatuses: [], demoProgress: [], dateRange: "", dateFrom: "", dateTo: "", ageMin: 18, ageMax: 65, education: [], languages: [], otherLanguages: [], skills: [], industries: [] })
   const [profileCandidate, setProfileCandidate] = useState<Candidate | null>(null)
   const [profileColumnId, setProfileColumnId] = useState<string | null>(null)
   const [drawerCandidateId, setDrawerCandidateId] = useState<string | null>(null)

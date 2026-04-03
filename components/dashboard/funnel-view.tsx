@@ -1,9 +1,13 @@
 "use client"
 
 import { useState } from "react"
-import { MapPin, Briefcase, Circle, ChevronDown } from "lucide-react"
+import { MapPin, Briefcase, Circle, ChevronDown, CheckCircle2, XCircle, ArrowRight, ThumbsUp, Clock } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
 import type { Candidate } from "./candidate-card"
+import type { CardDisplaySettings } from "./card-settings"
+import type { CandidateAction } from "@/lib/column-config"
 
 interface Column {
   id: string
@@ -16,21 +20,29 @@ interface Column {
 
 interface FunnelViewProps {
   columns: Column[]
+  settings?: CardDisplaySettings
+  onOpenProfile?: (candidate: Candidate, columnId: string) => void
+  onAction?: (candidateId: string, columnId: string, action: CandidateAction) => void
 }
 
-function formatTimeAgo(date: Date) {
-  const diffMs = Date.now() - date.getTime()
-  const diffMins = Math.floor(diffMs / 60000)
-  const diffHours = Math.floor(diffMs / 3600000)
-  const diffDays = Math.floor(diffMs / 86400000)
-  if (diffMins < 60) return `${diffMins} мин. назад`
-  if (diffHours < 24) return `${diffHours} ч. назад`
-  if (diffDays === 1) return "вчера"
-  if (diffDays < 7) return `${diffDays} дн. назад`
-  return `${Math.floor(diffDays / 7)} нед. назад`
+function getScoreColor(score: number) {
+  if (score >= 80) return "border-green-300 text-green-700 bg-green-50 dark:bg-green-950 dark:text-green-400"
+  if (score >= 60) return "border-yellow-300 text-yellow-700 bg-yellow-50 dark:bg-yellow-950 dark:text-yellow-400"
+  return "border-red-300 text-red-700 bg-red-50 dark:bg-red-950 dark:text-red-400"
 }
 
-export function FunnelView({ columns }: FunnelViewProps) {
+function getSourceColor(source: string) {
+  const colors: Record<string, string> = {
+    "hh.ru": "bg-red-50 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-400",
+    "Telegram": "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-400",
+    "LinkedIn": "bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950 dark:text-sky-400",
+    "Реферал": "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950 dark:text-purple-400",
+    "Сайт": "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-400",
+  }
+  return colors[source] || "bg-muted text-muted-foreground border-border"
+}
+
+export function FunnelView({ columns, settings, onOpenProfile, onAction }: FunnelViewProps) {
   const [expandedCardId, setExpandedCardId] = useState<string | null>(null)
   const maxCount = Math.max(1, ...columns.map((c) => c.count))
 
@@ -105,8 +117,8 @@ export function FunnelView({ columns }: FunnelViewProps) {
           const rate = conversionRates[i]
           const isCardExpanded = expandedCardId === col.id
           return (
-            <div 
-              key={col.id} 
+            <div
+              key={col.id}
               className="bg-card border border-border rounded-xl overflow-hidden cursor-pointer hover:shadow-md transition-shadow"
               onClick={() => setExpandedCardId(isCardExpanded ? null : col.id)}
             >
@@ -117,7 +129,7 @@ export function FunnelView({ columns }: FunnelViewProps) {
               <div className="p-4">
                 <div className="flex items-center justify-between">
                   <p className="text-[11px] text-muted-foreground mb-1 truncate">{col.title}</p>
-                  <ChevronDown 
+                  <ChevronDown
                     className="size-3.5 text-muted-foreground transition-transform duration-200"
                     style={{ transform: isCardExpanded ? "rotate(180deg)" : "rotate(0deg)" }}
                   />
@@ -156,91 +168,153 @@ export function FunnelView({ columns }: FunnelViewProps) {
         })}
       </div>
 
-      {/* Expanded card candidate list */}
-      {expandedCardId && (
-        <div className="bg-card border border-border rounded-xl overflow-hidden">
-          {(() => {
-            const col = columns.find(c => c.id === expandedCardId)
-            if (!col) return null
-            return (
+      {/* Expanded card — full table */}
+      {expandedCardId && (() => {
+        const col = columns.find(c => c.id === expandedCardId)
+        if (!col) return null
+        return (
+          <div className="rounded-xl border border-border overflow-hidden bg-card">
+            <div
+              className="h-1.5"
+              style={{ background: `linear-gradient(90deg, ${col.colorFrom}, ${col.colorTo})` }}
+            />
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+              <h4 className="text-sm font-semibold text-foreground">{col.title}</h4>
+              <span className="text-xs text-muted-foreground">{col.count} кандидатов</span>
+            </div>
+
+            {col.candidates.length === 0 ? (
+              <p className="text-sm text-muted-foreground p-4">Нет кандидатов на этом этапе</p>
+            ) : (
               <>
-                <div 
-                  className="h-1.5" 
-                  style={{ background: `linear-gradient(90deg, ${col.colorFrom}, ${col.colorTo})` }}
-                />
-                <div className="p-4">
-                  <div className="flex items-center justify-between mb-4">
-                    <h4 className="text-sm font-semibold text-foreground">{col.title}</h4>
-                    <span className="text-xs text-muted-foreground">{col.count} кандидатов</span>
-                  </div>
-                  {col.candidates.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">Нет кандидатов на этом этапе</p>
-                  ) : (
-                    <div className="divide-y divide-border">
-                      {col.candidates.map((candidate) => {
-                        const isOnline = candidate.lastSeen === "online"
-                        return (
+                {/* Table Header */}
+                <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1.5fr_auto] gap-4 px-4 py-2.5 bg-muted/60 border-b border-border text-[13px] font-medium text-muted-foreground tracking-normal">
+                  <div>Кандидат</div>
+                  {settings?.showScore !== false && <div>AI скор</div>}
+                  {(settings?.showSalary || settings?.showSalaryFull) !== false && <div>Зарплата</div>}
+                  {settings?.showCity !== false && <div>Город</div>}
+                  <div>Статус</div>
+                  {settings?.showSource !== false && <div>Источник</div>}
+                  <div>Действия</div>
+                </div>
+
+                {/* Rows */}
+                <div className="divide-y divide-border">
+                  {col.candidates.map((candidate, i) => {
+                    const isDecisionStage = candidate.columnId === "interview" || candidate.columnId === "offer"
+                    return (
+                      <div
+                        key={candidate.id}
+                        className={cn(
+                          "grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1.5fr_auto] gap-4 px-4 items-center hover:bg-muted/40 transition-colors min-h-[56px] text-[14px]",
+                          i % 2 === 0 ? "" : "bg-muted/20"
+                        )}
+                      >
+                        {/* Name + experience */}
+                        <div className="flex items-center gap-3 min-w-0">
                           <div
-                            key={candidate.id}
-                            className="flex items-center gap-4 py-3 first:pt-0 last:pb-0"
+                            className="w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-white text-[11px] font-bold"
+                            style={{ background: `linear-gradient(135deg, ${candidate.colorFrom}, ${candidate.colorTo})` }}
                           >
-                            <div
-                              className="size-9 rounded-full flex items-center justify-center text-white text-sm font-semibold flex-shrink-0"
-                              style={{ background: `linear-gradient(135deg, ${col.colorFrom}, ${col.colorTo})` }}
-                            >
-                              {candidate.name.charAt(0)}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2">
-                                <span className="text-sm font-medium text-foreground truncate">{candidate.name}</span>
-                                {isOnline ? (
-                                  <span className="flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400 flex-shrink-0">
-                                    <Circle className="size-1.5 fill-current" />
-                                    онлайн
-                                  </span>
-                                ) : (
-                                  <span className="text-[10px] text-muted-foreground flex-shrink-0">
-                                    {formatTimeAgo(candidate.lastSeen as Date)}
-                                  </span>
-                                )}
-                              </div>
-                              <div className="flex items-center gap-3 mt-0.5">
-                                <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                                  <MapPin className="size-3" />
-                                  {candidate.city}
-                                </span>
-                                <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                                  <Briefcase className="size-3" />
-                                  {candidate.experience}
-                                </span>
-                              </div>
-                            </div>
-                            <div className="text-xs font-medium text-foreground flex-shrink-0">
-                              {(candidate.salaryMin / 1000).toFixed(0)}–{(candidate.salaryMax / 1000).toFixed(0)}k
-                            </div>
-                            <Badge
-                              variant="outline"
-                              className={`text-xs font-semibold flex-shrink-0 ${
-                                candidate.score >= 80
-                                  ? "border-green-300 text-green-700 bg-green-50 dark:bg-green-950 dark:text-green-400"
-                                  : candidate.score >= 60
-                                  ? "border-yellow-300 text-yellow-700 bg-yellow-50 dark:bg-yellow-950 dark:text-yellow-400"
-                                  : "border-red-300 text-red-700 bg-red-50 dark:bg-red-950 dark:text-red-400"
-                              }`}
-                            >
+                            {candidate.name.charAt(0)}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-[15px] font-medium text-foreground truncate">{candidate.name}</p>
+                            {settings?.showExperience !== false && (
+                              <p className="text-[13px] text-muted-foreground truncate">{candidate.experience}</p>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Score */}
+                        {settings?.showScore !== false && (
+                          <div>
+                            <Badge variant="outline" className={cn("text-[14px] border font-semibold", getScoreColor(candidate.score))}>
                               {candidate.score}
                             </Badge>
                           </div>
-                        )
-                      })}
-                    </div>
-                  )}
+                        )}
+
+                        {/* Salary */}
+                        {(settings?.showSalary || settings?.showSalaryFull) !== false && (
+                          <div className="text-[14px] font-medium text-foreground">
+                            {settings?.showSalaryFull
+                              ? `${candidate.salaryMin.toLocaleString("ru-RU")} — ${candidate.salaryMax.toLocaleString("ru-RU")} ₽`
+                              : `${Math.round(candidate.salaryMin / 1000)}-${Math.round(candidate.salaryMax / 1000)}k`
+                            }
+                          </div>
+                        )}
+
+                        {/* City */}
+                        {settings?.showCity !== false && (
+                          <div className="flex items-center gap-1 text-[14px] text-muted-foreground">
+                            <MapPin className="w-3.5 h-3.5 flex-shrink-0" />
+                            <span className="truncate">{candidate.city}</span>
+                          </div>
+                        )}
+
+                        {/* Stage badge */}
+                        <div>
+                          <span
+                            className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium text-white"
+                            style={{ background: `linear-gradient(135deg, ${candidate.colorFrom}, ${candidate.colorTo})` }}
+                          >
+                            {candidate.columnTitle}
+                          </span>
+                        </div>
+
+                        {/* Source */}
+                        {settings?.showSource !== false && (
+                          <div>
+                            <Badge variant="outline" className={cn("text-[10px] border", getSourceColor(candidate.source))}>
+                              {candidate.source}
+                            </Badge>
+                          </div>
+                        )}
+
+                        {/* Actions */}
+                        <div className="flex items-center gap-1">
+                          {isDecisionStage ? (
+                            <>
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-success hover:bg-success/10" title="Принять" onClick={() => onAction?.(candidate.id, candidate.columnId, "advance")}>
+                                <ThumbsUp className="w-3.5 h-3.5" />
+                              </Button>
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:bg-destructive/10" title="Отказать" onClick={() => onAction?.(candidate.id, candidate.columnId, "reject")}>
+                                <XCircle className="w-3.5 h-3.5" />
+                              </Button>
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-warning hover:bg-warning/10" title="В резерв" onClick={() => onAction?.(candidate.id, candidate.columnId, "reserve")}>
+                                <Clock className="w-3.5 h-3.5" />
+                              </Button>
+                            </>
+                          ) : (
+                            <>
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-success hover:bg-success/10" title="Пригласить" onClick={() => onAction?.(candidate.id, candidate.columnId, "advance")}>
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                              </Button>
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:bg-destructive/10" title="Отказать" onClick={() => onAction?.(candidate.id, candidate.columnId, "reject")}>
+                                <XCircle className="w-3.5 h-3.5" />
+                              </Button>
+                            </>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-muted-foreground hover:text-primary hover:bg-primary/10"
+                            title="Открыть"
+                            onClick={() => onOpenProfile?.(candidate, candidate.columnId)}
+                          >
+                            <ArrowRight className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               </>
-            )
-          })()}
-        </div>
-      )}
+            )}
+          </div>
+        )
+      })()}
     </div>
   )
 }

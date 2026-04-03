@@ -161,7 +161,7 @@ export function KanbanBoard({ settings, viewMode, onViewModeChange, columns, onC
       )}
 
       {viewMode === "funnel" && (
-        <FunnelView columns={columns} />
+        <FunnelView columns={columns} settings={settings} onOpenProfile={onOpenProfile} onAction={onAction} />
       )}
 
       {viewMode === "tiles" && (
