@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useSession } from "next-auth/react"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { KanbanBoard, type ViewMode } from "@/components/dashboard/kanban-board"
@@ -17,7 +18,8 @@ import { AddCandidateDialog } from "@/components/dashboard/add-candidate-dialog"
 import { getOnboarding, isOnboardingComplete, remainingSteps } from "@/lib/onboarding"
 import { Rocket } from "lucide-react"
 import Link from "next/link"
-import { useEffect } from "react"
+import { useRouter } from "next/navigation"
+import LandingPage from "./(public)/landing/page"
 
 interface ColumnData {
   id: string
@@ -48,6 +50,23 @@ function emptyColumns(): ColumnData[] {
 }
 
 export default function DashboardPage() {
+  const { data: session, status } = useSession()
+  const router = useRouter()
+
+  useEffect(() => {
+    if (status === "authenticated") {
+      router.replace("/hr/overview")
+    }
+  }, [status, router])
+
+  // Не авторизован → лендинг
+  if (status === "unauthenticated") return <LandingPage />
+
+  // loading или authenticated (ждём редирект)
+  return null
+}
+
+function AuthenticatedDashboard() {
   const [cardSettings, setCardSettings] = useState<CardDisplaySettings>(defaultSettings)
   const [viewMode, setViewMode] = useState<ViewMode>("funnel")
   const [columns, setColumns] = useState<ColumnData[]>(emptyColumns)

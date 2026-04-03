@@ -8,6 +8,7 @@ export const runtime = "nodejs"
 const PUBLIC_PREFIXES = [
   "/login",
   "/register",
+  "/landing",
   "/vacancy/",
   "/candidate/",
   "/schedule/",
@@ -19,6 +20,7 @@ const PUBLIC_PREFIXES = [
 ]
 
 function isPublic(pathname: string): boolean {
+  if (pathname === "/") return true
   return PUBLIC_PREFIXES.some(
     (p) => pathname === p || pathname.startsWith(p)
   )
