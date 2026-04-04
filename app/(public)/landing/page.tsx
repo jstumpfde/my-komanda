@@ -9,7 +9,7 @@ import {
   Target, Zap, ArrowRight, Check, X, Minus,
   Clock, TrendingUp, Award, Building2,
   Bot, Handshake,
-  Menu, X as XIcon, Play,
+  Menu, X as XIcon, TrendingDown, Play,
 } from "lucide-react"
 
 // ─── Scroll reveal hook ──────────────────────────────────────────────────────
@@ -72,13 +72,113 @@ const NAV_ITEMS = [
   { label: "О нас", href: "#about" },
 ]
 
+const FEATURE_TABS = [
+  {
+    id: "hiring", label: "Найм", color: "indigo",
+    problem: { title: "Кандидатов много — релевантных мало", points: [
+      "Сотни откликов, но HR тратит время на нерелевантных",
+      "Хорошие кандидаты уходят, пока разбираете слабых",
+      "Кандидаты приходят на собеседование просто узнать что предлагаете",
+      "Ручная переписка с каждым — нужна целая команда рекрутеров",
+    ]},
+    solution: { title: "Company24.pro находит готовых кандидатов", points: [
+      "Привлекаем кандидатов с hh.ru, Авито, SuperJob и других job-бордов",
+      "AI автоматически фильтрует нерелевантных",
+      "Прогрев, проверка навыков, отсев — без участия HR",
+      "Демонстрация должности до собеседования",
+      "К HR приходят только те, кто сказал «да, я хочу»",
+    ]},
+  },
+  {
+    id: "onboarding", label: "Ввод в должность", color: "amber",
+    problem: { title: "Месяцы ожидания — покажет ли результат?", points: [
+      "2-3 месяца чтобы понять, подходит ли сотрудник",
+      "Огромная нагрузка на наставников и руководителей",
+      "Не подошёл — потеряны месяцы и деньги",
+      "Нет структурированного процесса адаптации",
+    ]},
+    solution: { title: "За 1-2 недели понимаем — подходит или нет", points: [
+      "Курсы и тестовые задания с первого дня",
+      "Проверяем ключевые навыки: звонки, письма, продажи",
+      "Структурированный онбординг снимает нагрузку с наставников",
+      "Не подошёл — узнаём за дни, а не за месяцы",
+    ]},
+  },
+  {
+    id: "training", label: "Обучение", color: "violet",
+    problem: { title: "Обучение хаотичное и не системное", points: [
+      "Сотрудники не знают что развивать",
+      "Руководители не успевают обучать",
+      "Нет единой базы знаний и контроля",
+    ]},
+    solution: { title: "AI прокачивает команду на автомате", points: [
+      "AI анализирует слабые стороны каждого сотрудника",
+      "Дозированные курсы и видео из библиотеки обучения",
+      "Платформа напоминает когда пора учиться",
+      "Прокачка навыков без участия руководителя",
+    ]},
+  },
+  {
+    id: "marketing", label: "Маркетинг", color: "rose",
+    problem: { title: "Бюджеты сливаются — ROI непонятен", points: [
+      "Непонятно какой канал приносит клиентов",
+      "Конкуренты снижают цены, а вы не знаете",
+      "Нет аналитики по каждому рублю рекламы",
+    ]},
+    solution: { title: "AI считает каждый рубль", points: [
+      "ROI по каждому рекламному каналу",
+      "Анализ конкурентов в реальном времени",
+      "AI оптимизирует бюджет автоматически",
+      "A/B тесты и прогнозы без маркетолога",
+    ]},
+  },
+  {
+    id: "sales", label: "Продажи", color: "orange",
+    problem: { title: "Лиды теряются, сделки буксуют", points: [
+      "Менеджеры забывают перезвонить",
+      "Нет прогноза по сделкам",
+      "Непонятно почему клиенты уходят",
+    ]},
+    solution: { title: "AI ведёт воронку продаж", points: [
+      "Автоматические follow-up и напоминания",
+      "AI-квалификация лидов — приоритет лучшим",
+      "Прогноз закрытия каждой сделки",
+      "Интеграция с Битрикс24 и AmoCRM",
+    ]},
+  },
+  {
+    id: "logistics", label: "Логистика", color: "emerald",
+    problem: { title: "Склад и доставка вручную", points: [
+      "Остатки не совпадают с реальностью",
+      "Маршруты не оптимизированы",
+      "Заказы теряются между этапами",
+    ]},
+    solution: { title: "AI управляет складом и доставкой", points: [
+      "Учёт товаров и автозаказ у поставщиков",
+      "Оптимизация маршрутов доставки",
+      "Прогноз спроса и планирование закупок",
+      "Интеграция с 1С",
+    ]},
+  },
+]
+
+const FEATURE_TAB_COLORS: Record<string, { bg: string; text: string; border: string }> = {
+  indigo: { bg: "bg-indigo-500", text: "text-indigo-500", border: "border-indigo-500" },
+  amber: { bg: "bg-amber-500", text: "text-amber-500", border: "border-amber-500" },
+  violet: { bg: "bg-violet-500", text: "text-violet-500", border: "border-violet-500" },
+  rose: { bg: "bg-rose-500", text: "text-rose-500", border: "border-rose-500" },
+  orange: { bg: "bg-orange-500", text: "text-orange-500", border: "border-orange-500" },
+  emerald: { bg: "bg-emerald-500", text: "text-emerald-500", border: "border-emerald-500" },
+}
+
 
 
 const MODULES = [
   {
     id: "hr", icon: Users, label: "HR и команда",
+    desc: "Находим, оцениваем и адаптируем сотрудников на автомате",
     gradient: "from-indigo-500 to-violet-500",
-    lightBg: "bg-indigo-50", lightColor: "text-indigo-600",
+    lightBg: "bg-indigo-500/10", lightColor: "text-indigo-400",
     features: [
       "AI-скоринг кандидатов за секунды",
       "Демо-курс «Один день в должности»",
@@ -90,8 +190,9 @@ const MODULES = [
   },
   {
     id: "marketing", icon: Megaphone, label: "Маркетинг",
+    desc: "Анализируем каналы, считаем ROI и оптимизируем бюджет",
     gradient: "from-rose-500 to-pink-500",
-    lightBg: "bg-rose-50", lightColor: "text-rose-600",
+    lightBg: "bg-rose-500/10", lightColor: "text-rose-400",
     features: [
       "Анализ конкурентов в реальном времени",
       "ROI по каждому каналу",
@@ -102,8 +203,9 @@ const MODULES = [
   },
   {
     id: "sales", icon: DollarSign, label: "Продажи",
+    desc: "Ведём воронку, квалифицируем лиды, прогнозируем сделки",
     gradient: "from-amber-500 to-orange-500",
-    lightBg: "bg-amber-50", lightColor: "text-amber-600",
+    lightBg: "bg-amber-500/10", lightColor: "text-amber-400",
     features: [
       "AI-квалификация лидов",
       "Автоматические follow-up",
@@ -114,8 +216,9 @@ const MODULES = [
   },
   {
     id: "logistics", icon: Truck, label: "Логистика и склад",
+    desc: "Управляем заказами, складом и маршрутами доставки",
     gradient: "from-emerald-500 to-teal-500",
-    lightBg: "bg-emerald-50", lightColor: "text-emerald-600",
+    lightBg: "bg-emerald-500/10", lightColor: "text-emerald-400",
     features: [
       "Управление заказами",
       "Складской учёт",
@@ -133,20 +236,27 @@ const STEPS = [
 ]
 
 const AI_AGENTS = [
-  { icon: Brain, name: "Скоринг-агент", desc: "Оценивает кандидатов по 50+ параметрам", gradient: "from-indigo-500 to-violet-600", lightBg: "bg-indigo-50" },
-  { icon: MessageSquare, name: "Коммуникатор", desc: "Отправляет сообщения, назначает интервью", gradient: "from-rose-500 to-pink-600", lightBg: "bg-rose-50" },
-  { icon: BarChart3, name: "Аналитик", desc: "Строит отчёты, находит узкие места", gradient: "from-emerald-500 to-teal-600", lightBg: "bg-emerald-50" },
-  { icon: Target, name: "Маркетолог", desc: "Анализирует конкурентов, оптимизирует бюджет", gradient: "from-amber-500 to-orange-600", lightBg: "bg-amber-50" },
-  { icon: Handshake, name: "Продавец", desc: "Квалифицирует лиды, напоминает о follow-up", gradient: "from-violet-500 to-purple-600", lightBg: "bg-violet-50" },
-  { icon: Truck, name: "Логист", desc: "Оптимизирует маршруты, прогнозирует спрос", gradient: "from-cyan-500 to-blue-600", lightBg: "bg-cyan-50" },
+  { icon: Brain, name: "Скоринг-агент", desc: "Оценивает кандидатов по 50+ параметрам", gradient: "from-indigo-500 to-violet-600", lightBg: "bg-indigo-500/10" },
+  { icon: MessageSquare, name: "Коммуникатор", desc: "Отправляет сообщения, назначает интервью", gradient: "from-rose-500 to-pink-600", lightBg: "bg-rose-500/10" },
+  { icon: BarChart3, name: "Аналитик", desc: "Строит отчёты, находит узкие места", gradient: "from-emerald-500 to-teal-600", lightBg: "bg-emerald-500/10" },
+  { icon: Target, name: "Маркетолог", desc: "Анализирует конкурентов, оптимизирует бюджет", gradient: "from-amber-500 to-orange-600", lightBg: "bg-amber-500/10" },
+  { icon: Handshake, name: "Продавец", desc: "Квалифицирует лиды, напоминает о follow-up", gradient: "from-violet-500 to-purple-600", lightBg: "bg-violet-500/10" },
+  { icon: Truck, name: "Логист", desc: "Оптимизирует маршруты, прогнозирует спрос", gradient: "from-cyan-500 to-blue-600", lightBg: "bg-cyan-500/10" },
 ]
 
-const TARIFFS = [
-  { name: "Solo", price: "14 900", vacancies: "1 вакансия", candidates: "400 кандидатов", popular: false, features: ["1 пользователь", "Базовый AI-скоринг", "Email-поддержка"] },
-  { name: "Starter", price: "24 900", vacancies: "3 вакансии", candidates: "1 200 кандидатов", popular: false, features: ["3 пользователя", "Расширенный AI", "Интеграция hh.ru", "Чат-поддержка"] },
-  { name: "Business", price: "49 900", vacancies: "10 вакансий", candidates: "4 000 кандидатов", popular: true, features: ["10 пользователей", "Все AI-агенты", "Branding", "AI-видеоинтервью", "Приоритетная поддержка"] },
-  { name: "Pro", price: "99 900", vacancies: "22 вакансии", candidates: "10 000 кандидатов", popular: false, features: ["Безлимит пользователей", "Все модули", "Custom domain", "API доступ", "Персональный менеджер"] },
+const PRICING_MODULES = [
+  { id: "hr", icon: Users, label: "HR и найм", desc: "Воронка, скоринг, онбординг, обучение", price: 19900, gradient: "from-indigo-500 to-violet-500", color: "indigo", available: true },
+  { id: "marketing", icon: Megaphone, label: "Маркетинг", desc: "ROI, аналитика каналов, A/B тесты", price: 19900, gradient: "from-rose-500 to-pink-500", color: "rose", available: true },
+  { id: "sales", icon: DollarSign, label: "Продажи", desc: "CRM, воронка, follow-up, прогнозы", price: 19900, gradient: "from-amber-500 to-orange-500", color: "amber", available: true },
+  { id: "logistics", icon: Truck, label: "Логистика", desc: "Склад, маршруты, доставка, 1С", price: 19900, gradient: "from-cyan-500 to-cyan-400", color: "cyan", available: false },
 ]
+
+const PRICING_MODULE_COLORS: Record<string, { border: string; bg: string; text: string; check: string }> = {
+  indigo: { border: "border-indigo-500", bg: "bg-indigo-500/10", text: "text-indigo-400", check: "bg-indigo-500" },
+  rose: { border: "border-rose-500", bg: "bg-rose-500/10", text: "text-rose-400", check: "bg-rose-500" },
+  amber: { border: "border-amber-500", bg: "bg-amber-500/10", text: "text-amber-400", check: "bg-amber-500" },
+  cyan: { border: "border-cyan-500", bg: "bg-cyan-500/10", text: "text-cyan-400", check: "bg-cyan-500" },
+}
 
 const COUNTER_METRICS = [
   { end: 60, suffix: "%", prefix: "", label: "быстрее найм", icon: Clock },
@@ -175,361 +285,267 @@ function MetricCounter({ end, suffix, prefix, label, icon: Icon }: typeof COUNTE
   )
 }
 
-// ─── Hero Dashboard ─────────────────────────────────────────────────────────
-
-const DASH_TABS = [
-  {
-    id: "hr", label: "HR", color: "#6366f1",
-    metrics: [
-      { label: "Кандидатов", value: 1247, suffix: "" },
-      { label: "Конверсия", value: 34, suffix: "%" },
-      { label: "Время найма", value: 12, suffix: " дн" },
-    ],
-    nodes: [
-      { x: 40, y: 105, label: "Отклик" },
-      { x: 145, y: 55, label: "hh.ru" },
-      { x: 145, y: 155, label: "Реферал" },
-      { x: 280, y: 105, label: "Скрининг" },
-      { x: 395, y: 55, label: "AI-оценка" },
-      { x: 395, y: 155, label: "Интервью" },
-      { x: 520, y: 105, label: "Оффер" },
-    ],
-    edges: [[0,1],[0,2],[1,3],[2,3],[3,4],[3,5],[4,6],[5,6]] as [number, number][],
-    events: [
-      "AI-скоринг: Иванов А. — 94 балла",
-      "Новый отклик на Senior React",
-      "Интервью назначено: 15:30",
-      "Оффер отправлен: Петрова М.",
-      "Реферал: рекомендация от отдела",
-      "Скрининг: 12 резюме обработано",
-    ],
-  },
-  {
-    id: "mkt", label: "Маркетинг", color: "#f43f5e",
-    metrics: [
-      { label: "ROI", value: 4, suffix: ".2x" },
-      { label: "Лиды", value: 892, suffix: "" },
-      { label: "CTR", value: 7, suffix: "%" },
-    ],
-    nodes: [
-      { x: 40, y: 105, label: "Трафик" },
-      { x: 145, y: 55, label: "SEO" },
-      { x: 145, y: 155, label: "Реклама" },
-      { x: 280, y: 105, label: "Лендинг" },
-      { x: 395, y: 55, label: "Заявка" },
-      { x: 395, y: 155, label: "Ретаргет" },
-      { x: 520, y: 105, label: "Лиды 892" },
-    ],
-    edges: [[0,1],[0,2],[1,3],[2,3],[3,4],[3,5],[4,6],[5,6]] as [number, number][],
-    events: [
-      "SEO: +12 позиций «автоматизация»",
-      "CTR рекламы вырос до 7.2%",
-      "Новая заявка с лендинга",
-      "Ретаргет: 34 возврата за час",
-      "ROI кампании: 4.2x",
-      "Трафик: +18% за неделю",
-    ],
-  },
-  {
-    id: "sales", label: "Продажи", color: "#f59e0b",
-    metrics: [
-      { label: "Сделок", value: 156, suffix: "" },
-      { label: "Выручка", value: 12, suffix: ".4M" },
-      { label: "Конверсия", value: 28, suffix: "%" },
-    ],
-    nodes: [
-      { x: 40, y: 105, label: "Лид" },
-      { x: 145, y: 55, label: "Звонок" },
-      { x: 145, y: 155, label: "Письмо" },
-      { x: 280, y: 105, label: "КП" },
-      { x: 395, y: 55, label: "Переговоры" },
-      { x: 395, y: 155, label: "Демо" },
-      { x: 520, y: 105, label: "Сделка" },
-    ],
-    edges: [[0,1],[0,2],[1,3],[2,3],[3,4],[3,5],[4,6],[5,6]] as [number, number][],
-    events: [
-      "Новый лид: ООО «Техносфера»",
-      "КП отправлено: 2.4M ₽",
-      "Демо запланировано на 16:00",
-      "Сделка закрыта: 1.8M ₽",
-      "Follow-up: 3 напоминания",
-      "Звонок: конверсия 34%",
-    ],
-  },
-  {
-    id: "logistics", label: "Логистика", color: "#0ea5e9",
-    metrics: [
-      { label: "Заказов", value: 340, suffix: "" },
-      { label: "В пути", value: 89, suffix: "" },
-      { label: "Доставка", value: 2, suffix: ".1 дн" },
-    ],
-    nodes: [
-      { x: 30, y: 105, label: "Заказ" },
-      { x: 115, y: 55, label: "Наличие" },
-      { x: 115, y: 155, label: "Закупка" },
-      { x: 210, y: 105, label: "Комплект." },
-      { x: 305, y: 55, label: "Упаковка" },
-      { x: 305, y: 155, label: "Маршрут" },
-      { x: 400, y: 105, label: "Доставка" },
-      { x: 510, y: 105, label: "Готово" },
-    ],
-    edges: [[0,1],[0,2],[1,3],[2,3],[3,4],[3,5],[4,6],[5,6],[6,7]] as [number, number][],
-    events: [
-      "Заказ #4521 → комплектация",
-      "Маршрут оптимизирован: −40 мин",
-      "Закупка: поставщик подтвердил",
-      "Доставка #4518 завершена",
-      "Наличие: 98% позиций в стоке",
-      "Упаковка: партия #89 готова",
-    ],
-  },
-  {
-    id: "warehouse", label: "Склад", color: "#10b981",
-    metrics: [
-      { label: "Позиций", value: 4200, suffix: "" },
-      { label: "Оборот", value: 8, suffix: ".2M" },
-      { label: "Точность", value: 99, suffix: ".8%" },
-    ],
-    nodes: [
-      { x: 40, y: 105, label: "Приёмка" },
-      { x: 145, y: 55, label: "Проверка" },
-      { x: 145, y: 155, label: "Маркировка" },
-      { x: 280, y: 105, label: "Хранение" },
-      { x: 395, y: 55, label: "Сборка" },
-      { x: 395, y: 155, label: "Упаковка" },
-      { x: 520, y: 105, label: "Отгрузка" },
-    ],
-    edges: [[0,1],[0,2],[1,3],[2,3],[3,4],[3,5],[4,6],[5,6]] as [number, number][],
-    events: [
-      "Приёмка: 340 позиций принято",
-      "Маркировка завершена: партия #89",
-      "Сборка заказа #4520",
-      "Инвентаризация: расхождение 0.2%",
-      "Отгрузка: 12 паллет готово",
-      "Проверка качества: OK",
-    ],
-  },
-]
+// ─── Hero Dashboard (4-panel) ───────────────────────────────────────────────
 
 function HeroDashboard() {
-  const [tab, setTab] = useState(0)
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-  const animRef = useRef(0)
-  const timerRef = useRef<ReturnType<typeof setInterval>>(undefined)
-  const [animatedMetrics, setAnimatedMetrics] = useState([0, 0, 0])
-  const [eventIdx, setEventIdx] = useState(0)
+  const [mounted, setMounted] = useState(false)
+  const mktCanvasRef = useRef<HTMLCanvasElement>(null)
+  const salesCanvasRef = useRef<HTMLCanvasElement>(null)
+  const logCanvasRef = useRef<HTMLCanvasElement>(null)
+  const [salesRevenue, setSalesRevenue] = useState(0)
 
-  const current = DASH_TABS[tab]
-
-  // Auto-rotate tabs every 6s
   useEffect(() => {
-    timerRef.current = setInterval(() => {
-      setTab((t) => (t + 1) % DASH_TABS.length)
-    }, 6000)
-    return () => clearInterval(timerRef.current)
+    const t = setTimeout(() => setMounted(true), 300)
+    return () => clearTimeout(t)
   }, [])
 
-  const handleTab = (i: number) => {
-    setTab(i)
-    clearInterval(timerRef.current)
-    timerRef.current = setInterval(() => {
-      setTab((t) => (t + 1) % DASH_TABS.length)
-    }, 6000)
-  }
-
-  // Event feed rotation every 2s
+  // Sales count-up
   useEffect(() => {
-    setEventIdx(0)
-    const id = setInterval(() => setEventIdx((i) => i + 1), 2000)
-    return () => clearInterval(id)
-  }, [tab])
-
-  // Animate metrics on tab change
-  useEffect(() => {
-    const targets = current.metrics.map((m) => m.value)
-    const startTime = performance.now()
-    const duration = 1200
+    if (!mounted) return
+    const target = 248
+    const start = performance.now()
     let raf: number
     const tick = (now: number) => {
-      const p = Math.min((now - startTime) / duration, 1)
-      const eased = 1 - Math.pow(1 - p, 3)
-      setAnimatedMetrics(targets.map((t) => Math.round(eased * t)))
+      const p = Math.min((now - start) / 1500, 1)
+      setSalesRevenue(Math.round((1 - Math.pow(1 - p, 3)) * target) / 10)
       if (p < 1) raf = requestAnimationFrame(tick)
     }
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
-  }, [tab, current.metrics])
+  }, [mounted])
 
-  // Canvas network animation
+  // Marketing bar chart
   useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    const ctx = canvas.getContext("2d")
+    if (!mounted) return
+    const c = mktCanvasRef.current
+    if (!c) return
+    const ctx = c.getContext("2d")
     if (!ctx) return
-
     const dpr = window.devicePixelRatio || 1
-    canvas.width = 560 * dpr
-    canvas.height = 220 * dpr
+    c.width = 120 * dpr; c.height = 60 * dpr
     ctx.scale(dpr, dpr)
+    const vals = [40, 55, 48, 70, 62, 80, 95]
+    const max = 100
+    const bw = 12, gap = 5
+    vals.forEach((v, i) => {
+      const h = (v / max) * 50
+      ctx.fillStyle = i === vals.length - 1 ? "#F59E0B" : "#78716C"
+      ctx.beginPath()
+      ctx.roundRect(i * (bw + gap), 55 - h, bw, h, 2)
+      ctx.fill()
+    })
+    ctx.fillStyle = "#9CA3AF"
+    ctx.font = "9px system-ui"
+    ctx.fillText("155K", 85, 10)
+  }, [mounted])
 
-    const { nodes, edges, color } = current
-    const particles: { edge: number; t: number; speed: number }[] = []
-    let running = true
-    let lastSpawn = 0
+  // Sales line chart
+  useEffect(() => {
+    if (!mounted) return
+    const c = salesCanvasRef.current
+    if (!c) return
+    const ctx = c.getContext("2d")
+    if (!ctx) return
+    const dpr = window.devicePixelRatio || 1
+    c.width = 240 * dpr; c.height = 50 * dpr
+    ctx.scale(dpr, dpr)
+    const pts = [20, 25, 22, 30, 28, 35, 32, 40, 38, 42, 45, 48]
+    const max = 55, w = 240, h = 50
+    const xs = pts.map((_, i) => (i / (pts.length - 1)) * w)
+    const ys = pts.map((v) => h - (v / max) * h + 2)
+    // Fill
+    ctx.beginPath()
+    ctx.moveTo(xs[0], ys[0])
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(xs[i], ys[i])
+    ctx.lineTo(w, h); ctx.lineTo(0, h); ctx.closePath()
+    ctx.fillStyle = "rgba(16,185,129,0.15)"
+    ctx.fill()
+    // Line
+    ctx.beginPath()
+    ctx.moveTo(xs[0], ys[0])
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(xs[i], ys[i])
+    ctx.strokeStyle = "#10B981"; ctx.lineWidth = 1.5; ctx.stroke()
+    // Plan dashed
+    ctx.setLineDash([4, 3])
+    ctx.beginPath(); ctx.moveTo(0, 18); ctx.lineTo(w, 18)
+    ctx.strokeStyle = "#4B5563"; ctx.lineWidth = 1; ctx.stroke()
+    ctx.setLineDash([])
+    ctx.fillStyle = "#6B7280"; ctx.font = "8px system-ui"; ctx.fillText("План", w - 25, 15)
+  }, [mounted])
 
-    const draw = (now: number) => {
-      if (!running) return
-      ctx.clearRect(0, 0, 560, 220)
+  // Logistics curve
+  useEffect(() => {
+    if (!mounted) return
+    const c = logCanvasRef.current
+    if (!c) return
+    const ctx = c.getContext("2d")
+    if (!ctx) return
+    const dpr = window.devicePixelRatio || 1
+    c.width = 240 * dpr; c.height = 50 * dpr
+    ctx.scale(dpr, dpr)
+    const w = 240, h = 50
+    ctx.beginPath(); ctx.moveTo(0, 35)
+    ctx.bezierCurveTo(60, 10, 120, 40, 180, 15)
+    ctx.bezierCurveTo(200, 8, 220, 20, w, 12)
+    ctx.lineTo(w, h); ctx.lineTo(0, h); ctx.closePath()
+    ctx.fillStyle = "rgba(6,182,212,0.15)"; ctx.fill()
+    ctx.beginPath(); ctx.moveTo(0, 35)
+    ctx.bezierCurveTo(60, 10, 120, 40, 180, 15)
+    ctx.bezierCurveTo(200, 8, 220, 20, w, 12)
+    ctx.strokeStyle = "#06B6D4"; ctx.lineWidth = 1.5; ctx.stroke()
+  }, [mounted])
 
-      // Spawn particles every 180ms
-      if (now - lastSpawn > 180) {
-        lastSpawn = now
-        if (particles.length < 40) {
-          const ei = Math.floor(Math.random() * edges.length)
-          particles.push({ edge: ei, t: 0, speed: 0.0036 + Math.random() * 0.0048 })
-        }
-      }
+  const ring = (pct: number, color: string, size: number) => {
+    const r = (size - 6) / 2, c = size / 2, circ = 2 * Math.PI * r
+    return (
+      <svg width={size} height={size}>
+        <circle cx={c} cy={c} r={r} fill="none" stroke="#1F2937" strokeWidth={5} />
+        <circle cx={c} cy={c} r={r} fill="none" stroke={color} strokeWidth={5}
+          strokeDasharray={circ} strokeDashoffset={mounted ? circ * (1 - pct / 100) : circ}
+          strokeLinecap="round" transform={`rotate(-90 ${c} ${c})`}
+          style={{ transition: "stroke-dashoffset 1.5s cubic-bezier(0.4,0,0.2,1)" }} />
+      </svg>
+    )
+  }
 
-      // Draw edges
-      for (const [ai, bi] of edges) {
-        const a = nodes[ai]
-        const b = nodes[bi]
-        ctx.beginPath()
-        ctx.moveTo(a.x, a.y)
-        ctx.lineTo(b.x, b.y)
-        ctx.strokeStyle = color + "25"
-        ctx.lineWidth = 2
-        ctx.stroke()
-      }
+  const funnelBar = (label: string, value: number, pct: number, color: string) => (
+    <div className="flex items-center gap-2">
+      <span className="text-[9px] text-gray-500 w-14 text-right shrink-0">{label}</span>
+      <div className="flex-1 h-[10px] bg-gray-800 rounded-full overflow-hidden">
+        <div className="h-full rounded-full" style={{ width: mounted ? `${pct}%` : "0%", backgroundColor: color, transition: "width 1.5s cubic-bezier(0.4,0,0.2,1)" }} />
+      </div>
+      <span className="text-[9px] text-gray-400 w-6">{value}</span>
+    </div>
+  )
 
-      // Update and draw particles
-      for (let i = particles.length - 1; i >= 0; i--) {
-        const p = particles[i]
-        p.t += p.speed
-        if (p.t > 1) { particles.splice(i, 1); continue }
-        const [ai, bi] = edges[p.edge]
-        const a = nodes[ai]
-        const b = nodes[bi]
-        const x = a.x + (b.x - a.x) * p.t
-        const y = a.y + (b.y - a.y) * p.t
+  const pill = (label: string, color: string) => (
+    <span className="text-[9px] font-medium px-1.5 py-0.5 rounded" style={{ color, backgroundColor: color + "18" }}>{label}</span>
+  )
 
-        ctx.beginPath()
-        ctx.arc(x, y, 3, 0, Math.PI * 2)
-        ctx.fillStyle = color + "cc"
-        ctx.fill()
-      }
-
-      // Draw nodes
-      for (let i = 0; i < nodes.length; i++) {
-        const n = nodes[i]
-        ctx.beginPath()
-        ctx.arc(n.x, n.y, 20, 0, Math.PI * 2)
-        ctx.fillStyle = color + "12"
-        ctx.fill()
-        ctx.strokeStyle = color + "35"
-        ctx.lineWidth = 1.5
-        ctx.stroke()
-
-        ctx.beginPath()
-        ctx.arc(n.x, n.y, 13, 0, Math.PI * 2)
-        ctx.fillStyle = color
-        ctx.fill()
-
-        ctx.fillStyle = "#fff"
-        ctx.font = "bold 10px system-ui"
-        ctx.textAlign = "center"
-        ctx.textBaseline = "middle"
-        ctx.fillText(String(i + 1), n.x, n.y)
-
-        ctx.fillStyle = "#6b7280"
-        ctx.font = "10px system-ui"
-        ctx.fillText(n.label, n.x, n.y + 32)
-      }
-
-      animRef.current = requestAnimationFrame(draw)
-    }
-
-    animRef.current = requestAnimationFrame(draw)
-    return () => {
-      running = false
-      cancelAnimationFrame(animRef.current)
-    }
-  }, [tab, current])
-
-  const evLen = current.events.length
-  const visibleEvents = [0, 1, 2].map((offset) =>
-    current.events[(eventIdx + offset) % evLen]
+  const pipelineSeg = (label: string, value: number, color: string, w: string) => (
+    <div className="text-center" style={{ width: w }}>
+      <div className="h-[6px] rounded-full mb-1" style={{ backgroundColor: color }} />
+      <p className="text-[8px] text-gray-500">{label}</p>
+      <p className="text-[10px] font-bold text-gray-300">{value}</p>
+    </div>
   )
 
   return (
     <div className="hidden lg:block" style={{ animation: "fade-in-up 1s ease-out 0.3s both" }}>
-      <div className="rounded-2xl border border-gray-200 shadow-lg overflow-hidden bg-white">
-        {/* Browser bar */}
-        <div className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 border-b border-gray-100">
-          <div className="flex gap-1.5">
-            <span className="w-3 h-3 rounded-full bg-red-400" />
-            <span className="w-3 h-3 rounded-full bg-amber-400" />
-            <span className="w-3 h-3 rounded-full bg-emerald-400" />
+      <div className="bg-gray-950 rounded-2xl overflow-hidden p-[2px] grid grid-cols-2 grid-rows-2 gap-[2px]" style={{ height: 420 }}>
+
+        {/* Panel 1: HR */}
+        <div className="bg-gray-900 rounded-xl p-3.5 overflow-hidden flex flex-col">
+          <div className="flex items-center gap-1.5 mb-2.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+            <span className="text-[11px] font-semibold tracking-wide text-emerald-400">HR — НАЙМ И КОМАНДА</span>
           </div>
-          <span className="text-xs text-gray-400 ml-2 font-medium">company24.pro</span>
-        </div>
-
-        {/* Tabs */}
-        <div className="flex gap-1 px-4 pt-3 pb-0">
-          {DASH_TABS.map((t, i) => (
-            <button
-              key={t.id}
-              onClick={() => handleTab(i)}
-              className={cn(
-                "px-3 py-1.5 rounded-lg text-xs font-medium transition-all",
-                tab === i
-                  ? "text-white shadow-sm"
-                  : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
-              )}
-              style={tab === i ? { backgroundColor: t.color } : undefined}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Metrics */}
-        <div className="grid grid-cols-3 gap-3 px-4 py-3">
-          {current.metrics.map((m, i) => (
-            <div key={m.label} className="rounded-xl bg-gray-50 px-3 py-2.5 text-center">
-              <p className="text-[10px] uppercase tracking-wide text-gray-400 mb-0.5">{m.label}</p>
-              <p className="text-xl font-bold tracking-tight" style={{ color: current.color }}>
-                {animatedMetrics[i]}{m.suffix}
-              </p>
+          <div className="flex gap-3 mb-2.5">
+            <div className="relative shrink-0">
+              {ring(73, "#10B981", 56)}
+              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <span className="text-sm font-bold text-emerald-400 leading-none">48</span>
+                <span className="text-[7px] text-gray-500">человек</span>
+              </div>
             </div>
-          ))}
+            <div className="space-y-1.5 text-[10px]">
+              <div className="flex justify-between"><span className="text-gray-500">Откр. вакансии</span><span className="text-white font-semibold">12</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">На испытат.</span><span className="text-amber-400 font-semibold">7</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">Текучесть</span><span className="text-emerald-400 font-semibold">4.2% <span className="text-[8px]">↓1.3%</span></span></div>
+            </div>
+          </div>
+          <p className="text-[9px] text-gray-600 uppercase tracking-wider mb-1.5 font-medium">Воронка найма</p>
+          <div className="space-y-1 flex-1">
+            {funnelBar("Отклики", 234, 100, "#4F46E5")}
+            {funnelBar("Скрининг", 89, 38, "#818CF8")}
+            {funnelBar("Интервью", 34, 15, "#FBBF24")}
+            {funnelBar("Оффер", 8, 3, "#10B981")}
+          </div>
         </div>
 
-        {/* Canvas network */}
-        <div className="px-4">
-          <canvas
-            ref={canvasRef}
-            width={560}
-            height={220}
-            className="w-full rounded-xl bg-gray-50/50"
-            style={{ height: 200 }}
-          />
+        {/* Panel 2: Marketing */}
+        <div className="bg-gray-900 rounded-xl p-3.5 overflow-hidden flex flex-col">
+          <div className="flex items-center gap-1.5 mb-2.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+            <span className="text-[11px] font-semibold tracking-wide text-amber-400">МАРКЕТИНГ — КАНАЛЫ</span>
+          </div>
+          <div className="flex gap-3 mb-2">
+            <canvas ref={mktCanvasRef} width={120} height={60} style={{ width: 120, height: 60 }} />
+            <div className="flex gap-2 items-start">
+              <div className="relative">
+                {ring(60, "#F59E0B", 44)}
+                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                  <span className="text-[10px] font-bold text-amber-400">60%</span>
+                  <span className="text-[6px] text-gray-500">ROI</span>
+                </div>
+              </div>
+              <div className="relative">
+                {ring(85, "#818CF8", 44)}
+                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                  <span className="text-[10px] font-bold text-indigo-400">85%</span>
+                  <span className="text-[6px] text-gray-500">CTR</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-1 mt-auto">
+            {pill("SEO +32%", "#10B981")}
+            {pill("Контекст +18%", "#F59E0B")}
+            {pill("SMM +45%", "#EC4899")}
+            {pill("Email +12%", "#818CF8")}
+          </div>
         </div>
 
-        {/* Event feed */}
-        <div className="px-4 py-3 border-t border-gray-100">
-          <div className="space-y-1.5">
-            {visibleEvents.map((ev, i) => (
-              <div
-                key={`${eventIdx}-${i}`}
-                className="flex items-center gap-2 text-[11px]"
-                style={i === 0 ? { animation: "slide-in 0.3s ease-out" } : { opacity: 1 - i * 0.25 }}
-              >
-                <span
-                  className="w-1.5 h-1.5 rounded-full shrink-0"
-                  style={{ backgroundColor: i === 0 ? current.color : current.color + "80" }}
-                />
-                <span className="text-gray-500 truncate">{ev}</span>
+        {/* Panel 3: Sales */}
+        <div className="bg-gray-900 rounded-xl p-3.5 overflow-hidden flex flex-col">
+          <div className="flex items-center gap-1.5 mb-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
+            <span className="text-[11px] font-semibold tracking-wide text-indigo-400">ПРОДАЖИ — CRM</span>
+          </div>
+          <div className="flex gap-4 mb-2 text-[10px]">
+            <div><span className="text-gray-500">Выручка</span> <span className="text-emerald-400 font-bold">₽{salesRevenue.toFixed(1)}M</span></div>
+            <div><span className="text-gray-500">Ср. чек</span> <span className="text-white font-bold">₽187K</span></div>
+            <div><span className="text-gray-500">Конв.</span> <span className="text-amber-400 font-bold">18.4%↑</span></div>
+          </div>
+          <canvas ref={salesCanvasRef} width={240} height={50} className="w-full mb-2" style={{ height: 50 }} />
+          <div className="flex gap-[2px] mt-auto">
+            {pipelineSeg("Новые", 45, "#4F46E5", "22%")}
+            {pipelineSeg("В работе", 128, "#818CF8", "34%")}
+            {pipelineSeg("Счёт", 67, "#FBBF24", "20%")}
+            {pipelineSeg("Закрыты", 156, "#10B981", "24%")}
+          </div>
+        </div>
+
+        {/* Panel 4: Logistics */}
+        <div className="bg-gray-900 rounded-xl p-3.5 overflow-hidden flex flex-col">
+          <div className="flex items-center gap-1.5 mb-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
+            <span className="text-[11px] font-semibold tracking-wide text-cyan-400">ЛОГИСТИКА — ДОСТАВКА</span>
+          </div>
+          <canvas ref={logCanvasRef} width={240} height={50} className="w-full mb-2" style={{ height: 50 }} />
+          <div className="grid grid-cols-4 gap-1 mb-2">
+            {[
+              { label: "В пути", value: "342", color: "text-cyan-400" },
+              { label: "Доставлено", value: "1,847", color: "text-emerald-400" },
+              { label: "Ср. время", value: "2.1д", color: "text-white" },
+              { label: "Возвраты", value: "1.2%", color: "text-amber-400" },
+            ].map((m) => (
+              <div key={m.label} className="bg-gray-800 rounded-md p-1.5 text-center">
+                <p className="text-[7px] text-gray-500">{m.label}</p>
+                <p className={`text-[10px] font-bold ${m.color}`}>{m.value}</p>
+              </div>
+            ))}
+          </div>
+          <div className="flex gap-[2px] mt-auto">
+            {[
+              { label: "Доставлено 68%", color: "#10B981", w: "68%" },
+              { label: "В пути 20%", color: "#06B6D4", w: "20%" },
+              { label: "Задержка", color: "#FBBF24", w: "8%" },
+              { label: "Возврат", color: "#EF4444", w: "4%" },
+            ].map((s) => (
+              <div key={s.label} className="text-center" style={{ width: s.w }}>
+                <div className="h-[6px] rounded-full" style={{ backgroundColor: s.color }} />
+                <p className="text-[7px] text-gray-500 mt-0.5 truncate">{s.label}</p>
               </div>
             ))}
           </div>
@@ -567,10 +583,6 @@ const CUSTOM_STYLES = `
   from { opacity: 0; transform: translateY(30px); }
   to { opacity: 1; transform: translateY(0); }
 }
-@keyframes slide-in {
-  from { opacity: 0; transform: translateY(-8px); }
-  to { opacity: 1; transform: translateY(0); }
-}
 `
 
 // ─── Landing Page ────────────────────────────────────────────────────────────
@@ -579,14 +591,17 @@ export default function LandingPage() {
   const [activeModule, setActiveModule] = useState("hr")
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
-
   // Section reveals
   const howWesolve = useReveal()
+  const [featureTab, setFeatureTab] = useState(0)
+  const forWhom = useReveal()
   const comparison = useReveal()
   const modules = useReveal()
   const steps = useReveal()
   const agents = useReveal()
   const pricing = useReveal()
+  const [pricingUsers, setPricingUsers] = useState(3)
+  const [selectedModules, setSelectedModules] = useState<Record<string, boolean>>({ hr: true })
   const cta = useReveal()
 
   useEffect(() => {
@@ -598,14 +613,14 @@ export default function LandingPage() {
   const currentModule = MODULES.find((m) => m.id === activeModule) ?? MODULES[0]
 
   return (
-    <div className="min-h-screen bg-white text-gray-900 antialiased scroll-smooth">
+    <div className="min-h-screen bg-gray-950 text-white antialiased scroll-smooth">
       <style dangerouslySetInnerHTML={{ __html: CUSTOM_STYLES }} />
 
       {/* ── HEADER ── */}
       <header className={cn(
         "sticky top-0 z-50 transition-all duration-300 border-b",
         scrolled
-          ? "bg-white/90 backdrop-blur-xl border-gray-200/60 shadow-sm"
+          ? "bg-gray-950/90 backdrop-blur-xl border-gray-700/60 shadow-sm"
           : "bg-transparent border-transparent"
       )}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
@@ -613,22 +628,22 @@ export default function LandingPage() {
             <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center shadow-lg shadow-indigo-500/20">
               <span className="text-white font-bold text-base">C</span>
             </div>
-            <span className="font-bold text-xl tracking-tight text-gray-800">Company24.pro</span>
+            <span className="font-bold text-xl tracking-tight text-gray-100">Company24.pro</span>
           </Link>
 
           <nav className="hidden md:flex items-center gap-8">
             {NAV_ITEMS.map((item) => (
-              <a key={item.href} href={item.href} className="text-sm font-medium text-gray-500 hover:text-gray-800 transition-colors">
+              <a key={item.href} href={item.href} className="text-sm font-medium text-gray-400 hover:text-gray-200 transition-colors">
                 {item.label}
               </a>
             ))}
           </nav>
 
           <div className="hidden md:flex items-center gap-3">
-            <Button variant="ghost" size="sm" className="text-gray-600 hover:text-gray-800" asChild>
+            <Button variant="ghost" size="sm" className="text-gray-400 hover:text-white" asChild>
               <Link href="/login">Войти</Link>
             </Button>
-            <Button size="sm" className="bg-gradient-to-r from-indigo-500 to-violet-500 hover:from-indigo-600 hover:to-violet-600 shadow-lg shadow-indigo-500/20 text-white" asChild>
+<Button size="sm" className="bg-gradient-to-r from-indigo-500 to-violet-500 hover:from-indigo-600 hover:to-violet-600 shadow-lg shadow-indigo-500/20 text-white" asChild>
               <Link href="/register">Попробовать бесплатно</Link>
             </Button>
           </div>
@@ -639,9 +654,9 @@ export default function LandingPage() {
         </div>
 
         {mobileMenuOpen && (
-          <div className="md:hidden border-t border-gray-200 bg-white/95 backdrop-blur-xl px-4 py-4 space-y-3">
+          <div className="md:hidden border-t border-gray-700 bg-gray-950/95 backdrop-blur-xl px-4 py-4 space-y-3">
             {NAV_ITEMS.map((item) => (
-              <a key={item.href} href={item.href} className="block text-sm font-medium text-gray-500" onClick={() => setMobileMenuOpen(false)}>
+              <a key={item.href} href={item.href} className="block text-sm font-medium text-gray-400" onClick={() => setMobileMenuOpen(false)}>
                 {item.label}
               </a>
             ))}
@@ -682,7 +697,7 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-12 md:py-16 relative w-full">
           <div className="grid lg:grid-cols-2 gap-16 items-center">
             <div style={{ animation: "fade-in-up 0.8s ease-out" }}>
-              <div className="inline-flex items-center gap-2 text-xs font-medium tracking-wide uppercase text-indigo-600 bg-indigo-50 border border-indigo-100 px-4 py-2 rounded-full mb-6">
+              <div className="inline-flex items-center gap-2 text-xs font-medium tracking-wide uppercase text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-4 py-2 rounded-full mb-6">
                 <span className="relative flex h-2 w-2">
                   <span className="absolute inset-0 rounded-full bg-emerald-400 opacity-75" style={{ animation: "pulse-ring 2s ease-in-out infinite" }} />
                   <span className="relative rounded-full h-2 w-2 bg-emerald-500" />
@@ -690,25 +705,25 @@ export default function LandingPage() {
                 AI Business OS
               </div>
 
-              <h1 className="text-4xl md:text-5xl lg:text-[56px] font-bold tracking-tight leading-[1.08] mb-5 text-gray-900">
+              <h1 className="text-4xl md:text-5xl lg:text-[56px] font-bold tracking-tight leading-[1.08] mb-5 text-white">
                 AI-система, которая ведёт бизнес{" "}
                 <span className="bg-gradient-to-r from-indigo-500 to-violet-500 bg-clip-text text-transparent">24/7</span>
               </h1>
 
-              <p className="text-lg text-gray-500 mb-10 max-w-xl leading-relaxed">
+              <p className="text-lg text-gray-400 mb-10 max-w-xl leading-relaxed">
                 Company24.pro автоматизирует HR, маркетинг, продажи и логистику. AI-агенты берут на себя 80% рутины. Снижаем затраты и увеличиваем эффективность.
               </p>
 
               <div className="flex flex-wrap gap-4 mb-8">
-                <Button size="lg" className="bg-gradient-to-r from-indigo-500 to-violet-500 hover:from-indigo-600 hover:to-violet-600 h-14 px-10 text-base shadow-xl shadow-indigo-500/20 transition-all hover:shadow-2xl hover:shadow-indigo-500/30 hover:scale-[1.02] text-white rounded-2xl" asChild>
+                <Button size="lg" className="bg-gradient-to-r from-indigo-500 to-violet-500 hover:from-indigo-600 hover:to-violet-600 h-14 px-10 text-base shadow-xl shadow-indigo-500/30 transition-all hover:shadow-2xl hover:shadow-indigo-500/40 hover:scale-[1.02] text-white rounded-2xl" asChild>
                   <Link href="/register">Начать бесплатно <ArrowRight className="w-5 h-5 ml-2" /></Link>
                 </Button>
-                <Button variant="outline" size="lg" className="h-14 px-10 text-base rounded-2xl border-gray-200 text-gray-600 hover:bg-white hover:border-indigo-200 hover:text-indigo-600 transition-all">
+                <Button variant="outline" size="lg" className="h-14 px-10 text-base rounded-2xl border-gray-700 text-gray-300 hover:bg-gray-800 hover:border-indigo-500 hover:text-indigo-400 transition-all">
                   <Play className="w-4 h-4 mr-2" /> Смотреть демо
                 </Button>
               </div>
 
-              <p className="text-sm text-gray-400">
+              <p className="text-sm text-gray-500">
                 Бесплатно 14 дней · Без привязки карты · company24.pro
               </p>
             </div>
@@ -719,166 +734,136 @@ export default function LandingPage() {
       </section>
 
       {/* ── КАК МЫ РЕШАЕМ ── */}
-      <section id="features" className="py-24 bg-gray-50">
+      <section id="features" className="py-24 bg-gray-950">
         <div
           ref={howWesolve.ref}
           className={cn(
-            "max-w-5xl mx-auto px-4 sm:px-6 transition-all duration-700",
+            "max-w-6xl mx-auto px-4 sm:px-6 transition-all duration-700",
             howWesolve.visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-10"
           )}
         >
-          <div className="text-center mb-14">
-            <span className="inline-block text-xs font-medium tracking-widest uppercase text-indigo-500 bg-indigo-50 border border-indigo-100 px-4 py-1.5 rounded-full mb-4">
+          <div className="text-center mb-10">
+            <span className="inline-block text-xs font-medium tracking-widest uppercase text-indigo-500 bg-indigo-500/10 border border-indigo-500/20 px-4 py-1.5 rounded-full mb-4">
               Как мы решаем
             </span>
-            <h2 className="text-3xl md:text-4xl font-bold text-gray-800">Проблемы бизнеса — и как Company24.pro их решает</h2>
+            <h2 className="text-3xl md:text-4xl font-bold text-gray-100">Проблемы бизнеса — и как Company24.pro их решает</h2>
           </div>
 
-          {/* Блок 1 — Найм */}
-          <div className="mb-16">
-            <div className="flex justify-center mb-6">
-              <span className="inline-block text-xs font-medium tracking-widest uppercase text-indigo-500 bg-indigo-50 border border-indigo-100 px-4 py-1.5 rounded-full">
-                Найм
-              </span>
-            </div>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="bg-white rounded-2xl border border-gray-100 border-l-4 border-l-red-400 p-8">
-                <h3 className="font-bold text-lg mb-4 text-gray-800">Кандидатов много — релевантных мало</h3>
-                <ul className="space-y-3">
-                  {[
-                    "Сотни откликов, но HR тратит время на нерелевантных",
-                    "Хорошие кандидаты уходят, пока разбираете слабых",
-                    "Кандидаты приходят на собеседование просто узнать что предлагаете",
-                    "Ручная переписка с каждым — нужна целая команда рекрутеров",
-                  ].map((p) => (
-                    <li key={p} className="flex items-start gap-3">
-                      <div className="w-5 h-5 rounded-full bg-red-50 flex items-center justify-center shrink-0 mt-0.5">
-                        <X className="w-3 h-3 text-red-400" />
-                      </div>
-                      <span className="text-sm text-gray-500 leading-relaxed">{p}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-              <div className="bg-white rounded-2xl border border-gray-100 border-l-4 border-l-emerald-400 p-8">
-                <h3 className="font-bold text-lg mb-4 text-gray-800">Company24.pro находит готовых кандидатов</h3>
-                <ul className="space-y-3">
-                  {[
-                    "Привлекаем кандидатов с hh.ru, Авито, SuperJob и других job-бордов",
-                    "AI автоматически фильтрует нерелевантных",
-                    "Прогрев, проверка навыков, отсев — без участия HR",
-                    "Демонстрация должности до собеседования",
-                    "К HR приходят только те, кто сказал «да, я хочу»",
-                  ].map((p) => (
-                    <li key={p} className="flex items-start gap-3">
-                      <div className="w-5 h-5 rounded-full bg-emerald-50 flex items-center justify-center shrink-0 mt-0.5">
-                        <Check className="w-3 h-3 text-emerald-500" />
-                      </div>
-                      <span className="text-sm text-gray-600 leading-relaxed">{p}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
+          {/* Tabs */}
+          <div className="flex justify-center mb-10">
+            <div className="inline-flex flex-wrap justify-center bg-gray-800 rounded-2xl border border-gray-700 p-1.5 gap-1 shadow-sm">
+              {FEATURE_TABS.map((t, i) => {
+                const colors = FEATURE_TAB_COLORS[t.color]
+                return (
+                  <button
+                    key={t.id}
+                    onClick={() => setFeatureTab(i)}
+                    className={cn(
+                      "px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200",
+                      featureTab === i
+                        ? `${colors.bg} text-white shadow-md`
+                        : "text-gray-400 hover:text-gray-200 hover:bg-gray-800"
+                    )}
+                  >
+                    {t.label}
+                  </button>
+                )
+              })}
             </div>
           </div>
 
-          {/* Блок 2 — Ввод в должность */}
-          <div className="mb-16">
-            <div className="flex justify-center mb-6">
-              <span className="inline-block text-xs font-medium tracking-widest uppercase text-amber-500 bg-amber-50 border border-amber-100 px-4 py-1.5 rounded-full">
-                Ввод в должность
-              </span>
-            </div>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="bg-white rounded-2xl border border-gray-100 border-l-4 border-l-red-400 p-8">
-                <h3 className="font-bold text-lg mb-4 text-gray-800">Месяцы ожидания — покажет ли результат?</h3>
-                <ul className="space-y-3">
-                  {[
-                    "2-3 месяца чтобы понять подходит ли сотрудник",
-                    "Огромная нагрузка на наставников и руководителей",
-                    "Не подошёл — потеряны месяцы и деньги",
-                    "Нет структурированного процесса адаптации",
-                  ].map((p) => (
-                    <li key={p} className="flex items-start gap-3">
-                      <div className="w-5 h-5 rounded-full bg-red-50 flex items-center justify-center shrink-0 mt-0.5">
-                        <X className="w-3 h-3 text-red-400" />
-                      </div>
-                      <span className="text-sm text-gray-500 leading-relaxed">{p}</span>
-                    </li>
-                  ))}
-                </ul>
+          {/* Content */}
+          {(() => {
+            const current = FEATURE_TABS[featureTab]
+            return (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Problem */}
+                <div className="bg-gray-900 rounded-2xl border border-gray-800 border-l-4 border-l-red-400 p-10 shadow-sm">
+                  <div className="flex items-center gap-3 mb-5">
+                    <div className="w-10 h-10 rounded-xl bg-red-500/10 flex items-center justify-center">
+                      <X className="w-5 h-5 text-red-400" />
+                    </div>
+                    <span className="text-xs font-medium uppercase tracking-widest text-red-400">Проблема</span>
+                  </div>
+                  <h3 className="font-bold text-xl mb-5 text-gray-100">{current.problem.title}</h3>
+                  <ul className="space-y-3.5">
+                    {current.problem.points.map((p) => (
+                      <li key={p} className="flex items-start gap-3">
+                        <div className="w-5 h-5 rounded-full bg-red-500/10 flex items-center justify-center shrink-0 mt-0.5">
+                          <X className="w-3 h-3 text-red-400" />
+                        </div>
+                        <span className="text-base text-gray-400 leading-relaxed">{p}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                {/* Solution */}
+                <div className="bg-gray-900 rounded-2xl border border-gray-800 border-l-4 border-l-emerald-400 p-10 shadow-sm">
+                  <div className="flex items-center gap-3 mb-5">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
+                      <Check className="w-5 h-5 text-emerald-500" />
+                    </div>
+                    <span className="text-xs font-medium uppercase tracking-widest text-emerald-500">Решение</span>
+                  </div>
+                  <h3 className="font-bold text-xl mb-5 text-gray-100">{current.solution.title}</h3>
+                  <ul className="space-y-3.5">
+                    {current.solution.points.map((p) => (
+                      <li key={p} className="flex items-start gap-3">
+                        <div className="w-5 h-5 rounded-full bg-emerald-500/10 flex items-center justify-center shrink-0 mt-0.5">
+                          <Check className="w-3 h-3 text-emerald-500" />
+                        </div>
+                        <span className="text-base text-gray-300 leading-relaxed">{p}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               </div>
-              <div className="bg-white rounded-2xl border border-gray-100 border-l-4 border-l-emerald-400 p-8">
-                <h3 className="font-bold text-lg mb-4 text-gray-800">За 1-2 недели понимаем — подходит или нет</h3>
-                <ul className="space-y-3">
-                  {[
-                    "Курсы + тестовые задания с первого дня",
-                    "Проверяем ключевые навыки: звонки, письма, продажи",
-                    "Структурированный онбординг снимает нагрузку с наставников",
-                    "Не подошёл — узнаём за дни, а не за месяцы",
-                  ].map((p) => (
-                    <li key={p} className="flex items-start gap-3">
-                      <div className="w-5 h-5 rounded-full bg-emerald-50 flex items-center justify-center shrink-0 mt-0.5">
-                        <Check className="w-3 h-3 text-emerald-500" />
-                      </div>
-                      <span className="text-sm text-gray-600 leading-relaxed">{p}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
+            )
+          })()}
+        </div>
+      </section>
+
+      {/* ── ДЛЯ КОГО ── */}
+      <section className="py-24 md:py-28 bg-gray-950">
+        <div
+          ref={forWhom.ref}
+          className={cn(
+            "max-w-6xl mx-auto px-4 sm:px-6 transition-all duration-700",
+            forWhom.visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-10"
+          )}
+        >
+          <div className="text-center mb-14">
+            <span className="inline-block text-xs font-medium tracking-widest uppercase text-indigo-500 bg-indigo-500/10 border border-indigo-500/20 px-4 py-1.5 rounded-full mb-4">
+              Для вашего бизнеса
+            </span>
+            <h2 className="text-3xl md:text-4xl font-bold text-gray-100 mb-3">Company24.pro — если вы хотите</h2>
+            <p className="text-gray-400 text-lg max-w-2xl mx-auto">Платформа для тех, кто строит бизнес на результат, а не на процессы</p>
           </div>
 
-          {/* Блок 3 — Обучение и развитие */}
-          <div>
-            <div className="flex justify-center mb-6">
-              <span className="inline-block text-xs font-medium tracking-widest uppercase text-violet-500 bg-violet-50 border border-violet-100 px-4 py-1.5 rounded-full">
-                Обучение и развитие
-              </span>
-            </div>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="bg-white rounded-2xl border border-gray-100 border-l-4 border-l-red-400 p-8">
-                <h3 className="font-bold text-lg mb-4 text-gray-800">Обучение хаотичное и не системное</h3>
-                <ul className="space-y-3">
-                  {[
-                    "Сотрудники не знают что развивать",
-                    "Руководители не успевают обучать",
-                    "Нет единой базы знаний и контроля",
-                  ].map((p) => (
-                    <li key={p} className="flex items-start gap-3">
-                      <div className="w-5 h-5 rounded-full bg-red-50 flex items-center justify-center shrink-0 mt-0.5">
-                        <X className="w-3 h-3 text-red-400" />
-                      </div>
-                      <span className="text-sm text-gray-500 leading-relaxed">{p}</span>
-                    </li>
-                  ))}
-                </ul>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {[
+              { icon: TrendingDown, color: "bg-indigo-500/10", iconColor: "text-indigo-500", title: "Снизить затраты на персонал в 2-3 раза", desc: "AI берёт на себя рутину рекрутинга, онбординга и обучения. Один HR-менеджер справляется с объёмом целого отдела." },
+              { icon: Users, color: "bg-emerald-500/10", iconColor: "text-emerald-500", title: "Собрать команду из лучших", desc: "Привлекаем, фильтруем и прогреваем кандидатов автоматически. К вам приходят только те, кто действительно хочет работать." },
+              { icon: TrendingUp, color: "bg-rose-500/10", iconColor: "text-rose-500", title: "Увеличить продажи и поток клиентов", desc: "AI ведёт воронку, квалифицирует лиды, напоминает о follow-up. Ни один клиент не теряется." },
+              { icon: Target, color: "bg-amber-500/10", iconColor: "text-amber-500", title: "Обогнать конкурентов", desc: "Пока конкуренты нанимают отделы — вы автоматизируете. Скорость принятия решений и реакции в разы выше." },
+              { icon: BarChart3, color: "bg-violet-500/10", iconColor: "text-violet-500", title: "Видеть всю картину бизнеса", desc: "Все данные в одном окне: HR, маркетинг, продажи, склад. Решения на основе цифр, а не интуиции." },
+              { icon: Zap, color: "bg-cyan-500/10", iconColor: "text-cyan-500", title: "Масштабироваться без хаоса", desc: "Процессы упакованы в систему. Растёте — система растёт вместе с вами, без потери контроля." },
+            ].map((card) => (
+              <div key={card.title} className="bg-gray-900 rounded-2xl p-8 border border-gray-800 hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
+                <div className={cn("w-14 h-14 rounded-2xl flex items-center justify-center mb-5", card.color)}>
+                  <card.icon className={cn("w-7 h-7", card.iconColor)} />
+                </div>
+                <h3 className="font-bold text-lg mb-2 text-gray-100">{card.title}</h3>
+                <p className="text-sm text-gray-400 leading-relaxed">{card.desc}</p>
               </div>
-              <div className="bg-white rounded-2xl border border-gray-100 border-l-4 border-l-emerald-400 p-8">
-                <h3 className="font-bold text-lg mb-4 text-gray-800">AI прокачивает команду на автомате</h3>
-                <ul className="space-y-3">
-                  {[
-                    "AI анализирует слабые стороны каждого сотрудника",
-                    "Дозированные курсы и видео из библиотеки обучения",
-                    "Платформа напоминает когда пора учиться",
-                    "Прокачка навыков без участия руководителя",
-                  ].map((p) => (
-                    <li key={p} className="flex items-start gap-3">
-                      <div className="w-5 h-5 rounded-full bg-emerald-50 flex items-center justify-center shrink-0 mt-0.5">
-                        <Check className="w-3 h-3 text-emerald-500" />
-                      </div>
-                      <span className="text-sm text-gray-600 leading-relaxed">{p}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
+            ))}
           </div>
         </div>
       </section>
 
       {/* ── СРАВНЕНИЕ ── */}
-      <section className="py-24 md:py-28 bg-gradient-to-br from-violet-50/50 via-indigo-50/30 to-emerald-50/30">
+      <section className="py-24 md:py-28 bg-gray-950">
         <div
           ref={comparison.ref}
           className={cn(
@@ -887,107 +872,78 @@ export default function LandingPage() {
           )}
         >
           <div className="text-center mb-14 max-w-3xl mx-auto">
-            <span className="inline-block text-xs font-medium tracking-widest uppercase text-indigo-500 bg-indigo-50 border border-indigo-100 px-4 py-1.5 rounded-full mb-4">
+            <span className="inline-block text-xs font-medium tracking-widest uppercase text-indigo-500 bg-indigo-500/10 border border-indigo-500/20 px-4 py-1.5 rounded-full mb-4">
               Почему мы
             </span>
-            <h2 className="text-3xl md:text-4xl font-bold mb-4 text-gray-800">
+            <h2 className="text-3xl md:text-4xl font-bold mb-4 text-gray-100">
               Не CRM. Не ERP.{" "}
               <span className="bg-gradient-to-r from-indigo-500 to-violet-500 bg-clip-text text-transparent">AI Business OS.</span>
             </h2>
-            <p className="text-gray-500 text-lg">Операционная система для бизнеса, где AI делает работу, а не просто показывает графики.</p>
+            <p className="text-gray-400 text-lg">Операционная система для бизнеса, где AI делает работу, а не просто показывает графики.</p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto items-start">
-            {/* CRM */}
-            <div className="bg-white rounded-2xl border border-gray-200 p-8">
-              <h3 className="font-bold text-xl mb-1 text-gray-400">CRM</h3>
-              <p className="text-sm text-gray-400 mb-6">Только продажи</p>
-              <ul className="space-y-3 mb-6">
-                {([
-                  { text: "Нет автоматизации найма", icon: "x" },
-                  { text: "Нет AI-скоринга кандидатов", icon: "x" },
-                  { text: "Частичная маркетинговая аналитика", icon: "partial" },
-                  { text: "Воронка продаж", icon: "check" },
-                  { text: "Нет управления складом", icon: "x" },
-                ] as const).map((p) => (
-                  <li key={p.text} className="flex items-start gap-3">
-                    <div className={cn(
-                      "w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5",
-                      p.icon === "x" ? "bg-gray-100" : p.icon === "partial" ? "bg-amber-50" : "bg-emerald-50"
-                    )}>
-                      {p.icon === "x" && <X className="w-3 h-3 text-gray-300" />}
-                      {p.icon === "partial" && <Minus className="w-3 h-3 text-amber-400" />}
-                      {p.icon === "check" && <Check className="w-3 h-3 text-emerald-400" />}
-                    </div>
-                    <span className="text-sm text-gray-500">{p.text}</span>
-                  </li>
-                ))}
-              </ul>
-              <p className="text-xs text-gray-400 font-medium">Среднее внедрение</p>
-            </div>
-
-            {/* Company24.pro */}
-            <div className="relative bg-gradient-to-b from-indigo-50 to-white rounded-2xl border-2 border-indigo-500 p-8 shadow-xl">
-              <span className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-gradient-to-r from-indigo-500 to-violet-500 text-white px-4 py-1 rounded-full text-xs font-medium shadow-lg">
-                Рекомендуем
-              </span>
-              <h3 className="font-bold text-xl mb-1 text-indigo-600">Company24.pro</h3>
-              <p className="text-sm text-indigo-400 mb-6">AI делает работу за вас</p>
-              <ul className="space-y-3 mb-6">
-                {[
-                  "Автоматизация найма",
-                  "AI-скоринг кандидатов",
-                  "Маркетинговая аналитика",
-                  "Воронка продаж",
-                  "Управление складом",
-                  "Доступная стоимость",
-                ].map((p) => (
-                  <li key={p} className="flex items-start gap-3">
-                    <div className="w-5 h-5 rounded-full bg-emerald-50 flex items-center justify-center shrink-0 mt-0.5">
-                      <Check className="w-3 h-3 text-emerald-500" />
-                    </div>
-                    <span className="text-sm text-gray-700 font-medium">{p}</span>
-                  </li>
-                ))}
-              </ul>
-              <Button className="w-full bg-gradient-to-r from-indigo-500 to-violet-500 hover:from-indigo-600 hover:to-violet-600 text-white shadow-lg shadow-indigo-500/20 h-11 rounded-xl" asChild>
-                <Link href="/register">Попробовать бесплатно</Link>
-              </Button>
-            </div>
-
-            {/* ERP */}
-            <div className="bg-white rounded-2xl border border-gray-200 p-8">
-              <h3 className="font-bold text-xl mb-1 text-gray-400">ERP</h3>
-              <p className="text-sm text-gray-400 mb-6">Сложно и дорого</p>
-              <ul className="space-y-3 mb-6">
-                {([
-                  { text: "Нет автоматизации найма", icon: "x" },
-                  { text: "Нет AI-скоринга", icon: "x" },
-                  { text: "Нет маркетинга", icon: "x" },
-                  { text: "Частично воронка продаж", icon: "partial" },
-                  { text: "Управление складом", icon: "check" },
-                ] as const).map((p) => (
-                  <li key={p.text} className="flex items-start gap-3">
-                    <div className={cn(
-                      "w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5",
-                      p.icon === "x" ? "bg-gray-100" : p.icon === "partial" ? "bg-amber-50" : "bg-emerald-50"
-                    )}>
-                      {p.icon === "x" && <X className="w-3 h-3 text-gray-300" />}
-                      {p.icon === "partial" && <Minus className="w-3 h-3 text-amber-400" />}
-                      {p.icon === "check" && <Check className="w-3 h-3 text-emerald-400" />}
-                    </div>
-                    <span className="text-sm text-gray-500">{p.text}</span>
-                  </li>
-                ))}
-              </ul>
-              <p className="text-xs text-red-400 font-medium">Дорогое внедрение</p>
+          <div className="overflow-x-auto max-w-4xl mx-auto">
+            <div className="bg-gray-900 rounded-2xl border border-gray-700 shadow-sm overflow-hidden">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-gray-800">
+                    <th className="text-left py-4 px-6" />
+                    <th className="py-4 px-6 bg-indigo-500/10">
+                      <span className="font-semibold text-indigo-400 bg-indigo-500/10 px-4 py-2 rounded-full text-sm">Company24.pro</span>
+                    </th>
+                    <th className="py-4 px-6 text-sm font-semibold uppercase tracking-wider text-gray-400">CRM</th>
+                    <th className="py-4 px-6 text-sm font-semibold uppercase tracking-wider text-gray-400">ERP</th>
+                    <th className="py-4 px-6 text-sm font-semibold uppercase tracking-wider text-gray-400">Вручную</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {([
+                    { feature: "Автоматизация найма", c24: "check", crm: "no", erp: "no", manual: "no" },
+                    { feature: "AI-скоринг кандидатов", c24: "check", crm: "no", erp: "no", manual: "no" },
+                    { feature: "Ввод в должность и онбординг", c24: "check", crm: "no", erp: "no", manual: "partial" },
+                    { feature: "Обучение и развитие персонала", c24: "check", crm: "no", erp: "no", manual: "partial" },
+                    { feature: "Маркетинговая аналитика", c24: "check", crm: "partial", erp: "no", manual: "no" },
+                    { feature: "Воронка продаж", c24: "check", crm: "check", erp: "partial", manual: "no" },
+                    { feature: "Управление складом и логистика", c24: "check", crm: "no", erp: "check", manual: "no" },
+                    { feature: "AI-агенты 24/7", c24: "check", crm: "no", erp: "no", manual: "no" },
+                    { feature: "Стоимость внедрения", c24: "check", crm: "partial", erp: "no", manual: "check" },
+                  ] as const).map((row, i) => {
+                    const renderIcon = (val: "check" | "no" | "partial") => {
+                      if (val === "check") return (
+                        <div className="w-8 h-8 rounded-full bg-emerald-900/40 flex items-center justify-center mx-auto">
+                          <Check className="w-5 h-5 text-emerald-400" />
+                        </div>
+                      )
+                      if (val === "no") return (
+                        <div className="w-8 h-8 rounded-full bg-red-900/40 flex items-center justify-center mx-auto">
+                          <X className="w-5 h-5 text-red-500" />
+                        </div>
+                      )
+                      return (
+                        <div className="w-8 h-8 rounded-full bg-amber-900/40 flex items-center justify-center mx-auto">
+                          <Minus className="w-5 h-5 text-amber-500" />
+                        </div>
+                      )
+                    }
+                    return (
+                      <tr key={row.feature} className={cn("border-b border-gray-800 last:border-0 hover:bg-gray-800/50 transition-colors", i % 2 === 1 && "bg-gray-800/50")}>
+                        <td className="py-5 px-6 text-base font-medium text-gray-100">{row.feature}</td>
+                        <td className="py-5 px-6 bg-indigo-500/10">{renderIcon(row.c24)}</td>
+                        <td className="py-5 px-6">{renderIcon(row.crm)}</td>
+                        <td className="py-5 px-6">{renderIcon(row.erp)}</td>
+                        <td className="py-5 px-6">{renderIcon(row.manual)}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
       </section>
 
       {/* ── МОДУЛИ ── */}
-      <section id="modules" className="bg-white py-24 md:py-28">
+      <section id="modules" className="bg-gray-950 py-24 md:py-28">
         <div
           ref={modules.ref}
           className={cn(
@@ -996,15 +952,16 @@ export default function LandingPage() {
           )}
         >
           <div className="text-center mb-14">
-            <span className="inline-block text-xs font-medium tracking-widest uppercase text-emerald-500 bg-emerald-50 border border-emerald-100 px-4 py-1.5 rounded-full mb-4">
-              Модули
+            <span className="inline-block text-xs font-medium tracking-widest uppercase text-indigo-500 bg-indigo-500/10 border border-indigo-500/20 px-4 py-1.5 rounded-full mb-4">
+              Платформа
             </span>
-            <h2 className="text-3xl md:text-4xl font-bold text-gray-800">4 модуля — одна платформа</h2>
+            <h2 className="text-3xl md:text-4xl font-bold text-gray-100 mb-3">Автоматизируем ключевые процессы</h2>
+            <p className="text-gray-400 text-lg max-w-2xl mx-auto">Каждый модуль — это AI-агенты, которые берут рутину на себя. И мы не останавливаемся.</p>
           </div>
 
           {/* Tabs */}
           <div className="flex justify-center mb-10">
-            <div className="inline-flex bg-white rounded-2xl border border-gray-100 p-1.5 gap-1">
+            <div className="inline-flex bg-gray-800 rounded-2xl border border-gray-700 p-1.5 gap-1">
               {MODULES.map((m) => (
                 <button
                   key={m.id}
@@ -1013,7 +970,7 @@ export default function LandingPage() {
                     "flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium transition-all duration-200",
                     activeModule === m.id
                       ? `bg-gradient-to-r ${m.gradient} text-white shadow-lg`
-                      : "text-gray-500 hover:text-gray-700 hover:bg-white"
+                      : "text-gray-400 hover:text-gray-200 hover:bg-gray-800"
                   )}
                 >
                   <m.icon className="w-4 h-4" />
@@ -1024,29 +981,71 @@ export default function LandingPage() {
           </div>
 
           {/* Module content */}
-          <div className="bg-white rounded-3xl border border-gray-100 p-10 max-w-2xl mx-auto transition-all duration-300">
-            <div className="flex items-center gap-4 mb-8">
-              <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center", currentModule.lightBg)}>
-                <currentModule.icon className={cn("w-6 h-6", currentModule.lightColor)} />
+          <div className="max-w-4xl mx-auto bg-gray-900 rounded-3xl border border-gray-700 shadow-lg overflow-hidden transition-all duration-300">
+            <div className={cn("h-1.5 w-full bg-gradient-to-r", currentModule.gradient)} />
+            <div className="grid grid-cols-1 lg:grid-cols-2">
+              {/* Left: info */}
+              <div className="p-10">
+                <div className={cn("w-14 h-14 rounded-2xl flex items-center justify-center mb-5", currentModule.lightBg)}>
+                  <currentModule.icon className={cn("w-7 h-7", currentModule.lightColor)} />
+                </div>
+                <h3 className="text-2xl font-bold text-gray-100 mb-3">{currentModule.label}</h3>
+                <p className="text-gray-400 text-base leading-relaxed">{currentModule.desc}</p>
               </div>
-              <h3 className="text-2xl font-bold text-gray-800">{currentModule.label}</h3>
+              {/* Right: features */}
+              <div className="p-10 bg-gray-800">
+                <ul className="space-y-4">
+                  {currentModule.features.map((f) => (
+                    <li key={f} className="flex items-start gap-3">
+                      <div className={cn("w-6 h-6 rounded-lg flex items-center justify-center shrink-0 mt-0.5", currentModule.lightBg)}>
+                        <Check className={cn("w-3.5 h-3.5", currentModule.lightColor)} />
+                      </div>
+                      <span className="text-base text-gray-200">{f}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             </div>
-            <ul className="space-y-4">
-              {currentModule.features.map((f) => (
-                <li key={f} className="flex items-start gap-3">
-                  <div className={cn("w-6 h-6 rounded-lg flex items-center justify-center shrink-0 mt-0.5", currentModule.lightBg)}>
-                    <Check className={cn("w-3.5 h-3.5", currentModule.lightColor)} />
-                  </div>
-                  <span className="text-[15px] text-gray-700">{f}</span>
-                </li>
-              ))}
-            </ul>
+          </div>
+        </div>
+      </section>
+
+      {/* ── ПРОЦЕССЫ ── */}
+      <section className="py-24 bg-gray-950">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6">
+          <div className="text-center">
+            <h2 className="text-3xl md:text-4xl font-bold text-gray-100 mb-3">Какие процессы автоматизирует Company24.pro</h2>
+            <p className="text-gray-400 text-lg max-w-2xl mx-auto">Каждый модуль экономит время и деньги — вот конкретные результаты</p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mt-14">
+            {[
+              { icon: Users, iconBg: "bg-indigo-500/10", iconColor: "text-indigo-500", metricBg: "bg-indigo-500/10", metricBorder: "border-indigo-500/20", metricText: "text-indigo-400", title: "Найм и подбор", desc: "AI находит релевантных кандидатов, фильтрует, прогревает и проводит через демонстрацию должности", metric: "−68% времени на найм" },
+              { icon: Zap, iconBg: "bg-amber-500/10", iconColor: "text-amber-500", metricBg: "bg-amber-500/10", metricBorder: "border-amber-500/20", metricText: "text-amber-400", title: "Ввод в должность", desc: "Онбординг с курсами и тестовыми заданиями. За 1-2 недели понимаем — подходит или нет", metric: "4x быстрее адаптация" },
+              { icon: Brain, iconBg: "bg-violet-500/10", iconColor: "text-violet-500", metricBg: "bg-violet-500/10", metricBorder: "border-violet-500/20", metricText: "text-violet-400", title: "Обучение и развитие", desc: "AI анализирует слабые стороны, назначает курсы и видео. Прокачка навыков на автомате", metric: "+40% эффективность" },
+              { icon: Megaphone, iconBg: "bg-rose-500/10", iconColor: "text-rose-500", metricBg: "bg-rose-500/10", metricBorder: "border-rose-500/20", metricText: "text-rose-400", title: "Маркетинг и аналитика", desc: "ROI по каждому каналу, анализ конкурентов, A/B тесты, оптимизация бюджета", metric: "−30% впустую на рекламу" },
+              { icon: DollarSign, iconBg: "bg-emerald-500/10", iconColor: "text-emerald-500", metricBg: "bg-emerald-500/10", metricBorder: "border-emerald-500/20", metricText: "text-emerald-400", title: "Продажи и CRM", desc: "AI квалифицирует лиды, follow-up, контроль менеджеров, прогноз сделок", metric: "+35% конверсия" },
+              { icon: Truck, iconBg: "bg-cyan-500/10", iconColor: "text-cyan-500", metricBg: "bg-cyan-500/10", metricBorder: "border-cyan-500/20", metricText: "text-cyan-400", title: "Логистика и склад", desc: "Учёт товаров, маршруты, прогноз спроса, автозаказ поставщикам", metric: "−25% затрат" },
+              { icon: BarChart3, iconBg: "bg-orange-500/10", iconColor: "text-orange-500", metricBg: "bg-orange-500/10", metricBorder: "border-orange-500/20", metricText: "text-orange-400", title: "Управленческая аналитика", desc: "Дашборды, KPI, прогнозы, узкие места в реальном времени", metric: "3x быстрее решения" },
+              { icon: Bot, iconBg: "bg-purple-500/10", iconColor: "text-purple-500", metricBg: "bg-purple-500/10", metricBorder: "border-purple-500/20", metricText: "text-purple-400", title: "AI-агенты 24/7", desc: "6 агентов работают круглосуточно: скоринг, коммуникация, аналитика, маркетинг, продажи, логистика", metric: "80% рутины на автомате" },
+            ].map((card) => (
+              <div key={card.title} className="bg-gray-800 border border-gray-700 rounded-2xl p-7 hover:shadow-lg hover:-translate-y-1 transition-all duration-300 flex flex-col">
+                <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center", card.iconBg)}>
+                  <card.icon className={cn("w-6 h-6", card.iconColor)} />
+                </div>
+                <h3 className="text-lg font-semibold text-white mt-4 mb-2">{card.title}</h3>
+                <p className="text-sm text-gray-400 leading-relaxed flex-1">{card.desc}</p>
+                <div className={cn("rounded-xl px-4 py-2.5 mt-5 border", card.metricBg, card.metricBorder)}>
+                  <span className={cn("font-bold text-sm", card.metricText)}>{card.metric}</span>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </section>
 
       {/* ── 3 ШАГА ── */}
-      <section className="py-24 md:py-28 bg-gray-50">
+      <section className="py-24 md:py-28 bg-gray-950">
         <div
           ref={steps.ref}
           className={cn(
@@ -1055,21 +1054,21 @@ export default function LandingPage() {
           )}
         >
           <div className="text-center mb-14">
-            <span className="inline-block text-xs font-medium tracking-widest uppercase text-gray-500 bg-white border border-gray-100 px-4 py-1.5 rounded-full mb-4">
+            <span className="inline-block text-xs font-medium tracking-widest uppercase text-gray-400 bg-gray-800 border border-gray-700 px-4 py-1.5 rounded-full mb-4">
               Как это работает
             </span>
-            <h2 className="text-3xl md:text-4xl font-bold text-gray-800">3 шага к автоматизации</h2>
+            <h2 className="text-3xl md:text-4xl font-bold text-gray-100">3 шага к автоматизации</h2>
           </div>
           <div className="grid md:grid-cols-3 gap-8">
             {STEPS.map((s, i) => (
-              <div key={s.num} className="relative bg-white rounded-3xl border border-gray-100 p-9 text-center transition-all duration-300 hover:shadow-xl hover:-translate-y-1">
+              <div key={s.num} className="relative bg-gray-900 rounded-3xl border border-gray-800 p-9 text-center transition-all duration-300 hover:shadow-xl hover:-translate-y-1">
                 <div className={cn("w-14 h-14 rounded-2xl bg-gradient-to-br flex items-center justify-center mx-auto mb-5 shadow-lg", s.gradient)}>
                   <s.icon className="w-7 h-7 text-white" />
                 </div>
-                <h3 className="font-bold text-xl mb-3 text-gray-800">{s.title}</h3>
-                <p className="text-gray-500 leading-relaxed">{s.desc}</p>
+                <h3 className="font-bold text-xl mb-3 text-gray-100">{s.title}</h3>
+                <p className="text-gray-400 leading-relaxed">{s.desc}</p>
                 {i < 2 && (
-                  <ArrowRight className="hidden md:block absolute -right-5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-300 z-10" />
+                  <ArrowRight className="hidden md:block absolute -right-5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-600 z-10" />
                 )}
               </div>
             ))}
@@ -1078,7 +1077,7 @@ export default function LandingPage() {
       </section>
 
       {/* ── AI-АГЕНТЫ ── */}
-      <section className="py-24 md:py-28 bg-gradient-to-br from-orange-50/40 via-rose-50/30 to-indigo-50/40">
+      <section className="py-24 md:py-28 bg-gray-950">
         <div
           ref={agents.ref}
           className={cn(
@@ -1087,26 +1086,26 @@ export default function LandingPage() {
           )}
         >
           <div className="text-center mb-14">
-            <span className="inline-flex items-center gap-1.5 text-xs font-medium tracking-widest uppercase text-violet-500 bg-violet-50 border border-violet-100 px-4 py-1.5 rounded-full mb-4">
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium tracking-widest uppercase text-violet-500 bg-violet-500/10 border border-violet-500/20 px-4 py-1.5 rounded-full mb-4">
               <Bot className="w-3.5 h-3.5" /> AI-агенты
             </span>
-            <h2 className="text-3xl md:text-4xl font-bold text-gray-800">6 агентов работают на вас</h2>
+            <h2 className="text-3xl md:text-4xl font-bold text-gray-100">6 агентов работают на вас</h2>
           </div>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
             {AI_AGENTS.map((a) => (
-              <div key={a.name} className="bg-white/80 backdrop-blur-sm rounded-2xl border border-white/60 p-7 flex items-start gap-5 transition-all duration-300 hover:shadow-xl hover:-translate-y-1 group">
+              <div key={a.name} className="bg-gray-900/80 backdrop-blur-sm rounded-2xl border border-gray-700/60 p-7 flex items-start gap-5 transition-all duration-300 hover:shadow-xl hover:-translate-y-1 group">
                 <div className="relative shrink-0">
                   <div className={cn("w-12 h-12 rounded-xl bg-gradient-to-br flex items-center justify-center", a.gradient)}>
                     <a.icon className="w-6 h-6 text-white" />
                   </div>
                   <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5">
                     <span className="absolute inset-0 rounded-full bg-emerald-400 opacity-75" style={{ animation: "pulse-ring 2s ease-in-out infinite" }} />
-                    <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-emerald-500 border-2 border-white" />
+                    <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-emerald-500 border-2 border-gray-900" />
                   </span>
                 </div>
                 <div>
-                  <h3 className="font-semibold text-base mb-1 text-gray-800">{a.name}</h3>
-                  <p className="text-sm text-gray-500 leading-relaxed">{a.desc}</p>
+                  <h3 className="font-semibold text-base mb-1 text-gray-100">{a.name}</h3>
+                  <p className="text-sm text-gray-400 leading-relaxed">{a.desc}</p>
                 </div>
               </div>
             ))}
@@ -1130,7 +1129,7 @@ export default function LandingPage() {
       </section>
 
       {/* ── ТАРИФЫ ── */}
-      <section id="pricing" className="py-24 md:py-28 bg-white">
+      <section id="pricing" className="py-24 md:py-28 bg-gray-950">
         <div
           ref={pricing.ref}
           className={cn(
@@ -1139,68 +1138,149 @@ export default function LandingPage() {
           )}
         >
           <div className="text-center mb-14">
-            <span className="inline-block text-xs font-medium tracking-widest uppercase text-amber-500 bg-amber-50 border border-amber-100 px-4 py-1.5 rounded-full mb-4">
-              Тарифы
+            <span className="inline-block text-xs font-medium tracking-widest uppercase text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-4 py-1.5 rounded-full mb-4">
+              Конструктор тарифа
             </span>
-            <h2 className="text-3xl md:text-4xl font-bold text-gray-800">Выберите свой план</h2>
+            <h2 className="text-3xl md:text-4xl font-bold text-white mb-3">Соберите свой тариф</h2>
+            <p className="text-gray-400 text-lg">Базовая платформа + нужные модули + количество пользователей</p>
           </div>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
-            {TARIFFS.map((t) => (
-              <div
-                key={t.name}
-                className={cn(
-                  "rounded-3xl p-7 flex flex-col relative transition-all duration-300 hover:scale-[1.02] hover:shadow-xl",
-                  t.popular
-                    ? "border-2 border-indigo-400 shadow-xl shadow-indigo-500/10 bg-white"
-                    : "border border-gray-100 bg-white hover:border-indigo-200"
-                )}
-              >
-                {t.popular && (
-                  <span className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-gradient-to-r from-indigo-500 to-violet-500 text-white px-4 py-1 rounded-full text-xs font-medium shadow-lg">
-                    Популярный
-                  </span>
-                )}
-                <h3 className="font-bold text-xl mb-2 text-gray-800">{t.name}</h3>
-                <div className="flex items-baseline gap-1.5 mb-5">
-                  <span className="text-4xl font-bold tracking-tight text-gray-800">{t.price}</span>
-                  <span className="text-sm text-gray-400">₽/мес</span>
+
+          {(() => {
+            const extraUsers = Math.max(0, pricingUsers - 3)
+            const modulesTotal = PRICING_MODULES.filter((m) => m.available && selectedModules[m.id]).reduce((s, m) => s + m.price, 0)
+            const total = 9900 + extraUsers * 500 + modulesTotal
+            const perUser = Math.round(total / pricingUsers)
+            const hasModules = PRICING_MODULES.some((m) => m.available && selectedModules[m.id])
+            const fmt = (n: number) => n.toLocaleString("ru-RU")
+
+            return (
+              <div className="max-w-2xl mx-auto space-y-4">
+                {/* Base platform */}
+                <div className="bg-gray-900 rounded-2xl border border-gray-800 p-6">
+                  <div className="flex items-start justify-between mb-5">
+                    <div>
+                      <h3 className="font-bold text-white text-lg">Базовая платформа</h3>
+                      <p className="text-sm text-gray-400">Личный кабинет, настройки, роли, аналитика</p>
+                    </div>
+                    <span className="text-emerald-400 font-bold text-lg shrink-0">9 900 ₽/мес</span>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <span className="text-sm text-gray-400">Пользователи</span>
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => setPricingUsers((u) => Math.max(1, u - 1))}
+                        className="w-8 h-8 bg-gray-800 border border-gray-700 rounded-lg flex items-center justify-center text-gray-300 hover:bg-gray-700 transition-colors"
+                      >
+                        <Minus className="w-4 h-4" />
+                      </button>
+                      <span className="text-xl font-bold text-white w-8 text-center">{pricingUsers}</span>
+                      <button
+                        onClick={() => setPricingUsers((u) => u + 1)}
+                        className="w-8 h-8 bg-gray-800 border border-gray-700 rounded-lg flex items-center justify-center text-gray-300 hover:bg-gray-700 transition-colors"
+                      >
+                        <span className="text-lg leading-none">+</span>
+                      </button>
+                    </div>
+                    <span className="text-xs text-gray-500">3 входят в базу, далее +500 ₽/мес</span>
+                  </div>
                 </div>
-                <div className="text-xs text-gray-400 mb-5 space-y-1 pb-5 border-b border-gray-100">
-                  <p>{t.vacancies}</p>
-                  <p>{t.candidates}</p>
-                </div>
-                <ul className="space-y-3 mb-8 flex-1">
-                  {t.features.map((f) => (
-                    <li key={f} className="flex items-center gap-2.5 text-sm text-gray-600">
-                      <div className="w-5 h-5 rounded-md bg-indigo-50 flex items-center justify-center">
-                        <Check className="w-3 h-3 text-indigo-500" />
-                      </div>
-                      {f}
-                    </li>
-                  ))}
-                </ul>
-                <Button
-                  variant={t.popular ? "default" : "outline"}
-                  className={cn(
-                    "w-full h-11 rounded-xl",
-                    t.popular
-                      ? "bg-gradient-to-r from-indigo-500 to-violet-500 hover:from-indigo-600 hover:to-violet-600 shadow-lg shadow-indigo-500/20 text-white"
-                      : "border-gray-200 text-gray-600 hover:border-indigo-200 hover:text-indigo-600 hover:bg-indigo-50/50"
+
+                {/* Modules */}
+                <div>
+                  <p className="text-xs font-medium uppercase tracking-wider text-gray-500 mb-3 px-1">Модули</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    {PRICING_MODULES.map((m) => {
+                      const selected = selectedModules[m.id] && m.available
+                      const colors = PRICING_MODULE_COLORS[m.color]
+                      return (
+                        <button
+                          key={m.id}
+                          onClick={() => m.available && setSelectedModules((prev) => ({ ...prev, [m.id]: !prev[m.id] }))}
+                          className={cn(
+                            "bg-gray-900 border-2 rounded-xl p-4 text-left transition-all duration-200 relative",
+                            !m.available && "opacity-50 cursor-not-allowed",
+                            m.available && !selected && "border-gray-800 hover:border-gray-700 cursor-pointer",
+                            selected && colors.border
+                          )}
+                          style={selected ? { backgroundColor: "rgba(99,102,241,0.05)" } : undefined}
+                          disabled={!m.available}
+                        >
+                          {!m.available && (
+                            <span className="absolute top-2 right-2 text-[10px] font-medium bg-gray-800 text-gray-400 px-2 py-0.5 rounded-full">Скоро</span>
+                          )}
+                          <div className="flex items-start justify-between mb-2">
+                            <div className={cn("w-9 h-9 rounded-lg flex items-center justify-center bg-gradient-to-br", m.gradient)}>
+                              <m.icon className="w-4.5 h-4.5 text-white" />
+                            </div>
+                            <div className={cn(
+                              "w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all",
+                              selected ? `${colors.check} border-transparent` : "border-gray-700"
+                            )}>
+                              {selected && <Check className="w-3 h-3 text-white" />}
+                            </div>
+                          </div>
+                          <h4 className="font-semibold text-white text-sm mb-0.5">{m.label}</h4>
+                          <p className="text-xs text-gray-500 mb-2">{m.desc}</p>
+                          <p className={cn("text-sm font-bold", selected ? colors.text : "text-gray-400")}>+{fmt(m.price)} ₽/мес</p>
+                        </button>
+                      )
+                    })}
+                  </div>
+                  {!hasModules && (
+                    <p className="text-xs text-red-400 mt-2 px-1">Выберите хотя бы один модуль</p>
                   )}
-                  asChild
-                >
-                  <Link href="/register">Выбрать</Link>
-                </Button>
+                </div>
+
+                {/* Total */}
+                <div className="bg-gray-900 rounded-2xl border border-gray-800 p-6">
+                  <div className="space-y-2 text-sm mb-4">
+                    <div className="flex justify-between"><span className="text-gray-400">Базовая платформа</span><span className="text-gray-300">{fmt(9900)} ₽</span></div>
+                    {extraUsers > 0 && (
+                      <div className="flex justify-between"><span className="text-gray-400">Доп. пользователи ({extraUsers})</span><span className="text-gray-300">+{fmt(extraUsers * 500)} ₽</span></div>
+                    )}
+                    {PRICING_MODULES.filter((m) => m.available && selectedModules[m.id]).map((m) => {
+                      const colors = PRICING_MODULE_COLORS[m.color]
+                      return (
+                        <div key={m.id} className="flex justify-between">
+                          <span className={colors.text}>{m.label}</span>
+                          <span className="text-gray-300">+{fmt(m.price)} ₽</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                  <div className="border-t border-gray-800 pt-4 flex items-end justify-between mb-4">
+                    <span className="text-lg font-bold text-white">Итого</span>
+                    <div className="text-right">
+                      <span className="text-3xl font-bold text-indigo-400">{fmt(total)} ₽</span>
+                      <span className="text-sm text-gray-500">/мес</span>
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-500 mb-4">{fmt(perUser)} ₽ за пользователя</p>
+                  <Button
+                    className={cn(
+                      "w-full py-4 text-base font-semibold rounded-xl bg-gradient-to-r from-indigo-500 to-violet-500 hover:from-indigo-600 hover:to-violet-600 text-white shadow-lg shadow-indigo-500/30 h-auto",
+                      !hasModules && "opacity-50 cursor-not-allowed"
+                    )}
+                    disabled={!hasModules}
+                    asChild={hasModules}
+                  >
+                    {hasModules ? (
+                      <Link href="/register">Начать бесплатно — 14 дней</Link>
+                    ) : (
+                      <span>Начать бесплатно — 14 дней</span>
+                    )}
+                  </Button>
+                </div>
               </div>
-            ))}
-          </div>
+            )
+          })()}
         </div>
       </section>
 
       {/* ── CTA ── */}
-      <section className="py-24 md:py-28 relative overflow-hidden bg-white">
+      <section className="py-24 md:py-28 relative overflow-hidden bg-gray-950">
         <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[400px] bg-gradient-to-br from-indigo-100/40 to-violet-100/40 rounded-full blur-3xl" />
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[400px] bg-gradient-to-br from-indigo-900/20 to-violet-900/20 rounded-full blur-3xl" />
         </div>
         <div
           ref={cta.ref}
@@ -1209,11 +1289,11 @@ export default function LandingPage() {
             cta.visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-10"
           )}
         >
-          <h2 className="text-3xl md:text-5xl font-bold mb-5 text-gray-800">
+          <h2 className="text-3xl md:text-5xl font-bold mb-5 text-gray-100">
             Попробуйте Company24.pro{" "}
             <span className="bg-gradient-to-r from-indigo-500 to-violet-500 bg-clip-text text-transparent">бесплатно</span>
           </h2>
-          <p className="text-xl text-gray-500 mb-10">14 дней полного доступа. Без привязки карты.</p>
+          <p className="text-xl text-gray-400 mb-10">14 дней полного доступа. Без привязки карты.</p>
           <Button size="lg" className="bg-gradient-to-r from-indigo-500 to-violet-500 hover:from-indigo-600 hover:to-violet-600 h-14 px-12 text-lg shadow-xl shadow-indigo-500/20 transition-all hover:shadow-2xl hover:scale-[1.02] text-white rounded-2xl" asChild>
             <Link href="/register">Начать бесплатно <ArrowRight className="w-5 h-5 ml-2" /></Link>
           </Button>
@@ -1221,7 +1301,7 @@ export default function LandingPage() {
       </section>
 
       {/* ── FOOTER ── */}
-      <footer id="about" className="bg-gray-900 text-gray-400 py-20">
+      <footer id="about" className="bg-gray-950 border-t border-gray-800 text-gray-400 py-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
           <div className="grid md:grid-cols-4 gap-10 mb-14">
             <div>
