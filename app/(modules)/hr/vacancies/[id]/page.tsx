@@ -287,23 +287,60 @@ export default function VacancyPage() {
     setMessageLogs(prev => [...prev, log])
   }
 
-  const handleAddCustomColumn = async (name: string, color: string) => {
+  const handleAddCustomColumn = async (name: string, color: string, afterColumnId?: string) => {
     const colId = `custom_${Date.now()}`
     const newCol: ColumnData = {
       id: colId, title: name, count: 0,
       colorFrom: color, colorTo: color,
       candidates: [],
     }
-    setColumns(prev => [...prev, newCol])
+    setColumns(prev => {
+      if (afterColumnId) {
+        const idx = prev.findIndex(c => c.id === afterColumnId)
+        if (idx !== -1) {
+          const copy = [...prev]
+          copy.splice(idx + 1, 0, newCol)
+          return copy
+        }
+      }
+      return [...prev, newCol]
+    })
 
     // Persist custom columns in vacancy.description_json
     const existing = (apiVacancy?.descriptionJson as Record<string, unknown>) || {}
-    const customColumns = [...((existing.customColumns as Array<{ id: string; name: string; color: string }>) || []), { id: colId, name, color }]
+    const customColumns = [...((existing.customColumns as Array<{ id: string; name: string; color: string; afterColumnId?: string }>) || []), { id: colId, name, color, afterColumnId }]
     try {
       await fetch(`/api/modules/hr/vacancies/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ description_json: { ...existing, customColumns } }),
+      })
+    } catch { /* silent */ }
+  }
+
+  const handleRemoveColumn = async (columnId: string) => {
+    setColumns(prev => {
+      const idx = prev.findIndex(c => c.id === columnId)
+      if (idx <= 0) return prev
+      const removed = prev[idx]
+      const prevCol = prev[idx - 1]
+      // Move candidates to previous column
+      const updated = prev.filter(c => c.id !== columnId).map(c =>
+        c.id === prevCol.id
+          ? { ...c, candidates: [...c.candidates, ...removed.candidates], count: c.count + removed.count }
+          : c
+      )
+      return updated
+    })
+
+    // Persist hidden columns in vacancy.description_json
+    const existing = (apiVacancy?.descriptionJson as Record<string, unknown>) || {}
+    const hiddenColumns = [...((existing.hiddenColumns as string[]) || []), columnId]
+    try {
+      await fetch(`/api/modules/hr/vacancies/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ description_json: { ...existing, hiddenColumns } }),
       })
     } catch { /* silent */ }
   }
@@ -627,6 +664,7 @@ export default function VacancyPage() {
                   onAction={handleAction}
                   hideViewSwitcher
                   onAddCustomColumn={handleAddCustomColumn}
+                  onRemoveColumn={handleRemoveColumn}
                 />
               </TabsContent>
 

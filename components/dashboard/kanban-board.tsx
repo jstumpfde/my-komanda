@@ -7,15 +7,15 @@ import { FunnelView } from "./funnel-view"
 import { TilesView } from "./tiles-view"
 import { ColumnColorPicker } from "./column-color-picker"
 import type { CardDisplaySettings } from "./card-settings"
-import { LayoutGrid, List, TrendingDown, Grid3X3, Plus } from "lucide-react"
+import { LayoutGrid, List, TrendingDown, Grid3X3, Plus, Minus } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { cn } from "@/lib/utils"
 import type { CandidateAction } from "@/lib/column-config"
-import { HR_DECISION_COLUMNS } from "@/lib/column-config"
+import { COLUMN_ORDER } from "@/lib/column-config"
 
 export type ViewMode = "kanban" | "list" | "funnel" | "tiles"
 
@@ -37,7 +37,8 @@ interface KanbanBoardProps {
   onOpenProfile?: (candidate: Candidate, columnId: string) => void
   onAction?: (candidateId: string, columnId: string, action: CandidateAction) => void
   hideViewSwitcher?: boolean
-  onAddCustomColumn?: (name: string, color: string) => void
+  onAddCustomColumn?: (name: string, color: string, afterColumnId?: string) => void
+  onRemoveColumn?: (columnId: string) => void
 }
 
 const VIEW_BUTTONS: { mode: ViewMode; icon: React.ElementType; label: string }[] = [
@@ -49,17 +50,26 @@ const VIEW_BUTTONS: { mode: ViewMode; icon: React.ElementType; label: string }[]
 
 const PRESET_COLORS = ["#94a3b8", "#3b82f6", "#ef4444", "#8b5cf6", "#f97316", "#22c55e", "#ec4899", "#06b6d4", "#f59e0b", "#10b981"]
 
-export function KanbanBoard({ settings, viewMode, onViewModeChange, columns = [], onColumnsChange, onOpenProfile, onAction, hideViewSwitcher, onAddCustomColumn }: KanbanBoardProps) {
+export function KanbanBoard({ settings, viewMode, onViewModeChange, columns = [], onColumnsChange, onOpenProfile, onAction, hideViewSwitcher, onAddCustomColumn, onRemoveColumn }: KanbanBoardProps) {
   const [addColOpen, setAddColOpen] = useState(false)
   const [newColName, setNewColName] = useState("")
   const [newColColor, setNewColColor] = useState("#3b82f6")
+  const [insertAfterColId, setInsertAfterColId] = useState<string | null>(null)
+  const [removeColId, setRemoveColId] = useState<string | null>(null)
 
   const handleAddColumn = () => {
     if (!newColName.trim() || !onAddCustomColumn) return
-    onAddCustomColumn(newColName.trim(), newColColor)
+    onAddCustomColumn(newColName.trim(), newColColor, insertAfterColId || undefined)
     setNewColName("")
     setNewColColor("#3b82f6")
+    setInsertAfterColId(null)
     setAddColOpen(false)
+  }
+
+  const handleRemoveColumn = () => {
+    if (!removeColId || !onRemoveColumn) return
+    onRemoveColumn(removeColId)
+    setRemoveColId(null)
   }
 
   const handleColorChange = (colId: string, from: string, to: string) => {
@@ -73,6 +83,21 @@ export function KanbanBoard({ settings, viewMode, onViewModeChange, columns = []
       columns.map((col) => (col.id === colId ? { ...col, title } : col))
     )
   }
+
+  // KPI metrics — only standard columns
+  const STANDARD_IDS = COLUMN_ORDER as readonly string[]
+  const KPI_LABELS: Record<string, string> = {
+    new: "Новый", demo: "Демо", decision: "Решение",
+    interview: "Интервью", final_decision: "Фин.решение", hired: "Нанят",
+  }
+  const kpiSteps = STANDARD_IDS
+    .map((id) => columns.find((c) => c.id === id))
+    .filter((col): col is ColumnData => !!col)
+    .map((col, i, arr) => {
+      const prev = i > 0 ? arr[i - 1] : null
+      const pct = prev && prev.count > 0 ? Math.round((col.count / prev.count) * 100) : null
+      return { title: KPI_LABELS[col.id] || col.title, count: col.count, pct }
+    })
 
   return (
     <div>
@@ -99,13 +124,18 @@ export function KanbanBoard({ settings, viewMode, onViewModeChange, columns = []
         </div>
       )}
 
-      {/* Kanban column counters — mobile */}
-      {viewMode === "kanban" && (
-        <div className="flex gap-1.5 mb-3 overflow-x-auto pb-1 md:hidden">
-          {columns.map(col => (
-            <div key={col.id} className="flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium shrink-0 border" style={{ borderColor: col.colorFrom + "40", color: col.colorFrom }}>
-              {col.title.split(" ")[0]} <span className="font-bold">{col.count}</span>
-            </div>
+      {/* KPI funnel metrics bar */}
+      {viewMode === "kanban" && kpiSteps.length > 0 && (
+        <div className="flex items-center gap-1.5 mb-4 px-1 text-sm flex-wrap">
+          {kpiSteps.map((step, i) => (
+            <span key={step.title} className="flex items-center gap-1.5 shrink-0">
+              {i > 0 && <span className="text-muted-foreground">→</span>}
+              <span className="text-muted-foreground">{step.title}:</span>
+              <span className="font-bold">{step.count}</span>
+              {step.pct !== null && (
+                <span className="text-muted-foreground text-xs">({step.pct}%)</span>
+              )}
+            </span>
           ))}
         </div>
       )}
@@ -115,35 +145,30 @@ export function KanbanBoard({ settings, viewMode, onViewModeChange, columns = []
         <div className="pb-4 -mx-4 px-4 sm:mx-0 sm:px-0 overflow-x-auto">
           <div className="flex gap-3">
             {columns.map((column, colIndex) => {
-              const isDecision = HR_DECISION_COLUMNS.includes(column.id)
-              const isLastColumn = colIndex === columns.length - 1
+              const isFirst = colIndex === 0
+              const isLast = colIndex === columns.length - 1
+              const isMiddle = !isFirst && !isLast
 
               return (
                 <div
                   key={column.id}
                   className={cn(
                     "flex flex-col rounded-xl",
-                    "min-w-[200px]",
-                    columns.length <= 6 && "flex-1"
+                    columns.length <= 6
+                      ? "flex-1 min-w-[200px]"
+                      : "shrink-0 min-w-[200px]"
                   )}
+                  style={columns.length > 6 ? { width: "calc((100% - 3.75rem) / 6)" } : undefined}
                 >
                   {/* Column Header */}
-                  <div className={cn("mb-3 rounded-xl overflow-visible", isLastColumn && onAddCustomColumn && "group relative")}>
+                  <div className="mb-3 rounded-xl overflow-visible group relative">
                     <div
                       className="flex items-center justify-between px-3.5 py-2.5 rounded-xl"
                       style={{ background: `linear-gradient(135deg, ${column.colorFrom}, ${column.colorTo})` }}
                     >
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5">
                         <h3 className="font-semibold text-white text-sm">{column.title}</h3>
-                        {isDecision && column.count > 0 ? (
-                          <Badge className="bg-white text-red-600 font-bold text-xs px-1.5 h-5 min-w-5 justify-center animate-pulse">
-                            {column.count}
-                          </Badge>
-                        ) : (
-                          <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-white/20 text-white text-[11px] font-bold">
-                            {column.count}
-                          </span>
-                        )}
+                        <span className="text-white font-bold text-sm">{column.count}</span>
                       </div>
                       <ColumnColorPicker
                         colorFrom={column.colorFrom}
@@ -153,15 +178,30 @@ export function KanbanBoard({ settings, viewMode, onViewModeChange, columns = []
                         onTitleChange={(t) => handleTitleChange(column.id, t)}
                       />
                     </div>
-                    {/* Plus button — right edge of last column header, visible on hover */}
-                    {isLastColumn && onAddCustomColumn && (
-                      <button
-                        type="button"
-                        className="absolute right-[-14px] top-1/2 -translate-y-1/2 z-10 w-7 h-7 rounded-full bg-background border border-border shadow-sm hover:bg-muted flex items-center justify-center transition-all opacity-0 group-hover:opacity-100"
-                        onClick={() => setAddColOpen(true)}
-                      >
-                        <Plus className="w-4 h-4 text-muted-foreground" />
-                      </button>
+                    {/* TASK 2+3: Minus & Plus buttons on middle columns */}
+                    {isMiddle && (
+                      <>
+                        {onRemoveColumn && (
+                          <button
+                            type="button"
+                            className="absolute left-[-10px] top-1/2 -translate-y-1/2 z-10 w-5 h-5 rounded-full bg-background border border-border shadow-sm hover:bg-red-50 hover:border-red-200 flex items-center justify-center transition-all opacity-0 group-hover:opacity-100"
+                            title="Удалить этап"
+                            onClick={() => setRemoveColId(column.id)}
+                          >
+                            <Minus className="w-3.5 h-3.5 text-muted-foreground" />
+                          </button>
+                        )}
+                        {onAddCustomColumn && (
+                          <button
+                            type="button"
+                            className="absolute right-[-10px] top-1/2 -translate-y-1/2 z-10 w-5 h-5 rounded-full bg-background border border-border shadow-sm hover:bg-green-50 hover:border-green-200 flex items-center justify-center transition-all opacity-0 group-hover:opacity-100"
+                            title="Добавить этап после"
+                            onClick={() => { setInsertAfterColId(column.id); setAddColOpen(true) }}
+                          >
+                            <Plus className="w-3.5 h-3.5 text-muted-foreground" />
+                          </button>
+                        )}
+                      </>
                     )}
                   </div>
 
@@ -173,6 +213,7 @@ export function KanbanBoard({ settings, viewMode, onViewModeChange, columns = []
                         candidate={candidate}
                         settings={settings}
                         columnId={column.id}
+                        isLastColumn={isLast}
                         onOpenProfile={(c) => onOpenProfile?.(c, column.id)}
                         onAction={onAction}
                       />
@@ -192,7 +233,7 @@ export function KanbanBoard({ settings, viewMode, onViewModeChange, columns = []
       )}
 
       {/* Add custom column dialog */}
-      <Dialog open={addColOpen} onOpenChange={setAddColOpen}>
+      <Dialog open={addColOpen} onOpenChange={(open) => { setAddColOpen(open); if (!open) setInsertAfterColId(null) }}>
         <DialogContent className="sm:max-w-[380px]">
           <DialogHeader>
             <DialogTitle>Добавить колонку</DialogTitle>
@@ -225,11 +266,29 @@ export function KanbanBoard({ settings, viewMode, onViewModeChange, columns = []
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setAddColOpen(false)}>Отмена</Button>
+            <Button variant="outline" onClick={() => { setAddColOpen(false); setInsertAfterColId(null) }}>Отмена</Button>
             <Button onClick={handleAddColumn} disabled={!newColName.trim()}>Добавить</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Remove column confirm dialog */}
+      <AlertDialog open={!!removeColId} onOpenChange={(open) => { if (!open) setRemoveColId(null) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Удалить этап?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Кандидаты перейдут в предыдущий этап.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Отмена</AlertDialogCancel>
+            <AlertDialogAction onClick={handleRemoveColumn} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Удалить
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {viewMode === "list" && (
         <ListView columns={columns} settings={settings} onOpenProfile={onOpenProfile} onAction={onAction} />

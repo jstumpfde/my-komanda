@@ -30,12 +30,14 @@ export interface Candidate {
   utmSource?: string
   workFormat?: "office" | "remote" | "hybrid"
   age?: number
+  birthDate?: Date | string
 }
 
 interface CandidateCardProps {
   candidate: Candidate
   settings: CardDisplaySettings
   columnId: string
+  isLastColumn?: boolean
   isDragging?: boolean
   onDragStart?: (candidateId: string, columnId: string) => void
   onDragEnd?: () => void
@@ -43,7 +45,7 @@ interface CandidateCardProps {
   onAction?: (candidateId: string, columnId: string, action: CandidateAction) => void
 }
 
-export function CandidateCard({ candidate, settings, columnId, onOpenProfile, onAction }: CandidateCardProps) {
+export function CandidateCard({ candidate, settings, columnId, isLastColumn, onOpenProfile, onAction }: CandidateCardProps) {
   const isDecisionColumn = columnId === "decision" || columnId === "final_decision"
   const isInterviewColumn = columnId === "interview"
 
@@ -136,9 +138,16 @@ export function CandidateCard({ candidate, settings, columnId, onOpenProfile, on
       )}
 
       {/* Возраст */}
-      {settings.showAge && candidate.age != null && (
-        <p className="text-xs text-muted-foreground mt-1">Возраст: {candidate.age} лет</p>
-      )}
+      {settings.showAge && (() => {
+        let age = candidate.age
+        if (age == null && candidate.birthDate) {
+          const birth = new Date(candidate.birthDate)
+          const now = new Date()
+          age = now.getFullYear() - birth.getFullYear()
+          if (now.getMonth() < birth.getMonth() || (now.getMonth() === birth.getMonth() && now.getDate() < birth.getDate())) age--
+        }
+        return age != null ? <p className="text-xs text-muted-foreground mt-1">Возраст: {age} лет</p> : null
+      })()}
 
       {/* AI summary (decision columns) */}
       {isDecisionColumn && candidate.aiSummary && (
@@ -158,14 +167,14 @@ export function CandidateCard({ candidate, settings, columnId, onOpenProfile, on
 
       {/* Action icons row */}
       <div className="flex items-center justify-between gap-1 w-full pt-2 mt-2 border-t" onClick={(e) => e.stopPropagation()}>
-        {columnId !== "final_decision" && columnId !== "hired" && (
-          <Button variant="ghost" className="w-9 h-9 rounded-full p-0 text-green-600 bg-green-50 border border-green-200 hover:bg-green-100 dark:bg-green-950 dark:border-green-800 dark:hover:bg-green-900" title="Следующий этап" onClick={() => onAction?.(candidate.id, columnId, "advance")}>
-            <ArrowRight className="w-5 h-5" />
-          </Button>
-        )}
         {columnId === "final_decision" && (
           <Button variant="ghost" className="w-9 h-9 rounded-full p-0 text-green-600 bg-green-50 border border-green-200 hover:bg-green-100 dark:bg-green-950 dark:border-green-800 dark:hover:bg-green-900" title="Нанять" onClick={() => onAction?.(candidate.id, columnId, "hire")}>
             <Check className="w-5 h-5" />
+          </Button>
+        )}
+        {columnId !== "final_decision" && !isLastColumn && (
+          <Button variant="ghost" className="w-9 h-9 rounded-full p-0 text-green-600 bg-green-50 border border-green-200 hover:bg-green-100 dark:bg-green-950 dark:border-green-800 dark:hover:bg-green-900" title="Следующий этап" onClick={() => onAction?.(candidate.id, columnId, "advance")}>
+            <ArrowRight className="w-5 h-5" />
           </Button>
         )}
         {columnId === "hired" && (
