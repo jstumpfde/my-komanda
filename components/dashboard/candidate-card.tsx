@@ -85,15 +85,14 @@ export function CandidateCard({ candidate, settings, columnId, isLastColumn, onO
     >
       {/* Score badge — top right */}
       {settings.showScore && (
-        <Badge
-          variant="outline"
+        <span
           className={cn(
-            "absolute top-2 right-2 font-bold border text-xs",
+            "absolute top-2 right-2 rounded-md px-1.5 h-5 text-xs font-bold inline-flex items-center justify-center",
             getScoreColor(candidate.score)
           )}
         >
           {candidate.score}
-        </Badge>
+        </span>
       )}
 
       {/* Row 1: ФИО */}

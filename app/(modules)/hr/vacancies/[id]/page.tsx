@@ -124,9 +124,11 @@ export default function VacancyPage() {
     if (apiVacancy?.status) {
       setStatus(apiVacancy.status as VacancyStatus)
     }
-    // Load custom columns from description_json
+    // Load custom columns from description_json (skip hidden ones)
     const desc = apiVacancy?.descriptionJson as Record<string, unknown> | undefined
-    const custom = (desc?.customColumns as Array<{ id: string; name: string; color: string }>) || []
+    const hiddenColumns = (desc?.hiddenColumns as string[]) || []
+    const custom = ((desc?.customColumns as Array<{ id: string; name: string; color: string }>) || [])
+      .filter(c => !hiddenColumns.includes(c.id))
     if (custom.length > 0) {
       setColumns(prev => {
         const existingIds = new Set(prev.map(c => c.id))
@@ -541,36 +543,6 @@ export default function VacancyPage() {
               </div>
             </div>
 
-            {/* ═══ АНАЛИТИКА ВОРОНКИ — 6 плашек ═══════════════ */}
-            <div className="mb-4 w-full overflow-x-auto">
-              <div className="flex items-stretch gap-0 min-w-max">
-                {funnelStages.map((s, i) => {
-                  const next = funnelStages[i + 1]
-                  const convPct = next && s.count > 0 ? Math.round((next.count / s.count) * 100) : null
-                  return (
-                    <div key={s.stage} className="flex items-center flex-1">
-                      <div
-                        className="rounded-xl border-l-4 border border-border bg-card px-3 py-3 w-full min-h-[90px] flex flex-col justify-between"
-                        style={{ borderLeftColor: s.color }}
-                      >
-                        <p className="text-[10px] text-muted-foreground leading-tight">{s.stage}</p>
-                        <p className="text-2xl font-bold text-foreground leading-none mt-1">{s.count}</p>
-                        <div className="flex items-center gap-2 mt-1.5">
-                          {convPct !== null && (
-                            <span className={cn("text-[11px] font-bold", convPct >= 50 ? "text-emerald-600" : convPct >= 25 ? "text-amber-600" : "text-red-600")}>→ {convPct}%</span>
-                          )}
-                          {convPct === null && i < funnelStages.length - 1 && (
-                            <span className="text-[11px] text-muted-foreground/50">→ —</span>
-                          )}
-                        </div>
-                      </div>
-                      {i < funnelStages.length - 1 && <span className="text-muted-foreground/25 text-lg px-1 flex-shrink-0">›</span>}
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-
             {/* ═══ ТАБЫ + ВИД в одной строке ══════════════════ */}
             <Tabs value={activeTab} onValueChange={setActiveTab}>
               <div className="flex items-center justify-between gap-3 mb-3 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
@@ -580,7 +552,6 @@ export default function VacancyPage() {
                   <TabsTrigger value="course" className="gap-1.5"><BookOpen className="w-3.5 h-3.5" />Демонстрация</TabsTrigger>
                   <TabsTrigger value="analytics" className="gap-1.5"><BarChart3 className="w-3.5 h-3.5" />Аналитика</TabsTrigger>
                   <TabsTrigger value="automation" className="gap-1.5"><Zap className="w-3.5 h-3.5" />Автоматизация</TabsTrigger>
-                  <TabsTrigger value="publish" className="gap-1.5"><Globe className="w-3.5 h-3.5" />Публикация</TabsTrigger>
                   <TabsTrigger value="settings" className="gap-1.5"><Settings className="w-3.5 h-3.5" />Настройки</TabsTrigger>
                 </TabsList>
 
@@ -881,239 +852,121 @@ export default function VacancyPage() {
 
               <TabsContent value="automation">
                 <AutomationSettings vacancyId={id} descriptionJson={apiVacancy?.descriptionJson} />
-              </TabsContent>
-
-              <TabsContent value="publish">
-                <div className="space-y-6">
-                  {/* Страница вакансии */}
-                  <Card>
-                    <CardHeader className="pb-3">
-                      <div className="flex items-center justify-between">
-                        <CardTitle className="text-base flex items-center gap-2">
-                          <Globe className="w-4 h-4" />
-                          Публичная страница вакансии
-                        </CardTitle>
-                        <div className="flex items-center gap-2">
-                          <button
-                            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors"
-                            onClick={() => {
-                              const url = `${window.location.origin}/vacancy/${id}`
-                              navigator.clipboard.writeText(url)
-                              toast.success("Ссылка скопирована")
-                            }}
-                          >
-                            <Copy className="w-3.5 h-3.5" />
-                            Скопировать ссылку
-                          </button>
-                          <Button size="sm" className="gap-1.5 h-8 text-xs" onClick={() => window.open(`/vacancy/${id}`, "_blank")}>
-                            <Globe className="w-3.5 h-3.5" />
-                            Открыть страницу
-                          </Button>
-                        </div>
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/50 border text-xs font-mono text-muted-foreground">
-                        <Globe className="w-3.5 h-3.5 shrink-0" />
-                        {typeof window !== "undefined" ? window.location.origin : "https://mykomanda.ru"}/vacancy/{id}
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  {/* Источники и UTM-ссылки */}
-                  <UtmLinksSection vacancyId={id} vacancySlug={id} />
-
-                  {/* AI-генерация текста вакансии */}
-                  <VacancyAiText vacancyId={id} descriptionJson={apiVacancy?.descriptionJson} />
-
-                  {/* Поля мини-формы */}
-                  <MiniFormBuilder vacancyId={id} descriptionJson={apiVacancy?.descriptionJson} />
-
-                  {/* HTML-страница */}
-                  <PublishTab
-                    vacancyTitle={internalName || vacancyTitle}
-                    vacancySlug={id}
-                    vacancyCity={apiVacancy?.city ?? "Москва"}
-                    salaryFrom={80000}
-                    salaryTo={150000}
-                  />
-
-                  {/* HH.ru Section */}
-                  <Card>
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-base flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-full bg-red-500 flex items-center justify-center text-white text-[10px] font-bold shrink-0">hh</div>
-                        Публикация на hh.ru
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      {hhConnected === null ? (
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          Загрузка...
-                        </div>
-                      ) : !hhConnected ? (
-                        <div className="p-4 rounded-lg bg-muted/50 border border-dashed border-border text-sm text-center space-y-2">
-                          <p className="text-muted-foreground">Подключите hh.ru для публикации вакансий напрямую из платформы</p>
-                          <Button variant="outline" size="sm" asChild>
-                            <a href="/settings/integrations">
-                              <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
-                              Настройки интеграций
-                            </a>
-                          </Button>
-                        </div>
-                      ) : hhPublished ? (
-                        <div className="space-y-4">
-                          <div className="flex items-center gap-2">
-                            <Check className="w-4 h-4 text-emerald-500" />
-                            <span className="text-sm font-medium text-emerald-700 dark:text-emerald-400">Опубликовано на hh.ru</span>
-                            <span className="text-xs text-muted-foreground">· ID: {hhPublished.hhVacancyId}</span>
-                          </div>
-                          <div className="grid grid-cols-3 gap-3">
-                            <div className="rounded-lg bg-muted/50 p-3 text-center">
-                              <p className="text-2xl font-bold">{hhPublished.views}</p>
-                              <p className="text-xs text-muted-foreground mt-0.5">Просмотров</p>
-                            </div>
-                            <div className="rounded-lg bg-muted/50 p-3 text-center">
-                              <p className="text-2xl font-bold">{hhPublished.responses}</p>
-                              <p className="text-xs text-muted-foreground mt-0.5">Откликов</p>
-                            </div>
-                            <div className="rounded-lg bg-muted/50 p-3 text-center">
-                              <p className="text-sm font-medium">{new Date(hhPublished.publishedAt).toLocaleDateString("ru-RU")}</p>
-                              <p className="text-xs text-muted-foreground mt-0.5">Дата публикации</p>
-                            </div>
-                          </div>
-                          <div className="flex items-center justify-between pt-1">
-                            {hhLastImport && (
-                              <p className="text-xs text-muted-foreground">
-                                Последний импорт: {hhLastImport.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}
-                              </p>
-                            )}
-                            <Button
-                              size="sm"
-                              className="gap-1.5 ml-auto"
-                              onClick={handleHhImport}
-                              disabled={hhImporting}
-                            >
-                              {hhImporting ? (
-                                <><Loader2 className="w-3.5 h-3.5 animate-spin" />Импорт...</>
-                              ) : (
-                                <><Download className="w-3.5 h-3.5" />Импортировать отклики</>
-                              )}
-                            </Button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="space-y-4">
-                          <div className="grid grid-cols-2 gap-3">
-                            <div className="space-y-1.5">
-                              <Label className="text-xs">Зарплата от (₽)</Label>
-                              <Input
-                                type="number"
-                                placeholder="80 000"
-                                value={hhSalaryFrom}
-                                onChange={(e) => setHhSalaryFrom(e.target.value)}
-                                className="h-8 text-sm"
-                              />
-                            </div>
-                            <div className="space-y-1.5">
-                              <Label className="text-xs">Зарплата до (₽)</Label>
-                              <Input
-                                type="number"
-                                placeholder="150 000"
-                                value={hhSalaryTo}
-                                onChange={(e) => setHhSalaryTo(e.target.value)}
-                                className="h-8 text-sm"
-                              />
-                            </div>
-                          </div>
-                          <div className="space-y-1.5">
-                            <Label className="text-xs">График работы</Label>
-                            <Select value={hhSchedule} onValueChange={setHhSchedule}>
-                              <SelectTrigger className="h-8 text-sm">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="fullDay">Полный день</SelectItem>
-                                <SelectItem value="shift">Сменный график</SelectItem>
-                                <SelectItem value="flexible">Гибкий график</SelectItem>
-                                <SelectItem value="remote">Удалённая работа</SelectItem>
-                                <SelectItem value="flyInFlyOut">Вахтовый метод</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <Button
-                            className="w-full gap-1.5 bg-red-500 hover:bg-red-600 text-white"
-                            onClick={handleHhPublish}
-                            disabled={hhPublishing}
-                          >
-                            {hhPublishing ? (
-                              <><Loader2 className="w-4 h-4 animate-spin" />Публикация...</>
-                            ) : (
-                              <>Опубликовать на hh.ru</>
-                            )}
-                          </Button>
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                </div>
+                <PostDemoSettings />
               </TabsContent>
 
               <TabsContent value="settings">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  {/* Левая колонка — Интеграции */}
-                  <div className="space-y-3">
-                    <div>
-                      <h3 className="text-lg font-semibold text-foreground mb-1">Источники кандидатов</h3>
-                      <p className="text-sm text-muted-foreground mb-3">Подключение сервисов для импорта откликов</p>
-                    </div>
+                  {/* Левая колонка */}
+                  <div className="space-y-6">
+                    {/* Публичная страница вакансии */}
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <div className="flex items-center justify-between">
+                          <CardTitle className="text-base flex items-center gap-2">
+                            <Globe className="w-4 h-4" />
+                            Публичная страница вакансии
+                          </CardTitle>
+                          <div className="flex items-center gap-2">
+                            <button
+                              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors"
+                              onClick={() => {
+                                const url = `${window.location.origin}/vacancy/${id}`
+                                navigator.clipboard.writeText(url)
+                                toast.success("Ссылка скопирована")
+                              }}
+                            >
+                              <Copy className="w-3.5 h-3.5" />
+                              Скопировать ссылку
+                            </button>
+                            <Button size="sm" className="gap-1.5 h-8 text-xs" onClick={() => window.open(`/vacancy/${id}`, "_blank")}>
+                              <Globe className="w-3.5 h-3.5" />
+                              Открыть страницу
+                            </Button>
+                          </div>
+                        </div>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/50 border text-xs font-mono text-muted-foreground">
+                          <Globe className="w-3.5 h-3.5 shrink-0" />
+                          {typeof window !== "undefined" ? window.location.origin : "https://mykomanda.ru"}/vacancy/{id}
+                        </div>
+                      </CardContent>
+                    </Card>
 
-                    {/* hh.ru — compact row that expands on click */}
-                    <HhIntegration onCandidatesImported={handleHhCandidatesImported} onMessageLog={handleHhMessageLog} />
+                    {/* AI-генерация текста вакансии */}
+                    <VacancyAiText vacancyId={id} descriptionJson={apiVacancy?.descriptionJson} />
 
-                    {/* Avito */}
-                    <Card><CardContent className="px-4 py-0 flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-950 flex items-center justify-center shrink-0"><span className="text-sm font-bold text-emerald-600">A</span></div>
-                      <div className="flex-1 min-w-0"><p className="text-sm font-medium">Авито Работа</p><p className="text-[12px] text-muted-foreground">Импорт откликов с Авито</p></div>
-                      <Badge variant="outline" className="text-[12px] text-muted-foreground border-border shrink-0">Не подключено</Badge>
-                      <Button size="sm" className="h-8 text-[12px] gap-1 bg-emerald-600 hover:bg-emerald-700 text-white shrink-0" onClick={() => toast.info("Подключение Авито (заглушка)")}>Подключить</Button>
-                    </CardContent></Card>
+                    {/* Поля мини-формы */}
+                    <MiniFormBuilder vacancyId={id} descriptionJson={apiVacancy?.descriptionJson} />
 
-                    {/* SuperJob */}
-                    <Card><CardContent className="px-4 py-0 flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-950 flex items-center justify-center shrink-0"><span className="text-sm font-bold text-blue-600">SJ</span></div>
-                      <div className="flex-1 min-w-0"><p className="text-sm font-medium">SuperJob</p><p className="text-[12px] text-muted-foreground">Импорт откликов с SuperJob</p></div>
-                      <Badge variant="outline" className="text-[12px] text-muted-foreground border-border shrink-0">Не подключено</Badge>
-                      <Button size="sm" className="h-8 text-[12px] gap-1 bg-blue-600 hover:bg-blue-700 text-white shrink-0" onClick={() => toast.info("Подключение SuperJob (заглушка)")}>Подключить</Button>
-                    </CardContent></Card>
-
-                    {/* CRM Integrations */}
-                    <div className="pt-2">
-                      <h3 className="text-lg font-semibold text-foreground mb-1">CRM-интеграции</h3>
-                      <p className="text-sm text-muted-foreground mb-3">Синхронизация воронки с CRM</p>
-                    </div>
-
-                    {/* Bitrix24 */}
-                    <Card><CardContent className="px-4 py-0 flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-sky-100 dark:bg-sky-950 flex items-center justify-center shrink-0"><span className="text-xs font-bold text-sky-600">Б24</span></div>
-                      <div className="flex-1 min-w-0"><p className="text-sm font-medium">Битрикс24</p><p className="text-[12px] text-muted-foreground">Синхронизация воронки и кандидатов</p></div>
-                      <Badge variant="outline" className="text-[12px] text-muted-foreground border-border shrink-0">Не подключено</Badge>
-                      <Button variant="outline" size="sm" className="h-8 text-[12px] gap-1 text-sky-600 border-sky-300 hover:bg-sky-50 shrink-0" onClick={() => toast.info("Подключение Битрикс24 (заглушка)")}>Подключить</Button>
-                    </CardContent></Card>
-
-                    {/* AmoCRM */}
-                    <Card><CardContent className="px-4 py-0 flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-indigo-100 dark:bg-indigo-950 flex items-center justify-center shrink-0"><span className="text-xs font-bold text-indigo-600">amo</span></div>
-                      <div className="flex-1 min-w-0"><p className="text-sm font-medium">AmoCRM</p><p className="text-[12px] text-muted-foreground">Синхронизация воронки и кандидатов</p></div>
-                      <Badge variant="outline" className="text-[12px] text-muted-foreground border-border shrink-0">Не подключено</Badge>
-                      <Button variant="outline" size="sm" className="h-8 text-[12px] gap-1 text-indigo-600 border-indigo-300 hover:bg-indigo-50 shrink-0" onClick={() => toast.info("Подключение AmoCRM (заглушка)")}>Подключить</Button>
-                    </CardContent></Card>
-
+                    {/* HTML-страница */}
+                    <PublishTab
+                      vacancyTitle={internalName || vacancyTitle}
+                      vacancySlug={id}
+                      vacancyCity={apiVacancy?.city ?? "Москва"}
+                      salaryFrom={80000}
+                      salaryTo={150000}
+                    />
                   </div>
 
-                  {/* Правая колонка — Лог сообщений + прочие настройки */}
+                  {/* Правая колонка */}
                   <div className="space-y-6">
+                    {/* Источники кандидатов */}
+                    <div className="space-y-3">
+                      <div>
+                        <h3 className="text-lg font-semibold text-foreground mb-1">Источники кандидатов</h3>
+                        <p className="text-sm text-muted-foreground mb-3">Подключение сервисов для импорта откликов</p>
+                      </div>
+
+                      {/* hh.ru */}
+                      <HhIntegration onCandidatesImported={handleHhCandidatesImported} onMessageLog={handleHhMessageLog} />
+
+                      {/* Avito */}
+                      <Card><CardContent className="px-4 py-0 flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-950 flex items-center justify-center shrink-0"><span className="text-sm font-bold text-emerald-600">A</span></div>
+                        <div className="flex-1 min-w-0"><p className="text-sm font-medium">Авито Работа</p><p className="text-[12px] text-muted-foreground">Импорт откликов с Авито</p></div>
+                        <Badge variant="outline" className="text-[12px] text-muted-foreground border-border shrink-0">Не подключено</Badge>
+                        <Button size="sm" className="h-8 text-[12px] gap-1 bg-emerald-600 hover:bg-emerald-700 text-white shrink-0" onClick={() => toast.info("Подключение Авито (заглушка)")}>Подключить</Button>
+                      </CardContent></Card>
+
+                      {/* SuperJob */}
+                      <Card><CardContent className="px-4 py-0 flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-950 flex items-center justify-center shrink-0"><span className="text-sm font-bold text-blue-600">SJ</span></div>
+                        <div className="flex-1 min-w-0"><p className="text-sm font-medium">SuperJob</p><p className="text-[12px] text-muted-foreground">Импорт откликов с SuperJob</p></div>
+                        <Badge variant="outline" className="text-[12px] text-muted-foreground border-border shrink-0">Не подключено</Badge>
+                        <Button size="sm" className="h-8 text-[12px] gap-1 bg-blue-600 hover:bg-blue-700 text-white shrink-0" onClick={() => toast.info("Подключение SuperJob (заглушка)")}>Подключить</Button>
+                      </CardContent></Card>
+                    </div>
+
+                    {/* CRM Integrations */}
+                    <div className="space-y-3">
+                      <div>
+                        <h3 className="text-lg font-semibold text-foreground mb-1">CRM-интеграции</h3>
+                        <p className="text-sm text-muted-foreground mb-3">Синхронизация воронки с CRM</p>
+                      </div>
+
+                      {/* Bitrix24 */}
+                      <Card><CardContent className="px-4 py-0 flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-lg bg-sky-100 dark:bg-sky-950 flex items-center justify-center shrink-0"><span className="text-xs font-bold text-sky-600">Б24</span></div>
+                        <div className="flex-1 min-w-0"><p className="text-sm font-medium">Битрикс24</p><p className="text-[12px] text-muted-foreground">Синхронизация воронки и кандидатов</p></div>
+                        <Badge variant="outline" className="text-[12px] text-muted-foreground border-border shrink-0">Не подключено</Badge>
+                        <Button variant="outline" size="sm" className="h-8 text-[12px] gap-1 text-sky-600 border-sky-300 hover:bg-sky-50 shrink-0" onClick={() => toast.info("Подключение Битрикс24 (заглушка)")}>Подключить</Button>
+                      </CardContent></Card>
+
+                      {/* AmoCRM */}
+                      <Card><CardContent className="px-4 py-0 flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-lg bg-indigo-100 dark:bg-indigo-950 flex items-center justify-center shrink-0"><span className="text-xs font-bold text-indigo-600">amo</span></div>
+                        <div className="flex-1 min-w-0"><p className="text-sm font-medium">AmoCRM</p><p className="text-[12px] text-muted-foreground">Синхронизация воронки и кандидатов</p></div>
+                        <Badge variant="outline" className="text-[12px] text-muted-foreground border-border shrink-0">Не подключено</Badge>
+                        <Button variant="outline" size="sm" className="h-8 text-[12px] gap-1 text-indigo-600 border-indigo-300 hover:bg-indigo-50 shrink-0" onClick={() => toast.info("Подключение AmoCRM (заглушка)")}>Подключить</Button>
+                      </CardContent></Card>
+                    </div>
+
+                    {/* Источники и UTM-ссылки */}
+                    <UtmLinksSection vacancyId={id} vacancySlug={id} />
+
+                    {/* Лог сообщений hh-чат */}
                     <Card>
                       <CardHeader className="pb-3">
                         <CardTitle className="text-base flex items-center gap-2">
@@ -1150,8 +1003,6 @@ export default function VacancyPage() {
                         )}
                       </CardContent>
                     </Card>
-
-                    <PostDemoSettings />
                   </div>
                 </div>
               </TabsContent>

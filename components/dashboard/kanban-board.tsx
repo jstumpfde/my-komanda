@@ -84,20 +84,22 @@ export function KanbanBoard({ settings, viewMode, onViewModeChange, columns = []
     )
   }
 
-  // KPI metrics — only standard columns
+  // KPI metrics — only standard columns, cumulative funnel counts
   const STANDARD_IDS = COLUMN_ORDER as readonly string[]
   const KPI_LABELS: Record<string, string> = {
     new: "Новый", demo: "Демо", decision: "Решение",
     interview: "Интервью", final_decision: "Фин.решение", hired: "Нанят",
   }
-  const kpiSteps = STANDARD_IDS
+  const standardCols = STANDARD_IDS
     .map((id) => columns.find((c) => c.id === id))
     .filter((col): col is ColumnData => !!col)
-    .map((col, i, arr) => {
-      const prev = i > 0 ? arr[i - 1] : null
-      const pct = prev && prev.count > 0 ? Math.round((col.count / prev.count) * 100) : null
-      return { title: KPI_LABELS[col.id] || col.title, count: col.count, pct }
-    })
+  // Cumulative: each step = candidates in this stage + all stages after it
+  const kpiSteps = standardCols.map((col, i, arr) => {
+    const cumulative = arr.slice(i).reduce((acc, c) => acc + c.count, 0)
+    const prevCumulative = i > 0 ? arr.slice(i - 1).reduce((acc, c) => acc + c.count, 0) : null
+    const pct = prevCumulative && prevCumulative > 0 ? Math.round((cumulative / prevCumulative) * 100) : null
+    return { title: KPI_LABELS[col.id] || col.title, count: cumulative, pct }
+  })
 
   return (
     <div>
@@ -147,7 +149,8 @@ export function KanbanBoard({ settings, viewMode, onViewModeChange, columns = []
             {columns.map((column, colIndex) => {
               const isFirst = colIndex === 0
               const isLast = colIndex === columns.length - 1
-              const isMiddle = !isFirst && !isLast
+              const protectedIds = ["new", "demo", "final_decision", "hired"]
+              const canManage = !protectedIds.includes(column.id)
 
               return (
                 <div
@@ -178,8 +181,8 @@ export function KanbanBoard({ settings, viewMode, onViewModeChange, columns = []
                         onTitleChange={(t) => handleTitleChange(column.id, t)}
                       />
                     </div>
-                    {/* TASK 2+3: Minus & Plus buttons on middle columns */}
-                    {isMiddle && (
+                    {/* Minus & Plus buttons on manageable columns */}
+                    {canManage && !isFirst && !isLast && (
                       <>
                         {onRemoveColumn && (
                           <button
