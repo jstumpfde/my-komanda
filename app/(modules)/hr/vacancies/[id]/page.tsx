@@ -138,6 +138,14 @@ export default function VacancyPage() {
         return newCols.length > 0 ? [...prev, ...newCols] : prev
       })
     }
+    // Load branding
+    const branding = desc?.branding as Record<string, string> | undefined
+    if (branding) {
+      if (branding.companyName) setBrandCompanyName(branding.companyName)
+      if (branding.color) setBrandColor(branding.color)
+      if (branding.slogan) setBrandSlogan(branding.slogan)
+      if (branding.logo) setBrandLogo(branding.logo)
+    }
   }, [apiVacancy])
 
   // Populate columns from API candidates
@@ -161,6 +169,11 @@ export default function VacancyPage() {
   const [internalName, setInternalName] = useState("")
   const [isEditingName, setIsEditingName] = useState(false)
   const [messageLogs, setMessageLogs] = useState<HhMessageLog[]>([])
+  const [brandCompanyName, setBrandCompanyName] = useState("")
+  const [brandColor, setBrandColor] = useState("#3B82F6")
+  const [brandSlogan, setBrandSlogan] = useState("")
+  const [brandLogo, setBrandLogo] = useState("")
+  const [brandSaving, setBrandSaving] = useState(false)
   const [activeTab, setActiveTab] = useState("candidates")
   const [anPeriod, setAnPeriod] = useState("all")
   const [anSources, setAnSources] = useState<string[]>([])
@@ -287,6 +300,26 @@ export default function VacancyPage() {
 
   const handleHhMessageLog = (log: HhMessageLog) => {
     setMessageLogs(prev => [...prev, log])
+  }
+
+  const saveBranding = async (updates?: { companyName?: string; color?: string; slogan?: string; logo?: string }) => {
+    setBrandSaving(true)
+    const existing = (apiVacancy?.descriptionJson as Record<string, unknown>) || {}
+    const branding = {
+      companyName: updates?.companyName ?? brandCompanyName,
+      color: updates?.color ?? brandColor,
+      slogan: updates?.slogan ?? brandSlogan,
+      logo: updates?.logo ?? brandLogo,
+    }
+    try {
+      await fetch(`/api/modules/hr/vacancies/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ description_json: { ...existing, branding } }),
+      })
+      toast.success("Брендинг сохранён")
+    } catch { /* silent */ }
+    setBrandSaving(false)
   }
 
   const handleAddCustomColumn = async (name: string, color: string, afterColumnId?: string) => {
@@ -900,6 +933,124 @@ export default function VacancyPage() {
                     {/* Поля мини-формы */}
                     <MiniFormBuilder vacancyId={id} descriptionJson={apiVacancy?.descriptionJson} />
 
+                    {/* Брендинг страницы */}
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-base flex items-center gap-2">
+                          <Sparkles className="w-4 h-4" />
+                          Брендинг страницы
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="space-y-1.5">
+                          <Label className="text-xs">Название компании</Label>
+                          <Input
+                            value={brandCompanyName}
+                            onChange={(e) => setBrandCompanyName(e.target.value)}
+                            placeholder="Название вашей компании"
+                            className="h-9 text-sm"
+                          />
+                        </div>
+                        <div className="flex gap-4">
+                          <div className="space-y-1.5 flex-1">
+                            <Label className="text-xs">Цвет бренда</Label>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="color"
+                                value={brandColor}
+                                onChange={(e) => { setBrandColor(e.target.value) }}
+                                className="w-9 h-9 rounded-md border cursor-pointer p-0.5"
+                              />
+                              <Input
+                                value={brandColor}
+                                onChange={(e) => setBrandColor(e.target.value)}
+                                className="h-9 text-sm font-mono w-28"
+                                maxLength={7}
+                              />
+                              <div className="h-9 flex-1 rounded-md" style={{ backgroundColor: brandColor }} />
+                            </div>
+                          </div>
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs">Логотип</Label>
+                          <div className="flex items-center gap-3">
+                            {brandLogo ? (
+                              <div className="relative">
+                                <img src={brandLogo} alt="Логотип" className="max-h-[60px] object-contain rounded-md border" />
+                                <button
+                                  className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center hover:bg-red-600"
+                                  onClick={() => { setBrandLogo(""); saveBranding({ logo: "" }) }}
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="h-14 w-24 rounded-lg border-2 border-dashed border-border flex items-center justify-center bg-muted/50">
+                                <span className="text-[10px] text-muted-foreground">Логотип</span>
+                              </div>
+                            )}
+                            <div className="flex flex-col gap-1">
+                              <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => {
+                                const input = document.createElement("input")
+                                input.type = "file"
+                                input.accept = "image/png,image/svg+xml,image/jpeg,image/webp"
+                                input.onchange = (e) => {
+                                  const file = (e.target as HTMLInputElement).files?.[0]
+                                  if (!file) return
+                                  if (file.size > 2 * 1024 * 1024) { toast.error("Файл слишком большой (макс. 2 МБ)"); return }
+                                  const reader = new FileReader()
+                                  reader.onload = () => {
+                                    const base64 = reader.result as string
+                                    setBrandLogo(base64)
+                                    saveBranding({ logo: base64 })
+                                  }
+                                  reader.readAsDataURL(file)
+                                }
+                                input.click()
+                              }}>
+                                Загрузить
+                              </Button>
+                              <span className="text-[10px] text-muted-foreground">PNG, SVG, JPG до 2 МБ</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs">Слоган / подзаголовок</Label>
+                          <Input
+                            value={brandSlogan}
+                            onChange={(e) => setBrandSlogan(e.target.value)}
+                            placeholder="Мы строим будущее вместе"
+                            className="h-9 text-sm"
+                          />
+                        </div>
+                        {/* Mini preview */}
+                        <div className="rounded-lg border p-4 bg-muted/30">
+                          <p className="text-[10px] text-muted-foreground mb-2">Превью шапки</p>
+                          <div className="flex items-center gap-3">
+                            {brandLogo ? (
+                              <img src={brandLogo} alt="" className="max-h-[40px] object-contain" />
+                            ) : (
+                              <div className="w-10 h-10 rounded-lg flex items-center justify-center text-white text-xs font-bold" style={{ backgroundColor: brandColor }}>
+                                {brandCompanyName ? brandCompanyName.charAt(0).toUpperCase() : "K"}
+                              </div>
+                            )}
+                            <div>
+                              <p className="text-sm font-semibold">{brandCompanyName || "Название компании"}</p>
+                              {brandSlogan && <p className="text-xs text-muted-foreground">{brandSlogan}</p>}
+                            </div>
+                          </div>
+                          <div className="mt-3 flex gap-2">
+                            <div className="h-7 px-4 rounded-md text-xs text-white flex items-center font-medium" style={{ backgroundColor: brandColor }}>Откликнуться</div>
+                            <div className="h-7 px-4 rounded-md text-xs border flex items-center" style={{ color: brandColor, borderColor: brandColor }}>Подробнее</div>
+                          </div>
+                        </div>
+                        <Button size="sm" className="gap-1.5 h-8 text-xs" onClick={() => saveBranding()} disabled={brandSaving}>
+                          {brandSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                          Сохранить
+                        </Button>
+                      </CardContent>
+                    </Card>
+
                     {/* HTML-страница */}
                     <PublishTab
                       vacancyTitle={internalName || vacancyTitle}
@@ -907,60 +1058,64 @@ export default function VacancyPage() {
                       vacancyCity={apiVacancy?.city ?? "Москва"}
                       salaryFrom={80000}
                       salaryTo={150000}
+                      brandOverride={{ companyName: brandCompanyName, color: brandColor, logo: brandLogo, slogan: brandSlogan }}
                     />
                   </div>
 
                   {/* Правая колонка */}
                   <div className="space-y-6">
                     {/* Источники кандидатов */}
-                    <div className="space-y-3">
-                      <div>
-                        <h3 className="text-lg font-semibold text-foreground mb-1">Источники кандидатов</h3>
-                        <p className="text-sm text-muted-foreground mb-3">Подключение сервисов для импорта откликов</p>
+                    {/* Источники кандидатов */}
+                    <div>
+                      <h3 className="text-lg font-semibold text-foreground mb-1">Источники кандидатов</h3>
+                      <p className="text-sm text-muted-foreground mb-3">Подключение сервисов для импорта откликов</p>
+                      <div className="space-y-3">
+                        <div className="rounded-lg border bg-card p-4 flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-white text-[11px] font-bold" style={{ backgroundColor: "#D6001C" }}>hh</div>
+                          <div className="flex-1 min-w-0"><p className="text-sm font-medium">hh.ru</p><p className="text-[11px] text-muted-foreground">Импорт откликов и управление вакансиями</p></div>
+                          <Badge variant="outline" className="text-xs h-6 text-muted-foreground shrink-0">Не подключено</Badge>
+                          <Button size="sm" className="h-8 text-xs shrink-0" onClick={() => toast.info("Подключение hh.ru (заглушка)")}>Подключить</Button>
+                        </div>
+                        <div className="rounded-lg border bg-card p-4 flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-white text-[11px] font-bold" style={{ backgroundColor: "#00AAFF" }}>A</div>
+                          <div className="flex-1 min-w-0"><p className="text-sm font-medium flex items-center gap-2">Авито Работа <span className="text-[10px] bg-amber-100 text-amber-700 rounded-full px-2 py-0.5 font-normal">Скоро</span></p><p className="text-[11px] text-muted-foreground">Импорт откликов с Авито</p></div>
+                          <Badge variant="outline" className="text-xs h-6 text-muted-foreground shrink-0">Не подключено</Badge>
+                          <Button size="sm" className="h-8 text-xs shrink-0" disabled>Подключить</Button>
+                        </div>
+                        <div className="rounded-lg border bg-card p-4 flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-white text-[11px] font-bold" style={{ backgroundColor: "#0066CC" }}>SJ</div>
+                          <div className="flex-1 min-w-0"><p className="text-sm font-medium flex items-center gap-2">SuperJob <span className="text-[10px] bg-amber-100 text-amber-700 rounded-full px-2 py-0.5 font-normal">Скоро</span></p><p className="text-[11px] text-muted-foreground">Импорт откликов с SuperJob</p></div>
+                          <Badge variant="outline" className="text-xs h-6 text-muted-foreground shrink-0">Не подключено</Badge>
+                          <Button size="sm" className="h-8 text-xs shrink-0" disabled>Подключить</Button>
+                        </div>
                       </div>
-
-                      {/* hh.ru */}
-                      <HhIntegration onCandidatesImported={handleHhCandidatesImported} onMessageLog={handleHhMessageLog} />
-
-                      {/* Avito */}
-                      <Card><CardContent className="px-4 py-0 flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-950 flex items-center justify-center shrink-0"><span className="text-sm font-bold text-emerald-600">A</span></div>
-                        <div className="flex-1 min-w-0"><p className="text-sm font-medium">Авито Работа</p><p className="text-[12px] text-muted-foreground">Импорт откликов с Авито</p></div>
-                        <Badge variant="outline" className="text-[12px] text-muted-foreground border-border shrink-0">Не подключено</Badge>
-                        <Button size="sm" className="h-8 text-[12px] gap-1 bg-emerald-600 hover:bg-emerald-700 text-white shrink-0" onClick={() => toast.info("Подключение Авито (заглушка)")}>Подключить</Button>
-                      </CardContent></Card>
-
-                      {/* SuperJob */}
-                      <Card><CardContent className="px-4 py-0 flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-950 flex items-center justify-center shrink-0"><span className="text-sm font-bold text-blue-600">SJ</span></div>
-                        <div className="flex-1 min-w-0"><p className="text-sm font-medium">SuperJob</p><p className="text-[12px] text-muted-foreground">Импорт откликов с SuperJob</p></div>
-                        <Badge variant="outline" className="text-[12px] text-muted-foreground border-border shrink-0">Не подключено</Badge>
-                        <Button size="sm" className="h-8 text-[12px] gap-1 bg-blue-600 hover:bg-blue-700 text-white shrink-0" onClick={() => toast.info("Подключение SuperJob (заглушка)")}>Подключить</Button>
-                      </CardContent></Card>
+                      <div className="hidden"><HhIntegration onCandidatesImported={handleHhCandidatesImported} onMessageLog={handleHhMessageLog} /></div>
                     </div>
 
                     {/* CRM Integrations */}
-                    <div className="space-y-3">
-                      <div>
-                        <h3 className="text-lg font-semibold text-foreground mb-1">CRM-интеграции</h3>
-                        <p className="text-sm text-muted-foreground mb-3">Синхронизация воронки с CRM</p>
+                    <div>
+                      <h3 className="text-lg font-semibold text-foreground mb-1">CRM-интеграции</h3>
+                      <p className="text-sm text-muted-foreground mb-3">Синхронизация воронки с CRM</p>
+                      <div className="space-y-3">
+                        <div className="rounded-lg border bg-card p-4 flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-white text-[9px] font-bold" style={{ backgroundColor: "#2FC6F6" }}>Б24</div>
+                          <div className="flex-1 min-w-0"><p className="text-sm font-medium flex items-center gap-2">Битрикс24 <span className="text-[10px] bg-amber-100 text-amber-700 rounded-full px-2 py-0.5 font-normal">Скоро</span></p><p className="text-[11px] text-muted-foreground">Синхронизация воронки и кандидатов</p></div>
+                          <Badge variant="outline" className="text-xs h-6 text-muted-foreground shrink-0">Не подключено</Badge>
+                          <Button size="sm" className="h-8 text-xs shrink-0" disabled>Подключить</Button>
+                        </div>
+                        <div className="rounded-lg border bg-card p-4 flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-white text-[11px] font-bold" style={{ backgroundColor: "#7B68EE" }}>amo</div>
+                          <div className="flex-1 min-w-0"><p className="text-sm font-medium flex items-center gap-2">AmoCRM <span className="text-[10px] bg-amber-100 text-amber-700 rounded-full px-2 py-0.5 font-normal">Скоро</span></p><p className="text-[11px] text-muted-foreground">Синхронизация воронки и кандидатов</p></div>
+                          <Badge variant="outline" className="text-xs h-6 text-muted-foreground shrink-0">Не подключено</Badge>
+                          <Button size="sm" className="h-8 text-xs shrink-0" disabled>Подключить</Button>
+                        </div>
+                        <div className="rounded-lg border bg-card p-4 flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-white" style={{ backgroundColor: "#6B7280" }}><Settings className="w-3.5 h-3.5" /></div>
+                          <div className="flex-1 min-w-0"><p className="text-sm font-medium flex items-center gap-2">Другая CRM <span className="text-[10px] bg-amber-100 text-amber-700 rounded-full px-2 py-0.5 font-normal">Скоро</span></p><p className="text-[11px] text-muted-foreground">Подключение через API или webhook</p></div>
+                          <Badge variant="outline" className="text-xs h-6 text-muted-foreground shrink-0">Не подключено</Badge>
+                          <Button size="sm" className="h-8 text-xs shrink-0" disabled>Настроить</Button>
+                        </div>
                       </div>
-
-                      {/* Bitrix24 */}
-                      <Card><CardContent className="px-4 py-0 flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-sky-100 dark:bg-sky-950 flex items-center justify-center shrink-0"><span className="text-xs font-bold text-sky-600">Б24</span></div>
-                        <div className="flex-1 min-w-0"><p className="text-sm font-medium">Битрикс24</p><p className="text-[12px] text-muted-foreground">Синхронизация воронки и кандидатов</p></div>
-                        <Badge variant="outline" className="text-[12px] text-muted-foreground border-border shrink-0">Не подключено</Badge>
-                        <Button variant="outline" size="sm" className="h-8 text-[12px] gap-1 text-sky-600 border-sky-300 hover:bg-sky-50 shrink-0" onClick={() => toast.info("Подключение Битрикс24 (заглушка)")}>Подключить</Button>
-                      </CardContent></Card>
-
-                      {/* AmoCRM */}
-                      <Card><CardContent className="px-4 py-0 flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-indigo-100 dark:bg-indigo-950 flex items-center justify-center shrink-0"><span className="text-xs font-bold text-indigo-600">amo</span></div>
-                        <div className="flex-1 min-w-0"><p className="text-sm font-medium">AmoCRM</p><p className="text-[12px] text-muted-foreground">Синхронизация воронки и кандидатов</p></div>
-                        <Badge variant="outline" className="text-[12px] text-muted-foreground border-border shrink-0">Не подключено</Badge>
-                        <Button variant="outline" size="sm" className="h-8 text-[12px] gap-1 text-indigo-600 border-indigo-300 hover:bg-indigo-50 shrink-0" onClick={() => toast.info("Подключение AmoCRM (заглушка)")}>Подключить</Button>
-                      </CardContent></Card>
                     </div>
 
                     {/* Источники и UTM-ссылки */}

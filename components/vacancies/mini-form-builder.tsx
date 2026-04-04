@@ -325,12 +325,6 @@ export function MiniFormBuilder({ vacancyId, descriptionJson }: MiniFormBuilderP
               Дополнительные поля
             </p>
 
-            {fields.length === 0 && (
-              <div className="text-center py-4 text-sm text-muted-foreground border border-dashed rounded-lg">
-                Нет дополнительных полей. Добавьте из списка или создайте своё.
-              </div>
-            )}
-
             <DndContext
               sensors={sensors}
               collisionDetection={closestCenter}
@@ -352,9 +346,10 @@ export function MiniFormBuilder({ vacancyId, descriptionJson }: MiniFormBuilderP
           </div>
 
           {/* Кнопка добавления */}
+          <div className="mt-3">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="gap-1.5 w-full">
+              <Button variant="outline" size="sm" className="gap-1.5 w-auto px-4 h-9">
                 <Plus className="w-3.5 h-3.5" />
                 Добавить поле
               </Button>
@@ -380,6 +375,7 @@ export function MiniFormBuilder({ vacancyId, descriptionJson }: MiniFormBuilderP
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          </div>
         </CardContent>
       </Card>
 

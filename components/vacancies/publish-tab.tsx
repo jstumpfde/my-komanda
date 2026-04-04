@@ -20,6 +20,12 @@ interface PublishTabProps {
   vacancyCity?: string
   salaryFrom?: number
   salaryTo?: number
+  brandOverride?: {
+    companyName?: string
+    color?: string
+    logo?: string
+    slogan?: string
+  }
 }
 
 function generateFullPageHtml(brand: BrandConfig, vacancy: { title: string; slug: string; city?: string; salaryFrom?: number; salaryTo?: number }): string {
@@ -117,12 +123,20 @@ const CMS_INSTRUCTIONS: { id: string; name: string; steps: string[] }[] = [
   ]},
 ]
 
-export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, salaryFrom, salaryTo }: PublishTabProps) {
+export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, salaryFrom, salaryTo, brandOverride }: PublishTabProps) {
   const [brand, setBrand] = useState<BrandConfig | null>(null)
   const [copied, setCopied] = useState(false)
   const [activeInstruction, setActiveInstruction] = useState<string | null>(null)
 
-  useEffect(() => { setBrand(getBrand()) }, [])
+  useEffect(() => {
+    const base = getBrand()
+    if (brandOverride) {
+      if (brandOverride.companyName) base.companyName = brandOverride.companyName
+      if (brandOverride.color) { base.primaryColor = brandOverride.color; base.bgColor = brandOverride.color + "10" }
+      if (brandOverride.logo) base.logoUrl = brandOverride.logo
+    }
+    setBrand(base)
+  }, [brandOverride])
 
   const handleCopyCode = async () => {
     if (!brand) return
