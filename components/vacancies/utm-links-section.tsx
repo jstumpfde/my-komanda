@@ -19,6 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { Link2, Plus, Copy, Loader2, MousePointerClick, Users, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -63,7 +64,7 @@ export function UtmLinksSection({ vacancyId }: UtmLinksSectionProps) {
   const [creating, setCreating] = useState(false)
   const [newSource, setNewSource] = useState("")
   const [newName, setNewName] = useState("")
-  const [newDestUrl, setNewDestUrl] = useState("")
+  const [deleteLinkId, setDeleteLinkId] = useState<string | null>(null)
 
   const fetchLinks = useCallback(async () => {
     try {
@@ -94,7 +95,7 @@ export function UtmLinksSection({ vacancyId }: UtmLinksSectionProps) {
       const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}/utm-links`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ source: newSource, name: newName.trim(), destinationUrl: newDestUrl.trim() || undefined }),
+        body: JSON.stringify({ source: newSource, name: newName.trim() }),
       })
       if (!res.ok) throw new Error()
       const link = await res.json()
@@ -102,7 +103,6 @@ export function UtmLinksSection({ vacancyId }: UtmLinksSectionProps) {
       setShowDialog(false)
       setNewSource("")
       setNewName("")
-      setNewDestUrl("")
       toast.success("Ссылка создана")
     } catch {
       toast.error("Не удалось создать ссылку")
@@ -111,16 +111,17 @@ export function UtmLinksSection({ vacancyId }: UtmLinksSectionProps) {
     }
   }
 
-  const handleDelete = async (linkId: string) => {
-    if (!confirm("Удалить ссылку?")) return
+  const handleDelete = async () => {
+    if (!deleteLinkId) return
     try {
-      const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}/utm-links/${linkId}`, { method: "DELETE" })
+      const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}/utm-links/${deleteLinkId}`, { method: "DELETE" })
       if (!res.ok) throw new Error()
-      setLinks((prev) => prev.filter((l) => l.id !== linkId))
+      setLinks((prev) => prev.filter((l) => l.id !== deleteLinkId))
       toast.success("Ссылка удалена")
     } catch {
       toast.error("Не удалось удалить")
     }
+    setDeleteLinkId(null)
   }
 
   return (
@@ -158,7 +159,6 @@ export function UtmLinksSection({ vacancyId }: UtmLinksSectionProps) {
                     <th className="text-left px-4 py-2.5 font-medium text-muted-foreground text-xs">Источник</th>
                     <th className="text-left px-4 py-2.5 font-medium text-muted-foreground text-xs">Название</th>
                     <th className="text-left px-4 py-2.5 font-medium text-muted-foreground text-xs">Короткая ссылка</th>
-                    <th className="text-left px-4 py-2.5 font-medium text-muted-foreground text-xs">Назначение</th>
                     <th className="text-right px-4 py-2.5 font-medium text-muted-foreground text-xs">
                       <span className="inline-flex items-center gap-1"><MousePointerClick className="w-3 h-3" />Клики</span>
                     </th>
@@ -188,15 +188,6 @@ export function UtmLinksSection({ vacancyId }: UtmLinksSectionProps) {
                         <td className="px-4 py-3">
                           <span className="text-xs text-primary font-mono">/v/{link.slug}</span>
                         </td>
-                        <td className="px-4 py-3">
-                          {link.destinationUrl ? (
-                            <span className="text-xs text-muted-foreground font-mono truncate max-w-[180px] block" title={link.destinationUrl}>
-                              {link.destinationUrl.replace(/^https?:\/\//, "").slice(0, 30)}{link.destinationUrl.replace(/^https?:\/\//, "").length > 30 ? "…" : ""}
-                            </span>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">Наша страница</span>
-                          )}
-                        </td>
                         <td className="px-4 py-3 text-right tabular-nums font-medium text-xs">{link.clicks}</td>
                         <td className="px-4 py-3 text-right tabular-nums font-medium text-xs">{link.candidatesCount}</td>
                         <td className="px-4 py-3">
@@ -210,7 +201,7 @@ export function UtmLinksSection({ vacancyId }: UtmLinksSectionProps) {
                             </button>
                             <button
                               className="text-muted-foreground hover:text-red-500 transition-colors opacity-0 group-hover/row:opacity-100"
-                              onClick={() => handleDelete(link.id)}
+                              onClick={() => setDeleteLinkId(link.id)}
                               title="Удалить"
                             >
                               <Trash2 className="w-3 h-3" />
@@ -261,17 +252,6 @@ export function UtmLinksSection({ vacancyId }: UtmLinksSectionProps) {
                 autoFocus
               />
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-sm">URL назначения <span className="text-muted-foreground font-normal">(необязательно)</span></Label>
-              <Input
-                value={newDestUrl}
-                onChange={(e) => setNewDestUrl(e.target.value)}
-                placeholder="https://hh.ru/vacancy/12345 или https://mysite.com/careers"
-              />
-              <p className="text-xs text-muted-foreground">
-                Если пусто — ведёт на публичную страницу вакансии
-              </p>
-            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowDialog(false)}>Отмена</Button>
@@ -281,6 +261,19 @@ export function UtmLinksSection({ vacancyId }: UtmLinksSectionProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!deleteLinkId} onOpenChange={(open) => { if (!open) setDeleteLinkId(null) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Удалить ссылку?</AlertDialogTitle>
+            <AlertDialogDescription>Ссылка будет удалена безвозвратно</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Отмена</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Удалить</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   )
 }
