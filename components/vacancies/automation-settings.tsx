@@ -610,8 +610,8 @@ export function AutomationSettings({ vacancyId, descriptionJson }: AutomationSet
       </Card>
 
       {/* Кнопка сохранения */}
-      <div className="flex justify-end">
-        <Button className="gap-2" onClick={saveSettings} disabled={saving}>
+      <div className="flex justify-end mt-3">
+        <Button size="sm" className="gap-1.5 h-8 text-xs" onClick={saveSettings} disabled={saving}>
           {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
           Сохранить настройки
         </Button>

@@ -134,21 +134,6 @@ export function VacancyAiText({ vacancyId, descriptionJson }: VacancyAiTextProps
               )}
               Сгенерировать все 3
             </Button>
-            {hasAnyText && (
-              <Button
-                size="sm"
-                className="gap-1.5 text-xs"
-                disabled={saving}
-                onClick={saveVariants}
-              >
-                {saving ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <Save className="w-3.5 h-3.5" />
-                )}
-                Сохранить
-              </Button>
-            )}
           </div>
         </div>
         <p className="text-xs text-muted-foreground mt-1">
@@ -217,6 +202,14 @@ export function VacancyAiText({ vacancyId, descriptionJson }: VacancyAiTextProps
             </TabsContent>
           ))}
         </Tabs>
+        {hasAnyText && (
+          <div className="flex justify-end mt-4">
+            <Button size="sm" className="gap-1.5 h-8 text-xs" disabled={saving} onClick={saveVariants}>
+              {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+              Сохранить
+            </Button>
+          </div>
+        )}
       </CardContent>
     </Card>
   )

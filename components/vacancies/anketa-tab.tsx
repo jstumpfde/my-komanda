@@ -287,10 +287,6 @@ export function AnketaTab({ vacancyId, descriptionJson }: {
       <div className="flex items-center gap-3">
         <Progress value={progress} className="flex-1 h-2" />
         <span className="text-sm text-muted-foreground font-medium whitespace-nowrap">{progress}%</span>
-        <Button size="sm" className="gap-1.5 h-8" onClick={save} disabled={saving}>
-          {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-          Сохранить
-        </Button>
       </div>
 
       {/* 1. Компания */}
@@ -648,6 +644,13 @@ export function AnketaTab({ vacancyId, descriptionJson }: {
           ))}
         </div>
       </Section>
+
+      <div className="flex justify-end mt-4">
+        <Button size="sm" className="gap-1.5 h-8 text-xs" onClick={save} disabled={saving}>
+          {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+          Сохранить
+        </Button>
+      </div>
     </div>
   )
 }

@@ -1044,10 +1044,12 @@ export default function VacancyPage() {
                             <div className="h-7 px-4 rounded-md text-xs border flex items-center" style={{ color: brandColor, borderColor: brandColor }}>Подробнее</div>
                           </div>
                         </div>
-                        <Button size="sm" className="gap-1.5 h-8 text-xs" onClick={() => saveBranding()} disabled={brandSaving}>
-                          {brandSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-                          Сохранить
-                        </Button>
+                        <div className="flex justify-end mt-4">
+                          <Button size="sm" className="gap-1.5 h-8 text-xs" onClick={() => saveBranding()} disabled={brandSaving}>
+                            {brandSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                            Сохранить
+                          </Button>
+                        </div>
                       </CardContent>
                     </Card>
 

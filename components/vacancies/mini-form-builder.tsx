@@ -283,16 +283,10 @@ export function MiniFormBuilder({ vacancyId, descriptionJson }: MiniFormBuilderP
     <>
       <Card>
         <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-base flex items-center gap-2">
-              <ClipboardList className="w-4 h-4" />
-              Поля формы для анонимных кандидатов
-            </CardTitle>
-            <Button size="sm" className="gap-1.5 h-8 text-xs" onClick={saveFields} disabled={saving}>
-              {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-              Сохранить
-            </Button>
-          </div>
+          <CardTitle className="text-base flex items-center gap-2">
+            <ClipboardList className="w-4 h-4" />
+            Поля формы для анонимных кандидатов
+          </CardTitle>
           <p className="text-xs text-muted-foreground mt-1">
             Настройте поля, которые кандидат заполняет при отклике на публичной странице вакансии
           </p>
@@ -375,6 +369,12 @@ export function MiniFormBuilder({ vacancyId, descriptionJson }: MiniFormBuilderP
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          </div>
+          <div className="flex justify-end mt-4">
+            <Button size="sm" className="gap-1.5 h-8 text-xs" onClick={saveFields} disabled={saving}>
+              {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+              Сохранить
+            </Button>
           </div>
         </CardContent>
       </Card>

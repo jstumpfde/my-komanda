@@ -176,9 +176,11 @@ export function PostDemoSettings() {
             </div>
           )}
 
-          <Button className="gap-1.5" onClick={() => toast.success("Настройки сохранены")}>
-            <Save className="w-4 h-4" /> Сохранить настройки
-          </Button>
+          <div className="flex justify-end mt-4">
+            <Button size="sm" className="gap-1.5 h-8 text-xs" onClick={() => toast.success("Настройки сохранены")}>
+              <Save className="w-4 h-4" /> Сохранить настройки
+            </Button>
+          </div>
         </CardContent>
       </Card>
 
