@@ -180,18 +180,23 @@ export function DashboardSidebar() {
 
   // ── Sub-group accordion state (persisted in sessionStorage) ──
   const GROUPS_KEY = 'sidebar:expandedGroups'
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => {
-    if (typeof window === 'undefined') return new Set()
-    try {
-      const saved = sessionStorage.getItem('sidebar:expandedGroups')
-      return saved ? new Set(JSON.parse(saved) as string[]) : new Set()
-    } catch { return new Set() }
-  })
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
+  const [groupsHydrated, setGroupsHydrated] = useState(false)
 
-  // Persist to sessionStorage on every change
+  // Load from sessionStorage after mount (avoid hydration mismatch)
   useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem(GROUPS_KEY)
+      if (saved) setExpandedGroups(new Set(JSON.parse(saved) as string[]))
+    } catch {}
+    setGroupsHydrated(true)
+  }, [])
+
+  // Persist to sessionStorage on every change (skip initial empty)
+  useEffect(() => {
+    if (!groupsHydrated) return
     try { sessionStorage.setItem(GROUPS_KEY, JSON.stringify([...expandedGroups])) } catch {}
-  }, [expandedGroups])
+  }, [expandedGroups, groupsHydrated])
 
   // Auto-expand group matching current path
   useEffect(() => {
