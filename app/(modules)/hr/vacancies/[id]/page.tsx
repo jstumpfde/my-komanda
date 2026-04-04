@@ -37,7 +37,9 @@ import type { Candidate } from "@/components/dashboard/candidate-card"
 import { HhIntegration, type HhMessageLog } from "@/components/vacancies/hh-integration"
 import { AutomationSettings } from "@/components/vacancies/automation-settings"
 import { PublishTab } from "@/components/vacancies/publish-tab"
+import { VacancyAiText } from "@/components/vacancies/vacancy-ai-text"
 import { MiniFormBuilder } from "@/components/vacancies/mini-form-builder"
+import { UtmLinksSection } from "@/components/vacancies/utm-links-section"
 import { PostDemoSettings } from "@/components/vacancies/post-demo-settings"
 import {
   ResponsiveContainer,
@@ -75,14 +77,6 @@ const defaultSettings: CardDisplaySettings = {
   showSource: true, showCity: true, showExperience: true, showSkills: true, showActions: true,
 }
 
-const VACANCY_SOURCES = [
-  { id: "hh",       name: "hh.ru",             color: "#ef4444", utmSource: "hh",       mockClicks: 312, mockResponses: 24 },
-  { id: "avito",    name: "Авито Работа",       color: "#22c55e", utmSource: "avito",    mockClicks: 187, mockResponses: 15 },
-  { id: "superjob", name: "SuperJob",           color: "#3b82f6", utmSource: "superjob", mockClicks: 94,  mockResponses: 7 },
-  { id: "telegram", name: "Telegram",           color: "#0088cc", utmSource: "telegram", mockClicks: 56,  mockResponses: 4 },
-  { id: "site",     name: "Сайт компании",      color: "#8b5cf6", utmSource: "site",     mockClicks: 43,  mockResponses: 3 },
-  { id: "referral", name: "Реферальная ссылка", color: "#f59e0b", utmSource: "referral", mockClicks: 28,  mockResponses: 2 },
-]
 
 const STATUS_CONFIG: Record<VacancyStatus, { label: string; color: string }> = {
   draft: { label: "Не опубликована", color: "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800" },
@@ -165,9 +159,6 @@ export default function VacancyPage() {
   const [isEditingName, setIsEditingName] = useState(false)
   const [messageLogs, setMessageLogs] = useState<HhMessageLog[]>([])
   const [activeTab, setActiveTab] = useState("candidates")
-  const [sourceStatuses, setSourceStatuses] = useState<Record<string, boolean>>({
-    hh: false, avito: false, superjob: false, telegram: false, site: false, referral: false,
-  })
   const [anPeriod, setAnPeriod] = useState("all")
   const [anSources, setAnSources] = useState<string[]>([])
   const [anCities, setAnCities] = useState<string[]>([])
@@ -871,80 +862,11 @@ export default function VacancyPage() {
                     </CardContent>
                   </Card>
 
-                  {/* Источники */}
-                  <Card>
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-base flex items-center gap-2">
-                        <Link2 className="w-4 h-4" />
-                        Источники размещения
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="p-0">
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
-                          <thead>
-                            <tr className="border-b bg-muted/30">
-                              <th className="text-left px-4 py-2.5 font-medium text-muted-foreground text-xs">Источник</th>
-                              <th className="text-left px-4 py-2.5 font-medium text-muted-foreground text-xs">UTM-ссылка</th>
-                              <th className="text-center px-4 py-2.5 font-medium text-muted-foreground text-xs">Статус</th>
-                              <th className="text-right px-4 py-2.5 font-medium text-muted-foreground text-xs">Переходы</th>
-                              <th className="text-right px-4 py-2.5 font-medium text-muted-foreground text-xs">Отклики</th>
-                              <th className="px-4 py-2.5"></th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {VACANCY_SOURCES.map((src, i) => {
-                              const utmUrl = `${typeof window !== "undefined" ? window.location.origin : "https://mykomanda.ru"}/vacancy/${id}?utm_source=${src.utmSource}&utm_medium=job_board`
-                              const isPublished = sourceStatuses[src.id] ?? false
-                              return (
-                                <tr key={src.id} className={cn("border-b last:border-0 hover:bg-muted/20", i % 2 === 1 && "bg-muted/10")}>
-                                  <td className="px-4 py-3">
-                                    <div className="flex items-center gap-2">
-                                      <div className="w-7 h-7 rounded-md flex items-center justify-center text-white text-[10px] font-bold shrink-0" style={{ backgroundColor: src.color }}>
-                                        {src.name.slice(0, 2).toUpperCase()}
-                                      </div>
-                                      <span className="font-medium">{src.name}</span>
-                                    </div>
-                                  </td>
-                                  <td className="px-4 py-3">
-                                    <div className="flex items-center gap-1.5">
-                                      <span className="text-xs text-muted-foreground font-mono truncate max-w-[220px]">
-                                        {`...?utm_source=${src.utmSource}&utm_medium=job_board`}
-                                      </span>
-                                    </div>
-                                  </td>
-                                  <td className="px-4 py-3 text-center">
-                                    <button
-                                      onClick={() => setSourceStatuses(p => ({ ...p, [src.id]: !p[src.id] }))}
-                                      className={cn(
-                                        "px-2.5 py-1 rounded-full text-[11px] font-medium border transition-colors",
-                                        isPublished
-                                          ? "bg-emerald-500/10 text-emerald-700 border-emerald-200 dark:text-emerald-400 dark:border-emerald-800"
-                                          : "bg-muted text-muted-foreground border-border"
-                                      )}
-                                    >
-                                      {isPublished ? "Опубликовано" : "Черновик"}
-                                    </button>
-                                  </td>
-                                  <td className="px-4 py-3 text-right text-sm text-muted-foreground">{isPublished ? src.mockClicks : "—"}</td>
-                                  <td className="px-4 py-3 text-right text-sm font-medium">{isPublished ? src.mockResponses : "—"}</td>
-                                  <td className="px-4 py-3">
-                                    <button
-                                      className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors whitespace-nowrap"
-                                      onClick={() => { navigator.clipboard.writeText(utmUrl); toast.success("Ссылка скопирована") }}
-                                    >
-                                      <Copy className="w-3 h-3" />
-                                      Скопировать
-                                    </button>
-                                  </td>
-                                </tr>
-                              )
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    </CardContent>
-                  </Card>
+                  {/* Источники и UTM-ссылки */}
+                  <UtmLinksSection vacancyId={id} vacancySlug={id} />
+
+                  {/* AI-генерация текста вакансии */}
+                  <VacancyAiText vacancyId={id} descriptionJson={apiVacancy?.descriptionJson} />
 
                   {/* Поля мини-формы */}
                   <MiniFormBuilder vacancyId={id} descriptionJson={apiVacancy?.descriptionJson} />

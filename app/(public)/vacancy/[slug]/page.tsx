@@ -48,6 +48,7 @@ function VacancyPageInner({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = use(params)
   const searchParams = useSearchParams()
   const utmSource = searchParams.get("utm_source") || searchParams.get("utm") || ""
+  const utmMedium = searchParams.get("utm_medium") || ""
 
   const [screen, setScreen] = useState<ScreenState>("loading")
   const [vacancy, setVacancy] = useState<VacancyData | null>(null)
@@ -76,6 +77,17 @@ function VacancyPageInner({ params }: { params: Promise<{ slug: string }> }) {
       })
       .catch(() => setScreen("error"))
   }, [slug])
+
+  // Track UTM click
+  useEffect(() => {
+    if (utmSource && screen === "landing") {
+      fetch(`/api/public/vacancy/${slug}/track`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ utmSource, utmMedium }),
+      }).catch(() => {})
+    }
+  }, [slug, utmSource, utmMedium, screen])
 
   const accentColor = vacancy?.brandPrimaryColor || "#3b82f6"
   const bgColor = vacancy?.brandBgColor || "#f0f4ff"

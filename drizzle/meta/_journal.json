@@ -71,6 +71,13 @@
       "when": 1775310257082,
       "tag": "0009_lively_wither",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1775311667721,
+      "tag": "0010_silky_orphan",
+      "breakpoints": true
     }
   ]
 }

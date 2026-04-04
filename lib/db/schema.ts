@@ -860,6 +860,19 @@ export const hhVacancies = pgTable("hh_vacancies", {
   updatedAt:    timestamp("updated_at").defaultNow(),
 })
 
+// ─── Vacancy UTM Links ───────────────────────────────────────────────────────
+
+export const vacancyUtmLinks = pgTable("vacancy_utm_links", {
+  id:              uuid("id").primaryKey().defaultRandom(),
+  vacancyId:       uuid("vacancy_id").references(() => vacancies.id, { onDelete: "cascade" }).notNull(),
+  source:          text("source").notNull(), // 'telegram' | 'whatsapp' | 'vk' | 'email' | 'site' | 'qr' | 'agency' | 'other'
+  name:            text("name").notNull(),
+  slug:            text("slug").unique().notNull(),
+  clicks:          integer("clicks").default(0),
+  candidatesCount: integer("candidates_count").default(0),
+  createdAt:       timestamp("created_at").defaultNow(),
+})
+
 export const hhCandidates = pgTable("hh_candidates", {
   id:              uuid("id").primaryKey().defaultRandom(),
   candidateId:     uuid("candidate_id").references(() => candidates.id).notNull(),

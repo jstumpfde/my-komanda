@@ -10,6 +10,7 @@ import { Separator } from "@/components/ui/separator"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
+import { Input } from "@/components/ui/input"
 import {
   MessageSquare, Clock, Zap, Phone, Brain, Send, GripVertical,
   ChevronDown, ChevronUp, Pencil, Check, X, Pause, GitBranch,
@@ -136,19 +137,40 @@ export function AutomationSettings({ vacancyId, descriptionJson }: AutomationSet
     return "demo-call" as ScenarioType
   })()
 
+  // Parse automation settings from descriptionJson
+  const initialAutomation = (() => {
+    if (descriptionJson && typeof descriptionJson === "object" && descriptionJson !== null) {
+      const dj = descriptionJson as Record<string, unknown>
+      return (dj.automation as Record<string, unknown>) || {}
+    }
+    return {}
+  })()
+
   // 1. Первое сообщение
-  const [tone, setTone] = useState<MessageTone>("casual")
-  const [firstMessageDelay, setFirstMessageDelay] = useState("3")
-  const [firstMessageText, setFirstMessageText] = useState(DEFAULT_FIRST_MESSAGE)
+  const [tone, setTone] = useState<MessageTone>((initialAutomation.tone as MessageTone) || "casual")
+  const [firstMessageDelay, setFirstMessageDelay] = useState(String(initialAutomation.delayMinutes ?? "3"))
+  const [firstMessageText, setFirstMessageText] = useState(
+    (initialAutomation.firstMessageText as string) || DEFAULT_FIRST_MESSAGE
+  )
+
+  // 1b. Рабочие часы
+  const initialWH = (initialAutomation.workingHours as { enabled?: boolean; from?: string; to?: string }) || {}
+  const [workingHoursEnabled, setWorkingHoursEnabled] = useState(initialWH.enabled ?? false)
+  const [workingHoursFrom, setWorkingHoursFrom] = useState(initialWH.from || "09:00")
+  const [workingHoursTo, setWorkingHoursTo] = useState(initialWH.to || "20:00")
 
   // 2. Обработка ответа
-  const [responseReaction, setResponseReaction] = useState<ResponseReaction>("slot-and-demo")
+  const [responseReaction, setResponseReaction] = useState<ResponseReaction>(
+    (initialAutomation.responseReaction as ResponseReaction) || "slot-and-demo"
+  )
 
   // 3. Цепочка дожима
-  const [followUpPreset, setFollowUpPreset] = useState<FollowUpPreset>("medium")
+  const [followUpPreset, setFollowUpPreset] = useState<FollowUpPreset>(
+    (initialAutomation.followUpPreset as FollowUpPreset) || "medium"
+  )
   const [touchPoints, setTouchPoints] = useState<TouchPoint[]>(ALL_TOUCH_POINTS)
-  const [stopOnNo, setStopOnNo] = useState(true)
-  const [stopOnClose, setStopOnClose] = useState(true)
+  const [stopOnNo, setStopOnNo] = useState((initialAutomation.stopOnNo as boolean) ?? true)
+  const [stopOnClose, setStopOnClose] = useState((initialAutomation.stopOnClose as boolean) ?? true)
   const [editingTouch, setEditingTouch] = useState<string | null>(null)
   const [editingText, setEditingText] = useState("")
 
@@ -196,7 +218,7 @@ export function AutomationSettings({ vacancyId, descriptionJson }: AutomationSet
     toast.success("Шаблон сохранён")
   }
 
-  // Save scenario to API
+  // Save all automation settings to API
   const saveSettings = useCallback(async () => {
     setSaving(true)
     try {
@@ -204,11 +226,30 @@ export function AutomationSettings({ vacancyId, descriptionJson }: AutomationSet
         ? descriptionJson as Record<string, unknown>
         : {}
 
+      const automationData = {
+        tone,
+        firstMessageText,
+        delayMinutes: Number(firstMessageDelay),
+        workingHours: {
+          enabled: workingHoursEnabled,
+          from: workingHoursFrom,
+          to: workingHoursTo,
+        },
+        responseReaction,
+        followUpPreset,
+        stopOnNo,
+        stopOnClose,
+      }
+
       const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          description_json: { ...currentJson, scenario: scenarioType },
+          description_json: {
+            ...currentJson,
+            scenario: scenarioType,
+            automation: automationData,
+          },
         }),
       })
 
@@ -219,7 +260,7 @@ export function AutomationSettings({ vacancyId, descriptionJson }: AutomationSet
     } finally {
       setSaving(false)
     }
-  }, [vacancyId, scenarioType, descriptionJson])
+  }, [vacancyId, scenarioType, descriptionJson, tone, firstMessageText, firstMessageDelay, workingHoursEnabled, workingHoursFrom, workingHoursTo, responseReaction, followUpPreset, stopOnNo, stopOnClose])
 
   return (
     <div className="space-y-6">
@@ -269,14 +310,42 @@ export function AutomationSettings({ vacancyId, descriptionJson }: AutomationSet
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="1">1 минута</SelectItem>
+                <SelectItem value="0">Сразу</SelectItem>
                 <SelectItem value="3">3 минуты</SelectItem>
                 <SelectItem value="5">5 минут</SelectItem>
-                <SelectItem value="10">10 минут</SelectItem>
                 <SelectItem value="15">15 минут</SelectItem>
                 <SelectItem value="30">30 минут</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+
+          {/* Рабочие часы */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label className="text-sm font-medium">Рабочие часы</Label>
+                <p className="text-xs text-muted-foreground">Отправлять сообщения только в рабочее время</p>
+              </div>
+              <Switch checked={workingHoursEnabled} onCheckedChange={setWorkingHoursEnabled} />
+            </div>
+            {workingHoursEnabled && (
+              <div className="flex items-center gap-2 pl-1">
+                <Label className="text-sm text-muted-foreground shrink-0">с</Label>
+                <Input
+                  type="time"
+                  value={workingHoursFrom}
+                  onChange={(e) => setWorkingHoursFrom(e.target.value)}
+                  className="w-[120px] h-9"
+                />
+                <Label className="text-sm text-muted-foreground shrink-0">до</Label>
+                <Input
+                  type="time"
+                  value={workingHoursTo}
+                  onChange={(e) => setWorkingHoursTo(e.target.value)}
+                  className="w-[120px] h-9"
+                />
+              </div>
+            )}
           </div>
 
           {/* Шаблон */}
