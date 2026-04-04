@@ -181,7 +181,7 @@ export function CandidateDrawer({
       toast.success(
         newStage === "hired" ? `🎉 ${candidate.name} нанят!` :
         newStage === "rejected" ? `${candidate.name} — отказ` :
-        newStage === "scheduled" ? "Приглашён на интервью" :
+        newStage === "interview" ? "Приглашён на интервью" :
         "Стадия обновлена"
       )
     } catch {
@@ -368,18 +368,18 @@ export function CandidateDrawer({
                   <section className="space-y-2">
                     <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Действия</h3>
                     <div className="space-y-2">
-                      {candidate.stage !== "scheduled" && candidate.stage !== "interviewed" && candidate.stage !== "hired" && (
+                      {candidate.stage !== "interview" && candidate.stage !== "final_decision" && candidate.stage !== "hired" && (
                         <Button
                           size="sm"
                           className="w-full gap-2 bg-purple-600 hover:bg-purple-700 text-white"
                           disabled={!!changingStage}
-                          onClick={() => handleStageChange("scheduled")}
+                          onClick={() => handleStageChange("interview")}
                         >
-                          {changingStage === "scheduled" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Calendar className="w-4 h-4" />}
+                          {changingStage === "interview" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Calendar className="w-4 h-4" />}
                           Пригласить на интервью
                         </Button>
                       )}
-                      {(candidate.stage === "scheduled" || candidate.stage === "interviewed") && (
+                      {(candidate.stage === "interview" || candidate.stage === "final_decision") && (
                         <Button
                           size="sm"
                           className="w-full gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"

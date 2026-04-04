@@ -4,7 +4,11 @@ import { db } from "@/lib/db"
 import { candidates, vacancies } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 
-const VALID_STAGES = ["new", "demo", "scheduled", "interviewed", "hired", "rejected"] as const
+const VALID_STAGES = [
+  "new", "demo", "decision", "interview",
+  "final_decision", "hired", "rejected", "talent_pool",
+  "pending", "preboarding",
+] as const
 type Stage = (typeof VALID_STAGES)[number]
 
 export async function PUT(

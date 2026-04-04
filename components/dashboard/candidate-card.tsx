@@ -48,11 +48,11 @@ interface CandidateCardProps {
 }
 
 export function CandidateCard({ candidate, settings, columnId, onOpenProfile, onAction }: CandidateCardProps) {
-  const isHrDecision = columnId === "task"
-  const isFinalDecision = columnId === "interviewed"
   const isDecisionColumn = HR_DECISION_COLUMNS.includes(columnId)
-  const isDemoColumn = columnId === "demo" || columnId === "answers"
-  const isInterviewColumn = columnId === "scheduled"
+  const isFirstDecision = columnId === "decision"
+  const isFinalDecision = columnId === "final_decision"
+  const isDemoColumn = columnId === "demo"
+  const isInterviewColumn = columnId === "interview"
   const isHiredColumn = columnId === "hired"
   const isAutoColumn = !isDecisionColumn && !isHiredColumn
 
@@ -246,7 +246,7 @@ export function CandidateCard({ candidate, settings, columnId, onOpenProfile, on
       {/* ═══ Action Buttons ════════════════════════════════════ */}
       {settings.showActions && (
         <div className="pt-2 border-t border-border/60 mt-1">
-          {isHrDecision && (
+          {isFirstDecision && (
             <div className="space-y-1.5">
               <Button
                 size="sm"
@@ -254,14 +254,14 @@ export function CandidateCard({ candidate, settings, columnId, onOpenProfile, on
                 onClick={() => onAction?.(candidate.id, columnId, "advance")}
               >
                 <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
-                Пригласить на интервью
+                Пригласить
               </Button>
               <div className="flex items-center gap-1.5">
                 <Button variant="ghost" size="sm" className="flex-1 h-9 sm:h-7 text-[11px] text-destructive hover:bg-destructive/10" onClick={() => onAction?.(candidate.id, columnId, "reject")}>
                   <XCircle className="w-3 h-3 mr-1" /> Отказать
                 </Button>
-                <Button variant="ghost" size="sm" className="flex-1 h-9 sm:h-7 text-[11px] text-warning hover:bg-warning/10" onClick={() => onAction?.(candidate.id, columnId, "reserve")}>
-                  <Archive className="w-3 h-3 mr-1" /> В резерв
+                <Button variant="ghost" size="sm" className="flex-1 h-9 sm:h-7 text-[11px] text-blue-600 hover:bg-blue-500/10" onClick={() => onAction?.(candidate.id, columnId, "reserve")}>
+                  <Archive className="w-3 h-3 mr-1" /> Резерв
                 </Button>
                 <Button variant="ghost" size="sm" className="flex-1 h-9 sm:h-7 text-[11px] text-muted-foreground hover:bg-muted" onClick={() => onAction?.(candidate.id, columnId, "think")}>
                   <HelpCircle className="w-3 h-3 mr-1" /> Подумать
@@ -284,14 +284,17 @@ export function CandidateCard({ candidate, settings, columnId, onOpenProfile, on
                 <Button variant="ghost" size="sm" className="flex-1 h-9 sm:h-7 text-[11px] text-destructive hover:bg-destructive/10" onClick={() => onAction?.(candidate.id, columnId, "reject")}>
                   <XCircle className="w-3 h-3 mr-1" /> Отказать
                 </Button>
-                <Button variant="ghost" size="sm" className="flex-1 h-9 sm:h-7 text-[11px] text-warning hover:bg-warning/10" onClick={() => onAction?.(candidate.id, columnId, "reserve")}>
-                  <Archive className="w-3 h-3 mr-1" /> В резерв
+                <Button variant="ghost" size="sm" className="flex-1 h-9 sm:h-7 text-[11px] text-blue-600 hover:bg-blue-500/10" onClick={() => onAction?.(candidate.id, columnId, "reserve")}>
+                  <Archive className="w-3 h-3 mr-1" /> Резерв
+                </Button>
+                <Button variant="ghost" size="sm" className="flex-1 h-9 sm:h-7 text-[11px] text-amber-600 hover:bg-amber-500/10" onClick={() => onAction?.(candidate.id, columnId, "preboarding")}>
+                  <ArrowRight className="w-3 h-3 mr-1" /> Пребординг
                 </Button>
               </div>
             </div>
           )}
 
-          {isAutoColumn && !isHrDecision && !isFinalDecision && !isHiredColumn && null}
+          {isAutoColumn && !isFirstDecision && !isFinalDecision && !isHiredColumn && null}
 
           {/* Открыть профиль — всегда видна */}
           <Button

@@ -1,0 +1,73 @@
+import { NextRequest } from "next/server"
+import { eq, and, isNull } from "drizzle-orm"
+import { db } from "@/lib/db"
+import { vacancies, candidates } from "@/lib/db/schema"
+import { apiError, apiSuccess } from "@/lib/api-helpers"
+import { generateCandidateToken } from "@/lib/candidate-tokens"
+
+export async function POST(
+  req: NextRequest,
+  { params }: { params: Promise<{ slug: string }> },
+) {
+  try {
+    const { slug } = await params
+    const body = await req.json()
+
+    const { name, contact, contactType, utmSource } = body as {
+      name?: string
+      contact?: string
+      contactType?: "phone" | "telegram"
+      utmSource?: string
+    }
+
+    if (!name?.trim()) {
+      return apiError("Имя обязательно", 400)
+    }
+    if (!contact?.trim()) {
+      return apiError("Контакт обязателен", 400)
+    }
+
+    // Find published vacancy by slug
+    const [vacancy] = await db
+      .select({ id: vacancies.id })
+      .from(vacancies)
+      .where(
+        and(
+          eq(vacancies.slug, slug),
+          eq(vacancies.status, "published"),
+          isNull(vacancies.deletedAt),
+        ),
+      )
+      .limit(1)
+
+    if (!vacancy) {
+      return apiError("Вакансия не найдена", 404)
+    }
+
+    // Determine source from UTM
+    const source = utmSource || "site"
+
+    // Store contact based on type
+    const phone = contactType === "phone" ? contact.trim() : null
+    const email = contactType === "telegram" ? contact.trim() : null
+
+    const [created] = await db
+      .insert(candidates)
+      .values({
+        vacancyId: vacancy.id,
+        name: name.trim(),
+        phone,
+        email, // telegram handle stored in email field
+        source,
+        stage: "new",
+        token: generateCandidateToken(),
+      })
+      .returning()
+
+    return apiSuccess({ ok: true, candidateId: created.id }, 201)
+  } catch (err) {
+    if (err instanceof Response) return err
+    console.error("POST /api/public/vacancy/[slug]/apply", err)
+    return apiError("Internal server error", 500)
+  }
+}

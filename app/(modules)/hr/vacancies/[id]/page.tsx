@@ -15,17 +15,20 @@ import { CandidateFilters, type FilterState } from "@/components/dashboard/candi
 import { CandidateProfile } from "@/components/dashboard/candidate-profile"
 import { CandidateDrawer } from "@/components/candidates/candidate-drawer"
 import { AddCandidateDialog } from "@/components/dashboard/add-candidate-dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
+import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { CourseTab } from "@/components/vacancies/course-tab"
+import { AnketaTab } from "@/components/vacancies/anketa-tab"
 import type { NotionEditorHandle } from "@/components/vacancies/notion-editor"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Slider } from "@/components/ui/slider"
 import { Input } from "@/components/ui/input"
-import { Plus, Clock, Pause, Play, Archive, RotateCcw, Trash2, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, Zap, Globe, AlertTriangle, TrendingUp, Calendar, MapPin, DollarSign, Filter, X, Link2, Copy, Save, Sparkles, Eye, Check, Loader2, Download, ExternalLink } from "lucide-react"
+import { Plus, Clock, Pause, Play, Archive, RotateCcw, Trash2, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, Zap, Globe, AlertTriangle, TrendingUp, Calendar, MapPin, DollarSign, Filter, X, Link2, Copy, Save, Sparkles, Eye, Check, Loader2, Download, ExternalLink, ClipboardList } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
@@ -91,7 +94,7 @@ const STATUS_CONFIG: Record<VacancyStatus, { label: string; color: string }> = {
 
 // Map ApiCandidate → Candidate (for the kanban card)
 function apiCandidateToCard(c: ApiCandidate, columnId: string): Candidate {
-  const progress = { new: 10, demo: 30, scheduled: 55, interviewed: 80, hired: 100 }[columnId] ?? 10
+  const progress = PROGRESS_BY_COLUMN[columnId] ?? 10
   return {
     id: c.id,
     name: c.name,
@@ -120,10 +123,22 @@ export default function VacancyPage() {
   const [status, setStatus] = useState<VacancyStatus>("draft")
   const [columns, setColumns] = useState<ColumnData[]>(emptyColumns())
 
-  // Sync vacancy status from API
+  // Sync vacancy status + custom columns from API
   useEffect(() => {
     if (apiVacancy?.status) {
       setStatus(apiVacancy.status as VacancyStatus)
+    }
+    // Load custom columns from description_json
+    const desc = apiVacancy?.descriptionJson as Record<string, unknown> | undefined
+    const custom = (desc?.customColumns as Array<{ id: string; name: string; color: string }>) || []
+    if (custom.length > 0) {
+      setColumns(prev => {
+        const existingIds = new Set(prev.map(c => c.id))
+        const newCols = custom
+          .filter(c => !existingIds.has(c.id))
+          .map(c => ({ id: c.id, title: c.name, count: 0, colorFrom: c.color, colorTo: c.color, candidates: [] as Candidate[] }))
+        return newCols.length > 0 ? [...prev, ...newCols] : prev
+      })
     }
   }, [apiVacancy])
 
@@ -160,6 +175,12 @@ export default function VacancyPage() {
   const [anSalaryMax, setAnSalaryMax] = useState(300000)
   const [anScoreMin, setAnScoreMin] = useState(0)
   const [anStages, setAnStages] = useState<string[]>([])
+  // Reject dialog state
+  const [rejectDialogOpen, setRejectDialogOpen] = useState(false)
+  const [rejectCandidateId, setRejectCandidateId] = useState<string | null>(null)
+  const [rejectColumnId, setRejectColumnId] = useState<string | null>(null)
+  const [rejectReason, setRejectReason] = useState("")
+
   // Course editor toolbar state
   const courseEditorRef = useRef<NotionEditorHandle>(null)
   const [courseEditorSaveStatus, setCourseEditorSaveStatus] = useState<"saved" | "saving">("saved")
@@ -257,25 +278,54 @@ export default function VacancyPage() {
     setMessageLogs(prev => [...prev, log])
   }
 
+  const handleAddCustomColumn = async (name: string, color: string) => {
+    const colId = `custom_${Date.now()}`
+    const newCol: ColumnData = {
+      id: colId, title: name, count: 0,
+      colorFrom: color, colorTo: color,
+      candidates: [],
+    }
+    setColumns(prev => [...prev, newCol])
+
+    // Persist custom columns in vacancy.description_json
+    const existing = (apiVacancy?.descriptionJson as Record<string, unknown>) || {}
+    const customColumns = [...((existing.customColumns as Array<{ id: string; name: string; color: string }>) || []), { id: colId, name, color }]
+    try {
+      await fetch(`/api/modules/hr/vacancies/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ description_json: { ...existing, customColumns } }),
+      })
+    } catch { /* silent */ }
+  }
+
   const handleAction = async (candidateId: string, columnId: string, action: CandidateAction) => {
     const sourceCol = columns.find((c) => c.id === columnId)
     const candidate = sourceCol?.candidates.find((c) => c.id === candidateId)
     if (!candidate || !sourceCol) return
 
     if (action === "reject") {
-      // Optimistic UI
-      setColumns((p) => p.map((c) => c.id !== columnId ? c : { ...c, candidates: c.candidates.filter((x) => x.id !== candidateId), count: c.candidates.filter((x) => x.id !== candidateId).length }))
-      toast.error(`${candidate.name} — отказ`)
-      await updateStage(candidateId, "rejected")
+      setRejectCandidateId(candidateId)
+      setRejectColumnId(columnId)
+      setRejectReason("")
+      setRejectDialogOpen(true)
       return
     }
     if (action === "reserve") {
       setColumns((p) => p.map((c) => c.id !== columnId ? c : { ...c, candidates: c.candidates.filter((x) => x.id !== candidateId), count: c.candidates.filter((x) => x.id !== candidateId).length }))
       toast.warning(`${candidate.name} — в резерв`)
+      await updateStage(candidateId, "talent_pool")
       return
     }
     if (action === "think") {
       toast("🤔 Подумаем над кандидатом", { description: candidate.name })
+      await updateStage(candidateId, "pending")
+      return
+    }
+    if (action === "preboarding") {
+      setColumns((p) => p.map((c) => c.id !== columnId ? c : { ...c, candidates: c.candidates.filter((x) => x.id !== candidateId), count: c.candidates.filter((x) => x.id !== candidateId).length }))
+      toast.success(`${candidate.name} — пребординг`)
+      await updateStage(candidateId, "preboarding")
       return
     }
     if (action === "hire") {
@@ -328,23 +378,22 @@ export default function VacancyPage() {
 
   // ─── Unified 6-stage metrics (single source of truth) ───
   const allCandidates = columns.flatMap((c) => c.candidates)
+  const newCol = columns.find((c) => c.id === "new")
   const demoCol = columns.find((c) => c.id === "demo")
-  const scheduledCol = columns.find((c) => c.id === "scheduled")
-  const interviewedCol = columns.find((c) => c.id === "interviewed")
+  const decisionCol = columns.find((c) => c.id === "decision")
+  const interviewCol = columns.find((c) => c.id === "interview")
+  const finalDecisionCol = columns.find((c) => c.id === "final_decision")
   const hiredCol = columns.find((c) => c.id === "hired")
 
-  // "Прошли демонстрацию ≥85%" = candidates in demo+ columns with score >= 85
-  const passedDemoHighScore = columns
-    .filter((c) => c.id !== "new")
-    .flatMap((c) => c.candidates)
-    .filter((c) => c.score >= 85).length
+  const afterDecision = [interviewCol, finalDecisionCol, hiredCol]
+    .reduce((acc, col) => acc + (col?.candidates.length || 0), 0)
 
   const funnelStages = [
-    { stage: "Всего откликов", count: totalCandidates, color: "#94a3b8" },
-    { stage: "Перешли на демо", count: totalCandidates - (columns.find((c) => c.id === "new")?.candidates.length || 0), color: "#3b82f6" },
-    { stage: "Прошли демо ≥85%", count: passedDemoHighScore, color: "#06b6d4" },
-    { stage: "Назначено интервью", count: (scheduledCol?.candidates.length || 0) + (interviewedCol?.candidates.length || 0) + (hiredCol?.candidates.length || 0), color: "#8b5cf6" },
-    { stage: "Прошли интервью", count: (interviewedCol?.candidates.length || 0) + (hiredCol?.candidates.length || 0), color: "#f59e0b" },
+    { stage: "Новый", count: totalCandidates, color: "#94a3b8" },
+    { stage: "Демо-курс", count: totalCandidates - (newCol?.candidates.length || 0), color: "#3b82f6" },
+    { stage: "Решение", count: (decisionCol?.candidates.length || 0) + afterDecision, color: "#ef4444" },
+    { stage: "Интервью", count: (interviewCol?.candidates.length || 0) + (finalDecisionCol?.candidates.length || 0) + (hiredCol?.candidates.length || 0), color: "#8b5cf6" },
+    { stage: "Финальное решение", count: (finalDecisionCol?.candidates.length || 0) + (hiredCol?.candidates.length || 0), color: "#f97316" },
     { stage: "Нанято", count: hiredCol?.candidates.length || 0, color: "#22c55e" },
   ]
 
@@ -477,6 +526,7 @@ export default function VacancyPage() {
             <Tabs value={activeTab} onValueChange={setActiveTab}>
               <div className="flex items-center justify-between gap-3 mb-3 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
                 <TabsList className="shrink-0">
+                  <TabsTrigger value="anketa" className="gap-1.5"><ClipboardList className="w-3.5 h-3.5" />Анкета</TabsTrigger>
                   <TabsTrigger value="candidates" className="gap-1.5"><Kanban className="w-3.5 h-3.5" />Кандидаты</TabsTrigger>
                   <TabsTrigger value="course" className="gap-1.5"><BookOpen className="w-3.5 h-3.5" />Демонстрация</TabsTrigger>
                   <TabsTrigger value="analytics" className="gap-1.5"><BarChart3 className="w-3.5 h-3.5" />Аналитика</TabsTrigger>
@@ -543,6 +593,10 @@ export default function VacancyPage() {
                 )}
               </div>
 
+              <TabsContent value="anketa">
+                <AnketaTab vacancyId={id} descriptionJson={apiVacancy?.descriptionJson} />
+              </TabsContent>
+
               <TabsContent value="candidates">
                 <KanbanBoard
                   settings={cardSettings}
@@ -560,6 +614,7 @@ export default function VacancyPage() {
                   }}
                   onAction={handleAction}
                   hideViewSwitcher
+                  onAddCustomColumn={handleAddCustomColumn}
                 />
               </TabsContent>
 
@@ -775,7 +830,7 @@ export default function VacancyPage() {
               </TabsContent>
 
               <TabsContent value="automation">
-                <AutomationSettings />
+                <AutomationSettings vacancyId={id} descriptionJson={apiVacancy?.descriptionJson} />
               </TabsContent>
 
               <TabsContent value="publish">
@@ -1122,6 +1177,41 @@ export default function VacancyPage() {
       </SidebarInset>
 
       <AddCandidateDialog open={addDialogOpen} onOpenChange={setAddDialogOpen} onAdd={handleAddCandidate} />
+
+      {/* Reject confirmation dialog */}
+      <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Отказать кандидату</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            <p className="text-sm text-muted-foreground">Укажите причину отказа (необязательно)</p>
+            <Textarea
+              value={rejectReason}
+              onChange={e => setRejectReason(e.target.value)}
+              placeholder="Причина отказа..."
+              rows={3}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRejectDialogOpen(false)}>Отмена</Button>
+            <Button
+              variant="destructive"
+              onClick={async () => {
+                if (rejectCandidateId && rejectColumnId) {
+                  const candidate = columns.find(c => c.id === rejectColumnId)?.candidates.find(c => c.id === rejectCandidateId)
+                  setColumns(p => p.map(c => c.id !== rejectColumnId ? c : { ...c, candidates: c.candidates.filter(x => x.id !== rejectCandidateId), count: c.candidates.filter(x => x.id !== rejectCandidateId).length }))
+                  toast.error(`${candidate?.name ?? "Кандидат"} — отказ`)
+                  await updateStage(rejectCandidateId, "rejected")
+                }
+                setRejectDialogOpen(false)
+              }}
+            >
+              Отказать
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Candidate Drawer — opens with real API data when "Открыть профиль" is clicked */}
       <CandidateDrawer

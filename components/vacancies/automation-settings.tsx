@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -14,7 +14,7 @@ import {
   MessageSquare, Clock, Zap, Phone, Brain, Send, GripVertical,
   ChevronDown, ChevronUp, Pencil, Check, X, Pause, GitBranch,
   FileText, BarChart3, Video, ClipboardList, Award, UserX,
-  Bot, Sparkles, Truck, Users,
+  Bot, Sparkles, Truck, Users, ChevronRight, Loader2,
 } from "lucide-react"
 
 // ─── Типы ────────────────────────────────────────────────────
@@ -32,14 +32,7 @@ interface TouchPoint {
   enabled: boolean
 }
 
-type ScenarioType = "demo-call" | "call-demo" | "call-only" | "fast-hire" | "ai-smart" | "custom"
-
-interface ScenarioStep {
-  id: string
-  type: StepType
-  label: string
-  icon: string
-}
+export type ScenarioType = "demo-call" | "call-demo" | "call-only" | "fast-hire" | "ai-smart"
 
 type StepType = "message" | "demo" | "questionnaire" | "scoring" | "call" | "interview" | "pause" | "condition" | "offer" | "reject"
 
@@ -74,29 +67,75 @@ const PRESET_TOUCH_COUNTS: Record<FollowUpPreset, number> = {
 }
 
 const STEP_META: Record<StepType, { icon: typeof MessageSquare; label: string; color: string }> = {
-  message: { icon: MessageSquare, label: "Сообщение", color: "bg-blue-500/10 text-blue-600" },
-  demo: { icon: Video, label: "Демонстрация", color: "bg-purple-500/10 text-purple-600" },
-  questionnaire: { icon: ClipboardList, label: "Анкета", color: "bg-amber-500/10 text-amber-600" },
-  scoring: { icon: BarChart3, label: "Скоринг", color: "bg-cyan-500/10 text-cyan-600" },
-  call: { icon: Phone, label: "Звонок", color: "bg-emerald-500/10 text-emerald-600" },
-  interview: { icon: Users, label: "Интервью", color: "bg-indigo-500/10 text-indigo-600" },
-  pause: { icon: Pause, label: "Пауза", color: "bg-gray-500/10 text-gray-600" },
-  condition: { icon: GitBranch, label: "Условие", color: "bg-orange-500/10 text-orange-600" },
-  offer: { icon: Award, label: "Оффер", color: "bg-green-500/10 text-green-600" },
-  reject: { icon: UserX, label: "Отказ", color: "bg-red-500/10 text-red-600" },
+  message: { icon: MessageSquare, label: "Сообщение", color: "bg-blue-500/10 text-blue-600 border-blue-200 dark:border-blue-800" },
+  demo: { icon: Video, label: "Демонстрация", color: "bg-purple-500/10 text-purple-600 border-purple-200 dark:border-purple-800" },
+  questionnaire: { icon: ClipboardList, label: "Анкета", color: "bg-amber-500/10 text-amber-600 border-amber-200 dark:border-amber-800" },
+  scoring: { icon: BarChart3, label: "Скоринг", color: "bg-cyan-500/10 text-cyan-600 border-cyan-200 dark:border-cyan-800" },
+  call: { icon: Phone, label: "Звонок", color: "bg-emerald-500/10 text-emerald-600 border-emerald-200 dark:border-emerald-800" },
+  interview: { icon: Users, label: "Интервью", color: "bg-indigo-500/10 text-indigo-600 border-indigo-200 dark:border-indigo-800" },
+  pause: { icon: Pause, label: "Пауза", color: "bg-gray-500/10 text-gray-600 border-gray-200 dark:border-gray-800" },
+  condition: { icon: GitBranch, label: "Условие", color: "bg-orange-500/10 text-orange-600 border-orange-200 dark:border-orange-800" },
+  offer: { icon: Award, label: "Оффер", color: "bg-green-500/10 text-green-600 border-green-200 dark:border-green-800" },
+  reject: { icon: UserX, label: "Отказ", color: "bg-red-500/10 text-red-600 border-red-200 dark:border-red-800" },
 }
 
-const SCENARIO_PRESETS: Record<Exclude<ScenarioType, "custom">, StepType[]> = {
-  "demo-call": ["message", "demo", "scoring", "call", "interview", "offer"],
-  "call-demo": ["message", "call", "demo", "scoring", "interview", "offer"],
-  "call-only": ["message", "call", "interview", "offer"],
-  "fast-hire": ["message", "questionnaire", "scoring", "call", "offer"],
-  "ai-smart": ["message", "scoring", "condition", "demo", "call", "interview", "offer"],
+const SCENARIO_PRESETS: Record<ScenarioType, { steps: StepType[]; icon: typeof Video; label: string; desc: string; color: string }> = {
+  "demo-call": {
+    steps: ["message", "demo", "scoring", "call", "interview", "offer"],
+    icon: Video,
+    label: "Демонстрация → Звонок",
+    desc: "Для продаж — сначала кандидат смотрит демо, затем созвон",
+    color: "text-purple-600",
+  },
+  "call-demo": {
+    steps: ["message", "call", "demo", "scoring", "interview", "offer"],
+    icon: Phone,
+    label: "Звонок → Демонстрация",
+    desc: "Для скептиков — сначала короткий звонок, потом демо",
+    color: "text-emerald-600",
+  },
+  "call-only": {
+    steps: ["message", "call", "interview", "offer"],
+    icon: Phone,
+    label: "Только звонок",
+    desc: "Топ-менеджмент — без демо, сразу живое общение",
+    color: "text-blue-600",
+  },
+  "fast-hire": {
+    steps: ["message", "questionnaire", "scoring", "call", "offer"],
+    icon: Truck,
+    label: "Быстрый найм",
+    desc: "Склад, курьеры — минимум шагов, максимум скорости",
+    color: "text-amber-600",
+  },
+  "ai-smart": {
+    steps: ["message", "scoring", "condition", "demo", "call", "interview", "offer"],
+    icon: Bot,
+    label: "Умный — AI решает по скорингу",
+    desc: "Адаптивный — AI подбирает путь кандидата по скорингу",
+    color: "text-cyan-600",
+  },
 }
 
 // ─── Компонент ──────────────────────────────────────────────
 
-export function AutomationSettings() {
+interface AutomationSettingsProps {
+  vacancyId: string
+  descriptionJson?: unknown
+}
+
+export function AutomationSettings({ vacancyId, descriptionJson }: AutomationSettingsProps) {
+  // Parse initial scenario from descriptionJson
+  const initialScenario = (() => {
+    if (descriptionJson && typeof descriptionJson === "object" && descriptionJson !== null) {
+      const dj = descriptionJson as Record<string, unknown>
+      if (dj.scenario && typeof dj.scenario === "string" && dj.scenario in SCENARIO_PRESETS) {
+        return dj.scenario as ScenarioType
+      }
+    }
+    return "demo-call" as ScenarioType
+  })()
+
   // 1. Первое сообщение
   const [tone, setTone] = useState<MessageTone>("casual")
   const [firstMessageDelay, setFirstMessageDelay] = useState("3")
@@ -113,10 +152,19 @@ export function AutomationSettings() {
   const [editingTouch, setEditingTouch] = useState<string | null>(null)
   const [editingText, setEditingText] = useState("")
 
-  // 4. Конструктор сценария
-  const [scenarioType, setScenarioType] = useState<ScenarioType>("demo-call")
-  const [customSteps, setCustomSteps] = useState<StepType[]>(SCENARIO_PRESETS["demo-call"])
-  const [dragIdx, setDragIdx] = useState<number | null>(null)
+  // 4. Сценарий
+  const [scenarioType, setScenarioType] = useState<ScenarioType>(initialScenario)
+  const [saving, setSaving] = useState(false)
+
+  // Sync if descriptionJson changes externally
+  useEffect(() => {
+    if (descriptionJson && typeof descriptionJson === "object" && descriptionJson !== null) {
+      const dj = descriptionJson as Record<string, unknown>
+      if (dj.scenario && typeof dj.scenario === "string" && dj.scenario in SCENARIO_PRESETS) {
+        setScenarioType(dj.scenario as ScenarioType)
+      }
+    }
+  }, [descriptionJson])
 
   const activeTouchCount = PRESET_TOUCH_COUNTS[followUpPreset]
   const visibleTouches = touchPoints.slice(0, activeTouchCount)
@@ -134,7 +182,6 @@ export function AutomationSettings() {
 
   const handleScenarioChange = (s: ScenarioType) => {
     setScenarioType(s)
-    if (s !== "custom") setCustomSteps(SCENARIO_PRESETS[s])
   }
 
   const startEditTouch = (tp: TouchPoint) => {
@@ -149,28 +196,30 @@ export function AutomationSettings() {
     toast.success("Шаблон сохранён")
   }
 
-  // drag-n-drop для кастомного сценария
-  const handleStepDragStart = (idx: number) => setDragIdx(idx)
-  const handleStepDragOver = (e: React.DragEvent, idx: number) => {
-    e.preventDefault()
-    if (dragIdx === null || dragIdx === idx) return
-    const next = [...customSteps]
-    const [moved] = next.splice(dragIdx, 1)
-    next.splice(idx, 0, moved)
-    setCustomSteps(next)
-    setDragIdx(idx)
-  }
-  const handleStepDragEnd = () => setDragIdx(null)
+  // Save scenario to API
+  const saveSettings = useCallback(async () => {
+    setSaving(true)
+    try {
+      const currentJson = (descriptionJson && typeof descriptionJson === "object" && descriptionJson !== null)
+        ? descriptionJson as Record<string, unknown>
+        : {}
 
-  const addStep = (type: StepType) => {
-    setCustomSteps(prev => [...prev, type])
-  }
+      const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          description_json: { ...currentJson, scenario: scenarioType },
+        }),
+      })
 
-  const removeStep = (idx: number) => {
-    setCustomSteps(prev => prev.filter((_, i) => i !== idx))
-  }
-
-  const activeSteps = scenarioType === "custom" ? customSteps : (SCENARIO_PRESETS[scenarioType] || [])
+      if (!res.ok) throw new Error("Ошибка сохранения")
+      toast.success("Настройки автоматизации сохранены")
+    } catch {
+      toast.error("Не удалось сохранить настройки")
+    } finally {
+      setSaving(false)
+    }
+  }, [vacancyId, scenarioType, descriptionJson])
 
   return (
     <div className="space-y-6">
@@ -346,7 +395,7 @@ export function AutomationSettings() {
           {followUpPreset !== "off" && (
             <>
               <div className="space-y-2">
-                {visibleTouches.map((tp, idx) => (
+                {visibleTouches.map((tp) => (
                   <div key={tp.id} className={cn(
                     "rounded-lg border transition-all",
                     !tp.enabled && "opacity-50"
@@ -418,133 +467,83 @@ export function AutomationSettings() {
         </CardContent>
       </Card>
 
-      {/* ═══ 4. Конструктор сценария ═══════════════════════════ */}
+      {/* ═══ 4. Сценарий найма ═════════════════════════════════ */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
             <GitBranch className="w-4 h-4" />
-            Конструктор сценария
+            Сценарий найма
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-5">
-          {/* Готовые сценарии */}
-          <div className="space-y-2">
-            {([
-              { value: "demo-call" as const, icon: Video, label: "Демонстрация → Звонок", desc: "Для продаж", color: "text-purple-600" },
-              { value: "call-demo" as const, icon: Phone, label: "Звонок → Демонстрация", desc: "Для скептиков", color: "text-emerald-600" },
-              { value: "call-only" as const, icon: Phone, label: "Только звонок", desc: "Топ-менеджмент", color: "text-blue-600" },
-              { value: "fast-hire" as const, icon: Truck, label: "Быстрый найм", desc: "Склад, курьеры", color: "text-amber-600" },
-              { value: "ai-smart" as const, icon: Bot, label: "Умный — AI решает по скорингу", desc: "Адаптивный", color: "text-cyan-600" },
-              { value: "custom" as const, icon: Pencil, label: "Свой сценарий", desc: "Настройте шаги вручную", color: "text-foreground" },
-            ]).map(opt => (
-              <button
-                key={opt.value}
-                className={cn(
-                  "w-full flex items-center gap-3 p-3 rounded-lg border text-left transition-all",
-                  scenarioType === opt.value
-                    ? "border-primary bg-primary/5 ring-2 ring-primary/20"
-                    : "border-border hover:border-primary/30"
-                )}
-                onClick={() => handleScenarioChange(opt.value)}
-              >
-                <div className={cn(
-                  "w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center",
-                  scenarioType === opt.value ? "border-primary" : "border-muted-foreground/40"
-                )}>
-                  {scenarioType === opt.value && <div className="w-2 h-2 rounded-full bg-primary" />}
-                </div>
-                <opt.icon className={cn("w-4 h-4 shrink-0", opt.color)} />
-                <div className="flex-1">
-                  <span className="text-sm font-medium text-foreground">{opt.label}</span>
-                  <span className="text-xs text-muted-foreground ml-2">{opt.desc}</span>
-                </div>
-              </button>
-            ))}
-          </div>
-
-          <Separator />
-
-          {/* Визуализация шагов сценария */}
-          <div className="space-y-2">
-            <Label className="text-sm font-medium">Шаги сценария</Label>
-            <div className="space-y-1.5">
-              {activeSteps.map((step, idx) => {
-                const meta = STEP_META[step]
-                const Icon = meta.icon
-                return (
-                  <div
-                    key={`${step}-${idx}`}
-                    draggable={scenarioType === "custom"}
-                    onDragStart={() => handleStepDragStart(idx)}
-                    onDragOver={(e) => handleStepDragOver(e, idx)}
-                    onDragEnd={handleStepDragEnd}
-                    className={cn(
-                      "flex items-center gap-3 p-2.5 rounded-lg border bg-card transition-all",
-                      scenarioType === "custom" && "cursor-grab active:cursor-grabbing hover:border-primary/30",
-                      dragIdx === idx && "opacity-40 scale-95"
-                    )}
-                  >
-                    {scenarioType === "custom" && (
-                      <GripVertical className="w-4 h-4 text-muted-foreground/40 shrink-0" />
-                    )}
-                    <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-                      <span className="text-xs text-muted-foreground w-5 text-center">{idx + 1}</span>
-                      <div className={cn("w-7 h-7 rounded-md flex items-center justify-center shrink-0", meta.color)}>
-                        <Icon className="w-3.5 h-3.5" />
-                      </div>
-                      <span>{meta.label}</span>
+        <CardContent className="space-y-4">
+          <div className="space-y-3">
+            {(Object.entries(SCENARIO_PRESETS) as [ScenarioType, typeof SCENARIO_PRESETS[ScenarioType]][]).map(([key, preset]) => {
+              const Icon = preset.icon
+              const isSelected = scenarioType === key
+              return (
+                <button
+                  key={key}
+                  className={cn(
+                    "w-full text-left rounded-xl border p-4 transition-all",
+                    isSelected
+                      ? "border-primary bg-primary/5 ring-2 ring-primary/20"
+                      : "border-border hover:border-primary/30"
+                  )}
+                  onClick={() => handleScenarioChange(key)}
+                >
+                  <div className="flex items-start gap-3">
+                    {/* Radio circle */}
+                    <div className={cn(
+                      "w-4 h-4 rounded-full border-2 mt-0.5 shrink-0 flex items-center justify-center",
+                      isSelected ? "border-primary" : "border-muted-foreground/40"
+                    )}>
+                      {isSelected && <div className="w-2 h-2 rounded-full bg-primary" />}
                     </div>
-                    {scenarioType === "custom" && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6 ml-auto shrink-0 text-muted-foreground hover:text-destructive"
-                        onClick={() => removeStep(idx)}
-                      >
-                        <X className="w-3 h-3" />
-                      </Button>
-                    )}
-                    {idx < activeSteps.length - 1 && (
-                      <div className="hidden" />
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-          </div>
 
-          {/* Добавить шаг (только для кастомного) */}
-          {scenarioType === "custom" && (
-            <div className="space-y-2">
-              <Label className="text-sm font-medium text-muted-foreground">Добавить шаг</Label>
-              <div className="flex flex-wrap gap-1.5">
-                {(Object.keys(STEP_META) as StepType[]).map(type => {
-                  const meta = STEP_META[type]
-                  const Icon = meta.icon
-                  return (
-                    <button
-                      key={type}
-                      className={cn(
-                        "flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-dashed text-xs font-medium transition-all hover:border-primary/50 hover:bg-primary/5",
-                        meta.color
-                      )}
-                      onClick={() => addStep(type)}
-                    >
-                      <Icon className="w-3 h-3" />
-                      {meta.label}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-          )}
+                    {/* Icon */}
+                    <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center shrink-0", isSelected ? "bg-primary/10" : "bg-muted")}>
+                      <Icon className={cn("w-4 h-4", preset.color)} />
+                    </div>
+
+                    {/* Text */}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground">{preset.label}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{preset.desc}</p>
+
+                      {/* Horizontal step chain */}
+                      <div className="flex flex-wrap items-center gap-1 mt-3">
+                        {preset.steps.map((step, idx) => {
+                          const meta = STEP_META[step]
+                          const StepIcon = meta.icon
+                          return (
+                            <div key={`${step}-${idx}`} className="flex items-center gap-1">
+                              <div className={cn(
+                                "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs font-medium",
+                                meta.color
+                              )}>
+                                <StepIcon className="w-3 h-3 shrink-0" />
+                                {meta.label}
+                              </div>
+                              {idx < preset.steps.length - 1 && (
+                                <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/50 shrink-0" />
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
         </CardContent>
       </Card>
 
       {/* Кнопка сохранения */}
       <div className="flex justify-end">
-        <Button className="gap-2" onClick={() => toast.success("Настройки автоматизации сохранены")}>
-          <Check className="w-4 h-4" />
+        <Button className="gap-2" onClick={saveSettings} disabled={saving}>
+          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
           Сохранить настройки
         </Button>
       </div>

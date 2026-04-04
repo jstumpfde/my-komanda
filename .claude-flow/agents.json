@@ -1,0 +1,95 @@
+{
+  "agents": {
+    "hive-worker-1775305973825-3ada": {
+      "agentId": "hive-worker-1775305973825-3ada",
+      "agentType": "worker",
+      "status": "idle",
+      "health": 1,
+      "taskCount": 0,
+      "config": {
+        "role": "worker",
+        "hiveRole": "worker"
+      },
+      "createdAt": "2026-04-04T12:32:53.825Z",
+      "domain": "hive-mind"
+    },
+    "hive-worker-1775307162157-o0ka": {
+      "agentId": "hive-worker-1775307162157-o0ka",
+      "agentType": "worker",
+      "status": "idle",
+      "health": 1,
+      "taskCount": 0,
+      "config": {
+        "role": "worker",
+        "hiveRole": "worker"
+      },
+      "createdAt": "2026-04-04T12:52:42.157Z",
+      "domain": "hive-mind"
+    },
+    "hive-worker-1775307175952-w85p": {
+      "agentId": "hive-worker-1775307175952-w85p",
+      "agentType": "worker",
+      "status": "idle",
+      "health": 1,
+      "taskCount": 0,
+      "config": {
+        "role": "worker",
+        "hiveRole": "worker"
+      },
+      "createdAt": "2026-04-04T12:52:55.952Z",
+      "domain": "hive-mind"
+    },
+    "hive-worker-1775307189674-452g": {
+      "agentId": "hive-worker-1775307189674-452g",
+      "agentType": "worker",
+      "status": "idle",
+      "health": 1,
+      "taskCount": 0,
+      "config": {
+        "role": "worker",
+        "hiveRole": "worker"
+      },
+      "createdAt": "2026-04-04T12:53:09.674Z",
+      "domain": "hive-mind"
+    },
+    "hive-worker-1775307252290-w2qc": {
+      "agentId": "hive-worker-1775307252290-w2qc",
+      "agentType": "worker",
+      "status": "idle",
+      "health": 1,
+      "taskCount": 0,
+      "config": {
+        "role": "worker",
+        "hiveRole": "worker"
+      },
+      "createdAt": "2026-04-04T12:54:12.290Z",
+      "domain": "hive-mind"
+    },
+    "hive-worker-1775307515801-2vp1": {
+      "agentId": "hive-worker-1775307515801-2vp1",
+      "agentType": "worker",
+      "status": "idle",
+      "health": 1,
+      "taskCount": 0,
+      "config": {
+        "role": "worker",
+        "hiveRole": "worker"
+      },
+      "createdAt": "2026-04-04T12:58:35.801Z",
+      "domain": "hive-mind"
+    },
+    "hive-worker-1775308213625-nuc7": {
+      "agentId": "hive-worker-1775308213625-nuc7",
+      "agentType": "worker",
+      "status": "idle",
+      "health": 1,
+      "taskCount": 0,
+      "config": {
+        "role": "worker",
+        "hiveRole": "worker"
+      },
+      "createdAt": "2026-04-04T13:10:13.625Z",
+      "domain": "hive-mind"
+    }
+  }
+}

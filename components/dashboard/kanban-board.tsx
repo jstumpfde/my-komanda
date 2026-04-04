@@ -1,14 +1,18 @@
 "use client"
 
+import { useState } from "react"
 import { CandidateCard, type Candidate } from "./candidate-card"
 import { ListView } from "./list-view"
 import { FunnelView } from "./funnel-view"
 import { TilesView } from "./tiles-view"
 import { ColumnColorPicker } from "./column-color-picker"
 import type { CardDisplaySettings } from "./card-settings"
-import { LayoutGrid, List, TrendingDown, Grid3X3 } from "lucide-react"
+import { LayoutGrid, List, TrendingDown, Grid3X3, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
 import type { CandidateAction } from "@/lib/column-config"
 import { HR_DECISION_COLUMNS } from "@/lib/column-config"
@@ -33,6 +37,7 @@ interface KanbanBoardProps {
   onOpenProfile?: (candidate: Candidate, columnId: string) => void
   onAction?: (candidateId: string, columnId: string, action: CandidateAction) => void
   hideViewSwitcher?: boolean
+  onAddCustomColumn?: (name: string, color: string) => void
 }
 
 const VIEW_BUTTONS: { mode: ViewMode; icon: React.ElementType; label: string }[] = [
@@ -42,7 +47,21 @@ const VIEW_BUTTONS: { mode: ViewMode; icon: React.ElementType; label: string }[]
   { mode: "tiles", icon: Grid3X3, label: "Плитки" },
 ]
 
-export function KanbanBoard({ settings, viewMode, onViewModeChange, columns = [], onColumnsChange, onOpenProfile, onAction, hideViewSwitcher }: KanbanBoardProps) {
+const PRESET_COLORS = ["#94a3b8", "#3b82f6", "#ef4444", "#8b5cf6", "#f97316", "#22c55e", "#ec4899", "#06b6d4", "#f59e0b", "#10b981"]
+
+export function KanbanBoard({ settings, viewMode, onViewModeChange, columns = [], onColumnsChange, onOpenProfile, onAction, hideViewSwitcher, onAddCustomColumn }: KanbanBoardProps) {
+  const [addColOpen, setAddColOpen] = useState(false)
+  const [newColName, setNewColName] = useState("")
+  const [newColColor, setNewColColor] = useState("#3b82f6")
+
+  const handleAddColumn = () => {
+    if (!newColName.trim() || !onAddCustomColumn) return
+    onAddCustomColumn(newColName.trim(), newColColor)
+    setNewColName("")
+    setNewColColor("#3b82f6")
+    setAddColOpen(false)
+  }
+
   const handleColorChange = (colId: string, from: string, to: string) => {
     onColumnsChange(
       columns.map((col) => (col.id === colId ? { ...col, colorFrom: from, colorTo: to } : col))
@@ -93,7 +112,7 @@ export function KanbanBoard({ settings, viewMode, onViewModeChange, columns = []
 
       {/* Kanban View — no drag-and-drop */}
       {viewMode === "kanban" && (
-        <div className="overflow-x-auto pb-4 -mx-4 px-4 sm:mx-0 sm:px-0 snap-x snap-mandatory md:snap-none">
+        <div className="overflow-x-auto pb-4 -mx-4 px-4 sm:mx-0 sm:px-0">
           <div className="flex gap-3">
             {columns.map((column) => {
               const isDecision = HR_DECISION_COLUMNS.includes(column.id)
@@ -101,7 +120,7 @@ export function KanbanBoard({ settings, viewMode, onViewModeChange, columns = []
               return (
                 <div
                   key={column.id}
-                  className="flex flex-col flex-1 min-w-[180px] rounded-xl snap-start"
+                  className="flex flex-col flex-1 min-w-[220px] rounded-xl"
                 >
                   {/* Column Header */}
                   <div className="mb-3 rounded-xl overflow-hidden">
@@ -152,9 +171,63 @@ export function KanbanBoard({ settings, viewMode, onViewModeChange, columns = []
                 </div>
               )
             })}
+
+            {/* Add custom column button */}
+            {onAddCustomColumn && (
+              <div className="flex flex-col items-center justify-start min-w-[220px] pt-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-10 w-10 rounded-xl border-dashed border-2 text-muted-foreground hover:text-foreground"
+                  onClick={() => setAddColOpen(true)}
+                >
+                  <Plus className="w-5 h-5" />
+                </Button>
+              </div>
+            )}
           </div>
         </div>
       )}
+
+      {/* Add custom column dialog */}
+      <Dialog open={addColOpen} onOpenChange={setAddColOpen}>
+        <DialogContent className="sm:max-w-[380px]">
+          <DialogHeader>
+            <DialogTitle>Добавить колонку</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>Название</Label>
+              <Input
+                value={newColName}
+                onChange={(e) => setNewColName(e.target.value)}
+                placeholder="Название колонки"
+                onKeyDown={(e) => e.key === "Enter" && handleAddColumn()}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Цвет</Label>
+              <div className="flex gap-2 flex-wrap">
+                {PRESET_COLORS.map((c) => (
+                  <button
+                    key={c}
+                    className={cn(
+                      "w-7 h-7 rounded-full border-2 transition-all",
+                      newColColor === c ? "border-foreground scale-110" : "border-transparent"
+                    )}
+                    style={{ backgroundColor: c }}
+                    onClick={() => setNewColColor(c)}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddColOpen(false)}>Отмена</Button>
+            <Button onClick={handleAddColumn} disabled={!newColName.trim()}>Добавить</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {viewMode === "list" && (
         <ListView columns={columns} settings={settings} onOpenProfile={onOpenProfile} onAction={onAction} />
