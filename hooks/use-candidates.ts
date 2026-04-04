@@ -20,6 +20,10 @@ export interface ApiCandidate {
   skills: string[] | null
   token: string
   demoProgressJson: unknown
+  anketaAnswers: { question: string; answer: string }[] | null
+  aiScore: number | null
+  aiSummary: string | null
+  aiDetails: { question: string; score: number; comment: string }[] | null
   createdAt: string | null
   updatedAt: string | null
 }

@@ -26,6 +26,9 @@ import {
   Send,
   MessageSquarePlus,
   Clock,
+  Sparkles,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
@@ -83,7 +86,25 @@ function AvatarInitials({ name, size = "md" }: { name: string; size?: "sm" | "md
   )
 }
 
-// ─── Score badge ──────────────────────────────────────────────────────────────
+// ─── AI Score badge ──────────────────────────────────────────────────────────
+
+function AiScoreBadge({ score, onClick }: { score: number | null; onClick?: () => void }) {
+  if (score === null) return null
+  const color =
+    score >= 75 ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800" :
+    score >= 50 ? "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800" :
+    "bg-destructive/10 text-destructive border-destructive/20"
+  return (
+    <Badge
+      variant="outline"
+      className={cn("font-bold text-sm border cursor-pointer hover:opacity-80 transition-opacity", color)}
+      onClick={onClick}
+    >
+      <Sparkles className="w-3 h-3 mr-1" />
+      AI: {score}
+    </Badge>
+  )
+}
 
 function ScoreBadge({ score }: { score: number | null }) {
   if (score === null) return null
@@ -124,6 +145,8 @@ export function CandidateDrawer({
   const [changingStage, setChangingStage] = useState<string | null>(null)
   const [noteText, setNoteText] = useState("")
   const [savingNote, setSavingNote] = useState(false)
+  const [scoringAi, setScoringAi] = useState(false)
+  const [showAiDetails, setShowAiDetails] = useState(false)
 
   // ── Fetch candidate details ───────────────────────────────────────────────
 
@@ -214,6 +237,32 @@ export function CandidateDrawer({
     }
   }
 
+  // ── AI Scoring ───────────────────────────────────────────────────────────
+
+  const handleAiScore = async () => {
+    if (!candidate || scoringAi) return
+    setScoringAi(true)
+    try {
+      const res = await fetch(`/api/vacancies/${candidate.vacancyId}/score-candidate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ candidateId: candidate.id }),
+      })
+      if (!res.ok) {
+        const data = await res.json() as { error?: string }
+        throw new Error(data.error || "Ошибка")
+      }
+      const data = await res.json() as { score: number; summary: string; details: { question: string; score: number; comment: string }[] }
+      setCandidate(prev => prev ? { ...prev, aiScore: data.score, aiSummary: data.summary, aiDetails: data.details } : prev)
+      setShowAiDetails(true)
+      toast.success(`AI-скоринг: ${data.score}/100`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Ошибка AI-скоринга")
+    } finally {
+      setScoringAi(false)
+    }
+  }
+
   // ── Format helpers ────────────────────────────────────────────────────────
 
   const formatSalary = (min: number | null, max: number | null) => {
@@ -265,6 +314,7 @@ export function CandidateDrawer({
                     </Badge>
                   )}
                   <ScoreBadge score={candidate.score} />
+                  <AiScoreBadge score={candidate.aiScore ?? null} onClick={() => setShowAiDetails(v => !v)} />
                 </div>
               </div>
             </div>
@@ -363,6 +413,47 @@ export function CandidateDrawer({
 
                 <Separator />
 
+                {/* ── AI Scoring ────────────────────────────────────── */}
+                {candidate.aiScore !== null && candidate.aiScore !== undefined && (
+                  <section className="space-y-2">
+                    <button
+                      className="flex items-center justify-between w-full text-xs font-semibold text-muted-foreground uppercase tracking-wide hover:text-foreground transition-colors"
+                      onClick={() => setShowAiDetails(v => !v)}
+                    >
+                      <span className="flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5" />
+                        AI-оценка
+                      </span>
+                      {showAiDetails ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                    </button>
+
+                    {showAiDetails && (
+                      <div className="space-y-2">
+                        {candidate.aiSummary && (
+                          <p className="text-sm text-muted-foreground italic">{candidate.aiSummary}</p>
+                        )}
+                        {(candidate.aiDetails as { question: string; score: number; comment: string }[] | null)?.map((detail, i) => {
+                          const detailColor =
+                            detail.score >= 75 ? "text-emerald-600 dark:text-emerald-400" :
+                            detail.score >= 50 ? "text-amber-600 dark:text-amber-400" :
+                            "text-destructive"
+                          return (
+                            <div key={i} className="p-2 rounded-lg bg-muted/40 border border-border/60 space-y-1">
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-medium text-foreground">{detail.question}</span>
+                                <span className={cn("text-xs font-bold", detailColor)}>{detail.score}</span>
+                              </div>
+                              <p className="text-xs text-muted-foreground">{detail.comment}</p>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </section>
+                )}
+
+                {candidate.aiScore !== null && candidate.aiScore !== undefined && <Separator />}
+
                 {/* ── Stage action buttons ──────────────────────────── */}
                 {!isHired && !isRejected && (
                   <section className="space-y-2">
@@ -390,6 +481,16 @@ export function CandidateDrawer({
                           Нанять
                         </Button>
                       )}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="w-full gap-2 border-purple-300 dark:border-purple-700 text-purple-700 dark:text-purple-400 hover:bg-purple-500/10"
+                        disabled={scoringAi}
+                        onClick={handleAiScore}
+                      >
+                        {scoringAi ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                        {scoringAi ? "Оценка..." : "Оценить AI"}
+                      </Button>
                       <Button
                         size="sm"
                         variant="outline"

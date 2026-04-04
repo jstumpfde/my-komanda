@@ -165,6 +165,10 @@ export const candidates = pgTable("candidates", {
   skills: text("skills").array().default([]),
   token: text("token").unique().notNull(),
   demoProgressJson: jsonb("demo_progress_json"),
+  anketaAnswers: jsonb("anketa_answers"), // [{question, answer}]
+  aiScore: integer("ai_score"),
+  aiSummary: text("ai_summary"),
+  aiDetails: jsonb("ai_details"), // [{question, score, comment}]
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 })

@@ -2,7 +2,8 @@
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { CheckCircle2, XCircle, ArrowRight, MapPin, Briefcase, Clock, ThumbsUp, Calendar, Circle, Copy, Check, Send, Archive, HelpCircle, PartyPopper } from "lucide-react"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { CheckCircle2, XCircle, ArrowRight, MapPin, Briefcase, Clock, ThumbsUp, Calendar, Circle, Copy, Check, Send, Archive, HelpCircle, PartyPopper, ShieldX, Sparkles } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { CardDisplaySettings } from "./card-settings"
 import type { CandidateAction } from "@/lib/column-config"
@@ -34,6 +35,12 @@ export interface Candidate {
   interviewTime?: string     // время слота
   utmSource?: string         // UTM название источника
   workFormat?: "office" | "remote" | "hybrid"
+  // AI-скоринг
+  aiScore?: number | null
+  aiSummary?: string | null
+  // Авто-отклонение по стоп-факторам
+  rejectedAuto?: boolean
+  rejectedAutoReasons?: string[]
 }
 
 interface CandidateCardProps {
@@ -152,17 +159,33 @@ export function CandidateCard({ candidate, settings, columnId, onOpenProfile, on
             </div>
           </div>
         </div>
-        {/* AI Score — large in decision columns */}
-        <Badge
-          variant="outline"
-          className={cn(
-            "ml-2 font-bold flex-shrink-0 border",
-            getScoreColor(candidate.score),
-            isDecisionColumn ? "text-sm px-2 py-0.5" : "text-xs"
+        {/* Score badges */}
+        <div className="flex items-center gap-1 ml-2 shrink-0">
+          {candidate.aiScore != null && (
+            <Badge
+              variant="outline"
+              className={cn(
+                "font-bold border text-xs",
+                candidate.aiScore >= 75 ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800" :
+                candidate.aiScore >= 50 ? "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800" :
+                "bg-destructive/10 text-destructive border-destructive/20"
+              )}
+            >
+              <Sparkles className="w-2.5 h-2.5 mr-0.5" />
+              {candidate.aiScore}
+            </Badge>
           )}
-        >
-          {candidate.score}
-        </Badge>
+          <Badge
+            variant="outline"
+            className={cn(
+              "font-bold flex-shrink-0 border",
+              getScoreColor(candidate.score),
+              isDecisionColumn ? "text-sm px-2 py-0.5" : "text-xs"
+            )}
+          >
+            {candidate.score}
+          </Badge>
+        </div>
       </div>
 
       {/* Source */}
@@ -174,6 +197,32 @@ export function CandidateCard({ candidate, settings, columnId, onOpenProfile, on
           <span className="text-[10px] text-muted-foreground">{candidate.utmSource}</span>
         )}
       </div>
+
+      {/* Rejected auto badge */}
+      {candidate.rejectedAuto && (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Badge variant="outline" className="mb-2 text-[10px] border-destructive/30 bg-destructive/10 text-destructive cursor-default">
+                <ShieldX className="w-3 h-3 mr-1" />
+                Не прошёл фильтр
+              </Badge>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="max-w-[240px]">
+              <p className="text-xs font-medium mb-1">Причины отклонения:</p>
+              <ul className="text-xs list-disc pl-3 space-y-0.5">
+                {candidate.rejectedAutoReasons?.length ? (
+                  candidate.rejectedAutoReasons.map((reason, i) => (
+                    <li key={i}>{reason}</li>
+                  ))
+                ) : (
+                  <li>Не соответствует стоп-факторам</li>
+                )}
+              </ul>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      )}
 
       {/* City + salary compact */}
       {settings.showCity && (

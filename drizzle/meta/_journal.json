@@ -64,6 +64,13 @@
       "when": 1775100000000,
       "tag": "0024_company_wizard_fields",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1775310257082,
+      "tag": "0009_lively_wither",
+      "breakpoints": true
     }
   ]
 }
