@@ -34,7 +34,7 @@ const defaultSettings: CardDisplaySettings = {
   showSalary: true,
   showSalaryFull: false,
   showScore: true,
-  showProgress: true,
+  showAge: true,
   showSource: true,
   showCity: true,
   showExperience: true,

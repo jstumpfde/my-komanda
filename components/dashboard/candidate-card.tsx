@@ -2,12 +2,10 @@
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { CheckCircle2, XCircle, ArrowRight, ThumbsUp, Archive, HelpCircle, ShieldX } from "lucide-react"
+import { Calendar, ArrowRight, Check, GraduationCap, X, Archive, Clock, Users } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { CardDisplaySettings } from "./card-settings"
 import type { CandidateAction } from "@/lib/column-config"
-import { HR_DECISION_COLUMNS } from "@/lib/column-config"
 
 export interface Candidate {
   id: string
@@ -31,10 +29,7 @@ export interface Candidate {
   interviewTime?: string
   utmSource?: string
   workFormat?: "office" | "remote" | "hybrid"
-  aiScore?: number | null
-  aiSummary?: string | null
-  rejectedAuto?: boolean
-  rejectedAutoReasons?: string[]
+  age?: number
 }
 
 interface CandidateCardProps {
@@ -49,162 +44,150 @@ interface CandidateCardProps {
 }
 
 export function CandidateCard({ candidate, settings, columnId, onOpenProfile, onAction }: CandidateCardProps) {
-  const isDecisionColumn = HR_DECISION_COLUMNS.includes(columnId)
-  const isFirstDecision = columnId === "decision"
-  const isFinalDecision = columnId === "final_decision"
-  const isHiredColumn = columnId === "hired"
-
-  const formatTimeAgo = (date: Date) => {
-    const now = new Date()
-    const diffMs = now.getTime() - date.getTime()
-    const diffMins = Math.floor(diffMs / 60000)
-    const diffHours = Math.floor(diffMs / 3600000)
-    const diffDays = Math.floor(diffMs / 86400000)
-    if (diffMins < 60) return `${diffMins} мин.`
-    if (diffHours < 24) return `${diffHours} ч.`
-    if (diffDays === 1) return "вчера"
-    if (diffDays < 7) return `${diffDays} дн.`
-    return `${Math.floor(diffDays / 7)} нед.`
-  }
+  const isDecisionColumn = columnId === "decision" || columnId === "final_decision"
+  const isInterviewColumn = columnId === "interview"
 
   const getScoreColor = (score: number) => {
-    if (score >= 75) return "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
-    if (score >= 50) return "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
-    return "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+    if (score >= 80) return "bg-success/10 text-success border-success/20"
+    if (score >= 70) return "bg-warning/10 text-warning border-warning/20"
+    return "bg-destructive/10 text-destructive border-destructive/20"
+  }
+
+  const getSourceColor = (source: string) => {
+    const colors: Record<string, string> = {
+      "hh.ru": "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800",
+      "Avito": "bg-cyan-500/10 text-cyan-700 dark:text-cyan-400 border-cyan-200 dark:border-cyan-800",
+      "Telegram": "bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800",
+      "LinkedIn": "bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-200 dark:border-purple-800",
+    }
+    return colors[source] || "bg-muted text-muted-foreground border-border"
   }
 
   const getSourceLabel = (source: string) => {
     const map: Record<string, string> = {
       "hh.ru": "hh",
-      "Avito": "avito",
-      "Telegram": "tg",
-      "LinkedIn": "in",
-      "Реферал": "ref",
+      "Реферал": "реферал",
       "Сайт": "сайт",
     }
     return map[source] || source
   }
 
   const formatSalary = (min: number, max: number) => {
-    return `${min.toLocaleString("ru-RU")} – ${max.toLocaleString("ru-RU")} ₽`
+    return `${min.toLocaleString("ru-RU")} – ${max.toLocaleString("ru-RU")} руб.`
   }
 
-  // Фамилия Имя (без отчества)
-  const displayName = candidate.name.trim().split(/\s+/).slice(0, 2).join(" ")
-
   return (
-    <div className="space-y-0">
-      {/* Clickable card body */}
-      <div
-        className={cn(
-          "p-3 rounded-md border bg-card cursor-pointer hover:shadow-sm transition",
-          isDecisionColumn && "border-primary/20 rounded-b-none border-b-0"
-        )}
-        onClick={() => onOpenProfile?.(candidate)}
-      >
-        {/* Row 1: Name + Score circle */}
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5 flex-1 min-w-0">
-            <span className="text-sm font-medium truncate">{displayName}</span>
-            {candidate.rejectedAuto && (
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <ShieldX className="w-3 h-3 text-destructive shrink-0" />
-                  </TooltipTrigger>
-                  <TooltipContent side="top" className="max-w-[240px]">
-                    <p className="text-xs font-medium mb-1">Причины отклонения:</p>
-                    <ul className="text-xs list-disc pl-3 space-y-0.5">
-                      {candidate.rejectedAutoReasons?.length ? (
-                        candidate.rejectedAutoReasons.map((reason, i) => (
-                          <li key={i}>{reason}</li>
-                        ))
-                      ) : (
-                        <li>Не соответствует стоп-факторам</li>
-                      )}
-                    </ul>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            )}
-          </div>
-          <span
-            className={cn(
-              "rounded-md px-1.5 h-5 text-xs font-medium shrink-0 inline-flex items-center justify-center",
-              getScoreColor(candidate.score)
-            )}
-          >
-            {candidate.score}
-          </span>
-        </div>
-
-        {/* Row 2: City + Source badge */}
-        <div className="flex items-center justify-between mt-1.5">
-          <span className="text-sm text-muted-foreground truncate">{candidate.city}</span>
-          <Badge variant="outline" className="text-xs h-4 px-1.5 border font-normal shrink-0 ml-2">
-            {getSourceLabel(candidate.source)}
-          </Badge>
-        </div>
-
-        {/* Row 3: Salary + Date */}
-        <div className="flex items-center justify-between mt-1">
-          <span className="text-sm font-medium truncate">
-            {formatSalary(candidate.salaryMin, candidate.salaryMax)}
-          </span>
-          <span className="text-xs text-muted-foreground shrink-0 ml-2">
-            {candidate.lastSeen === "online" ? "онлайн" : formatTimeAgo(candidate.lastSeen as Date)}
-          </span>
-        </div>
-      </div>
-
-      {/* Decision buttons — always shown in decision columns */}
-      {isDecisionColumn && (
-        <div className="p-2 pt-1.5 border border-t-0 rounded-b-md bg-card border-primary/20">
-          {isFirstDecision && (
-            <div className="flex flex-wrap gap-1">
-              <Button
-                size="sm"
-                className="flex-1 h-7 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white basis-full"
-                onClick={() => onAction?.(candidate.id, columnId, "advance")}
-              >
-                <CheckCircle2 className="w-3 h-3 mr-1" />
-                Пригласить
-              </Button>
-              <Button variant="ghost" size="sm" className="flex-1 h-7 text-xs text-destructive hover:bg-destructive/10" onClick={() => onAction?.(candidate.id, columnId, "reject")}>
-                <XCircle className="w-3 h-3 mr-0.5" /> Отказать
-              </Button>
-              <Button variant="ghost" size="sm" className="flex-1 h-7 text-xs text-blue-600 hover:bg-blue-500/10" onClick={() => onAction?.(candidate.id, columnId, "reserve")}>
-                <Archive className="w-3 h-3 mr-0.5" /> Резерв
-              </Button>
-              <Button variant="ghost" size="sm" className="flex-1 h-7 text-xs text-muted-foreground hover:bg-muted" onClick={() => onAction?.(candidate.id, columnId, "think")}>
-                <HelpCircle className="w-3 h-3 mr-0.5" /> Подумать
-              </Button>
-            </div>
+    <div
+      className="relative p-3.5 rounded-lg border bg-card cursor-pointer hover:shadow-sm transition"
+      onClick={() => onOpenProfile?.(candidate)}
+    >
+      {/* Score badge — top right */}
+      {settings.showScore && (
+        <Badge
+          variant="outline"
+          className={cn(
+            "absolute top-2 right-2 font-bold border text-xs",
+            getScoreColor(candidate.score)
           )}
+        >
+          {candidate.score}
+        </Badge>
+      )}
 
-          {isFinalDecision && (
-            <div className="flex flex-wrap gap-1">
-              <Button
-                size="sm"
-                className="flex-1 h-7 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white basis-full"
-                onClick={() => onAction?.(candidate.id, columnId, "hire")}
-              >
-                <ThumbsUp className="w-3 h-3 mr-1" />
-                Нанять
-              </Button>
-              <Button variant="ghost" size="sm" className="flex-1 h-7 text-xs text-destructive hover:bg-destructive/10" onClick={() => onAction?.(candidate.id, columnId, "reject")}>
-                <XCircle className="w-3 h-3 mr-0.5" /> Отказать
-              </Button>
-              <Button variant="ghost" size="sm" className="flex-1 h-7 text-xs text-blue-600 hover:bg-blue-500/10" onClick={() => onAction?.(candidate.id, columnId, "reserve")}>
-                <Archive className="w-3 h-3 mr-0.5" /> Резерв
-              </Button>
-              <Button variant="ghost" size="sm" className="flex-1 h-7 text-xs text-amber-600 hover:bg-amber-500/10" onClick={() => onAction?.(candidate.id, columnId, "preboarding")}>
-                <ArrowRight className="w-3 h-3 mr-0.5" /> Пребординг
-              </Button>
-            </div>
+      {/* Row 1: ФИО */}
+      <p className={cn("font-medium text-base text-foreground", settings.showScore && "pr-10")}>{candidate.name}</p>
+
+      {/* Row 2: Город + Источник */}
+      {(settings.showCity || settings.showSource) && (
+        <div className="flex items-center justify-between mt-1.5">
+          {settings.showCity && <span className="text-sm text-muted-foreground">{candidate.city}</span>}
+          {settings.showSource && (
+            <Badge variant="outline" className={cn("text-[10px] border", getSourceColor(candidate.source))}>
+              {getSourceLabel(candidate.source)}
+            </Badge>
           )}
         </div>
       )}
+
+      {/* Row 3: Зарплата */}
+      {(settings.showSalary || settings.showSalaryFull) && (
+        <p className="text-sm font-medium mt-1.5">
+          {settings.showSalaryFull
+            ? formatSalary(candidate.salaryMin, candidate.salaryMax)
+            : `${Math.round(candidate.salaryMin / 1000)}-${Math.round(candidate.salaryMax / 1000)}k`
+          }
+        </p>
+      )}
+
+      {/* Опыт */}
+      {settings.showExperience && candidate.experience && (
+        <p className="text-xs text-muted-foreground mt-1">Опыт: {candidate.experience}</p>
+      )}
+
+      {/* Навыки */}
+      {settings.showSkills && candidate.skills?.length > 0 && (
+        <div className="flex flex-wrap gap-1 mt-1.5">
+          {candidate.skills.slice(0, 3).map((skill) => (
+            <Badge key={skill} variant="secondary" className="text-[10px] px-1.5 py-0 h-4 font-normal">
+              {skill}
+            </Badge>
+          ))}
+        </div>
+      )}
+
+      {/* Возраст */}
+      {settings.showAge && candidate.age != null && (
+        <p className="text-xs text-muted-foreground mt-1">Возраст: {candidate.age} лет</p>
+      )}
+
+      {/* AI summary (decision columns) */}
+      {isDecisionColumn && candidate.aiSummary && (
+        <p className="text-xs text-muted-foreground mt-1.5 line-clamp-2 italic">{candidate.aiSummary}</p>
+      )}
+
+      {/* Interview date/time */}
+      {isInterviewColumn && candidate.interviewDate && (
+        <div className="flex items-center gap-1.5 mt-2 p-2 rounded-md bg-purple-500/5 border border-purple-200 dark:border-purple-800">
+          <Calendar className="w-3.5 h-3.5 text-purple-600" />
+          <span className="text-xs font-medium text-purple-700 dark:text-purple-400">
+            {candidate.interviewDate.toLocaleDateString("ru-RU", { day: "numeric", month: "short" })}
+            {candidate.interviewTime && ` в ${candidate.interviewTime}`}
+          </span>
+        </div>
+      )}
+
+      {/* Action icons row */}
+      <div className="flex items-center justify-between gap-1 w-full pt-2 mt-2 border-t" onClick={(e) => e.stopPropagation()}>
+        {columnId !== "final_decision" && columnId !== "hired" && (
+          <Button variant="ghost" className="w-9 h-9 rounded-full p-0 text-green-600 bg-green-50 border border-green-200 hover:bg-green-100 dark:bg-green-950 dark:border-green-800 dark:hover:bg-green-900" title="Следующий этап" onClick={() => onAction?.(candidate.id, columnId, "advance")}>
+            <ArrowRight className="w-5 h-5" />
+          </Button>
+        )}
+        {columnId === "final_decision" && (
+          <Button variant="ghost" className="w-9 h-9 rounded-full p-0 text-green-600 bg-green-50 border border-green-200 hover:bg-green-100 dark:bg-green-950 dark:border-green-800 dark:hover:bg-green-900" title="Нанять" onClick={() => onAction?.(candidate.id, columnId, "hire")}>
+            <Check className="w-5 h-5" />
+          </Button>
+        )}
+        {columnId === "hired" && (
+          <Button variant="ghost" className="w-8 h-8 rounded-full p-0 text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-950" title="Онбординг" onClick={() => onAction?.(candidate.id, columnId, "onboarding")}>
+            <GraduationCap className="w-4 h-4" />
+          </Button>
+        )}
+        <Button variant="ghost" className="w-9 h-9 rounded-full p-0 text-red-600 bg-red-50 border border-red-200 hover:bg-red-100 dark:bg-red-950 dark:border-red-800 dark:hover:bg-red-900" title="Отказать" onClick={() => onAction?.(candidate.id, columnId, "reject")}>
+          <X className="w-5 h-5" />
+        </Button>
+        <Button variant="ghost" className="w-8 h-8 rounded-full p-0 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950" title="Резерв" onClick={() => onAction?.(candidate.id, columnId, "reserve")}>
+          <Archive className="w-4 h-4" />
+        </Button>
+        {(columnId === "decision" || columnId === "interview" || columnId === "final_decision") && (
+          <Button variant="ghost" className="w-8 h-8 rounded-full p-0 text-gray-600 hover:bg-gray-50 dark:hover:bg-gray-950" title="Подумать" onClick={() => onAction?.(candidate.id, columnId, "think")}>
+            <Clock className="w-4 h-4" />
+          </Button>
+        )}
+        <Button variant="ghost" className="w-8 h-8 rounded-full p-0 text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-950" title="Talent Pool" onClick={() => onAction?.(candidate.id, columnId, "talent_pool")}>
+          <Users className="w-4 h-4" />
+        </Button>
+      </div>
     </div>
   )
 }

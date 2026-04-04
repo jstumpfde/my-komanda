@@ -112,8 +112,8 @@ export function KanbanBoard({ settings, viewMode, onViewModeChange, columns = []
 
       {/* Kanban View — no drag-and-drop */}
       {viewMode === "kanban" && (
-        <div className={cn("pb-4 -mx-4 px-4 sm:mx-0 sm:px-0", columns.length > 6 && "overflow-x-auto")}>
-          <div className={cn("flex gap-3", columns.length <= 6 ? "w-full" : "flex-nowrap")}>
+        <div className="pb-4 -mx-4 px-4 sm:mx-0 sm:px-0 overflow-x-auto">
+          <div className="flex gap-3">
             {columns.map((column, colIndex) => {
               const isDecision = HR_DECISION_COLUMNS.includes(column.id)
               const isLastColumn = colIndex === columns.length - 1
@@ -123,7 +123,8 @@ export function KanbanBoard({ settings, viewMode, onViewModeChange, columns = []
                   key={column.id}
                   className={cn(
                     "flex flex-col rounded-xl",
-                    columns.length <= 6 ? "flex-1 min-w-[180px]" : "min-w-[200px] flex-shrink-0"
+                    "min-w-[200px]",
+                    columns.length <= 6 && "flex-1"
                   )}
                 >
                   {/* Column Header */}

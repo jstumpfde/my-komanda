@@ -1,4 +1,4 @@
-export type CandidateAction = "advance" | "reject" | "reserve" | "hire" | "think" | "preboarding"
+export type CandidateAction = "advance" | "reject" | "reserve" | "hire" | "think" | "preboarding" | "talent_pool" | "onboarding"
 
 export const COLUMN_ORDER = [
   "new",

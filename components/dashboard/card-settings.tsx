@@ -14,7 +14,7 @@ export interface CardDisplaySettings {
   showSalary: boolean
   showSalaryFull: boolean
   showScore: boolean
-  showProgress: boolean
+  showAge: boolean
   showSource: boolean
   showCity: boolean
   showExperience: boolean
@@ -34,7 +34,7 @@ const settingsLabels: { key: keyof CardDisplaySettings; label: string }[] = [
   { key: "showCity", label: "Город" },
   { key: "showExperience", label: "Опыт работы" },
   { key: "showSkills", label: "Ключевые навыки" },
-  { key: "showProgress", label: "Прогресс" },
+  { key: "showAge", label: "Возраст" },
   { key: "showSource", label: "Источник" },
   { key: "showActions", label: "Кнопки действий" },
 ]

@@ -73,7 +73,7 @@ function emptyColumns(): ColumnData[] {
 }
 
 const defaultSettings: CardDisplaySettings = {
-  showSalary: false, showSalaryFull: true, showScore: true, showProgress: true,
+  showSalary: false, showSalaryFull: true, showScore: true, showAge: true,
   showSource: true, showCity: true, showExperience: true, showSkills: true, showActions: true,
 }
 
