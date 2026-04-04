@@ -11,11 +11,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { NotionEditor } from "@/components/vacancies/notion-editor"
 import { CourseTab } from "@/components/vacancies/course-tab"
 import {
-  Clock, Pause, Archive, Plus, Kanban, BarChart3, Zap, Globe, Settings, BookOpen,
+  Clock, Pause, Archive, Plus, Kanban, BarChart3, Zap, Globe, Settings, BookOpen, LayoutTemplate,
 } from "lucide-react"
 import { toast } from "sonner"
 import type { Demo } from "@/lib/course-types"
 import { createDemo } from "@/lib/course-types"
+import { TemplateSelectorDialog } from "@/components/vacancies/template-selector-dialog"
+import type { DemoTemplate } from "@/lib/templates/demo-templates"
 
 const STORAGE_KEY = "hireflow-demos"
 const NOTION_DEMO_KEY = "notion-demo-editor-demo"
@@ -63,6 +65,7 @@ export default function DemoEditorPage() {
   const [demo, setDemo] = useState<Demo | null>(null)
   const [hydrated, setHydrated] = useState(false)
   const [activeTab, setActiveTab] = useState("demo-notion")
+  const [templateDialogOpen, setTemplateDialogOpen] = useState(false)
 
   useEffect(() => {
     const d = loadOrCreateDemo()
@@ -74,6 +77,24 @@ export default function DemoEditorPage() {
     setDemo(updated)
     saveDemo(updated)
   }, [])
+
+  const handleTemplateSelect = useCallback((template: DemoTemplate) => {
+    const ts = Date.now()
+    const lessons = template.lessons.map((l, i) => ({
+      ...l,
+      id: `${l.id}-${ts}`,
+      blocks: l.blocks.map((b) => ({ ...b, id: `${b.id}-${ts}-${i}` })),
+    }))
+    const newDemo: Demo = {
+      ...(demo || createDemo(template.title)),
+      title: template.title,
+      lessons,
+      updatedAt: new Date(),
+    }
+    setDemo(newDemo)
+    saveDemo(newDemo)
+    toast.success(`Шаблон «${template.title}» применён`)
+  }, [demo])
 
   return (
     <SidebarProvider>
@@ -98,6 +119,9 @@ export default function DemoEditorPage() {
                 <p className="text-xs text-muted-foreground mt-0.5">1001 кандидатов · Менеджер по продажам · Москва</p>
               </div>
               <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => setTemplateDialogOpen(true)}>
+                  <LayoutTemplate className="w-3.5 h-3.5" />Выбрать шаблон
+                </Button>
                 <Button variant="outline" size="sm" className="gap-1.5 text-xs">
                   <Pause className="w-3.5 h-3.5" />Остановить
                 </Button>
@@ -200,6 +224,13 @@ export default function DemoEditorPage() {
             )}
           </div>
         </div>
+
+        {/* Template selector modal */}
+        <TemplateSelectorDialog
+          open={templateDialogOpen}
+          onOpenChange={setTemplateDialogOpen}
+          onSelect={handleTemplateSelect}
+        />
       </SidebarInset>
     </SidebarProvider>
   )

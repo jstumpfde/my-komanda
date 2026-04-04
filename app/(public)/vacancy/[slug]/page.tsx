@@ -10,9 +10,19 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import {
+  Select as SelectPrimitive,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { Switch } from "@/components/ui/switch"
+import { Checkbox } from "@/components/ui/checkbox"
+import {
   MapPin, Banknote, CheckCircle2, ArrowRight, Briefcase,
   Building2, Loader2,
 } from "lucide-react"
+import type { MiniFormField } from "@/components/vacancies/mini-form-builder"
 import { FORMAT_LABELS, EMPLOYMENT_LABELS } from "@/lib/vacancy-types"
 
 interface VacancyData {
@@ -29,6 +39,7 @@ interface VacancyData {
   brandPrimaryColor: string | null
   brandBgColor: string | null
   brandTextColor: string | null
+  descriptionJson: Record<string, unknown> | null
 }
 
 type ScreenState = "loading" | "landing" | "form" | "done" | "error"
@@ -44,6 +55,14 @@ function VacancyPageInner({ params }: { params: Promise<{ slug: string }> }) {
   const [contact, setContact] = useState("")
   const [contactType, setContactType] = useState<"phone" | "telegram">("phone")
   const [submitting, setSubmitting] = useState(false)
+  const [extraFields, setExtraFields] = useState<Record<string, string>>({})
+
+  const miniFormFields: MiniFormField[] =
+    vacancy?.descriptionJson &&
+    typeof vacancy.descriptionJson === "object" &&
+    Array.isArray((vacancy.descriptionJson as Record<string, unknown>).miniFormFields)
+      ? ((vacancy.descriptionJson as Record<string, unknown>).miniFormFields as MiniFormField[])
+      : []
 
   useEffect(() => {
     fetch(`/api/public/vacancy/${slug}`)
@@ -72,12 +91,20 @@ function VacancyPageInner({ params }: { params: Promise<{ slug: string }> }) {
       return
     }
 
+    const missingRequired = miniFormFields.find(
+      (f) => f.required && !extraFields[f.id]?.trim(),
+    )
+    if (missingRequired) {
+      toast.error(`Заполните поле «${missingRequired.label}»`)
+      return
+    }
+
     setSubmitting(true)
     try {
       const res = await fetch(`/api/public/vacancy/${slug}/apply`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, contact, contactType, utmSource }),
+        body: JSON.stringify({ name, contact, contactType, utmSource, extraFields }),
       })
       if (!res.ok) {
         const data = await res.json()
@@ -222,8 +249,9 @@ function VacancyPageInner({ params }: { params: Promise<{ slug: string }> }) {
           {screen === "form" && (
             <Card className="border-none shadow-lg">
               <CardContent className="pt-6 pb-6 space-y-4">
+                {/* Системное: Имя */}
                 <div className="space-y-1.5">
-                  <Label className="text-sm">Имя</Label>
+                  <Label className="text-sm">Имя <span className="text-destructive">*</span></Label>
                   <Input
                     value={name}
                     onChange={(e) => setName(e.target.value)}
@@ -232,8 +260,9 @@ function VacancyPageInner({ params }: { params: Promise<{ slug: string }> }) {
                   />
                 </div>
 
+                {/* Системное: Телефон / Telegram */}
                 <div className="space-y-2">
-                  <Label className="text-sm">Способ связи</Label>
+                  <Label className="text-sm">Способ связи <span className="text-destructive">*</span></Label>
                   <RadioGroup
                     value={contactType}
                     onValueChange={(v) => setContactType(v as "phone" | "telegram")}
@@ -254,6 +283,66 @@ function VacancyPageInner({ params }: { params: Promise<{ slug: string }> }) {
                     placeholder={contactType === "phone" ? "+7 (___) ___-__-__" : "@username"}
                   />
                 </div>
+
+                {/* Динамические поля из miniFormFields */}
+                {miniFormFields.map((field) => (
+                  <div key={field.id} className="space-y-1.5">
+                    <Label className="text-sm">
+                      {field.label}
+                      {field.required && <span className="text-destructive"> *</span>}
+                    </Label>
+
+                    {field.type === "text" && (
+                      <Input
+                        value={extraFields[field.id] || ""}
+                        onChange={(e) => setExtraFields((prev) => ({ ...prev, [field.id]: e.target.value }))}
+                        placeholder={field.placeholder}
+                      />
+                    )}
+
+                    {field.type === "number" && (
+                      <Input
+                        type="number"
+                        value={extraFields[field.id] || ""}
+                        onChange={(e) => setExtraFields((prev) => ({ ...prev, [field.id]: e.target.value }))}
+                        placeholder={field.placeholder}
+                      />
+                    )}
+
+                    {field.type === "select" && field.options && (
+                      <SelectPrimitive
+                        value={extraFields[field.id] || ""}
+                        onValueChange={(v) => setExtraFields((prev) => ({ ...prev, [field.id]: v }))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Выберите..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {field.options.map((opt) => (
+                            <SelectItem key={opt} value={opt}>
+                              {opt}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </SelectPrimitive>
+                    )}
+
+                    {field.type === "boolean" && (
+                      <div className="flex items-center gap-2 pt-1">
+                        <Checkbox
+                          id={`extra-${field.id}`}
+                          checked={extraFields[field.id] === "true"}
+                          onCheckedChange={(checked) =>
+                            setExtraFields((prev) => ({ ...prev, [field.id]: checked ? "true" : "false" }))
+                          }
+                        />
+                        <Label htmlFor={`extra-${field.id}`} className="text-sm cursor-pointer">
+                          Да
+                        </Label>
+                      </div>
+                    )}
+                  </div>
+                ))}
 
                 <Button
                   className="w-full h-12 text-white font-semibold"

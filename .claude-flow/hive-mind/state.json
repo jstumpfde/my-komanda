@@ -8,7 +8,11 @@
     "hive-worker-1775307189674-452g",
     "hive-worker-1775307252290-w2qc",
     "hive-worker-1775307515801-2vp1",
-    "hive-worker-1775308213625-nuc7"
+    "hive-worker-1775308213625-nuc7",
+    "hive-worker-1775309854888-90cg",
+    "hive-worker-1775309863166-7t6c",
+    "hive-worker-1775309869176-yf0k",
+    "hive-worker-1775309876132-3qn4"
   ],
   "consensus": {
     "pending": [],
@@ -16,7 +20,7 @@
   },
   "sharedMemory": {},
   "createdAt": "2026-04-04T12:30:18.315Z",
-  "updatedAt": "2026-04-04T13:10:13.626Z",
+  "updatedAt": "2026-04-04T13:37:56.132Z",
   "queen": {
     "agentId": "queen-1775305818315",
     "electedAt": "2026-04-04T12:30:18.315Z",

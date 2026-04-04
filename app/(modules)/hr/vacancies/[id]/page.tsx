@@ -37,6 +37,7 @@ import type { Candidate } from "@/components/dashboard/candidate-card"
 import { HhIntegration, type HhMessageLog } from "@/components/vacancies/hh-integration"
 import { AutomationSettings } from "@/components/vacancies/automation-settings"
 import { PublishTab } from "@/components/vacancies/publish-tab"
+import { MiniFormBuilder } from "@/components/vacancies/mini-form-builder"
 import { PostDemoSettings } from "@/components/vacancies/post-demo-settings"
 import {
   ResponsiveContainer,
@@ -944,6 +945,9 @@ export default function VacancyPage() {
                       </div>
                     </CardContent>
                   </Card>
+
+                  {/* Поля мини-формы */}
+                  <MiniFormBuilder vacancyId={id} descriptionJson={apiVacancy?.descriptionJson} />
 
                   {/* HTML-страница */}
                   <PublishTab

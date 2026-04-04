@@ -26,6 +26,7 @@ export async function GET(
         brandPrimaryColor: companies.brandPrimaryColor,
         brandBgColor: companies.brandBgColor,
         brandTextColor: companies.brandTextColor,
+        descriptionJson: vacancies.descriptionJson,
       })
       .from(vacancies)
       .innerJoin(companies, eq(vacancies.companyId, companies.id))

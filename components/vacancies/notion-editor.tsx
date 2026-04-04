@@ -22,6 +22,22 @@ import {
 import { toast } from "sonner"
 import type { Demo, Block, BlockType, Lesson } from "@/lib/course-types"
 import { VARIABLES, BLOCK_TYPE_META, createBlock } from "@/lib/course-types"
+import { TEMPLATE_VARIABLES } from "@/lib/templates/demo-templates"
+
+// ─── Variable highlighting ────────────────────────────────────────────────
+
+const VARIABLE_EXAMPLES: Record<string, { label: string; example: string }> = Object.fromEntries(
+  TEMPLATE_VARIABLES.map(v => [v.key, { label: v.label, example: v.example }])
+)
+
+/** Replace {{var}} with blue badge spans for preview/display rendering */
+function highlightVariables(html: string): string {
+  return html.replace(/\{\{(\w+)\}\}/g, (match, key) => {
+    const info = VARIABLE_EXAMPLES[key]
+    const tooltip = info ? `${info.label}: ${info.example}` : key
+    return `<span class="variable-badge" data-tooltip="${tooltip}" title="${tooltip}" style="display:inline-flex;align-items:center;gap:2px;background:#3b82f610;color:#3b82f6;border:1px solid #3b82f630;border-radius:4px;padding:0 5px;font-size:0.8em;font-weight:500;cursor:default;white-space:nowrap">${match}</span>`
+  })
+}
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -2983,13 +2999,13 @@ function TaskPreviewBlock({ block }: { block: Block }) {
         <h3 className="text-base font-semibold">{block.taskTitle}</h3>
       )}
       {block.taskDescription?.trim() && (
-        <p className="text-sm text-muted-foreground -mt-4">{block.taskDescription}</p>
+        <p className="text-sm text-muted-foreground -mt-4" dangerouslySetInnerHTML={{ __html: highlightVariables(block.taskDescription) }} />
       )}
       {block.questions.map((q, i) => (
         <div key={q.id} className="space-y-2.5">
           {/* Вопрос */}
           <p className="text-sm font-medium">
-            {i + 1}. {q.text}
+            <span dangerouslySetInnerHTML={{ __html: highlightVariables(`${i + 1}. ${q.text}`) }} />
             {q.required && <span className="text-destructive ml-0.5">*</span>}
           </p>
 
@@ -3129,7 +3145,7 @@ function SimplePreviewBlock({ block }: { block: Block }) {
     case "text": {
       const html = block.content?.trim()
       if (!html || html === "<br>") return null
-      return <div className="prose prose-sm max-w-none dark:prose-invert" dangerouslySetInnerHTML={{ __html: block.content }} />
+      return <div className="prose prose-sm max-w-none dark:prose-invert" dangerouslySetInnerHTML={{ __html: highlightVariables(block.content) }} />
     }
     case "image": {
       if (!block.imageUrl) return null
@@ -3234,7 +3250,7 @@ function SimplePreviewBlock({ block }: { block: Block }) {
           </div>
           <div
             className="flex-1 min-w-0 text-base leading-relaxed"
-            dangerouslySetInnerHTML={{ __html: block.content }}
+            dangerouslySetInnerHTML={{ __html: highlightVariables(block.content) }}
           />
         </div>
       )
