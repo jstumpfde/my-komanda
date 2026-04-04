@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Separator } from "@/components/ui/separator"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
@@ -158,6 +159,7 @@ export function AutomationSettings({ vacancyId, descriptionJson }: AutomationSet
   const [workingHoursEnabled, setWorkingHoursEnabled] = useState(initialWH.enabled ?? false)
   const [workingHoursFrom, setWorkingHoursFrom] = useState(initialWH.from || "09:00")
   const [workingHoursTo, setWorkingHoursTo] = useState(initialWH.to || "20:00")
+  const [includeWeekends, setIncludeWeekends] = useState((initialWH as Record<string, unknown>).includeWeekends as boolean ?? false)
 
   // 2. Обработка ответа
   const [responseReaction, setResponseReaction] = useState<ResponseReaction>(
@@ -165,6 +167,9 @@ export function AutomationSettings({ vacancyId, descriptionJson }: AutomationSet
   )
 
   // 3. Цепочка дожима
+  const [followUpEnabled, setFollowUpEnabled] = useState<boolean>(
+    (initialAutomation.followUpEnabled as boolean) ?? false
+  )
   const [followUpPreset, setFollowUpPreset] = useState<FollowUpPreset>(
     (initialAutomation.followUpPreset as FollowUpPreset) || "medium"
   )
@@ -234,8 +239,10 @@ export function AutomationSettings({ vacancyId, descriptionJson }: AutomationSet
           enabled: workingHoursEnabled,
           from: workingHoursFrom,
           to: workingHoursTo,
+          includeWeekends,
         },
         responseReaction,
+        followUpEnabled,
         followUpPreset,
         stopOnNo,
         stopOnClose,
@@ -260,7 +267,7 @@ export function AutomationSettings({ vacancyId, descriptionJson }: AutomationSet
     } finally {
       setSaving(false)
     }
-  }, [vacancyId, scenarioType, descriptionJson, tone, firstMessageText, firstMessageDelay, workingHoursEnabled, workingHoursFrom, workingHoursTo, responseReaction, followUpPreset, stopOnNo, stopOnClose])
+  }, [vacancyId, scenarioType, descriptionJson, tone, firstMessageText, firstMessageDelay, workingHoursEnabled, workingHoursFrom, workingHoursTo, includeWeekends, responseReaction, followUpEnabled, followUpPreset, stopOnNo, stopOnClose])
 
   return (
     <div className="space-y-6">
@@ -311,10 +318,13 @@ export function AutomationSettings({ vacancyId, descriptionJson }: AutomationSet
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="0">Сразу</SelectItem>
+                <SelectItem value="1">1 минута</SelectItem>
                 <SelectItem value="3">3 минуты</SelectItem>
                 <SelectItem value="5">5 минут</SelectItem>
+                <SelectItem value="10">10 минут</SelectItem>
                 <SelectItem value="15">15 минут</SelectItem>
                 <SelectItem value="30">30 минут</SelectItem>
+                <SelectItem value="60">60 минут</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -329,21 +339,28 @@ export function AutomationSettings({ vacancyId, descriptionJson }: AutomationSet
               <Switch checked={workingHoursEnabled} onCheckedChange={setWorkingHoursEnabled} />
             </div>
             {workingHoursEnabled && (
-              <div className="flex items-center gap-2 pl-1">
-                <Label className="text-sm text-muted-foreground shrink-0">с</Label>
-                <Input
-                  type="time"
-                  value={workingHoursFrom}
-                  onChange={(e) => setWorkingHoursFrom(e.target.value)}
-                  className="w-[120px] h-9"
-                />
-                <Label className="text-sm text-muted-foreground shrink-0">до</Label>
-                <Input
-                  type="time"
-                  value={workingHoursTo}
-                  onChange={(e) => setWorkingHoursTo(e.target.value)}
-                  className="w-[120px] h-9"
-                />
+              <div className="space-y-2.5 pl-1">
+                <div className="flex items-center gap-2">
+                  <Label className="text-sm text-muted-foreground shrink-0">с</Label>
+                  <Input
+                    type="time"
+                    value={workingHoursFrom}
+                    onChange={(e) => setWorkingHoursFrom(e.target.value)}
+                    className="w-[120px] h-9"
+                  />
+                  <Label className="text-sm text-muted-foreground shrink-0">до</Label>
+                  <Input
+                    type="time"
+                    value={workingHoursTo}
+                    onChange={(e) => setWorkingHoursTo(e.target.value)}
+                    className="w-[120px] h-9"
+                  />
+                </div>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <Checkbox checked={includeWeekends} onCheckedChange={(v) => setIncludeWeekends(!!v)} />
+                  <span className="text-sm">Включая выходные</span>
+                </label>
+                <p className="text-xs text-muted-foreground">Если кандидат откликнулся в нерабочее время — сообщение уйдёт в начале следующего рабочего дня</p>
               </div>
             )}
           </div>
@@ -425,15 +442,27 @@ export function AutomationSettings({ vacancyId, descriptionJson }: AutomationSet
       {/* ═══ 3. Цепочка дожима ═════════════════════════════════ */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Zap className="w-4 h-4" />
-            Цепочка дожима
-            {followUpPreset !== "off" && (
-              <Badge variant="outline" className="ml-2 text-xs">{activeTouchCount} касаний</Badge>
-            )}
-          </CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Zap className="w-4 h-4" />
+              Цепочка дожима
+              {followUpEnabled && followUpPreset !== "off" && (
+                <Badge variant="outline" className="ml-2 text-xs">{activeTouchCount} касаний</Badge>
+              )}
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              <Label htmlFor="followup-toggle" className="text-xs text-muted-foreground cursor-pointer">
+                {followUpEnabled ? "Включено" : "Выключено"}
+              </Label>
+              <Switch id="followup-toggle" checked={followUpEnabled} onCheckedChange={setFollowUpEnabled} />
+            </div>
+          </div>
         </CardHeader>
         <CardContent className="space-y-5">
+          {!followUpEnabled ? (
+            <p className="text-sm text-muted-foreground py-2">Выключено. Повторные сообщения отправляться не будут.</p>
+          ) : (
+          <>
           {/* Пресеты */}
           <div className="space-y-2">
             <Label className="text-sm font-medium">Интенсивность</Label>
@@ -532,6 +561,8 @@ export function AutomationSettings({ vacancyId, descriptionJson }: AutomationSet
                 </div>
               </div>
             </>
+          )}
+          </>
           )}
         </CardContent>
       </Card>

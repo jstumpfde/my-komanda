@@ -9,11 +9,12 @@ import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Slider } from "@/components/ui/slider"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import {
   CheckCircle2, Calendar, Phone, Video, Building2, Save,
-  Sparkles, Clock, Play,
+  Sparkles, Clock, Play, XCircle, ChevronDown,
 } from "lucide-react"
 
 type PostDemoMode = "auto" | "manual"
@@ -21,25 +22,46 @@ type PostDemoMode = "auto" | "manual"
 export function PostDemoSettings() {
   const [mode, setMode] = useState<PostDemoMode>("auto")
 
-  // Auto mode
-  const [threshold, setThreshold] = useState(85)
-  const [aboveTitle, setAboveTitle] = useState("Отлично! Выберите удобное время для встречи")
+  // Thresholds
+  const [upperThreshold, setUpperThreshold] = useState(75)
+  const [lowerThreshold, setLowerThreshold] = useState(50)
+
+  // Green level (>= upper)
+  const [greenTitle, setGreenTitle] = useState("Отлично! Выберите удобное время для встречи")
   const [meetPhone, setMeetPhone] = useState(true)
   const [meetOnline, setMeetOnline] = useState(true)
   const [meetOffice, setMeetOffice] = useState(false)
   const [officeAddress, setOfficeAddress] = useState("")
-  const [belowTitle, setBelowTitle] = useState("Спасибо за прохождение!")
-  const [belowText, setBelowText] = useState("Мы рассмотрим вашу анкету и свяжемся с вами в ближайшее время")
+  const [greenOpen, setGreenOpen] = useState(true)
+
+  // Yellow level (lower <= score < upper)
+  const [yellowTitle, setYellowTitle] = useState("Спасибо за прохождение!")
+  const [yellowText, setYellowText] = useState("Мы рассмотрим вашу анкету и свяжемся с вами в ближайшее время")
+  const [yellowOpen, setYellowOpen] = useState(false)
+
+  // Red level (< lower)
+  const [redTitle, setRedTitle] = useState("Спасибо за интерес к вакансии")
+  const [redText, setRedText] = useState("К сожалению, ваш профиль не соответствует требованиям данной позиции. Мы сохраним ваши данные и свяжемся, если появится подходящая вакансия.")
+  const [redOpen, setRedOpen] = useState(false)
 
   // Manual mode
   const [manualTitle, setManualTitle] = useState("Отлично, [Имя]! Вы прошли демонстрацию 🎉")
   const [manualText, setManualText] = useState("Мы изучим ваши ответы и свяжемся с вами в ближайшее время")
   const [manualButton, setManualButton] = useState("Хорошо, жду!")
 
-  // Preview score for demo
-  const [previewScore, setPreviewScore] = useState(88)
+  // Preview
+  const [previewScore, setPreviewScore] = useState(80)
+  const previewLevel = previewScore >= upperThreshold ? "green" : previewScore >= lowerThreshold ? "yellow" : "red"
 
-  const isAbove = previewScore >= threshold
+  // Keep thresholds in sync
+  const handleUpperChange = (v: number) => {
+    setUpperThreshold(v)
+    if (v <= lowerThreshold) setLowerThreshold(Math.max(0, v - 5))
+  }
+  const handleLowerChange = (v: number) => {
+    setLowerThreshold(v)
+    if (v >= upperThreshold) setUpperThreshold(Math.min(100, v + 5))
+  }
 
   return (
     <div className="space-y-6">
@@ -84,76 +106,132 @@ export function PostDemoSettings() {
           {/* Auto mode settings */}
           {mode === "auto" && (
             <div className="space-y-5">
-              {/* Threshold */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <Label className="text-sm font-medium flex items-center gap-1.5">
-                    <Sparkles className="w-4 h-4 text-amber-500" />
-                    Порог AI-скоринга
-                  </Label>
-                  <span className="text-lg font-bold text-primary">{threshold}%</span>
+              {/* Thresholds */}
+              <div className="space-y-4">
+                <Label className="text-sm font-medium flex items-center gap-1.5">
+                  <Sparkles className="w-4 h-4 text-amber-500" />
+                  Пороги AI-скоринга
+                </Label>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">Верхний порог (зелёный)</span>
+                    <span className="text-sm font-bold text-emerald-600">{upperThreshold}%</span>
+                  </div>
+                  <Slider value={[upperThreshold]} onValueChange={([v]) => handleUpperChange(v)} min={10} max={100} step={5} className="w-full" />
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">Нижний порог (жёлтый)</span>
+                    <span className="text-sm font-bold text-amber-600">{lowerThreshold}%</span>
+                  </div>
+                  <Slider value={[lowerThreshold]} onValueChange={([v]) => handleLowerChange(v)} min={0} max={95} step={5} className="w-full" />
                 </div>
-                <Slider
-                  value={[threshold]}
-                  onValueChange={([v]) => setThreshold(v)}
-                  min={0} max={100} step={5}
-                  className="w-full"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Кандидаты с баллом {">"}= {threshold}% смогут записаться на интервью автоматически
-                </p>
+                <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                  <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500" /> ≥{upperThreshold}%</span>
+                  <span>·</span>
+                  <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500" /> {lowerThreshold}–{upperThreshold - 1}%</span>
+                  <span>·</span>
+                  <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500" /> {"<"}{lowerThreshold}%</span>
+                </div>
               </div>
 
               <Separator />
 
-              {/* Above threshold */}
-              <div className="space-y-3 p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800">
-                <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-400 flex items-center gap-1">
-                  <CheckCircle2 className="w-3.5 h-3.5" /> Если балл {">"}= {threshold}%
-                </p>
-                <div className="space-y-2">
-                  <Label className="text-xs">Заголовок</Label>
-                  <Input value={aboveTitle} onChange={e => setAboveTitle(e.target.value)} className="h-8 text-sm" />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-xs">Доступные типы встречи</Label>
-                  <div className="space-y-1.5">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <Checkbox checked={meetPhone} onCheckedChange={v => setMeetPhone(!!v)} />
-                      <Phone className="w-3.5 h-3.5 text-muted-foreground" />
-                      <span className="text-sm">Звонок (телефон)</span>
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <Checkbox checked={meetOnline} onCheckedChange={v => setMeetOnline(!!v)} />
-                      <Video className="w-3.5 h-3.5 text-muted-foreground" />
-                      <span className="text-sm">Онлайн (Zoom / Телемост)</span>
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <Checkbox checked={meetOffice} onCheckedChange={v => setMeetOffice(!!v)} />
-                      <Building2 className="w-3.5 h-3.5 text-muted-foreground" />
-                      <span className="text-sm">Офис</span>
-                    </label>
-                    {meetOffice && (
-                      <Input value={officeAddress} onChange={e => setOfficeAddress(e.target.value)} placeholder="Адрес офиса" className="h-8 text-sm ml-6 w-[calc(100%-24px)]" />
-                    )}
+              {/* Green level */}
+              <Collapsible open={greenOpen} onOpenChange={setGreenOpen}>
+                <CollapsibleTrigger className="w-full">
+                  <div className="flex items-center justify-between p-3 rounded-lg border-2 border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/20">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                      <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">Отличный кандидат</span>
+                      <span className="text-xs text-emerald-600/70">≥{upperThreshold}%</span>
+                    </div>
+                    <ChevronDown className={cn("w-4 h-4 text-emerald-600 transition-transform", greenOpen && "rotate-180")} />
                   </div>
-                </div>
-              </div>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <div className="p-3 border-2 border-t-0 border-emerald-200 dark:border-emerald-800 rounded-b-lg space-y-3">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Заголовок</Label>
+                      <Input value={greenTitle} onChange={e => setGreenTitle(e.target.value)} className="h-8 text-sm" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Доступные типы встречи</Label>
+                      <div className="space-y-1.5">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <Checkbox checked={meetPhone} onCheckedChange={v => setMeetPhone(!!v)} />
+                          <Phone className="w-3.5 h-3.5 text-muted-foreground" />
+                          <span className="text-sm">Звонок (телефон)</span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <Checkbox checked={meetOnline} onCheckedChange={v => setMeetOnline(!!v)} />
+                          <Video className="w-3.5 h-3.5 text-muted-foreground" />
+                          <span className="text-sm">Онлайн (Zoom / Телемост)</span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <Checkbox checked={meetOffice} onCheckedChange={v => setMeetOffice(!!v)} />
+                          <Building2 className="w-3.5 h-3.5 text-muted-foreground" />
+                          <span className="text-sm">Офис</span>
+                        </label>
+                        {meetOffice && (
+                          <Input value={officeAddress} onChange={e => setOfficeAddress(e.target.value)} placeholder="Адрес офиса" className="h-8 text-sm ml-6 w-[calc(100%-24px)]" />
+                        )}
+                      </div>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">Действие: показать планировщик слотов для записи на интервью</p>
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
 
-              {/* Below threshold */}
-              <div className="space-y-3 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800">
-                <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 flex items-center gap-1">
-                  <Clock className="w-3.5 h-3.5" /> Если балл {"<"} {threshold}%
-                </p>
-                <div className="space-y-2">
-                  <Label className="text-xs">Заголовок</Label>
-                  <Input value={belowTitle} onChange={e => setBelowTitle(e.target.value)} className="h-8 text-sm" />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-xs">Текст</Label>
-                  <textarea className="w-full border rounded-lg p-2 text-sm resize-none h-16 bg-background focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none" value={belowText} onChange={e => setBelowText(e.target.value)} />
-                </div>
-              </div>
+              {/* Yellow level */}
+              <Collapsible open={yellowOpen} onOpenChange={setYellowOpen}>
+                <CollapsibleTrigger className="w-full">
+                  <div className="flex items-center justify-between p-3 rounded-lg border-2 border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/20">
+                    <div className="flex items-center gap-2">
+                      <Clock className="w-4 h-4 text-amber-600" />
+                      <span className="text-sm font-semibold text-amber-700 dark:text-amber-400">Средний кандидат</span>
+                      <span className="text-xs text-amber-600/70">{lowerThreshold}–{upperThreshold - 1}%</span>
+                    </div>
+                    <ChevronDown className={cn("w-4 h-4 text-amber-600 transition-transform", yellowOpen && "rotate-180")} />
+                  </div>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <div className="p-3 border-2 border-t-0 border-amber-200 dark:border-amber-800 rounded-b-lg space-y-3">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Заголовок</Label>
+                      <Input value={yellowTitle} onChange={e => setYellowTitle(e.target.value)} className="h-8 text-sm" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Текст</Label>
+                      <textarea className="w-full border rounded-lg p-2 text-sm resize-none h-16 bg-background focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none" value={yellowText} onChange={e => setYellowText(e.target.value)} />
+                    </div>
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
+
+              {/* Red level */}
+              <Collapsible open={redOpen} onOpenChange={setRedOpen}>
+                <CollapsibleTrigger className="w-full">
+                  <div className="flex items-center justify-between p-3 rounded-lg border-2 border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/20">
+                    <div className="flex items-center gap-2">
+                      <XCircle className="w-4 h-4 text-red-600" />
+                      <span className="text-sm font-semibold text-red-700 dark:text-red-400">Не подходит</span>
+                      <span className="text-xs text-red-600/70">{"<"}{lowerThreshold}%</span>
+                    </div>
+                    <ChevronDown className={cn("w-4 h-4 text-red-600 transition-transform", redOpen && "rotate-180")} />
+                  </div>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <div className="p-3 border-2 border-t-0 border-red-200 dark:border-red-800 rounded-b-lg space-y-3">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Заголовок</Label>
+                      <Input value={redTitle} onChange={e => setRedTitle(e.target.value)} className="h-8 text-sm" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Текст</Label>
+                      <textarea className="w-full border rounded-lg p-2 text-sm resize-none h-20 bg-background focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none" value={redText} onChange={e => setRedText(e.target.value)} />
+                    </div>
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
             </div>
           )}
 
@@ -192,7 +270,7 @@ export function PostDemoSettings() {
             <div className="flex items-center gap-3 mt-2">
               <Label className="text-xs text-muted-foreground">Тестовый балл:</Label>
               <Slider value={[previewScore]} onValueChange={([v]) => setPreviewScore(v)} min={0} max={100} step={1} className="w-32" />
-              <span className={cn("text-sm font-bold", previewScore >= threshold ? "text-emerald-600" : "text-amber-600")}>{previewScore}%</span>
+              <span className={cn("text-sm font-bold", previewLevel === "green" ? "text-emerald-600" : previewLevel === "yellow" ? "text-amber-600" : "text-red-600")}>{previewScore}%</span>
             </div>
           )}
         </CardHeader>
@@ -200,10 +278,10 @@ export function PostDemoSettings() {
           <div className="rounded-xl border overflow-hidden" style={{ backgroundColor: "#f8fafc" }}>
             <div className="p-6 text-center space-y-4 max-w-sm mx-auto">
               {mode === "auto" ? (
-                isAbove ? (
+                previewLevel === "green" ? (
                   <>
                     <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto" />
-                    <h3 className="text-lg font-bold text-gray-900">{aboveTitle}</h3>
+                    <h3 className="text-lg font-bold text-gray-900">{greenTitle}</h3>
                     <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
                       <Sparkles className="w-4 h-4 text-amber-500" />
                       AI-скоринг: <span className="font-bold text-emerald-600">{previewScore}%</span>
@@ -220,16 +298,25 @@ export function PostDemoSettings() {
                       <Calendar className="w-4 h-4 mr-1.5" /> Выбрать время
                     </div>
                   </>
-                ) : (
+                ) : previewLevel === "yellow" ? (
                   <>
                     <Clock className="w-12 h-12 text-amber-500 mx-auto" />
-                    <h3 className="text-lg font-bold text-gray-900">{belowTitle}</h3>
+                    <h3 className="text-lg font-bold text-gray-900">{yellowTitle}</h3>
                     <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
                       <Sparkles className="w-4 h-4 text-amber-500" />
                       AI-скоринг: <span className="font-bold text-amber-600">{previewScore}%</span>
-                      <span className="text-xs">(порог: {threshold}%)</span>
                     </div>
-                    <p className="text-sm text-gray-500">{belowText}</p>
+                    <p className="text-sm text-gray-500">{yellowText}</p>
+                  </>
+                ) : (
+                  <>
+                    <XCircle className="w-12 h-12 text-red-400 mx-auto" />
+                    <h3 className="text-lg font-bold text-gray-900">{redTitle}</h3>
+                    <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
+                      <Sparkles className="w-4 h-4 text-amber-500" />
+                      AI-скоринг: <span className="font-bold text-red-600">{previewScore}%</span>
+                    </div>
+                    <p className="text-sm text-gray-500">{redText}</p>
                   </>
                 )
               ) : (

@@ -145,7 +145,9 @@ export default function VacancyPage() {
       if (branding.color) setBrandColor(branding.color)
       if (branding.slogan) setBrandSlogan(branding.slogan)
       if (branding.logo) setBrandLogo(branding.logo)
-      if (branding.externalUrl) setBrandExternalUrl(branding.externalUrl)
+      if (branding.domainLevel) setBrandDomainLevel(branding.domainLevel as "free" | "subdomain" | "custom")
+      if (branding.companySlug) setBrandCompanySlug(branding.companySlug)
+      if (branding.customDomain) setBrandCustomDomain(branding.customDomain)
     }
   }, [apiVacancy])
 
@@ -174,7 +176,10 @@ export default function VacancyPage() {
   const [brandColor, setBrandColor] = useState("#3B82F6")
   const [brandSlogan, setBrandSlogan] = useState("")
   const [brandLogo, setBrandLogo] = useState("")
-  const [brandExternalUrl, setBrandExternalUrl] = useState("")
+  const [brandDomainLevel, setBrandDomainLevel] = useState<"free" | "subdomain" | "custom">("free")
+  const [brandCompanySlug, setBrandCompanySlug] = useState("")
+  const [brandCustomDomain, setBrandCustomDomain] = useState("")
+  const [editingSlug, setEditingSlug] = useState(false)
   const [brandSaving, setBrandSaving] = useState(false)
   const [activeTab, setActiveTab] = useState("candidates")
   const [anPeriod, setAnPeriod] = useState("all")
@@ -304,7 +309,7 @@ export default function VacancyPage() {
     setMessageLogs(prev => [...prev, log])
   }
 
-  const saveBranding = async (updates?: { companyName?: string; color?: string; slogan?: string; logo?: string; externalUrl?: string }) => {
+  const saveBranding = async (updates?: { companyName?: string; color?: string; slogan?: string; logo?: string }) => {
     setBrandSaving(true)
     const existing = (apiVacancy?.descriptionJson as Record<string, unknown>) || {}
     const branding = {
@@ -312,7 +317,9 @@ export default function VacancyPage() {
       color: updates?.color ?? brandColor,
       slogan: updates?.slogan ?? brandSlogan,
       logo: updates?.logo ?? brandLogo,
-      externalUrl: updates?.externalUrl ?? brandExternalUrl,
+      domainLevel: brandDomainLevel,
+      companySlug: brandCompanySlug,
+      customDomain: brandCustomDomain,
     }
     try {
       await fetch(`/api/modules/hr/vacancies/${id}`, {
@@ -487,9 +494,17 @@ export default function VacancyPage() {
 
   const vacancyTitle = apiVacancy?.title ?? "Вакансия"
   const vacancySlugOrId = apiVacancy?.slug || id
-  const publicPageOrigin = typeof window !== "undefined" ? window.location.origin : "https://mykomanda.ru"
-  const publicPageUrl = `${publicPageOrigin}/vacancy/${vacancySlugOrId}`
-  const externalPageUrl = brandExternalUrl ? `${brandExternalUrl}${brandExternalUrl.includes("?") ? "&" : "?"}utm_source=company24&utm_medium=redirect&utm_campaign=${vacancySlugOrId}` : ""
+  const companySlugDisplay = brandCompanySlug || brandCompanyName.toLowerCase()
+    .replace(/[а-яё]/g, (c) => {
+      const m: Record<string, string> = { а:"a",б:"b",в:"v",г:"g",д:"d",е:"e",ё:"yo",ж:"zh",з:"z",и:"i",й:"y",к:"k",л:"l",м:"m",н:"n",о:"o",п:"p",р:"r",с:"s",т:"t",у:"u",ф:"f",х:"h",ц:"ts",ч:"ch",ш:"sh",щ:"shch",ъ:"",ы:"y",ь:"",э:"e",ю:"yu",я:"ya" }
+      return m[c] || c
+    })
+    .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "company"
+  const publicPageUrl = brandDomainLevel === "custom" && brandCustomDomain
+    ? `https://${brandCustomDomain}/v/${vacancySlugOrId}`
+    : brandDomainLevel === "subdomain"
+    ? `https://${companySlugDisplay}.company24.pro/v/${vacancySlugOrId}`
+    : `https://company24.pro/c/${companySlugDisplay}/${vacancySlugOrId}`
 
   // ── Loading / 404 guard ────────────────────────────────────
   const isLoadingVacancy = vacancyLoading || (!apiVacancy && !vacancyError)
@@ -902,32 +917,9 @@ export default function VacancyPage() {
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   {/* Левая колонка */}
                   <div className="space-y-6">
-                    {/* Публичная страница вакансии */}
                     <div>
-                      <h3 className="text-lg font-semibold text-foreground mb-1">Публичная страница вакансии</h3>
-                      <p className="text-sm text-muted-foreground mb-3">Ссылка для кандидатов на публичную страницу вакансии</p>
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/50 border text-xs font-mono text-muted-foreground">
-                          <Globe className="w-3.5 h-3.5 shrink-0" />
-                          <span className="truncate flex-1">{publicPageUrl}</span>
-                          <button className="shrink-0 text-muted-foreground hover:text-primary" onClick={() => { navigator.clipboard.writeText(publicPageUrl); toast.success("Ссылка скопирована") }}>
-                            <Copy className="w-3.5 h-3.5" />
-                          </button>
-                          <Button variant="outline" size="sm" className="h-7 text-xs gap-1 shrink-0" onClick={() => window.open(`/vacancy/${vacancySlugOrId}`, "_blank")}>
-                            <Globe className="w-3 h-3" />
-                            Открыть
-                          </Button>
-                        </div>
-                        {externalPageUrl && (
-                          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 text-xs font-mono text-blue-700 dark:text-blue-400">
-                            <ExternalLink className="w-3.5 h-3.5 shrink-0" />
-                            <span className="truncate flex-1">{externalPageUrl}</span>
-                            <button className="shrink-0 text-blue-500 hover:text-blue-700" onClick={() => { navigator.clipboard.writeText(externalPageUrl); toast.success("Ссылка скопирована") }}>
-                              <Copy className="w-3 h-3" />
-                            </button>
-                          </div>
-                        )}
-                      </div>
+                      <h3 className="text-lg font-semibold text-foreground mb-1">Публичная страница</h3>
+                      <p className="text-sm text-muted-foreground">Настройка страницы вакансии для кандидатов</p>
                     </div>
 
                     {/* Поля мини-формы */}
@@ -1023,15 +1015,119 @@ export default function VacancyPage() {
                             className="h-9 text-sm"
                           />
                         </div>
-                        <div className="space-y-1.5">
-                          <Label className="text-xs">Ссылка на страницу вакансии на вашем сайте</Label>
-                          <Input
-                            value={brandExternalUrl}
-                            onChange={(e) => setBrandExternalUrl(e.target.value)}
-                            placeholder="https://example.com/careers/manager"
-                            className="h-9 text-sm"
-                          />
-                          <p className="text-xs text-muted-foreground">Если вы разместили форму на своём сайте — укажите ссылку. UTM-метки добавятся автоматически.</p>
+                        {/* Домен для публичных страниц */}
+                        <div className="space-y-3">
+                          <Label className="text-xs font-medium">Домен для публичных страниц</Label>
+
+                          {/* Free */}
+                          <label className={cn("flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors", brandDomainLevel === "free" ? "border-primary bg-primary/5" : "hover:bg-muted/50")}>
+                            <input type="radio" name="domainLevel" checked={brandDomainLevel === "free"} onChange={() => setBrandDomainLevel("free")} className="mt-0.5" />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium">Бесплатный</p>
+                              <p className="text-xs text-muted-foreground mt-0.5">
+                                Ваши ссылки: <span className="font-mono text-foreground">company24.pro/c/{companySlugDisplay}/...</span>
+                              </p>
+                              {brandDomainLevel === "free" && (
+                                <div className="flex items-center gap-2 mt-2">
+                                  <span className="text-xs text-muted-foreground">Slug:</span>
+                                  {editingSlug ? (
+                                    <Input
+                                      value={brandCompanySlug}
+                                      onChange={(e) => setBrandCompanySlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
+                                      onBlur={() => setEditingSlug(false)}
+                                      onKeyDown={(e) => e.key === "Enter" && setEditingSlug(false)}
+                                      className="h-7 text-xs font-mono w-32"
+                                      autoFocus
+                                    />
+                                  ) : (
+                                    <>
+                                      <span className="text-xs font-mono text-foreground">{companySlugDisplay}</span>
+                                      <button className="text-xs text-primary hover:underline" onClick={() => { setBrandCompanySlug(companySlugDisplay); setEditingSlug(true) }}>Изменить</button>
+                                    </>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </label>
+
+                          {/* Subdomain */}
+                          <label className={cn("flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors", brandDomainLevel === "subdomain" ? "border-primary bg-primary/5" : "hover:bg-muted/50")}>
+                            <input type="radio" name="domainLevel" checked={brandDomainLevel === "subdomain"} onChange={() => setBrandDomainLevel("subdomain")} className="mt-0.5" />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <p className="text-sm font-medium">Поддомен Company24</p>
+                                <span className="text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 rounded-full px-2 py-0.5">Тариф Бизнес</span>
+                              </div>
+                              <p className="text-xs text-muted-foreground mt-0.5">
+                                Ваши ссылки: <span className="font-mono text-foreground">{companySlugDisplay}.company24.pro/v/...</span>
+                              </p>
+                              {brandDomainLevel === "subdomain" && (
+                                <div className="mt-2 space-y-1.5">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs text-muted-foreground">Ваш сайт:</span>
+                                    <Input
+                                      value={brandCustomDomain}
+                                      onChange={(e) => {
+                                        setBrandCustomDomain(e.target.value)
+                                        const domain = e.target.value.replace(/^(https?:\/\/)?(www\.)?/, "").split("/")[0].split(".")[0]
+                                        if (domain) setBrandCompanySlug(domain.toLowerCase().replace(/[^a-z0-9-]/g, ""))
+                                      }}
+                                      placeholder="orlink.ru"
+                                      className="h-7 text-xs font-mono w-40"
+                                    />
+                                  </div>
+                                  <p className="text-[11px] text-muted-foreground">
+                                    Ваш поддомен: <span className="font-mono text-foreground">{companySlugDisplay}.company24.pro</span>
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          </label>
+
+                          {/* Custom domain */}
+                          <label className={cn("flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors", brandDomainLevel === "custom" ? "border-primary bg-primary/5" : "hover:bg-muted/50")}>
+                            <input type="radio" name="domainLevel" checked={brandDomainLevel === "custom"} onChange={() => setBrandDomainLevel("custom")} className="mt-0.5" />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <p className="text-sm font-medium">Свой домен</p>
+                                <span className="text-[10px] bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300 rounded-full px-2 py-0.5">Тариф Масштаб</span>
+                              </div>
+                              {brandDomainLevel === "custom" && (
+                                <div className="mt-2 space-y-2">
+                                  <Input
+                                    value={brandCustomDomain}
+                                    onChange={(e) => setBrandCustomDomain(e.target.value)}
+                                    placeholder="careers.orlink.ru"
+                                    className="h-8 text-xs font-mono"
+                                  />
+                                  {brandCustomDomain && (
+                                    <>
+                                      <p className="text-[11px] text-muted-foreground">
+                                        Добавьте CNAME запись: <span className="font-mono text-foreground">{brandCustomDomain}</span> → <span className="font-mono text-foreground">company24.pro</span>
+                                      </p>
+                                      <div className="flex items-center gap-2">
+                                        <Badge variant="outline" className="text-[10px] h-5 text-muted-foreground">Не проверен</Badge>
+                                        <Button variant="outline" size="sm" className="h-6 text-[10px] px-2" onClick={() => toast.info("Проверка DNS (скоро)")}>Проверить DNS</Button>
+                                      </div>
+                                    </>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </label>
+
+                          {/* Ваша ссылка */}
+                          <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-muted/50 border text-xs font-mono text-muted-foreground mt-1">
+                            <Globe className="w-3.5 h-3.5 shrink-0 text-primary" />
+                            <span className="truncate flex-1">{publicPageUrl}</span>
+                            <button className="shrink-0 text-muted-foreground hover:text-primary" onClick={() => { navigator.clipboard.writeText(publicPageUrl); toast.success("Ссылка скопирована") }}>
+                              <Copy className="w-3.5 h-3.5" />
+                            </button>
+                            <Button variant="outline" size="sm" className="h-7 text-xs gap-1 shrink-0" onClick={() => window.open(`/vacancy/${vacancySlugOrId}`, "_blank")}>
+                              <Globe className="w-3 h-3" />
+                              Открыть
+                            </Button>
+                          </div>
                         </div>
                         {/* Mini preview */}
                         <div className="rounded-lg border p-4 bg-muted/30">

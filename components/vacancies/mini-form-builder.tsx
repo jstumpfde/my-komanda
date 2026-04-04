@@ -339,38 +339,36 @@ export function MiniFormBuilder({ vacancyId, descriptionJson }: MiniFormBuilderP
             </DndContext>
           </div>
 
-          {/* Кнопка добавления */}
-          <div className="mt-3">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="gap-1.5 w-auto px-4 h-9">
-                <Plus className="w-3.5 h-3.5" />
-                Добавить поле
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-56">
-              {PRESET_FIELDS.map((preset) => {
-                const exists = fields.some((f) => f.label === preset.label)
-                return (
-                  <DropdownMenuItem
-                    key={preset.label}
-                    disabled={exists}
-                    onClick={() => addPresetField(preset)}
-                  >
-                    {preset.label}
-                    {exists && <span className="ml-auto text-xs text-muted-foreground">добавлено</span>}
-                  </DropdownMenuItem>
-                )
-              })}
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => setShowCustomDialog(true)}>
-                <Plus className="w-3.5 h-3.5 mr-2" />
-                Своё поле…
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          </div>
-          <div className="flex justify-end mt-4">
+          {/* Кнопки: добавить + сохранить */}
+          <div className="flex items-center justify-between mt-3">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-1.5 px-4 h-8 text-xs">
+                  <Plus className="w-3.5 h-3.5" />
+                  Добавить поле
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-56">
+                {PRESET_FIELDS.map((preset) => {
+                  const exists = fields.some((f) => f.label === preset.label)
+                  return (
+                    <DropdownMenuItem
+                      key={preset.label}
+                      disabled={exists}
+                      onClick={() => addPresetField(preset)}
+                    >
+                      {preset.label}
+                      {exists && <span className="ml-auto text-xs text-muted-foreground">добавлено</span>}
+                    </DropdownMenuItem>
+                  )
+                })}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => setShowCustomDialog(true)}>
+                  <Plus className="w-3.5 h-3.5 mr-2" />
+                  Своё поле…
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <Button size="sm" className="gap-1.5 h-8 text-xs" onClick={saveFields} disabled={saving}>
               {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
               Сохранить
