@@ -181,6 +181,32 @@
       },
       "createdAt": "2026-04-04T14:11:55.791Z",
       "domain": "hive-mind"
+    },
+    "hive-worker-1775313757441-d3lv": {
+      "agentId": "hive-worker-1775313757441-d3lv",
+      "agentType": "worker",
+      "status": "idle",
+      "health": 1,
+      "taskCount": 0,
+      "config": {
+        "role": "worker",
+        "hiveRole": "worker"
+      },
+      "createdAt": "2026-04-04T14:42:37.441Z",
+      "domain": "hive-mind"
+    },
+    "hive-worker-1775314940619-prak": {
+      "agentId": "hive-worker-1775314940619-prak",
+      "agentType": "worker",
+      "status": "idle",
+      "health": 1,
+      "taskCount": 0,
+      "config": {
+        "role": "worker",
+        "hiveRole": "worker"
+      },
+      "createdAt": "2026-04-04T15:02:20.619Z",
+      "domain": "hive-mind"
     }
   }
 }

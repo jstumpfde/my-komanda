@@ -112,20 +112,24 @@ export function KanbanBoard({ settings, viewMode, onViewModeChange, columns = []
 
       {/* Kanban View — no drag-and-drop */}
       {viewMode === "kanban" && (
-        <div className="overflow-x-auto pb-4 -mx-4 px-4 sm:mx-0 sm:px-0">
-          <div className="flex gap-3">
-            {columns.map((column) => {
+        <div className={cn("pb-4 -mx-4 px-4 sm:mx-0 sm:px-0", columns.length > 6 && "overflow-x-auto")}>
+          <div className={cn("flex gap-3", columns.length <= 6 ? "w-full" : "flex-nowrap")}>
+            {columns.map((column, colIndex) => {
               const isDecision = HR_DECISION_COLUMNS.includes(column.id)
+              const isLastColumn = colIndex === columns.length - 1
 
               return (
                 <div
                   key={column.id}
-                  className="flex flex-col flex-1 min-w-[220px] rounded-xl"
+                  className={cn(
+                    "flex flex-col rounded-xl",
+                    columns.length <= 6 ? "flex-1 min-w-[180px]" : "min-w-[200px] flex-shrink-0"
+                  )}
                 >
                   {/* Column Header */}
-                  <div className="mb-3 rounded-xl overflow-hidden">
+                  <div className={cn("mb-3 rounded-xl overflow-visible", isLastColumn && onAddCustomColumn && "group relative")}>
                     <div
-                      className="flex items-center justify-between px-3.5 py-2.5"
+                      className="flex items-center justify-between px-3.5 py-2.5 rounded-xl"
                       style={{ background: `linear-gradient(135deg, ${column.colorFrom}, ${column.colorTo})` }}
                     >
                       <div className="flex items-center gap-2">
@@ -140,25 +144,24 @@ export function KanbanBoard({ settings, viewMode, onViewModeChange, columns = []
                           </span>
                         )}
                       </div>
-                      <div className="flex items-center gap-1">
-                        {onAddCustomColumn && column.id === columns[columns.length - 1]?.id && (
-                          <button
-                            type="button"
-                            className="w-6 h-6 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center transition-colors"
-                            onClick={() => setAddColOpen(true)}
-                          >
-                            <Plus className="w-3.5 h-3.5 text-white" />
-                          </button>
-                        )}
-                        <ColumnColorPicker
-                          colorFrom={column.colorFrom}
-                          colorTo={column.colorTo}
-                          onColorChange={(from, to) => handleColorChange(column.id, from, to)}
-                          title={column.title}
-                          onTitleChange={(t) => handleTitleChange(column.id, t)}
-                        />
-                      </div>
+                      <ColumnColorPicker
+                        colorFrom={column.colorFrom}
+                        colorTo={column.colorTo}
+                        onColorChange={(from, to) => handleColorChange(column.id, from, to)}
+                        title={column.title}
+                        onTitleChange={(t) => handleTitleChange(column.id, t)}
+                      />
                     </div>
+                    {/* Plus button — right edge of last column header, visible on hover */}
+                    {isLastColumn && onAddCustomColumn && (
+                      <button
+                        type="button"
+                        className="absolute right-[-14px] top-1/2 -translate-y-1/2 z-10 w-7 h-7 rounded-full bg-background border border-border shadow-sm hover:bg-muted flex items-center justify-center transition-all opacity-0 group-hover:opacity-100"
+                        onClick={() => setAddColOpen(true)}
+                      >
+                        <Plus className="w-4 h-4 text-muted-foreground" />
+                      </button>
+                    )}
                   </div>
 
                   {/* Cards */}

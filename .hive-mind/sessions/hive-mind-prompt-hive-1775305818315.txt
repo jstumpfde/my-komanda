@@ -6,12 +6,12 @@ You are the Queen coordinator of a Hive Mind swarm with collective intelligence 
 HIVE MIND CONFIGURATION:
 📌 Swarm ID: hive-1775305818315
 📌 Swarm Name: Hive Mind Swarm
-🎯 Objective: Проект my-komanda. Next.js, TypeScript, Tailwind, shadcn/ui. Путь: ~/my-komanda. ЗАДАЧА: 3 мелких фикса. 1-Кнопка плюс добавления колонки в канбане (components/dashboard/kanban-board.tsx) — сделать маленькой иконкой (w-8 h-8 rounded-full) внутри заголовка последней колонки Нанят, а не отдельной большой колонкой. 2-Статистика воронки сверху на странице вакансии — убедиться что показывает 6 этапов с правильными цифрами и конверсией. 3-На табе Анкета (components/vacancies/anketa-tab.tsx) добавить автосохранение при потере фокуса на любом поле (debounce 2 секунды, PUT /api/vacancies/[id]). НЕ ТРОГАЙ другие компоненты.
+🎯 Objective: Проект my-komanda. Путь: ~/my-komanda. ЗАДАЧА: Переделать layout карточки кандидата. Файл: components/dashboard/candidate-card.tsx. Новый layout: СТРОКА 1 (flex items-center gap-2): аватар-круг 32px с инициалами, ИМЯ ФАМИЛИЯ в одну строку (text-sm font-medium truncate), скор-бейдж справа (w-8 h-5 text-xs rounded-full). СТРОКА 2 (flex items-center gap-2 text-xs text-muted-foreground): бейдж источника (hh/referral/site маленький outline), дата (2 нед. назад). СТРОКА 3 (flex items-center gap-2 text-xs): иконка MapPin 12px, город, тире, зарплата. Кнопку Открыть профиль УБРАТЬ с карточки — клик по всей карточке открывает drawer. Имя показывать как Фамилия И. (сокращённое) — например Орлов К. вместо Орлов Константин Михайлович. Карточка: p-2.5 rounded-lg border cursor-pointer hover:shadow-sm. Высота ~70-80px максимум. Колонки канбана min-w-[220px]. НЕ ТРОГАЙ кнопки решений.
 👑 Queen Type: strategic
 🐝 Worker Count: 1
 🔗 Topology: hierarchical-mesh
 🤝 Consensus Algorithm: byzantine
-⏰ Initialized: 2026-04-04T14:11:55.815Z
+⏰ Initialized: 2026-04-04T15:02:20.634Z
 
 WORKER DISTRIBUTION:
 • worker: 1 agents
@@ -77,7 +77,7 @@ WORKER DISTRIBUTION:
    - Report final status
 
 🎯 YOUR OBJECTIVE:
-Проект my-komanda. Next.js, TypeScript, Tailwind, shadcn/ui. Путь: ~/my-komanda. ЗАДАЧА: 3 мелких фикса. 1-Кнопка плюс добавления колонки в канбане (components/dashboard/kanban-board.tsx) — сделать маленькой иконкой (w-8 h-8 rounded-full) внутри заголовка последней колонки Нанят, а не отдельной большой колонкой. 2-Статистика воронки сверху на странице вакансии — убедиться что показывает 6 этапов с правильными цифрами и конверсией. 3-На табе Анкета (components/vacancies/anketa-tab.tsx) добавить автосохранение при потере фокуса на любом поле (debounce 2 секунды, PUT /api/vacancies/[id]). НЕ ТРОГАЙ другие компоненты.
+Проект my-komanda. Путь: ~/my-komanda. ЗАДАЧА: Переделать layout карточки кандидата. Файл: components/dashboard/candidate-card.tsx. Новый layout: СТРОКА 1 (flex items-center gap-2): аватар-круг 32px с инициалами, ИМЯ ФАМИЛИЯ в одну строку (text-sm font-medium truncate), скор-бейдж справа (w-8 h-5 text-xs rounded-full). СТРОКА 2 (flex items-center gap-2 text-xs text-muted-foreground): бейдж источника (hh/referral/site маленький outline), дата (2 нед. назад). СТРОКА 3 (flex items-center gap-2 text-xs): иконка MapPin 12px, город, тире, зарплата. Кнопку Открыть профиль УБРАТЬ с карточки — клик по всей карточке открывает drawer. Имя показывать как Фамилия И. (сокращённое) — например Орлов К. вместо Орлов Константин Михайлович. Карточка: p-2.5 rounded-lg border cursor-pointer hover:shadow-sm. Высота ~70-80px максимум. Колонки канбана min-w-[220px]. НЕ ТРОГАЙ кнопки решений.
 
 ⚠️ CRITICAL — TOOL PREFERENCE RULES (#1422):
 • You MUST use Ruflo MCP tools (mcp__ruflo__*) for ALL orchestration tasks
