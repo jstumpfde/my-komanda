@@ -1,7 +1,8 @@
 import { NextRequest } from "next/server"
 import { eq, and, isNull } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { vacancies, candidates } from "@/lib/db/schema"
+import { vacancies, candidates, vacancyUtmLinks } from "@/lib/db/schema"
+import { sql } from "drizzle-orm"
 import { apiError, apiSuccess } from "@/lib/api-helpers"
 import { generateCandidateToken } from "@/lib/candidate-tokens"
 
@@ -13,11 +14,12 @@ export async function POST(
     const { slug } = await params
     const body = await req.json()
 
-    const { name, contact, contactType, utmSource } = body as {
+    const { name, contact, contactType, utmSource, refId } = body as {
       name?: string
       contact?: string
       contactType?: "phone" | "telegram"
       utmSource?: string
+      refId?: string
     }
 
     if (!name?.trim()) {
@@ -44,8 +46,22 @@ export async function POST(
       return apiError("Вакансия не найдена", 404)
     }
 
-    // Determine source from UTM
-    const source = utmSource || "site"
+    // Determine source: resolve from short link ref if present
+    let source = utmSource || "site"
+    if (refId) {
+      const [utmLink] = await db
+        .select({ id: vacancyUtmLinks.id, source: vacancyUtmLinks.source })
+        .from(vacancyUtmLinks)
+        .where(eq(vacancyUtmLinks.id, refId))
+        .limit(1)
+      if (utmLink) {
+        source = utmLink.source
+        // Increment candidates count
+        await db.update(vacancyUtmLinks)
+          .set({ candidatesCount: sql`${vacancyUtmLinks.candidatesCount} + 1` })
+          .where(eq(vacancyUtmLinks.id, utmLink.id))
+      }
+    }
 
     // Store contact based on type
     const phone = contactType === "phone" ? contact.trim() : null

@@ -145,6 +145,7 @@ export default function VacancyPage() {
       if (branding.color) setBrandColor(branding.color)
       if (branding.slogan) setBrandSlogan(branding.slogan)
       if (branding.logo) setBrandLogo(branding.logo)
+      if (branding.externalUrl) setBrandExternalUrl(branding.externalUrl)
     }
   }, [apiVacancy])
 
@@ -173,6 +174,7 @@ export default function VacancyPage() {
   const [brandColor, setBrandColor] = useState("#3B82F6")
   const [brandSlogan, setBrandSlogan] = useState("")
   const [brandLogo, setBrandLogo] = useState("")
+  const [brandExternalUrl, setBrandExternalUrl] = useState("")
   const [brandSaving, setBrandSaving] = useState(false)
   const [activeTab, setActiveTab] = useState("candidates")
   const [anPeriod, setAnPeriod] = useState("all")
@@ -302,7 +304,7 @@ export default function VacancyPage() {
     setMessageLogs(prev => [...prev, log])
   }
 
-  const saveBranding = async (updates?: { companyName?: string; color?: string; slogan?: string; logo?: string }) => {
+  const saveBranding = async (updates?: { companyName?: string; color?: string; slogan?: string; logo?: string; externalUrl?: string }) => {
     setBrandSaving(true)
     const existing = (apiVacancy?.descriptionJson as Record<string, unknown>) || {}
     const branding = {
@@ -310,6 +312,7 @@ export default function VacancyPage() {
       color: updates?.color ?? brandColor,
       slogan: updates?.slogan ?? brandSlogan,
       logo: updates?.logo ?? brandLogo,
+      externalUrl: updates?.externalUrl ?? brandExternalUrl,
     }
     try {
       await fetch(`/api/modules/hr/vacancies/${id}`, {
@@ -483,6 +486,10 @@ export default function VacancyPage() {
   const statusCfg = STATUS_CONFIG[status]
 
   const vacancyTitle = apiVacancy?.title ?? "Вакансия"
+  const vacancySlugOrId = apiVacancy?.slug || id
+  const publicPageOrigin = typeof window !== "undefined" ? window.location.origin : "https://mykomanda.ru"
+  const publicPageUrl = `${publicPageOrigin}/vacancy/${vacancySlugOrId}`
+  const externalPageUrl = brandExternalUrl ? `${brandExternalUrl}${brandExternalUrl.includes("?") ? "&" : "?"}utm_source=company24&utm_medium=redirect&utm_campaign=${vacancySlugOrId}` : ""
 
   // ── Loading / 404 guard ────────────────────────────────────
   const isLoadingVacancy = vacancyLoading || (!apiVacancy && !vacancyError)
@@ -648,6 +655,9 @@ export default function VacancyPage() {
 
               <TabsContent value="anketa">
                 <AnketaTab vacancyId={id} descriptionJson={apiVacancy?.descriptionJson} />
+                <div className="mt-6">
+                  <VacancyAiText vacancyId={id} descriptionJson={apiVacancy?.descriptionJson} />
+                </div>
               </TabsContent>
 
               <TabsContent value="candidates">
@@ -893,42 +903,32 @@ export default function VacancyPage() {
                   {/* Левая колонка */}
                   <div className="space-y-6">
                     {/* Публичная страница вакансии */}
-                    <Card>
-                      <CardHeader className="pb-3">
-                        <div className="flex items-center justify-between">
-                          <CardTitle className="text-base flex items-center gap-2">
-                            <Globe className="w-4 h-4" />
-                            Публичная страница вакансии
-                          </CardTitle>
-                          <div className="flex items-center gap-2">
-                            <button
-                              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors"
-                              onClick={() => {
-                                const url = `${window.location.origin}/vacancy/${id}`
-                                navigator.clipboard.writeText(url)
-                                toast.success("Ссылка скопирована")
-                              }}
-                            >
-                              <Copy className="w-3.5 h-3.5" />
-                              Скопировать ссылку
-                            </button>
-                            <Button size="sm" className="gap-1.5 h-8 text-xs" onClick={() => window.open(`/vacancy/${id}`, "_blank")}>
-                              <Globe className="w-3.5 h-3.5" />
-                              Открыть страницу
-                            </Button>
-                          </div>
-                        </div>
-                      </CardHeader>
-                      <CardContent>
+                    <div>
+                      <h3 className="text-lg font-semibold text-foreground mb-1">Публичная страница вакансии</h3>
+                      <p className="text-sm text-muted-foreground mb-3">Ссылка для кандидатов на публичную страницу вакансии</p>
+                      <div className="space-y-2">
                         <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/50 border text-xs font-mono text-muted-foreground">
                           <Globe className="w-3.5 h-3.5 shrink-0" />
-                          {typeof window !== "undefined" ? window.location.origin : "https://mykomanda.ru"}/vacancy/{id}
+                          <span className="truncate flex-1">{publicPageUrl}</span>
+                          <button className="shrink-0 text-muted-foreground hover:text-primary" onClick={() => { navigator.clipboard.writeText(publicPageUrl); toast.success("Ссылка скопирована") }}>
+                            <Copy className="w-3.5 h-3.5" />
+                          </button>
+                          <Button variant="outline" size="sm" className="h-7 text-xs gap-1 shrink-0" onClick={() => window.open(`/vacancy/${vacancySlugOrId}`, "_blank")}>
+                            <Globe className="w-3 h-3" />
+                            Открыть
+                          </Button>
                         </div>
-                      </CardContent>
-                    </Card>
-
-                    {/* AI-генерация текста вакансии */}
-                    <VacancyAiText vacancyId={id} descriptionJson={apiVacancy?.descriptionJson} />
+                        {externalPageUrl && (
+                          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 text-xs font-mono text-blue-700 dark:text-blue-400">
+                            <ExternalLink className="w-3.5 h-3.5 shrink-0" />
+                            <span className="truncate flex-1">{externalPageUrl}</span>
+                            <button className="shrink-0 text-blue-500 hover:text-blue-700" onClick={() => { navigator.clipboard.writeText(externalPageUrl); toast.success("Ссылка скопирована") }}>
+                              <Copy className="w-3 h-3" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
 
                     {/* Поля мини-формы */}
                     <MiniFormBuilder vacancyId={id} descriptionJson={apiVacancy?.descriptionJson} />
@@ -1022,6 +1022,16 @@ export default function VacancyPage() {
                             placeholder="Мы строим будущее вместе"
                             className="h-9 text-sm"
                           />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs">Ссылка на страницу вакансии на вашем сайте</Label>
+                          <Input
+                            value={brandExternalUrl}
+                            onChange={(e) => setBrandExternalUrl(e.target.value)}
+                            placeholder="https://example.com/careers/manager"
+                            className="h-9 text-sm"
+                          />
+                          <p className="text-xs text-muted-foreground">Если вы разместили форму на своём сайте — укажите ссылку. UTM-метки добавятся автоматически.</p>
                         </div>
                         {/* Mini preview */}
                         <div className="rounded-lg border p-4 bg-muted/30">

@@ -13,6 +13,7 @@ const PUBLIC_PREFIXES = [
   "/candidate/",
   "/schedule/",
   "/ref/",
+  "/v/",
   "/api/auth",
   "/api/modules",
   "/api/plans",

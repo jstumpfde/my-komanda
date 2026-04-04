@@ -1,24 +1,18 @@
 import { NextRequest } from "next/server"
 import { eq, and } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { vacancies, vacancyUtmLinks } from "@/lib/db/schema"
+import { vacancies, vacancyUtmLinks, companies } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 
-function toSlug(str: string): string {
-  return str
-    .toLowerCase()
-    .replace(/[а-яё]/g, (c) => {
-      const map: Record<string, string> = {
-        а: "a", б: "b", в: "v", г: "g", д: "d", е: "e", ё: "yo",
-        ж: "zh", з: "z", и: "i", й: "y", к: "k", л: "l", м: "m",
-        н: "n", о: "o", п: "p", р: "r", с: "s", т: "t", у: "u",
-        ф: "f", х: "h", ц: "ts", ч: "ch", ш: "sh", щ: "shch",
-        ъ: "", ы: "y", ь: "", э: "e", ю: "yu", я: "ya",
-      }
-      return map[c] || c
-    })
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "")
+function generateShortCode(companyName: string): string {
+  const prefix = (companyName || "k")[0].toLowerCase()
+  const now = new Date()
+  const year = String(now.getFullYear()).slice(-2)
+  const month = String(now.getMonth() + 1)
+  const chars = "abcdefghijklmnopqrstuvwxyz0123456789"
+  let suffix = ""
+  for (let i = 0; i < 2; i++) suffix += chars[Math.floor(Math.random() * chars.length)]
+  return `${prefix}${year}${month}${suffix}`
 }
 
 // GET — список UTM-ссылок вакансии
@@ -30,7 +24,6 @@ export async function GET(
     const user = await requireCompany()
     const { id } = await params
 
-    // Verify ownership
     const [vacancy] = await db
       .select({ id: vacancies.id })
       .from(vacancies)
@@ -51,7 +44,7 @@ export async function GET(
   }
 }
 
-// POST — создать UTM-ссылку
+// POST — создать короткую UTM-ссылку
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -60,26 +53,38 @@ export async function POST(
     const user = await requireCompany()
     const { id } = await params
 
-    // Verify ownership
     const [vacancy] = await db
-      .select({ id: vacancies.id, slug: vacancies.slug })
+      .select({ id: vacancies.id })
       .from(vacancies)
       .where(and(eq(vacancies.id, id), eq(vacancies.companyId, user.companyId)))
       .limit(1)
 
     if (!vacancy) return apiError("Vacancy not found", 404)
 
-    const body = await req.json() as {
-      source: string
-      name: string
-    }
+    const body = await req.json() as { source: string; name: string }
 
     if (!body.source || !body.name?.trim()) {
       return apiError("source and name are required", 400)
     }
 
-    const nameSlug = toSlug(body.name.trim())
-    const slug = `${body.source}-${nameSlug}-${Date.now().toString(36)}`
+    // Get company name for short code prefix
+    const [company] = await db
+      .select({ name: companies.name })
+      .from(companies)
+      .where(eq(companies.id, user.companyId))
+      .limit(1)
+
+    // Generate unique short code (retry on collision)
+    let slug = ""
+    for (let attempt = 0; attempt < 5; attempt++) {
+      slug = generateShortCode(company?.name || "")
+      const [existing] = await db
+        .select({ id: vacancyUtmLinks.id })
+        .from(vacancyUtmLinks)
+        .where(eq(vacancyUtmLinks.slug, slug))
+        .limit(1)
+      if (!existing) break
+    }
 
     const [link] = await db
       .insert(vacancyUtmLinks)

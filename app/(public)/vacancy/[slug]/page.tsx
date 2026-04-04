@@ -49,6 +49,7 @@ function VacancyPageInner({ params }: { params: Promise<{ slug: string }> }) {
   const searchParams = useSearchParams()
   const utmSource = searchParams.get("utm_source") || searchParams.get("utm") || ""
   const utmMedium = searchParams.get("utm_medium") || ""
+  const refId = searchParams.get("ref") || (typeof document !== "undefined" ? document.cookie.match(/utm_ref=([^;]+)/)?.[1] : "") || ""
 
   const [screen, setScreen] = useState<ScreenState>("loading")
   const [vacancy, setVacancy] = useState<VacancyData | null>(null)
@@ -116,7 +117,7 @@ function VacancyPageInner({ params }: { params: Promise<{ slug: string }> }) {
       const res = await fetch(`/api/public/vacancy/${slug}/apply`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, contact, contactType, utmSource, extraFields }),
+        body: JSON.stringify({ name, contact, contactType, utmSource, refId, extraFields }),
       })
       if (!res.ok) {
         const data = await res.json()

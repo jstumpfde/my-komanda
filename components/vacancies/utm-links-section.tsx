@@ -85,7 +85,7 @@ export function UtmLinksSection({ vacancyId, vacancySlug }: UtmLinksSectionProps
 
   const buildUrl = (link: UtmLink) => {
     const origin = typeof window !== "undefined" ? window.location.origin : "https://mykomanda.ru"
-    return `${origin}/vacancy/${vacancySlug}?utm_source=${link.source}&utm_medium=${link.slug}`
+    return `${origin}/v/${link.slug}`
   }
 
   const copyUrl = (link: UtmLink) => {
@@ -186,8 +186,8 @@ export function UtmLinksSection({ vacancyId, vacancySlug }: UtmLinksSectionProps
                         </td>
                         <td className="px-4 py-3 text-sm">{link.name}</td>
                         <td className="px-4 py-3">
-                          <span className="text-xs text-muted-foreground font-mono truncate max-w-[200px] block">
-                            ...?utm_source={link.source}&utm_medium={link.slug}
+                          <span className="text-xs text-primary font-mono">
+                            /v/{link.slug}
                           </span>
                         </td>
                         <td className="px-4 py-3 text-right tabular-nums font-medium">{link.clicks}</td>
