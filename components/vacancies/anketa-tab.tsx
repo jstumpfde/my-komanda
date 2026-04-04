@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useMemo } from "react"
+import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { cn } from "@/lib/utils"
 import { Progress } from "@/components/ui/progress"
 import { Input } from "@/components/ui/input"
@@ -244,6 +244,28 @@ export function AnketaTab({ vacancyId, descriptionJson }: {
     }
   }, [data, descriptionJson, vacancyId])
 
+  // ── Autosave on blur (debounce 2s) ──
+  const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const latestData = useRef(data)
+  latestData.current = data
+
+  const scheduleAutosave = useCallback(() => {
+    if (autosaveTimer.current) clearTimeout(autosaveTimer.current)
+    autosaveTimer.current = setTimeout(() => {
+      save()
+    }, 2000)
+  }, [save])
+
+  useEffect(() => {
+    return () => {
+      if (autosaveTimer.current) clearTimeout(autosaveTimer.current)
+    }
+  }, [])
+
+  const handleBlur = useCallback(() => {
+    scheduleAutosave()
+  }, [scheduleAutosave])
+
   const sectionFilled = (idx: number) => {
     switch (idx) {
       case 1: return !!(data.companyName || data.industry || data.companyCity)
@@ -260,7 +282,7 @@ export function AnketaTab({ vacancyId, descriptionJson }: {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" onBlur={handleBlur}>
       {/* Progress */}
       <div className="flex items-center gap-3">
         <Progress value={progress} className="flex-1 h-2" />

@@ -140,13 +140,24 @@ export function KanbanBoard({ settings, viewMode, onViewModeChange, columns = []
                           </span>
                         )}
                       </div>
-                      <ColumnColorPicker
-                        colorFrom={column.colorFrom}
-                        colorTo={column.colorTo}
-                        onColorChange={(from, to) => handleColorChange(column.id, from, to)}
-                        title={column.title}
-                        onTitleChange={(t) => handleTitleChange(column.id, t)}
-                      />
+                      <div className="flex items-center gap-1">
+                        {onAddCustomColumn && column.id === columns[columns.length - 1]?.id && (
+                          <button
+                            type="button"
+                            className="w-6 h-6 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center transition-colors"
+                            onClick={() => setAddColOpen(true)}
+                          >
+                            <Plus className="w-3.5 h-3.5 text-white" />
+                          </button>
+                        )}
+                        <ColumnColorPicker
+                          colorFrom={column.colorFrom}
+                          colorTo={column.colorTo}
+                          onColorChange={(from, to) => handleColorChange(column.id, from, to)}
+                          title={column.title}
+                          onTitleChange={(t) => handleTitleChange(column.id, t)}
+                        />
+                      </div>
                     </div>
                   </div>
 
@@ -172,19 +183,6 @@ export function KanbanBoard({ settings, viewMode, onViewModeChange, columns = []
               )
             })}
 
-            {/* Add custom column button */}
-            {onAddCustomColumn && (
-              <div className="flex flex-col items-center justify-start min-w-[220px] pt-1">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-10 w-10 rounded-xl border-dashed border-2 text-muted-foreground hover:text-foreground"
-                  onClick={() => setAddColOpen(true)}
-                >
-                  <Plus className="w-5 h-5" />
-                </Button>
-              </div>
-            )}
           </div>
         </div>
       )}

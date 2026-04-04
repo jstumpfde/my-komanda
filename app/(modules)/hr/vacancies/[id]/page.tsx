@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
-import { useParams } from "next/navigation"
+import { useParams, useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { useAuth, isPlatformRole } from "@/lib/auth"
 import { useVacancy } from "@/hooks/use-vacancies"
@@ -109,6 +109,7 @@ function apiCandidateToCard(c: ApiCandidate, columnId: string): Candidate {
 
 export default function VacancyPage() {
   const params = useParams()
+  const router = useRouter()
   const id = params.id as string
 
   // ── Real API data ──────────────────────────────────────────
@@ -255,6 +256,22 @@ export default function VacancyPage() {
 
   const { role } = useAuth()
   const canAdd = isPlatformRole(role)
+  const [duplicating, setDuplicating] = useState(false)
+
+  const handleDuplicate = async () => {
+    setDuplicating(true)
+    try {
+      const res = await fetch(`/api/modules/hr/vacancies/${id}/duplicate`, { method: "POST" })
+      if (!res.ok) throw new Error()
+      const data = await res.json()
+      toast.success("Копия создана")
+      router.push(`/hr/vacancies/${data.id}`)
+    } catch {
+      toast.error("Не удалось создать копию")
+    } finally {
+      setDuplicating(false)
+    }
+  }
 
   const totalCandidates = columns.reduce((acc, col) => acc + col.candidates.length, 0)
 
@@ -476,6 +493,9 @@ export default function VacancyPage() {
                   <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={() => { setStatus("draft"); toast.success("Восстановлена") }}><RotateCcw className="size-3.5" />Восстановить</Button>
                   <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs text-destructive" onClick={() => toast.error("Удаление (заглушка)")}><Trash2 className="size-3.5" />Удалить</Button>
                 </>}
+                <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs text-muted-foreground" disabled={duplicating} onClick={handleDuplicate}>
+                  {duplicating ? <Loader2 className="size-3.5 animate-spin" /> : <Copy className="size-3.5" />}Создать похожую
+                </Button>
                 {canAdd && (
                   <Button size="sm" className="h-8 gap-1.5 text-xs" onClick={() => setAddDialogOpen(true)}>
                     <Plus className="size-3.5" />Добавить
