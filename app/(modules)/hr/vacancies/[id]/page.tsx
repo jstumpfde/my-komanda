@@ -122,7 +122,10 @@ export default function VacancyPage() {
   // Sync vacancy status + custom columns from API
   useEffect(() => {
     if (apiVacancy?.status) {
-      setStatus(apiVacancy.status as VacancyStatus)
+      const s = apiVacancy.status as VacancyStatus
+      setStatus(s)
+      const isPublished = s === "published" || s === "active" || s === "closed"
+      setActiveTab(prev => prev === "anketa" || prev === "analytics" ? (isPublished ? "analytics" : "anketa") : prev)
     }
     // Load custom columns from description_json (skip hidden ones)
     const desc = apiVacancy?.descriptionJson as Record<string, unknown> | undefined
@@ -181,7 +184,8 @@ export default function VacancyPage() {
   const [brandCustomDomain, setBrandCustomDomain] = useState("")
   const [editingSlug, setEditingSlug] = useState(false)
   const [brandSaving, setBrandSaving] = useState(false)
-  const [activeTab, setActiveTab] = useState("candidates")
+  const defaultTab = (status === "published" || status === "active" || status === "closed") ? "analytics" : "anketa"
+  const [activeTab, setActiveTab] = useState(defaultTab)
   const [anPeriod, setAnPeriod] = useState("all")
   const [anSources, setAnSources] = useState<string[]>([])
   const [anCities, setAnCities] = useState<string[]>([])
@@ -602,11 +606,23 @@ export default function VacancyPage() {
             <Tabs value={activeTab} onValueChange={setActiveTab}>
               <div className="flex items-center justify-between gap-3 mb-3 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
                 <TabsList className="shrink-0">
-                  <TabsTrigger value="anketa" className="gap-1.5"><ClipboardList className="w-3.5 h-3.5" />Анкета</TabsTrigger>
-                  <TabsTrigger value="candidates" className="gap-1.5"><Kanban className="w-3.5 h-3.5" />Кандидаты</TabsTrigger>
-                  <TabsTrigger value="course" className="gap-1.5"><BookOpen className="w-3.5 h-3.5" />Демонстрация</TabsTrigger>
-                  <TabsTrigger value="analytics" className="gap-1.5"><BarChart3 className="w-3.5 h-3.5" />Аналитика</TabsTrigger>
-                  <TabsTrigger value="automation" className="gap-1.5"><Zap className="w-3.5 h-3.5" />Автоматизация</TabsTrigger>
+                  {(status === "published" || status === "active" || status === "closed" ? [
+                    { value: "analytics", icon: BarChart3, label: "Аналитика" },
+                    { value: "candidates", icon: Kanban, label: "Кандидаты" },
+                    { value: "course", icon: BookOpen, label: "Демонстрация" },
+                    { value: "anketa", icon: ClipboardList, label: "Анкета" },
+                    { value: "automation", icon: Zap, label: "Автоматизация" },
+                  ] : [
+                    { value: "anketa", icon: ClipboardList, label: "Анкета" },
+                    { value: "course", icon: BookOpen, label: "Демонстрация" },
+                    { value: "candidates", icon: Kanban, label: "Кандидаты" },
+                    { value: "analytics", icon: BarChart3, label: "Аналитика" },
+                    { value: "automation", icon: Zap, label: "Автоматизация" },
+                  ]).map(tab => (
+                    <TabsTrigger key={tab.value} value={tab.value} className="gap-1.5">
+                      <tab.icon className="w-3.5 h-3.5" />{tab.label}
+                    </TabsTrigger>
+                  ))}
                   <TabsTrigger value="settings" className="gap-1.5"><Settings className="w-3.5 h-3.5" />Настройки</TabsTrigger>
                 </TabsList>
 
@@ -748,7 +764,7 @@ export default function VacancyPage() {
                     e.count++; e.scoreSum += c.score
                     srcMap.set(c.source, e)
                   })
-                  const srcColors: Record<string, string> = { "hh.ru": "#3b82f6", "Avito": "#06b6d4", "LinkedIn": "#8b5cf6", "Telegram": "#6366f1", "Реферал": "#10b981" }
+                  const srcColors: Record<string, string> = { "hh.ru": "#D6001C", "hh": "#D6001C", "Avito": "#00AAFF", "avito": "#00AAFF", "SuperJob": "#0066CC", "superjob": "#0066CC", "Telegram": "#26A5E4", "telegram": "#26A5E4", "WhatsApp": "#25D366", "whatsapp": "#25D366", "Сайт": "#F59E0B", "site": "#F59E0B", "Реферал": "#8B5CF6", "referral": "#8B5CF6", "LinkedIn": "#0A66C2" }
                   const sourceData = Array.from(srcMap.entries()).map(([source, d]) => ({
                     source, count: d.count, avgScore: d.count > 0 ? Math.round(d.scoreSum / d.count) : 0,
                     pct: totalCandidates > 0 ? Math.round((d.count / totalCandidates) * 100) : 0,
@@ -843,7 +859,16 @@ export default function VacancyPage() {
                             <div className="w-full lg:w-1/3">
                               <ResponsiveContainer width="100%" height={200}>
                                 <PieChart>
-                                  <Pie data={sourceData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} dataKey="count" strokeWidth={2} stroke="var(--background)">
+                                  <Pie data={sourceData} cx="50%" cy="50%" innerRadius={40} outerRadius={80} dataKey="count" strokeWidth={2} stroke="var(--background)"
+                                    label={({ cx, cy, midAngle, innerRadius: ir, outerRadius: or, count }) => {
+                                      const RADIAN = Math.PI / 180
+                                      const radius = (ir + or) / 2
+                                      const x = cx + radius * Math.cos(-midAngle * RADIAN)
+                                      const y = cy + radius * Math.sin(-midAngle * RADIAN)
+                                      return <text x={x} y={y} fill="white" textAnchor="middle" dominantBaseline="central" fontSize={11} fontWeight="bold">{count}</text>
+                                    }}
+                                    labelLine={false}
+                                  >
                                     {sourceData.map((s, i) => <Cell key={i} fill={s.color} />)}
                                   </Pie>
                                   <Tooltip contentStyle={ttStyle} />

@@ -106,6 +106,7 @@ export const CourseTab = forwardRef<NotionEditorHandle, CourseTabProps>(
             onUpdate={handleUpdateDemo}
             onSaveStatusChange={onSaveStatusChange}
             hideToolbar
+            vacancyId={vacancyId}
           />
         </>
       )

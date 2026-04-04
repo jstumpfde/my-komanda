@@ -193,6 +193,7 @@ export default function DemoEditorPage() {
                     demo={demo}
                     onBack={() => {}}
                     onUpdate={handleUpdate}
+                    onOpenLibrary={() => setTemplateDialogOpen(true)}
                   />
                 ) : (
                   <div className="flex items-center justify-center h-full text-muted-foreground/40 text-sm">

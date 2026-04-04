@@ -17,7 +17,7 @@ import {
   Bold, Italic, Underline, Strikethrough, AlignLeft, AlignCenter, AlignRight,
   Heading1, Heading2, Heading3, List as ListIcon, ListOrdered, Link2, Hash, Smile,
   Type, ImageIcon, Video, Music, FileText, Info, MousePointerClick, CheckSquare,
-  ChevronLeft, ChevronRight, Mic, Highlighter,
+  ChevronLeft, ChevronRight, Mic, Highlighter, Loader2,
 } from "lucide-react"
 import { toast } from "sonner"
 import type { Demo, Block, BlockType, Lesson } from "@/lib/course-types"
@@ -53,6 +53,8 @@ interface NotionEditorProps {
   onUpdate: (demo: Demo) => void
   onSaveStatusChange?: (status: "saved" | "saving") => void
   hideToolbar?: boolean
+  vacancyId?: string
+  onOpenLibrary?: () => void
 }
 
 // ─── Slash command menu ────────────────────────────────────────────────────
@@ -70,7 +72,7 @@ const SLASH_ITEMS = [
 
 // ─── Main component ────────────────────────────────────────────────────────
 
-export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(function NotionEditorInner({ demo, onBack, onUpdate, onSaveStatusChange, hideToolbar = false }, ref) {
+export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(function NotionEditorInner({ demo, onBack, onUpdate, onSaveStatusChange, hideToolbar = false, vacancyId, onOpenLibrary }, ref) {
   const [activeLessonId, setActiveLessonId] = useState(demo.lessons[0]?.id || "")
   const [previewMode, setPreviewMode] = useState(false)
   const [previewIdx, setPreviewIdx] = useState(0)
@@ -100,13 +102,51 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
     toast.success("Сохранено")
   }, [onSaveStatusChange])
 
+  const [aiGenerating, setAiGenerating] = useState(false)
+
+  const generateWithAI = useCallback(async () => {
+    if (!vacancyId) { toast.error("Сохраните вакансию перед генерацией"); return }
+    setAiGenerating(true)
+    try {
+      const res = await fetch("/api/modules/hr/demo/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ vacancyId }),
+      })
+      if (!res.ok) throw new Error()
+      const blocks = await res.json() as Array<{ type: string; title: string; content: string; questionType?: string }>
+
+      // Convert AI blocks to lessons
+      const newLessons: Lesson[] = blocks.map((b, i) => {
+        const block = createBlock(b.type === "question" ? "task" : "text")
+        block.content = b.content
+        if (b.type === "question") {
+          block.answerType = b.questionType === "radio" ? "choice" : "long"
+        }
+        return {
+          id: `lesson-ai-${Date.now()}-${i}`,
+          title: b.title,
+          blocks: [block],
+        }
+      })
+
+      save(newLessons)
+      if (newLessons.length > 0) setActiveLessonId(newLessons[0].id)
+      toast.success(`Сгенерировано ${newLessons.length} блоков`)
+    } catch {
+      toast.error("Не удалось сгенерировать курс")
+    } finally {
+      setAiGenerating(false)
+    }
+  }, [vacancyId, save])
+
   useEffect(() => () => { if (debounceRef.current) clearTimeout(debounceRef.current) }, [])
 
   // Expose imperative handle for parent toolbar
   useImperativeHandle(ref, () => ({
     save: saveNow,
     openPreview: () => { setPreviewIdx(0); setPreviewMode(true) },
-    openLibrary: () => { /* placeholder */ },
+    openLibrary: () => onOpenLibrary?.(),
   }), [saveNow])
 
   // Lesson ops
@@ -256,11 +296,12 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
             <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8" onClick={saveNow}>
               <Save className="w-3.5 h-3.5" />Сохранить
             </Button>
-            <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8">
+            <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8" onClick={onOpenLibrary}>
               <BookOpen className="w-3.5 h-3.5" />Библиотека
             </Button>
-            <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8">
-              <Sparkles className="w-3.5 h-3.5" />AI
+            <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8" onClick={generateWithAI} disabled={aiGenerating}>
+              {aiGenerating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+              {aiGenerating ? "Генерация..." : "AI"}
             </Button>
             <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8" onClick={() => { setPreviewIdx(0); setPreviewMode(true) }}>
               <Eye className="w-3.5 h-3.5" />Превью
@@ -847,17 +888,17 @@ function NotionBlock({ block, idx, totalBlocks, isHovered, isDragging, isDragOve
         range.insertNode(br)
         range.setStartAfter(br)
         range.setEndAfter(br)
-        // At end of block the browser won't render cursor on new line
-        // without a trailing <br> sentinel — add one, cursor sits before it
+        // At end of block the browser needs something after <br> to render cursor on new line
         if (atEnd) {
-          const sentinel = document.createElement("br")
-          range.insertNode(sentinel)
-          range.setStartBefore(sentinel)
-          range.setEndBefore(sentinel)
+          const zwsp = document.createTextNode("\u200B")
+          range.insertNode(zwsp)
+          range.setStartAfter(zwsp)
+          range.setEndAfter(zwsp)
         }
       }
       sel.removeAllRanges()
       sel.addRange(range)
+      syncContent()
     }
     if (e.key === "Backspace" && block.type === "text" && editorRef.current) {
       const html = editorRef.current.innerHTML
