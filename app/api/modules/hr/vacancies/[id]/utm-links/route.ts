@@ -61,11 +61,13 @@ export async function POST(
 
     if (!vacancy) return apiError("Vacancy not found", 404)
 
-    const body = await req.json() as { source: string; name: string }
+    const body = await req.json() as { source: string; name: string; destinationUrl?: string }
 
     if (!body.source || !body.name?.trim()) {
       return apiError("source and name are required", 400)
     }
+
+    const destinationUrl = body.destinationUrl?.trim() || null
 
     // Get company name for short code prefix
     const [company] = await db
@@ -93,6 +95,7 @@ export async function POST(
         source: body.source,
         name: body.name.trim(),
         slug,
+        destinationUrl,
       })
       .returning()
 

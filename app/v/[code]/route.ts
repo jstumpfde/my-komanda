@@ -16,6 +16,7 @@ export async function GET(
         id: vacancyUtmLinks.id,
         vacancyId: vacancyUtmLinks.vacancyId,
         source: vacancyUtmLinks.source,
+        destinationUrl: vacancyUtmLinks.destinationUrl,
       })
       .from(vacancyUtmLinks)
       .where(eq(vacancyUtmLinks.slug, code))
@@ -31,16 +32,23 @@ export async function GET(
       .set({ clicks: sql`${vacancyUtmLinks.clicks} + 1` })
       .where(eq(vacancyUtmLinks.id, link.id))
 
-    // Get vacancy slug
-    const [vacancy] = await db
-      .select({ slug: vacancies.slug })
-      .from(vacancies)
-      .where(eq(vacancies.id, link.vacancyId))
-      .limit(1)
+    let redirectUrl: URL
 
-    const vacancySlug = vacancy?.slug || link.vacancyId
-    const redirectUrl = new URL(`/vacancy/${vacancySlug}`, _req.url)
-    redirectUrl.searchParams.set("ref", link.id)
+    if (link.destinationUrl) {
+      // External destination
+      redirectUrl = new URL(link.destinationUrl)
+    } else {
+      // Default: our vacancy page
+      const [vacancy] = await db
+        .select({ slug: vacancies.slug })
+        .from(vacancies)
+        .where(eq(vacancies.id, link.vacancyId))
+        .limit(1)
+
+      const vacancySlug = vacancy?.slug || link.vacancyId
+      redirectUrl = new URL(`/vacancy/${vacancySlug}`, _req.url)
+      redirectUrl.searchParams.set("ref", link.id)
+    }
 
     // Set ref cookie for 30 days
     const response = NextResponse.redirect(redirectUrl)

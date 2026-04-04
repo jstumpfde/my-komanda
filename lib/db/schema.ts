@@ -868,6 +868,7 @@ export const vacancyUtmLinks = pgTable("vacancy_utm_links", {
   source:          text("source").notNull(), // 'telegram' | 'whatsapp' | 'vk' | 'email' | 'site' | 'qr' | 'agency' | 'other'
   name:            text("name").notNull(),
   slug:            text("slug").unique().notNull(),
+  destinationUrl:  text("destination_url"),
   clicks:          integer("clicks").default(0),
   candidatesCount: integer("candidates_count").default(0),
   createdAt:       timestamp("created_at").defaultNow(),
