@@ -1,4 +1,4 @@
-export type ModuleId = 'hr' | 'marketing' | 'sales' | 'b2b' | 'ecommerce' | 'logistics'
+export type ModuleId = 'hr' | 'knowledge' | 'marketing' | 'sales' | 'b2b' | 'ecommerce' | 'logistics'
 
 export interface MenuItem {
   label: string

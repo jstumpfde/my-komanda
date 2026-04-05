@@ -68,16 +68,14 @@ export function WeekView({ currentDate, events, onSlotClick, onEventClick }: Wee
   }
 
   return (
-    <div className="flex flex-col h-full overflow-auto">
+    <div className="flex flex-col h-full overflow-auto border rounded-xl">
       {/* Header row */}
-      <div className="grid grid-cols-[60px_repeat(7,1fr)] border-b sticky top-0 bg-white z-10">
+      <div className="grid grid-cols-[60px_repeat(7,1fr)] border-b sticky top-0 bg-card z-10 rounded-t-xl">
         <div className="p-2 text-xs text-muted-foreground" />
         {days.map((day) => (
-          <div key={day.toISOString()} className="p-2 text-center border-l">
-            <div className="text-xs text-muted-foreground uppercase">
-              {format(day, "EEE", { locale: ru })}
-            </div>
-            <div className="text-sm font-semibold">{format(day, "d")}</div>
+          <div key={day.toISOString()} className="py-2.5 text-center border-l flex items-center justify-center gap-1.5">
+            <span className="text-xs text-muted-foreground uppercase">{format(day, "EEEEEE", { locale: ru })}</span>
+            <span className="text-sm font-semibold">{format(day, "d")}</span>
           </div>
         ))}
       </div>

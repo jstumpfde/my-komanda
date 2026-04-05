@@ -6,15 +6,9 @@ export type { MenuGroup }
 // Определение групп для каждого модуля (href → группа)
 const MODULE_GROUP_DEFS: Partial<Record<ModuleId, { label: string; hrefs: string[]; legacy?: boolean }[]>> = {
   hr: [
-    { label: 'Найм',          hrefs: ['/hr/overview', '/hr/overview2', '/hr/vacancies', '/hr/candidates', '/hr/funnel', '/hr/demo-editor', '/hr/calendar'] },
-    { label: 'Настройки HR',  hrefs: ['/hr/settings/notifications', '/hr/settings/schedule', '/hr/settings/funnel-stages', '/hr/settings/templates', '/hr/settings/sources'] },
-    { label: 'Адаптация',     hrefs: ['/hr/onboarding', '/hr/adaptation/plans', '/hr/adaptation/assignments', '/hr/buddy', '/hr/adaptation/gamification', '/hr/adaptation/analytics'] },
-    { label: 'Lifecycle',     hrefs: ['/hr/preboarding', '/hr/offboarding'] },
-    { label: 'Обучение',      hrefs: ['/hr/courses', '/hr/certificates'] },
-    { label: 'Развитие',      hrefs: ['/hr/talent-pool', '/hr/skills', '/hr/assessments'] },
-    { label: 'Аналитика HR',  hrefs: ['/hr/flight-risk', '/hr/pulse-surveys', '/hr/reskilling', '/hr/predictive-hiring', '/hr/analytics'] },
-    { label: 'Инструменты',   hrefs: ['/hr/marketplace', '/hr/ai-assistant'] },
-    { label: 'Обзор',         hrefs: ['/overview', '/referrals'] },
+    { label: 'Найм',       hrefs: ['/hr/dashboard', '/hr/vacancies', '/hr/candidates', '/hr/talent-pool', '/hr/calendar', '/hr/hiring-settings'] },
+    { label: 'Адаптация',  hrefs: ['/hr/onboarding', '/hr/assignments', '/hr/adaptation-analytics'] },
+    { label: 'Персонал',   hrefs: ['/hr/employees', '/hr/courses', '/hr/development', '/hr/retention', '/hr/people-analytics'] },
   ],
   marketing: [
     { label: 'Контент',    hrefs: ['/marketing/dashboard', '/marketing/content', '/marketing/landings'] },

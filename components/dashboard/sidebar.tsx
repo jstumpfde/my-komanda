@@ -11,6 +11,7 @@ import {
   Settings, Shield, ChevronRight, ChevronDown, LogOut, Calendar, CalendarDays, Share2, ShieldCheck,
   ClipboardList, ClipboardCheck, UserCheck2, Trophy, HeartHandshake, BookOpen, Award, Zap,
   AlertTriangle, UserMinus, Brain, Radar, Bot, Store, TrendingDown, Handshake,
+  BookMarked, GraduationCap, Target, PieChart,
   type LucideIcon,
 } from "lucide-react"
 import {
@@ -45,6 +46,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   Settings, Shield, Calendar, CalendarDays, Share2, ShieldCheck, ClipboardList, ClipboardCheck,
   UserCheck2, Trophy, BarChart2, HeartHandshake, BookOpen, Award, Zap, ChevronRight,
   AlertTriangle, UserMinus, Brain, Radar, Bot, Store, TrendingDown, Handshake,
+  BookMarked, GraduationCap, Target, PieChart,
 }
 function getIcon(name: string): LucideIcon {
   return ICON_MAP[name] ?? Settings
@@ -62,6 +64,7 @@ const SLUG_TO_MODULE_ID: Partial<Record<string, ModuleId>> = {
 
 const MODULE_SHORT: Record<ModuleId, string> = {
   hr:        'HR',
+  knowledge: 'БЗ',
   marketing: 'МКТ',
   sales:     'ПРД',
   b2b:       'B2B',
@@ -72,6 +75,7 @@ const MODULE_SHORT: Record<ModuleId, string> = {
 // Module accent colors for visual distinction
 const MODULE_COLORS: Record<ModuleId, string> = {
   hr:        'text-blue-500',
+  knowledge: 'text-amber-500',
   marketing: 'text-purple-500',
   sales:     'text-emerald-500',
   b2b:       'text-cyan-500',
@@ -81,6 +85,7 @@ const MODULE_COLORS: Record<ModuleId, string> = {
 
 const MODULE_BG_COLORS: Record<ModuleId, string> = {
   hr:        'bg-blue-500/10',
+  knowledge: 'bg-amber-500/10',
   marketing: 'bg-purple-500/10',
   sales:     'bg-emerald-500/10',
   b2b:       'bg-cyan-500/10',
@@ -90,6 +95,7 @@ const MODULE_BG_COLORS: Record<ModuleId, string> = {
 
 const MODULE_BORDER_COLORS: Record<ModuleId, string> = {
   hr:        '#3b82f6',
+  knowledge: '#f59e0b',
   marketing: '#a855f7',
   sales:     '#10b981',
   b2b:       '#06b6d4',
@@ -106,6 +112,7 @@ const GROUP_COLORS: Record<string, { text: string; bg: string }> = {
   'Обучение':       { text: 'text-pink-400',    bg: 'bg-pink-500/15 text-pink-400' },
   'Развитие':       { text: 'text-amber-400',   bg: 'bg-amber-500/15 text-amber-400' },
   'Аналитика HR':   { text: 'text-red-400',     bg: 'bg-red-500/15 text-red-400' },
+  'Персонал':       { text: 'text-indigo-400',  bg: 'bg-indigo-500/15 text-indigo-400' },
   'Инструменты':    { text: 'text-emerald-400', bg: 'bg-emerald-500/15 text-emerald-400' },
   'Обзор':          { text: 'text-gray-400',    bg: 'bg-gray-500/15 text-gray-400' },
   // HR v1 accordion groups — muted slate
@@ -133,7 +140,7 @@ export function DashboardSidebar() {
   const visSettings = getVisibleSettings(role) ?? ['profile']
 
   // Active modules fetched from API
-  const [activeModules, setActiveModules] = useState<ModuleId[]>(['hr'])
+  const [activeModules, setActiveModules] = useState<ModuleId[]>(['hr', 'knowledge'])
   useEffect(() => {
     fetch('/api/tenant/modules')
       .then(r => r.json())
@@ -146,16 +153,29 @@ export function DashboardSidebar() {
             .map(m => SLUG_TO_MODULE_ID[m.slug])
             .filter((id): id is ModuleId => !!id)
         ))
-        if (ids.length > 0) setActiveModules(ids)
+        if (ids.length > 0) setActiveModules([...ids, ...(['knowledge'] as ModuleId[]).filter(k => !ids.includes(k))])
       })
       .catch(() => { /* keep default */ })
   }, [])
 
-  // ── Accordion state: which modules are expanded ──
-  const [expandedModules, setExpandedModules] = useState<Set<ModuleId>>(() => new Set<ModuleId>(['hr']))
+  // ── Hydration-safe mounted flag ──
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
 
-  // Auto-expand module matching current path
+  // ── Accordion state: which modules are expanded ──
+  // Initial value is deterministic (same on server & client) — no hydration mismatch
+  const [expandedModules, setExpandedModules] = useState<Set<ModuleId>>(new Set())
+
+  // After mount: expand module matching current path (or default to hr)
   useEffect(() => {
+    if (!mounted) return
+    const matchId = activeModules.find(id => pathname.startsWith(MODULE_REGISTRY[id].basePath))
+    setExpandedModules(new Set<ModuleId>([matchId ?? 'hr']))
+  }, [mounted]) // intentionally only on mount
+
+  // On path change (after mount): expand matching module
+  useEffect(() => {
+    if (!mounted) return
     for (const id of activeModules) {
       if (pathname.startsWith(MODULE_REGISTRY[id].basePath)) {
         setExpandedModules(prev => {
@@ -167,7 +187,7 @@ export function DashboardSidebar() {
         return
       }
     }
-  }, [pathname, activeModules])
+  }, [pathname, activeModules, mounted])
 
   const toggleModule = useCallback((id: ModuleId) => {
     setExpandedModules(prev => {
@@ -181,32 +201,39 @@ export function DashboardSidebar() {
   // ── Sub-group accordion state (persisted in sessionStorage) ──
   const GROUPS_KEY = 'sidebar:expandedGroups'
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
-  const [groupsHydrated, setGroupsHydrated] = useState(false)
 
-  // Load from sessionStorage after mount (avoid hydration mismatch)
+  // Load from sessionStorage + auto-expand matching group on mount
   useEffect(() => {
+    if (!mounted) return
+    const next = new Set<string>()
+    // Restore from session
     try {
       const saved = sessionStorage.getItem(GROUPS_KEY)
-      if (saved) setExpandedGroups(new Set(JSON.parse(saved) as string[]))
+      if (saved) for (const k of JSON.parse(saved) as string[]) next.add(k)
     } catch {}
-    setGroupsHydrated(true)
-  }, [])
-
-  // Persist to sessionStorage on every change (skip initial empty)
-  useEffect(() => {
-    if (!groupsHydrated) return
-    try { sessionStorage.setItem(GROUPS_KEY, JSON.stringify([...expandedGroups])) } catch {}
-  }, [expandedGroups, groupsHydrated])
-
-  // Auto-expand group matching current path
-  useEffect(() => {
+    // Auto-expand group matching current path
     for (const id of activeModules) {
-      const groups = getModuleGroups(id)
-      for (const group of groups) {
-        const match = group.items.some(
-          item => !item.divider && (pathname === item.href || pathname.startsWith(item.href + '/'))
-        )
-        if (match && group.label) {
+      for (const group of getModuleGroups(id)) {
+        if (group.label && group.items.some(i => !i.divider && (pathname === i.href || pathname.startsWith(i.href + '/')))) {
+          next.add(`${id}:${group.label}`)
+        }
+      }
+    }
+    setExpandedGroups(next)
+  }, [mounted]) // intentionally only on mount
+
+  // Persist to sessionStorage
+  useEffect(() => {
+    if (!mounted) return
+    try { sessionStorage.setItem(GROUPS_KEY, JSON.stringify([...expandedGroups])) } catch {}
+  }, [expandedGroups, mounted])
+
+  // On path change: auto-expand matching group
+  useEffect(() => {
+    if (!mounted) return
+    for (const id of activeModules) {
+      for (const group of getModuleGroups(id)) {
+        if (group.label && group.items.some(i => !i.divider && (pathname === i.href || pathname.startsWith(i.href + '/')))) {
           const key = `${id}:${group.label}`
           setExpandedGroups(prev => {
             if (prev.has(key)) return prev
@@ -217,7 +244,7 @@ export function DashboardSidebar() {
         }
       }
     }
-  }, [pathname, activeModules])
+  }, [pathname, activeModules, mounted])
 
   const toggleGroup = useCallback((key: string) => {
     setExpandedGroups(prev => {
@@ -300,8 +327,8 @@ export function DashboardSidebar() {
             <Briefcase className="size-5" />
           </div>
           <div className="overflow-hidden group-data-[collapsible=icon]:hidden">
-            <span className="font-semibold text-sidebar-foreground text-base tracking-tight">Company24</span>
-            <p className="text-xs text-sidebar-foreground/70 tracking-wide truncate">AI Business OS</p>
+            <span className="font-semibold text-sidebar-foreground text-base tracking-tight">Company24.Pro</span>
+            <p className="text-xs text-sidebar-foreground/70 tracking-wide truncate">AI Business System</p>
           </div>
         </div>
       </SidebarHeader>
@@ -380,10 +407,34 @@ export function DashboardSidebar() {
             const groups = isModuleEnabled ? getModuleGroups(id) : []
             const hasItems = isModuleEnabled && groups.some(g => g.items.length > 0)
 
+            // Single-item module → render as direct link (no accordion)
+            const allItems = groups.flatMap(g => g.items)
+            if (isModuleEnabled && allItems.length === 1) {
+              const item = allItems[0]
+              const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
+              return (
+                <Link
+                  key={id}
+                  href={item.href}
+                  style={isActive ? { borderLeft: `3px solid ${MODULE_BORDER_COLORS[id]}` } : { borderLeft: '3px solid transparent' }}
+                  className={cn(
+                    "flex items-center gap-2.5 w-full px-3 py-2.5 text-sm font-semibold transition-all duration-150 rounded-none rounded-r-lg",
+                    "hover:bg-sidebar-accent",
+                    isActive
+                      ? cn(MODULE_BG_COLORS[id], MODULE_COLORS[id])
+                      : "text-sidebar-foreground/70"
+                  )}
+                >
+                  <ModIcon className={cn("size-4 shrink-0", isActive && MODULE_COLORS[id])} />
+                  <span className="flex-1 text-left">{mod.name}</span>
+                </Link>
+              )
+            }
+
             return (
               <Collapsible
                 key={id}
-                open={isModuleEnabled && isExpanded}
+                open={mounted && isModuleEnabled && isExpanded}
                 onOpenChange={() => isModuleEnabled && toggleModule(id)}
               >
                 {/* ── Module header (accordion trigger) — Style A: color bar left ── */}
@@ -406,14 +457,14 @@ export function DashboardSidebar() {
                   ) : (
                     <ChevronRight className={cn(
                       "size-3.5 text-sidebar-foreground/40 transition-transform duration-200",
-                      isExpanded && "rotate-90"
+                      mounted && isExpanded && "rotate-90"
                     )} />
                   )}
                 </CollapsibleTrigger>
 
                 {/* ── Module content: sub-groups as nested accordions ── */}
                 {hasItems && (
-                  <CollapsibleContent className="pl-2 mt-1">
+                  <CollapsibleContent forceMount className="pl-2 mt-1 data-[state=closed]:hidden">
                     {groups.map((group) => {
                       if (group.items.length === 0) return null
                       const groupKey = `${id}:${group.label}`
@@ -439,8 +490,8 @@ export function DashboardSidebar() {
                               return (
                                 <SidebarMenuItem key={item.href}>
                                   <SidebarMenuButton
-                                    asChild
                                     isActive={isActive}
+                                    onClick={() => router.push(item.href)}
                                     className={cn(
                                       "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground h-9 pl-4",
                                       item.legacy
@@ -448,10 +499,8 @@ export function DashboardSidebar() {
                                         : "text-sidebar-foreground/90"
                                     )}
                                   >
-                                    <Link href={item.href}>
-                                      <ItemIcon className="size-4" />
-                                      <span className="text-sm">{item.label}</span>
-                                    </Link>
+                                    <ItemIcon className="size-4" />
+                                    <span className="text-sm">{item.label}</span>
                                   </SidebarMenuButton>
                                 </SidebarMenuItem>
                               )
@@ -464,7 +513,7 @@ export function DashboardSidebar() {
                       return (
                         <Collapsible
                           key={groupKey}
-                          open={isGroupExpanded}
+                          open={mounted && isGroupExpanded}
                           onOpenChange={() => toggleGroup(groupKey)}
                         >
                           <CollapsibleTrigger className={cn(
@@ -494,11 +543,11 @@ export function DashboardSidebar() {
                             )}>{group.items.filter(i => !i.divider && !i.legacy).length}</span>
                             <ChevronRight className={cn(
                               "size-3 shrink-0 transition-transform duration-150",
-                              isGroupExpanded && "rotate-90"
+                              mounted && isGroupExpanded && "rotate-90"
                             )} />
                           </CollapsibleTrigger>
 
-                          <CollapsibleContent>
+                          <CollapsibleContent forceMount className="data-[state=closed]:hidden">
                             <SidebarMenu className="gap-0.5 mt-1">
                               {group.items.map((item) => {
                                 if (item.divider) {
@@ -513,8 +562,8 @@ export function DashboardSidebar() {
                                 return (
                                   <SidebarMenuItem key={item.href}>
                                     <SidebarMenuButton
-                                      asChild
                                       isActive={isActive}
+                                      onClick={() => router.push(item.href)}
                                       className={cn(
                                         "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground h-9 pl-6",
                                         item.legacy
@@ -522,10 +571,8 @@ export function DashboardSidebar() {
                                           : "text-sidebar-foreground/90"
                                       )}
                                     >
-                                      <Link href={item.href}>
-                                        <ItemIcon className="size-4" />
-                                        <span className="text-sm">{item.label}</span>
-                                      </Link>
+                                      <ItemIcon className="size-4" />
+                                      <span className="text-sm">{item.label}</span>
                                     </SidebarMenuButton>
                                   </SidebarMenuItem>
                                 )
