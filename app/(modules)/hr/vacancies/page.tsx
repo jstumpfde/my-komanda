@@ -575,7 +575,7 @@ export default function VacanciesPage() {
                       <th className="px-4 py-3 text-sm font-semibold text-muted-foreground">Зарплата</th>
                       <th className="px-4 py-3"><SortableHeader label="Статус" column="status" current={colSort} onToggle={toggleColSort} /></th>
                       <th className="px-4 py-3"><SortableHeader label="Создана" column="date" current={colSort} onToggle={toggleColSort} /></th>
-                      <th className="px-4 py-3"><SortableHeader label="Ответственный HR" column="hr" current={colSort} onToggle={toggleColSort} /></th>
+                      <th className="px-4 py-3"><SortableHeader label="Менеджер" column="hr" current={colSort} onToggle={toggleColSort} /></th>
                       <th className="pl-2 pr-5 py-3 w-10" />
                     </tr>
                   </thead>
