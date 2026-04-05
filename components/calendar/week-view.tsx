@@ -78,11 +78,11 @@ export function WeekView({ currentDate, events, onSlotClick, onEventClick }: Wee
           const today = isToday(day)
           const weekend = isWeekend(day)
           return (
-            <div key={day.toISOString()} className="border-l py-3 flex flex-col items-center gap-0.5">
-              <span className={`text-[11px] font-medium uppercase tracking-wide ${weekend ? "text-muted-foreground/50" : "text-muted-foreground"}`}>
+            <div key={day.toISOString()} className="border-l py-2.5 flex items-center justify-center gap-1.5">
+              <span className={`text-xs uppercase ${weekend ? "text-muted-foreground/50" : "text-muted-foreground"}`}>
                 {format(day, "EEEEEE", { locale: ru })}
               </span>
-              <span className={`text-sm font-bold w-7 h-7 flex items-center justify-center rounded-full ${today ? "bg-primary text-primary-foreground" : weekend ? "text-muted-foreground/50" : "text-foreground"}`}>
+              <span className={`text-sm font-semibold min-w-6 h-6 flex items-center justify-center rounded-full ${today ? "bg-primary text-primary-foreground" : weekend ? "text-muted-foreground/50" : "text-foreground"}`}>
                 {format(day, "d")}
               </span>
             </div>
@@ -95,8 +95,8 @@ export function WeekView({ currentDate, events, onSlotClick, onEventClick }: Wee
         {/* Time column */}
         <div>
           {hours.map((h) => (
-            <div key={h} style={{ height: SLOT_HEIGHT }} className="border-b flex items-start justify-end pr-2 pt-[-4px]">
-              <span className="text-[11px] text-muted-foreground/60 font-medium select-none -mt-2">
+            <div key={h} style={{ height: SLOT_HEIGHT }} className="border-b flex items-start justify-end pr-2 pt-1.5">
+              <span className="text-[11px] text-muted-foreground/60 font-medium select-none">
                 {String(h).padStart(2, "0")}:00
               </span>
             </div>

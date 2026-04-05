@@ -137,8 +137,8 @@ export default function TalentPoolPage() {
       <DashboardSidebar />
       <SidebarInset>
         <DashboardHeader />
-        <main className="flex-1 overflow-auto bg-background">
-          <div className="p-4 sm:p-6">
+        <div className="flex-1 overflow-auto bg-background min-w-0">
+          <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
             <div className="flex items-center justify-between mb-5">
               <div>
                 <h1 className="text-2xl font-semibold">Talent Pool</h1>
@@ -323,7 +323,7 @@ export default function TalentPoolPage() {
               </TabsContent>
             </Tabs>
           </div>
-        </main>
+        </div>
       </SidebarInset>
 
       {/* Add candidate dialog */}
