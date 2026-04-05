@@ -12,6 +12,8 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
@@ -19,13 +21,13 @@ import {
   Plus, Upload, Rocket, Users, Mail, BarChart3, Search,
   MoreHorizontal, Heart, Pause, Play, Sparkles, Send,
   TrendingUp, Eye, MessageSquare, UserPlus, Clock, Trash2, GripVertical,
-  Settings2, ClipboardList,
+  Settings2, ClipboardList, ChevronDown,
 } from "lucide-react"
 import { ScoringBadge, type ScoreBreakdown } from "@/components/talent-pool/scoring-badge"
 import { ReferralTab } from "@/components/talent-pool/referral-tab"
 import { CampaignsTab } from "@/components/talent-pool/campaigns-tab"
 import { AnalyticsTab } from "@/components/talent-pool/analytics-tab"
-import { SourcesManager } from "@/components/talent-pool/sources-manager"
+import { SourcesManager, INITIAL_SOURCES, type SourceItem } from "@/components/talent-pool/sources-manager"
 import { FormsManager } from "@/components/talent-pool/forms-manager"
 
 // ─── Types ──────────────────────────────────────────────
@@ -118,10 +120,13 @@ export default function TalentPoolPage() {
   const [campaignOpen, setCampaignOpen] = useState(false)
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
-  const [sourceFilter, setSourceFilter] = useState("all")
+  const [selectedSources, setSelectedSources] = useState<Set<string>>(new Set())
+  const [sources, setSources] = useState<SourceItem[]>(INITIAL_SOURCES)
   const [sourcesOpen, setSourcesOpen] = useState(false)
   const [formsOpen, setFormsOpen] = useState(false)
   const [thanked, setThanked] = useState<Set<string>>(new Set())
+
+  const enabledSources = sources.filter((s) => s.enabled)
 
   // Add candidate form
   const [form, setForm] = useState({ name: "", position: "", company: "", source: "", email: "", phone: "", telegram: "", comment: "" })
@@ -145,14 +150,27 @@ export default function TalentPoolPage() {
     toast.success("Кампания создана")
   }
 
-  const uniqueSources = Array.from(new Set(candidates.map((c) => c.source)))
-
   const filtered = candidates.filter((c) => {
     if (search && !c.name.toLowerCase().includes(search.toLowerCase()) && !c.position.toLowerCase().includes(search.toLowerCase())) return false
     if (statusFilter !== "all" && c.status !== statusFilter) return false
-    if (sourceFilter !== "all" && c.source !== sourceFilter) return false
+    if (selectedSources.size > 0 && !selectedSources.has(c.source)) return false
     return true
   })
+
+  const toggleSourceFilter = (name: string) => {
+    setSelectedSources((prev) => {
+      const next = new Set(prev)
+      if (next.has(name)) next.delete(name)
+      else next.add(name)
+      return next
+    })
+  }
+
+  const sourceFilterLabel = selectedSources.size === 0
+    ? "Все источники"
+    : selectedSources.size <= 2
+      ? Array.from(selectedSources).join(", ")
+      : `${selectedSources.size} источника`
 
   const formatDate = (d: Date) => d.toLocaleDateString("ru-RU", { day: "numeric", month: "short" })
 
@@ -192,13 +210,29 @@ export default function TalentPoolPage() {
                       {Object.entries(STATUS_CFG).map(([k, v]) => <SelectItem key={k} value={k}>{v.emoji} {v.label}</SelectItem>)}
                     </SelectContent>
                   </Select>
-                  <Select value={sourceFilter} onValueChange={setSourceFilter}>
-                    <SelectTrigger className="w-40 h-8 text-xs border border-border"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Все источники</SelectItem>
-                      {uniqueSources.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5 border border-border min-w-[140px] justify-between">
+                        <span className="truncate">{sourceFilterLabel}</span>
+                        <ChevronDown className="w-3 h-3 shrink-0 text-muted-foreground" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-52 p-2" align="start">
+                      {selectedSources.size > 0 && (
+                        <button className="w-full text-left text-[11px] text-muted-foreground hover:text-foreground px-2 py-1 mb-1" onClick={() => setSelectedSources(new Set())}>
+                          Сбросить все
+                        </button>
+                      )}
+                      <div className="space-y-0.5">
+                        {enabledSources.map((s) => (
+                          <label key={s.id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted/40 cursor-pointer">
+                            <Checkbox checked={selectedSources.has(s.name)} onCheckedChange={() => toggleSourceFilter(s.name)} />
+                            <span className="text-xs">{s.name}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
                   <Button variant="ghost" size="icon" className="h-8 w-8" title="Настройки источников" onClick={() => setSourcesOpen(true)}><Settings2 className="w-3.5 h-3.5" /></Button>
                   <div className="flex-1" />
                   <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={() => setFormsOpen(true)}><ClipboardList className="w-3.5 h-3.5" />Формы</Button>
@@ -370,8 +404,8 @@ export default function TalentPoolPage() {
         </DialogContent>
       </Dialog>
 
-      <SourcesManager open={sourcesOpen} onOpenChange={setSourcesOpen} />
-      <FormsManager open={formsOpen} onOpenChange={setFormsOpen} />
+      <SourcesManager open={sourcesOpen} onOpenChange={setSourcesOpen} sources={sources} onSourcesChange={setSources} />
+      <FormsManager open={formsOpen} onOpenChange={setFormsOpen} enabledSources={enabledSources} />
     </SidebarProvider>
   )
 }

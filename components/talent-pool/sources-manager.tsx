@@ -10,12 +10,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { cn } from "@/lib/utils"
 import {
   Briefcase, Globe, Linkedin, MessageSquare, Mail, Users, QrCode,
-  Heart, Building2, Send, Plus, ChevronDown, ChevronRight, Settings2,
+  Heart, Building2, Send, Plus, ChevronDown, ChevronRight, Settings2, Trash2,
 } from "lucide-react"
-import { TrackingLinks } from "./tracking-links"
 
 // ─── Icons map ─────────────────────────────────────────
-const ICON_MAP: Record<string, React.ElementType> = {
+export const ICON_MAP: Record<string, React.ElementType> = {
   Briefcase, Globe, Linkedin, MessageSquare, Mail, Users, QrCode,
   Heart, Building2, Send,
 }
@@ -27,6 +26,7 @@ export interface SourceItem {
   name: string
   icon: string
   enabled: boolean
+  custom?: boolean
 }
 
 const INITIAL_SOURCES: SourceItem[] = [
@@ -46,25 +46,48 @@ const INITIAL_SOURCES: SourceItem[] = [
 interface SourcesManagerProps {
   open: boolean
   onOpenChange: (open: boolean) => void
+  sources: SourceItem[]
+  onSourcesChange: (sources: SourceItem[]) => void
 }
 
-export function SourcesManager({ open, onOpenChange }: SourcesManagerProps) {
-  const [sources, setSources] = useState(INITIAL_SOURCES)
+export function SourcesManager({ open, onOpenChange, sources, onSourcesChange }: SourcesManagerProps) {
   const [addMode, setAddMode] = useState(false)
   const [newName, setNewName] = useState("")
   const [newIcon, setNewIcon] = useState("Globe")
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [editName, setEditName] = useState("")
+  const [editIcon, setEditIcon] = useState("")
 
   const toggleSource = (id: string) => {
-    setSources((prev) => prev.map((s) => s.id === id ? { ...s, enabled: !s.enabled } : s))
+    onSourcesChange(sources.map((s) => s.id === id ? { ...s, enabled: !s.enabled } : s))
   }
 
   const handleAdd = () => {
     if (!newName.trim()) return
-    setSources((prev) => [...prev, { id: `s-${Date.now()}`, name: newName.trim(), icon: newIcon, enabled: true }])
+    onSourcesChange([...sources, { id: `s-${Date.now()}`, name: newName.trim(), icon: newIcon, enabled: true, custom: true }])
     setNewName("")
     setNewIcon("Globe")
     setAddMode(false)
+  }
+
+  const handleExpand = (source: SourceItem) => {
+    if (expandedId === source.id) {
+      setExpandedId(null)
+    } else {
+      setExpandedId(source.id)
+      setEditName(source.name)
+      setEditIcon(source.icon)
+    }
+  }
+
+  const handleSaveEdit = (id: string) => {
+    onSourcesChange(sources.map((s) => s.id === id ? { ...s, name: editName, icon: editIcon } : s))
+    setExpandedId(null)
+  }
+
+  const handleDelete = (id: string) => {
+    onSourcesChange(sources.filter((s) => s.id !== id))
+    setExpandedId(null)
   }
 
   return (
@@ -86,7 +109,7 @@ export function SourcesManager({ open, onOpenChange }: SourcesManagerProps) {
                 <div className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted/40 transition-colors">
                   <button
                     className="text-muted-foreground hover:text-foreground"
-                    onClick={() => setExpandedId(isExpanded ? null : source.id)}
+                    onClick={() => handleExpand(source)}
                   >
                     {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
                   </button>
@@ -95,8 +118,32 @@ export function SourcesManager({ open, onOpenChange }: SourcesManagerProps) {
                   <Switch checked={source.enabled} onCheckedChange={() => toggleSource(source.id)} />
                 </div>
                 {isExpanded && (
-                  <div className="ml-10 mr-3 mb-2">
-                    <TrackingLinks sourceName={source.name} sourceId={source.id} />
+                  <div className="ml-10 mr-3 mb-2 p-3 bg-muted/20 rounded-lg border space-y-2">
+                    <div className="grid gap-1">
+                      <Label className="text-[11px]">Название</Label>
+                      <Input value={editName} onChange={(e) => setEditName(e.target.value)} className="h-7 text-xs" />
+                    </div>
+                    <div className="grid gap-1">
+                      <Label className="text-[11px]">Иконка</Label>
+                      <Select value={editIcon} onValueChange={setEditIcon}>
+                        <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {ICON_OPTIONS.map((name) => {
+                            const Ic = ICON_MAP[name]
+                            return <SelectItem key={name} value={name}><div className="flex items-center gap-2"><Ic className="w-3.5 h-3.5" />{name}</div></SelectItem>
+                          })}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button size="sm" className="h-6 text-[11px]" onClick={() => handleSaveEdit(source.id)}>Сохранить</Button>
+                      <Button size="sm" variant="outline" className="h-6 text-[11px]" onClick={() => setExpandedId(null)}>Отмена</Button>
+                      {source.custom && (
+                        <Button size="sm" variant="ghost" className="h-6 text-[11px] text-destructive ml-auto" onClick={() => handleDelete(source.id)}>
+                          <Trash2 className="w-3 h-3 mr-1" />Удалить
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
@@ -136,3 +183,6 @@ export function SourcesManager({ open, onOpenChange }: SourcesManagerProps) {
     </Dialog>
   )
 }
+
+// Export initial sources for use in page
+export { INITIAL_SOURCES }
