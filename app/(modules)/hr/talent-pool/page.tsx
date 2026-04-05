@@ -21,14 +21,14 @@ import {
   Plus, Upload, Rocket, Users, Mail, BarChart3, Search,
   MoreHorizontal, Heart, Pause, Play, Sparkles, Send,
   TrendingUp, Eye, MessageSquare, UserPlus, Clock, Trash2, GripVertical,
-  Settings2, ClipboardList, ChevronDown,
+  Settings2, ClipboardList, ChevronDown, FileText,
 } from "lucide-react"
 import { ScoringBadge, type ScoreBreakdown } from "@/components/talent-pool/scoring-badge"
 import { ReferralTab } from "@/components/talent-pool/referral-tab"
 import { CampaignsTab } from "@/components/talent-pool/campaigns-tab"
 import { AnalyticsTab } from "@/components/talent-pool/analytics-tab"
 import { SourcesManager, INITIAL_SOURCES, type SourceItem } from "@/components/talent-pool/sources-manager"
-import { FormsManager } from "@/components/talent-pool/forms-manager"
+import { FormsTab } from "@/components/talent-pool/forms-tab"
 
 // ─── Types ──────────────────────────────────────────────
 type TalentStatus = "cold" | "warming" | "hot" | "ideal" | "refused" | "hired"
@@ -123,7 +123,6 @@ export default function TalentPoolPage() {
   const [selectedSources, setSelectedSources] = useState<Set<string>>(new Set())
   const [sources, setSources] = useState<SourceItem[]>(INITIAL_SOURCES)
   const [sourcesOpen, setSourcesOpen] = useState(false)
-  const [formsOpen, setFormsOpen] = useState(false)
   const [thanked, setThanked] = useState<Set<string>>(new Set())
 
   const enabledSources = sources.filter((s) => s.enabled)
@@ -194,6 +193,7 @@ export default function TalentPoolPage() {
                 <TabsTrigger value="campaigns" className="gap-1.5"><Rocket className="w-3.5 h-3.5" />Кампании</TabsTrigger>
                 <TabsTrigger value="referrals" className="gap-1.5"><Heart className="w-3.5 h-3.5" />Рефералы</TabsTrigger>
                 <TabsTrigger value="analytics" className="gap-1.5"><BarChart3 className="w-3.5 h-3.5" />Аналитика</TabsTrigger>
+                <TabsTrigger value="forms" className="gap-1.5"><FileText className="w-3.5 h-3.5" />Формы</TabsTrigger>
               </TabsList>
 
               {/* ═══ TAB: База ═══ */}
@@ -235,7 +235,6 @@ export default function TalentPoolPage() {
                   </Popover>
                   <Button variant="ghost" size="icon" className="h-8 w-8" title="Настройки источников" onClick={() => setSourcesOpen(true)}><Settings2 className="w-3.5 h-3.5" /></Button>
                   <div className="flex-1" />
-                  <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={() => setFormsOpen(true)}><ClipboardList className="w-3.5 h-3.5" />Формы</Button>
                   <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5"><Upload className="w-3.5 h-3.5" />Загрузить CSV</Button>
                   <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={() => setAddOpen(true)}><Plus className="w-3.5 h-3.5" />Добавить</Button>
                   <Button size="sm" className="h-8 text-xs gap-1.5 bg-purple-600 hover:bg-purple-700 border border-purple-700" onClick={() => setCampaignOpen(true)}><Rocket className="w-3.5 h-3.5" />Запустить кампанию</Button>
@@ -311,6 +310,11 @@ export default function TalentPoolPage() {
               {/* ═══ TAB: Аналитика ═══ */}
               <TabsContent value="analytics" className="space-y-4">
                 <AnalyticsTab />
+              </TabsContent>
+
+              {/* ═══ TAB: Формы ═══ */}
+              <TabsContent value="forms" className="space-y-4">
+                <FormsTab enabledSources={enabledSources} />
               </TabsContent>
             </Tabs>
           </div>
@@ -405,7 +409,6 @@ export default function TalentPoolPage() {
       </Dialog>
 
       <SourcesManager open={sourcesOpen} onOpenChange={setSourcesOpen} sources={sources} onSourcesChange={setSources} />
-      <FormsManager open={formsOpen} onOpenChange={setFormsOpen} enabledSources={enabledSources} />
     </SidebarProvider>
   )
 }
