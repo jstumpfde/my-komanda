@@ -65,12 +65,12 @@ interface Campaign {
 
 // ─── Status config ──────────────────────────────────────
 const STATUS_CFG: Record<TalentStatus, { label: string; emoji: string; cls: string }> = {
-  cold: { label: "Холодный", emoji: "🟡", cls: "bg-amber-500/10 text-amber-700 border border-amber-300 px-2.5 py-0.5" },
-  warming: { label: "В прогреве", emoji: "🔵", cls: "bg-blue-500/10 text-blue-700 border border-blue-300 px-2.5 py-0.5" },
-  hot: { label: "Горячий", emoji: "🟢", cls: "bg-emerald-500/10 text-emerald-700 border border-emerald-300 px-2.5 py-0.5" },
-  ideal: { label: "Идеальный 🔥", emoji: "🔴", cls: "bg-red-500/10 text-red-700 border border-red-300 px-2.5 py-0.5" },
-  refused: { label: "Отказался", emoji: "🔴", cls: "bg-red-500/5 text-red-600 border border-red-200 px-2.5 py-0.5" },
-  hired: { label: "Нанят", emoji: "⚫", cls: "bg-muted text-muted-foreground border border-border px-2.5 py-0.5" },
+  cold: { label: "Холодный", emoji: "🟡", cls: "bg-amber-500/10 text-amber-700 border-transparent px-2.5 py-0.5" },
+  warming: { label: "В прогреве", emoji: "🔵", cls: "bg-blue-500/10 text-blue-700 border-transparent px-2.5 py-0.5" },
+  hot: { label: "Горячий", emoji: "🟢", cls: "bg-emerald-500/10 text-emerald-700 border-transparent px-2.5 py-0.5" },
+  ideal: { label: "Идеальный 🔥", emoji: "🔴", cls: "bg-red-500/10 text-red-700 border-transparent px-2.5 py-0.5" },
+  refused: { label: "Отказался", emoji: "🔴", cls: "bg-red-500/5 text-red-600 border-transparent px-2.5 py-0.5" },
+  hired: { label: "Нанят", emoji: "⚫", cls: "bg-muted text-muted-foreground border-transparent px-2.5 py-0.5" },
 }
 
 function scoreToStatus(score: number): TalentStatus {
