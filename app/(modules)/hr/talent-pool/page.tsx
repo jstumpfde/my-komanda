@@ -20,6 +20,10 @@ import {
   MoreHorizontal, Heart, Pause, Play, Sparkles, Send,
   TrendingUp, Eye, MessageSquare, UserPlus, Clock, Trash2, GripVertical,
 } from "lucide-react"
+import { ScoringBadge, type ScoreBreakdown } from "@/components/talent-pool/scoring-badge"
+import { ReferralTab } from "@/components/talent-pool/referral-tab"
+import { CampaignsTab } from "@/components/talent-pool/campaigns-tab"
+import { AnalyticsTab } from "@/components/talent-pool/analytics-tab"
 
 // ─── Types ──────────────────────────────────────────────
 type TalentStatus = "cold" | "warming" | "warm" | "refused" | "hired"
@@ -37,6 +41,8 @@ interface TalentCandidate {
   phone: string
   telegram: string
   comment: string
+  score: number
+  scoreBreakdown: ScoreBreakdown
 }
 
 interface CampaignStep {
@@ -66,15 +72,22 @@ const STATUS_CFG: Record<TalentStatus, { label: string; emoji: string; cls: stri
   hired: { label: "Нанят", emoji: "⚫", cls: "bg-muted text-muted-foreground border-border" },
 }
 
+function scoreToStatus(score: number): TalentStatus {
+  if (score >= 86) return "warm"
+  if (score >= 61) return "warming"
+  if (score >= 31) return "warming"
+  return "cold"
+}
+
 const CHANNEL_LABELS: Record<string, string> = { tg: "Telegram", whatsapp: "WhatsApp", email: "Email" }
 
 // ─── Test data ──────────────────────────────────────────
 const INITIAL_CANDIDATES: TalentCandidate[] = [
-  { id: "t1", name: "Андрей Фёдоров", position: "Менеджер по продажам", company: "СберРешения", source: "Реферал", referralName: "Анна Иванова", status: "cold", lastContact: new Date(Date.now() - 14 * 86400000), email: "andrey@mail.ru", phone: "+7 903 111-22-33", telegram: "@andrey_f", comment: "Опыт 5 лет B2B" },
-  { id: "t2", name: "Ксения Воробьёва", position: "HR-менеджер", company: "Яндекс", source: "LinkedIn", status: "warming", lastContact: new Date(Date.now() - 3 * 86400000), email: "ks@yandex.ru", phone: "+7 916 444-55-66", telegram: "@ks_hr", comment: "Ищет новые проекты" },
-  { id: "t3", name: "Максим Егоров", position: "DevOps инженер", company: "Ozon", source: "Конференция", status: "warm", lastContact: new Date(Date.now() - 1 * 86400000), email: "max@ozon.ru", phone: "+7 925 777-88-99", telegram: "@maxdev", comment: "Заинтересован в оффере" },
-  { id: "t4", name: "Ольга Петрова", position: "Бухгалтер", company: "1С-Рарус", source: "Реферал", referralName: "Дмитрий Козлов", status: "refused", lastContact: new Date(Date.now() - 30 * 86400000), email: "olga@1c.ru", phone: "+7 999 000-11-22", telegram: "", comment: "Не рассматривает смену работы" },
-  { id: "t5", name: "Роман Кузнецов", position: "Product Manager", company: "VK", source: "hh.ru", status: "cold", lastContact: new Date(Date.now() - 7 * 86400000), email: "roman@vk.com", phone: "+7 912 333-44-55", telegram: "@roman_pm", comment: "" },
+  { id: "t1", name: "Андрей Фёдоров", position: "Менеджер по продажам", company: "СберРешения", source: "Реферал", referralName: "Анна Иванова", status: "warming", lastContact: new Date(Date.now() - 14 * 86400000), email: "andrey@mail.ru", phone: "+7 903 111-22-33", telegram: "@andrey_f", comment: "Опыт 5 лет B2B", score: 45, scoreBreakdown: { experience: 60, skills: 45, culture: 35, motivation: 40, availability: 45 } },
+  { id: "t2", name: "Ксения Воробьёва", position: "HR-менеджер", company: "Яндекс", source: "LinkedIn", status: "warming", lastContact: new Date(Date.now() - 3 * 86400000), email: "ks@yandex.ru", phone: "+7 916 444-55-66", telegram: "@ks_hr", comment: "Ищет новые проекты", score: 72, scoreBreakdown: { experience: 80, skills: 75, culture: 70, motivation: 65, availability: 70 } },
+  { id: "t3", name: "Максим Егоров", position: "DevOps инженер", company: "Ozon", source: "Конференция", status: "warm", lastContact: new Date(Date.now() - 1 * 86400000), email: "max@ozon.ru", phone: "+7 925 777-88-99", telegram: "@maxdev", comment: "Заинтересован в оффере", score: 88, scoreBreakdown: { experience: 92, skills: 90, culture: 85, motivation: 88, availability: 85 } },
+  { id: "t4", name: "Ольга Петрова", position: "Бухгалтер", company: "1С-Рарус", source: "Реферал", referralName: "Дмитрий Козлов", status: "cold", lastContact: new Date(Date.now() - 30 * 86400000), email: "olga@1c.ru", phone: "+7 999 000-11-22", telegram: "", comment: "Не рассматривает смену работы", score: 23, scoreBreakdown: { experience: 30, skills: 20, culture: 25, motivation: 15, availability: 25 } },
+  { id: "t5", name: "Роман Кузнецов", position: "Product Manager", company: "VK", source: "hh.ru", status: "warming", lastContact: new Date(Date.now() - 7 * 86400000), email: "roman@vk.com", phone: "+7 912 333-44-55", telegram: "@roman_pm", comment: "", score: 55, scoreBreakdown: { experience: 65, skills: 55, culture: 50, motivation: 50, availability: 55 } },
 ]
 
 const INITIAL_CAMPAIGNS: Campaign[] = [
@@ -110,7 +123,7 @@ export default function TalentPoolPage() {
 
   const handleAdd = () => {
     if (!form.name.trim()) return
-    setCandidates((p) => [...p, { ...form, id: `t-${Date.now()}`, status: "cold" as TalentStatus, lastContact: new Date(), referralName: undefined }])
+    setCandidates((p) => [...p, { ...form, id: `t-${Date.now()}`, status: "cold" as TalentStatus, lastContact: new Date(), referralName: undefined, score: 0, scoreBreakdown: { experience: 0, skills: 0, culture: 0, motivation: 0, availability: 0 } }])
     setForm({ name: "", position: "", company: "", source: "", email: "", phone: "", telegram: "", comment: "" })
     setAddOpen(false)
     toast.success("Кандидат добавлен в Talent Pool")
@@ -150,6 +163,7 @@ export default function TalentPoolPage() {
               <TabsList className="mb-4">
                 <TabsTrigger value="base" className="gap-1.5"><Users className="w-3.5 h-3.5" />База</TabsTrigger>
                 <TabsTrigger value="campaigns" className="gap-1.5"><Rocket className="w-3.5 h-3.5" />Кампании</TabsTrigger>
+                <TabsTrigger value="referrals" className="gap-1.5"><Heart className="w-3.5 h-3.5" />Рефералы</TabsTrigger>
                 <TabsTrigger value="analytics" className="gap-1.5"><BarChart3 className="w-3.5 h-3.5" />Аналитика</TabsTrigger>
               </TabsList>
 
@@ -181,6 +195,7 @@ export default function TalentPoolPage() {
                         <th className="text-left text-[11px] font-semibold text-muted-foreground px-3 py-2.5">Должность</th>
                         <th className="text-left text-[11px] font-semibold text-muted-foreground px-3 py-2.5">Компания</th>
                         <th className="text-left text-[11px] font-semibold text-muted-foreground px-3 py-2.5">Источник</th>
+                        <th className="text-center text-[11px] font-semibold text-muted-foreground px-3 py-2.5">Скоринг</th>
                         <th className="text-left text-[11px] font-semibold text-muted-foreground px-3 py-2.5">Статус</th>
                         <th className="text-left text-[11px] font-semibold text-muted-foreground px-3 py-2.5">Контакт</th>
                         <th className="px-3 py-2.5"></th>
@@ -202,6 +217,11 @@ export default function TalentPoolPage() {
                                   </div>
                                 )}
                               </td>
+                              <td className="px-3 py-2.5">
+                                <div className="flex justify-center">
+                                  <ScoringBadge score={c.score} breakdown={c.scoreBreakdown} size="sm" />
+                                </div>
+                              </td>
                               <td className="px-3 py-2.5"><Badge variant="outline" className={cn("text-[10px]", st.cls)}>{st.emoji} {st.label}</Badge></td>
                               <td className="px-3 py-2.5 text-xs text-muted-foreground">{formatDate(c.lastContact)}</td>
                               <td className="px-3 py-2.5">
@@ -213,7 +233,7 @@ export default function TalentPoolPage() {
                             </tr>
                           )
                         })}
-                        {filtered.length === 0 && <tr><td colSpan={7} className="text-center py-8 text-sm text-muted-foreground">Нет кандидатов</td></tr>}
+                        {filtered.length === 0 && <tr><td colSpan={8} className="text-center py-8 text-sm text-muted-foreground">Нет кандидатов</td></tr>}
                       </tbody>
                     </table>
                   </CardContent>
@@ -222,104 +242,17 @@ export default function TalentPoolPage() {
 
               {/* ═══ TAB: Кампании ═══ */}
               <TabsContent value="campaigns" className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm text-muted-foreground">{campaigns.length} кампаний</p>
-                  <Button size="sm" className="h-8 text-xs gap-1.5" onClick={() => setCampaignOpen(true)}><Plus className="w-3.5 h-3.5" />Создать кампанию</Button>
-                </div>
-                <div className="space-y-3">
-                  {campaigns.map((camp) => (
-                    <Card key={camp.id}>
-                      <CardContent className="p-4 flex items-center gap-4">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <p className="text-sm font-semibold">{camp.name}</p>
-                            <Badge variant="outline" className={cn("text-[10px]", camp.status === "active" ? "bg-emerald-500/10 text-emerald-700 border-emerald-200" : camp.status === "paused" ? "bg-amber-500/10 text-amber-700 border-amber-200" : "bg-muted text-muted-foreground border-border")}>
-                              {camp.status === "active" ? "Активна" : camp.status === "paused" ? "Пауза" : "Завершена"}
-                            </Badge>
-                          </div>
-                          <div className="flex items-center gap-4 mt-1 text-xs text-muted-foreground">
-                            <span>{camp.candidates} кандидатов</span>
-                            <span>Шаг {camp.currentStep}/{camp.totalSteps}</span>
-                            <span>Открытия: {camp.openRate}%</span>
-                          </div>
-                          {/* Steps preview */}
-                          <div className="flex items-center gap-1 mt-2">
-                            {camp.steps.map((step, i) => (
-                              <div key={step.id} className={cn("h-1.5 flex-1 rounded-full", i < camp.currentStep ? "bg-primary" : "bg-muted")} />
-                            ))}
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          {camp.status === "active" ? (
-                            <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => setCampaigns((p) => p.map((c) => c.id === camp.id ? { ...c, status: "paused" } : c))}><Pause className="w-3 h-3" />Пауза</Button>
-                          ) : camp.status === "paused" ? (
-                            <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => setCampaigns((p) => p.map((c) => c.id === camp.id ? { ...c, status: "active" } : c))}><Play className="w-3 h-3" />Запустить</Button>
-                          ) : null}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
+                <CampaignsTab />
+              </TabsContent>
+
+              {/* ═══ TAB: Рефералы ═══ */}
+              <TabsContent value="referrals" className="space-y-4">
+                <ReferralTab />
               </TabsContent>
 
               {/* ═══ TAB: Аналитика ═══ */}
               <TabsContent value="analytics" className="space-y-4">
-                <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-                  {[
-                    { label: "Отправлено", value: "156", color: "text-blue-600" },
-                    { label: "Доставлено", value: "148", color: "text-cyan-600" },
-                    { label: "Открыто", value: "112", color: "text-purple-600" },
-                    { label: "Ответили", value: "34", color: "text-amber-600" },
-                    { label: "В воронке", value: "8", color: "text-emerald-600" },
-                  ].map((m) => (
-                    <Card key={m.label}><CardContent className="p-4"><p className="text-xs text-muted-foreground">{m.label}</p><p className={`text-2xl font-bold mt-1 ${m.color}`}>{m.value}</p></CardContent></Card>
-                  ))}
-                </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  <Card>
-                    <CardHeader className="pb-2"><CardTitle className="text-sm">Конверсия Talent Pool → Воронка</CardTitle></CardHeader>
-                    <CardContent>
-                      <div className="space-y-3">
-                        {[
-                          { from: "Отправлено → Открыто", pct: 72, color: "bg-primary" },
-                          { from: "Открыто → Ответили", pct: 30, color: "bg-primary" },
-                          { from: "Ответили → В воронке", pct: 24, color: "bg-emerald-500" },
-                        ].map((t) => (
-                          <div key={t.from} className="flex items-center gap-3">
-                            <span className="text-xs text-muted-foreground w-44 shrink-0">{t.from}</span>
-                            <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden"><div className={cn("h-full rounded-full", t.color)} style={{ width: `${t.pct}%` }} /></div>
-                            <span className="text-xs font-semibold w-10 text-right">{t.pct}%</span>
-                          </div>
-                        ))}
-                      </div>
-                      <div className="flex items-center justify-between mt-4 pt-3 border-t border-border">
-                        <span className="text-xs font-medium">Общая конверсия</span>
-                        <Badge variant="secondary" className="font-bold">5.1%</Badge>
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardHeader className="pb-2"><CardTitle className="text-sm">Лучшие кампании</CardTitle></CardHeader>
-                    <CardContent>
-                      <div className="space-y-3">
-                        {campaigns.map((c) => (
-                          <div key={c.id} className="flex items-center justify-between">
-                            <div>
-                              <p className="text-sm font-medium">{c.name}</p>
-                              <p className="text-xs text-muted-foreground">{c.candidates} кандидатов</p>
-                            </div>
-                            <div className="text-right">
-                              <p className="text-sm font-bold text-emerald-600">{c.openRate}%</p>
-                              <p className="text-[10px] text-muted-foreground">открытий</p>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
+                <AnalyticsTab />
               </TabsContent>
             </Tabs>
           </div>
