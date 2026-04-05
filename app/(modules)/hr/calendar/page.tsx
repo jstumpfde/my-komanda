@@ -86,13 +86,22 @@ export default function CalendarPage() {
   const [settingsOpen, setSettingsOpen] = useState(false)
 
   // Calendar settings
-  const [workStart, setWorkStart] = useState("09:00")
-  const [workEnd, setWorkEnd] = useState("18:00")
-  const [weekendDays, setWeekendDays] = useState<number[]>([6, 0]) // Сб=6, Вс=0
+  interface DaySchedule { enabled: boolean; start: string; end: string; slot: string }
+  const [weekSchedule, setWeekSchedule] = useState<Record<number, DaySchedule>>({
+    1: { enabled: true, start: "09:00", end: "18:00", slot: "60" },
+    2: { enabled: true, start: "09:00", end: "18:00", slot: "60" },
+    3: { enabled: true, start: "09:00", end: "18:00", slot: "60" },
+    4: { enabled: true, start: "09:00", end: "18:00", slot: "60" },
+    5: { enabled: true, start: "09:00", end: "18:00", slot: "60" },
+    6: { enabled: false, start: "10:00", end: "16:00", slot: "60" },
+    0: { enabled: false, start: "10:00", end: "16:00", slot: "60" },
+  })
+  const updateDay = (day: number, patch: Partial<DaySchedule>) => {
+    setWeekSchedule(prev => ({ ...prev, [day]: { ...prev[day], ...patch } }))
+  }
   const [respectHolidays, setRespectHolidays] = useState(true)
   const [timezone, setTimezone] = useState("Europe/Moscow")
   const [showWeekNumbers, setShowWeekNumbers] = useState(false)
-  const [slotDuration, setSlotDuration] = useState("60")
   const [defaultView, setDefaultView] = useState<ViewMode>("week")
   const [icalFeeds, setIcalFeeds] = useState<{ id: string; name: string; url: string; active: boolean }[]>([
     { id: "1", name: "Google Calendar", url: "", active: false },
@@ -100,14 +109,12 @@ export default function CalendarPage() {
   const [newFeedUrl, setNewFeedUrl] = useState("")
   const [copiedFeed, setCopiedFeed] = useState(false)
 
-  const toggleWeekend = (day: number) => {
-    setWeekendDays(prev => prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day])
-  }
-
-  const WEEKDAY_LABELS = [
+  const DAYS_ORDER: { day: number; label: string }[] = [
     { day: 1, label: "Пн" }, { day: 2, label: "Вт" }, { day: 3, label: "Ср" },
     { day: 4, label: "Чт" }, { day: 5, label: "Пт" }, { day: 6, label: "Сб" }, { day: 0, label: "Вс" },
   ]
+  const TIME_OPTIONS = ["07:00","08:00","09:00","10:00","11:00","12:00","13:00","14:00","15:00","16:00","17:00","18:00","19:00","20:00","21:00"]
+  const SLOT_OPTIONS = [{ v: "15", l: "15м" },{ v: "30", l: "30м" },{ v: "45", l: "45м" },{ v: "60", l: "60м" },{ v: "90", l: "90м" },{ v: "120", l: "2ч" }]
 
   const addIcalFeed = () => {
     if (!newFeedUrl.trim()) return
@@ -373,76 +380,36 @@ export default function CalendarPage() {
 
               <div className="space-y-6 mt-6">
 
-                {/* ── Рабочее время ── */}
+                {/* ── Рабочее время по дням ── */}
                 <Card>
                   <CardHeader className="pb-3">
                     <CardTitle className="text-sm flex items-center gap-2"><Clock className="size-4" />Рабочее время</CardTitle>
-                    <CardDescription>Часы работы компании — календарь подсвечивает рабочие слоты</CardDescription>
+                    <CardDescription>Настройте расписание для каждого дня недели</CardDescription>
                   </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="flex items-center gap-3">
-                      <div className="space-y-1 flex-1">
-                        <Label className="text-xs">Начало</Label>
-                        <Select value={workStart} onValueChange={setWorkStart}>
-                          <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            {["07:00","08:00","09:00","10:00","11:00"].map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-1 flex-1">
-                        <Label className="text-xs">Конец</Label>
-                        <Select value={workEnd} onValueChange={setWorkEnd}>
-                          <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            {["17:00","18:00","19:00","20:00","21:00"].map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs">Длительность слота</Label>
-                      <Select value={slotDuration} onValueChange={setSlotDuration}>
-                        <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="15">15 минут</SelectItem>
-                          <SelectItem value="30">30 минут</SelectItem>
-                          <SelectItem value="45">45 минут</SelectItem>
-                          <SelectItem value="60">60 минут</SelectItem>
-                          <SelectItem value="90">90 минут</SelectItem>
-                          <SelectItem value="120">120 минут</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* ── Выходные и праздники ── */}
-                <Card>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-sm flex items-center gap-2"><CalendarDays className="size-4" />Выходные и праздники</CardTitle>
-                    <CardDescription>Нерабочие дни отображаются серым в календаре</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="space-y-1.5">
-                      <Label className="text-xs">Выходные дни</Label>
-                      <div className="flex gap-1.5">
-                        {WEEKDAY_LABELS.map(({ day, label }) => (
-                          <button
-                            key={day}
-                            onClick={() => toggleWeekend(day)}
-                            className={cn(
-                              "w-9 h-9 rounded-lg text-xs font-medium transition-colors",
-                              weekendDays.includes(day)
-                                ? "bg-red-500/15 text-red-600 border border-red-200"
-                                : "bg-muted text-muted-foreground hover:bg-muted/80"
-                            )}
-                          >
-                            {label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
+                  <CardContent className="space-y-1.5">
+                    {DAYS_ORDER.map(({ day, label }) => {
+                      const s = weekSchedule[day]
+                      return (
+                        <div key={day} className="flex items-center gap-2">
+                          <Switch checked={s.enabled} onCheckedChange={v => updateDay(day, { enabled: v })} className="scale-90" />
+                          <span className={cn("w-6 text-xs font-semibold shrink-0", s.enabled ? "text-foreground" : "text-muted-foreground")}>{label}</span>
+                          <Select value={s.start} onValueChange={v => updateDay(day, { start: v })} disabled={!s.enabled}>
+                            <SelectTrigger className={cn("h-7 w-[90px] text-xs", !s.enabled && "opacity-40")}><SelectValue /></SelectTrigger>
+                            <SelectContent>{TIME_OPTIONS.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+                          </Select>
+                          <span className={cn("text-xs", !s.enabled && "text-muted-foreground/40")}>—</span>
+                          <Select value={s.end} onValueChange={v => updateDay(day, { end: v })} disabled={!s.enabled}>
+                            <SelectTrigger className={cn("h-7 w-[90px] text-xs", !s.enabled && "opacity-40")}><SelectValue /></SelectTrigger>
+                            <SelectContent>{TIME_OPTIONS.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+                          </Select>
+                          <Select value={s.slot} onValueChange={v => updateDay(day, { slot: v })} disabled={!s.enabled}>
+                            <SelectTrigger className={cn("h-7 w-[76px] text-xs", !s.enabled && "opacity-40")}><SelectValue /></SelectTrigger>
+                            <SelectContent>{SLOT_OPTIONS.map(o => <SelectItem key={o.v} value={o.v}>{o.l}</SelectItem>)}</SelectContent>
+                          </Select>
+                        </div>
+                      )
+                    })}
+                    <Separator className="my-2" />
                     <div className="flex items-center justify-between">
                       <div>
                         <Label className="text-sm">Учитывать праздничные дни РФ</Label>
