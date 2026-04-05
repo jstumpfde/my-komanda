@@ -115,6 +115,7 @@ export default function TalentPoolPage() {
   const [campaignOpen, setCampaignOpen] = useState(false)
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
+  const [sourceFilter, setSourceFilter] = useState("all")
   const [thanked, setThanked] = useState<Set<string>>(new Set())
 
   // Add candidate form
@@ -139,9 +140,12 @@ export default function TalentPoolPage() {
     toast.success("Кампания создана")
   }
 
+  const uniqueSources = Array.from(new Set(candidates.map((c) => c.source)))
+
   const filtered = candidates.filter((c) => {
     if (search && !c.name.toLowerCase().includes(search.toLowerCase()) && !c.position.toLowerCase().includes(search.toLowerCase())) return false
     if (statusFilter !== "all" && c.status !== statusFilter) return false
+    if (sourceFilter !== "all" && c.source !== sourceFilter) return false
     return true
   })
 
@@ -183,6 +187,13 @@ export default function TalentPoolPage() {
                       {Object.entries(STATUS_CFG).map(([k, v]) => <SelectItem key={k} value={k}>{v.emoji} {v.label}</SelectItem>)}
                     </SelectContent>
                   </Select>
+                  <Select value={sourceFilter} onValueChange={setSourceFilter}>
+                    <SelectTrigger className="w-40 h-8 text-xs border border-border"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Все источники</SelectItem>
+                      {uniqueSources.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
                   <div className="flex-1" />
                   <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5"><Upload className="w-3.5 h-3.5" />Загрузить CSV</Button>
                   <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={() => setAddOpen(true)}><Plus className="w-3.5 h-3.5" />Добавить</Button>
@@ -213,13 +224,15 @@ export default function TalentPoolPage() {
                               <td className="px-3 py-2.5 text-[13px] text-muted-foreground">{c.position}</td>
                               <td className="px-3 py-2.5 text-[13px] text-muted-foreground">{c.company}</td>
                               <td className="px-3 py-2.5">
-                                <span className="text-[13px]">{c.source}</span>
-                                {c.referralName && (
-                                  <div className="flex items-center gap-1 mt-0.5">
-                                    <span className="text-[10px] text-muted-foreground">от {c.referralName}</span>
-                                    <button className="text-[10px] text-pink-500 hover:scale-110 transition-transform" onClick={() => { setThanked((prev) => { const next = new Set(prev); next.add(c.id); return next }); toast.success(`Спасибо отправлено ${c.referralName}!`) }}><Heart className={cn("w-3 h-3 inline", thanked.has(c.id) && "fill-pink-500")} /></button>
-                                  </div>
-                                )}
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-[13px]">{c.source}</span>
+                                  {c.referralName && (
+                                    <>
+                                      <span className="text-[11px] text-muted-foreground">· {c.referralName}</span>
+                                      <button className="text-pink-500 hover:scale-110 transition-transform" onClick={() => { setThanked((prev) => { const next = new Set(prev); next.add(c.id); return next }); toast.success(`Спасибо отправлено ${c.referralName}!`) }}><Heart className={cn("w-3 h-3", thanked.has(c.id) && "fill-pink-500")} /></button>
+                                    </>
+                                  )}
+                                </div>
                               </td>
                               <td className="px-3 py-2.5">
                                 <div className="flex justify-center">
