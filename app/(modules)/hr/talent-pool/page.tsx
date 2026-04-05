@@ -19,11 +19,14 @@ import {
   Plus, Upload, Rocket, Users, Mail, BarChart3, Search,
   MoreHorizontal, Heart, Pause, Play, Sparkles, Send,
   TrendingUp, Eye, MessageSquare, UserPlus, Clock, Trash2, GripVertical,
+  Settings2, ClipboardList,
 } from "lucide-react"
 import { ScoringBadge, type ScoreBreakdown } from "@/components/talent-pool/scoring-badge"
 import { ReferralTab } from "@/components/talent-pool/referral-tab"
 import { CampaignsTab } from "@/components/talent-pool/campaigns-tab"
 import { AnalyticsTab } from "@/components/talent-pool/analytics-tab"
+import { SourcesManager } from "@/components/talent-pool/sources-manager"
+import { FormsManager } from "@/components/talent-pool/forms-manager"
 
 // ─── Types ──────────────────────────────────────────────
 type TalentStatus = "cold" | "warming" | "hot" | "ideal" | "refused" | "hired"
@@ -116,6 +119,8 @@ export default function TalentPoolPage() {
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [sourceFilter, setSourceFilter] = useState("all")
+  const [sourcesOpen, setSourcesOpen] = useState(false)
+  const [formsOpen, setFormsOpen] = useState(false)
   const [thanked, setThanked] = useState<Set<string>>(new Set())
 
   // Add candidate form
@@ -194,7 +199,9 @@ export default function TalentPoolPage() {
                       {uniqueSources.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
                     </SelectContent>
                   </Select>
+                  <Button variant="ghost" size="icon" className="h-8 w-8" title="Настройки источников" onClick={() => setSourcesOpen(true)}><Settings2 className="w-3.5 h-3.5" /></Button>
                   <div className="flex-1" />
+                  <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={() => setFormsOpen(true)}><ClipboardList className="w-3.5 h-3.5" />Формы</Button>
                   <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5"><Upload className="w-3.5 h-3.5" />Загрузить CSV</Button>
                   <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={() => setAddOpen(true)}><Plus className="w-3.5 h-3.5" />Добавить</Button>
                   <Button size="sm" className="h-8 text-xs gap-1.5 bg-purple-600 hover:bg-purple-700 border border-purple-700" onClick={() => setCampaignOpen(true)}><Rocket className="w-3.5 h-3.5" />Запустить кампанию</Button>
@@ -362,6 +369,9 @@ export default function TalentPoolPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <SourcesManager open={sourcesOpen} onOpenChange={setSourcesOpen} />
+      <FormsManager open={formsOpen} onOpenChange={setFormsOpen} />
     </SidebarProvider>
   )
 }

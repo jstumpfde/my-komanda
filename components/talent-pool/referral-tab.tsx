@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { Heart, Users, UserCheck, TrendingUp, Banknote, Copy, Gift, CheckCircle2 } from "lucide-react"
+import { ReferralLinks } from "./referral-links"
 
 // ─── Mock data ─────────────────────────────────────────
 const REFERRAL_KPI = [
@@ -57,6 +58,9 @@ export function ReferralTab() {
           </Card>
         ))}
       </div>
+
+      {/* Ссылки сотрудников */}
+      <ReferralLinks />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Таблица рефереров */}
