@@ -78,6 +78,13 @@
       "when": 1775311667721,
       "tag": "0010_silky_orphan",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1775420867939,
+      "tag": "0011_wonderful_vampiro",
+      "breakpoints": true
     }
   ]
 }

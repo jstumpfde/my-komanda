@@ -118,6 +118,56 @@ export const users = pgTable("users", {
   createdAt: timestamp("created_at").defaultNow(),
 })
 
+// ─── Sales: CRM Компании ─────────────────────────────────────────────────────
+
+export const salesCompanies = pgTable("sales_companies", {
+  id:             uuid("id").primaryKey().defaultRandom(),
+  tenantId:       uuid("tenant_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  name:           text("name").notNull(),
+  inn:            text("inn"),
+  kpp:            text("kpp"),
+  ogrn:           text("ogrn"),
+  industry:       text("industry"),
+  city:           text("city"),
+  address:        text("address"),
+  website:        text("website"),
+  phone:          text("phone"),
+  email:          text("email"),
+  revenue:        text("revenue"),
+  employeesCount: integer("employees_count"),
+  description:    text("description"),
+  logoUrl:        text("logo_url"),
+  type:           text("type").default("client"),    // 'own'|'client'|'partner'
+  status:         text("status").default("active"),  // 'active'|'archive'
+  createdAt:      timestamp("created_at").defaultNow(),
+  updatedAt:      timestamp("updated_at").defaultNow(),
+})
+
+// ─── Sales: CRM Контакты ─────────────────────────────────────────────────────
+
+export const salesContacts = pgTable("sales_contacts", {
+  id:         uuid("id").primaryKey().defaultRandom(),
+  tenantId:   uuid("tenant_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  companyId:  uuid("company_id").references(() => salesCompanies.id, { onDelete: "set null" }),
+  firstName:  text("first_name").notNull(),
+  lastName:   text("last_name").notNull(),
+  middleName: text("middle_name"),
+  position:   text("position"),
+  department: text("department"),
+  phone:      text("phone"),
+  mobile:     text("mobile"),
+  email:      text("email"),
+  telegram:   text("telegram"),
+  whatsapp:   text("whatsapp"),
+  comment:    text("comment"),
+  isPrimary:  boolean("is_primary").default(false),
+  status:     text("status").default("active"),  // 'active'|'archive'
+  createdAt:  timestamp("created_at").defaultNow(),
+  updatedAt:  timestamp("updated_at").defaultNow(),
+})
+
+// ─── Vacancies ────────────────────────────────────────────────────────────────
+
 export const vacancies = pgTable("vacancies", {
   id: uuid("id").primaryKey().defaultRandom(),
   companyId: uuid("company_id").references(() => companies.id).notNull(),
@@ -134,6 +184,8 @@ export const vacancies = pgTable("vacancies", {
   status: text("status").default("draft"), // 'draft' | 'published' | 'paused' | 'closed'
   slug: text("slug").unique().notNull(),
   descriptionJson: jsonb("description_json"),
+  clientCompanyId: uuid("client_company_id").references(() => salesCompanies.id, { onDelete: "set null" }),
+  clientContactId: uuid("client_contact_id").references(() => salesContacts.id, { onDelete: "set null" }),
   deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),

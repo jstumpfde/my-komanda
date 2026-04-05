@@ -5,99 +5,80 @@ import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Users, Plus, Search, Phone, Mail, MessageCircle, Clock } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { ContactsTable, type SalesContact } from "@/components/sales/contacts-table"
+import { ContactFormModal, type ContactFormData } from "@/components/sales/contact-form-modal"
+import { Users, Plus, Search } from "lucide-react"
 import { toast } from "sonner"
 
-type ContactStatus = "active" | "inactive" | "new"
-
-interface Contact {
-  id: string
-  name: string
-  initials: string
-  position: string
-  company: string
-  phone: string
-  email: string
-  telegram: string
-  lastContact: string
-  status: ContactStatus
-  notes: string
-}
-
-const STATUS_COLORS: Record<ContactStatus, string> = {
-  active: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400",
-  inactive: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400",
-  new: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
-}
-
-const STATUS_LABELS: Record<ContactStatus, string> = {
-  active: "Активный",
-  inactive: "Неактивный",
-  new: "Новый",
-}
-
-const INITIAL_CONTACTS: Contact[] = [
-  { id: "1", name: "Иван Смирнов", initials: "ИС", position: "Директор", company: "ООО Техностар", phone: "+7 999 111-22-33", email: "i.smirnov@technostar.ru", telegram: "@ivan_smirnov", lastContact: "Сегодня", status: "active", notes: "Принимает решения по закупкам" },
-  { id: "2", name: "Павел Орлов", initials: "ПО", position: "Коммерческий директор", company: "ГК Вектор", phone: "+7 812 555-66-77", email: "p.orlov@vector-group.ru", telegram: "@p_orlov_vgk", lastContact: "Вчера", status: "active", notes: "" },
-  { id: "3", name: "Роман Федоров", initials: "РФ", position: "Финансовый директор", company: "ЗАО Капитал", phone: "+7 495 333-44-55", email: "r.fedorov@capital-zao.ru", telegram: "—", lastContact: "3 дня назад", status: "active", notes: "Согласует бюджет" },
-  { id: "4", name: "Светлана Морозова", initials: "СМ", position: "Главный бухгалтер", company: "ООО Горизонт", phone: "+7 383 222-33-44", email: "s.morozova@gorizont-nsk.ru", telegram: "@svetlana_mrz", lastContact: "Неделю назад", status: "active", notes: "" },
-  { id: "5", name: "Михаил Волков", initials: "МВ", position: "IT-директор", company: "АО Альфа Ресурс", phone: "+7 495 666-77-88", email: "m.volkov@alfa-resource.ru", telegram: "@m_volkov_ar", lastContact: "2 дня назад", status: "active", notes: "Технический специалист" },
-  { id: "6", name: "Елена Тихонова", initials: "ЕТ", position: "Менеджер по закупкам", company: "ООО СтройГрупп", phone: "+7 846 444-55-66", email: "e.tikhonova@stroygrupp.com", telegram: "—", lastContact: "5 дней назад", status: "inactive", notes: "" },
-  { id: "7", name: "Кирилл Зайцев", initials: "КЗ", position: "Технический директор", company: "ИТ Решения ООО", phone: "+7 499 777-88-99", email: "k.zaitsev@itrешения.рф", telegram: "@k_zaitsev_itr", lastContact: "Сегодня", status: "active", notes: "Партнёр по интеграциям" },
-  { id: "8", name: "Анна Кузнецова", initials: "АК", position: "PR-менеджер", company: "ООО Медиасфера", phone: "+7 495 888-99-00", email: "a.kuznetsova@mediasfera.ru", telegram: "@anna_k_media", lastContact: "10 дней назад", status: "inactive", notes: "" },
-  { id: "9", name: "Дмитрий Лебедев", initials: "ДЛ", position: "CEO", company: "ООО Техностар", phone: "+7 999 000-11-22", email: "d.lebedev@technostar.ru", telegram: "@d_lebedev", lastContact: "Сегодня", status: "new", notes: "Новый контакт, рекомендация от Смирнова" },
-  { id: "10", name: "Ольга Данилова", initials: "ОД", position: "HR-директор", company: "ГК Вектор", phone: "+7 812 111-22-33", email: "o.danilova@vector-group.ru", telegram: "@olga_danilova", lastContact: "Вчера", status: "active", notes: "" },
+const MOCK_COMPANIES = [
+  { id: "1", name: 'ООО "Ромаш��а"' },
+  { id: "2", name: 'ЗАО "Альф�� Групп"' },
+  { id: "3", name: "ИП Петров" },
+  { id: "4", name: 'ООО "ТехноПлюс"' },
+  { id: "5", name: 'ООО "Ст��ойМастер"' },
 ]
 
-const COMPANIES = ["Все компании", "ООО Техностар", "ГК Вектор", "ЗАО Капитал", "ООО Горизонт", "АО Альфа Ресурс", "ООО СтройГрупп", "ИТ Решения ООО", "ООО Медиасфера"]
+const MOCK_CONTACTS: SalesContact[] = [
+  { id: "1", companyId: "1", firstName: "Иван", lastName: "Петров", middleName: "Сергеевич", position: "Генеральный директор", department: "Руководство", phone: "+7 (495) 111-22-33", mobile: "+7 (999) 111-22-33", email: "i.petrov@romashka.ru", telegram: "@ipetrov", whatsapp: "+79991112233", comment: null, isPrimary: true, status: "active", companyName: 'ООО "Ромашка"' },
+  { id: "2", companyId: "1", firstName: "Мария", lastName: "Сидорова", middleName: null, position: "HR-директор", department: "HR", phone: "+7 (495) 111-22-34", mobile: null, email: "m.sidorova@romashka.ru", telegram: "@msidorova", whatsapp: null, comment: "Отвечает за подбор", isPrimary: false, status: "active", companyName: 'ООО "Ромашка"' },
+  { id: "3", companyId: "1", firstName: "Алексей", lastName: "Козлов", middleName: "Игоревич", position: "CTO", department: "IT", phone: null, mobile: "+7 (999) 222-33-44", email: "a.kozlov@romashka.ru", telegram: "@akozlov", whatsapp: null, comment: null, isPrimary: false, status: "active", companyName: 'ООО "Ромаш��а"' },
+  { id: "4", companyId: "2", firstName: "Елена", lastName: "Волкова", middleName: "Андреевна", position: "Финансовый директор", department: "Финансы", phone: "+7 (495) 222-33-44", mobile: "+7 (999) 333-44-55", email: "e.volkova@alfagroup.ru", telegram: "@evolkova", whatsapp: "+79993334455", comment: "Согласует бюджеты", isPrimary: true, status: "active", companyName: 'ЗАО "Альфа Групп"' },
+  { id: "5", companyId: "2", firstName: "Дмитрий", lastName: "Новиков", middleName: null, position: "Руководитель отдела продаж", department: "Продажи", phone: "+7 (495) 222-33-45", mobile: null, email: "d.novikov@alfagroup.ru", telegram: null, whatsapp: null, comment: null, isPrimary: false, status: "active", companyName: 'ЗАО "Альфа Групп"' },
+  { id: "6", companyId: "3", firstName: "Сергей", lastName: "Петров", middleName: "Алексеевич", position: "Индивидуальный предприниматель", department: null, phone: "+7 (812) 333-44-55", mobile: "+7 (999) 444-55-66", email: "petrov@mail.ru", telegram: "@spetrov", whatsapp: "+79994445566", comment: null, isPrimary: true, status: "active", companyName: "ИП Петро��" },
+  { id: "7", companyId: "4", firstName: "Ольга", lastName: "Смирнова", middleName: "Владимировна", position: "Директор по персоналу", department: "HR", phone: "+7 (843) 444-55-66", mobile: null, email: "o.smirnova@technoplus.ru", telegram: "@osmirnova", whatsapp: null, comment: "Основной контакт по найму", isPrimary: true, status: "active", companyName: 'ООО "ТехноПлюс"' },
+  { id: "8", companyId: "5", firstName: "Андрей", lastName: "Кузнецов", middleName: null, position: "Прораб", department: "Строительство", phone: "+7 (343) 555-66-77", mobile: "+7 (999) 555-66-77", email: "a.kuznetsov@stroymaster.ru", telegram: null, whatsapp: "+79995556677", comment: null, isPrimary: true, status: "active", companyName: 'ООО "СтройМастер"' },
+]
 
 export default function SalesContactsPage() {
-  const [contacts, setContacts] = useState<Contact[]>(INITIAL_CONTACTS)
+  const [contacts, setContacts] = useState<SalesContact[]>(MOCK_CONTACTS)
   const [search, setSearch] = useState("")
   const [filterCompany, setFilterCompany] = useState("all")
-  const [sheetOpen, setSheetOpen] = useState(false)
+  const [filterStatus, setFilterStatus] = useState("all")
+  const [modalOpen, setModalOpen] = useState(false)
 
-  const [form, setForm] = useState({
-    name: "", position: "", company: "", phone: "", email: "", telegram: "", notes: "",
-  })
-
-  const filtered = contacts.filter(c => {
-    if (search && !c.name.toLowerCase().includes(search.toLowerCase()) &&
-        !c.company.toLowerCase().includes(search.toLowerCase()) &&
-        !c.email.toLowerCase().includes(search.toLowerCase())) return false
-    if (filterCompany !== "all" && c.company !== filterCompany) return false
+  const filtered = contacts.filter((c) => {
+    const fullName = `${c.lastName} ${c.firstName} ${c.middleName || ""}`.toLowerCase()
+    if (search && !fullName.includes(search.toLowerCase()) && !(c.email || "").toLowerCase().includes(search.toLowerCase()) && !(c.phone || "").includes(search)) return false
+    if (filterCompany !== "all" && c.companyId !== filterCompany) return false
+    if (filterStatus !== "all" && c.status !== filterStatus) return false
     return true
   })
 
-  const handleCreate = () => {
-    if (!form.name) { toast.error("Введите имя контакта"); return }
-    const words = form.name.split(" ")
-    const initials = (words[0]?.[0] || "") + (words[1]?.[0] || "")
-    const newContact: Contact = {
+  const handleCreate = (data: ContactFormData) => {
+    const company = MOCK_COMPANIES.find((c) => c.id === data.companyId)
+    const newContact: SalesContact = {
       id: String(Date.now()),
-      name: form.name,
-      initials: initials.toUpperCase() || "??",
-      position: form.position || "—",
-      company: form.company || "—",
-      phone: form.phone || "—",
-      email: form.email || "—",
-      telegram: form.telegram || "—",
-      lastContact: "Только что",
-      status: "new",
-      notes: form.notes,
+      companyId: data.companyId || null,
+      firstName: data.firstName,
+      lastName: data.lastName,
+      middleName: data.middleName || null,
+      position: data.position || null,
+      department: data.department || null,
+      phone: data.phone || null,
+      mobile: data.mobile || null,
+      email: data.email || null,
+      telegram: data.telegram || null,
+      whatsapp: data.whatsapp || null,
+      comment: data.comment || null,
+      isPrimary: data.isPrimary,
+      status: "active",
+      companyName: company?.name || "—",
     }
-    setContacts(prev => [newContact, ...prev])
-    setSheetOpen(false)
-    setForm({ name: "", position: "", company: "", phone: "", email: "", telegram: "", notes: "" })
+    setContacts((prev) => [newContact, ...prev])
+    setModalOpen(false)
     toast.success("Контакт добавлен")
+  }
+
+  const handleArchive = (contact: SalesContact) => {
+    setContacts((prev) => prev.map((c) => c.id === contact.id ? { ...c, status: "archive" } : c))
+    toast.success("Контакт перемещён в архив")
+  }
+
+  const handleRestore = (contact: SalesContact) => {
+    setContacts((prev) => prev.map((c) => c.id === contact.id ? { ...c, status: "active" } : c))
+    toast.success("Контакт восстановлен")
   }
 
   return (
@@ -106,7 +87,7 @@ export default function SalesContactsPage() {
       <SidebarInset>
         <DashboardHeader />
         <main className="flex-1 overflow-auto bg-background">
-          <div className="p-4 sm:p-6 max-w-6xl">
+          <div className="p-4 sm:p-6 max-w-7xl">
             {/* Header */}
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-3">
@@ -114,11 +95,11 @@ export default function SalesContactsPage() {
                   <Users className="w-5 h-5 text-primary" />
                 </div>
                 <div>
-                  <h1 className="text-2xl font-semibold">Контакты</h1>
-                  <p className="text-sm text-muted-foreground">{contacts.length} человек в базе</p>
+                  <h1 className="text-2xl font-semibold">Ко��такты</h1>
+                  <p className="text-sm text-muted-foreground">{contacts.length} контактов в ба��е</p>
                 </div>
               </div>
-              <Button className="gap-1.5" onClick={() => setSheetOpen(true)}>
+              <Button className="gap-1.5" onClick={() => setModalOpen(true)}>
                 <Plus className="w-4 h-4" />
                 Добавить контакт
               </Button>
@@ -128,142 +109,41 @@ export default function SalesContactsPage() {
             <div className="flex flex-wrap items-center gap-2 mb-4">
               <div className="relative flex-1 min-w-[200px] max-w-xs">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input className="pl-9 h-9" placeholder="Поиск по имени, email..." value={search} onChange={e => setSearch(e.target.value)} />
+                <Input className="pl-9 h-9" placeholder="Поиск по имени, email, телефону..." value={search} onChange={(e) => setSearch(e.target.value)} />
               </div>
               <Select value={filterCompany} onValueChange={setFilterCompany}>
-                <SelectTrigger className="w-[200px] h-9"><SelectValue placeholder="Все компании" /></SelectTrigger>
+                <SelectTrigger className="w-[200px] h-9"><SelectValue placeholder="Компания" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Все компании</SelectItem>
-                  {COMPANIES.slice(1).map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                  {MOCK_COMPANIES.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Select value={filterStatus} onValueChange={setFilterStatus}>
+                <SelectTrigger className="w-[150px] h-9"><SelectValue placeholder="Статус" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">��се статусы</SelectItem>
+                  <SelectItem value="active">Активный</SelectItem>
+                  <SelectItem value="archive">Архив</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             {/* Table */}
-            <div className="border rounded-xl overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b bg-muted/30">
-                      <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-3">Имя</th>
-                      <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-3">Должность</th>
-                      <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-3">Компания</th>
-                      <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-3">Телефон</th>
-                      <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-3">Email</th>
-                      <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-3">Telegram</th>
-                      <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-3">Контакт</th>
-                      <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-3">Статус</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filtered.map(contact => (
-                      <tr key={contact.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2.5">
-                            <Avatar className="w-8 h-8 shrink-0">
-                              <AvatarFallback className="text-xs bg-primary/10 text-primary">{contact.initials}</AvatarFallback>
-                            </Avatar>
-                            <span className="text-sm font-medium text-foreground">{contact.name}</span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-sm text-muted-foreground">{contact.position}</td>
-                        <td className="px-4 py-3 text-sm text-foreground">{contact.company}</td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                            <Phone className="w-3 h-3 shrink-0" />
-                            {contact.phone}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                            <Mail className="w-3 h-3 shrink-0" />
-                            <span className="truncate max-w-[160px]">{contact.email}</span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                            <MessageCircle className="w-3 h-3 shrink-0" />
-                            {contact.telegram}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                            <Clock className="w-3 h-3" />
-                            {contact.lastContact}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <Badge className={cn("text-xs border-0", STATUS_COLORS[contact.status])}>
-                            {STATUS_LABELS[contact.status]}
-                          </Badge>
-                        </td>
-                      </tr>
-                    ))}
-                    {filtered.length === 0 && (
-                      <tr>
-                        <td colSpan={8} className="text-center py-10 text-sm text-muted-foreground">
-                          Контакты не найдены
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+            <ContactsTable
+              contacts={filtered}
+              onArchive={handleArchive}
+              onRestore={handleRestore}
+            />
           </div>
         </main>
       </SidebarInset>
 
-      {/* Add Contact Sheet */}
-      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-        <SheetContent className="sm:max-w-md overflow-y-auto">
-          <SheetHeader>
-            <SheetTitle className="flex items-center gap-2">
-              <Users className="w-5 h-5" />
-              Добавить контакт
-            </SheetTitle>
-          </SheetHeader>
-          <div className="space-y-4 mt-6">
-            <div className="space-y-1.5">
-              <Label>Имя *</Label>
-              <Input placeholder="Иван Иванов" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Должность</Label>
-              <Input placeholder="Директор" value={form.position} onChange={e => setForm(p => ({ ...p, position: e.target.value }))} />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Компания</Label>
-              <Select value={form.company} onValueChange={v => setForm(p => ({ ...p, company: v }))}>
-                <SelectTrigger><SelectValue placeholder="Выберите компанию" /></SelectTrigger>
-                <SelectContent>
-                  {COMPANIES.slice(1).map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label>Телефон</Label>
-              <Input placeholder="+7 999 000-00-00" value={form.phone} onChange={e => setForm(p => ({ ...p, phone: e.target.value }))} />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Email</Label>
-              <Input placeholder="ivan@company.ru" type="email" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Telegram</Label>
-              <Input placeholder="@username" value={form.telegram} onChange={e => setForm(p => ({ ...p, telegram: e.target.value }))} />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Заметки</Label>
-              <Textarea placeholder="Дополнительная информация..." value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} rows={3} />
-            </div>
-            <div className="flex gap-2 pt-2">
-              <Button variant="outline" className="flex-1" onClick={() => setSheetOpen(false)}>Отмена</Button>
-              <Button className="flex-1" onClick={handleCreate}>Добавить</Button>
-            </div>
-          </div>
-        </SheetContent>
-      </Sheet>
+      <ContactFormModal
+        open={modalOpen}
+        onOpenChange={setModalOpen}
+        onSubmit={handleCreate}
+        companies={MOCK_COMPANIES}
+      />
     </SidebarProvider>
   )
 }

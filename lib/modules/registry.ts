@@ -95,7 +95,7 @@ export const MODULE_REGISTRY: Record<ModuleId, ModuleConfig> = {
       { label: 'Дашборд',         href: '/sales/dashboard',   icon: 'LayoutDashboard' },
       { label: 'Сделки',          href: '/sales/deals',       icon: 'Briefcase' },
       { label: 'Воронка',         href: '/sales/pipeline',    icon: 'TrendingDown' },
-      { label: 'Клиенты',         href: '/sales/clients',     icon: 'Building2' },
+      { label: 'Компании',         href: '/sales/clients',     icon: 'Building2' },
       { label: 'Контакты',        href: '/sales/contacts',    icon: 'Users' },
       { label: 'Задачи',          href: '/sales/tasks',       icon: 'ClipboardList' },
       { label: 'Встречи',         href: '/sales/meetings',    icon: 'Calendar' },
