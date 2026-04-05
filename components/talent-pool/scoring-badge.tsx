@@ -12,15 +12,15 @@ export interface ScoreBreakdown {
 }
 
 export function getScoreColor(score: number) {
-  if (score >= 86) return { bg: "bg-gradient-to-br from-red-500 to-orange-500", text: "text-white", label: "Горячий" }
-  if (score >= 61) return { bg: "bg-emerald-500", text: "text-white", label: "Тёплый" }
-  if (score >= 31) return { bg: "bg-amber-400", text: "text-amber-900", label: "Прогрев" }
+  if (score >= 86) return { bg: "bg-gradient-to-br from-red-500 to-orange-500", text: "text-white", label: "Идеальный 🔥" }
+  if (score >= 61) return { bg: "bg-emerald-500", text: "text-white", label: "Горячий" }
+  if (score >= 31) return { bg: "bg-amber-400", text: "text-amber-900", label: "В прогреве" }
   return { bg: "bg-muted", text: "text-muted-foreground", label: "Холодный" }
 }
 
-export function scoreToStatus(score: number): "cold" | "warming" | "warm" | "hired" | "refused" {
-  if (score >= 86) return "warm"
-  if (score >= 61) return "warming"
+export function scoreToStatus(score: number): "cold" | "warming" | "hot" | "ideal" | "refused" | "hired" {
+  if (score >= 86) return "ideal"
+  if (score >= 61) return "hot"
   if (score >= 31) return "warming"
   return "cold"
 }

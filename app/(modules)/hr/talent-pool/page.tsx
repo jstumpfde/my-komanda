@@ -26,7 +26,7 @@ import { CampaignsTab } from "@/components/talent-pool/campaigns-tab"
 import { AnalyticsTab } from "@/components/talent-pool/analytics-tab"
 
 // ─── Types ──────────────────────────────────────────────
-type TalentStatus = "cold" | "warming" | "warm" | "refused" | "hired"
+type TalentStatus = "cold" | "warming" | "hot" | "ideal" | "refused" | "hired"
 
 interface TalentCandidate {
   id: string
@@ -65,16 +65,17 @@ interface Campaign {
 
 // ─── Status config ──────────────────────────────────────
 const STATUS_CFG: Record<TalentStatus, { label: string; emoji: string; cls: string }> = {
-  cold: { label: "Холодный", emoji: "🟡", cls: "bg-amber-500/10 text-amber-700 border-amber-200" },
-  warming: { label: "В прогреве", emoji: "🔵", cls: "bg-blue-500/10 text-blue-700 border-blue-200" },
-  warm: { label: "Тёплый", emoji: "🟢", cls: "bg-emerald-500/10 text-emerald-700 border-emerald-200" },
-  refused: { label: "Отказался", emoji: "🔴", cls: "bg-red-500/10 text-red-700 border-red-200" },
-  hired: { label: "Нанят", emoji: "⚫", cls: "bg-muted text-muted-foreground border-border" },
+  cold: { label: "Холодный", emoji: "🟡", cls: "bg-yellow-100 text-yellow-800 ring-1 ring-inset ring-yellow-300 px-3 py-1" },
+  warming: { label: "В прогреве", emoji: "🔵", cls: "bg-blue-100 text-blue-800 ring-1 ring-inset ring-blue-300 px-3 py-1" },
+  hot: { label: "Горячий", emoji: "🟢", cls: "bg-green-100 text-green-800 ring-1 ring-inset ring-green-300 px-3 py-1" },
+  ideal: { label: "Идеальный 🔥", emoji: "🔴", cls: "bg-red-100 text-red-800 ring-1 ring-inset ring-red-300 px-3 py-1" },
+  refused: { label: "Отказался", emoji: "🔴", cls: "bg-red-50 text-red-700 ring-1 ring-inset ring-red-200 px-3 py-1" },
+  hired: { label: "Нанят", emoji: "⚫", cls: "bg-muted text-muted-foreground ring-1 ring-inset ring-border px-3 py-1" },
 }
 
 function scoreToStatus(score: number): TalentStatus {
-  if (score >= 86) return "warm"
-  if (score >= 61) return "warming"
+  if (score >= 86) return "ideal"
+  if (score >= 61) return "hot"
   if (score >= 31) return "warming"
   return "cold"
 }
@@ -84,8 +85,8 @@ const CHANNEL_LABELS: Record<string, string> = { tg: "Telegram", whatsapp: "What
 // ─── Test data ──────────────────────────────────────────
 const INITIAL_CANDIDATES: TalentCandidate[] = [
   { id: "t1", name: "Андрей Фёдоров", position: "Менеджер по продажам", company: "СберРешения", source: "Реферал", referralName: "Анна Иванова", status: "warming", lastContact: new Date(Date.now() - 14 * 86400000), email: "andrey@mail.ru", phone: "+7 903 111-22-33", telegram: "@andrey_f", comment: "Опыт 5 лет B2B", score: 45, scoreBreakdown: { experience: 60, skills: 45, culture: 35, motivation: 40, availability: 45 } },
-  { id: "t2", name: "Ксения Воробьёва", position: "HR-менеджер", company: "Яндекс", source: "LinkedIn", status: "warming", lastContact: new Date(Date.now() - 3 * 86400000), email: "ks@yandex.ru", phone: "+7 916 444-55-66", telegram: "@ks_hr", comment: "Ищет новые проекты", score: 72, scoreBreakdown: { experience: 80, skills: 75, culture: 70, motivation: 65, availability: 70 } },
-  { id: "t3", name: "Максим Егоров", position: "DevOps инженер", company: "Ozon", source: "Конференция", status: "warm", lastContact: new Date(Date.now() - 1 * 86400000), email: "max@ozon.ru", phone: "+7 925 777-88-99", telegram: "@maxdev", comment: "Заинтересован в оффере", score: 88, scoreBreakdown: { experience: 92, skills: 90, culture: 85, motivation: 88, availability: 85 } },
+  { id: "t2", name: "Ксения Воробьёва", position: "HR-менеджер", company: "Яндекс", source: "LinkedIn", status: "hot", lastContact: new Date(Date.now() - 3 * 86400000), email: "ks@yandex.ru", phone: "+7 916 444-55-66", telegram: "@ks_hr", comment: "Ищет новые проекты", score: 72, scoreBreakdown: { experience: 80, skills: 75, culture: 70, motivation: 65, availability: 70 } },
+  { id: "t3", name: "Максим Егоров", position: "DevOps инженер", company: "Ozon", source: "Конференция", status: "ideal", lastContact: new Date(Date.now() - 1 * 86400000), email: "max@ozon.ru", phone: "+7 925 777-88-99", telegram: "@maxdev", comment: "Заинтересован в оффере", score: 88, scoreBreakdown: { experience: 92, skills: 90, culture: 85, motivation: 88, availability: 85 } },
   { id: "t4", name: "Ольга Петрова", position: "Бухгалтер", company: "1С-Рарус", source: "Реферал", referralName: "Дмитрий Козлов", status: "cold", lastContact: new Date(Date.now() - 30 * 86400000), email: "olga@1c.ru", phone: "+7 999 000-11-22", telegram: "", comment: "Не рассматривает смену работы", score: 23, scoreBreakdown: { experience: 30, skills: 20, culture: 25, motivation: 15, availability: 25 } },
   { id: "t5", name: "Роман Кузнецов", position: "Product Manager", company: "VK", source: "hh.ru", status: "warming", lastContact: new Date(Date.now() - 7 * 86400000), email: "roman@vk.com", phone: "+7 912 333-44-55", telegram: "@roman_pm", comment: "", score: 55, scoreBreakdown: { experience: 65, skills: 55, culture: 50, motivation: 50, availability: 55 } },
 ]
@@ -182,7 +183,7 @@ export default function TalentPoolPage() {
                     </SelectContent>
                   </Select>
                   <div className="flex-1" />
-                  <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5"><Upload className="w-3.5 h-3.5" />Импорт CSV</Button>
+                  <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5"><Upload className="w-3.5 h-3.5" />Загрузить CSV</Button>
                   <Button size="sm" className="h-8 text-xs gap-1.5" onClick={() => setAddOpen(true)}><Plus className="w-3.5 h-3.5" />Добавить</Button>
                   <Button size="sm" className="h-8 text-xs gap-1.5 bg-purple-600 hover:bg-purple-700" onClick={() => setCampaignOpen(true)}><Rocket className="w-3.5 h-3.5" />Запустить кампанию</Button>
                 </div>
@@ -190,16 +191,18 @@ export default function TalentPoolPage() {
                 <Card>
                   <CardContent className="p-0">
                     <table className="w-full">
-                      <thead><tr className="border-b bg-muted/30">
-                        <th className="text-left text-[11px] font-semibold text-muted-foreground px-4 py-2.5">Имя</th>
-                        <th className="text-left text-[11px] font-semibold text-muted-foreground px-3 py-2.5">Должность</th>
-                        <th className="text-left text-[11px] font-semibold text-muted-foreground px-3 py-2.5">Компания</th>
-                        <th className="text-left text-[11px] font-semibold text-muted-foreground px-3 py-2.5">Источник</th>
-                        <th className="text-center text-[11px] font-semibold text-muted-foreground px-3 py-2.5">Скоринг</th>
-                        <th className="text-left text-[11px] font-semibold text-muted-foreground px-3 py-2.5">Статус</th>
-                        <th className="text-left text-[11px] font-semibold text-muted-foreground px-3 py-2.5">Контакт</th>
-                        <th className="px-3 py-2.5"></th>
-                      </tr></thead>
+                      <thead>
+                        <tr className="border-b border-border bg-muted/40">
+                        <th className="text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3">Имя</th>
+                        <th className="text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3">Должность</th>
+                        <th className="text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3">Компания</th>
+                        <th className="text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3">Источник</th>
+                        <th className="text-center text-xs font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3">Скоринг</th>
+                        <th className="text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3">Статус</th>
+                        <th className="text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3">Контакт</th>
+                        <th className="px-4 py-3"></th>
+                      </tr>
+                      </thead>
                       <tbody>
                         {filtered.map((c) => {
                           const st = STATUS_CFG[c.status]
