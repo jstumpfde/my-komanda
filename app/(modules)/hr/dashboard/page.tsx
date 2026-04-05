@@ -5,7 +5,6 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -34,7 +33,7 @@ import {
 } from "lucide-react"
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, LineChart, Line,
+  ResponsiveContainer, LineChart, Line, AreaChart, Area,
 } from "recharts"
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -68,14 +67,59 @@ interface DashboardData {
   }
 }
 
+// ─── Mock data for charts ──────────────────────────────────────────────────
+
+const MOCK_VACANCIES: VacancyRow[] = [
+  { id: "1", title: "Менеджер по продажам", city: "Москва", slug: "manager", salaryMin: null, salaryMax: 150000, status: "active", createdAt: "2026-03-01", candidateCount: 300, decisionCount: 12 },
+  { id: "2", title: "Frontend-разработчик", city: "Удалённо", slug: "frontend", salaryMin: null, salaryMax: 250000, status: "active", createdAt: "2026-03-05", candidateCount: 85, decisionCount: 3 },
+  { id: "3", title: "HR-менеджер", city: "Москва", slug: "hr-manager", salaryMin: null, salaryMax: 120000, status: "active", createdAt: "2026-03-10", candidateCount: 42, decisionCount: 0 },
+  { id: "4", title: "Бухгалтер", city: "Санкт-Петербург", slug: "accountant", salaryMin: null, salaryMax: 90000, status: "active", createdAt: "2026-03-15", candidateCount: 18, decisionCount: 5 },
+]
+
+const MOCK_WEEKLY_RESPONSES = [
+  { day: "Пн", value: 45 },
+  { day: "Вт", value: 62 },
+  { day: "Ср", value: 38 },
+  { day: "Чт", value: 78 },
+  { day: "Пт", value: 95 },
+  { day: "Сб", value: 55 },
+  { day: "Вс", value: 102 },
+]
+
+const MOCK_SOURCE_DISTRIBUTION = [
+  { name: "hh.ru", pct: 62, color: "#3b82f6" },
+  { name: "Telegram", pct: 18, color: "#8b5cf6" },
+  { name: "Рефералы", pct: 12, color: "#22c55e" },
+  { name: "Сайт", pct: 8, color: "#f59e0b" },
+]
+
+const MOCK_TIME_TO_HIRE = [
+  { month: "Янв", days: 24 },
+  { month: "Фев", days: 21 },
+  { month: "Мар", days: 18 },
+  { month: "Апр", days: 15 },
+  { month: "Май", days: 19 },
+  { month: "Июн", days: 18 },
+]
+
+const MOCK_CONVERSION_STAGES = [
+  { stage: "Отклик → Скрининг", pct: 44, color: "#6ee7b7" },
+  { stage: "Скрининг → Интервью", pct: 45, color: "#34d399" },
+  { stage: "Интервью → Оффер", pct: 52, color: "#10b981" },
+  { stage: "Оффер → Выход", pct: 57, color: "#059669" },
+]
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 function formatSalary(min: number | null, max: number | null): string {
   if (!min && !max) return "Не указана"
-  const fmt = (n: number) => n >= 1000 ? `${Math.round(n / 1000)}k` : String(n)
-  if (min && max) return `${fmt(min)} – ${fmt(max)} ₽`
-  if (min) return `от ${fmt(min)} ₽`
-  return `до ${fmt(max!)} ₽`
+  const fmt = (n: number) => {
+    if (n >= 1000) return `${Math.round(n / 1000)} 000 ₽`
+    return `${n} ₽`
+  }
+  if (min && max) return `${fmt(min)} – ${fmt(max)}`
+  if (min) return `от ${fmt(min)}`
+  return `до ${fmt(max!)}`
 }
 
 function getGreeting(): string {
@@ -84,90 +128,6 @@ function getGreeting(): string {
   if (h < 18) return "Добрый день"
   return "Добрый вечер"
 }
-
-// ─── KPI Card ───────────────────────────────────────────────────────────────
-
-function KpiCard({ icon: Icon, label, value, accent }: {
-  icon: React.ElementType
-  label: string
-  value: string | number
-  accent: string
-}) {
-  return (
-    <Card className="relative overflow-hidden">
-      <CardContent className="p-5">
-        <div className="flex items-start justify-between">
-          <div className="space-y-1">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{label}</p>
-            <p className="text-2xl font-bold tracking-tight">{value}</p>
-          </div>
-          <div className={cn("flex h-10 w-10 items-center justify-center rounded-lg", accent)}>
-            <Icon className="size-5 text-white" />
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  )
-}
-
-// ─── Vacancy Card ───────────────────────────────────────────────────────────
-
-function VacancyCard({ v, onClick }: { v: VacancyRow; onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      className="w-full text-left rounded-xl border bg-card p-4 hover:bg-accent/50 transition-colors group"
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <p className="font-semibold text-sm truncate group-hover:text-primary transition-colors">{v.title}</p>
-          {v.city && (
-            <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
-              <MapPin className="size-3" />{v.city}
-            </p>
-          )}
-          <p className="text-xs text-muted-foreground mt-1">{formatSalary(v.salaryMin, v.salaryMax)}</p>
-        </div>
-        <ChevronRight className="size-4 text-muted-foreground/50 shrink-0 mt-1 group-hover:text-primary transition-colors" />
-      </div>
-      <div className="flex items-center gap-2 mt-3">
-        <Badge variant="secondary" className="text-xs font-normal">
-          <Users className="size-3 mr-1" />{v.candidateCount} кандидат{v.candidateCount === 1 ? "" : v.candidateCount < 5 ? "а" : "ов"}
-        </Badge>
-        {v.decisionCount > 0 && (
-          <Badge className="bg-red-500/15 text-red-600 dark:text-red-400 border-0 text-xs font-normal">
-            <AlertTriangle className="size-3 mr-1" />{v.decisionCount} ждут решения
-          </Badge>
-        )}
-      </div>
-    </button>
-  )
-}
-
-// ─── Funnel Bar ─────────────────────────────────────────────────────────────
-
-function FunnelBar({ stage, count, maxCount, prevCount }: {
-  stage: string; count: number; maxCount: number; prevCount: number
-}) {
-  const cfg = defaultColumnColors[stage]
-  if (!cfg) return null
-  const pct = maxCount > 0 ? (count / maxCount) * 100 : 0
-  const conversion = prevCount > 0 ? Math.round((count / prevCount) * 100) : null
-  return (
-    <div className="flex items-center gap-3">
-      <div className="w-32 shrink-0 text-right">
-        <p className="text-sm font-medium">{cfg.label}</p>
-        {conversion !== null && <p className="text-[11px] text-muted-foreground">{conversion}% конверсия</p>}
-      </div>
-      <div className="flex-1 h-9 bg-muted rounded-lg overflow-hidden relative">
-        <div className="h-full rounded-lg transition-all duration-500" style={{ width: `${Math.max(pct, 2)}%`, background: `linear-gradient(90deg, ${cfg.from}, ${cfg.to})` }} />
-        <span className="absolute inset-0 flex items-center px-3 text-sm font-semibold text-white mix-blend-difference">{count}</span>
-      </div>
-    </div>
-  )
-}
-
-// ─── Analytics: Sources Tab (from /hr/analytics) ────────────────────────────
 
 const ANALYTICS_VACANCIES = [
   { id: "1", name: "Менеджер по продажам", slug: "manager" },
@@ -178,28 +138,110 @@ const HH_ACCOUNTS = ["anna@romashka.ru (основной)", "hr2@romashka.ru", "
 const TG_ACCOUNTS = ["@romashka_hr", "@romashka_jobs", "личный бот HR"]
 const tooltipStyle = { backgroundColor: "var(--popover)", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "12px" }
 
-function AnalyticsOverviewTab({ vacancyFilter, onVacancyChange }: { vacancyFilter: string; onVacancyChange: (v: string) => void }) {
+// ─── Section 1: Greeting ───────────────────────────────────────────────────
+
+function GreetingBlock({ userName, interviews, responses, decisions }: {
+  userName: string; interviews: number; responses: number; decisions: number
+}) {
+  const hints: string[] = []
+  if (interviews > 0) hints.push(`${interviews} интервью`)
+  if (responses > 0) hints.push(`${responses} новых откликов`)
+  if (decisions > 0) hints.push(`${decisions} кандидатов ждут решения`)
+  const hintText = hints.length > 0 ? `Сегодня ${hints.join(" · ")}` : "Сегодня всё спокойно"
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <Select value={vacancyFilter} onValueChange={onVacancyChange}>
-          <SelectTrigger className="w-[220px] h-9"><SelectValue placeholder="Все вакансии" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Все вакансии</SelectItem>
-            {ANALYTICS_VACANCIES.map(v => <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>)}
-          </SelectContent>
-        </Select>
+    <div className="rounded-xl bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 px-6 py-4">
+      <div className="flex items-center gap-2">
+        <span className="text-lg">✨</span>
+        <h2 className="text-lg font-semibold">{getGreeting()}, {userName}!</h2>
       </div>
-      <div className="flex flex-col items-center justify-center py-20 text-center">
-        <BarChart3 className="size-14 text-muted-foreground/25 mb-4" />
-        <p className="text-muted-foreground font-medium">Раздел в разработке</p>
-        <p className="text-sm text-muted-foreground/60 mt-1">Здесь появится аналитика по воронке найма</p>
+      <p className="text-sm text-muted-foreground mt-1">{hintText}</p>
+    </div>
+  )
+}
+
+// ─── Section 2: KPI Cards ──────────────────────────────────────────────────
+
+function KpiCard({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="bg-muted/50 rounded-xl p-4">
+      <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">{label}</p>
+      <p className="text-2xl font-semibold">{value}</p>
+    </div>
+  )
+}
+
+// ─── Section 3: Vacancy Cards ──────────────────────────────────────────────
+
+function VacancyCard({ v, onClick }: { v: VacancyRow; onClick: () => void }) {
+  const interviewCount = v.decisionCount
+  return (
+    <button
+      onClick={onClick}
+      className="w-full text-left rounded-xl border p-4 hover:bg-accent/50 transition-colors group"
+    >
+      <p className="font-medium text-sm group-hover:text-primary transition-colors">{v.title}</p>
+      <p className="text-sm text-muted-foreground mt-1">
+        {v.city && <>{v.city} · </>}{formatSalary(v.salaryMin, v.salaryMax)}
+      </p>
+      <div className="flex items-center gap-2 mt-3">
+        <Badge variant="secondary" className="text-xs font-normal bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 border-0">
+          {v.candidateCount} откликов
+        </Badge>
+        <Badge
+          variant="secondary"
+          className={cn(
+            "text-xs font-normal border-0",
+            interviewCount === 0
+              ? "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400"
+              : interviewCount <= 3
+                ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300"
+                : interviewCount <= 8
+                  ? "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300"
+                  : "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300"
+          )}
+        >
+          {interviewCount} на интервью
+        </Badge>
+      </div>
+    </button>
+  )
+}
+
+// ─── Section 4: Funnel Bar ─────────────────────────────────────────────────
+
+function FunnelBar({ stage, count, maxCount, firstCount }: {
+  stage: string; count: number; maxCount: number; firstCount: number
+}) {
+  const cfg = defaultColumnColors[stage]
+  if (!cfg) return null
+  const pct = maxCount > 0 ? (count / maxCount) * 100 : 0
+  const conversion = firstCount > 0 ? Math.round((count / firstCount) * 100) : null
+  const isFirst = count === firstCount
+  return (
+    <div className="flex items-center gap-3">
+      <div className="w-36 shrink-0 text-right">
+        <p className="text-sm font-medium">{cfg.label}</p>
+        {!isFirst && conversion !== null && (
+          <p className="text-[11px] text-muted-foreground">{conversion}% конверсия</p>
+        )}
+      </div>
+      <div className="flex-1 h-9 bg-muted rounded-lg overflow-hidden relative">
+        <div
+          className="h-full rounded-lg transition-all duration-500"
+          style={{ width: `${Math.max(pct, 2)}%`, background: `linear-gradient(90deg, ${cfg.from}, ${cfg.to})` }}
+        />
+        <span className="absolute inset-0 flex items-center px-3 text-sm font-semibold text-white mix-blend-difference">
+          {count}
+        </span>
       </div>
     </div>
   )
 }
 
-function SourcesTab() {
+// ─── Section 5: Sources Tab ────────────────────────────────────────────────
+
+function SourcesSection() {
   const [links, setLinks] = useState<TrackedLink[]>(DEFAULT_TRACKED_LINKS)
   const [createOpen, setCreateOpen] = useState(false)
   const [analyticsLink, setAnalyticsLink] = useState<TrackedLink | null>(null)
@@ -257,75 +299,74 @@ function SourcesTab() {
 
   return (
     <>
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4">
-        <p className="text-sm text-muted-foreground">UTM-ссылки, аналитика переходов и конверсий</p>
-        <Button className="gap-1.5" onClick={() => { setCreateOpen(true); setStep(1) }}><Plus className="w-4 h-4" />Создать ссылку</Button>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2 mb-4">
-        <div className="relative flex-1 min-w-[200px] max-w-xs">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input className="pl-9 h-9" placeholder="Поиск по названию..." value={searchText} onChange={e => setSearchText(e.target.value)} />
+      <div className="border rounded-xl p-6">
+        <div className="flex items-center justify-between mb-1">
+          <h2 className="text-base font-semibold">Источники</h2>
+          <Button className="gap-1.5" size="sm" onClick={() => { setCreateOpen(true); setStep(1) }}><Plus className="w-4 h-4" />Создать ссылку</Button>
         </div>
-        <Select value={filterSource} onValueChange={setFilterSource}>
-          <SelectTrigger className="w-[140px] h-9"><SelectValue placeholder="Источник" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Все источники</SelectItem>
-            {(Object.entries(SOURCE_TYPE_LABELS) as [SourceType, string][]).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
-          </SelectContent>
-        </Select>
-        <Select value={filterVacancy} onValueChange={setFilterVacancy}>
-          <SelectTrigger className="w-[180px] h-9"><SelectValue placeholder="Вакансия" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Все вакансии</SelectItem>
-            {ANALYTICS_VACANCIES.map(v => <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>)}
-          </SelectContent>
-        </Select>
-      </div>
+        <p className="text-sm text-muted-foreground mb-4">UTM-ссылки, аналитика переходов и конверсий</p>
 
-      <Card>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b bg-muted/30">
-                  <th className="w-3 px-2 py-3" />
-                  <th className="text-left text-xs font-semibold text-muted-foreground px-3 py-3">Название</th>
-                  <th className="text-left text-xs font-semibold text-muted-foreground px-3 py-3">Источник</th>
-                  <th className="text-left text-xs font-semibold text-muted-foreground px-3 py-3">Аккаунт</th>
-                  <th className="text-right text-xs font-semibold text-muted-foreground px-3 py-3">Переходов</th>
-                  <th className="text-right text-xs font-semibold text-muted-foreground px-3 py-3">Откликов</th>
-                  <th className="text-right text-xs font-semibold text-muted-foreground px-3 py-3">Конверсия</th>
-                  <th className="text-left text-xs font-semibold text-muted-foreground px-3 py-3">Создана</th>
-                  <th className="text-center text-xs font-semibold text-muted-foreground px-3 py-3">Действия</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map(link => (
-                  <tr key={link.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
-                    <td className="px-2 py-3"><div className="w-3 h-3 rounded-full" style={{ backgroundColor: link.color }} /></td>
-                    <td className="px-3 py-3"><p className="text-sm font-medium text-foreground">{link.name}</p><p className="text-[10px] text-muted-foreground font-mono">{link.shortUrl}</p></td>
-                    <td className="px-3 py-3"><Badge variant="outline" className="text-xs" style={{ borderColor: link.color + "40", color: link.color }}>{SOURCE_TYPE_LABELS[link.sourceType]}</Badge></td>
-                    <td className="px-3 py-3 text-sm text-muted-foreground">{link.account}</td>
-                    <td className="text-right px-3 py-3 text-sm font-medium text-foreground">{link.clicks}</td>
-                    <td className="text-right px-3 py-3 text-sm font-medium text-foreground">{link.responses}</td>
-                    <td className="text-right px-3 py-3"><span className={cn("text-sm font-semibold", link.conversion >= 30 ? "text-emerald-600" : "text-foreground")}>{link.conversion}%</span></td>
-                    <td className="px-3 py-3 text-xs text-muted-foreground">{link.createdAt.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" })}{link.auto && <Badge variant="secondary" className="ml-1 text-[9px] py-0 h-4">авто</Badge>}</td>
-                    <td className="text-center px-3 py-3">
-                      <div className="flex items-center justify-center gap-0.5">
-                        <Button variant="ghost" size="icon" className="h-7 w-7" title="Аналитика" onClick={() => openAnalytics(link)}><BarChart3 className="w-3.5 h-3.5" /></Button>
-                        <Button variant="ghost" size="icon" className="h-7 w-7" title="Копировать" onClick={() => handleCopy(link.shortUrl, link.id)}>{copiedId === link.id ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}</Button>
-                        {!link.auto && <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" title="Удалить" onClick={() => handleDelete(link.id)}><Trash2 className="w-3.5 h-3.5" /></Button>}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-                {filtered.length === 0 && <tr><td colSpan={9} className="text-center py-8 text-sm text-muted-foreground">Нет ссылок</td></tr>}
-              </tbody>
-            </table>
+        <div className="flex flex-wrap items-center gap-2 mb-4">
+          <div className="relative flex-1 min-w-[200px] max-w-xs">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input className="pl-9 h-9" placeholder="Поиск по названию..." value={searchText} onChange={e => setSearchText(e.target.value)} />
           </div>
-        </CardContent>
-      </Card>
+          <Select value={filterSource} onValueChange={setFilterSource}>
+            <SelectTrigger className="w-[140px] h-9"><SelectValue placeholder="Источник" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Все источники</SelectItem>
+              {(Object.entries(SOURCE_TYPE_LABELS) as [SourceType, string][]).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={filterVacancy} onValueChange={setFilterVacancy}>
+            <SelectTrigger className="w-[180px] h-9"><SelectValue placeholder="Вакансия" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Все вакансии</SelectItem>
+              {ANALYTICS_VACANCIES.map(v => <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="overflow-x-auto rounded-lg border">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b bg-muted/30">
+                <th className="w-3 px-2 py-3" />
+                <th className="text-left text-xs font-semibold text-muted-foreground px-3 py-3">Название</th>
+                <th className="text-left text-xs font-semibold text-muted-foreground px-3 py-3">Источник</th>
+                <th className="text-left text-xs font-semibold text-muted-foreground px-3 py-3">Аккаунт</th>
+                <th className="text-right text-xs font-semibold text-muted-foreground px-3 py-3">Переходов</th>
+                <th className="text-right text-xs font-semibold text-muted-foreground px-3 py-3">Откликов</th>
+                <th className="text-right text-xs font-semibold text-muted-foreground px-3 py-3">Конверсия</th>
+                <th className="text-left text-xs font-semibold text-muted-foreground px-3 py-3">Создана</th>
+                <th className="text-center text-xs font-semibold text-muted-foreground px-3 py-3">Действия</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map(link => (
+                <tr key={link.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
+                  <td className="px-2 py-3"><div className="w-3 h-3 rounded-full" style={{ backgroundColor: link.color }} /></td>
+                  <td className="px-3 py-3"><p className="text-sm font-medium text-foreground">{link.name}</p><p className="text-[10px] text-muted-foreground font-mono">{link.shortUrl}</p></td>
+                  <td className="px-3 py-3"><Badge variant="outline" className="text-xs" style={{ borderColor: link.color + "40", color: link.color }}>{SOURCE_TYPE_LABELS[link.sourceType]}</Badge></td>
+                  <td className="px-3 py-3 text-sm text-muted-foreground">{link.account}</td>
+                  <td className="text-right px-3 py-3 text-sm font-medium text-foreground">{link.clicks}</td>
+                  <td className="text-right px-3 py-3 text-sm font-medium text-foreground">{link.responses}</td>
+                  <td className="text-right px-3 py-3"><span className={cn("text-sm font-semibold", link.conversion >= 30 ? "text-emerald-600" : "text-foreground")}>{link.conversion}%</span></td>
+                  <td className="px-3 py-3 text-xs text-muted-foreground">{link.createdAt.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" })}{link.auto && <Badge variant="secondary" className="ml-1 text-[9px] py-0 h-4">авто</Badge>}</td>
+                  <td className="text-center px-3 py-3">
+                    <div className="flex items-center justify-center gap-0.5">
+                      <Button variant="ghost" size="icon" className="h-7 w-7" title="Аналитика" onClick={() => openAnalytics(link)}><BarChart3 className="w-3.5 h-3.5" /></Button>
+                      <Button variant="ghost" size="icon" className="h-7 w-7" title="Копировать" onClick={() => handleCopy(link.shortUrl, link.id)}>{copiedId === link.id ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}</Button>
+                      {!link.auto && <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" title="Удалить" onClick={() => handleDelete(link.id)}><Trash2 className="w-3.5 h-3.5" /></Button>}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {filtered.length === 0 && <tr><td colSpan={9} className="text-center py-8 text-sm text-muted-foreground">Нет ссылок</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </div>
 
       {/* Create dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
@@ -429,47 +470,14 @@ function SourcesTab() {
   )
 }
 
-// ─── Greeting Block ─────────────────────────────────────────────────────────
-
-function GreetingBlock({ userName, decisionCount }: { userName: string; decisionCount: number }) {
-  return (
-    <div className="rounded-xl bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 p-6 mb-6">
-      <div className="flex items-center gap-2 mb-1">
-        <Sun className="size-5 text-amber-500" />
-        <h2 className="text-lg font-semibold">{getGreeting()}, {userName}!</h2>
-      </div>
-      <div className="flex flex-wrap gap-4 mt-3">
-        {decisionCount > 0 && (
-          <div className="flex items-center gap-1.5 text-sm text-red-600 dark:text-red-400">
-            <AlertTriangle className="size-4" />
-            <span>У вас <strong>{decisionCount}</strong> кандидат{decisionCount === 1 ? "" : decisionCount < 5 ? "а" : "ов"} ждут решения</span>
-          </div>
-        )}
-        <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-          <Calendar className="size-4" />
-          <span>Сегодня <strong>2</strong> интервью запланировано</span>
-        </div>
-        <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-          <ClipboardCheck className="size-4" />
-          <span>Обработано <strong>0</strong> кандидатов за сегодня</span>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ─── Inner content (needs Suspense for useSearchParams) ─────────────────────
+// ─── Inner content ─────────────────────────────────────────────────────────
 
 function DashboardContent() {
   const router = useRouter()
-  const searchParams = useSearchParams()
   const { user } = useAuth()
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
-  const initialTab = searchParams.get("tab") === "analytics" ? "analytics" : "overview"
-  const [tab, setTab] = useState(initialTab)
   const [funnelVacancy, setFunnelVacancy] = useState("__all__")
-  const [analyticsVacancyFilter, setAnalyticsVacancyFilter] = useState("all")
 
   useEffect(() => {
     fetch("/api/modules/hr/dashboard/stats")
@@ -479,123 +487,183 @@ function DashboardContent() {
       .finally(() => setLoading(false))
   }, [])
 
-  const totalDecisionCount = useMemo(
-    () => data?.vacancies.reduce((sum, v) => sum + v.decisionCount, 0) ?? 0,
-    [data],
-  )
-
-  const needsAttention = useMemo(
-    () => data?.vacancies.filter(v => v.decisionCount > 0) ?? [],
-    [data],
-  )
+  // Use API data if available, otherwise mock
+  const vacancies = data?.vacancies ?? MOCK_VACANCIES
+  const kpi = data?.kpi ?? { activeVacancies: 4, totalCandidates: 1400, hiredThisMonth: 82, conversionRate: 5.9 }
 
   const funnelData = useMemo(() => {
-    if (!data) return []
+    if (!data) return COLUMN_ORDER.map(stage => ({
+      stage,
+      count: { new: 523, demo: 318, decision: 1, interview: 194, final_decision: 5, hired: 92 }[stage] ?? 0,
+    }))
     const src = funnelVacancy === "__all__" ? data.funnel.totals : data.funnel.byVacancy[funnelVacancy] ?? {}
     return COLUMN_ORDER.map(stage => ({ stage, count: src[stage] ?? 0 }))
   }, [data, funnelVacancy])
 
   const funnelMax = Math.max(...funnelData.map(d => d.count), 1)
+  const firstStageCount = funnelData[0]?.count ?? 1
 
+  const totalDecisionCount = vacancies.reduce((sum, v) => sum + v.decisionCount, 0)
   const firstName = (user.name ?? "").split(" ")[0] || "HR"
 
   return (
-    <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
-      {/* Greeting */}
-      <GreetingBlock userName={firstName} decisionCount={totalDecisionCount} />
+    <div className="py-6 space-y-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
 
-      {/* KPI Cards */}
+      {/* ─── Section 1: Greeting ─── */}
+      <GreetingBlock
+        userName={firstName}
+        interviews={2}
+        responses={45}
+        decisions={totalDecisionCount}
+      />
+
+      {/* ─── Section 2: KPI Cards ─── */}
       {loading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          {Array.from({ length: 4 }).map((_, i) => <Card key={i}><CardContent className="p-5"><Skeleton className="h-16 w-full" /></CardContent></Card>)}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-xl" />)}
         </div>
-      ) : data && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          <KpiCard icon={Briefcase} label="Активных вакансий" value={data.kpi.activeVacancies} accent="bg-blue-500" />
-          <KpiCard icon={Users} label="Всего кандидатов" value={data.kpi.totalCandidates} accent="bg-violet-500" />
-          <KpiCard icon={UserCheck} label="Нанято за месяц" value={data.kpi.hiredThisMonth} accent="bg-emerald-500" />
-          <KpiCard icon={TrendingUp} label="Средняя конверсия" value={`${data.kpi.conversionRate}%`} accent="bg-amber-500" />
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <KpiCard label="Активных вакансий" value={kpi.activeVacancies} />
+          <KpiCard label="Всего кандидатов" value={kpi.totalCandidates.toLocaleString("ru-RU")} />
+          <KpiCard label="Нанято за месяц" value={kpi.hiredThisMonth} />
+          <KpiCard label="Средняя конверсия" value={`${kpi.conversionRate}%`} />
         </div>
       )}
 
-      {/* Tabs */}
-      <Tabs value={tab} onValueChange={setTab}>
-        <TabsList>
-          <TabsTrigger value="overview">Обзор</TabsTrigger>
-          <TabsTrigger value="funnel">Воронка</TabsTrigger>
-          <TabsTrigger value="analytics">Аналитика</TabsTrigger>
-        </TabsList>
+      {/* ─── Section 3: Active Vacancies ─── */}
+      <div>
+        <h2 className="text-base font-semibold mb-3">Активные вакансии ({vacancies.length})</h2>
+        {loading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-28 rounded-xl" />)}
+          </div>
+        ) : vacancies.length === 0 ? (
+          <div className="border rounded-xl p-12 text-center text-muted-foreground">
+            <Briefcase className="size-10 mx-auto mb-3 opacity-30" />
+            <p className="font-medium">Нет активных вакансий</p>
+            <p className="text-sm mt-1">Опубликуйте вакансию, чтобы увидеть статистику</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {vacancies.map(v => (
+              <VacancyCard key={v.id} v={v} onClick={() => router.push(`/hr/vacancies/${v.id}`)} />
+            ))}
+          </div>
+        )}
+      </div>
 
-        {/* ═══ Tab: Обзор ═══ */}
-        <TabsContent value="overview" className="mt-4 space-y-6">
-          {loading ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-28 rounded-xl" />)}
+      {/* ─── Section 4: Hiring Funnel ─── */}
+      <div className="border rounded-xl p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-base font-semibold">Воронка найма</h2>
+          <Select value={funnelVacancy} onValueChange={setFunnelVacancy}>
+            <SelectTrigger className="w-56 h-9"><SelectValue placeholder="Все вакансии" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">Все вакансии</SelectItem>
+              {(data?.vacancies ?? MOCK_VACANCIES).map(v => <SelectItem key={v.id} value={v.id}>{v.title}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-3">
+          {funnelData.every(d => d.count === 0) ? (
+            <div className="py-8 text-center text-muted-foreground">
+              <Users className="size-10 mx-auto mb-3 opacity-30" />
+              <p className="font-medium">Нет данных по воронке</p>
             </div>
-          ) : !data || data.vacancies.length === 0 ? (
-            <Card>
-              <CardContent className="py-12 text-center text-muted-foreground">
-                <Briefcase className="size-10 mx-auto mb-3 opacity-30" />
-                <p className="font-medium">Нет активных вакансий</p>
-                <p className="text-sm mt-1">Опубликуйте вакансию, чтобы увидеть статистику</p>
-              </CardContent>
-            </Card>
           ) : (
-            <>
-              {needsAttention.length > 0 && (
-                <div>
-                  <h2 className="text-sm font-semibold text-red-600 dark:text-red-400 flex items-center gap-1.5 mb-3">
-                    <AlertTriangle className="size-4" />Требуют внимания ({needsAttention.length})
-                  </h2>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {needsAttention.map(v => <VacancyCard key={v.id} v={v} onClick={() => router.push(`/hr/vacancies/${v.id}`)} />)}
-                  </div>
+            funnelData.map((d) => (
+              <FunnelBar
+                key={d.stage}
+                stage={d.stage}
+                count={d.count}
+                maxCount={funnelMax}
+                firstCount={firstStageCount}
+              />
+            ))
+          )}
+        </div>
+      </div>
+
+      {/* ─── Section 5: Sources ─── */}
+      <SourcesSection />
+
+      {/* ─── Section 6: Two charts row ─── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Weekly responses */}
+        <div className="border rounded-xl p-6">
+          <h2 className="text-base font-semibold mb-4">Динамика откликов за неделю</h2>
+          <ResponsiveContainer width="100%" height={220}>
+            <AreaChart data={MOCK_WEEKLY_RESPONSES}>
+              <defs>
+                <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
+                  <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+              <XAxis dataKey="day" tick={{ fontSize: 12 }} stroke="var(--muted-foreground)" />
+              <YAxis tick={{ fontSize: 12 }} stroke="var(--muted-foreground)" />
+              <Tooltip contentStyle={tooltipStyle} />
+              <Area type="monotone" dataKey="value" name="Отклики" stroke="#10b981" strokeWidth={2} fill="url(#areaGrad)" />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Source distribution */}
+        <div className="border rounded-xl p-6">
+          <h2 className="text-base font-semibold mb-4">Источники кандидатов</h2>
+          <div className="space-y-4">
+            {MOCK_SOURCE_DISTRIBUTION.map(s => (
+              <div key={s.name}>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-sm font-medium">{s.name}</span>
+                  <span className="text-sm text-muted-foreground">{s.pct}%</span>
                 </div>
-              )}
-              <div>
-                <h2 className="text-sm font-semibold text-foreground/80 mb-3">Активные вакансии ({data.vacancies.length})</h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {data.vacancies.map(v => <VacancyCard key={v.id} v={v} onClick={() => router.push(`/hr/vacancies/${v.id}`)} />)}
+                <div className="h-2.5 bg-muted rounded-full overflow-hidden">
+                  <div className="h-full rounded-full transition-all" style={{ width: `${s.pct}%`, backgroundColor: s.color }} />
                 </div>
               </div>
-            </>
-          )}
-        </TabsContent>
-
-        {/* ═══ Tab: Воронка ═══ */}
-        <TabsContent value="funnel" className="mt-4 space-y-4">
-          <div className="flex items-center gap-3">
-            <Select value={funnelVacancy} onValueChange={setFunnelVacancy}>
-              <SelectTrigger className="w-64"><SelectValue placeholder="Все вакансии" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__all__">Все вакансии</SelectItem>
-                {data?.vacancies.map(v => <SelectItem key={v.id} value={v.id}>{v.title}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            ))}
           </div>
-          <Card>
-            <CardContent className="p-6 space-y-3">
-              {funnelData.every(d => d.count === 0) ? (
-                <div className="py-8 text-center text-muted-foreground"><Users className="size-10 mx-auto mb-3 opacity-30" /><p className="font-medium">Нет данных по воронке</p></div>
-              ) : (
-                funnelData.map((d, i) => <FunnelBar key={d.stage} stage={d.stage} count={d.count} maxCount={funnelMax} prevCount={i > 0 ? funnelData[i - 1].count : d.count} />)
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
+        </div>
+      </div>
 
-        {/* ═══ Tab: Аналитика ═══ */}
-        <TabsContent value="analytics" className="mt-4">
-          <Tabs defaultValue="overview">
-            <TabsList className="mb-4">
-              <TabsTrigger value="overview">Обзор</TabsTrigger>
-              <TabsTrigger value="sources">Источники</TabsTrigger>
-            </TabsList>
-            <TabsContent value="overview"><AnalyticsOverviewTab vacancyFilter={analyticsVacancyFilter} onVacancyChange={setAnalyticsVacancyFilter} /></TabsContent>
-            <TabsContent value="sources"><SourcesTab /></TabsContent>
-          </Tabs>
-        </TabsContent>
-      </Tabs>
+      {/* ─── Section 7: Two more charts ─── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Time to hire */}
+        <div className="border rounded-xl p-6">
+          <h2 className="text-base font-semibold mb-1">Время закрытия вакансий</h2>
+          <p className="text-3xl font-bold text-amber-600 mb-4">18 <span className="text-base font-medium text-muted-foreground">дней в среднем</span></p>
+          <ResponsiveContainer width="100%" height={180}>
+            <BarChart data={MOCK_TIME_TO_HIRE}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+              <XAxis dataKey="month" tick={{ fontSize: 12 }} stroke="var(--muted-foreground)" />
+              <YAxis tick={{ fontSize: 12 }} stroke="var(--muted-foreground)" />
+              <Tooltip contentStyle={tooltipStyle} />
+              <Bar dataKey="days" name="Дней" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Conversion by stages */}
+        <div className="border rounded-xl p-6">
+          <h2 className="text-base font-semibold mb-4">Конверсия по этапам</h2>
+          <div className="space-y-4">
+            {MOCK_CONVERSION_STAGES.map(s => (
+              <div key={s.stage}>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-sm font-medium">{s.stage}</span>
+                  <span className="text-sm text-muted-foreground">{s.pct}%</span>
+                </div>
+                <div className="h-2.5 bg-muted rounded-full overflow-hidden">
+                  <div className="h-full rounded-full transition-all" style={{ width: `${s.pct}%`, backgroundColor: s.color }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
