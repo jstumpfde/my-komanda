@@ -10,6 +10,8 @@ import {
   startOfDay,
   differenceInMinutes,
   isSameDay,
+  isToday,
+  isWeekend,
 } from "date-fns"
 import { ru } from "date-fns/locale"
 
@@ -70,23 +72,31 @@ export function WeekView({ currentDate, events, onSlotClick, onEventClick }: Wee
   return (
     <div className="flex flex-col h-full overflow-auto border rounded-xl">
       {/* Header row */}
-      <div className="grid grid-cols-[60px_repeat(7,1fr)] border-b sticky top-0 bg-card z-10 rounded-t-xl">
-        <div className="p-2 text-xs text-muted-foreground" />
-        {days.map((day) => (
-          <div key={day.toISOString()} className="py-2.5 text-center border-l flex items-center justify-center gap-1.5">
-            <span className="text-xs text-muted-foreground uppercase">{format(day, "EEEEEE", { locale: ru })}</span>
-            <span className="text-sm font-semibold">{format(day, "d")}</span>
-          </div>
-        ))}
+      <div className="grid grid-cols-[52px_repeat(7,1fr)] border-b sticky top-0 bg-card z-10 rounded-t-xl">
+        <div />
+        {days.map((day) => {
+          const today = isToday(day)
+          const weekend = isWeekend(day)
+          return (
+            <div key={day.toISOString()} className="border-l py-3 flex flex-col items-center gap-0.5">
+              <span className={`text-[11px] font-medium uppercase tracking-wide ${weekend ? "text-muted-foreground/50" : "text-muted-foreground"}`}>
+                {format(day, "EEEEEE", { locale: ru })}
+              </span>
+              <span className={`text-sm font-bold w-7 h-7 flex items-center justify-center rounded-full ${today ? "bg-primary text-primary-foreground" : weekend ? "text-muted-foreground/50" : "text-foreground"}`}>
+                {format(day, "d")}
+              </span>
+            </div>
+          )
+        })}
       </div>
 
       {/* Grid */}
-      <div className="grid grid-cols-[60px_repeat(7,1fr)] flex-1">
+      <div className="grid grid-cols-[52px_repeat(7,1fr)] flex-1">
         {/* Time column */}
         <div>
           {hours.map((h) => (
-            <div key={h} style={{ height: SLOT_HEIGHT }} className="border-b flex items-start">
-              <span className="text-xs text-muted-foreground px-1 pt-1 select-none">
+            <div key={h} style={{ height: SLOT_HEIGHT }} className="border-b flex items-start justify-end pr-2 pt-[-4px]">
+              <span className="text-[11px] text-muted-foreground/60 font-medium select-none -mt-2">
                 {String(h).padStart(2, "0")}:00
               </span>
             </div>
@@ -96,14 +106,15 @@ export function WeekView({ currentDate, events, onSlotClick, onEventClick }: Wee
         {/* Day columns */}
         {days.map((day) => {
           const dayEvents = getEventsForDay(day)
+          const weekend = isWeekend(day)
           return (
-            <div key={day.toISOString()} className="border-l relative">
+            <div key={day.toISOString()} className={`border-l relative ${weekend ? "bg-muted/20" : ""}`}>
               {/* Hour slots (clickable) */}
               {hours.map((h) => (
                 <div
                   key={h}
                   style={{ height: SLOT_HEIGHT }}
-                  className="border-b cursor-pointer hover:bg-muted/30 transition-colors"
+                  className="border-b border-border/50 cursor-pointer hover:bg-primary/5 transition-colors"
                   onClick={() => onSlotClick(addHours(startOfDay(day), h))}
                 />
               ))}

@@ -43,6 +43,7 @@ import {
   Building2,
   UserCircle,
   Users,
+  Search,
 } from "lucide-react"
 import { toast } from "sonner"
 import { WeekView } from "@/components/calendar/week-view"
@@ -99,7 +100,33 @@ export default function CalendarPage() {
   const updateDay = (day: number, patch: Partial<DaySchedule>) => {
     setWeekSchedule(prev => ({ ...prev, [day]: { ...prev[day], ...patch } }))
   }
-  const [respectHolidays, setRespectHolidays] = useState(true)
+  const [holidayCalendars, setHolidayCalendars] = useState<{ code: string; name: string; enabled: boolean }[]>([
+    { code: "RU", name: "Российская Федерация", enabled: true },
+  ])
+  const [holidaySearch, setHolidaySearch] = useState("")
+  const AVAILABLE_COUNTRIES = [
+    { code: "RU", name: "Российская Федерация" }, { code: "BY", name: "Беларусь" }, { code: "KZ", name: "Казахстан" },
+    { code: "UZ", name: "Узбекистан" }, { code: "KG", name: "Кыргызстан" }, { code: "AM", name: "Армения" },
+    { code: "GE", name: "Грузия" }, { code: "AZ", name: "Азербайджан" }, { code: "UA", name: "Украина" },
+    { code: "US", name: "США" }, { code: "DE", name: "Германия" }, { code: "GB", name: "Великобритания" },
+    { code: "FR", name: "Франция" }, { code: "CN", name: "Китай" }, { code: "TR", name: "Турция" },
+    { code: "AE", name: "ОАЭ" }, { code: "IL", name: "Израиль" }, { code: "IN", name: "Индия" },
+    { code: "JP", name: "Япония" }, { code: "KR", name: "Южная Корея" },
+  ]
+  const filteredCountries = holidaySearch.trim()
+    ? AVAILABLE_COUNTRIES.filter(c => c.name.toLowerCase().includes(holidaySearch.toLowerCase()) && !holidayCalendars.some(h => h.code === c.code))
+    : []
+  const addHolidayCalendar = (country: { code: string; name: string }) => {
+    setHolidayCalendars(prev => [...prev, { ...country, enabled: true }])
+    setHolidaySearch("")
+    toast.success(`Добавлен календарь: ${country.name}`)
+  }
+  const removeHolidayCalendar = (code: string) => {
+    setHolidayCalendars(prev => prev.filter(c => c.code !== code))
+  }
+  const toggleHolidayCalendar = (code: string) => {
+    setHolidayCalendars(prev => prev.map(c => c.code === code ? { ...c, enabled: !c.enabled } : c))
+  }
   const [timezone, setTimezone] = useState("Europe/Moscow")
   const [showWeekNumbers, setShowWeekNumbers] = useState(false)
   const [defaultView, setDefaultView] = useState<ViewMode>("week")
@@ -108,6 +135,37 @@ export default function CalendarPage() {
   ])
   const [newFeedUrl, setNewFeedUrl] = useState("")
   const [copiedFeed, setCopiedFeed] = useState(false)
+
+  // Room management
+  const [newRoomName, setNewRoomName] = useState("")
+  const [newRoomCapacity, setNewRoomCapacity] = useState("")
+  const [syncCompanyRooms, setSyncCompanyRooms] = useState(false)
+
+  const handleAddRoom = async () => {
+    if (!newRoomName.trim()) return
+    try {
+      const res = await fetch("/api/modules/hr/rooms", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newRoomName.trim(), capacity: newRoomCapacity ? parseInt(newRoomCapacity) : null }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setRooms(prev => [...prev, data.data ?? data])
+        setNewRoomName("")
+        setNewRoomCapacity("")
+        toast.success(`Переговорная "${newRoomName.trim()}" добавлена`)
+      } else {
+        toast.error("Не удалось добавить переговорную")
+      }
+    } catch {
+      // Fallback: add locally
+      setRooms(prev => [...prev, { id: String(Date.now()), name: newRoomName.trim(), capacity: newRoomCapacity ? parseInt(newRoomCapacity) : null }])
+      setNewRoomName("")
+      setNewRoomCapacity("")
+      toast.success(`Переговорная "${newRoomName.trim()}" добавлена (локально)`)
+    }
+  }
 
   const DAYS_ORDER: { day: number; label: string }[] = [
     { day: 1, label: "Пн" }, { day: 2, label: "Вт" }, { day: 3, label: "Ср" },
@@ -410,12 +468,49 @@ export default function CalendarPage() {
                       )
                     })}
                     <Separator className="my-2" />
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <Label className="text-sm">Учитывать праздничные дни РФ</Label>
-                        <p className="text-xs text-muted-foreground mt-0.5">1 января, 8 марта, 9 мая и др.</p>
+                    <div>
+                      <Label className="text-sm font-medium">Праздничные календари</Label>
+                      <p className="text-xs text-muted-foreground mt-0.5 mb-2">Нерабочие праздничные дни по странам</p>
+
+                      {/* Added calendars */}
+                      {holidayCalendars.map(cal => (
+                        <div key={cal.code} className="flex items-center justify-between py-1.5">
+                          <div className="flex items-center gap-2">
+                            <Switch checked={cal.enabled} onCheckedChange={() => toggleHolidayCalendar(cal.code)} className="scale-90" />
+                            <span className="text-sm">{cal.name}</span>
+                            <span className="text-[10px] text-muted-foreground font-mono">{cal.code}</span>
+                          </div>
+                          <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={() => removeHolidayCalendar(cal.code)}>
+                            <Trash2 className="size-3" />
+                          </Button>
+                        </div>
+                      ))}
+
+                      {/* Search & add */}
+                      <div className="relative mt-2">
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
+                        <Input
+                          value={holidaySearch}
+                          onChange={e => setHolidaySearch(e.target.value)}
+                          placeholder="Найти страну..."
+                          className="h-8 pl-8 text-sm"
+                        />
+                        {filteredCountries.length > 0 && (
+                          <div className="absolute top-full left-0 right-0 z-20 mt-1 rounded-lg border bg-popover shadow-lg max-h-40 overflow-y-auto">
+                            {filteredCountries.map(c => (
+                              <button
+                                key={c.code}
+                                onClick={() => addHolidayCalendar(c)}
+                                className="flex items-center gap-2 w-full px-3 py-1.5 text-sm hover:bg-accent text-left"
+                              >
+                                <Plus className="size-3.5 text-muted-foreground" />
+                                <span>{c.name}</span>
+                                <span className="text-[10px] text-muted-foreground font-mono ml-auto">{c.code}</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                      <Switch checked={respectHolidays} onCheckedChange={setRespectHolidays} />
                     </div>
                   </CardContent>
                 </Card>
@@ -425,11 +520,11 @@ export default function CalendarPage() {
                   <CardHeader className="pb-3">
                     <CardTitle className="text-sm flex items-center gap-2"><Globe className="size-4" />Отображение</CardTitle>
                   </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="space-y-1.5">
-                      <Label className="text-xs">Часовой пояс</Label>
+                  <CardContent className="space-y-2">
+                    <div className="flex items-center gap-3">
+                      <Label className="text-xs w-24 shrink-0">Часовой пояс</Label>
                       <Select value={timezone} onValueChange={setTimezone}>
-                        <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                        <SelectTrigger className="h-8 text-xs flex-1"><SelectValue /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="Europe/Kaliningrad">Калининград (UTC+2)</SelectItem>
                           <SelectItem value="Europe/Moscow">Москва (UTC+3)</SelectItem>
@@ -440,10 +535,10 @@ export default function CalendarPage() {
                         </SelectContent>
                       </Select>
                     </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs">Вид по умолчанию</Label>
+                    <div className="flex items-center gap-3">
+                      <Label className="text-xs w-24 shrink-0">Вид по умолч.</Label>
                       <Select value={defaultView} onValueChange={v => setDefaultView(v as ViewMode)}>
-                        <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                        <SelectTrigger className="h-8 text-xs flex-1"><SelectValue /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="day">День</SelectItem>
                           <SelectItem value="week">Неделя</SelectItem>
@@ -451,70 +546,79 @@ export default function CalendarPage() {
                         </SelectContent>
                       </Select>
                     </div>
-                    <div className="flex items-center justify-between">
-                      <Label className="text-sm">Показывать номера недель</Label>
-                      <Switch checked={showWeekNumbers} onCheckedChange={setShowWeekNumbers} />
+                    <div className="flex items-center gap-3">
+                      <Label className="text-xs flex-1">Номера недель</Label>
+                      <Switch checked={showWeekNumbers} onCheckedChange={setShowWeekNumbers} className="scale-90" />
                     </div>
                   </CardContent>
                 </Card>
 
-                {/* ── Переговорные ── */}
-                <Card>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-sm flex items-center gap-2"><Building2 className="size-4" />Переговорные</CardTitle>
-                    <CardDescription>При назначении интервью система учитывает занятость переговорных</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-2">
-                    {rooms.length === 0 ? (
-                      <p className="text-sm text-muted-foreground py-2">Переговорные не добавлены</p>
-                    ) : (
-                      rooms.map(room => {
-                        const busy = events.some(e => e.roomId === room.id)
-                        return (
-                          <div key={room.id} className="flex items-center justify-between p-2 rounded-lg border bg-muted/30">
-                            <div className="flex items-center gap-2">
-                              <span className={cn("size-2 rounded-full", busy ? "bg-red-500" : "bg-emerald-500")} />
-                              <span className="text-sm font-medium">{room.name}</span>
-                              {room.capacity && <span className="text-xs text-muted-foreground">({room.capacity} чел.)</span>}
-                            </div>
-                            <Badge variant="outline" className={cn("text-[10px]", busy ? "text-red-600 border-red-200" : "text-emerald-600 border-emerald-200")}>
-                              {busy ? "Занята" : "Свободна"}
-                            </Badge>
-                          </div>
-                        )
-                      })
-                    )}
-                    <p className="text-[11px] text-muted-foreground">Управление переговорными — в настройках компании</p>
-                  </CardContent>
-                </Card>
-
-                {/* ── Видимость календарей ── */}
+                {/* ── Видимость календарей и переговорные ── */}
                 <Card>
                   <CardHeader className="pb-3">
                     <CardTitle className="text-sm flex items-center gap-2"><Users className="size-4" />Видимость календарей</CardTitle>
-                    <CardDescription>Какие календари отображать в сетке</CardDescription>
+                    <CardDescription>Какие календари и переговорные отображать в сетке</CardDescription>
                   </CardHeader>
-                  <CardContent className="space-y-3">
-                    <div className="flex items-center justify-between">
+                  <CardContent className="space-y-2">
+                    {/* Calendars */}
+                    <div className="flex items-center justify-between py-1">
                       <div className="flex items-center gap-2">
                         <div className="size-3 rounded-full bg-blue-500" />
                         <Label className="text-sm flex items-center gap-1.5"><Building2 className="size-3.5" />Компания (общий)</Label>
                       </div>
-                      <Switch defaultChecked />
+                      <Switch defaultChecked className="scale-90" />
                     </div>
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between py-1">
                       <div className="flex items-center gap-2">
                         <div className="size-3 rounded-full bg-violet-500" />
                         <Label className="text-sm flex items-center gap-1.5"><Users className="size-3.5" />HR-отдел</Label>
                       </div>
-                      <Switch defaultChecked />
+                      <Switch defaultChecked className="scale-90" />
                     </div>
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between py-1">
                       <div className="flex items-center gap-2">
                         <div className="size-3 rounded-full bg-emerald-500" />
                         <Label className="text-sm flex items-center gap-1.5"><UserCircle className="size-3.5" />Мой личный</Label>
                       </div>
-                      <Switch defaultChecked />
+                      <Switch defaultChecked className="scale-90" />
+                    </div>
+
+                    <Separator className="my-2" />
+
+                    {/* Rooms */}
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Переговорные</p>
+
+                    {rooms.map(room => {
+                      const busy = events.some(e => e.roomId === room.id)
+                      return (
+                        <div key={room.id} className="flex items-center justify-between py-1">
+                          <div className="flex items-center gap-2">
+                            <span className={cn("size-2.5 rounded-full", busy ? "bg-red-500" : "bg-amber-500")} />
+                            <span className="text-sm">{room.name}</span>
+                            {room.capacity && <span className="text-[10px] text-muted-foreground">({room.capacity})</span>}
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <Badge variant="outline" className={cn("text-[10px] h-5", busy ? "text-red-600 border-red-200" : "text-emerald-600 border-emerald-200")}>
+                              {busy ? "Занята" : "Свободна"}
+                            </Badge>
+                            <Switch defaultChecked className="scale-90" />
+                          </div>
+                        </div>
+                      )
+                    })}
+
+                    {/* Add room */}
+                    <div className="flex gap-2 mt-1">
+                      <Input value={newRoomName} onChange={e => setNewRoomName(e.target.value)} placeholder="Название" className="h-7 text-xs flex-1" />
+                      <Input type="number" value={newRoomCapacity} onChange={e => setNewRoomCapacity(e.target.value)} placeholder="Мест" className="h-7 text-xs w-14" />
+                      <Button size="sm" variant="outline" className="h-7 text-xs px-2" onClick={handleAddRoom} disabled={!newRoomName.trim()}>
+                        <Plus className="size-3 mr-1" />Добавить
+                      </Button>
+                    </div>
+
+                    <div className="flex items-center justify-between mt-1">
+                      <p className="text-[11px] text-muted-foreground">Синхронизация с календарём компании</p>
+                      <Switch checked={syncCompanyRooms} onCheckedChange={setSyncCompanyRooms} className="scale-90" />
                     </div>
                   </CardContent>
                 </Card>
