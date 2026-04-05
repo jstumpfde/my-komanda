@@ -192,29 +192,25 @@ export default function CandidatesPage() {
 
             {/* Toolbar */}
             <div className="flex items-center gap-3 mb-4">
-              {/* Поиск — 35% */}
-              <div className="relative" style={{ flex: "0 0 35%" }}>
+              <div className="relative flex-[2] min-w-0">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
                 <Input placeholder="Поиск по фамилии..." value={search} onChange={(e) => setSearch(e.target.value)}
                   className={cn("pl-9", FILTER_INPUT)} />
               </div>
-              {/* Вакансия — 25% */}
               <Select value={vacancyFilter} onValueChange={setVacancyFilter}>
-                <SelectTrigger className={FILTER_INPUT} style={{ flex: "0 0 25%" }}><SelectValue /></SelectTrigger>
+                <SelectTrigger className={cn("flex-1 min-w-0", FILTER_INPUT)}><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {VACANCY_FILTER.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
                 </SelectContent>
               </Select>
-              {/* Статус — 20% */}
               <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className={FILTER_INPUT} style={{ flex: "0 0 20%" }}><SelectValue /></SelectTrigger>
+                <SelectTrigger className={cn("flex-1 min-w-0", FILTER_INPUT)}><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {STATUS_FILTER.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
                 </SelectContent>
               </Select>
-              {/* Источник — 20% */}
               <Select value={sourceFilter} onValueChange={setSourceFilter}>
-                <SelectTrigger className={FILTER_INPUT} style={{ flex: "0 0 20%" }}><SelectValue /></SelectTrigger>
+                <SelectTrigger className={cn("flex-1 min-w-0", FILTER_INPUT)}><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {SOURCE_FILTER.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
                 </SelectContent>
