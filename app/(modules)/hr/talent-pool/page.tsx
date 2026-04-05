@@ -177,7 +177,7 @@ export default function TalentPoolPage() {
                     <Input className="pl-8 h-8 text-sm" placeholder="Поиск по имени или должности..." value={search} onChange={(e) => setSearch(e.target.value)} />
                   </div>
                   <Select value={statusFilter} onValueChange={setStatusFilter}>
-                    <SelectTrigger className="w-36 h-8 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectTrigger className="w-36 h-8 text-xs border border-border"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">Все статусы</SelectItem>
                       {Object.entries(STATUS_CFG).map(([k, v]) => <SelectItem key={k} value={k}>{v.emoji} {v.label}</SelectItem>)}
