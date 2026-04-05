@@ -185,8 +185,8 @@ export default function TalentPoolPage() {
                   </Select>
                   <div className="flex-1" />
                   <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5"><Upload className="w-3.5 h-3.5" />Загрузить CSV</Button>
-                  <Button size="sm" className="h-8 text-xs gap-1.5" onClick={() => setAddOpen(true)}><Plus className="w-3.5 h-3.5" />Добавить</Button>
-                  <Button size="sm" className="h-8 text-xs gap-1.5 bg-purple-600 hover:bg-purple-700" onClick={() => setCampaignOpen(true)}><Rocket className="w-3.5 h-3.5" />Запустить кампанию</Button>
+                  <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={() => setAddOpen(true)}><Plus className="w-3.5 h-3.5" />Добавить</Button>
+                  <Button size="sm" className="h-8 text-xs gap-1.5 bg-purple-600 hover:bg-purple-700 border border-purple-700" onClick={() => setCampaignOpen(true)}><Rocket className="w-3.5 h-3.5" />Запустить кампанию</Button>
                 </div>
 
                 <Card>
