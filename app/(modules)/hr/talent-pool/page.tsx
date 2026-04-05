@@ -115,6 +115,7 @@ export default function TalentPoolPage() {
   const [campaignOpen, setCampaignOpen] = useState(false)
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
+  const [thanked, setThanked] = useState<Set<string>>(new Set())
 
   // Add candidate form
   const [form, setForm] = useState({ name: "", position: "", company: "", source: "", email: "", phone: "", telegram: "", comment: "" })
@@ -216,7 +217,7 @@ export default function TalentPoolPage() {
                                 {c.referralName && (
                                   <div className="flex items-center gap-1 mt-0.5">
                                     <span className="text-[10px] text-muted-foreground">от {c.referralName}</span>
-                                    <button className="text-[10px] text-pink-500 hover:underline" onClick={() => toast.success(`Спасибо отправлено ${c.referralName}!`)}><Heart className="w-3 h-3 inline" /></button>
+                                    <button className="text-[10px] text-pink-500 hover:scale-110 transition-transform" onClick={() => { setThanked((prev) => { const next = new Set(prev); next.add(c.id); return next }); toast.success(`Спасибо отправлено ${c.referralName}!`) }}><Heart className={cn("w-3 h-3 inline", thanked.has(c.id) && "fill-pink-500")} /></button>
                                   </div>
                                 )}
                               </td>
