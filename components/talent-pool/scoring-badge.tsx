@@ -12,10 +12,10 @@ export interface ScoreBreakdown {
 }
 
 export function getScoreColor(score: number) {
-  if (score >= 86) return { bg: "bg-gradient-to-br from-red-500 to-orange-500", text: "text-white", label: "Идеальный 🔥" }
-  if (score >= 61) return { bg: "bg-emerald-500", text: "text-white", label: "Горячий" }
-  if (score >= 31) return { bg: "bg-amber-400", text: "text-amber-900", label: "В прогреве" }
-  return { bg: "bg-muted", text: "text-muted-foreground", label: "Холодный" }
+  if (score >= 86) return { bg: "bg-red-500/8 border border-red-200/60", text: "text-red-600", label: "Идеальный 🔥" }
+  if (score >= 61) return { bg: "bg-emerald-500/8 border border-emerald-200/60", text: "text-emerald-600", label: "Горячий" }
+  if (score >= 31) return { bg: "bg-amber-500/8 border border-amber-200/60", text: "text-amber-600", label: "В прогреве" }
+  return { bg: "bg-muted border border-border/60", text: "text-muted-foreground", label: "Холодный" }
 }
 
 export function scoreToStatus(score: number): "cold" | "warming" | "hot" | "ideal" | "refused" | "hired" {
@@ -33,10 +33,10 @@ interface ScoringBadgeProps {
 
 export function ScoringBadge({ score, breakdown, size = "md" }: ScoringBadgeProps) {
   const color = getScoreColor(score)
-  const dim = size === "sm" ? "w-8 h-8 text-xs" : "w-9 h-9 text-sm"
+  const dim = size === "sm" ? "w-8 h-8 text-[11px]" : "w-9 h-9 text-xs"
 
   const badge = (
-    <div className={cn("rounded-full flex items-center justify-center font-bold shrink-0 cursor-default", dim, color.bg, color.text)}>
+    <div className={cn("rounded-full flex items-center justify-center font-semibold shrink-0 cursor-default", dim, color.bg, color.text)}>
       {score}
     </div>
   )

@@ -65,12 +65,12 @@ interface Campaign {
 
 // ─── Status config ──────────────────────────────────────
 const STATUS_CFG: Record<TalentStatus, { label: string; emoji: string; cls: string }> = {
-  cold: { label: "Холодный", emoji: "🟡", cls: "bg-yellow-100 text-yellow-800 ring-1 ring-inset ring-yellow-300 px-3 py-1" },
-  warming: { label: "В прогреве", emoji: "🔵", cls: "bg-blue-100 text-blue-800 ring-1 ring-inset ring-blue-300 px-3 py-1" },
-  hot: { label: "Горячий", emoji: "🟢", cls: "bg-green-100 text-green-800 ring-1 ring-inset ring-green-300 px-3 py-1" },
-  ideal: { label: "Идеальный 🔥", emoji: "🔴", cls: "bg-red-100 text-red-800 ring-1 ring-inset ring-red-300 px-3 py-1" },
-  refused: { label: "Отказался", emoji: "🔴", cls: "bg-red-50 text-red-700 ring-1 ring-inset ring-red-200 px-3 py-1" },
-  hired: { label: "Нанят", emoji: "⚫", cls: "bg-muted text-muted-foreground ring-1 ring-inset ring-border px-3 py-1" },
+  cold: { label: "Холодный", emoji: "🟡", cls: "bg-amber-500/10 text-amber-700 border-amber-200/60 px-2.5 py-0.5" },
+  warming: { label: "В прогреве", emoji: "🔵", cls: "bg-blue-500/10 text-blue-700 border-blue-200/60 px-2.5 py-0.5" },
+  hot: { label: "Горячий", emoji: "🟢", cls: "bg-emerald-500/10 text-emerald-700 border-emerald-200/60 px-2.5 py-0.5" },
+  ideal: { label: "Идеальный 🔥", emoji: "🔴", cls: "bg-red-500/10 text-red-700 border-red-200/60 px-2.5 py-0.5" },
+  refused: { label: "Отказался", emoji: "🔴", cls: "bg-red-500/5 text-red-600 border-red-200/40 px-2.5 py-0.5" },
+  hired: { label: "Нанят", emoji: "⚫", cls: "bg-muted text-muted-foreground border-border px-2.5 py-0.5" },
 }
 
 function scoreToStatus(score: number): TalentStatus {
@@ -208,11 +208,11 @@ export default function TalentPoolPage() {
                           const st = STATUS_CFG[c.status]
                           return (
                             <tr key={c.id} className="border-b last:border-0 hover:bg-muted/20">
-                              <td className="px-4 py-2.5 text-sm font-medium">{c.name}</td>
-                              <td className="px-3 py-2.5 text-sm text-muted-foreground">{c.position}</td>
-                              <td className="px-3 py-2.5 text-sm text-muted-foreground">{c.company}</td>
+                              <td className="px-4 py-2.5 text-[13px] font-medium text-foreground/85">{c.name}</td>
+                              <td className="px-3 py-2.5 text-[13px] text-muted-foreground">{c.position}</td>
+                              <td className="px-3 py-2.5 text-[13px] text-muted-foreground">{c.company}</td>
                               <td className="px-3 py-2.5">
-                                <span className="text-sm">{c.source}</span>
+                                <span className="text-[13px]">{c.source}</span>
                                 {c.referralName && (
                                   <div className="flex items-center gap-1 mt-0.5">
                                     <span className="text-[10px] text-muted-foreground">от {c.referralName}</span>
