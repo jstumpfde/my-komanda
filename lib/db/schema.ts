@@ -933,3 +933,36 @@ export const hhCandidates = pgTable("hh_candidates", {
   hhApplicationId: text("hh_application_id"),
   importedAt:      timestamp("imported_at").defaultNow(),
 })
+
+// ─── Knowledge Base ─────────────────────────────────────────────────────────
+
+export const knowledgeCategories = pgTable("knowledge_categories", {
+  id:          uuid("id").primaryKey().defaultRandom(),
+  tenantId:    uuid("tenant_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  name:        text("name").notNull(),
+  slug:        text("slug"),
+  description: text("description"),
+  icon:        text("icon"),
+  sortOrder:   integer("sort_order").default(0),
+  parentId:    uuid("parent_id"),
+  status:      text("status").default("active"),
+  createdAt:   timestamp("created_at").defaultNow(),
+  updatedAt:   timestamp("updated_at").defaultNow(),
+})
+
+export const knowledgeArticles = pgTable("knowledge_articles", {
+  id:          uuid("id").primaryKey().defaultRandom(),
+  tenantId:    uuid("tenant_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  categoryId:  uuid("category_id").references(() => knowledgeCategories.id, { onDelete: "set null" }),
+  title:       text("title").notNull(),
+  slug:        text("slug"),
+  content:     text("content"),
+  excerpt:     text("excerpt"),
+  authorId:    uuid("author_id").references(() => users.id, { onDelete: "set null" }),
+  viewsCount:  integer("views_count").default(0),
+  isPinned:    boolean("is_pinned").default(false),
+  status:      text("status").default("published"),
+  tags:        text("tags").array(),
+  createdAt:   timestamp("created_at").defaultNow(),
+  updatedAt:   timestamp("updated_at").defaultNow(),
+})

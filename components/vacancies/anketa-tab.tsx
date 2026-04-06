@@ -11,53 +11,49 @@ import { Switch } from "@/components/ui/switch"
 import { Slider } from "@/components/ui/slider"
 import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ChevronDown, Plus, X, Save, Loader2 } from "lucide-react"
+import { ChevronDown, ChevronUp, Plus, X, Save, Loader2, Trash2, GripVertical } from "lucide-react"
 import { toast } from "sonner"
+import { POSITION_CATEGORIES } from "@/lib/position-classifier"
+import { type Question, type QuestionAnswerType, defaultQuestion } from "@/lib/course-types"
+import { CompanySelector } from "@/components/vacancies/company-selector"
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 interface AnketaData {
+  // Top-level
+  vacancyTitle: string
   // 1. Компания
+  companyMode: "own" | "client"
   companyName: string
   industry: string
   companyCity: string
-  revenue: string
-  // 2. Продукт
-  productDescription: string
-  averageCheck: string
-  dealCycle: string
-  segments: string[]
-  crm: string
-  // 3. Должность
-  positionTitle: string
-  positionType: string
+  clientCompanyId: string | null
+  clientContactId: string | null
+  // 2. Должность
+  positionCategory: string
   workFormats: string[]
-  employment: string
+  employment: string[]
   positionCity: string
-  // 4. Деньги
+  // 3. Мотивация
   salaryFrom: string
   salaryTo: string
   bonus: string
-  payFrequency: string
+  payFrequency: string[]
   showSalary: boolean
-  // 5. Портрет кандидата
+  // 4. Портрет кандидата
   requiredSkills: string[]
   desiredSkills: string[]
+  unacceptableSkills: string[]
   experienceMin: string
   experienceIdeal: string
-  // 6. Условия
-  bonuses: string
-  training: string
-  careerGrowth: string
-  socialPackage: string[]
-  // 7. Стоп-факторы
   stopFactors: StopFactor[]
-  // 8. Желаемые параметры
   desiredParams: DesiredParam[]
-  // 9. Квалификационные вопросы
-  questions: string[]
+  // 5. Условия
+  conditions: string[]
+  conditionsCustom: string[]
+  // 6. Квалификационные вопросы
+  questions: Question[]
 }
 
 interface StopFactor {
@@ -77,19 +73,52 @@ interface DesiredParam {
   custom?: boolean
 }
 
+// ─── Constants ───────────────────────────────────────────────────────────────
+
+const POSITION_CATEGORY_OPTIONS = Object.entries(POSITION_CATEGORIES).map(([key, val]) => ({
+  value: key,
+  label: val.label,
+}))
+
+const WORK_FORMAT_OPTIONS = ["Офис", "Гибрид", "Удалёнка"]
+const EMPLOYMENT_OPTIONS = ["Полная", "Частичная", "Проектная"]
+
+const PAY_FREQUENCY_OPTIONS = [
+  { value: "monthly", label: "Ежемесячно" },
+  { value: "biweekly", label: "2 раза в месяц" },
+  { value: "weekly", label: "Еженедельно" },
+]
+
+const REQUIRED_SKILL_SUGGESTIONS = [
+  "Холодные звонки", "Переговоры", "CRM", "B2B продажи", "Презентации",
+  "Работа с возражениями", "Коммерческие предложения", "Тендеры",
+  "1С", "Excel", "Документооборот", "Ведение базы клиентов",
+  "Активные продажи", "Телефонные продажи", "Работа с дебиторкой",
+]
+
+const DESIRED_SKILL_SUGGESTIONS = [
+  "Английский язык", "Управление командой", "Аналитика", "Маркетинг",
+  "Финансовый анализ", "Публичные выступления", "Наставничество",
+  "Стратегическое планирование", "Знание ERP", "Power BI", "SQL",
+]
+
+const UNACCEPTABLE_SUGGESTIONS = [
+  "Без опыта продаж", "Частая смена работы", "Нет высшего образования",
+  "Судимость", "Нет водительских прав", "Не готов к командировкам",
+]
+
 const DEFAULT_STOP_FACTORS: StopFactor[] = [
+  { id: "age", label: "Возраст", enabled: false, ageRange: [18, 65] },
+  { id: "experience", label: "Опыт работы (мин. лет)", enabled: false },
+  { id: "citizenship", label: "Гражданство", enabled: false },
   { id: "city", label: "Город проживания", enabled: false },
   { id: "format", label: "Формат работы", enabled: false },
-  { id: "age", label: "Возраст", enabled: false, ageRange: [18, 65] },
-  { id: "experience", label: "Опыт работы", enabled: false },
   { id: "documents", label: "Документы", enabled: false },
-  { id: "skills", label: "Навыки", enabled: false },
-  { id: "citizenship", label: "Гражданство", enabled: false },
   { id: "salaryMax", label: "Зарплата максимальная", enabled: false },
 ]
 
 const DEFAULT_DESIRED_PARAMS: DesiredParam[] = [
-  { id: "experience", label: "Опыт в отрасли", enabled: false, weight: 3 },
+  { id: "industry_exp", label: "Опыт в отрасли", enabled: false, weight: 3 },
   { id: "education", label: "Профильное образование", enabled: false, weight: 2 },
   { id: "crm", label: "Знание CRM", enabled: false, weight: 3 },
   { id: "english", label: "Английский язык", enabled: false, weight: 2 },
@@ -98,25 +127,65 @@ const DEFAULT_DESIRED_PARAMS: DesiredParam[] = [
   { id: "travel", label: "Готовность к командировкам", enabled: false, weight: 2 },
 ]
 
-const SOCIAL_PACKAGE_OPTIONS = [
+const CONDITIONS_OPTIONS = [
   "ДМС", "Фитнес", "Питание", "Обучение", "Парковка",
   "Мобильная связь", "Корпоративный транспорт", "Страхование жизни",
+  "Оплата ГСМ", "13-я зарплата", "Гибкий график", "Удалённые дни",
+  "Корпоративные мероприятия", "Программа релокации", "Stock options",
+  "Материальная помощь", "Скидки на продукцию", "Компенсация обедов",
+  "Оплачиваемые больничные сверх ТК", "Дополнительный отпуск",
+  "Менторская программа", "Бюджет на конференции",
 ]
 
-const SEGMENT_OPTIONS = ["B2B", "B2C", "B2G"]
+const ANKETA_QTYPES: { type: QuestionAnswerType; icon: string; label: string; desc: string }[] = [
+  { type: "short", icon: "T", label: "Короткий текст", desc: "Одна строка" },
+  { type: "long", icon: "≡", label: "Развёрнутый ответ", desc: "Абзац" },
+  { type: "yesno", icon: "⊙", label: "Да / Нет", desc: "Один из двух" },
+  { type: "single", icon: "◉", label: "Один из списка", desc: "Радио" },
+  { type: "multiple", icon: "☑", label: "Несколько", desc: "Чекбоксы" },
+]
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function emptyAnketa(): AnketaData {
   return {
-    companyName: "", industry: "", companyCity: "", revenue: "",
-    productDescription: "", averageCheck: "", dealCycle: "", segments: [], crm: "",
-    positionTitle: "", positionType: "", workFormats: [], employment: "", positionCity: "",
-    salaryFrom: "", salaryTo: "", bonus: "", payFrequency: "monthly", showSalary: true,
-    requiredSkills: [], desiredSkills: [], experienceMin: "", experienceIdeal: "",
-    bonuses: "", training: "", careerGrowth: "", socialPackage: [],
+    vacancyTitle: "",
+    companyMode: "own", companyName: "", industry: "", companyCity: "",
+    clientCompanyId: null, clientContactId: null,
+    positionCategory: "", workFormats: [], employment: [], positionCity: "",
+    salaryFrom: "", salaryTo: "", bonus: "", payFrequency: [], showSalary: true,
+    requiredSkills: [], desiredSkills: [], unacceptableSkills: [],
+    experienceMin: "", experienceIdeal: "",
     stopFactors: DEFAULT_STOP_FACTORS.map(f => ({ ...f })),
     desiredParams: DEFAULT_DESIRED_PARAMS.map(p => ({ ...p })),
-    questions: ["", "", ""],
+    conditions: [], conditionsCustom: [],
+    questions: [],
   }
+}
+
+function migrateAnketa(saved: Record<string, unknown>): AnketaData {
+  const d = { ...emptyAnketa(), ...saved } as AnketaData
+  // employment: string -> string[]
+  if (typeof d.employment === "string" && d.employment) {
+    d.employment = [d.employment as string]
+  }
+  // payFrequency: string -> string[]
+  if (typeof d.payFrequency === "string" && d.payFrequency) {
+    d.payFrequency = [d.payFrequency as string]
+  }
+  // questions: string[] -> Question[]
+  if (d.questions?.length && typeof d.questions[0] === "string") {
+    d.questions = (d.questions as unknown as string[]).filter(q => q.trim()).map(text => ({ ...defaultQuestion(), text }))
+  }
+  // positionTitle -> vacancyTitle
+  if (!d.vacancyTitle && (saved as Record<string, string>).positionTitle) {
+    d.vacancyTitle = (saved as Record<string, string>).positionTitle
+  }
+  // ensure arrays
+  if (!Array.isArray(d.conditions)) d.conditions = []
+  if (!Array.isArray(d.conditionsCustom)) d.conditionsCustom = []
+  if (!Array.isArray(d.unacceptableSkills)) d.unacceptableSkills = []
+  return d
 }
 
 // ─── Section wrapper ─────────────────────────────────────────────────────────
@@ -148,7 +217,7 @@ function Section({ title, number, children, filled }: {
   )
 }
 
-// ─── Tag input helper ────────────────────────────────────────────────────────
+// ─── Tag input ──────────────────────────────────────────────────────────────
 
 function TagInput({ tags, onChange, placeholder }: {
   tags: string[]; onChange: (t: string[]) => void; placeholder: string
@@ -187,6 +256,256 @@ function TagInput({ tags, onChange, placeholder }: {
   )
 }
 
+// ─── Tag input with suggestions ─────────────────────────────────────────────
+
+function TagInputWithSuggestions({ tags, onChange, placeholder, suggestions }: {
+  tags: string[]; onChange: (t: string[]) => void; placeholder: string; suggestions: string[]
+}) {
+  const available = suggestions.filter(s => !tags.includes(s))
+  return (
+    <div className="space-y-2">
+      {available.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {available.map(s => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => onChange([...tags, s])}
+              className="text-[11px] px-2 py-0.5 rounded-full border border-dashed border-muted-foreground/30 text-muted-foreground hover:border-primary hover:text-primary transition-colors"
+            >
+              + {s}
+            </button>
+          ))}
+        </div>
+      )}
+      <TagInput tags={tags} onChange={onChange} placeholder={placeholder} />
+    </div>
+  )
+}
+
+// ─── Question constructor ───────────────────────────────────────────────────
+
+function QuestionEditor({ questions, onChange }: {
+  questions: Question[]; onChange: (q: Question[]) => void
+}) {
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [addingType, setAddingType] = useState(false)
+
+  const addQuestion = (type: QuestionAnswerType) => {
+    const q = { ...defaultQuestion(), id: `q-${Date.now()}`, answerType: type }
+    if (type === "single" || type === "multiple") {
+      q.options = ["Вариант 1", "Вариант 2"]
+    }
+    onChange([...questions, q])
+    setExpandedId(q.id)
+    setAddingType(false)
+  }
+
+  const updateQ = (id: string, patch: Partial<Question>) => {
+    onChange(questions.map(q => q.id === id ? { ...q, ...patch } : q))
+  }
+
+  const removeQ = (id: string) => {
+    onChange(questions.filter(q => q.id !== id))
+    if (expandedId === id) setExpandedId(null)
+  }
+
+  const moveQ = (idx: number, dir: -1 | 1) => {
+    const next = [...questions]
+    const target = idx + dir
+    if (target < 0 || target >= next.length) return
+    ;[next[idx], next[target]] = [next[target], next[idx]]
+    onChange(next)
+  }
+
+  return (
+    <div className="space-y-2">
+      {questions.map((q, idx) => {
+        const isOpen = expandedId === q.id
+        const meta = ANKETA_QTYPES.find(t => t.type === q.answerType) ?? ANKETA_QTYPES[0]
+        return (
+          <div key={q.id} className="border rounded-lg">
+            {/* Header */}
+            <button
+              type="button"
+              className="flex items-center gap-2 w-full px-3 py-2.5 text-left hover:bg-muted/50 transition-colors"
+              onClick={() => setExpandedId(isOpen ? null : q.id)}
+            >
+              <span className="text-xs text-muted-foreground font-mono w-5">{idx + 1}</span>
+              <span className="flex-1 text-sm truncate">{q.text || "Новый вопрос"}</span>
+              <Badge variant="outline" className="text-[10px] shrink-0">{meta.icon} {meta.label}</Badge>
+              {q.required && <span className="text-destructive text-xs font-bold">*</span>}
+              <ChevronDown className={cn("w-3.5 h-3.5 text-muted-foreground transition-transform shrink-0", isOpen && "rotate-180")} />
+            </button>
+
+            {/* Expanded */}
+            {isOpen && (
+              <div className="px-3 pb-3 pt-1 border-t space-y-3">
+                {/* Actions */}
+                <div className="flex items-center gap-1">
+                  <Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={() => moveQ(idx, -1)} disabled={idx === 0}>
+                    <ChevronUp className="w-3 h-3" />
+                  </Button>
+                  <Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={() => moveQ(idx, 1)} disabled={idx === questions.length - 1}>
+                    <ChevronDown className="w-3 h-3" />
+                  </Button>
+                  <div className="flex-1" />
+                  <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Checkbox checked={q.required ?? false} onCheckedChange={v => updateQ(q.id, { required: !!v })} />
+                    Обязательный
+                  </label>
+                  <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={() => removeQ(q.id)}>
+                    <Trash2 className="w-3 h-3" />
+                  </Button>
+                </div>
+
+                {/* Question text */}
+                <div className="space-y-1">
+                  <Label className="text-xs">Текст вопроса</Label>
+                  <Textarea value={q.text} onChange={e => updateQ(q.id, { text: e.target.value })} placeholder="Введите вопрос..." rows={2} />
+                </div>
+
+                {/* Type picker */}
+                <div className="space-y-1">
+                  <Label className="text-xs">Тип ответа</Label>
+                  <div className="grid grid-cols-5 gap-1.5">
+                    {ANKETA_QTYPES.map(t => (
+                      <button
+                        key={t.type}
+                        type="button"
+                        onClick={() => {
+                          const patch: Partial<Question> = { answerType: t.type }
+                          if ((t.type === "single" || t.type === "multiple") && q.options.length === 0) {
+                            patch.options = ["Вариант 1", "Вариант 2"]
+                          }
+                          updateQ(q.id, patch)
+                        }}
+                        className={cn(
+                          "flex flex-col items-center gap-0.5 p-2 rounded-lg border text-center transition-colors",
+                          q.answerType === t.type ? "border-primary bg-primary/5 text-primary" : "border-border hover:border-primary/50"
+                        )}
+                      >
+                        <span className="text-lg font-mono leading-none">{t.icon}</span>
+                        <span className="text-[10px] font-medium leading-tight">{t.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Options for single/multiple */}
+                {(q.answerType === "single" || q.answerType === "multiple") && (
+                  <div className="space-y-2">
+                    <Label className="text-xs">Варианты ответа</Label>
+                    {q.options.map((opt, oi) => (
+                      <div key={oi} className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          title="Правильный ответ"
+                          onClick={() => {
+                            const cur = q.correctOptions ?? []
+                            if (q.answerType === "single") {
+                              updateQ(q.id, { correctOptions: cur.includes(oi) ? [] : [oi] })
+                            } else {
+                              updateQ(q.id, { correctOptions: cur.includes(oi) ? cur.filter(i => i !== oi) : [...cur, oi] })
+                            }
+                          }}
+                          className={cn(
+                            "w-5 h-5 rounded-full border-2 flex items-center justify-center text-[10px] shrink-0 transition-colors",
+                            (q.correctOptions ?? []).includes(oi)
+                              ? "border-emerald-500 bg-emerald-500 text-white"
+                              : "border-muted-foreground/30 hover:border-emerald-400"
+                          )}
+                        >
+                          {(q.correctOptions ?? []).includes(oi) && "✓"}
+                        </button>
+                        <Input
+                          value={opt}
+                          onChange={e => {
+                            const next = [...q.options]
+                            next[oi] = e.target.value
+                            updateQ(q.id, { options: next })
+                          }}
+                          className="h-7 text-xs flex-1"
+                        />
+                        <Button
+                          type="button" variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive shrink-0"
+                          onClick={() => {
+                            const next = q.options.filter((_, i) => i !== oi)
+                            const nextCorrect = (q.correctOptions ?? []).filter(i => i !== oi).map(i => i > oi ? i - 1 : i)
+                            updateQ(q.id, { options: next, correctOptions: nextCorrect })
+                          }}
+                        >
+                          <X className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    ))}
+                    <Button
+                      type="button" variant="outline" size="sm" className="h-7 text-[11px] gap-1"
+                      onClick={() => updateQ(q.id, { options: [...q.options, `Вариант ${q.options.length + 1}`] })}
+                    >
+                      <Plus className="w-3 h-3" />Добавить вариант
+                    </Button>
+                  </div>
+                )}
+
+                {/* Yes/No correct answer */}
+                {q.answerType === "yesno" && (
+                  <div className="space-y-1">
+                    <Label className="text-xs">Правильный ответ</Label>
+                    <div className="flex gap-2">
+                      {(["yes", "no"] as const).map(v => (
+                        <button
+                          key={v}
+                          type="button"
+                          onClick={() => updateQ(q.id, { correctYesNo: q.correctYesNo === v ? undefined : v })}
+                          className={cn(
+                            "px-4 py-1.5 rounded-lg border text-sm font-medium transition-colors",
+                            q.correctYesNo === v
+                              ? "border-emerald-500 bg-emerald-500/10 text-emerald-700"
+                              : "border-border hover:border-emerald-400"
+                          )}
+                        >
+                          {v === "yes" ? "Да" : "Нет"}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )
+      })}
+
+      {/* Add question */}
+      {addingType ? (
+        <div className="border rounded-lg p-3 space-y-2">
+          <p className="text-xs font-medium text-muted-foreground">Выберите тип вопроса:</p>
+          <div className="grid grid-cols-5 gap-1.5">
+            {ANKETA_QTYPES.map(t => (
+              <button
+                key={t.type}
+                type="button"
+                onClick={() => addQuestion(t.type)}
+                className="flex flex-col items-center gap-1 p-3 rounded-lg border border-border hover:border-primary hover:bg-primary/5 transition-colors"
+              >
+                <span className="text-xl font-mono leading-none">{t.icon}</span>
+                <span className="text-[10px] font-semibold">{t.label}</span>
+                <span className="text-[9px] text-muted-foreground">{t.desc}</span>
+              </button>
+            ))}
+          </div>
+          <Button type="button" variant="ghost" size="sm" className="text-xs" onClick={() => setAddingType(false)}>Отмена</Button>
+        </div>
+      ) : (
+        <Button type="button" variant="outline" size="sm" className="gap-1.5 w-full" onClick={() => setAddingType(true)}>
+          <Plus className="w-3.5 h-3.5" />Добавить вопрос
+        </Button>
+      )}
+    </div>
+  )
+}
+
 // ─── Main component ──────────────────────────────────────────────────────────
 
 export function AnketaTab({ vacancyId, descriptionJson }: {
@@ -194,34 +513,31 @@ export function AnketaTab({ vacancyId, descriptionJson }: {
   descriptionJson: unknown
 }) {
   const [data, setData] = useState<AnketaData>(() => {
-    const saved = (descriptionJson as Record<string, unknown>)?.anketa as AnketaData | undefined
-    return saved ? { ...emptyAnketa(), ...saved } : emptyAnketa()
+    const saved = (descriptionJson as Record<string, unknown>)?.anketa as Record<string, unknown> | undefined
+    return saved ? migrateAnketa(saved) : emptyAnketa()
   })
   const [saving, setSaving] = useState(false)
 
-  // Re-sync when descriptionJson changes externally
   useEffect(() => {
-    const saved = (descriptionJson as Record<string, unknown>)?.anketa as AnketaData | undefined
-    if (saved) setData(prev => ({ ...prev, ...saved }))
+    const saved = (descriptionJson as Record<string, unknown>)?.anketa as Record<string, unknown> | undefined
+    if (saved) setData(prev => ({ ...prev, ...migrateAnketa(saved) }))
   }, [descriptionJson])
 
   const set = useCallback(<K extends keyof AnketaData>(key: K, value: AnketaData[K]) => {
     setData(prev => ({ ...prev, [key]: value }))
   }, [])
 
-  // ── Progress calculation ──
+  // ── Progress ──
   const progress = useMemo(() => {
     let filled = 0
-    let total = 9
-    if (data.companyName || data.industry || data.companyCity) filled++
-    if (data.productDescription || data.averageCheck) filled++
-    if (data.positionTitle || data.positionType) filled++
+    const total = 7
+    if (data.vacancyTitle) filled++
+    if (data.companyName || data.clientCompanyId) filled++
+    if (data.positionCategory) filled++
     if (data.salaryFrom || data.salaryTo) filled++
     if (data.requiredSkills.length > 0) filled++
-    if (data.bonuses || data.training || data.careerGrowth || data.socialPackage.length > 0) filled++
-    if (data.stopFactors.some(f => f.enabled)) filled++
-    if (data.desiredParams.some(p => p.enabled)) filled++
-    if (data.questions.some(q => q.trim())) filled++
+    if (data.conditions.length > 0 || data.conditionsCustom.length > 0) filled++
+    if (data.questions.length > 0 && data.questions.some(q => q.text.trim())) filled++
     return Math.round((filled / total) * 100)
   }, [data])
 
@@ -244,42 +560,34 @@ export function AnketaTab({ vacancyId, descriptionJson }: {
     }
   }, [data, descriptionJson, vacancyId])
 
-  // ── Autosave on blur (debounce 2s) ──
+  // ── Autosave ──
   const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const latestData = useRef(data)
-  latestData.current = data
-
   const scheduleAutosave = useCallback(() => {
     if (autosaveTimer.current) clearTimeout(autosaveTimer.current)
-    autosaveTimer.current = setTimeout(() => {
-      save()
-    }, 2000)
+    autosaveTimer.current = setTimeout(() => save(), 2000)
   }, [save])
-
-  useEffect(() => {
-    return () => {
-      if (autosaveTimer.current) clearTimeout(autosaveTimer.current)
-    }
-  }, [])
-
-  const handleBlur = useCallback(() => {
-    scheduleAutosave()
-  }, [scheduleAutosave])
+  useEffect(() => () => { if (autosaveTimer.current) clearTimeout(autosaveTimer.current) }, [])
+  const handleBlur = useCallback(() => scheduleAutosave(), [scheduleAutosave])
 
   const sectionFilled = (idx: number) => {
     switch (idx) {
-      case 1: return !!(data.companyName || data.industry || data.companyCity)
-      case 2: return !!(data.productDescription || data.averageCheck)
-      case 3: return !!(data.positionTitle || data.positionType)
-      case 4: return !!(data.salaryFrom || data.salaryTo)
-      case 5: return data.requiredSkills.length > 0
-      case 6: return !!(data.bonuses || data.training || data.careerGrowth || data.socialPackage.length > 0)
-      case 7: return data.stopFactors.some(f => f.enabled)
-      case 8: return data.desiredParams.some(p => p.enabled)
-      case 9: return data.questions.some(q => q.trim())
+      case 1: return !!(data.companyName || data.clientCompanyId)
+      case 2: return !!data.positionCategory
+      case 3: return !!(data.salaryFrom || data.salaryTo)
+      case 4: return data.requiredSkills.length > 0
+      case 5: return data.conditions.length > 0 || data.conditionsCustom.length > 0
+      case 6: return data.questions.length > 0 && data.questions.some(q => q.text.trim())
       default: return false
     }
   }
+
+  // ── Toggle helpers ──
+  const toggleArray = useCallback((key: keyof AnketaData, value: string) => {
+    setData(prev => {
+      const arr = prev[key] as string[]
+      return { ...prev, [key]: arr.includes(value) ? arr.filter(x => x !== value) : [...arr, value] }
+    })
+  }, [])
 
   return (
     <div className="space-y-4" onBlur={handleBlur}>
@@ -289,126 +597,86 @@ export function AnketaTab({ vacancyId, descriptionJson }: {
         <span className="text-sm text-muted-foreground font-medium whitespace-nowrap">{progress}%</span>
       </div>
 
-      {/* 1. Компания */}
+      {/* ── Название вакансии (top-level) ── */}
+      <div className="space-y-1">
+        <Label className="text-xs font-medium">Название вакансии</Label>
+        <Input
+          value={data.vacancyTitle}
+          onChange={e => set("vacancyTitle", e.target.value)}
+          placeholder="Менеджер по продажам"
+          className="h-11 text-lg"
+        />
+      </div>
+
+      {/* ── 1. Компания ── */}
       <Section title="Компания" number={1} filled={sectionFilled(1)}>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <CompanySelector
+          mode={data.companyMode}
+          clientCompanyId={data.clientCompanyId}
+          clientContactId={data.clientContactId}
+          onModeChange={v => set("companyMode", v)}
+          onCompanyChange={v => set("clientCompanyId", v)}
+          onContactChange={v => set("clientContactId", v)}
+        />
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="space-y-1.5">
             <Label className="text-xs">Название компании</Label>
             <Input value={data.companyName} onChange={e => set("companyName", e.target.value)} placeholder="ООО Компания" className="h-9" />
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs">Отрасль</Label>
-            <Input value={data.industry} onChange={e => set("industry", e.target.value)} placeholder="IT, ритейл, производство..." className="h-9" />
+            <Input value={data.industry} onChange={e => set("industry", e.target.value)} placeholder="IT, ритейл..." className="h-9" />
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs">Город</Label>
             <Input value={data.companyCity} onChange={e => set("companyCity", e.target.value)} placeholder="Москва" className="h-9" />
           </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">Оборот</Label>
-            <Input value={data.revenue} onChange={e => set("revenue", e.target.value)} placeholder="100 млн ₽/год" className="h-9" />
-          </div>
         </div>
       </Section>
 
-      {/* 2. Продукт */}
-      <Section title="Продукт" number={2} filled={sectionFilled(2)}>
-        <div className="space-y-4">
+      {/* ── 2. Должность ── */}
+      <Section title="Должность" number={2} filled={sectionFilled(2)}>
+        <div className="space-y-1.5">
+          <Label className="text-xs">Категория</Label>
+          <Select value={data.positionCategory} onValueChange={v => set("positionCategory", v)}>
+            <SelectTrigger className="h-9"><SelectValue placeholder="Выберите категорию" /></SelectTrigger>
+            <SelectContent>
+              {POSITION_CATEGORY_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-1.5">
-            <Label className="text-xs">Что продаёт компания</Label>
-            <Textarea value={data.productDescription} onChange={e => set("productDescription", e.target.value)} placeholder="Опишите продукт или услугу..." rows={2} />
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <Label className="text-xs">Средний чек</Label>
-              <Input value={data.averageCheck} onChange={e => set("averageCheck", e.target.value)} placeholder="500 000 ₽" className="h-9" />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Цикл сделки</Label>
-              <Input value={data.dealCycle} onChange={e => set("dealCycle", e.target.value)} placeholder="3 месяца" className="h-9" />
-            </div>
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">Сегменты</Label>
-            <div className="flex flex-wrap gap-2">
-              {SEGMENT_OPTIONS.map(s => (
-                <label key={s} className="flex items-center gap-1.5">
-                  <Checkbox
-                    checked={data.segments.includes(s)}
-                    onCheckedChange={checked => {
-                      set("segments", checked ? [...data.segments, s] : data.segments.filter(x => x !== s))
-                    }}
-                  />
-                  <span className="text-sm">{s}</span>
+            <Label className="text-xs">Формат работы</Label>
+            <div className="flex flex-wrap gap-3">
+              {WORK_FORMAT_OPTIONS.map(f => (
+                <label key={f} className="flex items-center gap-1.5">
+                  <Checkbox checked={data.workFormats.includes(f)} onCheckedChange={() => toggleArray("workFormats", f)} />
+                  <span className="text-sm">{f}</span>
                 </label>
               ))}
             </div>
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs">CRM</Label>
-            <Input value={data.crm} onChange={e => set("crm", e.target.value)} placeholder="Bitrix24, amoCRM..." className="h-9" />
-          </div>
-        </div>
-      </Section>
-
-      {/* 3. Должность */}
-      <Section title="Должность" number={3} filled={sectionFilled(3)}>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="space-y-1.5">
-            <Label className="text-xs">Название должности</Label>
-            <Input value={data.positionTitle} onChange={e => set("positionTitle", e.target.value)} placeholder="Менеджер по продажам" className="h-9" />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">Тип</Label>
-            <Select value={data.positionType} onValueChange={v => set("positionType", v)}>
-              <SelectTrigger className="h-9"><SelectValue placeholder="Выберите тип" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="hunter">Хантер</SelectItem>
-                <SelectItem value="farmer">Фермер</SelectItem>
-                <SelectItem value="closer">Клозер</SelectItem>
-                <SelectItem value="rop">РОП</SelectItem>
-                <SelectItem value="other">Другое</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-        <div className="space-y-1.5">
-          <Label className="text-xs">Формат работы</Label>
-          <div className="flex flex-wrap gap-3">
-            {(["Офис", "Гибрид", "Удалёнка"] as const).map(f => (
-              <label key={f} className="flex items-center gap-1.5">
-                <Checkbox
-                  checked={data.workFormats.includes(f)}
-                  onCheckedChange={checked => {
-                    set("workFormats", checked ? [...data.workFormats, f] : data.workFormats.filter(x => x !== f))
-                  }}
-                />
-                <span className="text-sm">{f}</span>
-              </label>
-            ))}
-          </div>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="space-y-1.5">
             <Label className="text-xs">Занятость</Label>
-            <Select value={data.employment} onValueChange={v => set("employment", v)}>
-              <SelectTrigger className="h-9"><SelectValue placeholder="Выберите" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="full">Полная</SelectItem>
-                <SelectItem value="part">Частичная</SelectItem>
-                <SelectItem value="project">Проектная</SelectItem>
-              </SelectContent>
-            </Select>
+            <div className="flex flex-wrap gap-3">
+              {EMPLOYMENT_OPTIONS.map(e => (
+                <label key={e} className="flex items-center gap-1.5">
+                  <Checkbox checked={data.employment.includes(e)} onCheckedChange={() => toggleArray("employment", e)} />
+                  <span className="text-sm">{e}</span>
+                </label>
+              ))}
+            </div>
           </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">Город</Label>
-            <Input value={data.positionCity} onChange={e => set("positionCity", e.target.value)} placeholder="Москва" className="h-9" />
-          </div>
+        </div>
+        <div className="space-y-1.5 max-w-xs">
+          <Label className="text-xs">Город</Label>
+          <Input value={data.positionCity} onChange={e => set("positionCity", e.target.value)} placeholder="Москва" className="h-9" />
         </div>
       </Section>
 
-      {/* 4. Деньги */}
-      <Section title="Деньги" number={4} filled={sectionFilled(4)}>
+      {/* ── 3. Мотивация ── */}
+      <Section title="Мотивация" number={3} filled={sectionFilled(3)}>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <Label className="text-xs">Зарплата от</Label>
@@ -420,25 +688,20 @@ export function AnketaTab({ vacancyId, descriptionJson }: {
           </div>
         </div>
         <div className="space-y-1.5">
-          <Label className="text-xs">Бонус</Label>
-          <Input value={data.bonus} onChange={e => set("bonus", e.target.value)} placeholder="% от продаж, KPI..." className="h-9" />
+          <Label className="text-xs">Бонусы</Label>
+          <Input value={data.bonus} onChange={e => set("bonus", e.target.value)} placeholder="% от продаж, KPI, бонус за перевыполнение..." className="h-9" />
+          <p className="text-[11px] text-muted-foreground">Например: % от продаж, KPI, бонус за перевыполнение плана, квартальная премия</p>
         </div>
         <div className="space-y-1.5">
           <Label className="text-xs">Частота выплат</Label>
-          <RadioGroup value={data.payFrequency} onValueChange={v => set("payFrequency", v)} className="flex flex-wrap gap-4">
-            <div className="flex items-center gap-1.5">
-              <RadioGroupItem value="monthly" id="pay-monthly" />
-              <Label htmlFor="pay-monthly" className="text-sm font-normal">Ежемесячно</Label>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <RadioGroupItem value="biweekly" id="pay-biweekly" />
-              <Label htmlFor="pay-biweekly" className="text-sm font-normal">2 раза в месяц</Label>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <RadioGroupItem value="weekly" id="pay-weekly" />
-              <Label htmlFor="pay-weekly" className="text-sm font-normal">Еженедельно</Label>
-            </div>
-          </RadioGroup>
+          <div className="flex flex-wrap gap-3">
+            {PAY_FREQUENCY_OPTIONS.map(o => (
+              <label key={o.value} className="flex items-center gap-1.5">
+                <Checkbox checked={data.payFrequency.includes(o.value)} onCheckedChange={() => toggleArray("payFrequency", o.value)} />
+                <span className="text-sm">{o.label}</span>
+              </label>
+            ))}
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <Switch checked={data.showSalary} onCheckedChange={v => set("showSalary", v)} />
@@ -446,16 +709,23 @@ export function AnketaTab({ vacancyId, descriptionJson }: {
         </div>
       </Section>
 
-      {/* 5. Портрет кандидата */}
-      <Section title="Портрет кандидата" number={5} filled={sectionFilled(5)}>
+      {/* ── 4. Портрет кандидата ── */}
+      <Section title="Портрет кандидата" number={4} filled={sectionFilled(4)}>
+        {/* Skills */}
         <div className="space-y-1.5">
           <Label className="text-xs">Обязательные навыки</Label>
-          <TagInput tags={data.requiredSkills} onChange={v => set("requiredSkills", v)} placeholder="Добавить навык..." />
+          <TagInputWithSuggestions tags={data.requiredSkills} onChange={v => set("requiredSkills", v)} placeholder="Добавить навык..." suggestions={REQUIRED_SKILL_SUGGESTIONS} />
         </div>
         <div className="space-y-1.5">
           <Label className="text-xs">Желательные навыки</Label>
-          <TagInput tags={data.desiredSkills} onChange={v => set("desiredSkills", v)} placeholder="Добавить навык..." />
+          <TagInputWithSuggestions tags={data.desiredSkills} onChange={v => set("desiredSkills", v)} placeholder="Добавить навык..." suggestions={DESIRED_SKILL_SUGGESTIONS} />
         </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs text-destructive/80">Неприемлемо</Label>
+          <TagInputWithSuggestions tags={data.unacceptableSkills} onChange={v => set("unacceptableSkills", v)} placeholder="Что неприемлемо..." suggestions={UNACCEPTABLE_SUGGESTIONS} />
+        </div>
+
+        {/* Experience */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <Label className="text-xs">Опыт минимальный (лет)</Label>
@@ -466,59 +736,23 @@ export function AnketaTab({ vacancyId, descriptionJson }: {
             <Input value={data.experienceIdeal} onChange={e => set("experienceIdeal", e.target.value)} placeholder="3" className="h-9" type="number" />
           </div>
         </div>
-      </Section>
 
-      {/* 6. Условия */}
-      <Section title="Условия" number={6} filled={sectionFilled(6)}>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="space-y-1.5">
-            <Label className="text-xs">Бонусы</Label>
-            <Input value={data.bonuses} onChange={e => set("bonuses", e.target.value)} placeholder="Бонус за выполнение KPI..." className="h-9" />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">Обучение</Label>
-            <Input value={data.training} onChange={e => set("training", e.target.value)} placeholder="Внутреннее обучение, курсы..." className="h-9" />
-          </div>
-        </div>
-        <div className="space-y-1.5">
-          <Label className="text-xs">Карьерный рост</Label>
-          <Input value={data.careerGrowth} onChange={e => set("careerGrowth", e.target.value)} placeholder="Рост до РОП за 1-2 года..." className="h-9" />
-        </div>
-        <div className="space-y-1.5">
-          <Label className="text-xs">Соцпакет</Label>
-          <div className="flex flex-wrap gap-2">
-            {SOCIAL_PACKAGE_OPTIONS.map(opt => (
-              <label key={opt} className="flex items-center gap-1.5">
-                <Checkbox
-                  checked={data.socialPackage.includes(opt)}
-                  onCheckedChange={checked => {
-                    set("socialPackage", checked ? [...data.socialPackage, opt] : data.socialPackage.filter(x => x !== opt))
-                  }}
-                />
-                <span className="text-sm">{opt}</span>
-              </label>
-            ))}
-          </div>
-        </div>
-      </Section>
-
-      {/* 7. Стоп-факторы */}
-      <Section title="Стоп-факторы" number={7} filled={sectionFilled(7)}>
-        <div className="space-y-3">
-          {data.stopFactors.map((f, idx) => (
-            <div key={f.id} className="flex items-start gap-3">
-              <Switch
-                checked={f.enabled}
-                onCheckedChange={v => {
-                  const next = [...data.stopFactors]
-                  next[idx] = { ...next[idx], enabled: v }
-                  set("stopFactors", next)
-                }}
-                className="mt-0.5"
-              />
-              <div className="flex-1 space-y-2">
+        {/* Stop factors */}
+        <div className="space-y-2 pt-2 border-t">
+          <Label className="text-xs font-semibold">Стоп-факторы</Label>
+          <div className="space-y-2">
+            {data.stopFactors.map((f, idx) => (
+              <div key={f.id}>
                 <div className="flex items-center gap-2">
-                  <span className={cn("text-sm", !f.enabled && "text-muted-foreground")}>{f.label}</span>
+                  <Checkbox
+                    checked={f.enabled}
+                    onCheckedChange={v => {
+                      const next = [...data.stopFactors]
+                      next[idx] = { ...next[idx], enabled: !!v }
+                      set("stopFactors", next)
+                    }}
+                  />
+                  <span className={cn("text-sm flex-1", !f.enabled && "text-muted-foreground")}>{f.label}</span>
                   {f.custom && (
                     <button type="button" onClick={() => set("stopFactors", data.stopFactors.filter((_, i) => i !== idx))} className="text-muted-foreground hover:text-destructive">
                       <X className="w-3.5 h-3.5" />
@@ -526,8 +760,8 @@ export function AnketaTab({ vacancyId, descriptionJson }: {
                   )}
                 </div>
                 {f.enabled && f.id === "age" && (
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs text-muted-foreground">{f.ageRange?.[0] ?? 18}</span>
+                  <div className="flex items-center gap-3 ml-6 mt-1">
+                    <span className="text-xs text-muted-foreground w-6 text-right">{f.ageRange?.[0] ?? 18}</span>
                     <Slider
                       value={f.ageRange ?? [18, 65]}
                       min={18} max={65} step={1}
@@ -538,10 +772,10 @@ export function AnketaTab({ vacancyId, descriptionJson }: {
                       }}
                       className="flex-1"
                     />
-                    <span className="text-xs text-muted-foreground">{f.ageRange?.[1] ?? 65}</span>
+                    <span className="text-xs text-muted-foreground w-6">{f.ageRange?.[1] ?? 65}</span>
                   </div>
                 )}
-                {f.enabled && f.id === "salaryMax" && (
+                {f.enabled && (f.id === "experience" || f.id === "citizenship" || f.id === "salaryMax" || f.id === "city" || f.id === "documents") && (
                   <Input
                     value={f.value ?? ""}
                     onChange={e => {
@@ -549,102 +783,105 @@ export function AnketaTab({ vacancyId, descriptionJson }: {
                       next[idx] = { ...next[idx], value: e.target.value }
                       set("stopFactors", next)
                     }}
-                    placeholder="Максимальная зарплата"
-                    className="h-8 text-sm max-w-xs"
+                    placeholder={f.id === "salaryMax" ? "Максимальная сумма" : f.id === "experience" ? "Мин. лет" : "Уточните..."}
+                    className="h-7 text-xs max-w-xs ml-6 mt-1"
                   />
                 )}
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
+          <Button
+            type="button" variant="outline" size="sm" className="gap-1.5 text-xs"
+            onClick={() => set("stopFactors", [...data.stopFactors, { id: `sf_${Date.now()}`, label: "Новый стоп-фактор", enabled: true, custom: true }])}
+          >
+            <Plus className="w-3 h-3" />Добавить свой
+          </Button>
         </div>
-        <Button
-          type="button" variant="outline" size="sm" className="gap-1.5 mt-2"
-          onClick={() => {
-            const id = `custom_${Date.now()}`
-            set("stopFactors", [...data.stopFactors, { id, label: "Новый стоп-фактор", enabled: true, custom: true }])
-          }}
-        >
-          <Plus className="w-3.5 h-3.5" />Добавить свой
-        </Button>
-      </Section>
 
-      {/* 8. Желаемые параметры */}
-      <Section title="Желаемые параметры" number={8} filled={sectionFilled(8)}>
-        <div className="space-y-3">
-          {data.desiredParams.map((p, idx) => (
-            <div key={p.id} className="flex items-center gap-3">
-              <Switch
-                checked={p.enabled}
-                onCheckedChange={v => {
-                  const next = [...data.desiredParams]
-                  next[idx] = { ...next[idx], enabled: v }
-                  set("desiredParams", next)
-                }}
-              />
-              <div className="flex items-center gap-2 flex-1 min-w-0">
-                <span className={cn("text-sm truncate", !p.enabled && "text-muted-foreground")}>{p.label}</span>
+        {/* Desired params */}
+        <div className="space-y-2 pt-2 border-t">
+          <Label className="text-xs font-semibold">Желаемые параметры</Label>
+          <div className="space-y-2">
+            {data.desiredParams.map((p, idx) => (
+              <div key={p.id} className="flex items-center gap-2">
+                <Checkbox
+                  checked={p.enabled}
+                  onCheckedChange={v => {
+                    const next = [...data.desiredParams]
+                    next[idx] = { ...next[idx], enabled: !!v }
+                    set("desiredParams", next)
+                  }}
+                />
+                <span className={cn("text-sm flex-1 min-w-0 truncate", !p.enabled && "text-muted-foreground")}>{p.label}</span>
                 {p.custom && (
                   <button type="button" onClick={() => set("desiredParams", data.desiredParams.filter((_, i) => i !== idx))} className="text-muted-foreground hover:text-destructive shrink-0">
                     <X className="w-3.5 h-3.5" />
                   </button>
                 )}
+                {p.enabled && (
+                  <div className="flex items-center gap-1 shrink-0">
+                    <span className="text-[10px] text-muted-foreground">Вес:</span>
+                    {[1, 2, 3, 4, 5].map(w => (
+                      <button
+                        key={w} type="button"
+                        className={cn(
+                          "w-5 h-5 rounded text-[10px] font-medium transition-colors",
+                          p.weight === w ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/80"
+                        )}
+                        onClick={() => {
+                          const next = [...data.desiredParams]
+                          next[idx] = { ...next[idx], weight: w }
+                          set("desiredParams", next)
+                        }}
+                      >
+                        {w}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
-              {p.enabled && (
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <span className="text-xs text-muted-foreground">Вес:</span>
-                  {[1, 2, 3, 4, 5].map(w => (
-                    <button
-                      key={w} type="button"
-                      className={cn(
-                        "w-6 h-6 rounded text-xs font-medium transition-colors",
-                        p.weight === w ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/80"
-                      )}
-                      onClick={() => {
-                        const next = [...data.desiredParams]
-                        next[idx] = { ...next[idx], weight: w }
-                        set("desiredParams", next)
-                      }}
-                    >
-                      {w}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-        <Button
-          type="button" variant="outline" size="sm" className="gap-1.5 mt-2"
-          onClick={() => {
-            const id = `custom_${Date.now()}`
-            set("desiredParams", [...data.desiredParams, { id, label: "Новый параметр", enabled: true, weight: 3, custom: true }])
-          }}
-        >
-          <Plus className="w-3.5 h-3.5" />Добавить свой
-        </Button>
-      </Section>
-
-      {/* 9. Квалификационные вопросы */}
-      <Section title="Квалификационные вопросы" number={9} filled={sectionFilled(9)}>
-        <div className="space-y-3">
-          {data.questions.map((q, idx) => (
-            <div key={idx} className="space-y-1.5">
-              <Label className="text-xs">Вопрос {idx + 1}</Label>
-              <Textarea
-                value={q}
-                onChange={e => {
-                  const next = [...data.questions]
-                  next[idx] = e.target.value
-                  set("questions", next)
-                }}
-                placeholder={`Квалификационный вопрос ${idx + 1}...`}
-                rows={2}
-              />
-            </div>
-          ))}
+            ))}
+          </div>
+          <Button
+            type="button" variant="outline" size="sm" className="gap-1.5 text-xs"
+            onClick={() => set("desiredParams", [...data.desiredParams, { id: `dp_${Date.now()}`, label: "Новый параметр", enabled: true, weight: 3, custom: true }])}
+          >
+            <Plus className="w-3 h-3" />Добавить свой
+          </Button>
         </div>
       </Section>
 
+      {/* ── 5. Условия ── */}
+      <Section title="Условия" number={5} filled={sectionFilled(5)}>
+        <div className="flex flex-wrap gap-x-4 gap-y-2">
+          {CONDITIONS_OPTIONS.map(opt => (
+            <label key={opt} className="flex items-center gap-1.5">
+              <Checkbox checked={data.conditions.includes(opt)} onCheckedChange={() => toggleArray("conditions", opt)} />
+              <span className="text-sm">{opt}</span>
+            </label>
+          ))}
+        </div>
+        {data.conditionsCustom.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {data.conditionsCustom.map(c => (
+              <Badge key={c} variant="secondary" className="gap-1 text-xs">
+                {c}
+                <button type="button" onClick={() => set("conditionsCustom", data.conditionsCustom.filter(x => x !== c))} className="hover:text-destructive">
+                  <X className="w-3 h-3" />
+                </button>
+              </Badge>
+            ))}
+          </div>
+        )}
+        <TagInput tags={[]} onChange={tags => { if (tags.length > 0) set("conditionsCustom", [...data.conditionsCustom, ...tags]) }} placeholder="Добавить своё условие..." />
+      </Section>
+
+      {/* ── 6. Квалификационные вопросы ── */}
+      <Section title="Квалификационные вопросы" number={6} filled={sectionFilled(6)}>
+        <QuestionEditor questions={data.questions} onChange={v => set("questions", v)} />
+      </Section>
+
+      {/* Save */}
       <div className="flex justify-end mt-4">
         <Button size="sm" className="gap-1.5 h-8 text-xs" onClick={save} disabled={saving}>
           {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
