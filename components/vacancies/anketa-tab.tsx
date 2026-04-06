@@ -28,6 +28,7 @@ interface AnketaData {
   companyName: string
   industry: string
   companyCity: string
+  workFormat: string
   clientCompanyId: string | null
   clientContactId: string | null
   // 2. Должность
@@ -81,6 +82,13 @@ const POSITION_CATEGORY_OPTIONS = Object.entries(POSITION_CATEGORIES).map(([key,
 }))
 
 const WORK_FORMAT_OPTIONS = ["Офис", "Гибрид", "Удалёнка"]
+const COMPANY_WORK_FORMAT_OPTIONS = [
+  { value: "office",   label: "Офис" },
+  { value: "remote",   label: "Удалённо" },
+  { value: "hybrid",   label: "Гибрид" },
+  { value: "rotation", label: "Вахта" },
+  { value: "travel",   label: "Разъездной" },
+]
 const EMPLOYMENT_OPTIONS = ["Полная", "Частичная", "Проектная"]
 
 const PAY_FREQUENCY_OPTIONS = [
@@ -150,7 +158,7 @@ const ANKETA_QTYPES: { type: QuestionAnswerType; icon: string; label: string; de
 function emptyAnketa(): AnketaData {
   return {
     vacancyTitle: "",
-    companyMode: "own", companyName: "", industry: "", companyCity: "",
+    companyMode: "own", companyName: "", industry: "", companyCity: "", workFormat: "",
     clientCompanyId: null, clientContactId: null,
     positionCategory: "", workFormats: [], employment: [], positionCity: "",
     salaryFrom: "", salaryTo: "", bonus: "", payFrequency: [], showSalary: true,
@@ -508,9 +516,10 @@ function QuestionEditor({ questions, onChange }: {
 
 // ─── Main component ──────────────────────────────────────────────────────────
 
-export function AnketaTab({ vacancyId, descriptionJson }: {
+export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
   vacancyId: string
   descriptionJson: unknown
+  onTitleChange?: (title: string) => void
 }) {
   const [data, setData] = useState<AnketaData>(() => {
     const saved = (descriptionJson as Record<string, unknown>)?.anketa as Record<string, unknown> | undefined
@@ -602,7 +611,7 @@ export function AnketaTab({ vacancyId, descriptionJson }: {
         <Label className="text-xs font-medium">Название вакансии</Label>
         <Input
           value={data.vacancyTitle}
-          onChange={e => set("vacancyTitle", e.target.value)}
+          onChange={e => { set("vacancyTitle", e.target.value); onTitleChange?.(e.target.value) }}
           placeholder="Менеджер по продажам"
           className="h-11 text-lg"
         />
@@ -619,17 +628,24 @@ export function AnketaTab({ vacancyId, descriptionJson }: {
           onContactChange={v => set("clientContactId", v)}
         />
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="space-y-1.5">
-            <Label className="text-xs">Название компании</Label>
-            <Input value={data.companyName} onChange={e => set("companyName", e.target.value)} placeholder="ООО Компания" className="h-9" />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">Отрасль</Label>
-            <Input value={data.industry} onChange={e => set("industry", e.target.value)} placeholder="IT, ритейл..." className="h-9" />
-          </div>
+          {data.companyMode === "own" && (
+            <div className="space-y-1.5">
+              <Label className="text-xs">Компания</Label>
+              <div className="h-9 flex items-center px-3 rounded-md border bg-muted/40 text-sm text-muted-foreground">Моя компания</div>
+            </div>
+          )}
           <div className="space-y-1.5">
             <Label className="text-xs">Город</Label>
-            <Input value={data.companyCity} onChange={e => set("companyCity", e.target.value)} placeholder="Москва" className="h-9" />
+            <Input value={data.companyCity} onChange={e => set("companyCity", e.target.value)} placeholder="Москва" className="h-9 border" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Формат работы</Label>
+            <Select value={data.workFormat} onValueChange={v => set("workFormat", v)}>
+              <SelectTrigger className="h-9 border"><SelectValue placeholder="Выберите формат" /></SelectTrigger>
+              <SelectContent>
+                {COMPANY_WORK_FORMAT_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
           </div>
         </div>
       </Section>
