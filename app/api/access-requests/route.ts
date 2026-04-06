@@ -1,6 +1,19 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { accessRequests } from "@/lib/db/schema"
+import { requireCompany } from "@/lib/api-helpers"
+import { desc, eq } from "drizzle-orm"
+
+export async function GET() {
+  try {
+    await requireCompany()
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
+  const rows = await db.select().from(accessRequests).orderBy(desc(accessRequests.createdAt))
+  return NextResponse.json(rows)
+}
 
 export async function POST(req: NextRequest) {
   try {
