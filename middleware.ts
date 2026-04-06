@@ -32,7 +32,8 @@ const MODULE_PATH_MAP: { prefix: string; slugs: string[]; moduleParam: string }[
   { prefix: "/hr/",        slugs: HR_MODULE_SLUGS, moduleParam: "recruiting" },
   { prefix: "/marketing/", slugs: ["marketing"],   moduleParam: "marketing" },
   { prefix: "/sales/",     slugs: ["sales"],       moduleParam: "sales" },
-  { prefix: "/logistics/", slugs: ["logistics"],   moduleParam: "logistics" },
+  { prefix: "/logistics/",  slugs: ["logistics"],   moduleParam: "logistics" },
+  { prefix: "/knowledge/", slugs: ["knowledge"],   moduleParam: "knowledge" },
 ]
 
 export default auth(async (req) => {

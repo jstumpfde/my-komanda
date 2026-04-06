@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import {
   startOfMonth,
   endOfMonth,
@@ -11,10 +11,12 @@ import {
   isSameMonth,
   isSameDay,
   isToday,
+  getDay,
 } from "date-fns"
 import { ru } from "date-fns/locale"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import type { CalendarEvent } from "./week-view"
+import type { DaySchedule } from "./week-view"
 
 const TYPE_BG: Record<string, string> = {
   interview: "bg-blue-500",
@@ -27,19 +29,40 @@ const TYPE_BG: Record<string, string> = {
 interface MonthViewProps {
   currentDate: Date
   events: CalendarEvent[]
+  weekSchedule?: Record<number, DaySchedule>
   onEventClick: (event: CalendarEvent) => void
 }
 
-export function MonthView({ currentDate, events, onEventClick }: MonthViewProps) {
+export function MonthView({ currentDate, events, weekSchedule, onEventClick }: MonthViewProps) {
   const [openDayKey, setOpenDayKey] = useState<string | null>(null)
 
   const monthStart = startOfMonth(currentDate)
   const monthEnd = endOfMonth(currentDate)
   const calStart = startOfWeek(monthStart, { weekStartsOn: 1 })
   const calEnd = endOfWeek(monthEnd, { weekStartsOn: 1 })
-  const days = eachDayOfInterval({ start: calStart, end: calEnd })
+  const allDays = eachDayOfInterval({ start: calStart, end: calEnd })
 
-  const weekdays = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
+  // Determine which day-of-week columns to show
+  // Hide Sat (6) / Sun (0) if disabled in weekSchedule AND no events on any such day in the range
+  const visibleDows = useMemo(() => {
+    const allDows = [1, 2, 3, 4, 5, 6, 0] // Mon-Sun
+    if (!weekSchedule) return allDows
+    return allDows.filter((dow) => {
+      const schedule = weekSchedule[dow]
+      if (schedule?.enabled) return true
+      // Check if any day with this dow has events
+      return allDays.some((day) => getDay(day) === dow && events.some((e) => isSameDay(new Date(e.startAt), day)))
+    })
+  }, [weekSchedule, allDays, events])
+
+  const weekdayLabels: Record<number, string> = { 1: "Пн", 2: "Вт", 3: "Ср", 4: "Чт", 5: "Пт", 6: "Сб", 0: "Вс" }
+
+  // Filter days to only include visible day-of-week columns
+  const days = useMemo(() => {
+    return allDays.filter((day) => visibleDows.includes(getDay(day)))
+  }, [allDays, visibleDows])
+
+  const colCount = visibleDows.length
 
   const getEventsForDay = (day: Date) =>
     events.filter((e) => isSameDay(new Date(e.startAt), day))
@@ -47,16 +70,16 @@ export function MonthView({ currentDate, events, onEventClick }: MonthViewProps)
   return (
     <div className="flex flex-col h-full">
       {/* Weekday headers */}
-      <div className="grid grid-cols-7 border-b">
-        {weekdays.map((wd) => (
-          <div key={wd} className="py-2 text-center text-xs font-medium text-muted-foreground border-l first:border-l-0">
-            {wd}
+      <div className={`grid border-b`} style={{ gridTemplateColumns: `repeat(${colCount}, 1fr)` }}>
+        {visibleDows.map((dow) => (
+          <div key={dow} className="py-2 text-center text-xs font-medium text-muted-foreground border-l first:border-l-0">
+            {weekdayLabels[dow]}
           </div>
         ))}
       </div>
 
       {/* Days grid */}
-      <div className="grid grid-cols-7 flex-1 overflow-auto">
+      <div className="flex-1 overflow-auto" style={{ display: "grid", gridTemplateColumns: `repeat(${colCount}, 1fr)` }}>
         {days.map((day) => {
           const dayKey = day.toISOString()
           const dayEvents = getEventsForDay(day)

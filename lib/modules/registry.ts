@@ -74,7 +74,8 @@ export const MODULE_REGISTRY: Record<ModuleId, ModuleConfig> = {
     icon: 'BookMarked',
     basePath: '/knowledge',
     menuItems: [
-      { label: 'База знаний', href: '/knowledge', icon: 'BookMarked' },
+      { label: 'Все статьи',      href: '/knowledge',     icon: 'BookMarked' },
+      { label: 'Новая статья',    href: '/knowledge/new', icon: 'FilePlus' },
     ],
   },
   marketing: {

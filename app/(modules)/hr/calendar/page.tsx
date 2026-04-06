@@ -327,9 +327,9 @@ export default function CalendarPage() {
       <SidebarInset>
         <DashboardHeader />
         <main className="flex-1 overflow-auto bg-background">
-          <div className="flex flex-col h-[calc(100vh-3.5rem)] px-4 sm:px-6">
+          <div className="flex flex-col h-[calc(100vh-3.5rem)]" style={{ paddingLeft: 56, paddingRight: 56 }}>
           {/* Top bar */}
-          <div className="flex items-center justify-between px-4 py-3 border-b gap-4 flex-wrap">
+          <div className="flex items-center justify-between py-3 border-b gap-4 flex-wrap">
             <div className="flex items-center gap-2">
               <CalendarDays className="h-5 w-5 text-violet-600" />
               <h1 className="text-lg font-semibold">Календарь</h1>
@@ -395,6 +395,7 @@ export default function CalendarPage() {
               <WeekView
                 currentDate={currentDate}
                 events={events}
+                weekSchedule={weekSchedule}
                 onSlotClick={(date) => openNewEvent(date)}
                 onEventClick={openEditEvent}
               />
@@ -411,6 +412,7 @@ export default function CalendarPage() {
               <MonthView
                 currentDate={currentDate}
                 events={events}
+                weekSchedule={weekSchedule}
                 onEventClick={openEditEvent}
               />
             )}

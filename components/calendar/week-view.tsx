@@ -12,6 +12,7 @@ import {
   isSameDay,
   isToday,
   isWeekend,
+  getDay,
 } from "date-fns"
 import { ru } from "date-fns/locale"
 
@@ -23,6 +24,13 @@ export interface CalendarEvent {
   endAt: string
   color?: string | null
   roomId?: string | null
+}
+
+export interface DaySchedule {
+  enabled: boolean
+  start: string
+  end: string
+  slot: string
 }
 
 const TYPE_COLORS: Record<string, string> = {
@@ -41,14 +49,29 @@ const SLOT_HEIGHT = 60 // px per hour
 interface WeekViewProps {
   currentDate: Date
   events: CalendarEvent[]
+  weekSchedule?: Record<number, DaySchedule>
   onSlotClick: (date: Date) => void
   onEventClick: (event: CalendarEvent) => void
 }
 
-export function WeekView({ currentDate, events, onSlotClick, onEventClick }: WeekViewProps) {
+export function WeekView({ currentDate, events, weekSchedule, onSlotClick, onEventClick }: WeekViewProps) {
   const weekStart = startOfWeek(currentDate, { locale: ru, weekStartsOn: 1 })
   const weekEnd = endOfWeek(currentDate, { locale: ru, weekStartsOn: 1 })
-  const days = eachDayOfInterval({ start: weekStart, end: weekEnd })
+  const allDays = eachDayOfInterval({ start: weekStart, end: weekEnd })
+
+  // Filter out non-working days that have no events
+  const days = useMemo(() => {
+    if (!weekSchedule) return allDays
+    return allDays.filter((day) => {
+      const dow = getDay(day) // 0=Sun, 1=Mon...
+      const schedule = weekSchedule[dow]
+      if (schedule?.enabled) return true
+      // Non-working day — show only if it has events
+      return events.some((e) => isSameDay(new Date(e.startAt), day))
+    })
+  }, [allDays, weekSchedule, events])
+
+  const colCount = days.length
 
   const hours = useMemo(
     () => Array.from({ length: TOTAL_HOURS }, (_, i) => HOURS_START + i),
@@ -72,7 +95,7 @@ export function WeekView({ currentDate, events, onSlotClick, onEventClick }: Wee
   return (
     <div className="flex flex-col h-full overflow-auto border rounded-xl">
       {/* Header row */}
-      <div className="grid grid-cols-[52px_repeat(7,1fr)] border-b sticky top-0 bg-card z-10 rounded-t-xl">
+      <div className={`grid border-b sticky top-0 bg-card z-10 rounded-t-xl`} style={{ gridTemplateColumns: `52px repeat(${colCount}, 1fr)` }}>
         <div />
         {days.map((day) => {
           const today = isToday(day)
@@ -91,7 +114,7 @@ export function WeekView({ currentDate, events, onSlotClick, onEventClick }: Wee
       </div>
 
       {/* Grid */}
-      <div className="grid grid-cols-[52px_repeat(7,1fr)] flex-1">
+      <div className="flex-1" style={{ display: "grid", gridTemplateColumns: `52px repeat(${colCount}, 1fr)` }}>
         {/* Time column */}
         <div>
           {hours.map((h) => (
