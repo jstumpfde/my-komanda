@@ -12,7 +12,7 @@ import { Slider } from "@/components/ui/slider"
 import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ChevronDown, ChevronUp, Plus, X, Save, Loader2, Trash2, GripVertical, Upload, Link2, Eye } from "lucide-react"
+import { ChevronDown, ChevronUp, Plus, X, Save, Loader2, Trash2, GripVertical, Eye } from "lucide-react"
 import { toast } from "sonner"
 import { POSITION_CATEGORIES } from "@/lib/position-classifier"
 import { type Question, type QuestionAnswerType, defaultQuestion } from "@/lib/course-types"
@@ -257,7 +257,7 @@ function TagInput({ tags, onChange, placeholder }: {
           value={input}
           onChange={e => setInput(e.target.value)}
           placeholder={placeholder}
-          className="h-8 text-sm"
+          className="h-8 text-sm bg-background border border-input"
           onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); add() } }}
         />
         <Button type="button" variant="outline" size="sm" className="h-8 px-3" onClick={add}>
@@ -617,7 +617,7 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
           value={data.vacancyTitle}
           onChange={e => { set("vacancyTitle", e.target.value); onTitleChange?.(e.target.value) }}
           placeholder="Менеджер по продажам"
-          className="h-11 text-lg"
+          className="h-11 text-lg bg-background border border-input"
         />
       </div>
 
@@ -639,7 +639,7 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
           <Label className="text-xs">Категория</Label>
           <div className="flex items-center gap-2">
             <Select value={data.positionCategory} onValueChange={v => set("positionCategory", v)}>
-              <SelectTrigger className="h-9 border border-input min-w-[300px]"><SelectValue placeholder="Выберите категорию" /></SelectTrigger>
+              <SelectTrigger className="h-9 bg-background border border-input min-w-[300px]"><SelectValue placeholder="Выберите категорию" /></SelectTrigger>
               <SelectContent>
                 {POSITION_CATEGORY_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
               </SelectContent>
@@ -674,7 +674,7 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
         </div>
         <div className="space-y-1.5 max-w-xs">
           <Label className="text-xs">Город</Label>
-          <Input value={data.positionCity} onChange={e => set("positionCity", e.target.value)} placeholder="Москва" className="h-9 border border-input" />
+          <Input value={data.positionCity} onChange={e => set("positionCity", e.target.value)} placeholder="Москва" className="h-9 bg-background border border-input" />
         </div>
       </Section>
 
@@ -684,16 +684,16 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
           <div className="grid grid-cols-2 gap-4 max-w-lg">
             <div className="space-y-1.5">
               <Label className="text-xs">Зарплата от</Label>
-              <Input value={data.salaryFrom} onChange={e => set("salaryFrom", e.target.value)} placeholder="80 000 ₽" className="h-9 border border-input" />
+              <Input value={data.salaryFrom} onChange={e => set("salaryFrom", e.target.value)} placeholder="80 000 ₽" className="h-9 bg-background border border-input" />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Зарплата до</Label>
-              <Input value={data.salaryTo} onChange={e => set("salaryTo", e.target.value)} placeholder="150 000 ₽" className="h-9 border border-input" />
+              <Input value={data.salaryTo} onChange={e => set("salaryTo", e.target.value)} placeholder="150 000 ₽" className="h-9 bg-background border border-input" />
             </div>
           </div>
           <div className="space-y-1.5 max-w-lg">
             <Label className="text-xs">Бонусы</Label>
-            <Textarea value={data.bonus} onChange={e => set("bonus", e.target.value)} placeholder="% от продаж, KPI, бонус за перевыполнение плана, квартальная премия..." rows={2} className="text-sm border border-input" />
+            <Textarea value={data.bonus} onChange={e => set("bonus", e.target.value)} placeholder="% от продаж, KPI, бонус за перевыполнение плана, квартальная премия..." rows={2} className="text-sm bg-background border border-input" />
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs">Частота выплат</Label>
@@ -711,7 +711,7 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
 
       {/* ── 4. Обязанности и требования ── */}
       <Section title="Обязанности и требования" number={4} filled={sectionFilled(4)}>
-        <p className="text-xs text-muted-foreground -mt-2">Описание задач и функционала должности</p>
+        <p className="text-xs text-muted-foreground mt-1">Описание задач и функционала должности</p>
         <div className="space-y-1.5">
           <Label className="text-xs">Обязанности</Label>
           <Textarea
@@ -719,7 +719,7 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
             onChange={e => set("responsibilities", e.target.value)}
             placeholder="Опишите задачи и функционал должности..."
             rows={4}
-            className="text-sm border border-input"
+            className="text-sm bg-background border border-input"
           />
         </div>
         <div className="space-y-1.5">
@@ -729,18 +729,8 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
             onChange={e => set("requirements", e.target.value)}
             placeholder="Что должен знать и уметь кандидат..."
             rows={4}
-            className="text-sm border border-input"
+            className="text-sm bg-background border border-input"
           />
-        </div>
-        <div className="flex items-center gap-2">
-          <Button type="button" variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => toast("Загрузка файлов будет доступна в ближайшем обновлении")}>
-            <Upload className="w-3.5 h-3.5" />
-            Загрузить описание
-          </Button>
-          <Button type="button" variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => toast("Импорт из ссылки будет доступен в ближайшем обновлении")}>
-            <Link2 className="w-3.5 h-3.5" />
-            Импорт из ссылки
-          </Button>
         </div>
       </Section>
 
@@ -764,11 +754,11 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <Label className="text-xs">Опыт минимальный (лет)</Label>
-            <Input value={data.experienceMin} onChange={e => set("experienceMin", e.target.value)} placeholder="1" className="h-9" type="number" />
+            <Input value={data.experienceMin} onChange={e => set("experienceMin", e.target.value)} placeholder="1" className="h-9 bg-background border border-input" type="number" />
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs">Опыт идеальный (лет)</Label>
-            <Input value={data.experienceIdeal} onChange={e => set("experienceIdeal", e.target.value)} placeholder="3" className="h-9" type="number" />
+            <Input value={data.experienceIdeal} onChange={e => set("experienceIdeal", e.target.value)} placeholder="3" className="h-9 bg-background border border-input" type="number" />
           </div>
         </div>
 

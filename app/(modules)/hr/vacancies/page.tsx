@@ -23,11 +23,15 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
 import { useVacancies, type ApiVacancy } from "@/hooks/use-vacancies"
 import {
   Plus, Briefcase, MapPin, List, LayoutGrid, Table2, Calendar, Banknote,
   Search, MoreHorizontal, Pencil, Copy, Archive, Trash2, ListFilter,
-  RotateCcw, X,
+  RotateCcw, X, Upload, Link2, FileText, Loader2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
@@ -305,6 +309,32 @@ export default function VacanciesPage() {
   const [trashItems, setTrashItems] = useState<ApiVacancy[]>([])
   const [trashLoading, setTrashLoading] = useState(false)
   const [permanentDeleteTarget, setPermanentDeleteTarget] = useState<ApiVacancy | null>(null)
+  // Create vacancy dialog
+  const [createDialogOpen, setCreateDialogOpen] = useState(false)
+  const [newVacancyTitle, setNewVacancyTitle] = useState("")
+  const [creating, setCreating] = useState(false)
+  const [importUrl, setImportUrl] = useState("")
+
+  const handleCreateVacancy = useCallback(async () => {
+    if (!newVacancyTitle.trim()) { toast.error("Введите название вакансии"); return }
+    setCreating(true)
+    try {
+      const res = await fetch("/api/modules/hr/vacancies", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: newVacancyTitle.trim() }),
+      })
+      if (!res.ok) throw new Error()
+      const data = await res.json() as { id: string }
+      setCreateDialogOpen(false)
+      setNewVacancyTitle("")
+      router.push(`/hr/vacancies/${data.id}`)
+    } catch {
+      toast.error("Не удалось создать вакансию")
+    } finally {
+      setCreating(false)
+    }
+  }, [newVacancyTitle, router])
 
   const hrManagerTrashEnabled = typeof window !== "undefined" && localStorage.getItem(TRASH_ACCESS_KEY) === "true"
   const canSeeTrash = TRASH_ROLES_ALWAYS.includes(role) || (role === TRASH_ROLE_OPTIONAL && hrManagerTrashEnabled)
@@ -492,8 +522,8 @@ export default function VacanciesPage() {
                     )}
                   </button>
                 )}
-                <Button asChild>
-                  <Link href="/hr/vacancies/create"><Plus className="size-4 mr-1.5" />Создать вакансию</Link>
+                <Button onClick={() => setCreateDialogOpen(true)}>
+                  <Plus className="size-4 mr-1.5" />Создать вакансию
                 </Button>
               </div>
             </div>
@@ -536,7 +566,7 @@ export default function VacanciesPage() {
                 <Briefcase className="size-12 text-muted-foreground/30 mb-4" />
                 <p className="text-muted-foreground font-medium">Вакансий пока нет</p>
                 <p className="text-sm text-muted-foreground/60 mt-1 mb-4">Создайте первую вакансию чтобы начать найм</p>
-                <Button asChild><Link href="/hr/vacancies/create"><Plus className="size-4 mr-1.5" />Создать вакансию</Link></Button>
+                <Button onClick={() => setCreateDialogOpen(true)}><Plus className="size-4 mr-1.5" />Создать вакансию</Button>
               </div>
             )}
 
@@ -693,6 +723,78 @@ export default function VacanciesPage() {
           </div>
         </SheetContent>
       </Sheet>
+
+      {/* ── Create vacancy dialog ── */}
+      <Dialog open={createDialogOpen} onOpenChange={(open) => { setCreateDialogOpen(open); if (!open) { setNewVacancyTitle(""); setImportUrl("") } }}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Создать вакансию</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-4 py-2">
+            {/* Card 1: Manual */}
+            <div className="rounded-lg border p-4 space-y-3">
+              <div className="flex items-center gap-2 font-medium text-sm">
+                <Pencil className="size-4 text-primary" />
+                Создать вручную
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Название вакансии</Label>
+                <Input
+                  value={newVacancyTitle}
+                  onChange={(e) => setNewVacancyTitle(e.target.value)}
+                  placeholder="Менеджер по продажам"
+                  className="h-9 border border-input"
+                  onKeyDown={(e) => { if (e.key === "Enter") handleCreateVacancy() }}
+                />
+              </div>
+              <Button size="sm" className="w-full" onClick={handleCreateVacancy} disabled={creating}>
+                {creating ? <Loader2 className="size-4 mr-1.5 animate-spin" /> : <Plus className="size-4 mr-1.5" />}
+                Создать
+              </Button>
+            </div>
+
+            {/* Card 2: Upload */}
+            <div className="rounded-lg border p-4 space-y-3">
+              <div className="flex items-center gap-2 font-medium text-sm">
+                <Upload className="size-4 text-primary" />
+                Загрузить описание
+              </div>
+              <button
+                type="button"
+                className="w-full h-20 rounded-lg border-2 border-dashed border-muted-foreground/30 flex flex-col items-center justify-center gap-1 text-muted-foreground hover:border-primary/50 hover:text-primary transition-colors"
+                onClick={() => toast("Загрузка файлов будет доступна в ближайшем обновлении")}
+              >
+                <FileText className="size-5" />
+                <span className="text-xs">DOCX, PDF, TXT</span>
+              </button>
+            </div>
+
+            {/* Card 3: Import from URL */}
+            <div className="rounded-lg border p-4 space-y-3">
+              <div className="flex items-center gap-2 font-medium text-sm">
+                <Link2 className="size-4 text-primary" />
+                Импорт из ссылки
+              </div>
+              <div className="flex gap-2">
+                <Input
+                  value={importUrl}
+                  onChange={(e) => setImportUrl(e.target.value)}
+                  placeholder="https://hh.ru/vacancy/..."
+                  className="h-9 border border-input flex-1"
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-9 shrink-0"
+                  onClick={() => toast("Импорт из ссылки будет доступен в ближайшем обновлении")}
+                >
+                  Импорт
+                </Button>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </SidebarProvider>
   )
 }
