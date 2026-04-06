@@ -9,6 +9,7 @@ const MODULE_GROUP_DEFS: Partial<Record<ModuleId, { label: string; hrefs: string
     { label: 'Найм',       hrefs: ['/hr/dashboard', '/hr/vacancies', '/hr/candidates', '/hr/talent-pool', '/hr/calendar', '/hr/hiring-settings'] },
     { label: 'Адаптация',  hrefs: ['/hr/onboarding', '/hr/assignments', '/hr/adaptation-analytics'] },
     { label: 'Персонал',   hrefs: ['/hr/employees', '/hr/courses', '/hr/development', '/hr/retention', '/hr/people-analytics'] },
+    { label: 'CRM',        hrefs: ['/sales/clients', '/sales/contacts'] },
   ],
   marketing: [
     { label: 'Контент',    hrefs: ['/marketing/dashboard', '/marketing/content', '/marketing/landings'] },
