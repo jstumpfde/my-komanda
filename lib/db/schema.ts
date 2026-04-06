@@ -968,6 +968,39 @@ export const knowledgeArticles = pgTable("knowledge_articles", {
   updatedAt:   timestamp("updated_at").defaultNow(),
 })
 
+// ─── AI Course Projects ──────────────────────────────────────────────────────
+
+export const aiCourseProjects = pgTable("ai_course_projects", {
+  id:               uuid("id").primaryKey().defaultRandom(),
+  tenantId:         uuid("tenant_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  title:            text("title").notNull(),
+  description:      text("description"),
+  status:           text("status").default("draft"),            // draft | generating | ready | published
+  sources:          jsonb("sources").default([]),                // [{type, title, content, url?}]
+  params:           jsonb("params"),                             // {audience, format, tone, withTests, withSummary}
+  result:           jsonb("result"),                             // generated course structure
+  publishedCourseId: uuid("published_course_id").references(() => courses.id, { onDelete: "set null" }),
+  tokensInput:      integer("tokens_input").default(0),
+  tokensOutput:     integer("tokens_output").default(0),
+  costUsd:          text("cost_usd").default("0"),              // numeric as text
+  createdBy:        uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt:        timestamp("created_at").defaultNow(),
+  updatedAt:        timestamp("updated_at").defaultNow(),
+})
+
+export const aiUsageLog = pgTable("ai_usage_log", {
+  id:           uuid("id").primaryKey().defaultRandom(),
+  tenantId:     uuid("tenant_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  userId:       uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+  action:       text("action").notNull(),                       // course_generate | course_regenerate
+  projectId:    uuid("project_id").references(() => aiCourseProjects.id, { onDelete: "cascade" }),
+  inputTokens:  integer("input_tokens"),
+  outputTokens: integer("output_tokens"),
+  model:        text("model"),
+  costUsd:      text("cost_usd").default("0"),
+  createdAt:    timestamp("created_at").defaultNow(),
+})
+
 // Reviews / comments on knowledge articles
 export const knowledgeReviews = pgTable("knowledge_reviews", {
   id:          uuid("id").primaryKey().defaultRandom(),
