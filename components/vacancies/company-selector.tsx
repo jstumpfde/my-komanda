@@ -194,7 +194,7 @@ export function CompanySelector({
               </Button>
             </div>
             <Select value={clientCompanyId || ""} onValueChange={(v) => { onCompanyChange(v); onContactChange(null) }}>
-              <SelectTrigger className="border border-input">
+              <SelectTrigger className="bg-background border border-input">
                 <SelectValue placeholder="Выберите компанию" />
               </SelectTrigger>
               <SelectContent>
@@ -237,7 +237,7 @@ export function CompanySelector({
                 </Button>
               </div>
               <Select value={clientContactId || ""} onValueChange={onContactChange}>
-                <SelectTrigger className="border border-input">
+                <SelectTrigger className="bg-background border border-input">
                   <SelectValue placeholder="Выберите контакт" />
                 </SelectTrigger>
                 <SelectContent>
