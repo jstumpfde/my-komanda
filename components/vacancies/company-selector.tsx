@@ -64,6 +64,42 @@ const MOCK_CONTACTS: Record<string, ContactOption[]> = {
   ],
 }
 
+function OwnCompanyInfo() {
+  const [name, setName] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    fetch("/api/companies")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: Record<string, unknown> | null) => {
+        const n = (data?.short_name ?? data?.company_name ?? data?.name) as string | undefined
+        setName(n || null)
+      })
+      .catch(() => setName(null))
+      .finally(() => setLoading(false))
+  }, [])
+
+  if (loading) {
+    return (
+      <div className="rounded-lg border p-3 bg-muted/30 flex items-center gap-2">
+        <Building2 className="size-4 text-muted-foreground shrink-0 animate-pulse" />
+        <p className="text-sm text-muted-foreground">Загрузка...</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="rounded-lg border p-3 bg-muted/30 flex items-center gap-2">
+      <Building2 className="size-4 text-muted-foreground shrink-0" />
+      {name ? (
+        <p className="text-sm font-medium">{name}</p>
+      ) : (
+        <p className="text-sm text-muted-foreground">Не указана (настройте в Настройки → Компания)</p>
+      )}
+    </div>
+  )
+}
+
 export function CompanySelector({
   mode,
   clientCompanyId,
@@ -144,12 +180,7 @@ export function CompanySelector({
         </div>
       </RadioGroup>
 
-      {mode === "own" && (
-        <div className="rounded-lg border p-3 bg-muted/30 flex items-center gap-2">
-          <Building2 className="size-4 text-muted-foreground shrink-0" />
-          <p className="text-sm text-muted-foreground">Данные из настроек организации</p>
-        </div>
-      )}
+      {mode === "own" && <OwnCompanyInfo />}
 
       {mode === "client" && (
         <div className="space-y-3">

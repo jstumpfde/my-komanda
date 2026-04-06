@@ -66,6 +66,7 @@ export const MODULE_REGISTRY: Record<ModuleId, ModuleConfig> = {
       { label: 'Компании',  href: '/sales/clients',    icon: 'Building2' },
       { label: 'Контакты',  href: '/sales/contacts',   icon: 'Users' },
       { label: 'Заявки',    href: '/sales/requests',   icon: 'Inbox' },
+      { label: 'Журнал',    href: '/sales/visit-log',  icon: 'Activity' },
     ],
   },
   knowledge: {
