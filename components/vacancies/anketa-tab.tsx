@@ -639,7 +639,7 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
           <Label className="text-xs">Категория</Label>
           <div className="flex items-center gap-2">
             <Select value={data.positionCategory} onValueChange={v => set("positionCategory", v)}>
-              <SelectTrigger className="h-9 border min-w-[300px]"><SelectValue placeholder="Выберите категорию" /></SelectTrigger>
+              <SelectTrigger className="h-9 border border-input min-w-[300px]"><SelectValue placeholder="Выберите категорию" /></SelectTrigger>
               <SelectContent>
                 {POSITION_CATEGORY_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
               </SelectContent>
@@ -650,33 +650,31 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
             </Button>
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-6">
-          <div className="space-y-1.5">
-            <Label className="text-xs">Формат работы</Label>
-            <div className="flex flex-wrap gap-3">
-              {WORK_FORMAT_OPTIONS.map(f => (
-                <label key={f} className="flex items-center gap-1.5">
-                  <Checkbox checked={data.workFormats.includes(f)} onCheckedChange={() => toggleArray("workFormats", f)} />
-                  <span className="text-sm">{f}</span>
-                </label>
-              ))}
-            </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs">Формат работы</Label>
+          <div className="flex flex-wrap gap-3">
+            {WORK_FORMAT_OPTIONS.map(f => (
+              <label key={f} className="flex items-center gap-1.5">
+                <Checkbox checked={data.workFormats.includes(f)} onCheckedChange={() => toggleArray("workFormats", f)} />
+                <span className="text-sm">{f}</span>
+              </label>
+            ))}
           </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">Занятость</Label>
-            <div className="flex flex-wrap gap-3">
-              {EMPLOYMENT_OPTIONS.map(e => (
-                <label key={e} className="flex items-center gap-1.5">
-                  <Checkbox checked={data.employment.includes(e)} onCheckedChange={() => toggleArray("employment", e)} />
-                  <span className="text-sm">{e}</span>
-                </label>
-              ))}
-            </div>
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs">Занятость</Label>
+          <div className="flex flex-wrap gap-3">
+            {EMPLOYMENT_OPTIONS.map(e => (
+              <label key={e} className="flex items-center gap-1.5">
+                <Checkbox checked={data.employment.includes(e)} onCheckedChange={() => toggleArray("employment", e)} />
+                <span className="text-sm">{e}</span>
+              </label>
+            ))}
           </div>
         </div>
         <div className="space-y-1.5 max-w-xs">
           <Label className="text-xs">Город</Label>
-          <Input value={data.positionCity} onChange={e => set("positionCity", e.target.value)} placeholder="Москва" className="h-9 border" />
+          <Input value={data.positionCity} onChange={e => set("positionCity", e.target.value)} placeholder="Москва" className="h-9 border border-input" />
         </div>
       </Section>
 
@@ -686,16 +684,16 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
           <div className="grid grid-cols-2 gap-4 max-w-lg">
             <div className="space-y-1.5">
               <Label className="text-xs">Зарплата от</Label>
-              <Input value={data.salaryFrom} onChange={e => set("salaryFrom", e.target.value)} placeholder="80 000 ₽" className="h-9 border" />
+              <Input value={data.salaryFrom} onChange={e => set("salaryFrom", e.target.value)} placeholder="80 000 ₽" className="h-9 border border-input" />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Зарплата до</Label>
-              <Input value={data.salaryTo} onChange={e => set("salaryTo", e.target.value)} placeholder="150 000 ₽" className="h-9 border" />
+              <Input value={data.salaryTo} onChange={e => set("salaryTo", e.target.value)} placeholder="150 000 ₽" className="h-9 border border-input" />
             </div>
           </div>
           <div className="space-y-1.5 max-w-lg">
             <Label className="text-xs">Бонусы</Label>
-            <Textarea value={data.bonus} onChange={e => set("bonus", e.target.value)} placeholder="% от продаж, KPI, бонус за перевыполнение плана, квартальная премия..." rows={2} className="text-sm" />
+            <Textarea value={data.bonus} onChange={e => set("bonus", e.target.value)} placeholder="% от продаж, KPI, бонус за перевыполнение плана, квартальная премия..." rows={2} className="text-sm border border-input" />
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs">Частота выплат</Label>
@@ -721,7 +719,7 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
             onChange={e => set("responsibilities", e.target.value)}
             placeholder="Опишите задачи и функционал должности..."
             rows={4}
-            className="text-sm"
+            className="text-sm border border-input"
           />
         </div>
         <div className="space-y-1.5">
@@ -731,7 +729,7 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
             onChange={e => set("requirements", e.target.value)}
             placeholder="Что должен знать и уметь кандидат..."
             rows={4}
-            className="text-sm"
+            className="text-sm border border-input"
           />
         </div>
         <div className="flex items-center gap-2">
