@@ -4,8 +4,12 @@ import { useState } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { toast } from "sonner"
 import { Link, Plus, Copy, CheckCircle2, Code } from "lucide-react"
+import { nanoid } from "nanoid"
 
 // ─── Mock data ─────────────────────────────────────────
 interface TrackingLink {
@@ -25,15 +29,39 @@ const MOCK_LINKS: TrackingLink[] = [
   { id: "fl5", source: "QR-код", name: "Стенд HRTech", shortUrl: "/f/qr-hrtech-mnk345", clicks: 78, candidates: 9 },
 ]
 
+const SOURCE_OPTIONS = ["Telegram", "VK", "LinkedIn", "Сайт", "QR-код", "hh.ru", "Email", "Другой"]
+
 export function FormLinks() {
-  const [links] = useState(MOCK_LINKS)
+  const [links, setLinks] = useState(MOCK_LINKS)
   const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [createMode, setCreateMode] = useState(false)
+  const [newSource, setNewSource] = useState("")
+  const [newName, setNewName] = useState("")
 
   const handleCopy = (id: string, url: string) => {
     navigator.clipboard.writeText(`https://company24.pro${url}`)
     setCopiedId(id)
     toast.success("Ссылка скопирована")
     setTimeout(() => setCopiedId(null), 2000)
+  }
+
+  const handleCreate = () => {
+    if (!newName.trim() || !newSource) return
+    const slug = newName.trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-zа-яё0-9-]/gi, "")
+    const srcSlug = newSource.toLowerCase().replace(/\s+/g, "-").replace(/[^a-zа-яё0-9-]/gi, "")
+    const newLink: TrackingLink = {
+      id: `fl-${Date.now()}`,
+      source: newSource,
+      name: newName.trim(),
+      shortUrl: `/f/${srcSlug}-${slug}-${nanoid(6)}`,
+      clicks: 0,
+      candidates: 0,
+    }
+    setLinks((prev) => [...prev, newLink])
+    setNewSource("")
+    setNewName("")
+    setCreateMode(false)
+    toast.success("Ссылка создана")
   }
 
   return (
@@ -47,9 +75,42 @@ export function FormLinks() {
         <p className="text-xs text-muted-foreground">Короткие ссылки для отслеживания источников кандидатов</p>
       </div>
 
-      <Button variant="outline" size="sm" className="text-xs gap-1.5 w-full" onClick={() => toast.info("Конструктор ссылок в разработке")}>
-        <Plus className="w-3.5 h-3.5" />Создать ссылку
-      </Button>
+      {createMode ? (
+        <Card>
+          <CardContent className="p-4 space-y-3">
+            <p className="text-xs font-semibold">Новая ссылка</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-1">
+                <Label className="text-[11px]">Источник</Label>
+                <Select value={newSource} onValueChange={setNewSource}>
+                  <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Выберите источник" /></SelectTrigger>
+                  <SelectContent>
+                    {SOURCE_OPTIONS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-1">
+                <Label className="text-[11px]">Название размещения</Label>
+                <Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="DevOps Moscow" className="h-8 text-xs" />
+              </div>
+            </div>
+            {newSource && newName.trim() && (
+              <div className="flex items-center gap-1.5 p-2 bg-muted/30 rounded border text-[10px] text-muted-foreground">
+                <Link className="w-3 h-3 shrink-0" />
+                <span className="truncate">company24.pro/f/{newSource.toLowerCase().replace(/\s+/g, "-")}-{newName.trim().toLowerCase().replace(/\s+/g, "-")}-xxxxxx</span>
+              </div>
+            )}
+            <div className="flex gap-2">
+              <Button size="sm" className="text-xs" onClick={handleCreate} disabled={!newName.trim() || !newSource}>Создать</Button>
+              <Button size="sm" variant="outline" className="text-xs" onClick={() => { setCreateMode(false); setNewSource(""); setNewName("") }}>Отмена</Button>
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <Button variant="outline" size="sm" className="text-xs gap-1.5 w-full" onClick={() => setCreateMode(true)}>
+          <Plus className="w-3.5 h-3.5" />Создать ссылку
+        </Button>
+      )}
 
       {/* Table */}
       <Card>
