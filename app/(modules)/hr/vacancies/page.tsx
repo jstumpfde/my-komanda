@@ -346,13 +346,18 @@ export default function VacanciesPage() {
       const data = await res.json() as { text?: string; fileName?: string; error?: string }
       if (!res.ok) throw new Error(data.error ?? "Ошибка")
       setUploadedFile({ name: file.name, text: data.text ?? "" })
+      // Auto-fill title from file name if empty or very short
+      const titleFromFile = file.name.replace(/\.(docx?|pdf|txt)$/i, "").trim()
+      if (titleFromFile && newVacancyTitle.trim().length < 3) {
+        setNewVacancyTitle(titleFromFile)
+      }
       toast.success(`Файл "${file.name}" обработан`)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Ошибка обработки файла")
     } finally {
       setUploading(false)
     }
-  }, [])
+  }, [newVacancyTitle])
 
   const handleImportUrl = useCallback(async () => {
     if (!importUrl.trim()) return
