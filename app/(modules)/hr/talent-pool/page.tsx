@@ -21,13 +21,13 @@ import {
   Plus, Upload, Rocket, Users, Mail, BarChart3, Search,
   MoreHorizontal, Heart, Pause, Play, Sparkles, Send,
   TrendingUp, Eye, MessageSquare, UserPlus, Clock, Trash2, GripVertical,
-  Settings2, ClipboardList, ChevronDown, FileText,
+  ClipboardList, ChevronDown, ChevronRight, FileText,
 } from "lucide-react"
 import { ScoringBadge, type ScoreBreakdown } from "@/components/talent-pool/scoring-badge"
 import { ReferralTab } from "@/components/talent-pool/referral-tab"
 import { CampaignsTab } from "@/components/talent-pool/campaigns-tab"
 import { AnalyticsTab } from "@/components/talent-pool/analytics-tab"
-import { SourcesManager, INITIAL_SOURCES, type SourceItem } from "@/components/talent-pool/sources-manager"
+import { INITIAL_SOURCES, ICON_MAP, type SourceItem } from "@/components/talent-pool/sources-manager"
 import { FormsTab } from "@/components/talent-pool/forms-tab"
 
 // ─── Types ──────────────────────────────────────────────
@@ -121,8 +121,8 @@ export default function TalentPoolPage() {
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [selectedSources, setSelectedSources] = useState<Set<string>>(new Set())
-  const [sources, setSources] = useState<SourceItem[]>(INITIAL_SOURCES)
-  const [sourcesOpen, setSourcesOpen] = useState(false)
+  const [sources] = useState<SourceItem[]>(INITIAL_SOURCES)
+  const [expandedFilterSources, setExpandedFilterSources] = useState<Set<string>>(new Set())
   const [thanked, setThanked] = useState<Set<string>>(new Set())
 
   const enabledSources = sources.filter((s) => s.enabled)
@@ -152,7 +152,12 @@ export default function TalentPoolPage() {
   const filtered = candidates.filter((c) => {
     if (search && !c.name.toLowerCase().includes(search.toLowerCase()) && !c.position.toLowerCase().includes(search.toLowerCase())) return false
     if (statusFilter !== "all" && c.status !== statusFilter) return false
-    if (selectedSources.size > 0 && !selectedSources.has(c.source)) return false
+    if (selectedSources.size > 0) {
+      // Match by source name directly, or by parent source if a subcategory is selected
+      const matchesDirect = selectedSources.has(c.source)
+      const parentSource = enabledSources.find((s) => s.subcategories?.some((sub) => selectedSources.has(sub)) && s.name === c.source)
+      if (!matchesDirect && !parentSource) return false
+    }
     return true
   })
 
@@ -165,11 +170,22 @@ export default function TalentPoolPage() {
     })
   }
 
+  const toggleExpandFilter = (id: string) => {
+    setExpandedFilterSources((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  // Count only top-level selected sources for label
+  const selectedTopLevel = enabledSources.filter((s) => selectedSources.has(s.name))
   const sourceFilterLabel = selectedSources.size === 0
     ? "Все источники"
-    : selectedSources.size <= 2
-      ? Array.from(selectedSources).join(", ")
-      : `${selectedSources.size} источника`
+    : selectedTopLevel.length <= 2 && selectedSources.size === selectedTopLevel.length
+      ? selectedTopLevel.map((s) => s.name).join(", ")
+      : `${selectedSources.size} источн.`
 
   const formatDate = (d: Date) => d.toLocaleDateString("ru-RU", { day: "numeric", month: "short" })
 
@@ -217,23 +233,49 @@ export default function TalentPoolPage() {
                         <ChevronDown className="w-3 h-3 shrink-0 text-muted-foreground" />
                       </Button>
                     </PopoverTrigger>
-                    <PopoverContent className="w-52 p-2" align="start">
+                    <PopoverContent className="w-64 p-2 max-h-80 overflow-y-auto" align="start">
                       {selectedSources.size > 0 && (
                         <button className="w-full text-left text-[11px] text-muted-foreground hover:text-foreground px-2 py-1 mb-1" onClick={() => setSelectedSources(new Set())}>
                           Сбросить все
                         </button>
                       )}
                       <div className="space-y-0.5">
-                        {enabledSources.map((s) => (
-                          <label key={s.id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted/40 cursor-pointer">
-                            <Checkbox checked={selectedSources.has(s.name)} onCheckedChange={() => toggleSourceFilter(s.name)} />
-                            <span className="text-xs">{s.name}</span>
-                          </label>
-                        ))}
+                        {enabledSources.map((s) => {
+                          const hasSubs = s.subcategories && s.subcategories.length > 0
+                          const isExpanded = expandedFilterSources.has(s.id)
+                          const Icon = ICON_MAP[s.icon]
+                          return (
+                            <div key={s.id}>
+                              <div className="flex items-center gap-1.5 px-2 py-1.5 rounded hover:bg-muted/40">
+                                {hasSubs ? (
+                                  <button className="shrink-0 p-0.5 text-muted-foreground hover:text-foreground" onClick={() => toggleExpandFilter(s.id)}>
+                                    {isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                                  </button>
+                                ) : (
+                                  <span className="w-4" />
+                                )}
+                                <label className="flex items-center gap-2 flex-1 cursor-pointer">
+                                  <Checkbox checked={selectedSources.has(s.name)} onCheckedChange={() => toggleSourceFilter(s.name)} />
+                                  {Icon && <Icon className="w-3.5 h-3.5 text-muted-foreground shrink-0" />}
+                                  <span className="text-xs">{s.name}</span>
+                                </label>
+                              </div>
+                              {hasSubs && isExpanded && (
+                                <div className="ml-6 space-y-0.5">
+                                  {s.subcategories!.map((sub) => (
+                                    <label key={sub} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-muted/40 cursor-pointer">
+                                      <Checkbox checked={selectedSources.has(sub)} onCheckedChange={() => toggleSourceFilter(sub)} />
+                                      <span className="text-[11px] text-muted-foreground">{sub}</span>
+                                    </label>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })}
                       </div>
                     </PopoverContent>
                   </Popover>
-                  <Button variant="ghost" size="icon" className="h-8 w-8" title="Настройки источников" onClick={() => setSourcesOpen(true)}><Settings2 className="w-3.5 h-3.5" /></Button>
                   <div className="flex-1" />
                   <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5"><Upload className="w-3.5 h-3.5" />Загрузить CSV</Button>
                   <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={() => setAddOpen(true)}><Plus className="w-3.5 h-3.5" />Добавить</Button>
@@ -408,7 +450,6 @@ export default function TalentPoolPage() {
         </DialogContent>
       </Dialog>
 
-      <SourcesManager open={sourcesOpen} onOpenChange={setSourcesOpen} sources={sources} onSourcesChange={setSources} />
     </SidebarProvider>
   )
 }

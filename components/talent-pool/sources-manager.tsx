@@ -27,19 +27,20 @@ export interface SourceItem {
   icon: string
   enabled: boolean
   custom?: boolean
+  subcategories?: string[]
 }
 
 const INITIAL_SOURCES: SourceItem[] = [
-  { id: "s1", name: "hh.ru", icon: "Briefcase", enabled: true },
+  { id: "s1", name: "hh.ru", icon: "Briefcase", enabled: true, subcategories: ["hh.ru — Основной", "hh.ru — ТехноПлюс"] },
   { id: "s2", name: "LinkedIn", icon: "Linkedin", enabled: true },
   { id: "s3", name: "Telegram", icon: "Send", enabled: true },
   { id: "s4", name: "WhatsApp", icon: "MessageSquare", enabled: true },
   { id: "s5", name: "VK", icon: "Users", enabled: true },
   { id: "s6", name: "Email-рассылка", icon: "Mail", enabled: true },
-  { id: "s7", name: "Сайт компании", icon: "Globe", enabled: true },
-  { id: "s8", name: "Конференция", icon: "Building2", enabled: true },
+  { id: "s7", name: "Сайт компании", icon: "Globe", enabled: true, subcategories: ["careers.company.ru", "jobs.company.ru"] },
+  { id: "s8", name: "Конференция", icon: "Building2", enabled: true, subcategories: ["HighLoad++ 2026", "TeamLead Conf 2026", "HR Tech Forum"] },
   { id: "s9", name: "Реферал", icon: "Heart", enabled: true },
-  { id: "s10", name: "Кадровое агентство", icon: "Briefcase", enabled: false },
+  { id: "s10", name: "Кадровое агентство", icon: "Briefcase", enabled: false, subcategories: ["Хантфлоу", "Ancor", "Kelly Services"] },
   { id: "s11", name: "QR-код", icon: "QrCode", enabled: false },
 ]
 
