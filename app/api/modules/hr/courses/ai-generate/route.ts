@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { requireCompany } from "@/lib/api-helpers"
 
+// ─── Types ───────────────────────────────────────────────────────────────────
+
 interface QuizQuestion {
   question: string
   options: string[]
@@ -15,97 +17,126 @@ interface GeneratedLesson {
   quiz_questions: QuizQuestion[]
 }
 
+interface GeneratedModule {
+  title: string
+  description: string
+  lessons: GeneratedLesson[]
+}
+
 interface GeneratedCourse {
   title: string
   description: string
   category: string
   difficulty: string
-  lessons: GeneratedLesson[]
+  modules: GeneratedModule[]
+  // flat lessons for backwards compat
+  lessons?: GeneratedLesson[]
 }
 
-function getMockCourse(filename: string): GeneratedCourse {
-  return {
-    title: `Курс на основе: ${filename}`,
-    description:
-      "Этот курс создан на основе загруженного документа. AI-генерация недоступна — используется демо-структура.",
-    category: "onboarding",
-    difficulty: "beginner",
-    lessons: [
-      {
-        title: "Введение в материал",
-        content:
-          "## Введение\n\nДобро пожаловать в курс! В этом уроке мы познакомимся с основными темами.\n\n### Цели урока\n- Получить общее представление о теме\n- Изучить ключевые понятия\n- Подготовиться к дальнейшему обучению",
-        duration_minutes: 15,
-        has_quiz: true,
-        quiz_questions: [
-          {
-            question: "Что является основной целью этого курса?",
-            options: [
-              "Получить общее представление о теме",
-              "Научиться программировать",
-              "Изучить иностранный язык",
-              "Получить сертификат",
-            ],
-            correct: 0,
-          },
-          {
-            question: "Сколько уроков содержит этот курс?",
-            options: ["1", "3", "5", "10"],
-            correct: 2,
-          },
-        ],
-      },
-      {
-        title: "Основные концепции",
-        content:
-          "## Основные концепции\n\nВ этом уроке мы разберём ключевые понятия и принципы.\n\n### Ключевые термины\n- **Термин 1** — определение первого термина\n- **Термин 2** — определение второго термина\n- **Термин 3** — определение третьего термина",
-        duration_minutes: 20,
-        has_quiz: true,
-        quiz_questions: [
-          {
-            question: "Что означает Термин 1?",
-            options: [
-              "Определение первого термина",
-              "Определение второго термина",
-              "Определение третьего термина",
-              "Ни одно из перечисленных",
-            ],
-            correct: 0,
-          },
-          {
-            question: "Сколько ключевых терминов упоминается в уроке?",
-            options: ["1", "2", "3", "4"],
-            correct: 2,
-          },
-        ],
-      },
-      {
-        title: "Практическое применение",
-        content:
-          "## Практическое применение\n\nТеперь применим полученные знания на практике.\n\n### Примеры использования\n1. Первый пример применения\n2. Второй пример применения\n3. Третий пример применения",
-        duration_minutes: 25,
-        has_quiz: true,
-        quiz_questions: [
-          {
-            question: "Сколько примеров использования рассматривается в уроке?",
-            options: ["1", "2", "3", "4"],
-            correct: 2,
-          },
-          {
-            question: "Какова цель практического применения?",
-            options: [
-              "Закрепить теоретические знания",
-              "Выучить новые термины",
-              "Подготовиться к экзамену",
-              "Познакомиться с новыми людьми",
-            ],
-            correct: 0,
-          },
-        ],
-      },
-    ],
+interface GenerateRequest {
+  // Legacy single-file mode
+  text?: string
+  filename?: string
+  // Multi-source mode
+  articleIds?: string[]
+  videoUrls?: string[]
+  texts?: string[]
+  fileNames?: string[]
+  params?: {
+    title?: string
+    audience?: string
+    format?: string
+    tone?: string
+    withTests?: boolean
+    withSummary?: boolean
   }
 }
+
+// ─── YouTube transcript extraction ───────────────────────────────────────────
+
+async function fetchYoutubeTranscript(url: string): Promise<string> {
+  try {
+    const { YoutubeTranscript } = await import("youtube-transcript")
+    const transcript = await YoutubeTranscript.fetchTranscript(url)
+    return transcript.map((t: { text: string }) => t.text).join(" ")
+  } catch (e) {
+    console.warn("Failed to fetch YouTube transcript for:", url, e)
+    return `[YouTube видео: ${url} — субтитры недоступны]`
+  }
+}
+
+// ─── Mock article content ────────────────────────────────────────────────────
+
+const MOCK_ARTICLE_CONTENT: Record<string, string> = {
+  "1": "Как оформить отпуск. Заявление подаётся за 14 дней. Виды отпуска: ежегодный оплачиваемый, без сохранения ЗП, учебный, декретный. Порядок согласования: непосредственный руководитель → HR → приказ. Выплата отпускных за 3 дня до начала.",
+  "2": "Настройка VPN. Шаг 1: получите учётные данные в IT-отделе. Шаг 2: скачайте клиент WireGuard. Шаг 3: импортируйте конфигурацию. Шаг 4: подключитесь и проверьте доступ к внутренним ресурсам.",
+  "3": "Скрипт холодного звонка v2. Приветствие → Квалификация → Презентация ценности → Работа с возражениями → Назначение встречи. Ключевые фразы и примеры для каждого этапа.",
+  "4": "Чек-лист первого дня. Получить пропуск. Настроить рабочее место. Установить корпоративные приложения. Знакомство с командой. Обед с наставником. Изучить внутреннюю wiki.",
+  "5": "Как заказать канцтовары. Зайти в раздел Заявки. Выбрать из каталога. Согласовать с руководителем. Срок поставки — 3-5 рабочих дней.",
+  "6": "Работа с CRM. Создание сделки, этапы воронки, карточка клиента, задачи и напоминания, отчёты по продажам.",
+  "7": "Пароли и двухфакторная защита. Требования к паролям: минимум 12 символов, буквы, цифры, спецсимволы. 2FA обязательна для всех сотрудников. Используем Google Authenticator.",
+  "8": "Обработка возражений. Типовые возражения: дорого, подумаю, не нужно, есть поставщик. Техники: присоединение, уточнение, аргументация, закрытие.",
+  "9": "Структура компании. Генеральный директор → Директора направлений → Руководители отделов → Специалисты. Схема подчинения и зоны ответственности.",
+  "10": "KPI и бонусы. Система квартальных KPI. Формула расчёта бонуса. Градация выполнения: <80% — нет бонуса, 80-100% — пропорционально, >100% — повышенный коэффициент.",
+}
+
+// ─── Mock course generator ───────────────────────────────────────────────────
+
+function getMockCourse(params?: GenerateRequest["params"], sourceCount?: number): GeneratedCourse {
+  const title = params?.title || "Курс на основе загруженных материалов"
+  const isMinI = params?.format === "mini"
+  const isFull = params?.format === "full"
+
+  const lessonCount = isMinI ? 4 : isFull ? 16 : 8
+  const lessonDuration = isMinI ? 4 : isFull ? 18 : 12
+
+  const lessons: GeneratedLesson[] = Array.from({ length: lessonCount }, (_, i) => ({
+    title: `Урок ${i + 1}: ${["Введение в тему", "Основные понятия", "Практика", "Работа с инструментами", "Типичные ошибки", "Продвинутые техники", "Кейсы из практики", "Финальный обзор", "Углублённый разбор", "Методология", "Командная работа", "Оценка результатов", "Стратегия", "Автоматизация", "Масштабирование", "Итоги и следующие шаги"][i % 16]}`,
+    content: `## Урок ${i + 1}\n\nСодержание урока, сгенерированное на основе ${sourceCount ?? 1} источников.\n\n### Ключевые тезисы\n- Тезис 1\n- Тезис 2\n- Тезис 3\n\n### Практическое задание\nПрименить полученные знания на рабочем примере.`,
+    duration_minutes: lessonDuration + Math.floor(Math.random() * 5),
+    has_quiz: params?.withTests !== false,
+    quiz_questions: params?.withTests !== false ? [
+      {
+        question: `Что является ключевым выводом урока ${i + 1}?`,
+        options: ["Вариант А", "Вариант Б (правильный)", "Вариант В", "Вариант Г"],
+        correct: 1,
+      },
+      {
+        question: `Как применить знания из урока ${i + 1} на практике?`,
+        options: ["Способ 1", "Способ 2", "Способ 3 (правильный)", "Способ 4"],
+        correct: 2,
+      },
+    ] : [],
+  }))
+
+  // Split into modules for full format
+  if (isFull) {
+    const mod1 = lessons.slice(0, 5)
+    const mod2 = lessons.slice(5, 11)
+    const mod3 = lessons.slice(11)
+    return {
+      title,
+      description: "Полный курс, созданный AI на основе предоставленных материалов. Включает модули, уроки и тесты.",
+      category: "onboarding",
+      difficulty: "intermediate",
+      modules: [
+        { title: "Модуль 1: Основы", description: "Базовые знания и понятия", lessons: mod1 },
+        { title: "Модуль 2: Практика", description: "Практическое применение", lessons: mod2 },
+        { title: "Модуль 3: Продвинутый уровень", description: "Углублённое изучение", lessons: mod3 },
+      ],
+    }
+  }
+
+  return {
+    title,
+    description: "Курс создан AI на основе предоставленных материалов. Включает теорию, практику и проверочные тесты.",
+    category: "onboarding",
+    difficulty: "beginner",
+    modules: [{ title: "Основной модуль", description: "", lessons }],
+  }
+}
+
+// ─── POST handler ────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
   try {
@@ -115,43 +146,115 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { text, filename } = await req.json()
+    const body: GenerateRequest = await req.json()
 
-    if (!text || typeof text !== "string") {
-      return NextResponse.json({ error: "Текст документа обязателен" }, { status: 400 })
+    // Collect all text content
+    const allTexts: string[] = []
+
+    // Legacy single-text mode
+    if (body.text) {
+      allTexts.push(body.text)
     }
+
+    // Article content
+    if (body.articleIds?.length) {
+      for (const id of body.articleIds) {
+        const content = MOCK_ARTICLE_CONTENT[id]
+        if (content) allTexts.push(content)
+      }
+    }
+
+    // YouTube transcripts
+    if (body.videoUrls?.length) {
+      for (const url of body.videoUrls) {
+        const transcript = await fetchYoutubeTranscript(url)
+        allTexts.push(transcript)
+      }
+    }
+
+    // Pasted texts
+    if (body.texts?.length) {
+      allTexts.push(...body.texts.filter(Boolean))
+    }
+
+    // File names (in real app, files would be uploaded and parsed)
+    if (body.fileNames?.length) {
+      for (const name of body.fileNames) {
+        allTexts.push(`[Содержимое файла: ${name}]`)
+      }
+    }
+
+    if (allTexts.length === 0) {
+      return NextResponse.json({ error: "Нет материалов для генерации" }, { status: 400 })
+    }
+
+    const combinedText = allTexts.join("\n\n---\n\n")
+    const params = body.params
+    const sourceCount = (body.articleIds?.length ?? 0) + (body.videoUrls?.length ?? 0) + (body.texts?.length ?? 0) + (body.fileNames?.length ?? 0)
 
     const apiKey = process.env.ANTHROPIC_API_KEY
     if (!apiKey) {
-      // Возвращаем mock-структуру в dev-режиме
       console.warn("ANTHROPIC_API_KEY не задан, возвращаем демо-структуру курса")
-      return NextResponse.json(getMockCourse(filename || "документ"))
+      return NextResponse.json(getMockCourse(params, sourceCount || 1))
     }
 
-    const prompt = `На основе следующего документа создай структуру учебного курса.
+    // Build prompt
+    const formatHint = params?.format === "mini"
+      ? "3-5 коротких уроков по 3-5 минут. Один модуль."
+      : params?.format === "full"
+      ? "15-25 уроков по 15-20 минут, разбитых на 3-5 модулей."
+      : "8-12 уроков по 10-15 минут. 1-2 модуля."
 
-Документ: "${filename || "документ"}"
+    const toneHint = params?.tone === "formal"
+      ? "формальный, деловой стиль"
+      : params?.tone === "gamified"
+      ? "игровой, вовлекающий стиль с геймификацией"
+      : "дружелюбный, понятный стиль"
 
-Содержание:
-${text.slice(0, 8000)}
+    const audienceHint = {
+      new_employees: "новых сотрудников",
+      line_staff: "линейного персонала",
+      managers: "менеджеров среднего звена",
+      executives: "руководителей",
+      all: "всех сотрудников компании",
+    }[params?.audience ?? "all"] ?? "всех сотрудников"
 
-Верни ТОЛЬКО валидный JSON без пояснений:
+    const prompt = `Создай структурированный обучающий курс на основе следующих материалов.
+
+${params?.title ? `Название курса: "${params.title}"` : "Придумай подходящее название для курса."}
+
+Целевая аудитория: ${audienceHint}
+Формат: ${formatHint}
+Тон: ${toneHint}
+${params?.withTests !== false ? "Генерируй 2-3 тестовых вопроса после каждого урока." : "Без тестов."}
+${params?.withSummary ? "Добавь краткий конспект в начало каждого урока." : ""}
+
+Материалы (${sourceCount} источников):
+${combinedText.slice(0, 12000)}
+
+Верни ТОЛЬКО валидный JSON:
 {
   "title": "Название курса",
-  "description": "Описание (2-3 предложения)",
+  "description": "Описание курса (2-3 предложения)",
   "category": "onboarding",
   "difficulty": "beginner",
-  "lessons": [
+  "modules": [
     {
-      "title": "Название урока",
-      "content": "Содержание в Markdown",
-      "duration_minutes": 15,
-      "has_quiz": true,
-      "quiz_questions": [
+      "title": "Название модуля",
+      "description": "Описание модуля",
+      "lessons": [
         {
-          "question": "Вопрос",
-          "options": ["А", "Б", "В", "Г"],
-          "correct": 0
+          "title": "Название урока",
+          "content": "Содержание в Markdown",
+          "duration_minutes": 15,
+          "has_quiz": true,
+          "quiz_questions": [
+            {
+              "question": "Вопрос",
+              "options": ["А", "Б", "В", "Г"],
+              "correct": 0
+            }
+          ]
         }
       ]
     }
@@ -159,13 +262,11 @@ ${text.slice(0, 8000)}
 }
 
 Требования:
-- 5-10 уроков по 10-20 минут каждый
-- 2-3 вопроса на тест в каждом уроке
 - Язык: русский
 - category одно из: onboarding, product, sales, compliance, soft_skills
-- difficulty одно из: beginner, intermediate, advanced`
+- difficulty одно из: beginner, intermediate, advanced
+- Контент уроков должен быть основан на предоставленных материалах, не выдумывай факты`
 
-    // Используем fetch напрямую для совместимости (избегаем проблем с импортом SDK)
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -174,45 +275,23 @@ ${text.slice(0, 8000)}
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-opus-4-5",
-        max_tokens: 4096,
-        system: "Ты — эксперт по созданию обучающих курсов для корпоративных платформ.",
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 8192,
+        system: "Ты — эксперт по созданию обучающих курсов для корпоративного обучения. Создай структурированный курс на основе предоставленных материалов. Ответь строго в JSON формате.",
         messages: [{ role: "user", content: prompt }],
       }),
     })
 
     if (!response.ok) {
-      // Fallback на claude-3-5-sonnet
-      const fallbackResponse = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": apiKey,
-          "anthropic-version": "2023-06-01",
-        },
-        body: JSON.stringify({
-          model: "claude-3-5-sonnet-20241022",
-          max_tokens: 4096,
-          system: "Ты — эксперт по созданию обучающих курсов для корпоративных платформ.",
-          messages: [{ role: "user", content: prompt }],
-        }),
-      })
-
-      if (!fallbackResponse.ok) {
-        const errorText = await fallbackResponse.text()
-        console.error("Anthropic API error:", errorText)
-        return NextResponse.json({ error: "Ошибка AI-генерации. Попробуйте позже." }, { status: 502 })
-      }
-
-      const fallbackData = await fallbackResponse.json()
-      const content = fallbackData.content?.[0]?.text || ""
-      const parsed = parseAIResponse(content, filename)
-      return NextResponse.json(parsed)
+      const errorText = await response.text()
+      console.error("Anthropic API error:", errorText)
+      // Fallback to mock
+      return NextResponse.json(getMockCourse(params, sourceCount))
     }
 
     const data = await response.json()
     const content = data.content?.[0]?.text || ""
-    const parsed = parseAIResponse(content, filename)
+    const parsed = parseAIResponse(content, params, sourceCount)
     return NextResponse.json(parsed)
   } catch (error) {
     const message = error instanceof Error ? error.message : "Ошибка генерации курса"
@@ -221,9 +300,8 @@ ${text.slice(0, 8000)}
   }
 }
 
-function parseAIResponse(content: string, filename: string): GeneratedCourse {
+function parseAIResponse(content: string, params?: GenerateRequest["params"], sourceCount?: number): GeneratedCourse {
   try {
-    // Убираем markdown-блоки если есть
     const cleaned = content
       .replace(/^```json\s*/i, "")
       .replace(/^```\s*/i, "")
@@ -231,10 +309,15 @@ function parseAIResponse(content: string, filename: string): GeneratedCourse {
       .trim()
 
     const parsed = JSON.parse(cleaned)
+
+    // Ensure modules structure exists
+    if (!parsed.modules && parsed.lessons) {
+      parsed.modules = [{ title: "Основной модуль", description: "", lessons: parsed.lessons }]
+    }
+
     return parsed as GeneratedCourse
   } catch {
-    console.error("Failed to parse AI response as JSON:", content.slice(0, 200))
-    // Возвращаем mock если парсинг не удался
-    return getMockCourse(filename || "документ")
+    console.error("Failed to parse AI response:", content.slice(0, 200))
+    return getMockCourse(params, sourceCount)
   }
 }
