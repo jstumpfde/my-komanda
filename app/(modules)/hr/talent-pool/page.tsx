@@ -181,11 +181,12 @@ export default function TalentPoolPage() {
 
   // Count only top-level selected sources for label
   const selectedTopLevel = enabledSources.filter((s) => selectedSources.has(s.name))
+  const pluralSource = (n: number) => n === 1 ? "источник" : n >= 2 && n <= 4 ? "источника" : "источников"
   const sourceFilterLabel = selectedSources.size === 0
     ? "Все источники"
     : selectedTopLevel.length <= 2 && selectedSources.size === selectedTopLevel.length
       ? selectedTopLevel.map((s) => s.name).join(", ")
-      : `${selectedSources.size} источн.`
+      : `${selectedSources.size} ${pluralSource(selectedSources.size)}`
 
   const formatDate = (d: Date) => d.toLocaleDateString("ru-RU", { day: "numeric", month: "short" })
 
