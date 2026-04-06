@@ -407,7 +407,7 @@ function LoginForm() {
             <p className="text-center text-sm text-muted-foreground">
               Нет аккаунта?{" "}
               <Link href="/register" className="text-primary hover:underline font-medium">
-                Зарегистрироваться
+                Оставить заявку
               </Link>
             </p>
 

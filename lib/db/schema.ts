@@ -1015,6 +1015,19 @@ export const knowledgeReviews = pgTable("knowledge_reviews", {
   createdAt:   timestamp("created_at").defaultNow(),
 })
 
+// ─── Access Requests (заявки на подключение) ─────────────────────────────────
+
+export const accessRequests = pgTable("access_requests", {
+  id:          uuid("id").primaryKey().defaultRandom(),
+  name:        text("name").notNull(),
+  email:       text("email").notNull(),
+  phone:       text("phone"),
+  companyName: text("company_name"),
+  comment:     text("comment"),
+  status:      text("status").default("new"),   // new | contacted | approved | rejected
+  createdAt:   timestamp("created_at").defaultNow(),
+})
+
 // ─── Task Projects ───────────────────────────────────────────────────────────
 
 export const taskProjects = pgTable("task_projects", {

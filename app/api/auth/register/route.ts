@@ -5,7 +5,12 @@ import { db } from "@/lib/db"
 import { users } from "@/lib/db/schema"
 import { apiError, apiSuccess } from "@/lib/api-helpers"
 
-export async function POST(req: NextRequest) {
+export async function POST(_req: NextRequest) {
+  // Registration is disabled. Companies are onboarded manually.
+  return apiError("Регистрация временно закрыта. Оставьте заявку на подключение.", 403)
+}
+
+export async function _POST_DISABLED(req: NextRequest) {
   try {
     const body = await req.json() as {
       email?: unknown
