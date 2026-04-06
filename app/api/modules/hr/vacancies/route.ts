@@ -68,6 +68,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json() as {
       title: string
       description?: string
+      description_json?: Record<string, unknown>
       city?: string
       format?: string
       employment?: string
@@ -97,6 +98,7 @@ export async function POST(req: NextRequest) {
         salaryMax: body.salary_max,
         status: "draft" as const,
         slug,
+        descriptionJson: body.description_json || null,
       })
       .returning()
 

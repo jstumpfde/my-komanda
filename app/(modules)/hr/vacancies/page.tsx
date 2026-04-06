@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo, useEffect, useCallback } from "react"
+import { useState, useMemo, useEffect, useCallback, useRef } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
@@ -31,7 +31,7 @@ import { useVacancies, type ApiVacancy } from "@/hooks/use-vacancies"
 import {
   Plus, Briefcase, MapPin, List, LayoutGrid, Table2, Calendar, Banknote,
   Search, MoreHorizontal, Pencil, Copy, Archive, Trash2, ListFilter,
-  RotateCcw, X, Upload, Link2, FileText, Loader2,
+  RotateCcw, X, Upload, Link2, FileText, Loader2, CheckCircle2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
@@ -314,27 +314,90 @@ export default function VacanciesPage() {
   const [newVacancyTitle, setNewVacancyTitle] = useState("")
   const [creating, setCreating] = useState(false)
   const [importUrl, setImportUrl] = useState("")
+  const [uploadedFile, setUploadedFile] = useState<{ name: string; text: string } | null>(null)
+  const [uploading, setUploading] = useState(false)
+  const [importing, setImporting] = useState(false)
+  const [importedText, setImportedText] = useState("")
+  const [dragOver, setDragOver] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const resetCreateDialog = useCallback(() => {
+    setNewVacancyTitle("")
+    setImportUrl("")
+    setUploadedFile(null)
+    setImportedText("")
+  }, [])
+
+  const handleFileUpload = useCallback(async (file: File) => {
+    const name = file.name.toLowerCase()
+    if (!name.endsWith(".txt") && !name.endsWith(".pdf") && !name.endsWith(".docx") && !name.endsWith(".doc")) {
+      toast.error("Неподдерживаемый формат. Используйте DOCX, PDF или TXT")
+      return
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("Файл слишком большой (максимум 10 МБ)")
+      return
+    }
+    setUploading(true)
+    try {
+      const formData = new FormData()
+      formData.append("file", file)
+      const res = await fetch("/api/modules/hr/vacancies/parse-file", { method: "POST", body: formData })
+      const data = await res.json() as { text?: string; fileName?: string; error?: string }
+      if (!res.ok) throw new Error(data.error ?? "Ошибка")
+      setUploadedFile({ name: file.name, text: data.text ?? "" })
+      toast.success(`Файл "${file.name}" обработан`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Ошибка обработки файла")
+    } finally {
+      setUploading(false)
+    }
+  }, [])
+
+  const handleImportUrl = useCallback(async () => {
+    if (!importUrl.trim()) return
+    setImporting(true)
+    try {
+      toast("Импорт из ссылки будет доступен в ближайшем обновлении")
+    } finally {
+      setImporting(false)
+    }
+  }, [importUrl])
 
   const handleCreateVacancy = useCallback(async () => {
     if (!newVacancyTitle.trim()) { toast.error("Введите название вакансии"); return }
     setCreating(true)
     try {
+      // Build description_json with parsed file text if available
+      const descriptionJson: Record<string, unknown> = {}
+      const fileText = uploadedFile?.text || importedText
+      if (fileText) {
+        descriptionJson.anketa = {
+          vacancyTitle: newVacancyTitle.trim(),
+          responsibilities: fileText,
+        }
+        descriptionJson.importedFrom = uploadedFile ? { type: "file", fileName: uploadedFile.name } : { type: "url", url: importUrl }
+      }
+
       const res = await fetch("/api/modules/hr/vacancies", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: newVacancyTitle.trim() }),
+        body: JSON.stringify({
+          title: newVacancyTitle.trim(),
+          ...(Object.keys(descriptionJson).length > 0 ? { description_json: descriptionJson } : {}),
+        }),
       })
       if (!res.ok) throw new Error()
       const data = await res.json() as { id: string }
       setCreateDialogOpen(false)
-      setNewVacancyTitle("")
+      resetCreateDialog()
       router.push(`/hr/vacancies/${data.id}`)
     } catch {
       toast.error("Не удалось создать вакансию")
     } finally {
       setCreating(false)
     }
-  }, [newVacancyTitle, router])
+  }, [newVacancyTitle, uploadedFile, importedText, importUrl, router, resetCreateDialog])
 
   const hrManagerTrashEnabled = typeof window !== "undefined" && localStorage.getItem(TRASH_ACCESS_KEY) === "true"
   const canSeeTrash = TRASH_ROLES_ALWAYS.includes(role) || (role === TRASH_ROLE_OPTIONAL && hrManagerTrashEnabled)
@@ -725,7 +788,7 @@ export default function VacanciesPage() {
       </Sheet>
 
       {/* ── Create vacancy dialog ── */}
-      <Dialog open={createDialogOpen} onOpenChange={(open) => { setCreateDialogOpen(open); if (!open) { setNewVacancyTitle(""); setImportUrl("") } }}>
+      <Dialog open={createDialogOpen} onOpenChange={(open) => { setCreateDialogOpen(open); if (!open) resetCreateDialog() }}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Создать вакансию</DialogTitle>
@@ -753,14 +816,51 @@ export default function VacanciesPage() {
                 <Upload className="size-4 text-primary" />
                 Загрузить описание
               </div>
-              <button
-                type="button"
-                className="w-full h-20 rounded-lg border-2 border-dashed border-muted-foreground/30 flex flex-col items-center justify-center gap-1 text-muted-foreground hover:border-primary/50 hover:text-primary transition-colors"
-                onClick={() => toast("Загрузка файлов будет доступна в ближайшем обновлении")}
-              >
-                <FileText className="size-5" />
-                <span className="text-xs">DOCX, PDF, TXT</span>
-              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".docx,.doc,.pdf,.txt"
+                className="hidden"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileUpload(f); e.target.value = "" }}
+              />
+              {uploadedFile ? (
+                <div className="flex items-center gap-2 p-3 rounded-lg border bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800">
+                  <CheckCircle2 className="size-4 text-emerald-600 shrink-0" />
+                  <span className="text-sm text-emerald-700 dark:text-emerald-400 flex-1 truncate">{uploadedFile.name}</span>
+                  <button type="button" onClick={() => setUploadedFile(null)} className="text-muted-foreground hover:text-destructive shrink-0">
+                    <X className="size-3.5" />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  className={cn(
+                    "w-full h-20 rounded-lg border-2 border-dashed flex flex-col items-center justify-center gap-1 transition-colors",
+                    dragOver
+                      ? "border-primary bg-primary/5 text-primary"
+                      : "border-muted-foreground/30 text-muted-foreground hover:border-primary/50 hover:text-primary",
+                    uploading && "pointer-events-none opacity-60",
+                  )}
+                  onClick={() => fileInputRef.current?.click()}
+                  onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
+                  onDragLeave={() => setDragOver(false)}
+                  onDrop={(e) => {
+                    e.preventDefault()
+                    setDragOver(false)
+                    const f = e.dataTransfer.files[0]
+                    if (f) handleFileUpload(f)
+                  }}
+                >
+                  {uploading ? (
+                    <Loader2 className="size-5 animate-spin" />
+                  ) : (
+                    <>
+                      <FileText className="size-5" />
+                      <span className="text-xs">Перетащите файл или нажмите • DOCX, PDF, TXT</span>
+                    </>
+                  )}
+                </button>
+              )}
             </div>
 
             {/* Import from URL */}
@@ -780,9 +880,10 @@ export default function VacanciesPage() {
                   variant="outline"
                   size="sm"
                   className="h-9 shrink-0"
-                  onClick={() => toast("Импорт из ссылки будет доступен в ближайшем обновлении")}
+                  onClick={handleImportUrl}
+                  disabled={importing || !importUrl.trim()}
                 >
-                  Импорт
+                  {importing ? <Loader2 className="size-3.5 animate-spin" /> : "Импорт"}
                 </Button>
               </div>
             </div>
