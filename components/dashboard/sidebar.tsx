@@ -140,7 +140,7 @@ export function DashboardSidebar() {
   const visSettings = getVisibleSettings(role) ?? ['profile']
 
   // Active modules fetched from API
-  const [activeModules, setActiveModules] = useState<ModuleId[]>(['hr', 'knowledge'])
+  const [activeModules, setActiveModules] = useState<ModuleId[]>(['hr', 'knowledge', 'sales'])
   useEffect(() => {
     fetch('/api/tenant/modules')
       .then(r => r.json())
