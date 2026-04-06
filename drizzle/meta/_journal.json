@@ -120,6 +120,13 @@
       "when": 1775479534503,
       "tag": "0016_hard_fat_cobra",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1775486214282,
+      "tag": "0017_stiff_shen",
+      "breakpoints": true
     }
   ]
 }

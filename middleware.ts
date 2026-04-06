@@ -16,6 +16,7 @@ const PUBLIC_PREFIXES = [
   "/v/",
   "/api/auth",
   "/api/access-requests",
+  "/api/visit-log",
   "/api/modules",
   "/api/plans",
   "/api/dev",

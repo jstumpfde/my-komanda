@@ -1094,3 +1094,31 @@ export const taskActivityLog = pgTable("task_activity_log", {
   newValue:  text("new_value"),
   createdAt: timestamp("created_at").defaultNow(),
 })
+
+// ─── Visit Log ───────────────────────────────────────────────────────────────
+
+export const visitLog = pgTable("visit_log", {
+  id:        uuid("id").primaryKey().defaultRandom(),
+  userId:    uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+  tenantId:  uuid("tenant_id"),
+  sessionId: text("session_id"),
+  page:      text("page").notNull(),
+  ip:        text("ip"),
+  userAgent: text("user_agent"),
+  referrer:  text("referrer"),
+  createdAt: timestamp("created_at").defaultNow(),
+})
+
+// ─── User Sessions (online tracking) ────────────────────────────────────────
+
+export const userSessions = pgTable("user_sessions", {
+  id:           uuid("id").primaryKey().defaultRandom(),
+  userId:       uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  tenantId:     uuid("tenant_id"),
+  startedAt:    timestamp("started_at").defaultNow(),
+  lastActiveAt: timestamp("last_active_at").defaultNow(),
+  lastPage:     text("last_page"),
+  ip:           text("ip"),
+  userAgent:    text("user_agent"),
+  isOnline:     boolean("is_online").default(true),
+})

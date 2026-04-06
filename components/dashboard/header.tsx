@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Bell, Moon, Sun, Coffee, LogOut, PanelLeftClose, PanelLeft, ChevronDown, ArrowLeft } from "lucide-react"
 import { useTheme } from "next-themes"
 import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, usePathname } from "next/navigation"
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuSeparator, DropdownMenuTrigger,
@@ -38,6 +38,7 @@ export function DashboardHeader() {
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
   const router = useRouter()
+  const pathname = usePathname()
 
   // Fetch notifications from API
   useEffect(() => {
@@ -54,6 +55,19 @@ export function DashboardHeader() {
       })
       .catch(() => {})
   }, [])
+
+  // ── Visit tracking ──
+  useEffect(() => {
+    if (!pathname) return
+    const sessionId = typeof window !== "undefined"
+      ? (sessionStorage.getItem("mk_sid") || (() => { const id = crypto.randomUUID(); sessionStorage.setItem("mk_sid", id); return id })())
+      : null
+    fetch("/api/visit-log", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ page: pathname, referrer: document.referrer || null, sessionId }),
+    }).catch(() => {})
+  }, [pathname])
 
   const markAllRead = async () => {
     await fetch("/api/notifications", {
