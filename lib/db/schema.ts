@@ -1014,3 +1014,70 @@ export const knowledgeReviews = pgTable("knowledge_reviews", {
   attachments: text("attachments").array(), // доп. файлы / скриншоты
   createdAt:   timestamp("created_at").defaultNow(),
 })
+
+// ─── Task Projects ───────────────────────────────────────────────────────────
+
+export const taskProjects = pgTable("task_projects", {
+  id:          uuid("id").primaryKey().defaultRandom(),
+  tenantId:    uuid("tenant_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  title:       text("title").notNull(),
+  description: text("description"),
+  status:      text("status").default("active"),     // planning | active | paused | completed | archived
+  color:       text("color").default("#378ADD"),
+  icon:        text("icon"),
+  deadline:    timestamp("deadline"),
+  ownerId:     uuid("owner_id").references(() => users.id, { onDelete: "set null" }),
+  templateId:  uuid("template_id"),
+  progress:    integer("progress").default(0),
+  createdAt:   timestamp("created_at").defaultNow(),
+  updatedAt:   timestamp("updated_at").defaultNow(),
+})
+
+// ─── Tasks ───────────────────────────────────────────────────────────────────
+
+export const tasks = pgTable("tasks", {
+  id:             uuid("id").primaryKey().defaultRandom(),
+  tenantId:       uuid("tenant_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  projectId:      uuid("project_id").references(() => taskProjects.id, { onDelete: "set null" }),
+  parentId:       uuid("parent_id"),                   // self-ref for subtasks
+  title:          text("title").notNull(),
+  description:    text("description"),
+  status:         text("status").default("todo"),      // todo | in_progress | review | done | cancelled
+  priority:       text("priority").default("medium"),  // urgent | high | medium | low
+  assigneeId:     uuid("assignee_id").references(() => users.id, { onDelete: "set null" }),
+  creatorId:      uuid("creator_id").references(() => users.id, { onDelete: "set null" }),
+  source:         text("source").default("manual"),    // manual | ai | crm | hr | knowledge
+  sourceId:       uuid("source_id"),
+  tags:           text("tags").array(),
+  deadline:       timestamp("deadline"),
+  startedAt:      timestamp("started_at"),
+  completedAt:    timestamp("completed_at"),
+  estimatedHours: text("estimated_hours"),             // numeric as text
+  actualHours:    text("actual_hours"),
+  progress:       integer("progress").default(0),
+  sortOrder:      integer("sort_order").default(0),
+  createdAt:      timestamp("created_at").defaultNow(),
+  updatedAt:      timestamp("updated_at").defaultNow(),
+})
+
+// ─── Task Comments ───────────────────────────────────────────────────────────
+
+export const taskComments = pgTable("task_comments", {
+  id:        uuid("id").primaryKey().defaultRandom(),
+  taskId:    uuid("task_id").references(() => tasks.id, { onDelete: "cascade" }).notNull(),
+  userId:    uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+  content:   text("content").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+})
+
+// ─── Task Activity Log ───────────────────────────────────────────────────────
+
+export const taskActivityLog = pgTable("task_activity_log", {
+  id:        uuid("id").primaryKey().defaultRandom(),
+  taskId:    uuid("task_id").references(() => tasks.id, { onDelete: "cascade" }).notNull(),
+  userId:    uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+  action:    text("action").notNull(),               // created | status_changed | assigned | commented | completed | deadline_changed
+  oldValue:  text("old_value"),
+  newValue:  text("new_value"),
+  createdAt: timestamp("created_at").defaultNow(),
+})

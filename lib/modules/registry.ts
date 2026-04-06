@@ -80,6 +80,18 @@ export const MODULE_REGISTRY: Record<ModuleId, ModuleConfig> = {
       { label: 'Новая статья',    href: '/knowledge/new',        icon: 'FilePlus' },
     ],
   },
+  tasks: {
+    id: 'tasks',
+    name: 'Задачи и проекты',
+    description: 'Управление задачами, проектами и аналитика эффективности',
+    icon: 'CheckSquare',
+    basePath: '/tasks',
+    menuItems: [
+      { label: 'Доска',      href: '/tasks',            icon: 'LayoutGrid' },
+      { label: 'Проекты',    href: '/tasks/projects',   icon: 'FolderKanban' },
+      { label: 'Аналитика',  href: '/tasks/analytics',  icon: 'BarChart3' },
+    ],
+  },
   marketing: {
     id: 'marketing',
     name: 'Маркетинг и продвижение',
