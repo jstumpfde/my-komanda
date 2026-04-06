@@ -216,7 +216,7 @@ export default function TalentPoolPage() {
               {/* ═══ TAB: База ═══ */}
               <TabsContent value="base" className="space-y-4">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <div className="relative flex-1 max-w-xs">
+                  <div className="relative flex-1 max-w-md">
                     <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
                     <Input className="pl-8 h-8 text-sm" placeholder="Поиск по имени или должности..." value={search} onChange={(e) => setSearch(e.target.value)} />
                   </div>

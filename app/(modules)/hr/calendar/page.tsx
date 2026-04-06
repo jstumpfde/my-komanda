@@ -328,14 +328,15 @@ export default function CalendarPage() {
         <DashboardHeader />
         <main className="flex-1 overflow-auto bg-background">
           <div className="flex flex-col h-[calc(100vh-3.5rem)]" style={{ paddingLeft: 56, paddingRight: 56 }}>
-          {/* Top bar */}
-          <div className="flex items-center justify-between py-3 border-b gap-4 flex-wrap">
-            <div className="flex items-center gap-2">
-              <CalendarDays className="h-5 w-5 text-violet-600" />
-              <h1 className="text-lg font-semibold">Календарь</h1>
-            </div>
+          {/* Top bar — Row 1: Title */}
+          <div className="flex items-center gap-2 pt-3 pb-2">
+            <CalendarDays className="h-5 w-5 text-violet-600" />
+            <h1 className="text-lg font-semibold">Календарь</h1>
+          </div>
 
-            {/* Navigation */}
+          {/* Top bar — Row 2: Navigation (left) + Filters & Actions (right) */}
+          <div className="flex items-center justify-between pb-3 border-b gap-4">
+            {/* Navigation — left */}
             <div className="flex items-center gap-2">
               <Button variant="outline" size="icon" onClick={() => navigate(-1)}>
                 <ChevronLeft className="h-4 w-4" />
@@ -346,13 +347,13 @@ export default function CalendarPage() {
               <Button variant="outline" size="icon" onClick={() => navigate(1)}>
                 <ChevronRight className="h-4 w-4" />
               </Button>
-              <span className="text-sm font-medium capitalize min-w-[180px] text-center">
+              <span className="text-sm font-medium capitalize min-w-[180px]">
                 {getTitle()}
               </span>
             </div>
 
+            {/* Filters & Actions — right */}
             <div className="flex items-center gap-2">
-              {/* Filter */}
               <Tabs value={filter} onValueChange={(v) => setFilter(v as FilterMode)}>
                 <TabsList>
                   {FILTER_OPTIONS.map((f) => (
@@ -363,7 +364,6 @@ export default function CalendarPage() {
                 </TabsList>
               </Tabs>
 
-              {/* View mode */}
               <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as ViewMode)}>
                 <TabsList>
                   <TabsTrigger value="day">День</TabsTrigger>

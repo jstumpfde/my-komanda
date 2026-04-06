@@ -6,47 +6,50 @@ import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Switch } from "@/components/ui/switch"
-import { Label } from "@/components/ui/label"
-import { cn } from "@/lib/utils"
-import {
-  FileText, Plus, Video, Phone, Truck, Bot,
-  ShieldAlert, Settings,
-} from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+import { Settings, Link2 } from "lucide-react"
+import { toast } from "sonner"
 
-// ─── Scenario presets (same as automation-settings) ─────────────────────────
+// ─── CRM integrations ──────────────────────────────────────────────────────
 
-type ScenarioType = "demo-call" | "call-demo" | "call-only" | "fast-hire" | "ai-smart"
-
-const SCENARIOS: { key: ScenarioType; icon: React.ElementType; label: string; desc: string; color: string }[] = [
-  { key: "demo-call",  icon: Video, label: "Демонстрация - Звонок",          desc: "Сначала кандидат смотрит демо, затем созвон",         color: "text-purple-600" },
-  { key: "call-demo",  icon: Phone, label: "Звонок - Демонстрация",          desc: "Сначала короткий звонок, потом демо",                color: "text-emerald-600" },
-  { key: "call-only",  icon: Phone, label: "Только звонок",                  desc: "Без демо, сразу живое общение",                      color: "text-blue-600" },
-  { key: "fast-hire",  icon: Truck, label: "Быстрый найм",                   desc: "Минимум шагов, максимум скорости",                   color: "text-amber-600" },
-  { key: "ai-smart",   icon: Bot,   label: "Умный - AI решает по скорингу",  desc: "AI подбирает путь кандидата по скорингу",             color: "text-cyan-600" },
-]
-
-// ─── Default stop factors ───────────────────────────────────────────────────
-
-const DEFAULT_STOP_FACTORS = [
-  { id: "no_experience",   label: "Нет опыта работы",              defaultOn: false },
-  { id: "salary_mismatch", label: "Зарплатные ожидания не совпадают", defaultOn: true },
-  { id: "no_response_3d",  label: "Нет ответа 3 дня",             defaultOn: true },
-  { id: "failed_demo",     label: "Не прошёл демо-курс",          defaultOn: true },
-  { id: "wrong_city",      label: "Город не совпадает",            defaultOn: false },
-  { id: "duplicate",       label: "Дубликат кандидата",            defaultOn: true },
+const CRM_INTEGRATIONS = [
+  {
+    id: "bitrix24",
+    name: "Битрикс24",
+    icon: "Б24",
+    iconBg: "bg-sky-500",
+    desc: "Синхронизация воронки и кандидатов",
+    status: "soon" as const,
+  },
+  {
+    id: "amocrm",
+    name: "AmoCRM",
+    icon: "amo",
+    iconBg: "bg-violet-500",
+    desc: "Синхронизация воронки и кандидатов",
+    status: "soon" as const,
+  },
+  {
+    id: "other",
+    name: "Другая CRM",
+    icon: "⚙",
+    iconBg: "bg-muted",
+    desc: "Подключение через API или webhook",
+    status: "soon" as const,
+  },
 ]
 
 // ─── Page ───────────────────────────────────────────────────────────────────
 
 export default function HiringSettingsPage() {
-  const [selectedScenario, setSelectedScenario] = useState<ScenarioType>("demo-call")
-  const [stopFactors, setStopFactors] = useState<Record<string, boolean>>(
-    () => Object.fromEntries(DEFAULT_STOP_FACTORS.map(f => [f.id, f.defaultOn]))
-  )
+  const [connecting, setConnecting] = useState<string | null>(null)
 
-  const toggleFactor = (id: string) => {
-    setStopFactors(prev => ({ ...prev, [id]: !prev[id] }))
+  const handleConnect = (id: string) => {
+    setConnecting(id)
+    setTimeout(() => {
+      toast("Интеграция будет доступна в ближайшем обновлении")
+      setConnecting(null)
+    }, 500)
   }
 
   return (
@@ -68,82 +71,44 @@ export default function HiringSettingsPage() {
 
             <div className="space-y-6 max-w-3xl">
 
-              {/* ═══ Templates ═══ */}
+              {/* ═══ CRM Integrations ═══ */}
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base flex items-center gap-2">
-                    <FileText className="size-4" />Шаблоны сообщений
+                    <Link2 className="size-4" />CRM-интеграции
                   </CardTitle>
-                  <CardDescription>Создайте шаблоны для быстрого использования в вакансиях</CardDescription>
+                  <CardDescription>Синхронизация воронки с CRM</CardDescription>
                 </CardHeader>
-                <CardContent>
-                  <div className="rounded-lg border border-dashed p-8 text-center">
-                    <FileText className="size-8 mx-auto mb-3 text-muted-foreground/40" />
-                    <p className="text-sm text-muted-foreground mb-3">Шаблонов пока нет</p>
-                    <Button variant="outline" size="sm">
-                      <Plus className="size-4 mr-1.5" />Создать шаблон
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* ═══ Default funnel scenario ═══ */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Video className="size-4" />Дефолтный сценарий воронки
-                  </CardTitle>
-                  <CardDescription>Новые вакансии будут использовать этот сценарий по умолчанию</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid gap-2">
-                    {SCENARIOS.map(s => {
-                      const Icon = s.icon
-                      const selected = selectedScenario === s.key
-                      return (
-                        <button
-                          key={s.key}
-                          onClick={() => setSelectedScenario(s.key)}
-                          className={cn(
-                            "flex items-start gap-3 rounded-lg border p-3 text-left transition-colors",
-                            selected
-                              ? "border-primary bg-primary/5 ring-1 ring-primary"
-                              : "hover:bg-accent/50"
-                          )}
-                        >
-                          <Icon className={cn("size-5 mt-0.5 shrink-0", s.color)} />
-                          <div className="min-w-0">
-                            <p className={cn("text-sm font-medium", selected && "text-primary")}>{s.label}</p>
-                            <p className="text-xs text-muted-foreground mt-0.5">{s.desc}</p>
-                          </div>
-                        </button>
-                      )
-                    })}
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* ═══ Stop factors ═══ */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <ShieldAlert className="size-4" />Стоп-факторы по умолчанию
-                  </CardTitle>
-                  <CardDescription>Применяются ко всем новым вакансиям автоматически</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    {DEFAULT_STOP_FACTORS.map(f => (
-                      <div key={f.id} className="flex items-center justify-between">
-                        <Label htmlFor={f.id} className="text-sm cursor-pointer">{f.label}</Label>
-                        <Switch
-                          id={f.id}
-                          checked={stopFactors[f.id] ?? false}
-                          onCheckedChange={() => toggleFactor(f.id)}
-                        />
+                <CardContent className="space-y-3">
+                  {CRM_INTEGRATIONS.map(crm => (
+                    <div key={crm.id} className="flex items-center gap-4 rounded-lg border p-4">
+                      <div className={`flex items-center justify-center size-10 rounded-full ${crm.iconBg} text-white text-xs font-bold shrink-0`}>
+                        {crm.icon}
                       </div>
-                    ))}
-                  </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-semibold">{crm.name}</span>
+                          {crm.status === "soon" && (
+                            <Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800">
+                              Скоро
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-0.5">{crm.desc}</p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Badge variant="outline" className="text-xs">Не подключено</Badge>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleConnect(crm.id)}
+                          disabled={connecting === crm.id}
+                        >
+                          {crm.id === "other" ? "Настроить" : "Подключить"}
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
                 </CardContent>
               </Card>
 
