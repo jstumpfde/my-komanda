@@ -16,11 +16,11 @@ const MOCK_COMPANIES: SalesCompany[] = [
   { id: "1", name: 'ООО "Ромашка"', inn: "7701234567", kpp: "770101001", ogrn: null, industry: "IT", city: "Москва", address: null, website: "romashka.ru", phone: "+7 (495) 111-22-33", email: "info@romashka.ru", revenue: "50–200 млн ₽", employeesCount: 120, description: null, logoUrl: null, type: "client", status: "active", contactsCount: 3, vacanciesCount: 2 },
   { id: "2", name: 'ЗАО "Альфа Групп"', inn: "7709876543", kpp: "770901001", ogrn: null, industry: "Финансы", city: "Москва", address: null, website: "alfagroup.ru", phone: "+7 (495) 222-33-44", email: "info@alfagroup.ru", revenue: "500 млн – 1 млрд ₽", employeesCount: 450, description: null, logoUrl: null, type: "client", status: "active", contactsCount: 5, vacanciesCount: 1 },
   { id: "3", name: "ИП Петров", inn: "771234567890", kpp: null, ogrn: null, industry: "Ритейл", city: "Санкт-Петербург", address: null, website: null, phone: "+7 (812) 333-44-55", email: "petrov@mail.ru", revenue: "до 10 млн ₽", employeesCount: 5, description: null, logoUrl: null, type: "client", status: "active", contactsCount: 1, vacanciesCount: 0 },
-  { id: "4", name: 'ООО "ТехноПлюс"', inn: "5001234567", kpp: "500101001", ogrn: null, industry: "Производство", city: "Казань", address: null, website: "technoplus.ru", phone: "+7 (843) 444-55-66", email: "info@technoplus.ru", revenue: "200–500 ��лн ₽", employeesCount: 200, description: null, logoUrl: null, type: "client", status: "active", contactsCount: 2, vacanciesCount: 3 },
+  { id: "4", name: 'ООО "ТехноПлюс"', inn: "5001234567", kpp: "500101001", ogrn: null, industry: "Производство", city: "Казань", address: null, website: "technoplus.ru", phone: "+7 (843) 444-55-66", email: "info@technoplus.ru", revenue: "200–500 млн ₽", employeesCount: 200, description: null, logoUrl: null, type: "client", status: "active", contactsCount: 2, vacanciesCount: 3 },
   { id: "5", name: 'ООО "СтройМастер"', inn: "6601234567", kpp: "660101001", ogrn: null, industry: "Строительство", city: "Екатеринбург", address: null, website: "stroymaster.ru", phone: "+7 (343) 555-66-77", email: "info@stroymaster.ru", revenue: "10–50 млн ₽", employeesCount: 35, description: null, logoUrl: null, type: "client", status: "archive", contactsCount: 1, vacanciesCount: 0 },
 ]
 
-const INDUSTRIES = ["IT", "Финансы", "Ритейл", "Произ��одство", "Строительство", "Логистика", "Медицина", "Другое"]
+const INDUSTRIES = ["IT", "Финансы", "Ритейл", "Производство", "Строительство", "Логистика", "Медицина", "Другое"]
 
 export default function SalesClientsPage() {
   const [companies, setCompanies] = useState<SalesCompany[]>(MOCK_COMPANIES)
@@ -116,7 +116,7 @@ export default function SalesClientsPage() {
                 <SelectContent>
                   <SelectItem value="all">Все статусы</SelectItem>
                   <SelectItem value="active">Активная</SelectItem>
-                  <SelectItem value="archive">��рхив</SelectItem>
+                  <SelectItem value="archive">Архив</SelectItem>
                 </SelectContent>
               </Select>
             </div>

@@ -153,7 +153,7 @@ export function DashboardSidebar() {
             .map(m => SLUG_TO_MODULE_ID[m.slug])
             .filter((id): id is ModuleId => !!id)
         ))
-        if (ids.length > 0) setActiveModules([...ids, ...(['knowledge'] as ModuleId[]).filter(k => !ids.includes(k))])
+        if (ids.length > 0) setActiveModules([...ids, ...(['knowledge', 'sales'] as ModuleId[]).filter(k => !ids.includes(k))])
       })
       .catch(() => { /* keep default */ })
   }, [])

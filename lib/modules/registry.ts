@@ -26,9 +26,6 @@ export const MODULE_REGISTRY: Record<ModuleId, ModuleConfig> = {
       { label: 'Развитие',               href: '/hr/development',             icon: 'Target' },
       { label: 'Удержание',              href: '/hr/retention',               icon: 'Shield' },
       { label: 'Аналитика персонала',    href: '/hr/people-analytics',        icon: 'PieChart' },
-      // CRM
-      { label: 'Компании',              href: '/sales/clients',              icon: 'Building2' },
-      { label: 'Контакты',              href: '/sales/contacts',             icon: 'Users' },
       // Legacy (not in menu groups, but pages still exist)
       { label: 'Обзор',          href: '/hr/overview',    icon: 'LayoutDashboard' },
       { label: 'Overview2',      href: '/hr/overview2',   icon: 'LayoutDashboard' },
@@ -59,6 +56,17 @@ export const MODULE_REGISTRY: Record<ModuleId, ModuleConfig> = {
       { label: 'Рефералы',      href: '/referrals',      icon: 'Share2' },
     ],
   },
+  sales: {
+    id: 'sales',
+    name: 'CRM',
+    description: 'Управление компаниями и контактами',
+    icon: 'Briefcase',
+    basePath: '/sales',
+    menuItems: [
+      { label: 'Компании',  href: '/sales/clients',  icon: 'Building2' },
+      { label: 'Контакты',  href: '/sales/contacts', icon: 'Users' },
+    ],
+  },
   knowledge: {
     id: 'knowledge',
     name: 'База знаний',
@@ -86,25 +94,6 @@ export const MODULE_REGISTRY: Record<ModuleId, ModuleConfig> = {
       { label: 'Отзывы',          href: '/marketing/reviews',     icon: 'MessageSquare' },
       { label: 'Аналитика',       href: '/marketing/analytics',   icon: 'TrendingUp' },
       { label: 'Бюджет',          href: '/marketing/budget',      icon: 'CreditCard' },
-    ],
-  },
-  sales: {
-    id: 'sales',
-    name: 'Продажи и развитие',
-    description: 'CRM, воронка продаж, клиенты и аналитика',
-    icon: 'DollarSign',
-    basePath: '/sales',
-    menuItems: [
-      { label: 'Дашборд',         href: '/sales/dashboard',   icon: 'LayoutDashboard' },
-      { label: 'Сделки',          href: '/sales/deals',       icon: 'Briefcase' },
-      { label: 'Воронка',         href: '/sales/pipeline',    icon: 'TrendingDown' },
-      { label: 'Компании',         href: '/sales/clients',     icon: 'Building2' },
-      { label: 'Контакты',        href: '/sales/contacts',    icon: 'Users' },
-      { label: 'Задачи',          href: '/sales/tasks',       icon: 'ClipboardList' },
-      { label: 'Встречи',         href: '/sales/meetings',    icon: 'Calendar' },
-      { label: 'Продукты',        href: '/sales/products',    icon: 'Layers' },
-      { label: 'Аналитика',       href: '/sales/analytics',   icon: 'BarChart3' },
-      { label: 'Прогнозы',        href: '/sales/forecasts',   icon: 'TrendingUp' },
     ],
   },
   b2b: {

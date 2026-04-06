@@ -9,18 +9,11 @@ const MODULE_GROUP_DEFS: Partial<Record<ModuleId, { label: string; hrefs: string
     { label: 'Найм',       hrefs: ['/hr/dashboard', '/hr/vacancies', '/hr/candidates', '/hr/talent-pool', '/hr/calendar', '/hr/hiring-settings'] },
     { label: 'Адаптация',  hrefs: ['/hr/onboarding', '/hr/assignments', '/hr/adaptation-analytics'] },
     { label: 'Персонал',   hrefs: ['/hr/employees', '/hr/courses', '/hr/development', '/hr/retention', '/hr/people-analytics'] },
-    { label: 'CRM',        hrefs: ['/sales/clients', '/sales/contacts'] },
   ],
   marketing: [
     { label: 'Контент',    hrefs: ['/marketing/dashboard', '/marketing/content', '/marketing/landings'] },
     { label: 'Продвижение', hrefs: ['/marketing/seo', '/marketing/campaigns', '/marketing/social', '/marketing/email'] },
     { label: 'Аналитика',  hrefs: ['/marketing/reviews', '/marketing/analytics', '/marketing/budget'] },
-  ],
-  sales: [
-    { label: 'CRM',         hrefs: ['/sales/dashboard', '/sales/deals', '/sales/pipeline'] },
-    { label: 'Клиенты',     hrefs: ['/sales/clients', '/sales/contacts'] },
-    { label: 'Активности',  hrefs: ['/sales/tasks', '/sales/meetings', '/sales/products'] },
-    { label: 'Аналитика',   hrefs: ['/sales/analytics', '/sales/forecasts'] },
   ],
   logistics: [
     { label: 'Склад',       hrefs: ['/logistics/dashboard', '/logistics/inventory', '/logistics/warehouses'] },

@@ -13,20 +13,20 @@ import { Users, Plus, Search } from "lucide-react"
 import { toast } from "sonner"
 
 const MOCK_COMPANIES = [
-  { id: "1", name: 'ООО "Ромаш��а"' },
-  { id: "2", name: 'ЗАО "Альф�� Групп"' },
+  { id: "1", name: 'ООО "Ромашка"' },
+  { id: "2", name: 'ЗАО "Альфа Групп"' },
   { id: "3", name: "ИП Петров" },
   { id: "4", name: 'ООО "ТехноПлюс"' },
-  { id: "5", name: 'ООО "Ст��ойМастер"' },
+  { id: "5", name: 'ООО "СтройМастер"' },
 ]
 
 const MOCK_CONTACTS: SalesContact[] = [
   { id: "1", companyId: "1", firstName: "Иван", lastName: "Петров", middleName: "Сергеевич", position: "Генеральный директор", department: "Руководство", phone: "+7 (495) 111-22-33", mobile: "+7 (999) 111-22-33", email: "i.petrov@romashka.ru", telegram: "@ipetrov", whatsapp: "+79991112233", comment: null, isPrimary: true, status: "active", companyName: 'ООО "Ромашка"' },
   { id: "2", companyId: "1", firstName: "Мария", lastName: "Сидорова", middleName: null, position: "HR-директор", department: "HR", phone: "+7 (495) 111-22-34", mobile: null, email: "m.sidorova@romashka.ru", telegram: "@msidorova", whatsapp: null, comment: "Отвечает за подбор", isPrimary: false, status: "active", companyName: 'ООО "Ромашка"' },
-  { id: "3", companyId: "1", firstName: "Алексей", lastName: "Козлов", middleName: "Игоревич", position: "CTO", department: "IT", phone: null, mobile: "+7 (999) 222-33-44", email: "a.kozlov@romashka.ru", telegram: "@akozlov", whatsapp: null, comment: null, isPrimary: false, status: "active", companyName: 'ООО "Ромаш��а"' },
+  { id: "3", companyId: "1", firstName: "Алексей", lastName: "Козлов", middleName: "Игоревич", position: "CTO", department: "IT", phone: null, mobile: "+7 (999) 222-33-44", email: "a.kozlov@romashka.ru", telegram: "@akozlov", whatsapp: null, comment: null, isPrimary: false, status: "active", companyName: 'ООО "Ромашка"' },
   { id: "4", companyId: "2", firstName: "Елена", lastName: "Волкова", middleName: "Андреевна", position: "Финансовый директор", department: "Финансы", phone: "+7 (495) 222-33-44", mobile: "+7 (999) 333-44-55", email: "e.volkova@alfagroup.ru", telegram: "@evolkova", whatsapp: "+79993334455", comment: "Согласует бюджеты", isPrimary: true, status: "active", companyName: 'ЗАО "Альфа Групп"' },
   { id: "5", companyId: "2", firstName: "Дмитрий", lastName: "Новиков", middleName: null, position: "Руководитель отдела продаж", department: "Продажи", phone: "+7 (495) 222-33-45", mobile: null, email: "d.novikov@alfagroup.ru", telegram: null, whatsapp: null, comment: null, isPrimary: false, status: "active", companyName: 'ЗАО "Альфа Групп"' },
-  { id: "6", companyId: "3", firstName: "Сергей", lastName: "Петров", middleName: "Алексеевич", position: "Индивидуальный предприниматель", department: null, phone: "+7 (812) 333-44-55", mobile: "+7 (999) 444-55-66", email: "petrov@mail.ru", telegram: "@spetrov", whatsapp: "+79994445566", comment: null, isPrimary: true, status: "active", companyName: "ИП Петро��" },
+  { id: "6", companyId: "3", firstName: "Сергей", lastName: "Петров", middleName: "Алексеевич", position: "Индивидуальный предприниматель", department: null, phone: "+7 (812) 333-44-55", mobile: "+7 (999) 444-55-66", email: "petrov@mail.ru", telegram: "@spetrov", whatsapp: "+79994445566", comment: null, isPrimary: true, status: "active", companyName: "ИП Петров" },
   { id: "7", companyId: "4", firstName: "Ольга", lastName: "Смирнова", middleName: "Владимировна", position: "Директор по персоналу", department: "HR", phone: "+7 (843) 444-55-66", mobile: null, email: "o.smirnova@technoplus.ru", telegram: "@osmirnova", whatsapp: null, comment: "Основной контакт по найму", isPrimary: true, status: "active", companyName: 'ООО "ТехноПлюс"' },
   { id: "8", companyId: "5", firstName: "Андрей", lastName: "Кузнецов", middleName: null, position: "Прораб", department: "Строительство", phone: "+7 (343) 555-66-77", mobile: "+7 (999) 555-66-77", email: "a.kuznetsov@stroymaster.ru", telegram: null, whatsapp: "+79995556677", comment: null, isPrimary: true, status: "active", companyName: 'ООО "СтройМастер"' },
 ]
@@ -95,8 +95,8 @@ export default function SalesContactsPage() {
                   <Users className="w-5 h-5 text-primary" />
                 </div>
                 <div>
-                  <h1 className="text-2xl font-semibold">Ко��такты</h1>
-                  <p className="text-sm text-muted-foreground">{contacts.length} контактов в ба��е</p>
+                  <h1 className="text-2xl font-semibold">Контакты</h1>
+                  <p className="text-sm text-muted-foreground">{contacts.length} контактов в базе</p>
                 </div>
               </div>
               <Button className="gap-1.5" onClick={() => setModalOpen(true)}>
@@ -121,7 +121,7 @@ export default function SalesContactsPage() {
               <Select value={filterStatus} onValueChange={setFilterStatus}>
                 <SelectTrigger className="w-[150px] h-9"><SelectValue placeholder="Статус" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">��се статусы</SelectItem>
+                  <SelectItem value="all">Все статусы</SelectItem>
                   <SelectItem value="active">Активный</SelectItem>
                   <SelectItem value="archive">Архив</SelectItem>
                 </SelectContent>
