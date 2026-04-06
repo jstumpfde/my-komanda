@@ -730,30 +730,24 @@ export default function VacanciesPage() {
           <DialogHeader>
             <DialogTitle>Создать вакансию</DialogTitle>
           </DialogHeader>
-          <div className="grid gap-4 py-2">
-            {/* Card 1: Manual */}
-            <div className="rounded-lg border p-4 space-y-3">
-              <div className="flex items-center gap-2 font-medium text-sm">
-                <Pencil className="size-4 text-primary" />
-                Создать вручную
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">Название вакансии</Label>
-                <Input
-                  value={newVacancyTitle}
-                  onChange={(e) => setNewVacancyTitle(e.target.value)}
-                  placeholder="Менеджер по продажам"
-                  className="h-9 border border-input"
-                  onKeyDown={(e) => { if (e.key === "Enter") handleCreateVacancy() }}
-                />
-              </div>
-              <Button size="sm" className="w-full" onClick={handleCreateVacancy} disabled={creating}>
-                {creating ? <Loader2 className="size-4 mr-1.5 animate-spin" /> : <Plus className="size-4 mr-1.5" />}
-                Создать
-              </Button>
+          <div className="space-y-4 py-2">
+            {/* Title input — required */}
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Название вакансии</Label>
+              <Input
+                value={newVacancyTitle}
+                onChange={(e) => setNewVacancyTitle(e.target.value)}
+                placeholder="Менеджер по продажам"
+                className="h-10 border border-input"
+                onKeyDown={(e) => { if (e.key === "Enter" && newVacancyTitle.trim()) handleCreateVacancy() }}
+                autoFocus
+              />
             </div>
 
-            {/* Card 2: Upload */}
+            {/* Optional extras */}
+            <p className="text-xs text-muted-foreground">Дополнительно (необязательно)</p>
+
+            {/* Upload */}
             <div className="rounded-lg border p-4 space-y-3">
               <div className="flex items-center gap-2 font-medium text-sm">
                 <Upload className="size-4 text-primary" />
@@ -769,7 +763,7 @@ export default function VacanciesPage() {
               </button>
             </div>
 
-            {/* Card 3: Import from URL */}
+            {/* Import from URL */}
             <div className="rounded-lg border p-4 space-y-3">
               <div className="flex items-center gap-2 font-medium text-sm">
                 <Link2 className="size-4 text-primary" />
@@ -792,6 +786,12 @@ export default function VacanciesPage() {
                 </Button>
               </div>
             </div>
+
+            {/* Create button */}
+            <Button className="w-full h-10" onClick={handleCreateVacancy} disabled={creating || !newVacancyTitle.trim()}>
+              {creating ? <Loader2 className="size-4 mr-1.5 animate-spin" /> : <Plus className="size-4 mr-1.5" />}
+              Создать вакансию
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
