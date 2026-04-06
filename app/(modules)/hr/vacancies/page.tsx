@@ -807,14 +807,12 @@ export default function VacanciesPage() {
               />
             </div>
 
-            {/* Optional extras */}
-            <p className="text-xs text-muted-foreground">Дополнительно (необязательно)</p>
-
             {/* Upload */}
             <div className="rounded-lg border p-4 space-y-3">
-              <div className="flex items-center gap-2 font-medium text-sm">
+              <div className="flex items-center gap-2 text-sm">
                 <Upload className="size-4 text-primary" />
-                Загрузить описание
+                <span className="font-medium">Загрузить описание</span>
+                <span className="text-xs text-muted-foreground">(необязательно)</span>
               </div>
               <input
                 ref={fileInputRef}
@@ -865,9 +863,10 @@ export default function VacanciesPage() {
 
             {/* Import from URL */}
             <div className="rounded-lg border p-4 space-y-3">
-              <div className="flex items-center gap-2 font-medium text-sm">
+              <div className="flex items-center gap-2 text-sm">
                 <Link2 className="size-4 text-primary" />
-                Импорт из ссылки
+                <span className="font-medium">Импорт из ссылки</span>
+                <span className="text-xs text-muted-foreground">(необязательно)</span>
               </div>
               <div className="flex gap-2">
                 <Input
