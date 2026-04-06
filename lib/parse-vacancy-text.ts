@@ -239,38 +239,46 @@ function matchConditions(text: string): { known: string[]; custom: string[] } {
   return { known, custom }
 }
 
-function extractStopFactors(text: string): Record<string, string | boolean> {
+/**
+ * Stop factors — only extract when text EXPLICITLY states a restriction.
+ * Use requirements section only, not full text.
+ */
+function extractStopFactors(requirementsText: string): Record<string, string | boolean> {
   const result: Record<string, string | boolean> = {}
-  const lower = text.toLowerCase()
 
-  // Age
-  const ageMatch = text.match(/(?:возраст|от\s+)(\d{2})\s*(?:до|[-–—])\s*(\d{2})\s*(?:лет|год)/i)
+  // Age — only if explicit age range stated as requirement
+  const ageMatch = requirementsText.match(/возраст\s+(?:от\s+)?(\d{2})\s*(?:до|[-–—])\s*(\d{2})/i)
   if (ageMatch) result.age = `${ageMatch[1]}-${ageMatch[2]}`
 
-  // Citizenship
-  if (/(?:гражданство\s+(?:рф|россии|российское)|только\s+(?:граждане|гражданство))/i.test(lower)) {
+  // Citizenship — only if explicitly required
+  if (/(?:гражданство\s+(?:рф|россии|российское)|только\s+граждане?\s+(?:рф|россии))/i.test(requirementsText)) {
     result.citizenship = "РФ"
   }
 
-  // Driving license
-  if (/(?:водительск|права\s+категории|наличие\s+(?:прав|авто)|личный\s+автомобиль)/i.test(lower)) {
+  // Documents — only "обязательно наличие прав" type phrases
+  if (/(?:обязательно\s+(?:наличие\s+)?(?:водительск|прав)|(?:необходимы?|требуются?)\s+водительск|права\s+категории\s+[A-Eа-е])/i.test(requirementsText)) {
     result.documents = "Водительские права"
   }
 
   return result
 }
 
-function extractDesiredParams(text: string): string[] {
+/**
+ * Desired params — only extract from requirements section,
+ * and only when clearly stated as a requirement/preference.
+ */
+function extractDesiredParams(requirementsText: string): string[] {
   const params: string[] = []
-  const lower = text.toLowerCase()
+  const lower = requirementsText.toLowerCase()
 
-  if (/(?:опыт\s+в\s+(?:отрасли|сфере|индустрии)|отраслевой\s+опыт)/i.test(lower)) params.push("industry_exp")
-  if (/(?:профильное\s+образование|высшее\s+образование|образование)/i.test(lower)) params.push("education")
-  if (/(?:знание\s+crm|опыт\s+(?:работы\s+)?(?:с|в)\s+crm)/i.test(lower)) params.push("crm")
-  if (/(?:англий|english)/i.test(lower)) params.push("english")
-  if (/(?:управлен|руководств|менеджмент|лидерств)/i.test(lower)) params.push("management")
-  if (/(?:переезд|релокац)/i.test(lower)) params.push("relocation")
-  if (/(?:командировк)/i.test(lower)) params.push("travel")
+  // Only match specific requirement phrases, not casual mentions
+  if (/(?:опыт\s+(?:работы\s+)?в\s+(?:отрасли|сфере|(?:данной|нашей|этой)\s+индустрии)|отраслевой\s+опыт\s+(?:обязателен|приветствуется|желателен))/i.test(lower)) params.push("industry_exp")
+  if (/(?:(?:профильное|высшее|техническое)\s+образование\s+(?:обязательно|приветствуется|желательно)|(?:обязательно|необходимо)\s+(?:профильное|высшее)\s+образование)/i.test(lower)) params.push("education")
+  if (/(?:(?:знание|опыт\s+работы\s+(?:с|в))\s+crm\s+(?:обязательно|приветствуется)?|(?:обязательно|необходимо)\s+(?:знание|владение)\s+crm)/i.test(lower)) params.push("crm")
+  if (/(?:(?:знание\s+)?англий\S*\s+(?:язык\S*\s+)?(?:от\s+\w+|обязательно|приветствуется|не\s+ниже)|english\s+(?:required|preferred|b[12]|c[12]))/i.test(lower)) params.push("english")
+  if (/(?:(?:опыт\s+)?управлени[яе]\s+(?:командой|коллективом|отделом)|руководства?\s+(?:командой|отделом|подразделением))/i.test(lower)) params.push("management")
+  if (/(?:готовность\s+к\s+переезду|(?:возможен|рассматриваем)\s+переезд|релокац\S*\s+(?:обязательна|приветствуется|возможна))/i.test(lower)) params.push("relocation")
+  if (/(?:готовность\s+к\s+командировкам|командировки\s+(?:обязательны|до\s+\d+%))/i.test(lower)) params.push("travel")
 
   return params
 }
@@ -407,15 +415,13 @@ export function parseVacancyText(rawText: string): ParsedVacancy {
   const firstLine = lines.find(l => l.trim())?.trim() || ""
   result.positionCategory = extractPositionCategory(firstLine)
 
-  // Stop factors
-  result.stopFactors = extractStopFactors(fullText)
+  // Stop factors & desired params — only from requirements section
+  const reqText = result.requirements || ""
+  result.stopFactors = extractStopFactors(reqText)
+  result.desiredParams = extractDesiredParams(reqText)
 
-  // Desired params
-  result.desiredParams = extractDesiredParams(fullText)
-
-  // Also match conditions from full text (some are mentioned outside "Условия")
-  const globalCond = matchConditions(fullText)
-  result.conditions = [...new Set([...result.conditions, ...globalCond.known])]
+  // Don't match conditions from full text — only from "Условия" section
+  // to avoid false positives from casual mentions
 
   return result
 }
