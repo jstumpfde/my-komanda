@@ -34,6 +34,7 @@ import {
   RotateCcw, X, Upload, Link2, FileText, Loader2, CheckCircle2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { parseVacancyText } from "@/lib/parse-vacancy-text"
 import { toast } from "sonner"
 import { useAuth } from "@/lib/auth"
 import {
@@ -377,11 +378,20 @@ export default function VacanciesPage() {
       const descriptionJson: Record<string, unknown> = {}
       const fileText = uploadedFile?.text || importedText
       if (fileText) {
+        const parsed = parseVacancyText(fileText)
         descriptionJson.anketa = {
           vacancyTitle: newVacancyTitle.trim(),
-          responsibilities: fileText,
+          responsibilities: parsed.responsibilities,
+          requirements: parsed.requirements,
+          bonus: parsed.bonus,
+          salaryFrom: parsed.salaryFrom,
+          salaryTo: parsed.salaryTo,
+          conditions: parsed.conditions,
         }
         descriptionJson.importedFrom = uploadedFile ? { type: "file", fileName: uploadedFile.name } : { type: "url", url: importUrl }
+        if (parsed.companyDescription) {
+          descriptionJson.companyDescription = parsed.companyDescription
+        }
       }
 
       const res = await fetch("/api/modules/hr/vacancies", {

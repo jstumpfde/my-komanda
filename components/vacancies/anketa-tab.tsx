@@ -193,9 +193,18 @@ function migrateAnketa(saved: Record<string, unknown>): AnketaData {
   if (!d.vacancyTitle && (saved as Record<string, string>).positionTitle) {
     d.vacancyTitle = (saved as Record<string, string>).positionTitle
   }
-  // ensure arrays
+  // ensure arrays — split imported conditions into known/custom
   if (!Array.isArray(d.conditions)) d.conditions = []
   if (!Array.isArray(d.conditionsCustom)) d.conditionsCustom = []
+  if (d.conditions.length > 0) {
+    const known = new Set(CONDITIONS_OPTIONS)
+    const knownItems = d.conditions.filter(c => known.has(c))
+    const customItems = d.conditions.filter(c => !known.has(c))
+    if (customItems.length > 0) {
+      d.conditions = knownItems
+      d.conditionsCustom = [...new Set([...d.conditionsCustom, ...customItems])]
+    }
+  }
   if (!Array.isArray(d.unacceptableSkills)) d.unacceptableSkills = []
   return d
 }
