@@ -686,9 +686,6 @@ export default function VacancyPage() {
 
               <TabsContent value="anketa">
                 <AnketaTab vacancyId={id} descriptionJson={apiVacancy?.descriptionJson} onTitleChange={(t) => { if (t) setInternalName(t) }} />
-                <div className="mt-6">
-                  <VacancyAiText vacancyId={id} descriptionJson={apiVacancy?.descriptionJson} />
-                </div>
               </TabsContent>
 
               <TabsContent value="candidates">
