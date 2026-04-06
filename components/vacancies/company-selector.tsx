@@ -72,7 +72,7 @@ function OwnCompanyInfo() {
     fetch("/api/companies")
       .then((r) => (r.ok ? r.json() : null))
       .then((data: Record<string, unknown> | null) => {
-        const n = (data?.short_name ?? data?.company_name ?? data?.name) as string | undefined
+        const n = (data?.name) as string | undefined
         setName(n || null)
       })
       .catch(() => setName(null))

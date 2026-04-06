@@ -719,7 +719,7 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
           <Textarea
             value={data.responsibilities}
             onChange={e => set("responsibilities", e.target.value)}
-            placeholder="Что будет делать сотрудник..."
+            placeholder="Опишите задачи и функционал должности..."
             rows={4}
             className="text-sm"
           />
@@ -729,7 +729,7 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
           <Textarea
             value={data.requirements}
             onChange={e => set("requirements", e.target.value)}
-            placeholder="Что должен знать и уметь..."
+            placeholder="Что должен знать и уметь кандидат..."
             rows={4}
             className="text-sm"
           />
