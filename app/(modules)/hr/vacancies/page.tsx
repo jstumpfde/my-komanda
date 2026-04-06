@@ -381,16 +381,35 @@ export default function VacanciesPage() {
         const parsed = parseVacancyText(fileText)
         descriptionJson.anketa = {
           vacancyTitle: newVacancyTitle.trim(),
-          responsibilities: parsed.responsibilities,
-          requirements: parsed.requirements,
-          bonus: parsed.bonus,
+          // 2. Должность
+          positionCategory: parsed.positionCategory,
+          workFormats: parsed.workFormats,
+          employment: parsed.employment,
+          positionCity: parsed.positionCity,
+          // 3. Мотивация
           salaryFrom: parsed.salaryFrom,
           salaryTo: parsed.salaryTo,
+          bonus: parsed.bonus,
+          // 4. Обязанности
+          responsibilities: parsed.responsibilities,
+          requirements: parsed.requirements,
+          // 5. Портрет
+          requiredSkills: parsed.requiredSkills,
+          experienceMin: parsed.experienceMin,
+          // 6. Условия
           conditions: parsed.conditions,
+          conditionsCustom: parsed.conditionsCustom,
         }
         descriptionJson.importedFrom = uploadedFile ? { type: "file", fileName: uploadedFile.name } : { type: "url", url: importUrl }
         if (parsed.companyDescription) {
           descriptionJson.companyDescription = parsed.companyDescription
+        }
+        // Store stop factors & desired params for anketa migration
+        if (Object.keys(parsed.stopFactors).length > 0) {
+          (descriptionJson.anketa as Record<string, unknown>).parsedStopFactors = parsed.stopFactors
+        }
+        if (parsed.desiredParams.length > 0) {
+          (descriptionJson.anketa as Record<string, unknown>).parsedDesiredParams = parsed.desiredParams
         }
       }
 

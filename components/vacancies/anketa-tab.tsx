@@ -206,6 +206,32 @@ function migrateAnketa(saved: Record<string, unknown>): AnketaData {
     }
   }
   if (!Array.isArray(d.unacceptableSkills)) d.unacceptableSkills = []
+
+  // Apply parsed stop factors from file import
+  const psf = (saved as Record<string, unknown>).parsedStopFactors as Record<string, string | boolean> | undefined
+  if (psf) {
+    d.stopFactors = d.stopFactors.map(f => {
+      if (f.id in psf) {
+        const val = psf[f.id]
+        if (f.id === "age" && typeof val === "string" && val.includes("-")) {
+          const [min, max] = val.split("-").map(Number)
+          return { ...f, enabled: true, ageRange: [min || 18, max || 65] as [number, number] }
+        }
+        return { ...f, enabled: true, value: typeof val === "string" ? val : undefined }
+      }
+      return f
+    })
+  }
+
+  // Apply parsed desired params from file import
+  const pdp = (saved as Record<string, unknown>).parsedDesiredParams as string[] | undefined
+  if (pdp && pdp.length > 0) {
+    const enableSet = new Set(pdp)
+    d.desiredParams = d.desiredParams.map(p =>
+      enableSet.has(p.id) ? { ...p, enabled: true } : p
+    )
+  }
+
   return d
 }
 
