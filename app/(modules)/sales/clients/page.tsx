@@ -79,7 +79,7 @@ export default function SalesClientsPage() {
       <SidebarInset>
         <DashboardHeader />
         <main className="flex-1 overflow-auto bg-background">
-          <div className="p-4 sm:p-6 max-w-7xl">
+          <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
             {/* Header */}
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-3">
