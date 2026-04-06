@@ -62,15 +62,19 @@ const ALL_ARTICLES: Record<string, Article[]> = {
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  published: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
-  draft:     "bg-amber-500/15 text-amber-700 dark:text-amber-400",
-  archived:  "bg-muted text-muted-foreground",
+  published:      "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
+  draft:          "bg-gray-500/15 text-gray-700 dark:text-gray-400",
+  review:         "bg-blue-500/15 text-blue-700 dark:text-blue-400",
+  review_changes: "bg-amber-500/15 text-amber-700 dark:text-amber-400",
+  archived:       "bg-muted text-muted-foreground",
 }
 
 const STATUS_LABELS: Record<string, string> = {
-  published: "Опубликована",
-  draft: "Черновик",
-  archived: "В архиве",
+  published:      "Опубликована",
+  draft:          "Черновик",
+  review:         "На проверке",
+  review_changes: "Требуются правки",
+  archived:       "В архиве",
 }
 
 function formatDate(dateStr: string): string {

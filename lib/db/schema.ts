@@ -961,8 +961,23 @@ export const knowledgeArticles = pgTable("knowledge_articles", {
   authorId:    uuid("author_id").references(() => users.id, { onDelete: "set null" }),
   viewsCount:  integer("views_count").default(0),
   isPinned:    boolean("is_pinned").default(false),
-  status:      text("status").default("published"),
+  status:      text("status").default("published"), // draft | review | review_changes | published | archived
+  reviewerId:  uuid("reviewer_id").references(() => users.id, { onDelete: "set null" }),
   tags:        text("tags").array(),
   createdAt:   timestamp("created_at").defaultNow(),
   updatedAt:   timestamp("updated_at").defaultNow(),
+})
+
+// Reviews / comments on knowledge articles
+export const knowledgeReviews = pgTable("knowledge_reviews", {
+  id:          uuid("id").primaryKey().defaultRandom(),
+  tenantId:    uuid("tenant_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  articleId:   uuid("article_id").references(() => knowledgeArticles.id, { onDelete: "cascade" }).notNull(),
+  authorId:    uuid("author_id").references(() => users.id, { onDelete: "set null" }),
+  action:      text("action").notNull(), // comment | approve | request_changes
+  comment:     text("comment"),           // текстовый комментарий
+  voiceUrl:    text("voice_url"),         // URL голосового сообщения
+  videoUrl:    text("video_url"),         // URL видеозаписи с объяснениями
+  attachments: text("attachments").array(), // доп. файлы / скриншоты
+  createdAt:   timestamp("created_at").defaultNow(),
 })

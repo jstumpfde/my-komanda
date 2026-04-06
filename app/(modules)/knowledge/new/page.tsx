@@ -9,14 +9,21 @@ import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Badge } from "@/components/ui/badge"
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select"
-import { ChevronRight, Save } from "lucide-react"
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog"
+import { KnowledgeEditor } from "@/components/knowledge/editor"
+import { ChevronRight, Save, Send, Plus, X } from "lucide-react"
+import { toast } from "sonner"
 
-const CATEGORIES = [
+// ─── Mock data ──────────────────────────────────────────────────────────────
+
+const INITIAL_CATEGORIES = [
   { value: "onboarding",   label: "Онбординг" },
   { value: "regulations",  label: "Регламенты" },
   { value: "it-security",  label: "IT и безопасность" },
@@ -25,17 +32,74 @@ const CATEGORIES = [
   { value: "learning",     label: "Обучение" },
 ]
 
+const MOCK_REVIEWERS = [
+  { id: "r1", name: "Анна Иванова",    role: "HR-руководитель" },
+  { id: "r2", name: "Дмитрий Козлов",  role: "IT-директор" },
+  { id: "r3", name: "Сергей Волков",   role: "Руководитель продаж" },
+  { id: "r4", name: "Елена Сидорова",  role: "Операционный директор" },
+]
+
+// ─── Page ───────────────────────────────────────────────────────────────────
+
 export default function NewArticlePage() {
   const router = useRouter()
   const [title, setTitle] = useState("")
   const [category, setCategory] = useState("")
-  const [tags, setTags] = useState("")
+  const [tags, setTags] = useState<string[]>([])
+  const [tagInput, setTagInput] = useState("")
   const [content, setContent] = useState("")
   const [status, setStatus] = useState("draft")
   const [isPinned, setIsPinned] = useState(false)
+  const [reviewerId, setReviewerId] = useState("")
 
+  // Category management
+  const [categories, setCategories] = useState(INITIAL_CATEGORIES)
+  const [showNewCategory, setShowNewCategory] = useState(false)
+  const [newCatName, setNewCatName] = useState("")
+
+  const handleAddCategory = () => {
+    if (!newCatName.trim()) return
+    const slug = newCatName.trim().toLowerCase().replace(/\s+/g, "-")
+    setCategories((prev) => [...prev, { value: slug, label: newCatName.trim() }])
+    setCategory(slug)
+    setNewCatName("")
+    setShowNewCategory(false)
+    toast.success(`Категория «${newCatName.trim()}» создана`)
+  }
+
+  // Tags
+  const handleAddTag = () => {
+    const t = tagInput.trim()
+    if (t && !tags.includes(t)) {
+      setTags((prev) => [...prev, t])
+    }
+    setTagInput("")
+  }
+
+  const handleTagKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" || e.key === ",") {
+      e.preventDefault()
+      handleAddTag()
+    }
+  }
+
+  const removeTag = (tag: string) => setTags((prev) => prev.filter((t) => t !== tag))
+
+  // Save
   const handleSave = () => {
     // TODO: POST to /api/modules/knowledge/articles
+    toast.success("Статья сохранена")
+    router.push("/knowledge")
+  }
+
+  const handleSendToReview = () => {
+    if (!reviewerId) {
+      toast.error("Выберите проверяющего")
+      return
+    }
+    // TODO: POST with status: "review"
+    const reviewer = MOCK_REVIEWERS.find((r) => r.id === reviewerId)
+    toast.success(`Статья отправлена на проверку → ${reviewer?.name}`)
     router.push("/knowledge")
   }
 
@@ -56,7 +120,8 @@ export default function NewArticlePage() {
 
             <h1 className="text-xl font-semibold text-foreground mb-6">Новая статья</h1>
 
-            <div className="max-w-3xl space-y-5">
+            <div className="max-w-4xl space-y-5">
+
               {/* Title */}
               <div className="space-y-1.5">
                 <Label htmlFor="title">Заголовок</Label>
@@ -69,78 +134,126 @@ export default function NewArticlePage() {
                 />
               </div>
 
-              {/* Category */}
+              {/* Category with add-new */}
               <div className="space-y-1.5">
                 <Label>Категория</Label>
-                <Select value={category} onValueChange={setCategory}>
-                  <SelectTrigger className="h-10">
-                    <SelectValue placeholder="Выберите категорию" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CATEGORIES.map((c) => (
-                      <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex items-center gap-2">
+                  <Select value={category} onValueChange={setCategory}>
+                    <SelectTrigger className="h-10 flex-1">
+                      <SelectValue placeholder="Выберите категорию" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {categories.map((c) => (
+                        <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="gap-1 shrink-0"
+                    onClick={() => setShowNewCategory(true)}
+                  >
+                    <Plus className="size-3.5" />
+                    Новая
+                  </Button>
+                </div>
               </div>
 
               {/* Tags */}
               <div className="space-y-1.5">
                 <Label htmlFor="tags">Теги</Label>
+                <div className="flex flex-wrap items-center gap-1.5 mb-1.5">
+                  {tags.map((tag) => (
+                    <Badge key={tag} variant="secondary" className="gap-1 pr-1 font-normal">
+                      {tag}
+                      <button type="button" onClick={() => removeTag(tag)} className="hover:text-destructive">
+                        <X className="size-3" />
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
                 <Input
                   id="tags"
-                  placeholder="Введите теги через запятую"
-                  value={tags}
-                  onChange={(e) => setTags(e.target.value)}
+                  placeholder="Введите тег и нажмите Enter"
+                  value={tagInput}
+                  onChange={(e) => setTagInput(e.target.value)}
+                  onKeyDown={handleTagKeyDown}
+                  onBlur={handleAddTag}
                   className="h-10"
                 />
-                <p className="text-xs text-muted-foreground">Например: отпуск, HR, инструкция</p>
               </div>
 
-              {/* Content */}
+              {/* Content — editor with tabs */}
               <div className="space-y-1.5">
-                <Label htmlFor="content">Контент (Markdown)</Label>
-                <Textarea
-                  id="content"
-                  placeholder="Напишите содержимое статьи в формате Markdown..."
+                <Label>Контент</Label>
+                <KnowledgeEditor
                   value={content}
-                  onChange={(e) => setContent(e.target.value)}
-                  rows={16}
-                  className="font-mono text-sm"
+                  onChange={setContent}
+                  placeholder="Начните писать статью..."
+                  minHeight={400}
                 />
               </div>
 
-              {/* Status & Pinned */}
-              <div className="flex items-center gap-6">
+              {/* Status, reviewer, pinned */}
+              <div className="flex items-start gap-6 flex-wrap">
                 <div className="space-y-1.5">
                   <Label>Статус</Label>
                   <Select value={status} onValueChange={setStatus}>
-                    <SelectTrigger className="h-10 w-48">
+                    <SelectTrigger className="h-10 w-52">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="draft">Черновик</SelectItem>
+                      <SelectItem value="review">На проверку</SelectItem>
                       <SelectItem value="published">Опубликовать</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
 
-                <div className="flex items-center gap-2 pt-6">
+                {/* Reviewer — shown when status is "review" */}
+                {status === "review" && (
+                  <div className="space-y-1.5">
+                    <Label>Проверяющий</Label>
+                    <Select value={reviewerId} onValueChange={setReviewerId}>
+                      <SelectTrigger className="h-10 w-64">
+                        <SelectValue placeholder="Выберите проверяющего" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {MOCK_REVIEWERS.map((r) => (
+                          <SelectItem key={r.id} value={r.id}>
+                            {r.name} — {r.role}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                <div className="flex items-center gap-2 pt-7">
                   <Checkbox
                     id="pinned"
                     checked={isPinned}
                     onCheckedChange={(v) => setIsPinned(v === true)}
                   />
-                  <Label htmlFor="pinned" className="font-normal cursor-pointer">Закреплённая статья</Label>
+                  <Label htmlFor="pinned" className="font-normal cursor-pointer">Закреплённая</Label>
                 </div>
               </div>
 
-              {/* Save */}
+              {/* Actions */}
               <div className="flex items-center gap-3 pt-2">
-                <Button onClick={handleSave} className="gap-1.5" disabled={!title.trim()}>
-                  <Save className="size-4" />
-                  Сохранить
-                </Button>
+                {status === "review" ? (
+                  <Button onClick={handleSendToReview} className="gap-1.5" disabled={!title.trim()}>
+                    <Send className="size-4" />
+                    Отправить на проверку
+                  </Button>
+                ) : (
+                  <Button onClick={handleSave} className="gap-1.5" disabled={!title.trim()}>
+                    <Save className="size-4" />
+                    Сохранить
+                  </Button>
+                )}
                 <Link href="/knowledge">
                   <Button variant="outline">Отмена</Button>
                 </Link>
@@ -150,6 +263,32 @@ export default function NewArticlePage() {
           </div>
         </div>
       </SidebarInset>
+
+      {/* New category dialog */}
+      <Dialog open={showNewCategory} onOpenChange={setShowNewCategory}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Новая категория</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="cat-name">Название</Label>
+              <Input
+                id="cat-name"
+                placeholder="Например: Финансы"
+                value={newCatName}
+                onChange={(e) => setNewCatName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleAddCategory()}
+                className="h-10"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setShowNewCategory(false)}>Отмена</Button>
+              <Button onClick={handleAddCategory} disabled={!newCatName.trim()}>Создать</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </SidebarProvider>
   )
 }
