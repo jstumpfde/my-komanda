@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { Separator } from "@/components/ui/separator"
 import {
   Select,
   SelectContent,
@@ -20,6 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { toast } from "sonner"
+import { Sparkles } from "lucide-react"
 
 interface CreateVacancyDialogProps {
   open: boolean
@@ -44,6 +46,7 @@ const defaultForm = {
   salaryMin: "",
   salaryMax: "",
   description: "",
+  aiText: "",
 }
 
 export function CreateVacancyDialog({ open, onOpenChange }: CreateVacancyDialogProps) {
@@ -67,8 +70,17 @@ export function CreateVacancyDialog({ open, onOpenChange }: CreateVacancyDialogP
       return
     }
 
+    // Save AI text for anketa-tab to pick up after navigation
+    if (form.aiText.trim()) {
+      try {
+        sessionStorage.setItem("vacancy_ai_text", form.aiText.trim())
+      } catch {}
+    }
+
     toast.success(`Вакансия "${form.title}" создана`, {
-      description: "Вакансия добавлена в список активных",
+      description: form.aiText.trim()
+        ? "AI автоматически заполнит анкету"
+        : "Вакансия добавлена в список активных",
     })
     setForm(defaultForm)
     setErrors({})
@@ -85,7 +97,7 @@ export function CreateVacancyDialog({ open, onOpenChange }: CreateVacancyDialogP
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-[520px]">
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Создать вакансию</DialogTitle>
           <DialogDescription>
@@ -174,7 +186,27 @@ export function CreateVacancyDialog({ open, onOpenChange }: CreateVacancyDialogP
               rows={3}
               value={form.description}
               onChange={(e) => handleChange("description", e.target.value)}
+              className="w-full"
             />
+          </div>
+
+          <Separator />
+
+          {/* AI text input */}
+          <div className="grid gap-1.5">
+            <Label htmlFor="vac-ai-text" className="flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-primary" />
+              Или опишите текстом для AI
+            </Label>
+            <Textarea
+              id="vac-ai-text"
+              placeholder="Вставьте описание вакансии, должностные обязанности, требования... AI заполнит анкету автоматически."
+              rows={4}
+              value={form.aiText}
+              onChange={(e) => handleChange("aiText", e.target.value)}
+              className="w-full"
+            />
+            <p className="text-[11px] text-muted-foreground">AI заполнит анкету автоматически после создания вакансии</p>
           </div>
         </div>
 

@@ -680,6 +680,29 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
     if (saved) setData(prev => ({ ...prev, ...migrateAnketa(saved) }))
   }, [descriptionJson])
 
+  // Auto-trigger AI parsing if sessionStorage has text from create-vacancy-dialog
+  useEffect(() => {
+    try {
+      const aiText = sessionStorage.getItem("vacancy_ai_text")
+      if (aiText) {
+        sessionStorage.removeItem("vacancy_ai_text")
+        // Auto-run AI parsing
+        fetch("/api/ai/parse-vacancy", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: aiText }),
+        })
+          .then(res => res.ok ? res.json() : Promise.reject(new Error("AI parse failed")))
+          .then((json: { data: ParsedVacancy }) => handleWizardComplete(json.data))
+          .catch(() => {
+            toast.error("Не удалось автоматически заполнить анкету")
+            setShowWizard(true)
+          })
+      }
+    } catch {}
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const set = useCallback(<K extends keyof AnketaData>(key: K, value: AnketaData[K]) => {
     setData(prev => ({ ...prev, [key]: value }))
   }, [])
