@@ -81,7 +81,7 @@ function OwnCompanyInfo() {
 
   if (loading) {
     return (
-      <div className="rounded-lg border p-3 bg-muted/30 flex items-center gap-2">
+      <div className="rounded-lg border p-3 bg-[var(--input-bg)] flex items-center gap-2">
         <Building2 className="size-4 text-muted-foreground shrink-0 animate-pulse" />
         <p className="text-sm text-muted-foreground">Загрузка...</p>
       </div>
@@ -89,7 +89,7 @@ function OwnCompanyInfo() {
   }
 
   return (
-    <div className="rounded-lg border p-3 bg-muted/30 flex items-center gap-2">
+    <div className="rounded-lg border p-3 bg-[var(--input-bg)] flex items-center gap-2">
       <Building2 className="size-4 text-muted-foreground shrink-0" />
       {name ? (
         <p className="text-sm font-medium">{name}</p>

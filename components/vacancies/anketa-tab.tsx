@@ -292,7 +292,7 @@ function TagInput({ tags, onChange, placeholder }: {
           value={input}
           onChange={e => setInput(e.target.value)}
           placeholder={placeholder}
-          className="h-8 text-sm bg-background border border-input"
+          className="h-8 text-sm bg-[var(--input-bg)] border border-input"
           onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); add() } }}
         />
         <Button type="button" variant="outline" size="sm" className="h-8 px-3" onClick={add}>
@@ -318,7 +318,7 @@ function TagInputWithSuggestions({ tags, onChange, placeholder, suggestions }: {
               key={s}
               type="button"
               onClick={() => onChange([...tags, s])}
-              className="text-[11px] px-2 py-0.5 rounded-full border border-dashed border-muted-foreground/30 text-muted-foreground hover:border-primary hover:text-primary transition-colors"
+              className="text-[11px] px-2 py-0.5 rounded-full border border-dashed border-muted-foreground/30 text-muted-foreground hover:border-primary hover:text-primary transition-colors bg-[var(--input-bg)]"
             >
               + {s}
             </button>
@@ -652,7 +652,7 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
           value={data.vacancyTitle}
           onChange={e => { set("vacancyTitle", e.target.value); onTitleChange?.(e.target.value) }}
           placeholder="Менеджер по продажам"
-          className="h-11 text-lg bg-background border border-input"
+          className="h-11 text-lg bg-[var(--input-bg)] border border-input"
         />
       </div>
 
@@ -674,7 +674,7 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
           <Label className="text-xs">Категория</Label>
           <div className="flex items-center gap-2">
             <Select value={data.positionCategory} onValueChange={v => set("positionCategory", v)}>
-              <SelectTrigger className="h-9 bg-background border border-input min-w-[300px]"><SelectValue placeholder="Выберите категорию" /></SelectTrigger>
+              <SelectTrigger className="h-9 bg-[var(--input-bg)] border border-input min-w-[300px]"><SelectValue placeholder="Выберите категорию" /></SelectTrigger>
               <SelectContent>
                 {POSITION_CATEGORY_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
               </SelectContent>
@@ -709,7 +709,7 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
         </div>
         <div className="space-y-1.5 max-w-xs">
           <Label className="text-xs">Город</Label>
-          <Input value={data.positionCity} onChange={e => set("positionCity", e.target.value)} placeholder="Москва" className="h-9 bg-background border border-input" />
+          <Input value={data.positionCity} onChange={e => set("positionCity", e.target.value)} placeholder="Москва" className="h-9 bg-[var(--input-bg)] border border-input" />
         </div>
       </Section>
 
@@ -719,16 +719,16 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
           <div className="grid grid-cols-2 gap-4 max-w-lg">
             <div className="space-y-1.5">
               <Label className="text-xs">Зарплата от</Label>
-              <Input value={data.salaryFrom} onChange={e => set("salaryFrom", e.target.value)} placeholder="80 000 ₽" className="h-9 bg-background border border-input" />
+              <Input value={data.salaryFrom} onChange={e => set("salaryFrom", e.target.value)} placeholder="80 000 ₽" className="h-9 bg-[var(--input-bg)] border border-input" />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Зарплата до</Label>
-              <Input value={data.salaryTo} onChange={e => set("salaryTo", e.target.value)} placeholder="150 000 ₽" className="h-9 bg-background border border-input" />
+              <Input value={data.salaryTo} onChange={e => set("salaryTo", e.target.value)} placeholder="150 000 ₽" className="h-9 bg-[var(--input-bg)] border border-input" />
             </div>
           </div>
           <div className="space-y-1.5 max-w-lg">
             <Label className="text-xs">Бонусы</Label>
-            <Textarea value={data.bonus} onChange={e => set("bonus", e.target.value)} placeholder="% от продаж, KPI, бонус за перевыполнение плана, квартальная премия..." rows={2} className="text-sm bg-background border border-input" />
+            <Textarea value={data.bonus} onChange={e => set("bonus", e.target.value)} placeholder="% от продаж, KPI, бонус за перевыполнение плана, квартальная премия..." rows={2} className="text-sm bg-[var(--input-bg)] border border-input" />
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs">Частота выплат</Label>
@@ -754,7 +754,7 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
             onChange={e => set("responsibilities", e.target.value)}
             placeholder="Опишите задачи и функционал должности..."
             rows={4}
-            className="text-sm bg-background border border-input"
+            className="text-sm bg-[var(--input-bg)] border border-input"
           />
         </div>
         <div className="space-y-1.5">
@@ -764,7 +764,7 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
             onChange={e => set("requirements", e.target.value)}
             placeholder="Что должен знать и уметь кандидат..."
             rows={4}
-            className="text-sm bg-background border border-input"
+            className="text-sm bg-[var(--input-bg)] border border-input"
           />
         </div>
       </Section>
@@ -789,11 +789,11 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <Label className="text-xs">Опыт минимальный (лет)</Label>
-            <Input value={data.experienceMin} onChange={e => set("experienceMin", e.target.value)} placeholder="1" className="h-9 bg-background border border-input" type="number" />
+            <Input value={data.experienceMin} onChange={e => set("experienceMin", e.target.value)} placeholder="1" className="h-9 bg-[var(--input-bg)] border border-input" type="number" />
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs">Опыт идеальный (лет)</Label>
-            <Input value={data.experienceIdeal} onChange={e => set("experienceIdeal", e.target.value)} placeholder="3" className="h-9 bg-background border border-input" type="number" />
+            <Input value={data.experienceIdeal} onChange={e => set("experienceIdeal", e.target.value)} placeholder="3" className="h-9 bg-[var(--input-bg)] border border-input" type="number" />
           </div>
         </div>
 
