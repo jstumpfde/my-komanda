@@ -12,11 +12,12 @@ import { Slider } from "@/components/ui/slider"
 import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ChevronDown, ChevronUp, Plus, X, Save, Loader2, Trash2, GripVertical, Eye } from "lucide-react"
+import { ChevronDown, ChevronUp, Plus, X, Save, Loader2, Trash2, GripVertical, Eye, Sparkles } from "lucide-react"
 import { toast } from "sonner"
 import { POSITION_CATEGORIES } from "@/lib/position-classifier"
 import { type Question, type QuestionAnswerType, defaultQuestion } from "@/lib/course-types"
 import { CompanySelector } from "@/components/vacancies/company-selector"
+import { AnketaWizard, type WizardResult } from "@/components/vacancies/anketa-wizard"
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -102,20 +103,40 @@ const PAY_FREQUENCY_OPTIONS = [
 
 const REQUIRED_SKILL_SUGGESTIONS = [
   "Холодные звонки", "Переговоры", "CRM", "B2B продажи", "Презентации",
-  "Работа с возражениями", "Коммерческие предложения", "Тендеры",
-  "1С", "Excel", "Документооборот", "Ведение базы клиентов",
-  "Активные продажи", "Телефонные продажи", "Работа с дебиторкой",
+  "Работа с возражениями", "Коммерческие предложения", "Тендеры", "1С", "Excel",
+  "Документооборот", "Ведение базы клиентов", "Активные продажи", "Телефонные продажи",
+  "Работа с дебиторкой", "Аналитика продаж", "Управление командой", "Маркетинг",
+  "Финансовый анализ", "Бухгалтерия", "Кадровое делопроизводство", "Подбор персонала",
+  "Обучение персонала", "Деловая переписка", "Тайм-менеджмент", "Проектное управление",
+  "Agile/Scrum", "JIRA", "Confluence", "MS Office", "Google Workspace",
+  "Python", "JavaScript", "SQL", "Power BI", "Tableau", "SAP", "Битрикс24",
+  "AmoCRM", "Salesforce", "Figma", "Adobe Photoshop", "Adobe Illustrator",
+  "Контент-маркетинг", "SEO", "SMM", "Таргетированная реклама", "Контекстная реклама",
+  "Email-маркетинг", "Копирайтинг", "Видеомонтаж", "Фотография",
+  "Логистика", "Закупки", "Складской учёт", "ВЭД", "Таможенное оформление",
+  "Английский язык", "Немецкий язык", "Китайский язык", "Французский язык",
+  "Водительские права B", "Командировки", "Работа в команде", "Лидерство",
+  "Стрессоустойчивость", "Многозадачность", "Клиентоориентированность",
 ]
 
 const DESIRED_SKILL_SUGGESTIONS = [
   "Английский язык", "Управление командой", "Аналитика", "Маркетинг",
   "Финансовый анализ", "Публичные выступления", "Наставничество",
   "Стратегическое планирование", "Знание ERP", "Power BI", "SQL",
+  "Немецкий язык", "Китайский язык", "Французский язык",
+  "Agile/Scrum", "JIRA", "Confluence", "Figma", "Tableau",
+  "Проектное управление", "Тайм-менеджмент", "Деловая переписка",
+  "Копирайтинг", "SEO", "SMM", "Email-маркетинг", "Контент-маркетинг",
+  "Python", "JavaScript", "MS Office", "Google Workspace",
+  "Лидерство", "Коучинг", "Фасилитация", "Медиация", "Дизайн-мышление",
+  "Водительские права B", "Командировки", "Работа в команде",
 ]
 
 const UNACCEPTABLE_SUGGESTIONS = [
   "Без опыта продаж", "Частая смена работы", "Нет высшего образования",
   "Судимость", "Нет водительских прав", "Не готов к командировкам",
+  "Нет опыта в отрасли", "Завышенные зарплатные ожидания", "Курение",
+  "Нет регистрации", "Не владеет ПК", "Работа только удалённо",
 ]
 
 const DEFAULT_STOP_FACTORS: StopFactor[] = [
@@ -369,13 +390,13 @@ function TagInputWithSuggestions({ tags, onChange, placeholder, suggestions }: {
             </div>
           )}
         </div>
-        <Button type="button" variant="outline" size="sm" className="h-8 px-3 shrink-0" onClick={addCustom}>
+        <Button type="button" variant="outline" size="sm" className="h-8 px-3 shrink-0 relative z-40" onClick={addCustom}>
           <Plus className="w-3.5 h-3.5" />
         </Button>
       </div>
 
       {/* Кликаем вне — закрываем dropdown */}
-      {dropdownOpen && <div className="fixed inset-0 z-40" onClick={() => setDropdownOpen(false)} />}
+      {dropdownOpen && <div className="fixed inset-0 z-30" onClick={() => setDropdownOpen(false)} />}
     </div>
   )
 }
@@ -615,6 +636,26 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
     return saved ? migrateAnketa(saved) : emptyAnketa()
   })
   const [saving, setSaving] = useState(false)
+  const [showWizard, setShowWizard] = useState(false)
+
+  const handleWizardComplete = useCallback((result: WizardResult) => {
+    setData(prev => ({
+      ...prev,
+      vacancyTitle: result.positionTitle,
+      workFormats: result.workFormats,
+      employment: result.employment,
+      positionCity: result.positionCity,
+      salaryFrom: result.salaryFrom,
+      salaryTo: result.salaryTo,
+      requiredSkills: result.requiredSkills,
+      desiredSkills: result.desiredSkills,
+      unacceptableSkills: result.stopFactors,
+      conditions: result.conditions,
+    }))
+    if (result.positionTitle) onTitleChange?.(result.positionTitle)
+    setShowWizard(false)
+    toast.success("Анкета заполнена из шаблона")
+  }, [onTitleChange])
 
   useEffect(() => {
     const saved = (descriptionJson as Record<string, unknown>)?.anketa as Record<string, unknown> | undefined
@@ -687,12 +728,27 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
     })
   }, [])
 
+  if (showWizard) {
+    return (
+      <div className="py-2">
+        <AnketaWizard
+          onComplete={handleWizardComplete}
+          onSkip={() => setShowWizard(false)}
+          initialTitle={data.vacancyTitle}
+        />
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-4" onBlur={handleBlur}>
-      {/* Progress */}
+      {/* Progress + Wizard button */}
       <div className="flex items-center gap-3">
         <Progress value={progress} className="flex-1 h-2" />
         <span className="text-sm text-muted-foreground font-medium whitespace-nowrap">{progress}%</span>
+        <Button variant="outline" size="sm" className="gap-1.5 shrink-0" onClick={() => setShowWizard(true)}>
+          <Sparkles className="w-3.5 h-3.5" /> AI-заполнение
+        </Button>
       </div>
 
       {/* ── Название вакансии (top-level) ── */}
