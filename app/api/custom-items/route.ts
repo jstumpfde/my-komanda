@@ -29,6 +29,7 @@ export async function GET(req: Request) {
     return apiSuccess({ items })
   } catch (e) {
     if (e instanceof Response || (e && typeof e === "object" && "status" in e)) throw e
+    console.error("[custom-items GET]", e)
     return apiError("Ошибка загрузки", 500)
   }
 }

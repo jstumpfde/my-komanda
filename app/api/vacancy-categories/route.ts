@@ -22,6 +22,7 @@ export async function GET() {
     return apiSuccess({ system: systemCategories, custom })
   } catch (e) {
     if (e instanceof Response || (e && typeof e === "object" && "status" in e)) throw e
+    console.error("[vacancy-categories GET]", e)
     return apiError("Ошибка загрузки категорий", 500)
   }
 }
