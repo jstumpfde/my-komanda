@@ -12,7 +12,6 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Separator } from "@/components/ui/separator"
 import {
   Select,
   SelectContent,
@@ -97,7 +96,7 @@ export function CreateVacancyDialog({ open, onOpenChange }: CreateVacancyDialogP
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Создать вакансию</DialogTitle>
           <DialogDescription>
@@ -190,23 +189,19 @@ export function CreateVacancyDialog({ open, onOpenChange }: CreateVacancyDialogP
             />
           </div>
 
-          <Separator />
-
           {/* AI text input */}
-          <div className="grid gap-1.5">
-            <Label htmlFor="vac-ai-text" className="flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-primary" />
-              Или опишите текстом для AI
-            </Label>
+          <div className="rounded-lg border p-3 space-y-2">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <Sparkles className="w-4 h-4 text-primary" />
+              AI-заполнение
+              <span className="text-xs text-muted-foreground font-normal">(необязательно)</span>
+            </div>
             <Textarea
-              id="vac-ai-text"
-              placeholder="Вставьте описание вакансии, должностные обязанности, требования... AI заполнит анкету автоматически."
-              rows={4}
               value={form.aiText}
               onChange={(e) => handleChange("aiText", e.target.value)}
-              className="w-full"
+              placeholder="Вставьте описание вакансии или должностные обязанности — AI заполнит анкету автоматически..."
+              className="h-32 bg-[var(--input-bg)] border border-input resize-none text-sm"
             />
-            <p className="text-[11px] text-muted-foreground">AI заполнит анкету автоматически после создания вакансии</p>
           </div>
         </div>
 
