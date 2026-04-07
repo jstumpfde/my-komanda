@@ -1290,29 +1290,31 @@ export default function VacancyPage() {
               </TabsContent>
             </Tabs>
 
-            {/* ═══ Bottom tab navigation ══════════════════ */}
+            {/* ═══ Bottom navigation bar ══════════════════ */}
             {(() => {
               const tabOrder = (status === "published" || status === "active" || status === "closed")
                 ? ["analytics", "candidates", "course", "anketa", "automation", "settings"]
                 : ["anketa", "course", "candidates", "analytics", "automation", "settings"]
               const tabLabels: Record<string, string> = { anketa: "Анкета", course: "Демонстрация", candidates: "Кандидаты", analytics: "Аналитика", automation: "Автоматизация", settings: "Настройки" }
               const idx = tabOrder.indexOf(activeTab)
-              const prevTab = idx > 0 ? tabOrder[idx - 1] : null
               const nextTab = idx < tabOrder.length - 1 ? tabOrder[idx + 1] : null
               const goTab = (tab: string) => { setActiveTab(tab); window.scrollTo({ top: 0, behavior: "smooth" }) }
               return (
                 <div className="flex items-center justify-between mt-6 pt-4 border-t">
-                  <div className="flex items-center gap-2">
-                    {prevTab && (
-                      <Button variant="ghost" size="sm" className="gap-1.5 text-xs" onClick={() => goTab(prevTab)}>
-                        <ChevronLeft className="w-3.5 h-3.5" />
-                        {tabLabels[prevTab]}
-                      </Button>
-                    )}
-                    {nextTab && (
-                      <Button variant="ghost" size="sm" className="gap-1.5 text-xs" onClick={() => goTab(nextTab)}>
+                  <Button variant="ghost" size="sm" className="gap-1.5 text-xs" onClick={() => router.push("/hr/vacancies")}>
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                    Все вакансии
+                  </Button>
+                  <div className="flex items-center gap-3">
+                    {nextTab ? (
+                      <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => goTab(nextTab)}>
                         {tabLabels[nextTab]}
                         <ChevronRight className="w-3.5 h-3.5" />
+                      </Button>
+                    ) : (
+                      <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => goTab(tabOrder[0])}>
+                        <ChevronLeft className="w-3.5 h-3.5" />
+                        {tabLabels[tabOrder[0]]}
                       </Button>
                     )}
                   </div>
