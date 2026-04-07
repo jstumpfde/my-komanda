@@ -107,7 +107,7 @@ function StarRating({ rating }: { rating: number }) {
 
 function ReviewCard({ review }: { review: typeof reviews[0] }) {
   return (
-    <Card className="hover:shadow-sm transition-shadow">
+    <Card>
       <CardContent className="p-4 space-y-3">
         <div className="flex items-start justify-between gap-2">
           <div className="space-y-1">

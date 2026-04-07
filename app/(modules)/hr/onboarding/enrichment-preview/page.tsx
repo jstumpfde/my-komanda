@@ -188,7 +188,7 @@ function CollapsibleBlock({ title, summary, expanded, onToggle, children }: Bloc
     <Card
       className={cn(
         "border transition-all",
-        expanded ? "border-primary/30 shadow-sm" : "border-border"
+        expanded ? "border-primary/30" : "border-border"
       )}
     >
       <CardContent className="p-0">

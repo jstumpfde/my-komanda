@@ -157,7 +157,7 @@ export default function SalesMeetingsPage() {
     return (
       <div
         className={cn(
-          "border rounded-xl p-4 bg-card hover:shadow-md transition-shadow cursor-pointer",
+          "border rounded-xl p-4 bg-card cursor-pointer",
           meeting.isToday && "border-primary/50 bg-primary/5"
         )}
         onClick={() => setSelectedMeeting(meeting)}

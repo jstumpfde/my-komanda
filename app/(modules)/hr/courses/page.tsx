@@ -161,7 +161,7 @@ export default function CoursesPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map(course => (
-            <Card key={course.id} className="hover:shadow-md transition-shadow group">
+            <Card key={course.id} className="group">
               <CardContent className="p-5 space-y-3">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex-1 min-w-0">

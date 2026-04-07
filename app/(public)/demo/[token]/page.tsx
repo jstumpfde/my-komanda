@@ -429,7 +429,7 @@ export default function DemoPage() {
           </div>
 
           {/* Block content */}
-          <div className="rounded-xl bg-white p-5 sm:p-8 shadow-sm space-y-4">
+          <div className="rounded-xl bg-white p-5 sm:p-8 space-y-4">
             {block.type === "text" && <TextBlock block={block} data={data} />}
             {block.type === "info" && <InfoBlock block={block} data={data} />}
             {block.type === "video" && <VideoBlock block={block} />}

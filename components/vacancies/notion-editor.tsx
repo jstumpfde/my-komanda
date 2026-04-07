@@ -247,7 +247,7 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
           </div>
           <span className="text-xs font-medium text-muted-foreground">{previewIdx + 1} / {demo.lessons.length}</span>
         </div>
-        <div className="bg-card rounded-2xl border shadow-sm p-8 sm:p-10">
+        <div className="bg-card rounded-2xl border p-8 sm:p-10">
           <div className="text-center mb-8">
             <span className="text-5xl block mb-3">{lesson.emoji}</span>
             <h1 className="text-2xl font-bold">{lesson.title}</h1>
@@ -1634,7 +1634,7 @@ function TaskEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: 
               key={q.id}
               className={cn(
                 "bg-background rounded-lg border transition-all",
-                isExpanded ? "border-primary/40 shadow-sm" : "border-border"
+                isExpanded ? "border-primary/40" : "border-border"
               )}
             >
               {/* ── Заголовок карточки ── */}

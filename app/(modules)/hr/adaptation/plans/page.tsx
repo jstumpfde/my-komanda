@@ -119,7 +119,7 @@ export default function AdaptationPlansPage() {
                 {plans.map(plan => {
                   const { label, color } = typeInfo(plan.planType)
                   return (
-                    <Card key={plan.id} className="flex flex-col hover:shadow-md transition-shadow">
+                    <Card key={plan.id} className="flex flex-col">
                       <CardContent className="p-4 flex flex-col gap-3 flex-1">
                         <div className="flex items-start justify-between gap-2">
                           <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">

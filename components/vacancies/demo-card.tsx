@@ -308,7 +308,7 @@ export function DemoCard({ demo, onBack, onUpdate }: DemoCardProps) {
         </div>
 
         {/* Content card */}
-        <Card className="shadow-lg border-0 bg-white dark:bg-card">
+        <Card className="border-0 bg-white dark:bg-card">
           <CardContent className="p-8 sm:p-10">
             {/* Lesson title */}
             <div className="text-center mb-8">
@@ -1157,7 +1157,7 @@ function PreviewBlock({ block }: { block: Block }) {
     case "file": {
       const pfi = getFileIcon(block.fileName || "")
       return (
-        <div className="flex items-center gap-4 p-4 border border-border rounded-xl hover:shadow-sm transition-shadow cursor-pointer">
+        <div className="flex items-center gap-4 p-4 border border-border rounded-xl cursor-pointer">
           <div className={cn("w-16 h-16 rounded-xl flex items-center justify-center text-3xl flex-shrink-0", pfi.color)}>{pfi.icon}</div>
           <div>
             <p className="text-sm font-medium">{block.fileName || "Документ"}</p>

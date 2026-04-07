@@ -98,7 +98,7 @@ const statusColors: Record<string, string> = {
 function CampaignCard({ campaign }: { campaign: typeof campaigns[0] }) {
   const pct = campaign.budget > 0 ? Math.round((campaign.spent / campaign.budget) * 100) : 0
   return (
-    <Card className="hover:shadow-md transition-shadow">
+    <Card>
       <CardContent className="p-5 space-y-4">
         <div className="flex items-start justify-between gap-2">
           <div className="space-y-1">

@@ -155,7 +155,7 @@ export default function OnboardingScreenClient() {
               >
                 <Card
                   className={cn(
-                    "border-2 transition-all duration-200 hover:shadow-md",
+                    "border-2 transition-all duration-200",
                     method.highlighted
                       ? "border-primary/40 bg-primary/[0.02] hover:border-primary hover:bg-primary/5"
                       : "border-border hover:border-primary/30 hover:bg-muted/30"

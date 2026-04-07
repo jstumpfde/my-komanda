@@ -90,7 +90,7 @@ export default function LogisticsReportsPage() {
             {/* Report tiles */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {REPORT_TEMPLATES.map(report => (
-                <Card key={report.id} className="hover:shadow-md transition-shadow">
+                <Card key={report.id}>
                   <CardHeader className="pb-3">
                     <div className="flex items-center gap-2.5">
                       <div className={`w-9 h-9 rounded-lg bg-muted/50 flex items-center justify-center ${report.color}`}>

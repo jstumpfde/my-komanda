@@ -59,7 +59,7 @@ export default function TaskProjectsPage() {
               {projects.map((p) => {
                 const st = STATUS_CONFIG[p.status] ?? STATUS_CONFIG.active
                 return (
-                  <Link key={p.id} href={`/tasks?project=${p.id}`} className="group block border rounded-xl p-5 bg-card hover:shadow-md transition-all">
+                  <Link key={p.id} href={`/tasks?project=${p.id}`} className="group block border rounded-xl p-5 bg-card transition-all">
                     <div className="flex items-start justify-between mb-2">
                       <div className="flex items-center gap-2">
                         <div className="size-3 rounded-full" style={{ backgroundColor: p.color }} />

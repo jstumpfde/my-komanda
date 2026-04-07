@@ -179,7 +179,7 @@ export default function AccessRequestsPage() {
                 {filtered.map((r) => {
                   const st = STATUS_CONFIG[r.status] ?? STATUS_CONFIG.new
                   return (
-                    <div key={r.id} className="border rounded-xl p-5 bg-card hover:shadow-sm transition-shadow">
+                    <div key={r.id} className="border rounded-xl p-5 bg-card">
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex-1 min-w-0 space-y-2">
                           <div className="flex items-center gap-3">
@@ -308,7 +308,7 @@ export default function AccessRequestsPage() {
                             }}
                             onDragEnd={() => setDraggedId(null)}
                             className={cn(
-                              "border rounded-lg p-3 bg-card hover:shadow-sm transition-shadow cursor-grab active:cursor-grabbing",
+                              "border rounded-lg p-3 bg-card cursor-grab active:cursor-grabbing",
                               draggedId === r.id && "opacity-50"
                             )}
                           >

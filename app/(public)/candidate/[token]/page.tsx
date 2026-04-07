@@ -191,7 +191,7 @@ function WelcomeScreen({
         </div>
 
         {/* Описание */}
-        <Card className="border-none shadow-lg bg-white/80 backdrop-blur-sm">
+        <Card className="border-none bg-white/80 backdrop-blur-sm">
           <CardContent className="pt-6 pb-6">
             <div className="flex items-center gap-3 mb-3">
               <Clock className="w-5 h-5 text-muted-foreground" />
@@ -599,7 +599,7 @@ function FinalScreen({
             <p className="text-muted-foreground">
               {candidate.firstName}, мы ждём вас <span className="font-semibold text-foreground">{selectedSlot}</span>
             </p>
-            <Card className="border-none shadow-lg">
+            <Card className="border-none">
               <CardContent className="pt-6 pb-6 space-y-3">
                 <div className="flex items-center gap-2 justify-center">
                   <Calendar className="w-5 h-5 text-muted-foreground" />
@@ -628,7 +628,7 @@ function FinalScreen({
             </div>
 
             {/* Планировщик слотов */}
-            <Card className="border-none shadow-lg text-left">
+            <Card className="border-none text-left">
               <CardContent className="pt-6 pb-6">
                 <div className="space-y-4">
                   {days.map(day => (

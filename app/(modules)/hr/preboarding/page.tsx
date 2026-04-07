@@ -181,7 +181,7 @@ export default function PreboardingPage() {
                 {plans.map(plan => {
                   const cfg = TYPE_LABELS[plan.planType] ?? TYPE_LABELS.preboarding
                   return (
-                    <Card key={plan.id} className="hover:shadow-md transition-shadow">
+                    <Card key={plan.id}>
                       <CardContent className="p-4 space-y-3">
                         <div className="flex items-start justify-between">
                           <div className="p-2 rounded-lg bg-primary/10">

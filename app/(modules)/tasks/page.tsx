@@ -274,7 +274,7 @@ export default function TasksKanbanPage() {
                             key={task.id}
                             onClick={() => setSelectedTask(task)}
                             className={cn(
-                              "border rounded-lg p-3 bg-card cursor-pointer hover:shadow-md transition-all border-l-[3px]",
+                              "border rounded-lg p-3 bg-card cursor-pointer transition-all border-l-[3px]",
                               col.key === "todo" ? "border-l-slate-300" : col.key === "in_progress" ? "border-l-blue-500" : col.key === "review" ? "border-l-amber-500" : "border-l-emerald-500",
                               task.status === "done" && "opacity-70",
                             )}

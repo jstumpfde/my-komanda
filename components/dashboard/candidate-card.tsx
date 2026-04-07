@@ -80,7 +80,7 @@ export function CandidateCard({ candidate, settings, columnId, isLastColumn, onO
 
   return (
     <div
-      className="relative p-3.5 rounded-lg border bg-card cursor-pointer hover:shadow-sm transition"
+      className="relative p-3.5 rounded-lg border bg-card cursor-pointer transition"
       onClick={() => onOpenProfile?.(candidate)}
     >
       {/* Score badge — top right */}

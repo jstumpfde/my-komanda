@@ -652,7 +652,7 @@ export default function AiGeneratePage() {
                           className={cn(
                             "p-3 rounded-lg border text-left transition-all",
                             format === f.value
-                              ? "border-violet-400 bg-violet-50 shadow-sm"
+                              ? "border-violet-400 bg-violet-50"
                               : "border-border hover:border-foreground/20",
                           )}
                         >

@@ -162,7 +162,7 @@ function UpgradeContent() {
                 key={plan.slug}
                 className={`relative rounded-xl border p-5 flex flex-col gap-4 transition-shadow ${
                   hasModule
-                    ? "border-primary shadow-lg shadow-primary/10 bg-primary/5"
+                    ? "border-primary bg-primary/5"
                     : "border-border"
                 }`}
               >

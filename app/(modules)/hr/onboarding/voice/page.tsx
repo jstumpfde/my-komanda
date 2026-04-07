@@ -282,7 +282,7 @@ export default function VoicePage() {
                   {recordings.map((rec) => (
                     <div
                       key={rec.id}
-                      className="flex items-center gap-3 px-4 py-3 rounded-xl bg-white border border-border shadow-sm"
+                      className="flex items-center gap-3 px-4 py-3 rounded-xl bg-white border border-border"
                     >
                       <span className="text-base">🎙️</span>
                       <span className="flex-1 text-sm text-foreground">
@@ -306,7 +306,7 @@ export default function VoicePage() {
 
               {/* Processing steps (during processing) */}
               {stage === "processing" && (
-                <div className="rounded-xl border border-border bg-white/80 p-5 space-y-3 shadow-sm">
+                <div className="rounded-xl border border-border bg-white/80 p-5 space-y-3">
                   {PROC_STEPS.map((step, i) => {
                     const isDone = i < processingStep
                     const isCurrent = i === processingStep
@@ -365,7 +365,7 @@ export default function VoicePage() {
               </div>
 
               {/* Question card */}
-              <div className="bg-white rounded-2xl border border-border shadow-sm p-6 space-y-5">
+              <div className="bg-white rounded-2xl border border-border p-6 space-y-5">
                 {/* Progress indicator */}
                 <div className="flex items-center justify-between text-xs text-muted-foreground">
                   <span>Вопрос {qIndex + 1} из {totalQ}</span>

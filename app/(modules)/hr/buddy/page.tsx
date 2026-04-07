@@ -83,7 +83,7 @@ export default function BuddyDashboardPage() {
                     : "—"
 
                   return (
-                    <div key={a.id} className="rounded-xl border bg-card p-4 flex flex-col gap-3 hover:shadow-sm transition-shadow">
+                    <div key={a.id} className="rounded-xl border bg-card p-4 flex flex-col gap-3">
                       {/* Header */}
                       <div className="flex items-start justify-between">
                         <div className="flex items-center gap-3">

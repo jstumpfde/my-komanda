@@ -299,7 +299,7 @@ function LoginForm() {
         </div>
 
         {/* Card */}
-        <Card className="border shadow-xl">
+        <Card className="border">
           <CardContent className="pt-6 pb-6 space-y-5">
             <div>
               <h2 className="text-lg font-semibold text-foreground">Вход в систему</h2>

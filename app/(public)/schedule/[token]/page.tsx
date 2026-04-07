@@ -211,7 +211,7 @@ export default function SchedulePublicPage({ params }: { params: Promise<{ token
         </div>
 
         {/* Slots */}
-        <Card className="border-none shadow-lg">
+        <Card className="border-none">
           <CardContent className="pt-5 pb-5 space-y-4">
             {days.map(day => (
               <div key={day.toISOString()}>

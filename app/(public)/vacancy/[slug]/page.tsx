@@ -218,7 +218,7 @@ function VacancyPageInner({ params }: { params: Promise<{ slug: string }> }) {
           </div>
 
           {/* Информация о вакансии */}
-          <Card className="border-none shadow-lg">
+          <Card className="border-none">
             <CardContent className="pt-6 pb-6 space-y-4">
               {/* Формат и занятость */}
               <div className="flex flex-wrap gap-2">
@@ -260,7 +260,7 @@ function VacancyPageInner({ params }: { params: Promise<{ slug: string }> }) {
           )}
 
           {screen === "form" && (
-            <Card className="border-none shadow-lg">
+            <Card className="border-none">
               <CardContent className="pt-6 pb-6 space-y-4">
                 {/* Системное: Имя */}
                 <div className="space-y-1.5">

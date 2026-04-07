@@ -138,7 +138,7 @@ export default function SocialPage() {
                 >
                   {day.posts.length > 0 ? (
                     day.posts.map((post, i) => (
-                      <div key={i} className="text-xs bg-white rounded p-1.5 border border-blue-100 shadow-sm leading-snug">
+                      <div key={i} className="text-xs bg-white rounded p-1.5 border border-blue-100 leading-snug">
                         {post}
                       </div>
                     ))

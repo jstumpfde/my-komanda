@@ -116,7 +116,7 @@ function filterByCondition(interviews: Interview[], condition: StageCondition): 
 
 function MiniCard({ iv, compact }: { iv: Interview; compact?: boolean }) {
   return (
-    <div className={cn("rounded-lg border p-2 transition-all hover:shadow-sm cursor-pointer", STATUS_STYLES[iv.status], compact && "p-1.5")}>
+    <div className={cn("rounded-lg border p-2 transition-all cursor-pointer", STATUS_STYLES[iv.status], compact && "p-1.5")}>
       <div className="flex items-center gap-1.5">
         <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", STATUS_DOT[iv.status])} />
         <span className={cn("font-medium truncate", compact ? "text-[10px]" : "text-xs")}>{iv.time}</span>
@@ -569,7 +569,7 @@ export default function InterviewsPage() {
                               draggable
                               onDragStart={() => ivDragStart(iv.id)}
                               onDragEnd={ivDragEnd}
-                              className={cn("hover:shadow-md transition-all cursor-grab active:cursor-grabbing", dragIvId === iv.id && "opacity-40 scale-95")}
+                              className={cn("transition-all cursor-grab active:cursor-grabbing", dragIvId === iv.id && "opacity-40 scale-95")}
                             >
                               <CardContent className="p-3 space-y-1.5">
                                 <div className="flex items-center justify-between"><span className="text-sm font-semibold text-foreground">{iv.candidate}</span><span className="text-[10px] text-muted-foreground">{formatDateShort(iv.date)}</span></div>

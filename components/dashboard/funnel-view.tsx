@@ -119,7 +119,7 @@ export function FunnelView({ columns, settings, onOpenProfile, onAction }: Funne
           return (
             <div
               key={col.id}
-              className="bg-card border border-border rounded-xl overflow-hidden cursor-pointer hover:shadow-md transition-shadow"
+              className="bg-card border border-border rounded-xl overflow-hidden cursor-pointer"
               onClick={() => setExpandedCardId(isCardExpanded ? null : col.id)}
             >
               <div

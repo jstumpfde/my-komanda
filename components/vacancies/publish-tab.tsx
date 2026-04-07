@@ -54,11 +54,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .logo-text{font-size:20px;font-weight:700;color:${text}}
 h1{font-size:28px;font-weight:800;color:${text};margin-bottom:8px;line-height:1.2}
 .meta{color:${text}99;font-size:14px;margin-bottom:24px}
-.highlights{background:#fff;border-radius:16px;padding:24px;margin-bottom:24px;text-align:left;box-shadow:0 4px 24px rgba(0,0,0,.06)}
+.highlights{background:#fff;border-radius:16px;padding:24px;margin-bottom:24px;text-align:left}
 .highlight{display:flex;align-items:flex-start;gap:10px;margin-bottom:12px;font-size:14px;color:${text}}
 .highlight:last-child{margin-bottom:0}
 .check{color:${primary};font-size:18px;flex-shrink:0;margin-top:1px}
-.form-card{background:#fff;border-radius:16px;padding:24px;margin-bottom:24px;box-shadow:0 4px 24px rgba(0,0,0,.06)}
+.form-card{background:#fff;border-radius:16px;padding:24px;margin-bottom:24px}
 .form-card input{width:100%;padding:12px 16px;border:1px solid #e2e8f0;border-radius:10px;font-size:14px;margin-bottom:12px;outline:none;transition:border .2s}
 .form-card input:focus{border-color:${primary}}
 .btn{display:block;width:100%;padding:16px;background:${primary};color:#fff;border:none;border-radius:12px;font-size:16px;font-weight:600;cursor:pointer;transition:opacity .2s}
@@ -240,7 +240,7 @@ export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, salaryFrom,
                   {vacancyCity}{salaryFrom ? ` · ${salaryFrom.toLocaleString("ru-RU")} – ${salaryTo?.toLocaleString("ru-RU")} ₽` : ""}
                 </p>
                 {/* Mini form preview */}
-                <div className="space-y-1.5 bg-white rounded-lg p-3 shadow-sm">
+                <div className="space-y-1.5 bg-white rounded-lg p-3">
                   <div className="h-7 rounded-md border bg-white" />
                   <div className="h-7 rounded-md border bg-white" />
                   <div className="h-8 rounded-md text-white text-xs font-semibold flex items-center justify-center" style={{ backgroundColor: brand.primaryColor }}>

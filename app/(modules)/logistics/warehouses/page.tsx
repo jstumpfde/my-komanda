@@ -108,7 +108,7 @@ export default function LogisticsWarehousesPage() {
               {warehouses.map(wh => {
                 const pct = Math.round((wh.usedPositions / wh.positions) * 100)
                 return (
-                  <Card key={wh.id} className="hover:shadow-md transition-shadow">
+                  <Card key={wh.id}>
                     <CardHeader className="pb-3">
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex items-center gap-2">

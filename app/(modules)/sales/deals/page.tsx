@@ -65,7 +65,7 @@ function formatMoney(n: number) {
 
 function DealCard({ deal }: { deal: Deal }) {
   return (
-    <div className="bg-card border rounded-lg p-3 shadow-sm hover:shadow-md transition-shadow cursor-pointer space-y-2.5">
+    <div className="bg-card border rounded-lg p-3 cursor-pointer space-y-2.5">
       <div className="flex items-start justify-between gap-1">
         <div className="flex items-center gap-1.5">
           <Circle className={cn("w-2 h-2 fill-current shrink-0", PRIORITY_COLORS[deal.priority])} />
@@ -173,7 +173,7 @@ export default function SalesDealsPage() {
                 const stageDealsList = stageDeals(stage.key)
                 const total = stageTotal(stage.key)
                 return (
-                  <div key={stage.key} className={cn("rounded-xl border-t-4 bg-background shadow-sm", stage.color)}>
+                  <div key={stage.key} className={cn("rounded-xl border-t-4 bg-background", stage.color)}>
                     <div className={cn("rounded-b-none rounded-t-lg px-3 py-2.5", stage.headerColor)}>
                       <div className="flex items-center justify-between">
                         <span className="text-sm font-semibold text-foreground">{stage.label}</span>

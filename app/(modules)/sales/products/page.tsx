@@ -160,7 +160,7 @@ export default function SalesProductsPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {filtered.map(product => (
                 <div key={product.id} className={cn(
-                  "border rounded-xl p-4 bg-card hover:shadow-md transition-shadow",
+                  "border rounded-xl p-4 bg-card",
                   product.status === "archived" && "opacity-60"
                 )}>
                   <div className="flex items-start justify-between gap-2 mb-2">

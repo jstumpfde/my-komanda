@@ -110,7 +110,7 @@ export default function CourseLearnPage({ params }: { params: Promise<{ id: stri
         </div>
         <h2 className="text-2xl font-bold mb-2">Курс завершён!</h2>
         <p className="text-muted-foreground mb-6">Вы прошли курс «{course.title}» и получили сертификат.</p>
-        <div className="border rounded-xl p-6 bg-card max-w-sm w-full space-y-3 shadow-sm">
+        <div className="border rounded-xl p-6 bg-card max-w-sm w-full space-y-3">
           <div className="flex items-center gap-3">
             <Award className="size-8 text-yellow-500" />
             <div className="text-left">

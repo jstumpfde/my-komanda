@@ -377,7 +377,7 @@ export default function SmartInputPage() {
 
           {/* Processing UI */}
           {isProcessing && (
-            <div className="rounded-xl border border-border bg-white/80 p-5 space-y-3 shadow-sm">
+            <div className="rounded-xl border border-border bg-white/80 p-5 space-y-3">
               {PROCESSING_STEPS.map((step, i) => {
                 const isDone = i < processingStep
                 const isCurrent = i === processingStep

@@ -274,7 +274,7 @@ export function LibraryDialog({
 
                 <div className="space-y-3">
                   {FULL_TEMPLATES.map((tpl, i) => (
-                    <Card key={i} className="hover:shadow-md transition-shadow">
+                    <Card key={i} className="">
                       <CardContent className="p-4 flex items-center gap-4">
                         <span className="text-3xl flex-shrink-0">{tpl.emoji}</span>
                         <div className="flex-1 min-w-0">
@@ -304,7 +304,7 @@ export function LibraryDialog({
                   ) : (
                     <div className="space-y-2">
                       {savedTemplates.map((t, i) => (
-                        <Card key={i} className="hover:shadow-md transition-shadow">
+                        <Card key={i} className="">
                           <CardContent className="p-3 flex items-center gap-3">
                             <FolderOpen className="w-5 h-5 text-muted-foreground flex-shrink-0" />
                             <div className="flex-1"><p className="text-sm font-medium">{t.title}</p><p className="text-[10px] text-muted-foreground">{t.lessons.length} уроков · {t.category}</p></div>
@@ -332,7 +332,7 @@ export function LibraryDialog({
 
                 <div className="space-y-2">
                   {filteredModules.map((mod, i) => (
-                    <Card key={i} className="hover:shadow-md transition-shadow">
+                    <Card key={i} className="">
                       <CardContent className="p-3 flex items-center gap-3">
                         <span className="text-2xl flex-shrink-0">{mod.emoji}</span>
                         <div className="flex-1 min-w-0">
@@ -362,7 +362,7 @@ export function LibraryDialog({
                   ) : (
                     <div className="space-y-2">
                       {savedModules.map((m, i) => (
-                        <Card key={i} className="hover:shadow-md transition-shadow">
+                        <Card key={i} className="">
                           <CardContent className="p-3 flex items-center gap-3">
                             <span className="text-xl">{m.emoji}</span>
                             <div className="flex-1"><p className="text-sm font-medium">{m.title}</p></div>

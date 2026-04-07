@@ -167,7 +167,7 @@ export function StepMarket({ draft, onChange }: Props) {
         </h3>
         <div className="space-y-3">
           {examples.map((v, i) => (
-            <Card key={i} className="hover:shadow-md transition-shadow">
+            <Card key={i} className="">
               <CardContent className="p-4">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">

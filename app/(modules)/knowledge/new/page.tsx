@@ -272,8 +272,8 @@ function ImportPanel({ onImportDone }: { onImportDone: (lessons: Lesson[]) => vo
               className={cn(
                 "flex flex-col items-center gap-1.5 p-3 rounded-lg border transition-all text-center",
                 activeSource === s.id
-                  ? `${s.bg} ${s.border} border-2 shadow-sm`
-                  : "bg-background border-border hover:border-foreground/20 hover:shadow-sm",
+                  ? `${s.bg} ${s.border} border-2`
+                  : "bg-background border-border hover:border-foreground/20",
               )}
             >
               <span className="text-2xl">{s.icon}</span>

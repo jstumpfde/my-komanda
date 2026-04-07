@@ -48,7 +48,7 @@ export default function ForgotPasswordPage() {
           </div>
         </div>
 
-        <Card className="border shadow-xl">
+        <Card className="border">
           <CardContent className="pt-6 pb-6 space-y-5">
             {!sent ? (
               <>
