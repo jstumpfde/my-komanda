@@ -16,8 +16,8 @@ import {
   AlertCircle, CheckCircle2, Timer, Star, Calendar, Sparkles,
 } from "lucide-react"
 import {
-  ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
-  PieChart, Pie, Cell,
+  ResponsiveContainer, LineChart, Line, Area, XAxis, YAxis, CartesianGrid, Tooltip,
+  PieChart, Pie, Cell, ComposedChart,
 } from "recharts"
 
 // ─── Colors ─────────────────────────────────────────────────────────────────
@@ -40,11 +40,11 @@ const MOCK_VACANCIES = [
 ]
 
 const FUNNEL = [
-  { stage: "Отклики", count: 445, color: "#93c5fd" },
-  { stage: "Скрининг", count: 198, color: "#60a5fa" },
-  { stage: "Интервью", count: 87, color: "#3b82f6" },
-  { stage: "Оффер", count: 24, color: "#2563eb" },
-  { stage: "Наняты", count: 12, color: C.green },
+  { stage: "Отклики", count: 445, color: C.blue },
+  { stage: "Скрининг", count: 198, color: C.purple },
+  { stage: "Интервью", count: 87, color: C.green },
+  { stage: "Оффер", count: 24, color: C.orange },
+  { stage: "Наняты", count: 12, color: "#10b981" },
 ]
 
 const EVENTS = [
@@ -118,7 +118,7 @@ function DashboardContent() {
       <SidebarInset>
         <DashboardHeader />
         <main className="flex-1 overflow-auto bg-background">
-          <div className="p-4 sm:p-6 space-y-6 max-w-[1400px]">
+          <div className="p-4 sm:p-6 space-y-5 max-w-[1400px]">
 
             {/* ═══ Header ═══ */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -177,36 +177,39 @@ function DashboardContent() {
             {/* ═══ Block 2: 5 Metrics ═══ */}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
               {[
-                { label: "Активных вакансий", value: "4", trend: "+2 за неделю", icon: Briefcase, color: C.green },
-                { label: "Всего кандидатов", value: "445", trend: "+68 за неделю", icon: Users, color: C.blue },
-                { label: "Нанято за месяц", value: "3", trend: "цель: 5", icon: UserCheck, color: C.green },
-                { label: "Ср. время закрытия", value: "18 дн", trend: "цель: 14 дн", icon: Clock, color: C.orange },
-                { label: "Конверсия воронки", value: "12%", trend: "цель: 15%", icon: TrendingUp, color: C.purple },
+                { label: "Активных вакансий", value: "4", trend: "+2 за неделю", trendPositive: true, icon: Briefcase, color: C.green, border: "border-l-green-500" },
+                { label: "Всего кандидатов", value: "445", trend: "+68 за неделю", trendPositive: true, icon: Users, color: C.blue, border: "border-l-blue-500" },
+                { label: "Нанято за месяц", value: "3", trend: "цель: 5", trendPositive: false, icon: UserCheck, color: C.purple, border: "border-l-purple-500" },
+                { label: "Ср. время закрытия", value: "18 дн", trend: "цель: 14 дн", trendPositive: false, icon: Clock, color: C.orange, border: "border-l-orange-500" },
+                { label: "Конверсия воронки", value: "12%", trend: "цель: 15%", trendPositive: false, icon: TrendingUp, color: "#6366f1", border: "border-l-indigo-500" },
               ].map((m, i) => (
-                <div key={i} className="bg-muted/50 rounded-md p-3">
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <m.icon className="w-3.5 h-3.5" style={{ color: m.color }} />
+                <div key={i} className={cn("bg-white dark:bg-card border rounded-xl shadow-sm hover:shadow-md transition-shadow p-4 border-l-4", m.border)}>
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <m.icon className="w-4 h-4" style={{ color: m.color }} />
                     <span className="text-[11px] text-muted-foreground">{m.label}</span>
                   </div>
-                  <p className="text-xl font-semibold">{m.value}</p>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">{m.trend}</p>
+                  <p className="text-3xl font-bold" style={{ color: m.color }}>{m.value}</p>
+                  <p className={cn("text-xs mt-1", m.trendPositive ? "text-emerald-600" : "text-muted-foreground")}>{m.trend}</p>
                 </div>
               ))}
             </div>
 
             {/* ═══ Block 3: Funnel + Active Vacancies ═══ */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
               {/* Funnel */}
-              <div className="border rounded-lg p-5">
-                <h3 className="text-sm font-semibold mb-4">Воронка найма</h3>
-                <div className="space-y-3">
+              <div className="border rounded-xl shadow-sm hover:shadow-md transition-shadow p-6">
+                <h3 className="text-lg font-semibold mb-4">Воронка найма</h3>
+                <div className="space-y-2">
                   {FUNNEL.map((f, i) => (
                     <div key={i}>
                       <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs text-muted-foreground">{f.stage}</span>
-                        <span className="text-xs font-medium">{f.count}</span>
+                        <span className="text-xs font-medium">{f.stage}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-semibold">{f.count}</span>
+                          {i > 0 && <span className="text-[10px] text-muted-foreground">{Math.round((f.count / FUNNEL[i - 1].count) * 100)}%</span>}
+                        </div>
                       </div>
-                      <div className="h-5 bg-muted/50 rounded-full overflow-hidden">
+                      <div className="h-7 bg-muted/30 rounded-full overflow-hidden">
                         <div
                           className="h-full rounded-full transition-all"
                           style={{ width: `${(f.count / FUNNEL[0].count) * 100}%`, backgroundColor: f.color }}
@@ -218,9 +221,9 @@ function DashboardContent() {
               </div>
 
               {/* Active Vacancies */}
-              <div className="border rounded-lg p-5">
+              <div className="border rounded-xl shadow-sm hover:shadow-md transition-shadow p-6">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-sm font-semibold">Активные вакансии</h3>
+                  <h3 className="text-lg font-semibold">Активные вакансии</h3>
                   <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => router.push("/hr/vacancies?create=true")}>
                     <Plus className="w-3 h-3" />Новая
                   </Button>
@@ -247,22 +250,28 @@ function DashboardContent() {
             </div>
 
             {/* ═══ Block 4: Efficiency + Events ═══ */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
               {/* Efficiency */}
-              <div className="border rounded-lg p-5">
-                <h3 className="text-sm font-semibold mb-4">Эффективность по вакансиям</h3>
-                <div className="space-y-3">
+              <div className="border rounded-xl shadow-sm hover:shadow-md transition-shadow p-6">
+                <h3 className="text-lg font-semibold mb-4">Эффективность по вакансиям</h3>
+                <div className="space-y-4">
                   {MOCK_VACANCIES.map(v => {
-                    const statusMap = { ahead: { label: "Опережает", color: "text-emerald-600 bg-emerald-50" }, on_track: { label: "В графике", color: "text-blue-600 bg-blue-50" }, behind: { label: "Отстаёт", color: "text-red-600 bg-red-50" } }
+                    const statusMap = {
+                      ahead: { label: "Опережает", badge: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300", barColor: C.green },
+                      on_track: { label: "В графике", badge: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300", barColor: C.blue },
+                      behind: { label: "Отстаёт", badge: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300", barColor: C.red },
+                    }
                     const s = statusMap[v.status]
                     const pct = Math.min(100, Math.round((v.finalists / Math.max(1, v.responses)) * 100 * 10))
                     return (
                       <div key={v.id}>
-                        <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center justify-between mb-1.5">
                           <span className="text-xs font-medium">{v.title}</span>
-                          <Badge variant="outline" className={cn("text-[10px] h-5 border-0", s.color)}>{s.label}</Badge>
+                          <span className={cn("text-[10px] font-medium rounded-full px-3 py-0.5", s.badge)}>{s.label}</span>
                         </div>
-                        <Progress value={pct} className="h-2" />
+                        <div className="h-2.5 bg-muted/30 rounded-full overflow-hidden">
+                          <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: s.barColor }} />
+                        </div>
                       </div>
                     )
                   })}
@@ -270,9 +279,9 @@ function DashboardContent() {
               </div>
 
               {/* Events */}
-              <div className="border rounded-lg p-5">
+              <div className="border rounded-xl shadow-sm hover:shadow-md transition-shadow p-6">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-sm font-semibold">Ближайшие события</h3>
+                  <h3 className="text-lg font-semibold">Ближайшие события</h3>
                   <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={() => router.push("/hr/calendar")}>
                     <Calendar className="w-3 h-3" />Календарь
                   </Button>
@@ -295,22 +304,28 @@ function DashboardContent() {
             </div>
 
             {/* ═══ Block 5: Goals + Sources ═══ */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
               {/* Goals */}
-              <div className="border rounded-lg p-5">
-                <h3 className="text-sm font-semibold mb-4">Цели месяца</h3>
+              <div className="border rounded-xl shadow-sm hover:shadow-md transition-shadow p-6">
+                <h3 className="text-lg font-semibold mb-4">Цели месяца</h3>
                 <div className="space-y-4">
                   {GOALS.map((g, i) => {
                     const pct = g.inverted
                       ? Math.min(100, Math.round((g.target / Math.max(1, g.current)) * 100))
                       : Math.min(100, Math.round((g.current / Math.max(1, g.target)) * 100))
+                    const barColor = pct >= 80 ? C.green : pct >= 50 ? C.blue : C.orange
                     return (
                       <div key={i}>
                         <div className="flex items-center justify-between mb-1">
                           <span className="text-xs">{g.label}</span>
-                          <span className="text-xs font-medium">{g.current}{g.unit || ""} / {g.target}{g.unit || ""}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-medium">{g.current}{g.unit || ""} / {g.target}{g.unit || ""}</span>
+                            <span className="text-[10px] font-medium" style={{ color: barColor }}>{pct}%</span>
+                          </div>
                         </div>
-                        <Progress value={pct} className="h-2" />
+                        <div className="h-2.5 bg-muted/30 rounded-full overflow-hidden">
+                          <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: barColor }} />
+                        </div>
                       </div>
                     )
                   })}
@@ -318,8 +333,8 @@ function DashboardContent() {
               </div>
 
               {/* Sources donut */}
-              <div className="border rounded-lg p-5">
-                <h3 className="text-sm font-semibold mb-4">Источники откликов</h3>
+              <div className="border rounded-xl shadow-sm hover:shadow-md transition-shadow p-6">
+                <h3 className="text-lg font-semibold mb-4">Источники откликов</h3>
                 <div className="flex items-center gap-6">
                   <div className="w-[140px] h-[140px] shrink-0">
                     <ResponsiveContainer width="100%" height="100%">
@@ -344,9 +359,9 @@ function DashboardContent() {
             </div>
 
             {/* ═══ Block 6: Dynamics Chart ═══ */}
-            <div className="border rounded-lg p-5">
+            <div className="border rounded-xl shadow-sm hover:shadow-md transition-shadow p-6">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-semibold">Динамика за период</h3>
+                <h3 className="text-lg font-semibold">Динамика за период</h3>
                 <div className="flex items-center bg-muted rounded-md p-0.5 gap-0.5">
                   {(["7", "30", "90"] as const).map(p => (
                     <button
@@ -361,15 +376,32 @@ function DashboardContent() {
               </div>
               <div className="h-[250px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={dynamicsData}>
+                  <ComposedChart data={dynamicsData}>
+                    <defs>
+                      <linearGradient id="gradBlue" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={C.blue} stopOpacity={0.15} />
+                        <stop offset="100%" stopColor={C.blue} stopOpacity={0} />
+                      </linearGradient>
+                      <linearGradient id="gradPurple" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={C.purple} stopOpacity={0.15} />
+                        <stop offset="100%" stopColor={C.purple} stopOpacity={0} />
+                      </linearGradient>
+                      <linearGradient id="gradGreen" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={C.green} stopOpacity={0.15} />
+                        <stop offset="100%" stopColor={C.green} stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                     <XAxis dataKey="day" tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" />
                     <YAxis tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" />
                     <Tooltip contentStyle={tooltipStyle} />
-                    <Line type="monotone" dataKey="responses" stroke={C.blue} strokeWidth={2} dot={false} name="Отклики" />
-                    <Line type="monotone" dataKey="interviews" stroke={C.purple} strokeWidth={2} dot={false} name="Интервью" />
-                    <Line type="monotone" dataKey="offers" stroke={C.green} strokeWidth={2} dot={false} name="Офферы" />
-                  </LineChart>
+                    <Area type="monotone" dataKey="responses" fill="url(#gradBlue)" stroke="none" />
+                    <Area type="monotone" dataKey="interviews" fill="url(#gradPurple)" stroke="none" />
+                    <Area type="monotone" dataKey="offers" fill="url(#gradGreen)" stroke="none" />
+                    <Line type="monotone" dataKey="responses" stroke={C.blue} strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} name="Отклики" />
+                    <Line type="monotone" dataKey="interviews" stroke={C.purple} strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} name="Интервью" />
+                    <Line type="monotone" dataKey="offers" stroke={C.green} strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} name="Офферы" />
+                  </ComposedChart>
                 </ResponsiveContainer>
               </div>
               <div className="flex items-center justify-center gap-6 mt-3">
