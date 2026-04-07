@@ -17,7 +17,7 @@ export const MODULE_REGISTRY: Record<ModuleId, ModuleConfig> = {
       { label: 'Календарь',        href: '/hr/calendar',          icon: 'Calendar' },
       { label: 'Настройки найма',  href: '/hr/hiring-settings',   icon: 'Settings' },
       // Адаптация
-      { label: 'Онбординг',              href: '/hr/onboarding',              icon: 'GraduationCap' },
+      { label: 'Ввод информации',         href: '/hr/onboarding',              icon: 'GraduationCap' },
       { label: 'Назначения',             href: '/hr/assignments',             icon: 'ClipboardList' },
       { label: 'Аналитика адаптации',    href: '/hr/adaptation-analytics',    icon: 'TrendingUp' },
       // Персонал
@@ -56,19 +56,6 @@ export const MODULE_REGISTRY: Record<ModuleId, ModuleConfig> = {
       { label: 'Рефералы',      href: '/referrals',      icon: 'Share2' },
     ],
   },
-  sales: {
-    id: 'sales',
-    name: 'CRM',
-    description: 'Управление компаниями и контактами',
-    icon: 'Briefcase',
-    basePath: '/sales',
-    menuItems: [
-      { label: 'Компании',  href: '/sales/clients',    icon: 'Building2' },
-      { label: 'Контакты',  href: '/sales/contacts',   icon: 'Users' },
-      { label: 'Заявки',    href: '/sales/requests',   icon: 'Inbox' },
-      { label: 'Журнал',    href: '/sales/visit-log',  icon: 'Activity' },
-    ],
-  },
   knowledge: {
     id: 'knowledge',
     name: 'База знаний',
@@ -80,6 +67,19 @@ export const MODULE_REGISTRY: Record<ModuleId, ModuleConfig> = {
       { label: 'На проверке',     href: '/knowledge/reviews',    icon: 'ClipboardCheck' },
       { label: 'AI-курсы',        href: '/knowledge/ai-courses', icon: 'Sparkles' },
       { label: 'Новая статья',    href: '/knowledge/new',        icon: 'FilePlus' },
+    ],
+  },
+  sales: {
+    id: 'sales',
+    name: 'CRM',
+    description: 'Управление компаниями и контактами',
+    icon: 'Briefcase',
+    basePath: '/sales',
+    menuItems: [
+      { label: 'Компании',  href: '/sales/clients',    icon: 'Building2' },
+      { label: 'Контакты',  href: '/sales/contacts',   icon: 'Users' },
+      { label: 'Заявки',    href: '/sales/requests',   icon: 'Inbox' },
+      { label: 'Журнал',    href: '/sales/visit-log',  icon: 'Activity' },
     ],
   },
   tasks: {
