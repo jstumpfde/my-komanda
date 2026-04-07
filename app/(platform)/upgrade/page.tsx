@@ -160,7 +160,7 @@ function UpgradeContent() {
               return (
               <div
                 key={plan.slug}
-                className={`relative rounded-xl border p-5 flex flex-col gap-4 transition-shadow ${
+                className={`relative rounded-xl border p-5 flex flex-col gap-4 ${
                   hasModule
                     ? "border-primary bg-primary/5"
                     : "border-border"

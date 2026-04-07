@@ -290,7 +290,7 @@ export default function SmartInputPage() {
               onChange={(e) => handleInputChange(e.target.value)}
               placeholder="ИНН, ссылка на сайт, VK, Telegram, название компании и город..."
               rows={6}
-              className="resize-none text-sm bg-white border-border shadow-sm focus-visible:ring-primary"
+              className="resize-none text-sm bg-white border-border focus-visible:ring-primary"
               disabled={isProcessing}
             />
 
