@@ -65,6 +65,7 @@ export async function GET() {
     return apiSuccess(company)
   } catch (err) {
     if (err instanceof Response) return err
+    console.error("[companies GET]", err)
     return apiError("Internal server error", 500)
   }
 }
