@@ -578,7 +578,7 @@ export default function NewArticlePage() {
                 <Label>Категория</Label>
                 <div className="flex items-center gap-2">
                   <Select value={category} onValueChange={setCategory}>
-                    <SelectTrigger className="h-10 flex-1">
+                    <SelectTrigger className="h-10 max-w-xs border border-input rounded-md">
                       <SelectValue placeholder="Выберите категорию" />
                     </SelectTrigger>
                     <SelectContent>
@@ -595,7 +595,7 @@ export default function NewArticlePage() {
                     onClick={() => setShowNewCategory(true)}
                   >
                     <Plus className="size-3.5" />
-                    Новая
+                    Добавить категорию
                   </Button>
                 </div>
               </div>
@@ -620,7 +620,7 @@ export default function NewArticlePage() {
                   onChange={(e) => setTagInput(e.target.value)}
                   onKeyDown={handleTagKeyDown}
                   onBlur={handleAddTag}
-                  className="h-10"
+                  className="h-10 w-64"
                 />
               </div>
 
@@ -682,6 +682,18 @@ export default function NewArticlePage() {
                 </div>
               </div>
 
+              {/* Dates */}
+              <div className="flex items-start gap-6">
+                <div className="space-y-1.5">
+                  <Label>Дата создания</Label>
+                  <Input className="h-10 w-52" value={new Date().toLocaleDateString("ru-RU")} readOnly disabled />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Дата обновления</Label>
+                  <Input className="h-10 w-52" value={new Date().toLocaleDateString("ru-RU")} readOnly disabled />
+                </div>
+              </div>
+
               {/* Content — tabs: Editor / Import */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
@@ -730,11 +742,6 @@ export default function NewArticlePage() {
                 )}
               </div>
 
-              {/* Quiz / control questions */}
-              <div className="border-t pt-5">
-                <QuizEditor questions={questions} onChange={setQuestions} />
-              </div>
-
               {/* Status, reviewer, pinned */}
               <div className="flex items-start gap-6 flex-wrap">
                 <div className="space-y-1.5">
@@ -770,18 +777,13 @@ export default function NewArticlePage() {
                   </div>
                 )}
 
-                <div className="flex items-center gap-2 pt-7">
-                  <Checkbox
-                    id="pinned"
-                    checked={isPinned}
-                    onCheckedChange={(v) => setIsPinned(v === true)}
-                  />
-                  <Label htmlFor="pinned" className="font-normal cursor-pointer">Закреплённая</Label>
-                </div>
               </div>
 
               {/* Actions */}
               <div className="flex items-center gap-3 pt-2">
+                <Link href="/knowledge">
+                  <Button variant="outline">Отмена</Button>
+                </Link>
                 {status === "review" ? (
                   <Button onClick={handleSendToReview} className="gap-1.5" disabled={!title.trim()}>
                     <Send className="size-4" />
@@ -793,9 +795,6 @@ export default function NewArticlePage() {
                     Сохранить
                   </Button>
                 )}
-                <Link href="/knowledge">
-                  <Button variant="outline">Отмена</Button>
-                </Link>
               </div>
             </div>
 

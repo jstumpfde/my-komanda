@@ -162,11 +162,18 @@ function GreetingBlock({ userName, interviews, responses, decisions }: {
 
 // ─── Section 2: KPI Cards ──────────────────────────────────────────────────
 
-function KpiCard({ label, value }: { label: string; value: string | number }) {
+const KPI_COLORS = {
+  blue: "bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300",
+  green: "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300",
+  purple: "bg-purple-50 dark:bg-purple-950/30 text-purple-700 dark:text-purple-300",
+  amber: "bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300",
+} as const
+
+function KpiCard({ label, value, color }: { label: string; value: string | number; color: keyof typeof KPI_COLORS }) {
   return (
-    <div className="bg-muted/50 rounded-xl p-4">
-      <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">{label}</p>
-      <p className="text-2xl font-semibold">{value}</p>
+    <div className={cn("rounded-xl p-4", KPI_COLORS[color])}>
+      <p className="text-xs uppercase tracking-wider mb-1 opacity-70">{label}</p>
+      <p className="text-2xl font-semibold text-center">{value}</p>
     </div>
   )
 }
@@ -300,13 +307,13 @@ function SourcesSection() {
   return (
     <>
       <div className="border rounded-xl p-6">
-        <div className="flex items-center justify-between mb-1">
+        <div className="mb-1">
           <h2 className="text-base font-semibold">Источники</h2>
-          <Button className="gap-1.5" size="sm" onClick={() => { setCreateOpen(true); setStep(1) }}><Plus className="w-4 h-4" />Создать ссылку</Button>
         </div>
-        <p className="text-sm text-muted-foreground mb-4">UTM-ссылки, аналитика переходов и конверсий</p>
+        <p className="text-sm text-muted-foreground mb-4">Источники, UTM-ссылки, аналитика переходов и конверсий</p>
 
         <div className="flex flex-wrap items-center gap-2 mb-4">
+          <Button className="gap-1.5" size="sm" onClick={() => { setCreateOpen(true); setStep(1) }}><Plus className="w-4 h-4" />Создать ссылку</Button>
           <div className="relative flex-1 min-w-[200px] max-w-xs">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input className="pl-9 h-9" placeholder="Поиск по названию..." value={searchText} onChange={e => setSearchText(e.target.value)} />
@@ -332,14 +339,14 @@ function SourcesSection() {
             <thead>
               <tr className="border-b bg-muted/30">
                 <th className="w-3 px-2 py-3" />
-                <th className="text-left text-xs font-semibold text-muted-foreground px-3 py-3">Название</th>
-                <th className="text-left text-xs font-semibold text-muted-foreground px-3 py-3">Источник</th>
-                <th className="text-left text-xs font-semibold text-muted-foreground px-3 py-3">Аккаунт</th>
-                <th className="text-right text-xs font-semibold text-muted-foreground px-3 py-3">Переходов</th>
-                <th className="text-right text-xs font-semibold text-muted-foreground px-3 py-3">Откликов</th>
-                <th className="text-right text-xs font-semibold text-muted-foreground px-3 py-3">Конверсия</th>
-                <th className="text-left text-xs font-semibold text-muted-foreground px-3 py-3">Создана</th>
-                <th className="text-center text-xs font-semibold text-muted-foreground px-3 py-3">Действия</th>
+                <th className="text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground px-3 py-3">Название</th>
+                <th className="text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground px-3 py-3">Источник</th>
+                <th className="text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground px-3 py-3">Аккаунт</th>
+                <th className="text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground px-3 py-3">Переходов</th>
+                <th className="text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground px-3 py-3">Откликов</th>
+                <th className="text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground px-3 py-3">Конверсия</th>
+                <th className="text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground px-3 py-3">Создана</th>
+                <th className="text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground px-3 py-3">Действия</th>
               </tr>
             </thead>
             <tbody>
@@ -349,9 +356,9 @@ function SourcesSection() {
                   <td className="px-3 py-3"><p className="text-sm font-medium text-foreground">{link.name}</p><p className="text-[10px] text-muted-foreground font-mono">{link.shortUrl}</p></td>
                   <td className="px-3 py-3"><Badge variant="outline" className="text-xs" style={{ borderColor: link.color + "40", color: link.color }}>{SOURCE_TYPE_LABELS[link.sourceType]}</Badge></td>
                   <td className="px-3 py-3 text-sm text-muted-foreground">{link.account}</td>
-                  <td className="text-right px-3 py-3 text-sm font-medium text-foreground">{link.clicks}</td>
-                  <td className="text-right px-3 py-3 text-sm font-medium text-foreground">{link.responses}</td>
-                  <td className="text-right px-3 py-3"><span className={cn("text-sm font-semibold", link.conversion >= 30 ? "text-emerald-600" : "text-foreground")}>{link.conversion}%</span></td>
+                  <td className="text-center px-3 py-3 text-sm font-medium text-foreground">{link.clicks}</td>
+                  <td className="text-center px-3 py-3 text-sm font-medium text-foreground">{link.responses}</td>
+                  <td className="text-center px-3 py-3"><span className={cn("text-sm font-semibold", link.conversion >= 30 ? "text-emerald-600" : "text-foreground")}>{link.conversion}%</span></td>
                   <td className="px-3 py-3 text-xs text-muted-foreground">{link.createdAt.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" })}{link.auto && <Badge variant="secondary" className="ml-1 text-[9px] py-0 h-4">авто</Badge>}</td>
                   <td className="text-center px-3 py-3">
                     <div className="flex items-center justify-center gap-0.5">
@@ -524,10 +531,10 @@ function DashboardContent() {
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <KpiCard label="Активных вакансий" value={kpi.activeVacancies} />
-          <KpiCard label="Всего кандидатов" value={kpi.totalCandidates.toLocaleString("ru-RU")} />
-          <KpiCard label="Нанято за месяц" value={kpi.hiredThisMonth} />
-          <KpiCard label="Средняя конверсия" value={`${kpi.conversionRate}%`} />
+          <KpiCard label="Активных вакансий" value={kpi.activeVacancies} color="blue" />
+          <KpiCard label="Всего кандидатов" value={kpi.totalCandidates.toLocaleString("ru-RU")} color="green" />
+          <KpiCard label="Нанято за месяц" value={kpi.hiredThisMonth} color="purple" />
+          <KpiCard label="Средняя конверсия" value={`${kpi.conversionRate}%`} color="amber" />
         </div>
       )}
 
@@ -535,7 +542,7 @@ function DashboardContent() {
       <div>
         <h2 className="text-base font-semibold mb-3">Активные вакансии ({vacancies.length})</h2>
         {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-28 rounded-xl" />)}
           </div>
         ) : vacancies.length === 0 ? (
@@ -545,10 +552,14 @@ function DashboardContent() {
             <p className="text-sm mt-1">Опубликуйте вакансию, чтобы увидеть статистику</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {vacancies.map(v => (
               <VacancyCard key={v.id} v={v} onClick={() => router.push(`/hr/vacancies/${v.id}`)} />
             ))}
+            <button onClick={() => router.push('/hr/vacancies?create=true')} className="w-full text-left rounded-xl border border-dashed p-4 hover:bg-accent/50 transition-colors flex flex-col items-center justify-center gap-2 text-muted-foreground hover:text-primary min-h-[120px]">
+              <Plus className="w-6 h-6" />
+              <span className="text-sm font-medium">Добавить вакансию</span>
+            </button>
           </div>
         )}
       </div>

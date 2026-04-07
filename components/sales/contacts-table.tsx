@@ -67,10 +67,10 @@ export function ContactsTable({ contacts, onEdit, onArchive, onRestore }: Contac
               <th className="text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3">Имя</th>
               <th className="text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3">Должность</th>
               <th className="text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3">Компания</th>
-              <th className="text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3">Телефон</th>
+              <th className="text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3 min-w-[150px]">Телефон</th>
               <th className="text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3">Email</th>
               <th className="text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3">Telegram</th>
-              <th className="text-center text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3">Основной</th>
+              <th className="text-center text-[11px] font-semibold text-muted-foreground uppercase tracking-wider w-8 px-2 py-3">⭐</th>
               <th className="text-right text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3">Действия</th>
             </tr>
           </thead>
@@ -121,7 +121,7 @@ export function ContactsTable({ contacts, onEdit, onArchive, onRestore }: Contac
                       <span className="text-sm text-muted-foreground">—</span>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-center">
+                  <td className="px-2 py-3 text-center w-8">
                     {contact.isPrimary && (
                       <Star className="w-4 h-4 text-amber-500 mx-auto fill-amber-500" />
                     )}

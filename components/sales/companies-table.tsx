@@ -3,7 +3,7 @@
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { Building2, MoreHorizontal, Pencil, Archive, RotateCcw } from "lucide-react"
+import { Building2, MoreHorizontal, Pencil, Archive, RotateCcw, ArrowUpDown } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -54,9 +54,12 @@ interface CompaniesTableProps {
   onEdit?: (company: SalesCompany) => void
   onArchive?: (company: SalesCompany) => void
   onRestore?: (company: SalesCompany) => void
+  sortColumn?: string | null
+  sortDir?: "asc" | "desc"
+  onSort?: (column: string) => void
 }
 
-export function CompaniesTable({ companies, onEdit, onArchive, onRestore }: CompaniesTableProps) {
+export function CompaniesTable({ companies, onEdit, onArchive, onRestore, sortColumn, sortDir, onSort }: CompaniesTableProps) {
   if (companies.length === 0) {
     return (
       <div className="text-center py-12">
@@ -72,20 +75,26 @@ export function CompaniesTable({ companies, onEdit, onArchive, onRestore }: Comp
         <table className="w-full">
           <thead>
             <tr className="border-b bg-muted/30">
-              <th className="text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3">Название</th>
+              <th className="text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3 min-w-[200px]">
+                <button type="button" onClick={() => onSort?.("name")} className="inline-flex items-center gap-1 hover:text-foreground transition-colors">
+                  Название <ArrowUpDown className={cn("w-3 h-3", sortColumn === "name" ? "text-foreground" : "opacity-40")} />
+                </button>
+              </th>
               <th className="text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3">ИНН</th>
               <th className="text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3">Отрасль</th>
               <th className="text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3">Город</th>
-              <th className="text-center text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3">Контактов</th>
-              <th className="text-center text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3">Вакансий</th>
-              <th className="text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3">Статус</th>
-              <th className="text-right text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3">Действия</th>
+              <th className="text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3">
+                <button type="button" onClick={() => onSort?.("status")} className="inline-flex items-center gap-1 hover:text-foreground transition-colors">
+                  Статус <ArrowUpDown className={cn("w-3 h-3", sortColumn === "status" ? "text-foreground" : "opacity-40")} />
+                </button>
+              </th>
+              <th className="text-right text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3 pr-4">Действия</th>
             </tr>
           </thead>
           <tbody>
             {companies.map((company) => (
               <tr key={company.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
-                <td className="px-4 py-3">
+                <td className="px-4 py-3 min-w-[200px]">
                   <div className="flex items-center gap-2.5">
                     <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
                       <Building2 className="w-4 h-4 text-primary" />
@@ -99,14 +108,12 @@ export function CompaniesTable({ companies, onEdit, onArchive, onRestore }: Comp
                 <td className="px-4 py-3 text-sm text-muted-foreground font-mono">{company.inn || "—"}</td>
                 <td className="px-4 py-3 text-sm text-muted-foreground">{company.industry || "—"}</td>
                 <td className="px-4 py-3 text-sm text-muted-foreground">{company.city || "—"}</td>
-                <td className="px-4 py-3 text-center text-sm text-muted-foreground">{company.contactsCount ?? 0}</td>
-                <td className="px-4 py-3 text-center text-sm text-muted-foreground">{company.vacanciesCount ?? 0}</td>
                 <td className="px-4 py-3">
                   <Badge className={cn("text-xs border-0", STATUS_COLORS[company.status] || STATUS_COLORS.active)}>
                     {STATUS_LABELS[company.status] || company.status}
                   </Badge>
                 </td>
-                <td className="px-4 py-3 text-right">
+                <td className="px-4 py-3 text-right pr-4">
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button variant="ghost" size="icon" className="h-8 w-8">

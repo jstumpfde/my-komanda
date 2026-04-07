@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, DragEvent } from "react"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
@@ -11,10 +11,13 @@ import {
 } from "@/components/ui/select"
 import {
   Inbox, Mail, Phone, Building2, MessageSquare, Clock, CheckCircle2,
-  XCircle, UserCheck, Loader2, Trash2, RefreshCw,
+  XCircle, UserCheck, Loader2, Trash2, RefreshCw, List, LayoutGrid,
+  PauseCircle, HelpCircle,
 } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
+
+type ViewMode = "list" | "kanban"
 
 interface AccessRequest {
   id: string
@@ -28,11 +31,15 @@ interface AccessRequest {
 }
 
 const STATUS_CONFIG: Record<string, { label: string; className: string; icon: React.ReactNode }> = {
-  new:       { label: "Новая",      className: "bg-blue-500/15 text-blue-700",    icon: <Inbox className="size-3.5" /> },
-  contacted: { label: "Связались",  className: "bg-amber-500/15 text-amber-700",  icon: <Phone className="size-3.5" /> },
-  approved:  { label: "Одобрена",   className: "bg-emerald-500/15 text-emerald-700", icon: <CheckCircle2 className="size-3.5" /> },
-  rejected:  { label: "Отклонена",  className: "bg-red-500/15 text-red-700",      icon: <XCircle className="size-3.5" /> },
+  new:        { label: "Новый",        className: "bg-blue-500/15 text-blue-700",       icon: <Inbox className="size-3.5" /> },
+  contacted:  { label: "Был контакт",  className: "bg-amber-500/15 text-amber-700",     icon: <Phone className="size-3.5" /> },
+  deciding:   { label: "Решает",       className: "bg-purple-500/15 text-purple-700",   icon: <HelpCircle className="size-3.5" /> },
+  postponed:  { label: "Отложено",     className: "bg-gray-500/15 text-gray-700",       icon: <PauseCircle className="size-3.5" /> },
+  approved:   { label: "Подключён",    className: "bg-emerald-500/15 text-emerald-700", icon: <CheckCircle2 className="size-3.5" /> },
+  rejected:   { label: "Отменён",      className: "bg-red-500/15 text-red-700",         icon: <XCircle className="size-3.5" /> },
 }
+
+const KANBAN_COLUMNS = ["new", "contacted", "deciding", "postponed", "approved", "rejected"] as const
 
 function formatDate(d: string): string {
   return new Date(d).toLocaleString("ru-RU", {
@@ -44,6 +51,8 @@ export default function AccessRequestsPage() {
   const [requests, setRequests] = useState<AccessRequest[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState("all")
+  const [viewMode, setViewMode] = useState<ViewMode>("list")
+  const [draggedId, setDraggedId] = useState<string | null>(null)
 
   const fetchRequests = async () => {
     setLoading(true)
@@ -114,18 +123,39 @@ export default function AccessRequestsPage() {
               </Button>
             </div>
 
-            {/* Filter */}
-            <div className="flex items-center gap-3 mb-4">
+            {/* Filter + View Toggle */}
+            <div className="flex items-center justify-between mb-4">
               <Select value={filter} onValueChange={setFilter}>
-                <SelectTrigger className="h-8 w-44 text-xs"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="h-8 w-48 text-xs border border-input rounded-md"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Все заявки ({requests.length})</SelectItem>
                   <SelectItem value="new">Новые ({requests.filter((r) => r.status === "new").length})</SelectItem>
-                  <SelectItem value="contacted">Связались ({requests.filter((r) => r.status === "contacted").length})</SelectItem>
-                  <SelectItem value="approved">Одобренные ({requests.filter((r) => r.status === "approved").length})</SelectItem>
-                  <SelectItem value="rejected">Отклонённые ({requests.filter((r) => r.status === "rejected").length})</SelectItem>
+                  <SelectItem value="contacted">Был контакт ({requests.filter((r) => r.status === "contacted").length})</SelectItem>
+                  <SelectItem value="deciding">Решает ({requests.filter((r) => r.status === "deciding").length})</SelectItem>
+                  <SelectItem value="postponed">Отложено ({requests.filter((r) => r.status === "postponed").length})</SelectItem>
+                  <SelectItem value="approved">Подключён ({requests.filter((r) => r.status === "approved").length})</SelectItem>
+                  <SelectItem value="rejected">Отменён ({requests.filter((r) => r.status === "rejected").length})</SelectItem>
                 </SelectContent>
               </Select>
+
+              <div className="flex items-center gap-0.5 border border-input rounded-md p-0.5">
+                <Button
+                  size="sm"
+                  variant={viewMode === "list" ? "secondary" : "ghost"}
+                  className="h-7 w-7 p-0"
+                  onClick={() => setViewMode("list")}
+                >
+                  <List className="size-4" />
+                </Button>
+                <Button
+                  size="sm"
+                  variant={viewMode === "kanban" ? "secondary" : "ghost"}
+                  className="h-7 w-7 p-0"
+                  onClick={() => setViewMode("kanban")}
+                >
+                  <LayoutGrid className="size-4" />
+                </Button>
+              </div>
             </div>
 
             {/* Loading */}
@@ -143,8 +173,8 @@ export default function AccessRequestsPage() {
               </div>
             )}
 
-            {/* List */}
-            {!loading && filtered.length > 0 && (
+            {/* List View */}
+            {!loading && filtered.length > 0 && viewMode === "list" && (
               <div className="space-y-3">
                 {filtered.map((r) => {
                   const st = STATUS_CONFIG[r.status] ?? STATUS_CONFIG.new
@@ -200,7 +230,7 @@ export default function AccessRequestsPage() {
                               </Button>
                               <Button size="sm" className="h-7 text-[11px] gap-1" onClick={() => updateStatus(r.id, "approved")}>
                                 <UserCheck className="size-3" />
-                                Одобрить
+                                Подключить
                               </Button>
                             </>
                           )}
@@ -208,11 +238,11 @@ export default function AccessRequestsPage() {
                             <>
                               <Button size="sm" className="h-7 text-[11px] gap-1" onClick={() => updateStatus(r.id, "approved")}>
                                 <CheckCircle2 className="size-3" />
-                                Одобрить
+                                Подключить
                               </Button>
                               <Button size="sm" variant="outline" className="h-7 text-[11px] gap-1 text-destructive" onClick={() => updateStatus(r.id, "rejected")}>
                                 <XCircle className="size-3" />
-                                Отклонить
+                                Отменить
                               </Button>
                             </>
                           )}
@@ -222,6 +252,91 @@ export default function AccessRequestsPage() {
                             </Button>
                           )}
                         </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            {/* Kanban View */}
+            {!loading && viewMode === "kanban" && (
+              <div className="flex gap-3 overflow-x-auto pb-4">
+                {KANBAN_COLUMNS.map((colStatus) => {
+                  const config = STATUS_CONFIG[colStatus]
+                  const columnRequests = requests.filter((r) => r.status === colStatus)
+
+                  const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
+                    e.preventDefault()
+                    e.dataTransfer.dropEffect = "move"
+                  }
+
+                  const handleDrop = (e: DragEvent<HTMLDivElement>) => {
+                    e.preventDefault()
+                    const id = e.dataTransfer.getData("text/plain")
+                    if (id && id !== colStatus) {
+                      updateStatus(id, colStatus)
+                    }
+                    setDraggedId(null)
+                  }
+
+                  return (
+                    <div
+                      key={colStatus}
+                      className="flex-shrink-0 w-[240px] bg-muted/30 rounded-xl flex flex-col"
+                      onDragOver={handleDragOver}
+                      onDrop={handleDrop}
+                    >
+                      {/* Column Header */}
+                      <div className="p-3 pb-2 flex items-center gap-2">
+                        <Badge variant="secondary" className={cn("text-[10px] gap-1", config.className)}>
+                          {config.icon}{config.label}
+                        </Badge>
+                        <span className="text-xs text-muted-foreground font-medium">{columnRequests.length}</span>
+                      </div>
+
+                      {/* Column Cards */}
+                      <div className="flex-1 p-2 pt-0 space-y-2 min-h-[100px]">
+                        {columnRequests.map((r) => (
+                          <div
+                            key={r.id}
+                            draggable
+                            onDragStart={(e: DragEvent<HTMLDivElement>) => {
+                              e.dataTransfer.setData("text/plain", r.id)
+                              e.dataTransfer.effectAllowed = "move"
+                              setDraggedId(r.id)
+                            }}
+                            onDragEnd={() => setDraggedId(null)}
+                            className={cn(
+                              "border rounded-lg p-3 bg-card hover:shadow-sm transition-shadow cursor-grab active:cursor-grabbing",
+                              draggedId === r.id && "opacity-50"
+                            )}
+                          >
+                            <p className="font-medium text-sm truncate">{r.name}</p>
+                            <div className="mt-1.5 space-y-1 text-[11px] text-muted-foreground">
+                              <div className="flex items-center gap-1 truncate">
+                                <Mail className="size-3 shrink-0" />
+                                <span className="truncate">{r.email}</span>
+                              </div>
+                              {r.phone && (
+                                <div className="flex items-center gap-1">
+                                  <Phone className="size-3 shrink-0" />
+                                  <span>{r.phone}</span>
+                                </div>
+                              )}
+                              {r.companyName && (
+                                <div className="flex items-center gap-1 truncate">
+                                  <Building2 className="size-3 shrink-0" />
+                                  <span className="truncate">{r.companyName}</span>
+                                </div>
+                              )}
+                              <div className="flex items-center gap-1">
+                                <Clock className="size-3 shrink-0" />
+                                <span>{formatDate(r.createdAt)}</span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   )

@@ -79,7 +79,7 @@ const SOURCE_FILTER = [
   { value: "direct", label: "Прямой" },
 ]
 
-const FILTER_INPUT = "h-10 text-sm border border-gray-300 rounded-lg"
+const FILTER_INPUT = "h-10 text-sm border border-input rounded-md"
 
 // ─── Mock data ───────────────────────────────────────────────────────────────
 
@@ -116,7 +116,7 @@ function SortableHeader({
   const dir = isActive ? current.dir : null
   return (
     <button type="button" onClick={() => onToggle(column)}
-      className={cn("inline-flex items-center gap-1.5 text-sm font-semibold select-none transition-colors",
+      className={cn("inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider select-none transition-colors",
         isActive ? "text-foreground" : "text-muted-foreground hover:text-foreground")}>
       <ListFilter className={cn("size-4 transition-transform", dir === "desc" && "scale-y-[-1]", !isActive && "opacity-40")} />
       {label}
@@ -235,8 +235,8 @@ export default function CandidatesPage() {
                   <thead>
                     <tr className="border-b border-border bg-muted/40">
                       <th className="pl-5 pr-2 py-3 w-10"><Checkbox checked={allSelected} onCheckedChange={toggleAll} /></th>
-                      <th className="px-4 py-3 text-sm font-semibold text-muted-foreground">ФИО</th>
-                      <th className="px-4 py-3 text-sm font-semibold text-muted-foreground">Вакансия</th>
+                      <th className="px-4 py-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">ФИО</th>
+                      <th className="px-4 py-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Вакансия</th>
                       <th className="px-4 py-3"><SortableHeader label="Статус" column="status" current={colSort} onToggle={toggleColSort} /></th>
                       <th className="px-4 py-3"><SortableHeader label="Дата отклика" column="date" current={colSort} onToggle={toggleColSort} /></th>
                       <th className="px-4 py-3"><SortableHeader label="Источник" column="source" current={colSort} onToggle={toggleColSort} /></th>

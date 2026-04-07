@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { CompaniesTable, type SalesCompany } from "@/components/sales/companies-table"
 import { CompanyFormModal, type CompanyFormData } from "@/components/sales/company-form-modal"
-import { Building2, Plus, Search } from "lucide-react"
+import { Building2, Plus, Search, SlidersHorizontal, Settings2 } from "lucide-react"
 import { toast } from "sonner"
 
 const MOCK_COMPANIES: SalesCompany[] = [
@@ -41,7 +41,7 @@ export default function SalesClientsPage() {
       id: String(Date.now()),
       name: data.name,
       inn: data.inn || null,
-      kpp: data.kpp || null,
+      kpp: null,
       ogrn: data.ogrn || null,
       industry: data.industry || null,
       city: data.city || null,
@@ -99,12 +99,12 @@ export default function SalesClientsPage() {
 
             {/* Filters */}
             <div className="flex flex-wrap items-center gap-2 mb-4">
-              <div className="relative flex-1 min-w-[200px] max-w-xs">
+              <div className="relative flex-1 min-w-[240px] max-w-sm">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input className="pl-9 h-9" placeholder="Поиск по названию, ИНН..." value={search} onChange={(e) => setSearch(e.target.value)} />
               </div>
               <Select value={filterType} onValueChange={setFilterType}>
-                <SelectTrigger className="w-[150px] h-9"><SelectValue placeholder="Тип" /></SelectTrigger>
+                <SelectTrigger className="w-[150px] h-9 border border-input rounded-md"><SelectValue placeholder="Тип" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Все типы</SelectItem>
                   <SelectItem value="client">Клиент</SelectItem>
@@ -112,13 +112,15 @@ export default function SalesClientsPage() {
                 </SelectContent>
               </Select>
               <Select value={filterStatus} onValueChange={setFilterStatus}>
-                <SelectTrigger className="w-[150px] h-9"><SelectValue placeholder="Статус" /></SelectTrigger>
+                <SelectTrigger className="w-[150px] h-9 border border-input rounded-md"><SelectValue placeholder="Статус" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Все статусы</SelectItem>
                   <SelectItem value="active">Активная</SelectItem>
                   <SelectItem value="archive">Архив</SelectItem>
                 </SelectContent>
               </Select>
+              <Button variant="outline" size="sm" className="h-9 gap-1.5"><SlidersHorizontal className="w-3.5 h-3.5" />Фильтры</Button>
+              <Button variant="outline" size="sm" className="h-9 gap-1.5"><Settings2 className="w-3.5 h-3.5" />Настройки</Button>
             </div>
 
             {/* Table */}

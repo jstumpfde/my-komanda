@@ -123,59 +123,6 @@ export default function IntegrationsPage() {
 
             <div className="space-y-6">
 
-              {/* hh.ru */}
-              <div>
-                <h2 className="text-base font-semibold text-foreground mb-3">Джоб-борды</h2>
-                <Card>
-                  <CardContent className="p-5">
-                    <div className="flex items-center gap-3 mb-4">
-                      <div className="w-10 h-10 rounded-full bg-red-500 flex items-center justify-center text-white font-bold text-sm shrink-0">hh</div>
-                      <div className="flex-1">
-                        <p className="text-sm font-semibold text-foreground">HeadHunter (hh.ru)</p>
-                        <p className="text-xs text-muted-foreground">Публикация вакансий и импорт откликов</p>
-                      </div>
-                      {hhLoading ? (
-                        <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-                      ) : (
-                        <Badge variant="outline" className={cn("text-xs", hhStatus?.connected ? "bg-emerald-500/10 text-emerald-700 border-emerald-200 dark:text-emerald-400 dark:border-emerald-800" : "")}>
-                          {hhStatus?.connected ? <><CheckCircle2 className="w-3 h-3 mr-1" />Подключено</> : "Не подключено"}
-                        </Badge>
-                      )}
-                    </div>
-                    {hhStatus?.connected ? (
-                      <div className="space-y-2">
-                        <div className="text-xs text-muted-foreground space-y-0.5">
-                          {hhStatus.employerId && <p>ID работодателя: <span className="font-mono">{hhStatus.employerId}</span></p>}
-                          {hhStatus.tokenExpiresAt && (
-                            <p>Токен действует до: {new Date(hhStatus.tokenExpiresAt).toLocaleDateString("ru-RU")}</p>
-                          )}
-                        </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="w-full text-destructive hover:text-destructive"
-                          onClick={handleHhDisconnect}
-                          disabled={hhDisconnecting}
-                        >
-                          {hhDisconnecting ? <><Loader2 className="w-3 h-3 animate-spin mr-2" />Отключение...</> : "Отключить"}
-                        </Button>
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        <p className="text-xs text-muted-foreground">
-                          Подключите hh.ru для публикации вакансий и автоматического импорта откликов от кандидатов.
-                        </p>
-                        <Button className="w-full gap-1.5 bg-red-500 hover:bg-red-600 text-white" asChild>
-                          <a href="/api/integrations/hh/auth">
-                            <ExternalLink className="w-4 h-4" /> Подключить hh.ru
-                          </a>
-                        </Button>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              </div>
-
               {/* CRM Cards */}
               <div>
                 <h2 className="text-base font-semibold text-foreground mb-3">Интеграции с CRM</h2>

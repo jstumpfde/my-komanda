@@ -271,13 +271,13 @@ function TableView({ items }: { items: ReviewItem[] }) {
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b bg-muted/40">
-            <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Статья</th>
-            <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Автор</th>
-            <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Категория</th>
-            <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Статус</th>
-            <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Вопросов</th>
-            <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Ожидание</th>
-            <th className="text-left px-4 py-3 font-semibold text-muted-foreground w-10"></th>
+            <th className="text-left px-4 py-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Статья</th>
+            <th className="text-left px-4 py-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Автор</th>
+            <th className="text-left px-4 py-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Категория</th>
+            <th className="text-left px-4 py-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Статус</th>
+            <th className="text-left px-4 py-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Вопросов</th>
+            <th className="text-left px-4 py-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Ожидание</th>
+            <th className="text-left px-4 py-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider w-10"></th>
           </tr>
         </thead>
         <tbody>
@@ -430,7 +430,7 @@ export default function ReviewsPage() {
                 />
               </div>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="h-10 w-52">
+                <SelectTrigger className="h-10 w-52 border border-input rounded-md">
                   <SelectValue placeholder="Все статусы" />
                 </SelectTrigger>
                 <SelectContent>
@@ -440,7 +440,7 @@ export default function ReviewsPage() {
                 </SelectContent>
               </Select>
               <Select value={authorFilter} onValueChange={setAuthorFilter}>
-                <SelectTrigger className="h-10 w-52">
+                <SelectTrigger className="h-10 w-52 border border-input rounded-md">
                   <SelectValue placeholder="Все авторы" />
                 </SelectTrigger>
                 <SelectContent>
@@ -451,7 +451,7 @@ export default function ReviewsPage() {
                 </SelectContent>
               </Select>
               <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                <SelectTrigger className="h-10 w-52">
+                <SelectTrigger className="h-10 w-52 border border-input rounded-md">
                   <SelectValue placeholder="Все категории" />
                 </SelectTrigger>
                 <SelectContent>

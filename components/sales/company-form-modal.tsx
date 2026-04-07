@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Building2 } from "lucide-react"
+import { Building2, Search, Loader2 } from "lucide-react"
+import { toast } from "sonner"
 
 const INDUSTRIES = [
   "IT", "Финансы", "Ритейл", "Производство", "Строительство",
@@ -23,7 +24,6 @@ const REVENUE_RANGES = [
 export interface CompanyFormData {
   name: string
   inn: string
-  kpp: string
   ogrn: string
   industry: string
   city: string
@@ -38,7 +38,7 @@ export interface CompanyFormData {
 }
 
 const EMPTY_FORM: CompanyFormData = {
-  name: "", inn: "", kpp: "", ogrn: "", industry: "", city: "",
+  name: "", inn: "", ogrn: "", industry: "", city: "",
   address: "", phone: "", email: "", website: "", revenue: "",
   employeesCount: "", type: "client", description: "",
 }
@@ -53,6 +53,7 @@ interface CompanyFormModalProps {
 
 export function CompanyFormModal({ open, onOpenChange, onSubmit, initial, title = "Добавить компанию" }: CompanyFormModalProps) {
   const [form, setForm] = useState<CompanyFormData>({ ...EMPTY_FORM, ...initial })
+  const [innSearching, setInnSearching] = useState(false)
 
   const handleSubmit = () => {
     if (!form.name.trim()) return
@@ -62,6 +63,34 @@ export function CompanyFormModal({ open, onOpenChange, onSubmit, initial, title 
 
   const update = (key: keyof CompanyFormData, value: string) =>
     setForm((prev) => ({ ...prev, [key]: value }))
+
+  const handleInnSearch = async () => {
+    if (!form.inn.trim()) return
+    setInnSearching(true)
+    try {
+      const res = await fetch(`/api/companies/by-inn?inn=${encodeURIComponent(form.inn.trim())}`)
+      if (!res.ok) throw new Error()
+      const json = await res.json()
+      const suggestions = json?.suggestions ?? json?.data?.suggestions ?? []
+      if (suggestions.length > 0) {
+        const d = suggestions[0].data ?? {}
+        const s = suggestions[0]
+        setForm((prev) => ({
+          ...prev,
+          name: prev.name || s.value || "",
+          ogrn: d.ogrn || prev.ogrn,
+          city: d.address?.data?.city || d.address?.data?.settlement || prev.city,
+          address: d.address?.value || prev.address,
+        }))
+        toast.success("Компания найдена — данные заполнены")
+      } else {
+        toast.error("Компания не найдена")
+      }
+    } catch {
+      toast.error("Ошибка поиска")
+    }
+    setInnSearching(false)
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -79,14 +108,16 @@ export function CompanyFormModal({ open, onOpenChange, onSubmit, initial, title 
             <Input placeholder='ООО "Ромашка"' value={form.name} onChange={(e) => update("name", e.target.value)} />
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label>ИНН</Label>
-              <Input placeholder="7701234567" value={form.inn} onChange={(e) => update("inn", e.target.value)} />
-            </div>
-            <div className="space-y-1.5">
-              <Label>КПП</Label>
-              <Input placeholder="770101001" value={form.kpp} onChange={(e) => update("kpp", e.target.value)} />
+              <div className="relative">
+                <Input placeholder="7701234567" value={form.inn} onChange={(e) => update("inn", e.target.value.replace(/\D/g, "").slice(0, 12))} onKeyDown={(e) => { if (e.key === "Enter") handleInnSearch() }} className="pr-9" />
+                {innSearching
+                  ? <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-muted-foreground" />
+                  : <button type="button" onClick={handleInnSearch} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"><Search className="w-4 h-4" /></button>
+                }
+              </div>
             </div>
             <div className="space-y-1.5">
               <Label>ОГРН</Label>
@@ -98,7 +129,7 @@ export function CompanyFormModal({ open, onOpenChange, onSubmit, initial, title 
             <div className="space-y-1.5">
               <Label>Отрасль</Label>
               <Select value={form.industry} onValueChange={(v) => update("industry", v)}>
-                <SelectTrigger><SelectValue placeholder="Выберите" /></SelectTrigger>
+                <SelectTrigger className="border border-input rounded-md"><SelectValue placeholder="Выберите" /></SelectTrigger>
                 <SelectContent>
                   {INDUSTRIES.map((i) => <SelectItem key={i} value={i}>{i}</SelectItem>)}
                 </SelectContent>
@@ -135,7 +166,7 @@ export function CompanyFormModal({ open, onOpenChange, onSubmit, initial, title 
             <div className="space-y-1.5">
               <Label>Оборот</Label>
               <Select value={form.revenue} onValueChange={(v) => update("revenue", v)}>
-                <SelectTrigger><SelectValue placeholder="Выберите" /></SelectTrigger>
+                <SelectTrigger className="border border-input rounded-md"><SelectValue placeholder="Выберите" /></SelectTrigger>
                 <SelectContent>
                   {REVENUE_RANGES.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
                 </SelectContent>
@@ -143,12 +174,12 @@ export function CompanyFormModal({ open, onOpenChange, onSubmit, initial, title 
             </div>
             <div className="space-y-1.5">
               <Label>Сотрудников</Label>
-              <Input type="number" placeholder="50" value={form.employeesCount} onChange={(e) => update("employeesCount", e.target.value)} />
+              <Input type="number" placeholder="50" value={form.employeesCount} onChange={(e) => update("employeesCount", e.target.value)} className="w-32" />
             </div>
             <div className="space-y-1.5">
               <Label>Тип</Label>
               <Select value={form.type} onValueChange={(v) => update("type", v)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger className="border border-input rounded-md"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="client">Клиент</SelectItem>
                   <SelectItem value="partner">Партнёр</SelectItem>
@@ -159,7 +190,7 @@ export function CompanyFormModal({ open, onOpenChange, onSubmit, initial, title 
 
           <div className="space-y-1.5">
             <Label>Описание</Label>
-            <Textarea placeholder="Дополнительная информация о компании..." value={form.description} onChange={(e) => update("description", e.target.value)} rows={3} />
+            <Textarea placeholder="Дополнительная информация о компании..." value={form.description} onChange={(e) => update("description", e.target.value)} rows={3} className="bg-background border border-input" />
           </div>
         </div>
 

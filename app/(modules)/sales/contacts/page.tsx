@@ -107,19 +107,19 @@ export default function SalesContactsPage() {
 
             {/* Filters */}
             <div className="flex flex-wrap items-center gap-2 mb-4">
-              <div className="relative flex-1 min-w-[200px] max-w-xs">
+              <div className="relative flex-1 min-w-[230px] max-w-sm">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input className="pl-9 h-9" placeholder="Поиск по имени, email, телефону..." value={search} onChange={(e) => setSearch(e.target.value)} />
               </div>
               <Select value={filterCompany} onValueChange={setFilterCompany}>
-                <SelectTrigger className="w-[200px] h-9"><SelectValue placeholder="Компания" /></SelectTrigger>
+                <SelectTrigger className="w-[200px] h-9 border border-input rounded-md"><SelectValue placeholder="Компания" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Все компании</SelectItem>
                   {MOCK_COMPANIES.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
                 </SelectContent>
               </Select>
               <Select value={filterStatus} onValueChange={setFilterStatus}>
-                <SelectTrigger className="w-[150px] h-9"><SelectValue placeholder="Статус" /></SelectTrigger>
+                <SelectTrigger className="w-[150px] h-9 border border-input rounded-md"><SelectValue placeholder="Статус" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Все статусы</SelectItem>
                   <SelectItem value="active">Активный</SelectItem>

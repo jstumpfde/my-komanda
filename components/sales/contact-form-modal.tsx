@@ -23,13 +23,14 @@ export interface ContactFormData {
   telegram: string
   whatsapp: string
   isPrimary: boolean
+  preferredContact: string
   comment: string
 }
 
 const EMPTY_FORM: ContactFormData = {
   lastName: "", firstName: "", middleName: "", companyId: "", position: "",
   department: "", phone: "", mobile: "", email: "", telegram: "",
-  whatsapp: "", isPrimary: false, comment: "",
+  whatsapp: "", isPrimary: false, preferredContact: "", comment: "",
 }
 
 interface CompanyOption {
@@ -75,7 +76,7 @@ export function ContactFormModal({ open, onOpenChange, onSubmit, companies, init
         </DialogHeader>
 
         <div className="grid gap-4 py-2">
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label>Фамилия *</Label>
               <Input placeholder="Иванов" value={form.lastName} onChange={(e) => update("lastName", e.target.value)} />
@@ -84,16 +85,16 @@ export function ContactFormModal({ open, onOpenChange, onSubmit, companies, init
               <Label>Имя *</Label>
               <Input placeholder="Иван" value={form.firstName} onChange={(e) => update("firstName", e.target.value)} />
             </div>
-            <div className="space-y-1.5">
-              <Label>Отчество</Label>
-              <Input placeholder="Иванович" value={form.middleName} onChange={(e) => update("middleName", e.target.value)} />
-            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Отчество</Label>
+            <Input placeholder="Иванович" value={form.middleName} onChange={(e) => update("middleName", e.target.value)} />
           </div>
 
           <div className="space-y-1.5">
             <Label>Компания *</Label>
             <Select value={form.companyId} onValueChange={(v) => update("companyId", v)}>
-              <SelectTrigger><SelectValue placeholder="Выберите компанию" /></SelectTrigger>
+              <SelectTrigger className="border border-input rounded-md"><SelectValue placeholder="Выберите компанию" /></SelectTrigger>
               <SelectContent>
                 {companies.map((c) => (
                   <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
@@ -140,18 +141,32 @@ export function ContactFormModal({ open, onOpenChange, onSubmit, companies, init
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <Checkbox
-              id="isPrimary"
-              checked={form.isPrimary}
-              onCheckedChange={(checked) => update("isPrimary", !!checked)}
-            />
-            <Label htmlFor="isPrimary" className="cursor-pointer">Основной контакт</Label>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex items-center gap-2 pt-6">
+              <Checkbox
+                id="isPrimary"
+                checked={form.isPrimary}
+                onCheckedChange={(checked) => update("isPrimary", !!checked)}
+              />
+              <Label htmlFor="isPrimary" className="cursor-pointer">Основной контакт в компании</Label>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Предпочтительный способ связи</Label>
+              <Select value={form.preferredContact} onValueChange={(v) => update("preferredContact", v)}>
+                <SelectTrigger className="border border-input rounded-md"><SelectValue placeholder="Выберите" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="whatsapp">WhatsApp</SelectItem>
+                  <SelectItem value="telegram">Telegram</SelectItem>
+                  <SelectItem value="phone">Телефон</SelectItem>
+                  <SelectItem value="email">Email</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           <div className="space-y-1.5">
             <Label>Комментарий</Label>
-            <Textarea placeholder="Дополнительная информация..." value={form.comment} onChange={(e) => update("comment", e.target.value)} rows={3} />
+            <Textarea placeholder="Дополнительная информация..." value={form.comment} onChange={(e) => update("comment", e.target.value)} rows={3} className="bg-background border border-input" />
           </div>
         </div>
 
