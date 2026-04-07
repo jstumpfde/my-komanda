@@ -78,7 +78,7 @@ export async function POST(req: NextRequest) {
 
     const apiKey = process.env.ANTHROPIC_API_KEY
     if (!apiKey) {
-      return apiSuccess(fallbackParse(body.text.trim()))
+      return apiSuccess({ data: fallbackParse(body.text.trim()) })
     }
 
     const response = await client.messages.create({
@@ -112,7 +112,8 @@ export async function POST(req: NextRequest) {
     }
 
     const result = normalize(parsed)
-    return apiSuccess(result)
+    console.log("[parse-vacancy] AI result:", JSON.stringify(result, null, 2).slice(0, 500))
+    return apiSuccess({ data: result })
   } catch (err) {
     if (err instanceof Response) return err
     console.error("parse-vacancy error:", err)
