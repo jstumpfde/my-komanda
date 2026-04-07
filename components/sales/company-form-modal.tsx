@@ -190,7 +190,7 @@ export function CompanyFormModal({ open, onOpenChange, onSubmit, initial, title 
 
           <div className="space-y-1.5">
             <Label>Описание</Label>
-            <Textarea placeholder="Дополнительная информация о компании..." value={form.description} onChange={(e) => update("description", e.target.value)} rows={3} className="bg-background border border-input" />
+            <Textarea placeholder="Дополнительная информация о компании..." value={form.description} onChange={(e) => update("description", e.target.value)} rows={3} className="bg-[var(--input-bg)] border border-input" />
           </div>
         </div>
 

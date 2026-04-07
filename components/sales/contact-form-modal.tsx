@@ -166,7 +166,7 @@ export function ContactFormModal({ open, onOpenChange, onSubmit, companies, init
 
           <div className="space-y-1.5">
             <Label>Комментарий</Label>
-            <Textarea placeholder="Дополнительная информация..." value={form.comment} onChange={(e) => update("comment", e.target.value)} rows={3} className="bg-background border border-input" />
+            <Textarea placeholder="Дополнительная информация..." value={form.comment} onChange={(e) => update("comment", e.target.value)} rows={3} className="bg-[var(--input-bg)] border border-input" />
           </div>
         </div>
 
