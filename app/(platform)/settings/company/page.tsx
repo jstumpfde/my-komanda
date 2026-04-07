@@ -173,12 +173,30 @@ export default function CompanyProfilePage() {
   const handleSave = async () => {
     setSaving(true)
     try {
-      await updateCompanyApi({ name: shortName || fullName || undefined, inn: inn || undefined, kpp: kpp || undefined, legal_address: legalAddress || undefined, city: postalCity || undefined, postal_code: postalIndex || undefined, industry: industry || undefined })
+      await updateCompanyApi({
+        name: shortName || fullName || undefined,
+        inn: inn || undefined,
+        kpp: kpp || undefined,
+        legal_address: legalAddress || undefined,
+        city: postalCity || undefined,
+        postal_code: postalIndex || undefined,
+        industry: industry || undefined,
+        ogrn: ogrn || undefined,
+        full_name: fullName || undefined,
+        director: director || undefined,
+        description: description || undefined,
+        email: email || undefined,
+        phone: phone || undefined,
+        website: website || undefined,
+        employee_count: employeeCount ? parseInt(employeeCount, 10) || undefined : undefined,
+        registration_date: registrationDate || undefined,
+        office_address: officeAddress || undefined,
+        postal_address: (postalSameAsLegal ? legalAddress : postalAddress) || undefined,
+      })
       toast.success("Профиль компании сохранён")
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Ошибка"
-      if (msg.includes("404") || msg.toLowerCase().includes("no company")) toast.success("Данные сохранены локально")
-      else toast.error(`Ошибка: ${msg}`)
+      toast.error(`Ошибка: ${msg}`)
     } finally { setSaving(false) }
   }
 

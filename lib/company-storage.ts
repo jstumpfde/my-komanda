@@ -210,6 +210,16 @@ export interface ApiCompanyUpdatePayload {
   brand_bg_color?: string
   brand_text_color?: string
   custom_theme?: Record<string, string>
+  ogrn?: string
+  full_name?: string
+  director?: string
+  description?: string
+  email?: string
+  phone?: string
+  employee_count?: number
+  registration_date?: string
+  office_address?: string
+  postal_address?: string
 }
 
 /** GET /api/companies — fetch the current user's company from the DB */

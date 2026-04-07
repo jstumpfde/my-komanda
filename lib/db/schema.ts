@@ -83,6 +83,16 @@ export const companies = pgTable("companies", {
   postalCode:         text("postal_code"),
   foundedYear:        integer("founded_year"),
   revenueRange:       text("revenue_range"),           // Solo wizard step-1
+  ogrn:               text("ogrn"),
+  fullName:           text("full_name"),
+  director:           text("director"),
+  description:        text("description"),
+  email:              text("email"),
+  phone:              text("phone"),
+  employeeCount:      integer("employee_count"),
+  registrationDate:   text("registration_date"),     // ISO date string
+  officeAddress:      text("office_address"),
+  postalAddress:      text("postal_address"),
   website:            text("website"),
   crmStatus:          text("crm_status"),              // 'active'|'exists_unused'|'none'
   crmName:            text("crm_name"),
