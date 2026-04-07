@@ -41,7 +41,7 @@ export default function RootLayout({
         <Providers>
           {children}
         </Providers>
-        <Toaster position="bottom-right" />
+        <Toaster position="top-right" />
         <Analytics />
       </body>
     </html>

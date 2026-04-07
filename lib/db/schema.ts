@@ -1119,6 +1119,16 @@ export const visitLog = pgTable("visit_log", {
   createdAt: timestamp("created_at").defaultNow(),
 })
 
+// ─── Custom Skills / Items ───────────────────────────────────────────────────
+
+export const customSkills = pgTable("custom_skills", {
+  id:        uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  name:      text("name").notNull(),
+  type:      text("type").notNull().default("skill"), // 'skill' | 'condition' | 'stop_factor' | 'parameter'
+  createdAt: timestamp("created_at").defaultNow(),
+}, (t) => [unique().on(t.companyId, t.name, t.type)])
+
 // ─── Custom Vacancy Categories ───────────────────────────────────────────────
 
 export const customVacancyCategories = pgTable("custom_vacancy_categories", {

@@ -291,13 +291,22 @@ function Section({ title, number, children, filled }: {
 
 // ─── Tag input ──────────────────────────────────────────────────────────────
 
-function TagInput({ tags, onChange, placeholder }: {
-  tags: string[]; onChange: (t: string[]) => void; placeholder: string
+function TagInput({ tags, onChange, placeholder, customType }: {
+  tags: string[]; onChange: (t: string[]) => void; placeholder: string; customType?: string
 }) {
   const [input, setInput] = useState("")
   const add = () => {
     const v = input.trim()
-    if (v && !tags.includes(v)) onChange([...tags, v])
+    if (v && !tags.includes(v)) {
+      onChange([...tags, v])
+      if (customType) {
+        fetch("/api/custom-items", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: v, type: customType }),
+        }).catch(() => {})
+      }
+    }
     setInput("")
   }
   return (
@@ -330,17 +339,44 @@ function TagInput({ tags, onChange, placeholder }: {
 
 // ─── Tag input with suggestions ─────────────────────────────────────────────
 
-function TagInputWithSuggestions({ tags, onChange, placeholder, suggestions }: {
-  tags: string[]; onChange: (t: string[]) => void; placeholder: string; suggestions: string[]
+function TagInputWithSuggestions({ tags, onChange, placeholder, suggestions, customType }: {
+  tags: string[]; onChange: (t: string[]) => void; placeholder: string; suggestions: string[]; customType?: string
 }) {
   const [input, setInput] = useState("")
   const [dropdownOpen, setDropdownOpen] = useState(false)
-  const available = suggestions.filter(s => !tags.includes(s))
+  const [customItems, setCustomItems] = useState<string[]>([])
+
+  useEffect(() => {
+    if (!customType) return
+    fetch(`/api/custom-items?type=${customType}`)
+      .then(r => r.ok ? r.json() : null)
+      .then((data: { items?: { name: string }[] } | null) => {
+        if (data?.items) setCustomItems(data.items.map(i => i.name))
+      })
+      .catch(() => {})
+  }, [customType])
+
+  const allSuggestions = useMemo(() => {
+    const set = new Set([...suggestions, ...customItems])
+    return Array.from(set)
+  }, [suggestions, customItems])
+
+  const available = allSuggestions.filter(s => !tags.includes(s))
 
   const addCustom = () => {
     const v = input.trim()
     if (v && !tags.includes(v)) {
       onChange([...tags, v])
+      if (customType && !suggestions.includes(v)) {
+        fetch("/api/custom-items", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: v, type: customType }),
+        })
+          .then(r => r.ok ? r.json() : null)
+          .then(() => { if (!customItems.includes(v)) setCustomItems(prev => [...prev, v]) })
+          .catch(() => {})
+      }
       setInput("")
     }
   }
@@ -630,7 +666,7 @@ function QuestionEditor({ questions, onChange }: {
 
 // ─── Inline add button with input ────────────────────────────────────────────
 
-function AddCustomInline({ placeholder, onAdd }: { placeholder: string; onAdd: (name: string) => void }) {
+function AddCustomInline({ placeholder, onAdd, itemType }: { placeholder: string; onAdd: (name: string) => void; itemType?: string }) {
   const [editing, setEditing] = useState(false)
   const [value, setValue] = useState("")
 
@@ -638,6 +674,13 @@ function AddCustomInline({ placeholder, onAdd }: { placeholder: string; onAdd: (
     const name = value.trim()
     if (name) {
       onAdd(name)
+      if (itemType) {
+        fetch("/api/custom-items", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, type: itemType }),
+        }).catch(() => {})
+      }
       setValue("")
       setEditing(false)
     }
@@ -793,6 +836,7 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
     return saved ? migrateAnketa(saved) : emptyAnketa()
   })
   const [saving, setSaving] = useState(false)
+  const [previewOpen, setPreviewOpen] = useState(false)
 
   const handleWizardComplete = useCallback((result: ParsedVacancy) => {
     // Find closest positionCategory
@@ -1045,32 +1089,20 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
         {/* Skills */}
         <div className="space-y-1.5">
           <Label className="text-xs">Обязательные навыки</Label>
-          <TagInputWithSuggestions tags={data.requiredSkills} onChange={v => set("requiredSkills", v)} placeholder="Добавить навык..." suggestions={REQUIRED_SKILL_SUGGESTIONS} />
+          <TagInputWithSuggestions tags={data.requiredSkills} onChange={v => set("requiredSkills", v)} placeholder="Добавить навык..." suggestions={REQUIRED_SKILL_SUGGESTIONS} customType="skill" />
         </div>
         <div className="space-y-1.5">
           <Label className="text-xs">Желательные навыки</Label>
-          <TagInputWithSuggestions tags={data.desiredSkills} onChange={v => set("desiredSkills", v)} placeholder="Добавить навык..." suggestions={DESIRED_SKILL_SUGGESTIONS} />
+          <TagInputWithSuggestions tags={data.desiredSkills} onChange={v => set("desiredSkills", v)} placeholder="Добавить навык..." suggestions={DESIRED_SKILL_SUGGESTIONS} customType="skill" />
         </div>
         <div className="space-y-1.5">
           <Label className="text-xs text-destructive/80">Неприемлемо</Label>
-          <TagInputWithSuggestions tags={data.unacceptableSkills} onChange={v => set("unacceptableSkills", v)} placeholder="Что неприемлемо..." suggestions={UNACCEPTABLE_SUGGESTIONS} />
-        </div>
-
-        {/* Experience */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="space-y-1.5">
-            <Label className="text-xs">Опыт минимальный (лет)</Label>
-            <Input value={data.experienceMin} onChange={e => set("experienceMin", e.target.value)} placeholder="1" className="h-9 bg-[var(--input-bg)] border border-input" type="number" />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">Опыт идеальный (лет)</Label>
-            <Input value={data.experienceIdeal} onChange={e => set("experienceIdeal", e.target.value)} placeholder="3" className="h-9 bg-[var(--input-bg)] border border-input" type="number" />
-          </div>
+          <TagInputWithSuggestions tags={data.unacceptableSkills} onChange={v => set("unacceptableSkills", v)} placeholder="Что неприемлемо..." suggestions={UNACCEPTABLE_SUGGESTIONS} customType="skill" />
         </div>
 
         {/* Stop factors */}
         <div className="space-y-2 pt-2 border-t">
-          <Label className="text-xs font-semibold">Стоп-факторы</Label>
+          <Label className="text-xs font-semibold">Критерии отбора</Label>
           <div className="space-y-2">
             {data.stopFactors.map((f, idx) => (
               <div key={f.id}>
@@ -1137,6 +1169,7 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
           </div>
           <AddCustomInline
             placeholder="Название стоп-фактора..."
+            itemType="stop_factor"
             onAdd={name => set("stopFactors", [...data.stopFactors, { id: `sf_${Date.now()}`, label: name, enabled: true, custom: true }])}
           />
         </div>
@@ -1191,6 +1224,7 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
           </div>
           <AddCustomInline
             placeholder="Название параметра..."
+            itemType="parameter"
             onAdd={name => set("desiredParams", [...data.desiredParams, { id: `dp_${Date.now()}`, label: name, enabled: true, weight: 3, custom: true }])}
           />
         </div>
@@ -1218,7 +1252,7 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
             ))}
           </div>
         )}
-        <TagInput tags={[]} onChange={tags => { if (tags.length > 0) set("conditionsCustom", [...data.conditionsCustom, ...tags]) }} placeholder="Добавить своё условие..." />
+        <TagInput tags={[]} onChange={tags => { if (tags.length > 0) set("conditionsCustom", [...data.conditionsCustom, ...tags]) }} placeholder="Добавить своё условие..." customType="condition" />
       </Section>
 
       {/* ── 7. AI-генерация ── */}
@@ -1295,7 +1329,7 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
 
       {/* Actions */}
       <div className="flex items-center gap-3 justify-end mt-4">
-        <Button variant="outline" size="sm" className="gap-1.5 h-9 text-xs" onClick={() => toast("Предпросмотр вакансии будет доступен в ближайшем обновлении")}>
+        <Button variant="outline" size="sm" className="gap-1.5 h-9 text-xs" onClick={() => setPreviewOpen(true)}>
           <Eye className="w-3.5 h-3.5" />
           Предпросмотр вакансии
         </Button>
@@ -1304,6 +1338,73 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
           Сохранить
         </Button>
       </div>
+
+      {/* Preview modal */}
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="sm:max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{data.vacancyTitle || "Без названия"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 text-sm">
+            {(data.positionCity || data.positionCategory) && (
+              <div className="flex flex-wrap gap-2">
+                {data.positionCity && <Badge variant="secondary">{data.positionCity}</Badge>}
+                {data.positionCategory && (
+                  <Badge variant="outline">
+                    {POSITION_CATEGORY_OPTIONS.find(o => o.value === data.positionCategory)?.label || data.positionCategory}
+                  </Badge>
+                )}
+                {data.workFormats.map(f => <Badge key={f} variant="outline">{f}</Badge>)}
+                {data.employment.map(e => <Badge key={e} variant="outline">{e}</Badge>)}
+              </div>
+            )}
+            {(data.salaryFrom || data.salaryTo) && (
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground mb-1">Зарплата</p>
+                <p>{[data.salaryFrom && `от ${data.salaryFrom}`, data.salaryTo && `до ${data.salaryTo}`].filter(Boolean).join(" ")} ₽</p>
+              </div>
+            )}
+            {data.bonus && (
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground mb-1">Бонусы</p>
+                <p>{data.bonus}</p>
+              </div>
+            )}
+            {data.responsibilities && (
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground mb-1">Обязанности</p>
+                <div className="whitespace-pre-line">{data.responsibilities}</div>
+              </div>
+            )}
+            {data.requirements && (
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground mb-1">Требования</p>
+                <div className="whitespace-pre-line">{data.requirements}</div>
+              </div>
+            )}
+            {data.requiredSkills.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground mb-1">Обязательные навыки</p>
+                <div className="flex flex-wrap gap-1.5">{data.requiredSkills.map(s => <Badge key={s} variant="secondary" className="text-xs">{s}</Badge>)}</div>
+              </div>
+            )}
+            {data.desiredSkills.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground mb-1">Желательные навыки</p>
+                <div className="flex flex-wrap gap-1.5">{data.desiredSkills.map(s => <Badge key={s} variant="outline" className="text-xs">{s}</Badge>)}</div>
+              </div>
+            )}
+            {(data.conditions.length > 0 || data.conditionsCustom.length > 0) && (
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground mb-1">Условия</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {[...data.conditions, ...data.conditionsCustom].map(c => <Badge key={c} variant="secondary" className="text-xs">{c}</Badge>)}
+                </div>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
