@@ -12,12 +12,12 @@ import { Slider } from "@/components/ui/slider"
 import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ChevronDown, ChevronUp, Plus, X, Save, Loader2, Trash2, GripVertical, Eye, Sparkles, Copy, Check, Pencil } from "lucide-react"
+import { ChevronDown, ChevronUp, Plus, X, Save, Loader2, Trash2, GripVertical, Eye, Copy } from "lucide-react"
 import { toast } from "sonner"
 import { POSITION_CATEGORIES } from "@/lib/position-classifier"
 import { type Question, type QuestionAnswerType, defaultQuestion } from "@/lib/course-types"
 import { CompanySelector } from "@/components/vacancies/company-selector"
-import { AnketaWizard, type ParsedVacancy } from "@/components/vacancies/anketa-wizard"
+import { type ParsedVacancy } from "@/components/vacancies/anketa-wizard"
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -640,7 +640,6 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
     return saved ? migrateAnketa(saved) : emptyAnketa()
   })
   const [saving, setSaving] = useState(false)
-  const [showWizard, setShowWizard] = useState(false)
 
   const handleWizardComplete = useCallback((result: ParsedVacancy) => {
     // Find closest positionCategory
@@ -696,7 +695,6 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
           .then((json: { data: ParsedVacancy }) => handleWizardComplete(json.data))
           .catch(() => {
             toast.error("Не удалось автоматически заполнить анкету")
-            setShowWizard(true)
           })
       }
     } catch {}
@@ -770,21 +768,11 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
   }, [])
 
   return (
-    <>
-    <AnketaWizard
-      open={showWizard}
-      onOpenChange={setShowWizard}
-      onComplete={handleWizardComplete}
-      initialTitle={data.vacancyTitle}
-    />
     <div className="space-y-4" onBlur={handleBlur}>
-      {/* Progress + Wizard button */}
+      {/* Progress */}
       <div className="flex items-center gap-3">
         <Progress value={progress} className="flex-1 h-2" />
         <span className="text-sm text-muted-foreground font-medium whitespace-nowrap">{progress}%</span>
-        <Button variant="outline" size="sm" className="gap-1.5 shrink-0" onClick={() => setShowWizard(true)}>
-          <Sparkles className="w-3.5 h-3.5" /> AI-заполнение
-        </Button>
       </div>
 
       {/* ── Название вакансии (top-level) ── */}
@@ -795,7 +783,9 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
           onChange={e => { set("vacancyTitle", e.target.value); onTitleChange?.(e.target.value) }}
           placeholder="Менеджер по продажам"
           className="h-11 text-lg bg-[var(--input-bg)] border border-input"
+          maxLength={50}
         />
+        <p className="text-xs text-muted-foreground text-right">{data.vacancyTitle.length}/50</p>
       </div>
 
       {/* ── 1. Компания ── */}
@@ -849,9 +839,9 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
             ))}
           </div>
         </div>
-        <div className="space-y-1.5 max-w-xs">
+        <div className="space-y-1.5">
           <Label className="text-xs">Город</Label>
-          <Input value={data.positionCity} onChange={e => set("positionCity", e.target.value)} placeholder="Москва" className="h-9 bg-[var(--input-bg)] border border-input" />
+          <Input value={data.positionCity} onChange={e => set("positionCity", e.target.value)} placeholder="Москва" className="h-9 bg-[var(--input-bg)] border border-input w-full" />
         </div>
       </Section>
 
@@ -1162,6 +1152,5 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
         </Button>
       </div>
     </div>
-    </>
   )
 }

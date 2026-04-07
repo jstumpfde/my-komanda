@@ -568,7 +568,7 @@ export default function VacancyPage() {
                     <input autoFocus className="text-xl sm:text-2xl font-semibold text-foreground bg-transparent border-b-2 border-primary outline-none px-0 py-0.5 min-w-[200px]" value={internalName} onChange={(e) => setInternalName(e.target.value)} onBlur={() => setIsEditingName(false)} onKeyDown={(e) => { if (e.key === "Enter") setIsEditingName(false) }} placeholder="Название" />
                   ) : (
                     <button className="flex items-center gap-2 group text-left" onClick={() => setIsEditingName(true)}>
-                      <h1 className="text-xl sm:text-2xl font-semibold text-foreground">{internalName || vacancyTitle}</h1>
+                      <h1 className="text-xl sm:text-2xl font-semibold text-foreground line-clamp-2">{internalName || vacancyTitle}</h1>
                       <Pencil className="size-3.5 text-muted-foreground/0 group-hover:text-muted-foreground transition-colors" />
                     </button>
                   )}
@@ -593,11 +593,6 @@ export default function VacancyPage() {
                 <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs text-muted-foreground" disabled={duplicating} onClick={handleDuplicate}>
                   {duplicating ? <Loader2 className="size-3.5 animate-spin" /> : <Copy className="size-3.5" />}Создать похожую
                 </Button>
-                {canAdd && (
-                  <Button size="sm" className="h-8 gap-1.5 text-xs" onClick={() => setAddDialogOpen(true)}>
-                    <Plus className="size-3.5" />Добавить
-                  </Button>
-                )}
               </div>
             </div>
 

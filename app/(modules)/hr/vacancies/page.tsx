@@ -831,7 +831,7 @@ export default function VacanciesPage() {
 
       {/* ── Create vacancy dialog ── */}
       <Dialog open={createDialogOpen} onOpenChange={(open) => { setCreateDialogOpen(open); if (!open) resetCreateDialog() }}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-xl">
           <DialogHeader>
             <DialogTitle>Создать вакансию</DialogTitle>
           </DialogHeader>
@@ -844,6 +844,7 @@ export default function VacanciesPage() {
                 onChange={(e) => setNewVacancyTitle(e.target.value)}
                 placeholder="Менеджер по продажам"
                 className="h-10 border border-input"
+                maxLength={50}
                 onKeyDown={(e) => { if (e.key === "Enter" && newVacancyTitle.trim()) handleCreateVacancy() }}
                 autoFocus
               />
@@ -866,7 +867,7 @@ export default function VacanciesPage() {
               {uploadedFile ? (
                 <div className="flex items-center gap-2 p-3 rounded-lg border bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800">
                   <CheckCircle2 className="size-4 text-emerald-600 shrink-0" />
-                  <span className="text-sm text-emerald-700 dark:text-emerald-400 flex-1 truncate">{uploadedFile.name}</span>
+                  <span className="text-sm text-emerald-700 dark:text-emerald-400 flex-1 break-all">{uploadedFile.name}</span>
                   <button type="button" onClick={() => setUploadedFile(null)} className="text-muted-foreground hover:text-destructive shrink-0">
                     <X className="size-3.5" />
                   </button>
