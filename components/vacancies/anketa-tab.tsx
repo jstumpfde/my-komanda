@@ -847,6 +847,8 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
   })
   const [saving, setSaving] = useState(false)
   const [previewOpen, setPreviewOpen] = useState(false)
+  const [aiLoading, setAiLoading] = useState(false)
+  const [aiLoadingStep, setAiLoadingStep] = useState(0)
 
   const handleWizardComplete = useCallback((result: ParsedVacancy) => {
     // Find closest positionCategory
@@ -892,7 +894,8 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
       const aiText = sessionStorage.getItem("vacancy_ai_text")
       if (aiText) {
         sessionStorage.removeItem("vacancy_ai_text")
-        // Auto-run AI parsing
+        setAiLoading(true)
+        setAiLoadingStep(0)
         fetch("/api/ai/parse-vacancy", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -903,10 +906,18 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
           .catch(() => {
             toast.error("Не удалось автоматически заполнить анкету")
           })
+          .finally(() => setAiLoading(false))
       }
     } catch {}
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Rotate AI loading messages
+  useEffect(() => {
+    if (!aiLoading) return
+    const timer = setInterval(() => setAiLoadingStep(s => s + 1), 4000)
+    return () => clearInterval(timer)
+  }, [aiLoading])
 
   const set = useCallback(<K extends keyof AnketaData>(key: K, value: AnketaData[K]) => {
     setData(prev => ({ ...prev, [key]: value }))
@@ -974,8 +985,24 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
     })
   }, [])
 
+  const AI_LOADING_MESSAGES = [
+    "AI анализирует вакансию...",
+    "Извлекаю обязанности и требования...",
+    "Определяю навыки и условия...",
+    "Формирую анкету...",
+    "Почти готово...",
+  ]
+
   return (
-    <div className="space-y-4" onBlur={handleBlur}>
+    <div className="relative space-y-4" onBlur={handleBlur}>
+      {aiLoading && (
+        <div className="absolute inset-0 bg-white/80 dark:bg-gray-950/80 backdrop-blur-sm z-50 flex items-center justify-center rounded-lg">
+          <div className="flex flex-col items-center gap-3">
+            <Loader2 className="w-8 h-8 text-primary animate-spin" />
+            <p className="text-sm font-medium text-foreground">{AI_LOADING_MESSAGES[aiLoadingStep % AI_LOADING_MESSAGES.length]}</p>
+          </div>
+        </div>
+      )}
       {/* Progress */}
       <div className="flex items-center gap-3">
         <Progress value={progress} className="flex-1 h-2" />
