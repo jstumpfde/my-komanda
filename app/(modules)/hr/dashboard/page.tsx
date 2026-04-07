@@ -177,11 +177,11 @@ function DashboardContent() {
             {/* ═══ Block 2: 5 Metrics ═══ */}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
               {[
-                { label: "Активных вакансий", value: "4", trend: "+2 за неделю", icon: Briefcase, bg: "bg-emerald-500" },
-                { label: "Всего кандидатов", value: "445", trend: "+68 за неделю", icon: Users, bg: "bg-blue-500" },
-                { label: "Нанято за месяц", value: "3", trend: "цель: 5", icon: UserCheck, bg: "bg-purple-500" },
-                { label: "Ср. время закрытия", value: "18 дн", trend: "цель: 14 дн", icon: Clock, bg: "bg-orange-500" },
-                { label: "Конверсия воронки", value: "12%", trend: "цель: 15%", icon: TrendingUp, bg: "bg-indigo-500" },
+                { label: "Активных вакансий", value: "4", trend: "+2 за неделю", icon: Briefcase, bg: "bg-emerald-400" },
+                { label: "Всего кандидатов", value: "445", trend: "+68 за неделю", icon: Users, bg: "bg-blue-400" },
+                { label: "Нанято за месяц", value: "3", trend: "цель: 5", icon: UserCheck, bg: "bg-purple-400" },
+                { label: "Ср. время закрытия", value: "18 дн", trend: "цель: 14 дн", icon: Clock, bg: "bg-orange-400" },
+                { label: "Конверсия воронки", value: "12%", trend: "цель: 15%", icon: TrendingUp, bg: "bg-indigo-400" },
               ].map((m, i) => (
                 <div key={i} className={cn("rounded-xl shadow-sm hover:shadow-md transition-shadow p-4 text-white", m.bg)}>
                   <div className="flex items-center gap-1.5 mb-2">
