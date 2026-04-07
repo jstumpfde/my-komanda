@@ -12,12 +12,12 @@ import { Slider } from "@/components/ui/slider"
 import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ChevronDown, ChevronUp, Plus, X, Save, Loader2, Trash2, GripVertical, Eye, Sparkles } from "lucide-react"
+import { ChevronDown, ChevronUp, Plus, X, Save, Loader2, Trash2, GripVertical, Eye, Sparkles, Copy, Check, Pencil } from "lucide-react"
 import { toast } from "sonner"
 import { POSITION_CATEGORIES } from "@/lib/position-classifier"
 import { type Question, type QuestionAnswerType, defaultQuestion } from "@/lib/course-types"
 import { CompanySelector } from "@/components/vacancies/company-selector"
-import { AnketaWizard, type WizardResult } from "@/components/vacancies/anketa-wizard"
+import { AnketaWizard, type ParsedVacancy } from "@/components/vacancies/anketa-wizard"
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -59,6 +59,9 @@ interface AnketaData {
   conditionsCustom: string[]
   // removed: questions (moved to Demonstration)
   questions: Question[]
+  // 7. AI-генерация
+  screeningQuestions: string[]
+  hhDescription: string
 }
 
 interface StopFactor {
@@ -193,6 +196,7 @@ function emptyAnketa(): AnketaData {
     desiredParams: DEFAULT_DESIRED_PARAMS.map(p => ({ ...p })),
     conditions: [], conditionsCustom: [],
     questions: [],
+    screeningQuestions: [], hhDescription: "",
   }
 }
 
@@ -638,23 +642,37 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
   const [saving, setSaving] = useState(false)
   const [showWizard, setShowWizard] = useState(false)
 
-  const handleWizardComplete = useCallback((result: WizardResult) => {
+  const handleWizardComplete = useCallback((result: ParsedVacancy) => {
+    // Find closest positionCategory
+    const catMatch = POSITION_CATEGORY_OPTIONS.find(o =>
+      o.label.toLowerCase().includes((result.positionCategory || "").toLowerCase()) ||
+      (result.positionCategory || "").toLowerCase().includes(o.label.toLowerCase())
+    )
+
     setData(prev => ({
       ...prev,
-      vacancyTitle: result.positionTitle,
-      workFormats: result.workFormats,
-      employment: result.employment,
-      positionCity: result.positionCity,
-      salaryFrom: result.salaryFrom,
-      salaryTo: result.salaryTo,
-      requiredSkills: result.requiredSkills,
-      desiredSkills: result.desiredSkills,
-      unacceptableSkills: result.stopFactors,
-      conditions: result.conditions,
+      vacancyTitle: result.positionTitle || prev.vacancyTitle,
+      positionCategory: catMatch?.value || prev.positionCategory,
+      industry: result.industry || prev.industry,
+      positionCity: result.positionCity || prev.positionCity,
+      workFormats: result.workFormats.length > 0 ? result.workFormats : prev.workFormats,
+      employment: result.employment.length > 0 ? result.employment : prev.employment,
+      salaryFrom: result.salaryFrom || prev.salaryFrom,
+      salaryTo: result.salaryTo || prev.salaryTo,
+      bonus: result.bonus || prev.bonus,
+      responsibilities: result.responsibilities || prev.responsibilities,
+      requirements: result.requirements || prev.requirements,
+      requiredSkills: result.requiredSkills.length > 0 ? result.requiredSkills : prev.requiredSkills,
+      desiredSkills: result.desiredSkills.length > 0 ? result.desiredSkills : prev.desiredSkills,
+      unacceptableSkills: result.unacceptableSkills.length > 0 ? result.unacceptableSkills : prev.unacceptableSkills,
+      experienceMin: result.experienceMin || prev.experienceMin,
+      experienceIdeal: result.experienceIdeal || prev.experienceIdeal,
+      conditions: result.conditions.length > 0 ? result.conditions : prev.conditions,
+      screeningQuestions: result.screeningQuestions.length > 0 ? result.screeningQuestions : prev.screeningQuestions,
+      hhDescription: result.hhDescription || prev.hhDescription,
     }))
     if (result.positionTitle) onTitleChange?.(result.positionTitle)
-    setShowWizard(false)
-    toast.success("Анкета заполнена из шаблона")
+    toast.success("Анкета заполнена! Проверьте и дополните.")
   }, [onTitleChange])
 
   useEffect(() => {
@@ -728,19 +746,14 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
     })
   }, [])
 
-  if (showWizard) {
-    return (
-      <div className="py-2">
-        <AnketaWizard
-          onComplete={handleWizardComplete}
-          onSkip={() => setShowWizard(false)}
-          initialTitle={data.vacancyTitle}
-        />
-      </div>
-    )
-  }
-
   return (
+    <>
+    <AnketaWizard
+      open={showWizard}
+      onOpenChange={setShowWizard}
+      onComplete={handleWizardComplete}
+      initialTitle={data.vacancyTitle}
+    />
     <div className="space-y-4" onBlur={handleBlur}>
       {/* Progress + Wizard button */}
       <div className="flex items-center gap-3">
@@ -1042,6 +1055,78 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
         <TagInput tags={[]} onChange={tags => { if (tags.length > 0) set("conditionsCustom", [...data.conditionsCustom, ...tags]) }} placeholder="Добавить своё условие..." />
       </Section>
 
+      {/* ── 7. AI-генерация ── */}
+      {(data.screeningQuestions.length > 0 || data.hhDescription) && (
+        <Section title="AI-генерация" number={7} filled={true}>
+          {/* Screening questions */}
+          {data.screeningQuestions.length > 0 && (
+            <div className="space-y-2">
+              <Label className="text-xs font-medium">Вопросы для скрининга</Label>
+              <div className="space-y-1.5">
+                {data.screeningQuestions.map((q, i) => (
+                  <div key={i} className="flex items-start gap-2">
+                    <span className="text-xs text-muted-foreground font-medium mt-2 w-5 shrink-0">{i + 1}.</span>
+                    <Input
+                      value={q}
+                      onChange={e => {
+                        const updated = [...data.screeningQuestions]
+                        updated[i] = e.target.value
+                        set("screeningQuestions", updated)
+                      }}
+                      className="h-8 text-sm bg-[var(--input-bg)] border border-input flex-1"
+                    />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
+                      onClick={() => set("screeningQuestions", data.screeningQuestions.filter((_, j) => j !== i))}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs gap-1"
+                onClick={() => set("screeningQuestions", [...data.screeningQuestions, ""])}
+              >
+                <Plus className="w-3 h-3" /> Добавить вопрос
+              </Button>
+            </div>
+          )}
+
+          {/* hh.ru description */}
+          {data.hhDescription && (
+            <div className="space-y-2 mt-4">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-medium">Описание для hh.ru</Label>
+                <div className="flex gap-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs gap-1"
+                    onClick={async () => {
+                      await navigator.clipboard.writeText(data.hhDescription)
+                      toast.success("Скопировано")
+                    }}
+                  >
+                    <Copy className="w-3 h-3" /> Скопировать
+                  </Button>
+                </div>
+              </div>
+              <Textarea
+                value={data.hhDescription}
+                onChange={e => set("hhDescription", e.target.value)}
+                rows={10}
+                className="text-sm bg-[var(--input-bg)] border border-input font-mono text-xs"
+              />
+            </div>
+          )}
+        </Section>
+      )}
+
       {/* Actions */}
       <div className="flex items-center justify-between mt-4">
         <Button variant="outline" size="sm" className="gap-1.5 h-9 text-xs" onClick={() => toast("Предпросмотр вакансии будет доступен в ближайшем обновлении")}>
@@ -1054,5 +1139,6 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
         </Button>
       </div>
     </div>
+    </>
   )
 }
