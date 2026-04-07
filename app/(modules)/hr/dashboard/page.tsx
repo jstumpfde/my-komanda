@@ -179,17 +179,17 @@ function DashboardContent() {
               {[
                 { label: "Активных вакансий", value: "4", trend: "+2 за неделю", icon: Briefcase, bg: "bg-emerald-400" },
                 { label: "Всего кандидатов", value: "445", trend: "+68 за неделю", icon: Users, bg: "bg-blue-400" },
-                { label: "Нанято за месяц", value: "3", trend: "цель: 5", icon: UserCheck, bg: "bg-purple-400" },
+                { label: "Нанято за месяц", value: "3", trend: "цель: 5", icon: UserCheck, bg: "bg-violet-600" },
                 { label: "Ср. время закрытия", value: "18 дн", trend: "цель: 14 дн", icon: Clock, bg: "bg-orange-400" },
                 { label: "Конверсия воронки", value: "12%", trend: "цель: 15%", icon: TrendingUp, bg: "bg-indigo-400" },
               ].map((m, i) => (
                 <div key={i} className={cn("rounded-xl shadow-sm hover:shadow-md transition-shadow p-4 text-white", m.bg)}>
                   <div className="flex items-center gap-1.5 mb-2">
-                    <m.icon className="w-4 h-4 text-white/80" />
-                    <span className="text-[11px] text-white/70">{m.label}</span>
+                    <m.icon className="w-4 h-4 text-white" />
+                    <span className="text-sm font-semibold text-white">{m.label}</span>
                   </div>
                   <p className="text-3xl font-bold text-white">{m.value}</p>
-                  <p className="text-xs mt-1 text-white/70">{m.trend}</p>
+                  <p className="text-sm mt-1 text-white/90">{m.trend}</p>
                 </div>
               ))}
             </div>
