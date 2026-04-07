@@ -123,12 +123,12 @@ export default function AdminIntegratorsPage() {
                   <div className="overflow-x-auto">
                     <table className="w-full">
                       <thead>
-                        <tr className="border-b bg-muted/30">
-                          <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-3">Компания</th>
-                          <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-3">Уровень</th>
-                          <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-3">Контакт</th>
-                          <th className="text-center text-xs font-semibold text-muted-foreground px-4 py-3">Статус</th>
-                          <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-3">Дата вступления</th>
+                        <tr className="border-b bg-muted/50">
+                          <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Компания</th>
+                          <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Уровень</th>
+                          <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Контакт</th>
+                          <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Статус</th>
+                          <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Дата вступления</th>
                           <th className="px-4 py-3" />
                         </tr>
                       </thead>

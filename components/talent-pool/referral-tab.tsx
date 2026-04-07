@@ -89,11 +89,11 @@ export function ReferralTab() {
           <CardContent className="p-0">
             <table className="w-full">
               <thead>
-                <tr className="border-b border-border bg-muted/40">
-                  <th className="text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3">Сотрудник</th>
-                  <th className="text-center text-xs font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3">Рефералов</th>
-                  <th className="text-center text-xs font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3">Нанято</th>
-                  <th className="text-right text-xs font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3">Бонус</th>
+                <tr className="bg-muted/50 border-b">
+                  <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Сотрудник</th>
+                  <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Рефералов</th>
+                  <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Нанято</th>
+                  <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Бонус</th>
                 </tr>
               </thead>
               <tbody>

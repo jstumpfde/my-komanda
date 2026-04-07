@@ -135,11 +135,11 @@ export default function LogisticsDashboardPage() {
                 <CardContent className="p-0">
                   <table className="w-full">
                     <thead>
-                      <tr className="border-b bg-muted/30">
-                        <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2">Артикул</th>
-                        <th className="text-left text-xs font-semibold text-muted-foreground px-3 py-2">Наименование</th>
-                        <th className="text-right text-xs font-semibold text-muted-foreground px-4 py-2">Остаток</th>
-                        <th className="text-right text-xs font-semibold text-muted-foreground px-4 py-2">Мин.</th>
+                      <tr className="border-b bg-muted/50">
+                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Артикул</th>
+                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Наименование</th>
+                        <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Остаток</th>
+                        <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Мин.</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -171,11 +171,11 @@ export default function LogisticsDashboardPage() {
                 <CardContent className="p-0">
                   <table className="w-full">
                     <thead>
-                      <tr className="border-b bg-muted/30">
-                        <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2">Номер</th>
-                        <th className="text-left text-xs font-semibold text-muted-foreground px-3 py-2">Клиент</th>
-                        <th className="text-right text-xs font-semibold text-muted-foreground px-4 py-2">Сумма</th>
-                        <th className="text-center text-xs font-semibold text-muted-foreground px-4 py-2">Статус</th>
+                      <tr className="border-b bg-muted/50">
+                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Номер</th>
+                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Клиент</th>
+                        <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Сумма</th>
+                        <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Статус</th>
                       </tr>
                     </thead>
                     <tbody>

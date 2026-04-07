@@ -150,11 +150,11 @@ export default function KnowledgePage() {
               <div className="border rounded-xl overflow-hidden bg-card">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b bg-muted/40">
-                      <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Название</th>
-                      <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Категория</th>
-                      <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Просмотров</th>
-                      <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Дата</th>
+                    <tr className="border-b bg-muted/50">
+                      <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Название</th>
+                      <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Категория</th>
+                      <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Просмотров</th>
+                      <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Дата</th>
                     </tr>
                   </thead>
                   <tbody>

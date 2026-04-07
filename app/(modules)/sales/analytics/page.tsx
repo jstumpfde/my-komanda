@@ -209,12 +209,12 @@ export default function SalesAnalyticsPage() {
                   <div className="overflow-x-auto">
                     <table className="w-full">
                       <thead>
-                        <tr className="border-b bg-muted/30">
-                          <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5">Менеджер</th>
-                          <th className="text-right text-xs font-semibold text-muted-foreground px-4 py-2.5">Сделок</th>
-                          <th className="text-right text-xs font-semibold text-muted-foreground px-4 py-2.5">Сумма</th>
-                          <th className="text-right text-xs font-semibold text-muted-foreground px-4 py-2.5">Конверсия</th>
-                          <th className="text-right text-xs font-semibold text-muted-foreground px-4 py-2.5">Ср. цикл</th>
+                        <tr className="border-b bg-muted/50">
+                          <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Менеджер</th>
+                          <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Сделок</th>
+                          <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Сумма</th>
+                          <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Конверсия</th>
+                          <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Ср. цикл</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -263,12 +263,12 @@ export default function SalesAnalyticsPage() {
                 <div className="overflow-x-auto">
                   <table className="w-full">
                     <thead>
-                      <tr className="border-b bg-muted/30">
-                        <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5">Источник</th>
-                        <th className="text-right text-xs font-semibold text-muted-foreground px-4 py-2.5">Лидов</th>
-                        <th className="text-right text-xs font-semibold text-muted-foreground px-4 py-2.5">Конверсия</th>
-                        <th className="text-right text-xs font-semibold text-muted-foreground px-4 py-2.5">CPL</th>
-                        <th className="text-right text-xs font-semibold text-muted-foreground px-4 py-2.5">ROI</th>
+                      <tr className="border-b bg-muted/50">
+                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Источник</th>
+                        <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Лидов</th>
+                        <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Конверсия</th>
+                        <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">CPL</th>
+                        <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">ROI</th>
                       </tr>
                     </thead>
                     <tbody>

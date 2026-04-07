@@ -278,11 +278,11 @@ export default function AnalyticsPage() {
                   <div className="flex-1 overflow-x-auto">
                     <table className="w-full">
                       <thead>
-                        <tr className="border-b bg-muted/30">
-                          <th className="text-left text-xs font-semibold text-muted-foreground px-3 py-2">Источник</th>
-                          <th className="text-right text-xs font-semibold text-muted-foreground px-3 py-2">Кандидатов</th>
-                          <th className="text-right text-xs font-semibold text-muted-foreground px-3 py-2">% от общего</th>
-                          <th className="text-right text-xs font-semibold text-muted-foreground px-3 py-2">Ср. AI-скор</th>
+                        <tr className="border-b bg-muted/50">
+                          <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Источник</th>
+                          <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Кандидатов</th>
+                          <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">% от общего</th>
+                          <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Ср. AI-скор</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -345,12 +345,12 @@ export default function AnalyticsPage() {
               <CardContent className="p-0">
                 <table className="w-full">
                   <thead>
-                    <tr className="border-b bg-muted/30">
-                      <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-3">Вакансия</th>
-                      <th className="text-right text-xs font-semibold text-muted-foreground px-4 py-3">Дней активна</th>
-                      <th className="text-right text-xs font-semibold text-muted-foreground px-4 py-3">Кандидатов</th>
-                      <th className="text-right text-xs font-semibold text-muted-foreground px-4 py-3">Нанято</th>
-                      <th className="text-right text-xs font-semibold text-muted-foreground px-4 py-3">Статус</th>
+                    <tr className="border-b bg-muted/50">
+                      <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Вакансия</th>
+                      <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Дней активна</th>
+                      <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Кандидатов</th>
+                      <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Нанято</th>
+                      <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Статус</th>
                     </tr>
                   </thead>
                   <tbody>

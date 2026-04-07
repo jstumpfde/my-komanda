@@ -105,15 +105,15 @@ export default function LogisticsReturnsPage() {
                 <div className="overflow-x-auto">
                   <table className="w-full">
                     <thead>
-                      <tr className="border-b bg-muted/30">
-                        <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-3">Номер</th>
-                        <th className="text-left text-xs font-semibold text-muted-foreground px-3 py-3">Клиент</th>
-                        <th className="text-left text-xs font-semibold text-muted-foreground px-3 py-3">Заказ</th>
-                        <th className="text-right text-xs font-semibold text-muted-foreground px-3 py-3">Товаров</th>
-                        <th className="text-left text-xs font-semibold text-muted-foreground px-3 py-3">Причина</th>
-                        <th className="text-left text-xs font-semibold text-muted-foreground px-3 py-3">Комментарий</th>
-                        <th className="text-left text-xs font-semibold text-muted-foreground px-3 py-3">Дата</th>
-                        <th className="text-center text-xs font-semibold text-muted-foreground px-3 py-3">Статус</th>
+                      <tr className="border-b bg-muted/50">
+                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Номер</th>
+                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Клиент</th>
+                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Заказ</th>
+                        <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Товаров</th>
+                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Причина</th>
+                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Комментарий</th>
+                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Дата</th>
+                        <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Статус</th>
                       </tr>
                     </thead>
                     <tbody>

@@ -130,12 +130,12 @@ export default function LogisticsReportsPage() {
               <CardContent className="p-0">
                 <table className="w-full">
                   <thead>
-                    <tr className="border-b bg-muted/30">
-                      <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-3">Отчёт</th>
-                      <th className="text-left text-xs font-semibold text-muted-foreground px-3 py-3">Период</th>
-                      <th className="text-left text-xs font-semibold text-muted-foreground px-3 py-3">Дата формирования</th>
-                      <th className="text-center text-xs font-semibold text-muted-foreground px-3 py-3">Формат</th>
-                      <th className="text-center text-xs font-semibold text-muted-foreground px-3 py-3">Скачать</th>
+                    <tr className="border-b bg-muted/50">
+                      <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Отчёт</th>
+                      <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Период</th>
+                      <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Дата формирования</th>
+                      <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Формат</th>
+                      <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Скачать</th>
                     </tr>
                   </thead>
                   <tbody>

@@ -173,12 +173,12 @@ export default function LogisticsAnalyticsPage() {
               <CardContent className="p-0">
                 <table className="w-full">
                   <thead>
-                    <tr className="border-b bg-muted/30">
-                      <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2">Артикул</th>
-                      <th className="text-left text-xs font-semibold text-muted-foreground px-3 py-2">Наименование</th>
-                      <th className="text-right text-xs font-semibold text-muted-foreground px-3 py-2">Остаток</th>
-                      <th className="text-right text-xs font-semibold text-muted-foreground px-3 py-2">Дней без движения</th>
-                      <th className="text-right text-xs font-semibold text-muted-foreground px-4 py-2">Стоимость</th>
+                    <tr className="border-b bg-muted/50">
+                      <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Артикул</th>
+                      <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Наименование</th>
+                      <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Остаток</th>
+                      <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Дней без движения</th>
+                      <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Стоимость</th>
                     </tr>
                   </thead>
                   <tbody>

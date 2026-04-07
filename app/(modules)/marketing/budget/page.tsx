@@ -84,12 +84,12 @@ export default function BudgetPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b bg-muted/30">
-                  <th className="text-left py-3 px-4 font-medium text-muted-foreground">Канал</th>
-                  <th className="text-right py-3 px-4 font-medium text-muted-foreground">План ₽</th>
-                  <th className="text-right py-3 px-4 font-medium text-muted-foreground">Факт ₽</th>
-                  <th className="text-right py-3 px-4 font-medium text-muted-foreground">%</th>
-                  <th className="text-left py-3 px-4 font-medium text-muted-foreground w-44">Прогресс</th>
+                <tr className="border-b bg-muted/50">
+                  <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Канал</th>
+                  <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">План ₽</th>
+                  <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Факт ₽</th>
+                  <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">%</th>
+                  <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3 w-44">Прогресс</th>
                 </tr>
               </thead>
               <tbody>
@@ -135,12 +135,12 @@ export default function BudgetPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b bg-muted/30">
-                  <th className="text-left py-3 px-4 font-medium text-muted-foreground">Месяц</th>
-                  <th className="text-right py-3 px-4 font-medium text-muted-foreground">Бюджет ₽</th>
-                  <th className="text-right py-3 px-4 font-medium text-muted-foreground">Потрачено ₽</th>
-                  <th className="text-right py-3 px-4 font-medium text-muted-foreground">Лиды</th>
-                  <th className="text-right py-3 px-4 font-medium text-muted-foreground">CPL ₽</th>
+                <tr className="border-b bg-muted/50">
+                  <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Месяц</th>
+                  <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Бюджет ₽</th>
+                  <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Потрачено ₽</th>
+                  <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Лиды</th>
+                  <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">CPL ₽</th>
                 </tr>
               </thead>
               <tbody>

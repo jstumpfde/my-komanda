@@ -124,12 +124,12 @@ function MatrixDialog({
               <div className="rounded-lg border overflow-hidden">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b bg-muted/30">
-                      <th className="text-left px-3 py-2 font-medium text-muted-foreground w-1/2">
+                    <tr className="border-b bg-muted/50">
+                      <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3 w-1/2">
                         Функция
                       </th>
                       {LEVELS.map(l => (
-                        <th key={l.value} className={cn("px-3 py-2 text-center font-medium w-[18%]", l.cls)}>
+                        <th key={l.value} className={cn("text-xs font-medium uppercase tracking-wider px-4 py-3 text-center w-[18%]", l.cls)}>
                           {l.label}
                         </th>
                       ))}

@@ -75,14 +75,14 @@ export default function LandingsPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b bg-muted/30">
-                  <th className="text-left py-3 px-4 font-medium text-muted-foreground">Название</th>
-                  <th className="text-left py-3 px-4 font-medium text-muted-foreground">URL</th>
-                  <th className="text-right py-3 px-4 font-medium text-muted-foreground">Конверсия</th>
-                  <th className="text-right py-3 px-4 font-medium text-muted-foreground">Посещений</th>
-                  <th className="text-right py-3 px-4 font-medium text-muted-foreground">Лидов</th>
-                  <th className="text-left py-3 px-4 font-medium text-muted-foreground">Статус</th>
-                  <th className="text-right py-3 px-4 font-medium text-muted-foreground">Действия</th>
+                <tr className="border-b bg-muted/50">
+                  <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Название</th>
+                  <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">URL</th>
+                  <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Конверсия</th>
+                  <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Посещений</th>
+                  <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Лидов</th>
+                  <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Статус</th>
+                  <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Действия</th>
                 </tr>
               </thead>
               <tbody>

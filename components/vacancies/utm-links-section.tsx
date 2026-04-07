@@ -155,17 +155,17 @@ export function UtmLinksSection({ vacancyId }: UtmLinksSectionProps) {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b bg-muted/30">
-                    <th className="text-left px-4 py-2.5 font-medium text-muted-foreground text-xs">Источник</th>
-                    <th className="text-left px-4 py-2.5 font-medium text-muted-foreground text-xs">Название</th>
-                    <th className="text-left px-4 py-2.5 font-medium text-muted-foreground text-xs">Короткая ссылка</th>
-                    <th className="text-right px-4 py-2.5 font-medium text-muted-foreground text-xs">
+                  <tr className="bg-muted/50 border-b">
+                    <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Источник</th>
+                    <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Название</th>
+                    <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Короткая ссылка</th>
+                    <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">
                       <span className="inline-flex items-center gap-1"><MousePointerClick className="w-3 h-3" />Клики</span>
                     </th>
-                    <th className="text-right px-4 py-2.5 font-medium text-muted-foreground text-xs">
+                    <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">
                       <span className="inline-flex items-center gap-1"><Users className="w-3 h-3" />Кандидаты</span>
                     </th>
-                    <th className="px-4 py-2.5"></th>
+                    <th className="px-4 py-3"></th>
                   </tr>
                 </thead>
                 <tbody>

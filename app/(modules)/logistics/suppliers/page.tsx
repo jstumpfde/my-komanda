@@ -124,15 +124,15 @@ export default function LogisticsSuppliersPage() {
                 <div className="overflow-x-auto">
                   <table className="w-full">
                     <thead>
-                      <tr className="border-b bg-muted/30">
-                        <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-3">Название</th>
-                        <th className="text-left text-xs font-semibold text-muted-foreground px-3 py-3">ИНН</th>
-                        <th className="text-left text-xs font-semibold text-muted-foreground px-3 py-3">Контакт</th>
-                        <th className="text-left text-xs font-semibold text-muted-foreground px-3 py-3">Телефон</th>
-                        <th className="text-left text-xs font-semibold text-muted-foreground px-3 py-3">Email</th>
-                        <th className="text-right text-xs font-semibold text-muted-foreground px-3 py-3">Товаров</th>
-                        <th className="text-left text-xs font-semibold text-muted-foreground px-3 py-3">Последняя закупка</th>
-                        <th className="text-left text-xs font-semibold text-muted-foreground px-3 py-3">Рейтинг</th>
+                      <tr className="border-b bg-muted/50">
+                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Название</th>
+                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">ИНН</th>
+                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Контакт</th>
+                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Телефон</th>
+                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Email</th>
+                        <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Товаров</th>
+                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Последняя закупка</th>
+                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Рейтинг</th>
                       </tr>
                     </thead>
                     <tbody>

@@ -104,11 +104,11 @@ export default function MarketingDashboardPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b text-muted-foreground">
-                  <th className="text-left py-2 pr-4 font-medium">Канал</th>
-                  <th className="text-left py-2 pr-4 font-medium">Тема</th>
-                  <th className="text-left py-2 pr-4 font-medium">Дата</th>
-                  <th className="text-left py-2 font-medium">Статус</th>
+                <tr className="border-b bg-muted/50">
+                  <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Канал</th>
+                  <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Тема</th>
+                  <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Дата</th>
+                  <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Статус</th>
                 </tr>
               </thead>
               <tbody>

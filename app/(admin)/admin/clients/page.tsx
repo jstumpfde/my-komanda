@@ -94,7 +94,7 @@ function SortableHeader({
 }) {
   return (
     <button
-      className="flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
+      className="flex items-center gap-1 text-xs font-medium text-muted-foreground uppercase tracking-wider hover:text-foreground transition-colors"
       onClick={() => onSort(field)}
     >
       {label}
@@ -274,21 +274,21 @@ function AdminClientsInner() {
                 <div className="overflow-x-auto">
                   <table className="w-full">
                     <thead>
-                      <tr className="border-b bg-muted/30">
+                      <tr className="border-b bg-muted/50">
                         <th className="text-left px-4 py-3">
                           <SortableHeader label="Компания" field="name" currentSort={sort} onSort={setSort} />
                         </th>
-                        <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">ИНН</th>
-                        <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">Тариф</th>
-                        <th className="text-center px-4 py-3 text-xs font-semibold text-muted-foreground">Статус</th>
-                        <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground">Польз.</th>
+                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">ИНН</th>
+                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Тариф</th>
+                        <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Статус</th>
+                        <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Польз.</th>
                         <th className="text-left px-4 py-3">
                           <SortableHeader label="Дата" field="created_at" currentSort={sort} onSort={setSort} />
                         </th>
                         <th className="text-right px-4 py-3">
                           <SortableHeader label="MRR ₽" field="mrr" currentSort={sort} onSort={setSort} />
                         </th>
-                        <th className="text-center px-4 py-3 text-xs font-semibold text-muted-foreground">Действия</th>
+                        <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Действия</th>
                       </tr>
                     </thead>
                     <tbody>

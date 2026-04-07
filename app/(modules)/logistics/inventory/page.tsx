@@ -176,16 +176,16 @@ export default function LogisticsInventoryPage() {
                 <div className="overflow-x-auto">
                   <table className="w-full">
                     <thead>
-                      <tr className="border-b bg-muted/30">
-                        <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-3">Артикул</th>
-                        <th className="text-left text-xs font-semibold text-muted-foreground px-3 py-3">Наименование</th>
-                        <th className="text-left text-xs font-semibold text-muted-foreground px-3 py-3">Категория</th>
-                        <th className="text-right text-xs font-semibold text-muted-foreground px-3 py-3">Остаток</th>
-                        <th className="text-left text-xs font-semibold text-muted-foreground px-3 py-3">Ед.</th>
-                        <th className="text-right text-xs font-semibold text-muted-foreground px-3 py-3">Мин.</th>
-                        <th className="text-right text-xs font-semibold text-muted-foreground px-3 py-3">Цена</th>
-                        <th className="text-left text-xs font-semibold text-muted-foreground px-3 py-3">Поставщик</th>
-                        <th className="text-center text-xs font-semibold text-muted-foreground px-3 py-3">Статус</th>
+                      <tr className="border-b bg-muted/50">
+                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Артикул</th>
+                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Наименование</th>
+                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Категория</th>
+                        <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Остаток</th>
+                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Ед.</th>
+                        <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Мин.</th>
+                        <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Цена</th>
+                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Поставщик</th>
+                        <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Статус</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -274,11 +274,11 @@ export default function LogisticsInventoryPage() {
           <p className="text-sm text-muted-foreground">Введите фактическое количество. Пустые поля — не изменять.</p>
           <table className="w-full mt-3">
             <thead>
-              <tr className="border-b">
-                <th className="text-left text-xs font-semibold text-muted-foreground py-2">Артикул</th>
-                <th className="text-left text-xs font-semibold text-muted-foreground py-2">Название</th>
-                <th className="text-right text-xs font-semibold text-muted-foreground py-2 pr-2">Учёт</th>
-                <th className="text-right text-xs font-semibold text-muted-foreground py-2">Факт</th>
+              <tr className="border-b bg-muted/50">
+                <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider py-2">Артикул</th>
+                <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider py-2">Название</th>
+                <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider py-2 pr-2">Учёт</th>
+                <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider py-2">Факт</th>
               </tr>
             </thead>
             <tbody>

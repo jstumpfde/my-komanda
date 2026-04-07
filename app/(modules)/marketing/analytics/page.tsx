@@ -94,13 +94,13 @@ export default function MarketingAnalyticsPage() {
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="border-b bg-muted/30">
-                        <th className="text-left py-3 px-4 font-medium text-muted-foreground">Канал</th>
-                        <th className="text-right py-3 px-4 font-medium text-muted-foreground">Охват</th>
-                        <th className="text-right py-3 px-4 font-medium text-muted-foreground">Лиды</th>
-                        <th className="text-right py-3 px-4 font-medium text-muted-foreground">Конверсия</th>
-                        <th className="text-right py-3 px-4 font-medium text-muted-foreground">Стоимость лида</th>
-                        <th className="text-left py-3 px-4 font-medium text-muted-foreground">Доля лидов</th>
+                      <tr className="border-b bg-muted/50">
+                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Канал</th>
+                        <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Охват</th>
+                        <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Лиды</th>
+                        <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Конверсия</th>
+                        <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Стоимость лида</th>
+                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Доля лидов</th>
                       </tr>
                     </thead>
                     <tbody>

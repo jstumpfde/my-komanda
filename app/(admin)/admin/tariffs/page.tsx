@@ -153,15 +153,15 @@ export default function AdminTariffsPage() {
                 <div className="overflow-x-auto">
                   <table className="w-full">
                     <thead>
-                      <tr className="border-b bg-muted/30">
-                        <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-3">Название</th>
-                        <th className="text-right text-xs font-semibold text-muted-foreground px-4 py-3">Цена</th>
-                        <th className="text-right text-xs font-semibold text-muted-foreground px-4 py-3">Trial дней</th>
-                        <th className="text-right text-xs font-semibold text-muted-foreground px-4 py-3">Вакансий</th>
-                        <th className="text-right text-xs font-semibold text-muted-foreground px-4 py-3">Кандидатов</th>
-                        <th className="text-center text-xs font-semibold text-muted-foreground px-4 py-3">Брендинг</th>
-                        <th className="text-center text-xs font-semibold text-muted-foreground px-4 py-3">Активен</th>
-                        <th className="text-center text-xs font-semibold text-muted-foreground px-4 py-3">Действия</th>
+                      <tr className="border-b bg-muted/50">
+                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Название</th>
+                        <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Цена</th>
+                        <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Trial дней</th>
+                        <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Вакансий</th>
+                        <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Кандидатов</th>
+                        <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Брендинг</th>
+                        <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Активен</th>
+                        <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Действия</th>
                       </tr>
                     </thead>
                     <tbody>
