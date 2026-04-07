@@ -200,6 +200,11 @@ function emptyAnketa(): AnketaData {
   }
 }
 
+/** Collapse double newlines into single, trim blank lines */
+function cleanText(s: string): string {
+  return s.replace(/\n{2,}/g, "\n").replace(/^\s*\n/gm, "").trim()
+}
+
 function migrateAnketa(saved: Record<string, unknown>): AnketaData {
   const d = { ...emptyAnketa(), ...saved } as AnketaData
   // employment: string -> string[]
@@ -256,6 +261,11 @@ function migrateAnketa(saved: Record<string, unknown>): AnketaData {
       enableSet.has(p.id) ? { ...p, enabled: true } : p
     )
   }
+
+  // Clean up double newlines in text fields
+  d.bonus = cleanText(d.bonus)
+  d.responsibilities = cleanText(d.responsibilities)
+  d.requirements = cleanText(d.requirements)
 
   return d
 }
@@ -772,7 +782,7 @@ function CategoryField({ value, onChange }: { value: string; onChange: (v: strin
       <Label className="text-xs">Категория</Label>
       <div className="flex items-center gap-3 w-full">
         <Select value={value} onValueChange={onChange}>
-          <SelectTrigger className="h-9 bg-[var(--input-bg)] border border-input min-w-[300px] flex-1">
+          <SelectTrigger className="h-9 bg-[var(--input-bg)] border border-input w-1/2 min-w-[300px] flex-1">
             <SelectValue placeholder="Выберите категорию" />
           </SelectTrigger>
           <SelectContent>
@@ -855,9 +865,9 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
       employment: result.employment.length > 0 ? result.employment : prev.employment,
       salaryFrom: result.salaryFrom || prev.salaryFrom,
       salaryTo: result.salaryTo || prev.salaryTo,
-      bonus: (result.bonus || "").replace(/\n+/g, "; ").trim() || prev.bonus,
-      responsibilities: (result.responsibilities || "").replace(/\n+/g, "; ").trim() || prev.responsibilities,
-      requirements: (result.requirements || "").replace(/\n+/g, "; ").trim() || prev.requirements,
+      bonus: cleanText(result.bonus || "") || prev.bonus,
+      responsibilities: cleanText(result.responsibilities || "") || prev.responsibilities,
+      requirements: cleanText(result.requirements || "") || prev.requirements,
       requiredSkills: result.requiredSkills.length > 0 ? result.requiredSkills : prev.requiredSkills,
       desiredSkills: result.desiredSkills.length > 0 ? result.desiredSkills : prev.desiredSkills,
       unacceptableSkills: result.unacceptableSkills.length > 0 ? result.unacceptableSkills : prev.unacceptableSkills,
@@ -973,16 +983,16 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
       </div>
 
       {/* ── Название вакансии (top-level) ── */}
-      <div className="space-y-1">
+      <div className="w-full space-y-1">
         <Label className="text-xs font-medium">Название вакансии</Label>
         <Input
           value={data.vacancyTitle}
           onChange={e => { set("vacancyTitle", e.target.value); onTitleChange?.(e.target.value) }}
           placeholder="Менеджер по продажам"
-          className="h-11 text-lg bg-[var(--input-bg)] border border-input"
+          className="h-11 text-lg bg-[var(--input-bg)] border border-input w-1/2 min-w-[300px] max-w-full"
           maxLength={50}
         />
-        <p className="text-xs text-muted-foreground text-right">{data.vacancyTitle.length}/50</p>
+        <p className="text-xs text-muted-foreground w-1/2 min-w-[300px] max-w-full text-right">{data.vacancyTitle.length}/50</p>
       </div>
 
       {/* ── 1. Компания ── */}

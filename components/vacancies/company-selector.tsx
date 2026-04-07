@@ -81,7 +81,7 @@ function OwnCompanyInfo() {
 
   if (loading) {
     return (
-      <div className="rounded-lg border p-3 bg-[var(--input-bg)] flex items-center gap-2">
+      <div className="rounded-lg border p-3 bg-[var(--input-bg)] flex items-center gap-2 max-w-[50%] min-w-[300px]">
         <Building2 className="size-4 text-muted-foreground shrink-0 animate-pulse" />
         <p className="text-sm text-muted-foreground">Загрузка...</p>
       </div>
@@ -89,7 +89,7 @@ function OwnCompanyInfo() {
   }
 
   return (
-    <div className="rounded-lg border p-3 bg-[var(--input-bg)] flex items-center gap-2">
+    <div className="rounded-lg border p-3 bg-[var(--input-bg)] flex items-center gap-2 max-w-[50%] min-w-[300px]">
       <Building2 className="size-4 text-muted-foreground shrink-0" />
       {name ? (
         <p className="text-sm font-medium">{name}</p>
@@ -189,7 +189,7 @@ export function CompanySelector({
             <Label className="text-xs text-muted-foreground">Компания-клиент</Label>
             <div className="flex items-center gap-3 w-full">
               <Select value={clientCompanyId || ""} onValueChange={(v) => { onCompanyChange(v); onContactChange(null) }}>
-                <SelectTrigger className="bg-[var(--input-bg)] border border-input min-w-[300px] flex-1">
+                <SelectTrigger className="bg-[var(--input-bg)] border border-input w-1/2 min-w-[300px] flex-1">
                   <SelectValue placeholder="Выберите компанию" />
                 </SelectTrigger>
                 <SelectContent>
