@@ -707,7 +707,6 @@ export default function VacanciesPage() {
                       <th className="pl-5 pr-2 py-3 w-10"><Checkbox checked={allSelected} onCheckedChange={toggleAll} /></th>
                       <th className="px-4 py-3 text-sm font-semibold text-muted-foreground">Вакансия</th>
                       <th className="px-4 py-3 text-sm font-semibold text-muted-foreground">Город</th>
-                      <th className="px-4 py-3 text-sm font-semibold text-muted-foreground">Зарплата</th>
                       <th className="px-4 py-3"><SortableHeader label="Статус" column="status" current={colSort} onToggle={toggleColSort} /></th>
                       <th className="px-4 py-3"><SortableHeader label="Создана" column="date" current={colSort} onToggle={toggleColSort} /></th>
                       <th className="px-4 py-3"><SortableHeader label="Менеджер" column="hr" current={colSort} onToggle={toggleColSort} /></th>
@@ -727,7 +726,6 @@ export default function VacanciesPage() {
                         </td>
                         <td className="px-4 py-3.5 font-medium text-sm text-foreground">{v.title}</td>
                         <td className="px-4 py-3.5 text-sm text-muted-foreground">{v.city ?? "—"}</td>
-                        <td className="px-4 py-3.5 text-sm text-muted-foreground whitespace-nowrap">{formatSalary(v.salaryMin, v.salaryMax) ?? "—"}</td>
                         <td className="px-4 py-3.5"><StatusBadge status={v.status} /></td>
                         <td className="px-4 py-3.5 text-sm text-muted-foreground whitespace-nowrap">{formatDate(v.createdAt)}</td>
                         <td className="px-4 py-3.5"><HrAvatar name={getHrName(v.createdBy, teamMembers)} /></td>
