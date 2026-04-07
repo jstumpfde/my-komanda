@@ -782,7 +782,7 @@ function CategoryField({ value, onChange }: { value: string; onChange: (v: strin
       <Label className="text-xs">Категория</Label>
       <div className="flex items-center gap-3 w-full">
         <Select value={value} onValueChange={onChange}>
-          <SelectTrigger className="h-9 bg-[var(--input-bg)] border border-input w-1/2 min-w-[300px] flex-1">
+          <SelectTrigger className="h-9 bg-[var(--input-bg)] border border-input w-1/2 min-w-[300px]" style={{ maxWidth: "calc(100% - 160px)" }}>
             <SelectValue placeholder="Выберите категорию" />
           </SelectTrigger>
           <SelectContent>
@@ -985,14 +985,16 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
       {/* ── Название вакансии (top-level) ── */}
       <div className="w-full space-y-1">
         <Label className="text-xs font-medium">Название вакансии</Label>
-        <Input
-          value={data.vacancyTitle}
-          onChange={e => { set("vacancyTitle", e.target.value); onTitleChange?.(e.target.value) }}
-          placeholder="Менеджер по продажам"
-          className="h-11 text-lg bg-[var(--input-bg)] border border-input w-1/2 min-w-[300px] max-w-full"
-          maxLength={50}
-        />
-        <p className="text-xs text-muted-foreground w-1/2 min-w-[300px] max-w-full text-right">{data.vacancyTitle.length}/50</p>
+        <div style={{ width: "fit-content", minWidth: "50%", maxWidth: "100%" }}>
+          <Input
+            value={data.vacancyTitle}
+            onChange={e => { set("vacancyTitle", e.target.value); onTitleChange?.(e.target.value) }}
+            placeholder="Менеджер по продажам"
+            className="h-11 text-lg bg-[var(--input-bg)] border border-input w-full"
+            maxLength={50}
+          />
+          <p className="text-xs text-muted-foreground text-right mt-1">{data.vacancyTitle.length}/50</p>
+        </div>
       </div>
 
       {/* ── 1. Компания ── */}
