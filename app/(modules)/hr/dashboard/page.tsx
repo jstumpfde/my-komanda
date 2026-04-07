@@ -48,12 +48,19 @@ const FUNNEL = [
 ]
 
 const EVENTS = [
-  { date: "Сегодня, 14:00", title: "Интервью — Петров А.", type: "interview" },
-  { date: "Сегодня, 16:30", title: "Скрининг — Иванова М.", type: "screening" },
-  { date: "Завтра, 10:00", title: "Финальное интервью — Козлов Д.", type: "interview" },
-  { date: "Завтра, 15:00", title: "Оффер-колл — Сидорова К.", type: "offer" },
-  { date: "09 апр, 11:00", title: "Командное интервью — Новиков П.", type: "interview" },
+  { day: "8", month: "апр", title: "Интервью: Петров А.", subtitle: "14:00 · Менеджер по продажам · Zoom", type: "interview" as const },
+  { day: "8", month: "апр", title: "Скрининг: Иванова М.", subtitle: "16:30 · Frontend · Телефон", type: "screening" as const },
+  { day: "9", month: "апр", title: "Финальное интервью: Козлов Д.", subtitle: "10:00 · Менеджер по продажам · Офис", type: "interview" as const },
+  { day: "9", month: "апр", title: "Оффер-колл: Сидорова К.", subtitle: "15:00 · Frontend", type: "offer" as const },
+  { day: "10", month: "апр", title: "Выход: Новиков П.", subtitle: "Первый рабочий день · HR-менеджер", type: "onboarding" as const },
 ]
+
+const EVENT_COLORS: Record<string, string> = {
+  interview: "bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300",
+  screening: "bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300",
+  offer: "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300",
+  onboarding: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300",
+}
 
 const GOALS = [
   { label: "Закрыть вакансий", current: 3, target: 5 },
@@ -270,11 +277,17 @@ function DashboardContent() {
                     <Calendar className="w-3 h-3" />Календарь
                   </Button>
                 </div>
-                <div className="space-y-2">
+                <div className="flex flex-col gap-3">
                   {EVENTS.map((e, i) => (
-                    <div key={i} className="flex items-start gap-3 p-2 rounded-md hover:bg-muted/30 transition-colors">
-                      <div className="text-[11px] text-muted-foreground whitespace-nowrap w-[100px] shrink-0 pt-0.5">{e.date}</div>
-                      <p className="text-sm">{e.title}</p>
+                    <div key={i} className="flex items-center gap-3">
+                      <div className={cn("min-w-[48px] text-center rounded-lg p-1.5", EVENT_COLORS[e.type] || EVENT_COLORS.interview)}>
+                        <p className="text-lg font-semibold leading-none">{e.day}</p>
+                        <p className="text-[10px] mt-0.5">{e.month}</p>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium">{e.title}</p>
+                        <p className="text-xs text-muted-foreground">{e.subtitle}</p>
+                      </div>
                     </div>
                   ))}
                 </div>
