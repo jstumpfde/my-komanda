@@ -28,7 +28,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Checkbox } from "@/components/ui/checkbox"
 import { Slider } from "@/components/ui/slider"
 import { Input } from "@/components/ui/input"
-import { Plus, Clock, Pause, Play, Archive, RotateCcw, Trash2, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, Zap, Globe, AlertTriangle, TrendingUp, Calendar, MapPin, DollarSign, Filter, X, Link2, Copy, Save, Sparkles, Eye, Check, Loader2, Download, ExternalLink, ClipboardList } from "lucide-react"
+import { Plus, Clock, Pause, Play, Archive, RotateCcw, Trash2, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, Zap, Globe, AlertTriangle, TrendingUp, Calendar, MapPin, DollarSign, Filter, X, Link2, Copy, Save, Sparkles, Eye, Check, Loader2, Download, ExternalLink, ClipboardList, ChevronLeft, ChevronRight } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
@@ -1289,6 +1289,36 @@ export default function VacancyPage() {
                 </div>
               </TabsContent>
             </Tabs>
+
+            {/* ═══ Bottom tab navigation ══════════════════ */}
+            {(() => {
+              const tabOrder = (status === "published" || status === "active" || status === "closed")
+                ? ["analytics", "candidates", "course", "anketa", "automation", "settings"]
+                : ["anketa", "course", "candidates", "analytics", "automation", "settings"]
+              const tabLabels: Record<string, string> = { anketa: "Анкета", course: "Демонстрация", candidates: "Кандидаты", analytics: "Аналитика", automation: "Автоматизация", settings: "Настройки" }
+              const idx = tabOrder.indexOf(activeTab)
+              const prevTab = idx > 0 ? tabOrder[idx - 1] : null
+              const nextTab = idx < tabOrder.length - 1 ? tabOrder[idx + 1] : null
+              const goTab = (tab: string) => { setActiveTab(tab); window.scrollTo({ top: 0, behavior: "smooth" }) }
+              return (
+                <div className="flex items-center justify-between mt-6 pt-4 border-t">
+                  <div className="flex items-center gap-2">
+                    {prevTab && (
+                      <Button variant="ghost" size="sm" className="gap-1.5 text-xs" onClick={() => goTab(prevTab)}>
+                        <ChevronLeft className="w-3.5 h-3.5" />
+                        {tabLabels[prevTab]}
+                      </Button>
+                    )}
+                    {nextTab && (
+                      <Button variant="ghost" size="sm" className="gap-1.5 text-xs" onClick={() => goTab(nextTab)}>
+                        {tabLabels[nextTab]}
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              )
+            })()}
           </div>
         </main>
       </SidebarInset>
