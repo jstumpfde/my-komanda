@@ -31,11 +31,12 @@ import { useVacancies, type ApiVacancy } from "@/hooks/use-vacancies"
 import {
   Plus, Briefcase, MapPin, List, LayoutGrid, Table2, Calendar, Banknote,
   Search, MoreHorizontal, Pencil, Copy, Archive, Trash2, ListFilter,
-  RotateCcw, X, Upload, Link2, FileText, Loader2, CheckCircle2,
+  RotateCcw, X, Upload, Link2, FileText, Loader2, CheckCircle2, Sparkles,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { parseVacancyText } from "@/lib/parse-vacancy-text"
 import { toast } from "sonner"
+import { Textarea } from "@/components/ui/textarea"
 import { useAuth } from "@/lib/auth"
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle,
@@ -319,6 +320,7 @@ export default function VacanciesPage() {
   const [uploading, setUploading] = useState(false)
   const [importing, setImporting] = useState(false)
   const [importedText, setImportedText] = useState("")
+  const [aiText, setAiText] = useState("")
   const [dragOver, setDragOver] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -327,6 +329,7 @@ export default function VacanciesPage() {
     setImportUrl("")
     setUploadedFile(null)
     setImportedText("")
+    setAiText("")
   }, [])
 
   const handleFileUpload = useCallback(async (file: File) => {
@@ -413,6 +416,11 @@ export default function VacanciesPage() {
         }
       }
 
+      // Save AI text for anketa-tab to auto-parse after navigation
+      if (aiText.trim()) {
+        try { sessionStorage.setItem("vacancy_ai_text", aiText.trim()) } catch {}
+      }
+
       const res = await fetch("/api/modules/hr/vacancies", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -431,7 +439,7 @@ export default function VacanciesPage() {
     } finally {
       setCreating(false)
     }
-  }, [newVacancyTitle, uploadedFile, importedText, importUrl, router, resetCreateDialog])
+  }, [newVacancyTitle, uploadedFile, importedText, importUrl, aiText, router, resetCreateDialog])
 
   const hrManagerTrashEnabled = typeof window !== "undefined" && localStorage.getItem(TRASH_ACCESS_KEY) === "true"
   const canSeeTrash = TRASH_ROLES_ALWAYS.includes(role) || (role === TRASH_ROLE_OPTIONAL && hrManagerTrashEnabled)
@@ -823,7 +831,7 @@ export default function VacanciesPage() {
 
       {/* ── Create vacancy dialog ── */}
       <Dialog open={createDialogOpen} onOpenChange={(open) => { setCreateDialogOpen(open); if (!open) resetCreateDialog() }}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Создать вакансию</DialogTitle>
           </DialogHeader>
@@ -895,30 +903,19 @@ export default function VacanciesPage() {
               )}
             </div>
 
-            {/* Import from URL */}
-            <div className="rounded-lg border p-4 space-y-3">
-              <div className="flex items-center gap-2 text-sm">
-                <Link2 className="size-4 text-primary" />
-                <span className="font-medium">Импорт из ссылки</span>
-                <span className="text-xs text-muted-foreground">(необязательно)</span>
+            {/* AI text input */}
+            <div className="rounded-lg border p-3 space-y-2">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <Sparkles className="w-4 h-4 text-primary" />
+                AI-заполнение
+                <span className="text-xs text-muted-foreground font-normal">(необязательно)</span>
               </div>
-              <div className="flex gap-2">
-                <Input
-                  value={importUrl}
-                  onChange={(e) => setImportUrl(e.target.value)}
-                  placeholder="https://hh.ru/vacancy/..."
-                  className="h-9 border border-input flex-1"
-                />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-9 shrink-0"
-                  onClick={handleImportUrl}
-                  disabled={importing || !importUrl.trim()}
-                >
-                  {importing ? <Loader2 className="size-3.5 animate-spin" /> : "Импорт"}
-                </Button>
-              </div>
+              <Textarea
+                value={aiText}
+                onChange={(e) => setAiText(e.target.value)}
+                placeholder="Вставьте описание вакансии или должностные обязанности — AI заполнит анкету автоматически..."
+                className="h-32 bg-[var(--input-bg)] border border-input resize-none text-sm"
+              />
             </div>
 
             {/* Create button */}
