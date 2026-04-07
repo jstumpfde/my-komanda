@@ -185,7 +185,7 @@ function VacancyCard({ v, onClick }: { v: VacancyRow; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="w-full text-left rounded-xl border p-4 hover:bg-accent/50 transition-colors group"
+      className="w-full text-left rounded-xl border p-4 shadow-sm hover:shadow-md transition-shadow duration-200 group"
     >
       <p className="font-medium text-sm group-hover:text-primary transition-colors">{v.title}</p>
       <p className="text-sm text-muted-foreground mt-1">
@@ -556,7 +556,7 @@ function DashboardContent() {
             {vacancies.map(v => (
               <VacancyCard key={v.id} v={v} onClick={() => router.push(`/hr/vacancies/${v.id}`)} />
             ))}
-            <button onClick={() => router.push('/hr/vacancies?create=true')} className="w-full text-left rounded-xl border border-dashed p-4 hover:bg-accent/50 transition-colors flex flex-col items-center justify-center gap-2 text-muted-foreground hover:text-primary min-h-[120px]">
+            <button onClick={() => router.push('/hr/vacancies?create=true')} className="w-full text-left rounded-xl border border-dashed p-4 shadow-sm hover:shadow-md transition-shadow duration-200 flex flex-col items-center justify-center gap-2 text-muted-foreground hover:text-primary min-h-[120px]">
               <Plus className="w-6 h-6" />
               <span className="text-sm font-medium">Добавить вакансию</span>
             </button>
