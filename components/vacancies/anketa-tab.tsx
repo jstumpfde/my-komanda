@@ -8,7 +8,6 @@ import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
-import { Slider } from "@/components/ui/slider"
 import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -629,6 +628,50 @@ function QuestionEditor({ questions, onChange }: {
   )
 }
 
+// ─── Inline add button with input ────────────────────────────────────────────
+
+function AddCustomInline({ placeholder, onAdd }: { placeholder: string; onAdd: (name: string) => void }) {
+  const [editing, setEditing] = useState(false)
+  const [value, setValue] = useState("")
+
+  const submit = () => {
+    const name = value.trim()
+    if (name) {
+      onAdd(name)
+      setValue("")
+      setEditing(false)
+    }
+  }
+
+  if (editing) {
+    return (
+      <div className="flex items-center gap-2">
+        <Input
+          autoFocus
+          value={value}
+          onChange={e => setValue(e.target.value)}
+          placeholder={placeholder}
+          className="h-8 text-sm max-w-xs bg-[var(--input-bg)] border border-input"
+          onKeyDown={e => {
+            if (e.key === "Enter") { e.preventDefault(); submit() }
+            if (e.key === "Escape") { setEditing(false); setValue("") }
+          }}
+          onBlur={() => { if (value.trim()) submit(); else setEditing(false) }}
+        />
+        <Button type="button" variant="ghost" size="sm" className="h-8 text-xs" onClick={() => { setEditing(false); setValue("") }}>
+          Отмена
+        </Button>
+      </div>
+    )
+  }
+
+  return (
+    <Button type="button" variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => setEditing(true)}>
+      <Plus className="w-3 h-3" />Добавить свой
+    </Button>
+  )
+}
+
 // ─── Category field with custom categories ──────────────────────────────────
 
 function CategoryField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
@@ -935,9 +978,9 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
             ))}
           </div>
         </div>
-        <div className="w-full space-y-1.5">
+        <div className="space-y-1.5 max-w-lg">
           <Label className="text-xs">Город</Label>
-          <Input value={data.positionCity} onChange={e => set("positionCity", e.target.value)} placeholder="Москва" className="h-9 bg-[var(--input-bg)] border border-input min-w-[300px] flex-1 w-full" />
+          <Input value={data.positionCity} onChange={e => set("positionCity", e.target.value)} placeholder="Москва" className="h-9 bg-[var(--input-bg)] border border-input min-w-[300px] flex-1" />
         </div>
       </Section>
 
@@ -954,9 +997,9 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
               <Input value={data.salaryTo} onChange={e => set("salaryTo", e.target.value)} placeholder="150 000 ₽" className="h-9 bg-[var(--input-bg)] border border-input" />
             </div>
           </div>
-          <div className="space-y-1.5 max-w-lg">
+          <div className="space-y-1.5">
             <Label className="text-xs">Бонусы</Label>
-            <Textarea value={data.bonus} onChange={e => set("bonus", e.target.value)} placeholder="% от продаж, KPI, бонус за перевыполнение плана, квартальная премия..." rows={2} className="text-sm bg-[var(--input-bg)] border border-input" />
+            <Textarea value={data.bonus} onChange={e => set("bonus", e.target.value)} placeholder="% от продаж, KPI, бонус за перевыполнение плана, квартальная премия..." rows={2} className="text-sm bg-[var(--input-bg)] border border-input w-full" />
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs">Частота выплат</Label>
@@ -1048,19 +1091,33 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
                   )}
                 </div>
                 {f.enabled && f.id === "age" && (
-                  <div className="flex items-center gap-3 ml-6 mt-1">
-                    <span className="text-xs text-muted-foreground w-6 text-right">{f.ageRange?.[0] ?? 18}</span>
-                    <Slider
-                      value={f.ageRange ?? [18, 65]}
-                      min={18} max={65} step={1}
-                      onValueChange={v => {
-                        const next = [...data.stopFactors]
-                        next[idx] = { ...next[idx], ageRange: v as [number, number] }
-                        set("stopFactors", next)
-                      }}
-                      className="flex-1"
-                    />
-                    <span className="text-xs text-muted-foreground w-6">{f.ageRange?.[1] ?? 65}</span>
+                  <div className="flex items-center gap-4 ml-6 mt-1">
+                    <div className="space-y-1 max-w-[200px]">
+                      <Label className="text-[10px] text-muted-foreground">Возраст от</Label>
+                      <Input
+                        type="number" min={18} max={65}
+                        value={f.ageRange?.[0] ?? 18}
+                        onChange={e => {
+                          const next = [...data.stopFactors]
+                          next[idx] = { ...next[idx], ageRange: [Number(e.target.value) || 18, f.ageRange?.[1] ?? 65] }
+                          set("stopFactors", next)
+                        }}
+                        className="h-7 text-xs bg-[var(--input-bg)] border border-input"
+                      />
+                    </div>
+                    <div className="space-y-1 max-w-[200px]">
+                      <Label className="text-[10px] text-muted-foreground">Возраст до</Label>
+                      <Input
+                        type="number" min={18} max={65}
+                        value={f.ageRange?.[1] ?? 65}
+                        onChange={e => {
+                          const next = [...data.stopFactors]
+                          next[idx] = { ...next[idx], ageRange: [f.ageRange?.[0] ?? 18, Number(e.target.value) || 65] }
+                          set("stopFactors", next)
+                        }}
+                        className="h-7 text-xs bg-[var(--input-bg)] border border-input"
+                      />
+                    </div>
                   </div>
                 )}
                 {f.enabled && (f.id === "experience" || f.id === "citizenship" || f.id === "salaryMax" || f.id === "city" || f.id === "documents") && (
@@ -1078,42 +1135,44 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
               </div>
             ))}
           </div>
-          <Button
-            type="button" variant="outline" size="sm" className="gap-1.5 text-xs"
-            onClick={() => set("stopFactors", [...data.stopFactors, { id: `sf_${Date.now()}`, label: "Новый стоп-фактор", enabled: true, custom: true }])}
-          >
-            <Plus className="w-3 h-3" />Добавить свой
-          </Button>
+          <AddCustomInline
+            placeholder="Название стоп-фактора..."
+            onAdd={name => set("stopFactors", [...data.stopFactors, { id: `sf_${Date.now()}`, label: name, enabled: true, custom: true }])}
+          />
         </div>
 
         {/* Desired params */}
         <div className="space-y-2 pt-2 border-t">
           <Label className="text-xs font-semibold">Желаемые параметры</Label>
-          <div className="space-y-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {data.desiredParams.map((p, idx) => (
-              <div key={p.id} className="flex items-center gap-2">
-                <Checkbox
-                  checked={p.enabled}
-                  onCheckedChange={v => {
-                    const next = [...data.desiredParams]
-                    next[idx] = { ...next[idx], enabled: !!v }
-                    set("desiredParams", next)
-                  }}
-                />
-                <span className={cn("text-sm flex-1 min-w-0 truncate", !p.enabled && "text-muted-foreground")}>{p.label}</span>
-                {p.custom && (
-                  <button type="button" onClick={() => set("desiredParams", data.desiredParams.filter((_, i) => i !== idx))} className="text-muted-foreground hover:text-destructive shrink-0">
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                )}
+              <div key={p.id} className={cn("border rounded-lg p-3 transition-colors", p.enabled ? "border-primary/30 bg-primary/5" : "border-border")}>
+                <div className="flex items-center justify-between gap-2">
+                  <span className={cn("text-sm font-medium truncate", !p.enabled && "text-muted-foreground")}>{p.label}</span>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {p.custom && (
+                      <button type="button" onClick={() => set("desiredParams", data.desiredParams.filter((_, i) => i !== idx))} className="text-muted-foreground hover:text-destructive">
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                    <Switch
+                      checked={p.enabled}
+                      onCheckedChange={v => {
+                        const next = [...data.desiredParams]
+                        next[idx] = { ...next[idx], enabled: !!v }
+                        set("desiredParams", next)
+                      }}
+                    />
+                  </div>
+                </div>
                 {p.enabled && (
-                  <div className="flex items-center gap-1 shrink-0">
-                    <span className="text-[10px] text-muted-foreground">Вес:</span>
+                  <div className="flex items-center gap-1 mt-2">
+                    <span className="text-[10px] text-muted-foreground mr-1">Вес:</span>
                     {[1, 2, 3, 4, 5].map(w => (
                       <button
                         key={w} type="button"
                         className={cn(
-                          "w-5 h-5 rounded text-[10px] font-medium transition-colors",
+                          "w-6 h-6 rounded text-xs font-medium transition-colors",
                           p.weight === w ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/80"
                         )}
                         onClick={() => {
@@ -1130,12 +1189,10 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
               </div>
             ))}
           </div>
-          <Button
-            type="button" variant="outline" size="sm" className="gap-1.5 text-xs"
-            onClick={() => set("desiredParams", [...data.desiredParams, { id: `dp_${Date.now()}`, label: "Новый параметр", enabled: true, weight: 3, custom: true }])}
-          >
-            <Plus className="w-3 h-3" />Добавить свой
-          </Button>
+          <AddCustomInline
+            placeholder="Название параметра..."
+            onAdd={name => set("desiredParams", [...data.desiredParams, { id: `dp_${Date.now()}`, label: name, enabled: true, weight: 3, custom: true }])}
+          />
         </div>
       </Section>
 
@@ -1237,7 +1294,7 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
       )}
 
       {/* Actions */}
-      <div className="flex items-center justify-between mt-4">
+      <div className="flex items-center gap-3 justify-end mt-4">
         <Button variant="outline" size="sm" className="gap-1.5 h-9 text-xs" onClick={() => toast("Предпросмотр вакансии будет доступен в ближайшем обновлении")}>
           <Eye className="w-3.5 h-3.5" />
           Предпросмотр вакансии
