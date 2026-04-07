@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
-import { ChevronDown, ChevronUp, Plus, X, Save, Loader2, Trash2, GripVertical, Eye, Copy } from "lucide-react"
+import { ChevronDown, ChevronUp, Plus, X, Save, Loader2, Trash2, GripVertical, Eye, Copy, FileDown } from "lucide-react"
 import { toast } from "sonner"
 import { POSITION_CATEGORIES } from "@/lib/position-classifier"
 import { type Question, type QuestionAnswerType, defaultQuestion } from "@/lib/course-types"
@@ -1353,11 +1353,58 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
 
       {/* Preview modal */}
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-        <DialogContent className="sm:max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-2xl max-h-[80vh] overflow-y-auto bg-white dark:bg-gray-950 p-6">
           <DialogHeader>
-            <DialogTitle>{data.vacancyTitle || "Без названия"}</DialogTitle>
+            <div className="flex items-center justify-between gap-3">
+              <DialogTitle className="text-lg">{data.vacancyTitle || "Без названия"}</DialogTitle>
+              <div className="flex items-center gap-1 shrink-0">
+                <Button variant="ghost" size="icon" className="h-8 w-8" title="Скопировать" onClick={async () => {
+                  const categoryLabel = POSITION_CATEGORY_OPTIONS.find(o => o.value === data.positionCategory)?.label || data.positionCategory
+                  const lines = [
+                    `Название: ${data.vacancyTitle}`,
+                    data.positionCity && `Город: ${data.positionCity}`,
+                    categoryLabel && `Категория: ${categoryLabel}`,
+                    data.workFormats.length > 0 && `Формат: ${data.workFormats.join(", ")}`,
+                    data.employment.length > 0 && `Занятость: ${data.employment.join(", ")}`,
+                    (data.salaryFrom || data.salaryTo) && `Зарплата: ${[data.salaryFrom && `от ${data.salaryFrom}`, data.salaryTo && `до ${data.salaryTo}`].filter(Boolean).join(" ")} ₽`,
+                    data.bonus && `Бонусы: ${data.bonus}`,
+                    data.responsibilities && `\nОбязанности:\n${data.responsibilities}`,
+                    data.requirements && `\nТребования:\n${data.requirements}`,
+                    data.requiredSkills.length > 0 && `\nОбязательные навыки: ${data.requiredSkills.join(", ")}`,
+                    data.desiredSkills.length > 0 && `Желательные навыки: ${data.desiredSkills.join(", ")}`,
+                    (data.conditions.length > 0 || data.conditionsCustom.length > 0) && `\nУсловия: ${[...data.conditions, ...data.conditionsCustom].join(", ")}`,
+                  ].filter(Boolean).join("\n")
+                  await navigator.clipboard.writeText(lines)
+                  toast.success("Скопировано")
+                }}>
+                  <Copy className="w-4 h-4" />
+                </Button>
+                <Button variant="ghost" size="icon" className="h-8 w-8" title="Печать / PDF" onClick={() => {
+                  const categoryLabel = POSITION_CATEGORY_OPTIONS.find(o => o.value === data.positionCategory)?.label || data.positionCategory
+                  const sections = [
+                    `<h1 style="font-size:20px;margin:0 0 8px">${data.vacancyTitle || "Без названия"}</h1>`,
+                    [data.positionCity, categoryLabel, ...data.workFormats, ...data.employment].filter(Boolean).join(" · "),
+                    (data.salaryFrom || data.salaryTo) && `<p><b>Зарплата:</b> ${[data.salaryFrom && `от ${data.salaryFrom}`, data.salaryTo && `до ${data.salaryTo}`].filter(Boolean).join(" ")} ₽</p>`,
+                    data.bonus && `<p><b>Бонусы:</b> ${data.bonus}</p>`,
+                    data.responsibilities && `<h3>Обязанности</h3><p style="white-space:pre-line">${data.responsibilities}</p>`,
+                    data.requirements && `<h3>Требования</h3><p style="white-space:pre-line">${data.requirements}</p>`,
+                    data.requiredSkills.length > 0 && `<h3>Обязательные навыки</h3><p>${data.requiredSkills.join(", ")}</p>`,
+                    data.desiredSkills.length > 0 && `<h3>Желательные навыки</h3><p>${data.desiredSkills.join(", ")}</p>`,
+                    (data.conditions.length > 0 || data.conditionsCustom.length > 0) && `<h3>Условия</h3><p>${[...data.conditions, ...data.conditionsCustom].join(", ")}</p>`,
+                  ].filter(Boolean).join("")
+                  const w = window.open("", "_blank")
+                  if (w) {
+                    w.document.write(`<html><head><title>${data.vacancyTitle}</title><style>body{font-family:system-ui,sans-serif;max-width:700px;margin:40px auto;padding:0 20px;color:#1a1a1a;line-height:1.6}h3{margin:16px 0 4px;font-size:14px}p{margin:4px 0}</style></head><body>${sections}</body></html>`)
+                    w.document.close()
+                    w.print()
+                  }
+                }}>
+                  <FileDown className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
           </DialogHeader>
-          <div className="space-y-4 text-sm">
+          <div className="space-y-4 text-sm leading-relaxed">
             {(data.positionCity || data.positionCategory) && (
               <div className="flex flex-wrap gap-2">
                 {data.positionCity && <Badge variant="secondary">{data.positionCity}</Badge>}
@@ -1371,44 +1418,44 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
               </div>
             )}
             {(data.salaryFrom || data.salaryTo) && (
-              <div>
-                <p className="text-xs font-semibold text-muted-foreground mb-1">Зарплата</p>
+              <div className="mb-4">
+                <p className="font-semibold text-sm text-muted-foreground uppercase mb-1">Зарплата</p>
                 <p>{[data.salaryFrom && `от ${data.salaryFrom}`, data.salaryTo && `до ${data.salaryTo}`].filter(Boolean).join(" ")} ₽</p>
               </div>
             )}
             {data.bonus && (
-              <div>
-                <p className="text-xs font-semibold text-muted-foreground mb-1">Бонусы</p>
+              <div className="mb-4">
+                <p className="font-semibold text-sm text-muted-foreground uppercase mb-1">Бонусы</p>
                 <p>{data.bonus}</p>
               </div>
             )}
             {data.responsibilities && (
-              <div>
-                <p className="text-xs font-semibold text-muted-foreground mb-1">Обязанности</p>
+              <div className="mb-4">
+                <p className="font-semibold text-sm text-muted-foreground uppercase mb-1">Обязанности</p>
                 <div className="whitespace-pre-line">{data.responsibilities}</div>
               </div>
             )}
             {data.requirements && (
-              <div>
-                <p className="text-xs font-semibold text-muted-foreground mb-1">Требования</p>
+              <div className="mb-4">
+                <p className="font-semibold text-sm text-muted-foreground uppercase mb-1">Требования</p>
                 <div className="whitespace-pre-line">{data.requirements}</div>
               </div>
             )}
             {data.requiredSkills.length > 0 && (
-              <div>
-                <p className="text-xs font-semibold text-muted-foreground mb-1">Обязательные навыки</p>
+              <div className="mb-4">
+                <p className="font-semibold text-sm text-muted-foreground uppercase mb-1">Обязательные навыки</p>
                 <div className="flex flex-wrap gap-1.5">{data.requiredSkills.map(s => <Badge key={s} variant="secondary" className="text-xs">{s}</Badge>)}</div>
               </div>
             )}
             {data.desiredSkills.length > 0 && (
-              <div>
-                <p className="text-xs font-semibold text-muted-foreground mb-1">Желательные навыки</p>
+              <div className="mb-4">
+                <p className="font-semibold text-sm text-muted-foreground uppercase mb-1">Желательные навыки</p>
                 <div className="flex flex-wrap gap-1.5">{data.desiredSkills.map(s => <Badge key={s} variant="outline" className="text-xs">{s}</Badge>)}</div>
               </div>
             )}
             {(data.conditions.length > 0 || data.conditionsCustom.length > 0) && (
-              <div>
-                <p className="text-xs font-semibold text-muted-foreground mb-1">Условия</p>
+              <div className="mb-4">
+                <p className="font-semibold text-sm text-muted-foreground uppercase mb-1">Условия</p>
                 <div className="flex flex-wrap gap-1.5">
                   {[...data.conditions, ...data.conditionsCustom].map(c => <Badge key={c} variant="secondary" className="text-xs">{c}</Badge>)}
                 </div>
