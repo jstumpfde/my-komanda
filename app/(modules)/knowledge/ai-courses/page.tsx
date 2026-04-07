@@ -112,7 +112,7 @@ export default function AiCoursesListPage() {
                   <Link
                     key={p.id}
                     href={`/knowledge/ai-courses/${p.id}`}
-                    className="group block border rounded-xl p-5 bg-card hover:border-foreground/15 transition-all"
+                    className="group block border rounded-xl p-5 bg-card transition-all"
                   >
                     <div className="flex items-start justify-between mb-3">
                       <h3 className="font-semibold text-sm group-hover:text-primary transition-colors line-clamp-1">

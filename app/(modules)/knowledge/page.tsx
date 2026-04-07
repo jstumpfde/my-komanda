@@ -126,7 +126,7 @@ export default function KnowledgePage() {
                 <Link
                   key={cat.id}
                   href={`/knowledge/category/${cat.slug}`}
-                  className="group border rounded-xl p-6 hover:border-foreground/20 transition-all bg-card"
+                  className="group border rounded-xl p-6 transition-all bg-card"
                 >
                   <div className="flex items-start gap-4">
                     <div className="shrink-0">{CATEGORY_ICONS[cat.icon]}</div>

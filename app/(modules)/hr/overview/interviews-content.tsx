@@ -53,7 +53,7 @@ export default function InterviewsContent() {
 
       <div className="space-y-2 mb-6">
         {upcoming.map((iv) => (
-          <Card key={iv.id} className="hover:bg-accent/30 transition-colors cursor-pointer" onClick={() => router.push("/hr/interviews")}>
+          <Card key={iv.id} className="cursor-pointer" onClick={() => router.push("/hr/interviews")}>
             <CardContent className="p-4 flex items-center gap-4">
               <div className="flex items-center justify-center size-10 rounded-lg bg-primary/10 text-primary shrink-0">
                 <Video className="size-5" />

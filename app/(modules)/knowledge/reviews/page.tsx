@@ -115,7 +115,7 @@ function ListView({ items }: { items: ReviewItem[] }) {
         <Link
           key={item.id}
           href={`/knowledge/article/${item.articleSlug}/edit`}
-          className="block border rounded-xl p-4 hover:border-foreground/20 transition-all bg-card group"
+          className="block border rounded-xl p-4 transition-all bg-card group"
         >
           <div className="flex items-start gap-4">
             <Avatar className="size-10 shrink-0 mt-0.5">
@@ -214,7 +214,7 @@ function KanbanView({ items }: { items: ReviewItem[] }) {
                 <Link
                   key={item.id}
                   href={`/knowledge/article/${item.articleSlug}/edit`}
-                  className="block border rounded-lg p-3.5 hover:border-foreground/20 transition-all bg-card group"
+                  className="block border rounded-lg p-3.5 transition-all bg-card group"
                 >
                   <div className="flex items-start gap-3 mb-2">
                     <Avatar className="size-7 shrink-0">

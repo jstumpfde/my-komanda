@@ -73,7 +73,7 @@ function StepCard({
   const info = stepTypeInfo(step.type)
   const Icon = info.icon
   return (
-    <div className="flex items-center gap-2 p-2.5 rounded-lg border bg-card hover:bg-accent/30 transition-colors group">
+    <div className="flex items-center gap-2 p-2.5 rounded-lg border bg-card transition-colors group">
       <GripVertical className="w-4 h-4 text-muted-foreground/40 shrink-0 cursor-grab" />
       <div className={cn("w-7 h-7 rounded-md flex items-center justify-center shrink-0 bg-muted/50", info.color)}>
         <Icon className="w-3.5 h-3.5" />

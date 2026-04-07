@@ -234,7 +234,7 @@ function VacancyListItem({ v, selected, onToggle, team, actions }: {
 }) {
   const salary = formatSalary(v.salaryMin, v.salaryMax)
   return (
-    <div className="flex items-center gap-3 p-4 rounded-lg border border-border bg-card hover:bg-accent/50 transition-colors group">
+    <div className="flex items-center gap-3 p-4 rounded-lg border border-border bg-card transition-colors group">
       <Checkbox checked={selected} onCheckedChange={onToggle} onClick={(e) => e.stopPropagation()} className="shrink-0" />
       <Link href={`/hr/vacancies/${v.id}`} className="flex items-center gap-4 flex-1 min-w-0">
         <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary shrink-0">
@@ -264,7 +264,7 @@ function VacancyTile({ v, selected, onToggle, team, actions }: {
 }) {
   const salary = formatSalary(v.salaryMin, v.salaryMax)
   return (
-    <div className="flex flex-col p-4 rounded-lg border border-border bg-card hover:bg-accent/50 transition-colors group relative">
+    <div className="flex flex-col p-4 rounded-lg border border-border bg-card transition-colors group relative">
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center gap-2">
           <Checkbox checked={selected} onCheckedChange={onToggle} className="shrink-0" />

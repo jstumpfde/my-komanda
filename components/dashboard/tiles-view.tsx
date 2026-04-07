@@ -84,7 +84,7 @@ export function TilesView({ columns, settings, onOpenProfile, onAction }: TilesV
         return (
           <div
             key={candidate.id}
-            className="rounded-xl border border-border bg-card hover:border-primary/30 transition-all duration-200 overflow-hidden"
+            className="rounded-xl border border-border bg-card transition-all duration-200 overflow-hidden"
           >
             {/* Color bar */}
             <div
