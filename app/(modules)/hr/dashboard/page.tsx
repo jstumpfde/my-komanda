@@ -177,19 +177,19 @@ function DashboardContent() {
             {/* ═══ Block 2: 5 Metrics ═══ */}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
               {[
-                { label: "Активных вакансий", value: "4", trend: "+2 за неделю", trendPositive: true, icon: Briefcase, color: C.green, border: "border-l-green-500" },
-                { label: "Всего кандидатов", value: "445", trend: "+68 за неделю", trendPositive: true, icon: Users, color: C.blue, border: "border-l-blue-500" },
-                { label: "Нанято за месяц", value: "3", trend: "цель: 5", trendPositive: false, icon: UserCheck, color: C.purple, border: "border-l-purple-500" },
-                { label: "Ср. время закрытия", value: "18 дн", trend: "цель: 14 дн", trendPositive: false, icon: Clock, color: C.orange, border: "border-l-orange-500" },
-                { label: "Конверсия воронки", value: "12%", trend: "цель: 15%", trendPositive: false, icon: TrendingUp, color: "#6366f1", border: "border-l-indigo-500" },
+                { label: "Активных вакансий", value: "4", trend: "+2 за неделю", icon: Briefcase, bg: "bg-emerald-500" },
+                { label: "Всего кандидатов", value: "445", trend: "+68 за неделю", icon: Users, bg: "bg-blue-500" },
+                { label: "Нанято за месяц", value: "3", trend: "цель: 5", icon: UserCheck, bg: "bg-purple-500" },
+                { label: "Ср. время закрытия", value: "18 дн", trend: "цель: 14 дн", icon: Clock, bg: "bg-orange-500" },
+                { label: "Конверсия воронки", value: "12%", trend: "цель: 15%", icon: TrendingUp, bg: "bg-indigo-500" },
               ].map((m, i) => (
-                <div key={i} className={cn("bg-white dark:bg-card border rounded-xl shadow-sm hover:shadow-md transition-shadow p-4 border-l-4", m.border)}>
+                <div key={i} className={cn("rounded-xl shadow-sm hover:shadow-md transition-shadow p-4 text-white", m.bg)}>
                   <div className="flex items-center gap-1.5 mb-2">
-                    <m.icon className="w-4 h-4" style={{ color: m.color }} />
-                    <span className="text-[11px] text-muted-foreground">{m.label}</span>
+                    <m.icon className="w-4 h-4 text-white/80" />
+                    <span className="text-[11px] text-white/70">{m.label}</span>
                   </div>
-                  <p className="text-3xl font-bold" style={{ color: m.color }}>{m.value}</p>
-                  <p className={cn("text-xs mt-1", m.trendPositive ? "text-emerald-600" : "text-muted-foreground")}>{m.trend}</p>
+                  <p className="text-3xl font-bold text-white">{m.value}</p>
+                  <p className="text-xs mt-1 text-white/70">{m.trend}</p>
                 </div>
               ))}
             </div>
