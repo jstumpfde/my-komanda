@@ -77,7 +77,7 @@ export function CompaniesTable({ companies, onEdit, onArchive, onRestore, sortCo
             <tr className="border-b bg-muted/30">
               <th className="text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3 min-w-[200px]">
                 <button type="button" onClick={() => onSort?.("name")} className="inline-flex items-center gap-1 hover:text-foreground transition-colors">
-                  Название <ArrowUpDown className={cn("w-3 h-3", sortColumn === "name" ? "text-foreground" : "opacity-40")} />
+                  Название <ArrowUpDown className={cn("w-4 h-4", sortColumn === "name" ? "text-foreground" : "opacity-60")} />
                 </button>
               </th>
               <th className="text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3">ИНН</th>
@@ -85,7 +85,7 @@ export function CompaniesTable({ companies, onEdit, onArchive, onRestore, sortCo
               <th className="text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3">Город</th>
               <th className="text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3">
                 <button type="button" onClick={() => onSort?.("status")} className="inline-flex items-center gap-1 hover:text-foreground transition-colors">
-                  Статус <ArrowUpDown className={cn("w-3 h-3", sortColumn === "status" ? "text-foreground" : "opacity-40")} />
+                  Статус <ArrowUpDown className={cn("w-4 h-4", sortColumn === "status" ? "text-foreground" : "opacity-60")} />
                 </button>
               </th>
               <th className="text-right text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3 pr-4">Действия</th>
