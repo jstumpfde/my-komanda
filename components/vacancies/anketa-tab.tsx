@@ -308,40 +308,74 @@ function TagInput({ tags, onChange, placeholder }: {
 function TagInputWithSuggestions({ tags, onChange, placeholder, suggestions }: {
   tags: string[]; onChange: (t: string[]) => void; placeholder: string; suggestions: string[]
 }) {
-  const [custom, setCustom] = useState("")
+  const [input, setInput] = useState("")
+  const [dropdownOpen, setDropdownOpen] = useState(false)
+  const available = suggestions.filter(s => !tags.includes(s))
+
   const addCustom = () => {
-    const v = custom.trim()
-    if (v && !tags.includes(v)) onChange([...tags, v])
-    setCustom("")
+    const v = input.trim()
+    if (v && !tags.includes(v)) {
+      onChange([...tags, v])
+      setInput("")
+    }
   }
+
   return (
     <div className="space-y-2">
-      <div className="flex flex-wrap gap-x-4 gap-y-1.5">
-        {suggestions.map(s => (
-          <label key={s} className="flex items-center gap-1.5 text-sm cursor-pointer">
-            <Checkbox
-              checked={tags.includes(s)}
-              onCheckedChange={(checked) => {
-                if (checked) onChange([...tags, s])
-                else onChange(tags.filter(x => x !== s))
-              }}
-            />
-            {s}
-          </label>
-        ))}
-      </div>
+      {/* Выбранные навыки — чипы */}
+      {tags.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {tags.map(t => (
+            <Badge key={t} variant="secondary" className="gap-1 text-xs bg-primary/10 text-primary border-primary/20">
+              {t}
+              <button type="button" onClick={() => onChange(tags.filter(x => x !== t))} className="hover:text-destructive ml-0.5">
+                <X className="w-3 h-3" />
+              </button>
+            </Badge>
+          ))}
+        </div>
+      )}
+
+      {/* Кнопка добавления из списка + кастомное поле */}
       <div className="flex gap-2">
-        <Input
-          value={custom}
-          onChange={e => setCustom(e.target.value)}
-          placeholder="Добавить свой навык..."
-          className="h-8 text-sm bg-[var(--input-bg)] border border-input"
-          onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addCustom() } }}
-        />
-        <Button type="button" variant="outline" size="sm" className="h-8 px-3" onClick={addCustom}>
+        <div className="relative flex-1">
+          <Input
+            value={input}
+            onChange={e => { setInput(e.target.value); setDropdownOpen(true) }}
+            onFocus={() => setDropdownOpen(true)}
+            placeholder={tags.length > 0 ? "Добавить ещё..." : placeholder}
+            className="h-8 text-sm bg-[var(--input-bg)] border border-input"
+            onKeyDown={e => {
+              if (e.key === "Enter") { e.preventDefault(); addCustom() }
+              if (e.key === "Escape") setDropdownOpen(false)
+            }}
+          />
+          {/* Выпадающий список доступных навыков */}
+          {dropdownOpen && available.filter(s => !input || s.toLowerCase().includes(input.toLowerCase())).length > 0 && (
+            <div className="absolute left-0 right-0 top-full mt-1 z-50 bg-popover border border-border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+              {available
+                .filter(s => !input || s.toLowerCase().includes(input.toLowerCase()))
+                .map(s => (
+                  <button
+                    key={s}
+                    type="button"
+                    onMouseDown={e => { e.preventDefault(); onChange([...tags, s]); setInput("") }}
+                    className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted transition-colors"
+                  >
+                    + {s}
+                  </button>
+                ))
+              }
+            </div>
+          )}
+        </div>
+        <Button type="button" variant="outline" size="sm" className="h-8 px-3 shrink-0" onClick={addCustom}>
           <Plus className="w-3.5 h-3.5" />
         </Button>
       </div>
+
+      {/* Кликаем вне — закрываем dropdown */}
+      {dropdownOpen && <div className="fixed inset-0 z-40" onClick={() => setDropdownOpen(false)} />}
     </div>
   )
 }
