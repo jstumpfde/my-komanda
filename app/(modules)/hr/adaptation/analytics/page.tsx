@@ -250,18 +250,18 @@ export default function AdaptationAnalyticsPage() {
                       <div className="overflow-x-auto">
                         <table className="w-full text-sm">
                           <thead>
-                            <tr className="border-b bg-muted/30">
-                              <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Шаг</th>
-                              <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Тип</th>
-                              <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">План</th>
-                              <th className="text-center px-4 py-2.5 font-medium text-muted-foreground">День</th>
-                              <th className="text-center px-4 py-2.5 font-medium text-muted-foreground">% выполн.</th>
-                              <th className="text-center px-4 py-2.5 font-medium text-muted-foreground">Ср. балл</th>
+                            <tr className="bg-muted/50 border-b">
+                              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Шаг</th>
+                              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Тип</th>
+                              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">План</th>
+                              <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">День</th>
+                              <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">% выполн.</th>
+                              <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Ср. балл</th>
                             </tr>
                           </thead>
                           <tbody>
                             {problems.map(s => (
-                              <tr key={s.stepId} className="border-b last:border-0 hover:bg-muted/20">
+                              <tr key={s.stepId} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
                                 <td className="px-4 py-2.5 font-medium max-w-[200px] truncate">{s.title}</td>
                                 <td className="px-4 py-2.5 text-muted-foreground text-xs">
                                   {STEP_TYPE_LABELS[s.type] ?? s.type}

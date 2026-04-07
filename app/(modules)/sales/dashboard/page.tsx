@@ -175,17 +175,17 @@ export default function SalesDashboardPage() {
                 <div className="overflow-x-auto">
                   <table className="w-full">
                     <thead>
-                      <tr className="border-b bg-muted/30">
-                        <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5">#</th>
-                        <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5">Менеджер</th>
-                        <th className="text-right text-xs font-semibold text-muted-foreground px-4 py-2.5">Сделок</th>
-                        <th className="text-right text-xs font-semibold text-muted-foreground px-4 py-2.5">Сумма</th>
-                        <th className="text-right text-xs font-semibold text-muted-foreground px-4 py-2.5">Конверсия</th>
+                      <tr className="bg-muted/50 border-b">
+                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">#</th>
+                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Менеджер</th>
+                        <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Сделок</th>
+                        <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Сумма</th>
+                        <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Конверсия</th>
                       </tr>
                     </thead>
                     <tbody>
                       {TOP_MANAGERS.map((mgr, i) => (
-                        <tr key={mgr.name} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
+                        <tr key={mgr.name} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
                           <td className="px-4 py-3 text-sm text-muted-foreground">{i + 1}</td>
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-2.5">

@@ -145,10 +145,10 @@ export default function RolesPage() {
         <CardContent className="overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
-              <tr className="border-b">
-                <th className="text-left py-2 pr-4 font-medium text-muted-foreground w-40">Раздел</th>
+              <tr className="bg-muted/50 border-b">
+                <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider py-3 pr-4 w-40">Раздел</th>
                 {ROLES.map(r => (
-                  <th key={r.role} className="py-2 px-3 font-medium text-center">
+                  <th key={r.role} className="py-3 px-3 text-xs font-medium text-center">
                     <span className={cn("px-2 py-0.5 rounded-full", r.color)}>{r.label}</span>
                   </th>
                 ))}
@@ -156,7 +156,7 @@ export default function RolesPage() {
             </thead>
             <tbody>
               {PERMISSIONS.map(p => (
-                <tr key={p.label} className="border-b last:border-0 hover:bg-muted/20">
+                <tr key={p.label} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
                   <td className="py-2 pr-4 text-sm">{p.label}</td>
                   {(["director", "hr_lead", "hr_manager", "department_head", "observer"] as const).map(role => (
                     <td key={role} className="py-2 px-3 text-center">

@@ -874,15 +874,15 @@ export default function VacancyPage() {
                             </div>
                             <div className="flex-1 overflow-x-auto">
                               <table className="w-full">
-                                <thead><tr className="border-b bg-muted/30">
-                                  <th className="text-left text-xs font-semibold text-muted-foreground px-3 py-2">Источник</th>
-                                  <th className="text-right text-xs font-semibold text-muted-foreground px-3 py-2">Кол-во</th>
-                                  <th className="text-right text-xs font-semibold text-muted-foreground px-3 py-2">%</th>
-                                  <th className="text-right text-xs font-semibold text-muted-foreground px-3 py-2">Ср. AI-скор</th>
+                                <thead><tr className="bg-muted/50 border-b">
+                                  <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Источник</th>
+                                  <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Кол-во</th>
+                                  <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">%</th>
+                                  <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Ср. AI-скор</th>
                                 </tr></thead>
                                 <tbody>
                                   {sourceData.map((s) => (
-                                    <tr key={s.source} className="border-b last:border-0 hover:bg-muted/20">
+                                    <tr key={s.source} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
                                       <td className="px-3 py-2"><div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: s.color }} /><span className="text-sm font-medium">{s.source}</span></div></td>
                                       <td className="text-right px-3 py-2 text-sm font-medium">{s.count}</td>
                                       <td className="text-right px-3 py-2 text-sm text-muted-foreground">{s.pct}%</td>

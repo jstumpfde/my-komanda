@@ -95,21 +95,21 @@ export default function EmailPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b bg-muted/30">
-                  <th className="text-left py-3 px-4 font-medium text-muted-foreground">Тема</th>
-                  <th className="text-right py-3 px-4 font-medium text-muted-foreground">Отправлено</th>
-                  <th className="text-right py-3 px-4 font-medium text-muted-foreground">Открыто</th>
-                  <th className="text-right py-3 px-4 font-medium text-muted-foreground">OR %</th>
-                  <th className="text-right py-3 px-4 font-medium text-muted-foreground">Кликов</th>
-                  <th className="text-left py-3 px-4 font-medium text-muted-foreground">Дата</th>
-                  <th className="text-left py-3 px-4 font-medium text-muted-foreground">Статус</th>
+                <tr className="bg-muted/50 border-b">
+                  <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Тема</th>
+                  <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Отправлено</th>
+                  <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Открыто</th>
+                  <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">OR %</th>
+                  <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Кликов</th>
+                  <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Дата</th>
+                  <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Статус</th>
                 </tr>
               </thead>
               <tbody>
                 {campaigns.map((row) => {
                   const or = row.sent > 0 ? ((row.opened / row.sent) * 100).toFixed(1) : "—"
                   return (
-                    <tr key={row.id} className="border-b last:border-0 hover:bg-muted/30">
+                    <tr key={row.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
                       <td className="py-3 px-4 font-medium max-w-xs">
                         <p className="truncate">{row.subject}</p>
                       </td>

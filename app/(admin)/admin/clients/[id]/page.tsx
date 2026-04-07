@@ -761,11 +761,11 @@ export default function AdminClientPage() {
                       <div className="overflow-x-auto">
                         <table className="w-full">
                           <thead>
-                            <tr className="border-b bg-muted/30">
-                              <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-3">Пользователь</th>
-                              <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-3">Роль</th>
-                              <th className="text-center text-xs font-semibold text-muted-foreground px-4 py-3">Статус</th>
-                              <th className="text-right text-xs font-semibold text-muted-foreground px-4 py-3">Действия</th>
+                            <tr className="bg-muted/50 border-b">
+                              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Пользователь</th>
+                              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Роль</th>
+                              <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Статус</th>
+                              <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Действия</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -777,7 +777,7 @@ export default function AdminClientPage() {
                               </tr>
                             )}
                             {users.map(user => (
-                              <tr key={user.id} className="border-b last:border-0 hover:bg-muted/20">
+                              <tr key={user.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
                                 <td className="px-4 py-3">
                                   <div>
                                     <p className="text-sm font-medium text-foreground">{user.name}</p>

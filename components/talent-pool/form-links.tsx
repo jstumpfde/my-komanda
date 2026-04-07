@@ -117,18 +117,18 @@ export function FormLinks() {
         <CardContent className="p-0">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-border bg-muted/40">
-                <th className="text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-3 py-2.5">Источник</th>
-                <th className="text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-3 py-2.5">Название</th>
-                <th className="text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-3 py-2.5">Короткая ссылка</th>
-                <th className="text-center text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-2 py-2.5">👆 Клики</th>
-                <th className="text-center text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-2 py-2.5">👤 Кандидаты</th>
-                <th className="px-2 py-2.5"></th>
+              <tr className="bg-muted/50 border-b">
+                <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Источник</th>
+                <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Название</th>
+                <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Короткая ссылка</th>
+                <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Клики</th>
+                <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Кандидаты</th>
+                <th className="px-4 py-3"></th>
               </tr>
             </thead>
             <tbody>
               {links.map((link) => (
-                <tr key={link.id} className="border-b last:border-0 hover:bg-muted/20">
+                <tr key={link.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
                   <td className="px-3 py-2 text-xs text-muted-foreground">{link.source}</td>
                   <td className="px-3 py-2 text-xs font-medium">{link.name}</td>
                   <td className="px-3 py-2 text-[11px] text-muted-foreground font-mono">{link.shortUrl}</td>

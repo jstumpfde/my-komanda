@@ -337,21 +337,21 @@ function SourcesSection() {
         <div className="overflow-x-auto rounded-lg border">
           <table className="w-full">
             <thead>
-              <tr className="border-b bg-muted/30">
+              <tr className="bg-muted/50 border-b">
                 <th className="w-3 px-2 py-3" />
-                <th className="text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground px-3 py-3">Название</th>
-                <th className="text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground px-3 py-3">Источник</th>
-                <th className="text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground px-3 py-3">Аккаунт</th>
-                <th className="text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground px-3 py-3">Переходов</th>
-                <th className="text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground px-3 py-3">Откликов</th>
-                <th className="text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground px-3 py-3">Конверсия</th>
-                <th className="text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground px-3 py-3">Создана</th>
-                <th className="text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground px-3 py-3">Действия</th>
+                <th className="text-left text-xs font-medium uppercase tracking-wider text-muted-foreground px-4 py-3">Название</th>
+                <th className="text-left text-xs font-medium uppercase tracking-wider text-muted-foreground px-4 py-3">Источник</th>
+                <th className="text-left text-xs font-medium uppercase tracking-wider text-muted-foreground px-4 py-3">Аккаунт</th>
+                <th className="text-center text-xs font-medium uppercase tracking-wider text-muted-foreground px-4 py-3">Переходов</th>
+                <th className="text-center text-xs font-medium uppercase tracking-wider text-muted-foreground px-4 py-3">Откликов</th>
+                <th className="text-center text-xs font-medium uppercase tracking-wider text-muted-foreground px-4 py-3">Конверсия</th>
+                <th className="text-left text-xs font-medium uppercase tracking-wider text-muted-foreground px-4 py-3">Создана</th>
+                <th className="text-center text-xs font-medium uppercase tracking-wider text-muted-foreground px-4 py-3">Действия</th>
               </tr>
             </thead>
             <tbody>
               {filtered.map(link => (
-                <tr key={link.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
+                <tr key={link.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
                   <td className="px-2 py-3"><div className="w-3 h-3 rounded-full" style={{ backgroundColor: link.color }} /></td>
                   <td className="px-3 py-3"><p className="text-sm font-medium text-foreground">{link.name}</p><p className="text-[10px] text-muted-foreground font-mono">{link.shortUrl}</p></td>
                   <td className="px-3 py-3"><Badge variant="outline" className="text-xs" style={{ borderColor: link.color + "40", color: link.color }}>{SOURCE_TYPE_LABELS[link.sourceType]}</Badge></td>

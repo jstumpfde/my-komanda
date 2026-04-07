@@ -287,14 +287,14 @@ export default function TalentPoolPage() {
                   <CardContent className="p-0">
                     <table className="w-full">
                       <thead>
-                        <tr className="border-b border-border bg-muted/40">
-                        <th className="text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3">Имя</th>
-                        <th className="text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3">Должность</th>
-                        <th className="text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3">Компания</th>
-                        <th className="text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3">Источник</th>
-                        <th className="text-center text-xs font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3">Скоринг</th>
-                        <th className="text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3">Статус</th>
-                        <th className="text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3">Контакт</th>
+                        <tr className="bg-muted/50 border-b border-border">
+                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Имя</th>
+                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Должность</th>
+                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Компания</th>
+                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Источник</th>
+                        <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Скоринг</th>
+                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Статус</th>
+                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Контакт</th>
                         <th className="px-4 py-3"></th>
                       </tr>
                       </thead>
@@ -302,7 +302,7 @@ export default function TalentPoolPage() {
                         {filtered.map((c) => {
                           const st = STATUS_CFG[c.status]
                           return (
-                            <tr key={c.id} className="border-b last:border-0 hover:bg-muted/20">
+                            <tr key={c.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
                               <td className="px-4 py-2.5 text-[13px] font-medium text-foreground/85">{c.name}</td>
                               <td className="px-3 py-2.5 text-[13px] text-muted-foreground">{c.position}</td>
                               <td className="px-3 py-2.5 text-[13px] text-muted-foreground">{c.company}</td>

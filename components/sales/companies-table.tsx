@@ -74,26 +74,26 @@ export function CompaniesTable({ companies, onEdit, onArchive, onRestore, sortCo
       <div className="overflow-x-auto">
         <table className="w-full">
           <thead>
-            <tr className="border-b bg-muted/30">
-              <th className="text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3 min-w-[200px]">
+            <tr className="bg-muted/50 border-b">
+              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3 min-w-[200px]">
                 <button type="button" onClick={() => onSort?.("name")} className="inline-flex items-center gap-1 hover:text-foreground transition-colors">
                   Название <ArrowUpDown className={cn("w-4 h-4", sortColumn === "name" ? "text-foreground" : "opacity-60")} />
                 </button>
               </th>
-              <th className="text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3">ИНН</th>
-              <th className="text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3">Отрасль</th>
-              <th className="text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3">Город</th>
-              <th className="text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3">
+              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">ИНН</th>
+              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Отрасль</th>
+              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Город</th>
+              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">
                 <button type="button" onClick={() => onSort?.("status")} className="inline-flex items-center gap-1 hover:text-foreground transition-colors">
                   Статус <ArrowUpDown className={cn("w-4 h-4", sortColumn === "status" ? "text-foreground" : "opacity-60")} />
                 </button>
               </th>
-              <th className="text-right text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3 pr-4">Действия</th>
+              <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3 pr-4">Действия</th>
             </tr>
           </thead>
           <tbody>
             {companies.map((company) => (
-              <tr key={company.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
+              <tr key={company.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
                 <td className="px-4 py-3 min-w-[200px]">
                   <div className="flex items-center gap-2.5">
                     <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">

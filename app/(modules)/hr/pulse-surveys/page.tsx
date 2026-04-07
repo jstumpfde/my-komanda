@@ -220,10 +220,10 @@ export default function PulseSurveysPage() {
             <div className="border border-border rounded-xl overflow-hidden">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="bg-muted/50">
-                    <th className="text-left font-medium px-4 py-3">Вопрос</th>
-                    <th className="text-center font-medium px-4 py-3 w-32">Категория</th>
-                    <th className="text-center font-medium px-4 py-3 w-24">Тип</th>
+                  <tr className="bg-muted/50 border-b">
+                    <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Вопрос</th>
+                    <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3 w-32">Категория</th>
+                    <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3 w-24">Тип</th>
                   </tr>
                 </thead>
                 <tbody>

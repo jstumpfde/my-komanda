@@ -200,14 +200,14 @@ function UpgradeContent() {
           <div className="rounded-xl border overflow-hidden">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b bg-muted/40">
-                  <th className="text-left px-4 py-3 font-medium text-muted-foreground w-40">
+                <tr className="bg-muted/50 border-b">
+                  <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3 w-40">
                     Возможности
                   </th>
                   {PLANS.map((plan) => (
                     <th
                       key={plan.slug}
-                      className={`px-4 py-3 font-semibold text-center ${
+                      className={`text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3 text-center ${
                         plan.modules.includes(moduleSlug) ? "text-primary" : ""
                       }`}
                     >

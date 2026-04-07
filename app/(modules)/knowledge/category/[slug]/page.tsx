@@ -134,18 +134,18 @@ export default function CategoryPage() {
               <div className="border rounded-xl overflow-hidden bg-card">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b bg-muted/40">
-                      <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Название</th>
-                      <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Автор</th>
-                      <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Дата</th>
-                      <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Просмотров</th>
-                      <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Статус</th>
-                      <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Теги</th>
+                    <tr className="bg-muted/50 border-b">
+                      <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Название</th>
+                      <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Автор</th>
+                      <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Дата</th>
+                      <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Просмотров</th>
+                      <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Статус</th>
+                      <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Теги</th>
                     </tr>
                   </thead>
                   <tbody>
                     {articles.map((article) => (
-                      <tr key={article.id} className="border-b last:border-b-0 hover:bg-muted/30 transition-colors">
+                      <tr key={article.id} className="border-b last:border-b-0 hover:bg-muted/50 transition-colors">
                         <td className="px-4 py-3">
                           <Link
                             href={`/knowledge/article/${article.slug}`}

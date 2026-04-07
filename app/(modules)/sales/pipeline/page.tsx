@@ -132,17 +132,17 @@ export default function SalesPipelinePage() {
                   <div className="overflow-x-auto">
                     <table className="w-full">
                       <thead>
-                        <tr className="border-b bg-muted/30">
-                          <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5">Источник</th>
-                          <th className="text-right text-xs font-semibold text-muted-foreground px-4 py-2.5">Лидов</th>
-                          <th className="text-right text-xs font-semibold text-muted-foreground px-4 py-2.5">Сделок</th>
-                          <th className="text-right text-xs font-semibold text-muted-foreground px-4 py-2.5">Конверсия</th>
-                          <th className="text-right text-xs font-semibold text-muted-foreground px-4 py-2.5">Ср. сумма</th>
+                        <tr className="bg-muted/50 border-b">
+                          <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Источник</th>
+                          <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Лидов</th>
+                          <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Сделок</th>
+                          <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Конверсия</th>
+                          <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Ср. сумма</th>
                         </tr>
                       </thead>
                       <tbody>
                         {SOURCE_BREAKDOWN.map((row) => (
-                          <tr key={row.source} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
+                          <tr key={row.source} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
                             <td className="px-4 py-3 text-sm font-medium text-foreground">{row.source}</td>
                             <td className="text-right px-4 py-3 text-sm text-foreground">{row.leads}</td>
                             <td className="text-right px-4 py-3 text-sm text-foreground">{row.deals}</td>

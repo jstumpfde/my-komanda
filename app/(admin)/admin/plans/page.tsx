@@ -77,19 +77,19 @@ export default async function AdminPlansPage() {
                 <div className="overflow-x-auto">
                   <table className="w-full">
                     <thead>
-                      <tr className="border-b bg-muted/30">
-                        <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-3">Название</th>
-                        <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-3">Slug</th>
-                        <th className="text-right text-xs font-semibold text-muted-foreground px-4 py-3">Цена</th>
-                        <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-3">Модули</th>
-                        <th className="text-right text-xs font-semibold text-muted-foreground px-4 py-3">Клиентов</th>
-                        <th className="text-center text-xs font-semibold text-muted-foreground px-4 py-3">Статус</th>
+                      <tr className="bg-muted/50 border-b">
+                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Название</th>
+                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Slug</th>
+                        <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Цена</th>
+                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Модули</th>
+                        <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Клиентов</th>
+                        <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Статус</th>
                         <th className="px-4 py-3" />
                       </tr>
                     </thead>
                     <tbody>
                       {planList.map(plan => (
-                        <tr key={plan.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
+                        <tr key={plan.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
                           <td className="px-4 py-3">
                             <p className="font-medium text-sm text-foreground">{plan.name}</p>
                           </td>

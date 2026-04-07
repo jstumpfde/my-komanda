@@ -286,17 +286,17 @@ export default function VisitLogPage() {
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
-                        <tr className="border-b bg-muted/30">
-                          <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground">Время</th>
-                          <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground">Пользователь</th>
-                          <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground">Роль</th>
-                          <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground">Страница</th>
-                          <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground">IP</th>
+                        <tr className="bg-muted/50 border-b">
+                          <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Время</th>
+                          <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Пользователь</th>
+                          <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Роль</th>
+                          <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Страница</th>
+                          <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">IP</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y">
                         {paginatedVisits.map((v) => (
-                          <tr key={v.id} className="hover:bg-muted/30">
+                          <tr key={v.id} className="hover:bg-muted/50 transition-colors">
                             <td className="px-4 py-2 text-xs text-muted-foreground whitespace-nowrap">{formatTime(v.createdAt)}</td>
                             <td className="px-4 py-2">
                               <div className="flex items-center gap-2">
@@ -346,14 +346,14 @@ export default function VisitLogPage() {
                     </div>
                     <table className="w-full text-sm">
                       <thead>
-                        <tr className="border-b bg-muted/30">
-                          <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground">Страница</th>
-                          <th className="px-4 py-2 text-right text-xs font-medium text-muted-foreground">Визитов</th>
+                        <tr className="bg-muted/50 border-b">
+                          <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Страница</th>
+                          <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Визитов</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y">
                         {stats.topPages.map((p, i) => (
-                          <tr key={i} className="hover:bg-muted/30">
+                          <tr key={i} className="hover:bg-muted/50 transition-colors">
                             <td className="px-4 py-2 text-xs">
                               <span className="font-medium">{prettyPage(p.page)}</span>
                               <span className="text-muted-foreground ml-2">{p.page}</span>

@@ -84,18 +84,18 @@ export function TrackingLinks({ sourceName, sourceId }: TrackingLinksProps) {
           <CardContent className="p-0">
             <table className="w-full">
               <thead>
-                <tr className="border-b bg-muted/30">
-                  <th className="text-left text-[10px] font-semibold text-muted-foreground px-3 py-2">Название</th>
-                  <th className="text-left text-[10px] font-semibold text-muted-foreground px-2 py-2">Ссылка</th>
-                  <th className="text-center text-[10px] font-semibold text-muted-foreground px-2 py-2">Переходов</th>
-                  <th className="text-center text-[10px] font-semibold text-muted-foreground px-2 py-2">Заявок</th>
-                  <th className="text-center text-[10px] font-semibold text-muted-foreground px-2 py-2">Конв.</th>
-                  <th className="px-2 py-2"></th>
+                <tr className="bg-muted/50 border-b">
+                  <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Название</th>
+                  <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Ссылка</th>
+                  <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Переходов</th>
+                  <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Заявок</th>
+                  <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Конв.</th>
+                  <th className="px-4 py-3"></th>
                 </tr>
               </thead>
               <tbody>
                 {links.map((link) => (
-                  <tr key={link.id} className="border-b last:border-0 hover:bg-muted/20">
+                  <tr key={link.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
                     <td className="px-3 py-2 text-xs font-medium">{link.name}</td>
                     <td className="px-2 py-2 text-[11px] text-muted-foreground truncate max-w-[180px]">{link.url}</td>
                     <td className="px-2 py-2 text-xs text-center">{link.clicks}</td>

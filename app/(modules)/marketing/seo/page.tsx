@@ -76,17 +76,17 @@ export default function SeoPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b bg-muted/30">
-                  <th className="text-left py-3 px-4 font-medium text-muted-foreground">URL</th>
-                  <th className="text-right py-3 px-4 font-medium text-muted-foreground">Запросы</th>
-                  <th className="text-right py-3 px-4 font-medium text-muted-foreground">Позиция</th>
-                  <th className="text-right py-3 px-4 font-medium text-muted-foreground">Клики</th>
-                  <th className="text-right py-3 px-4 font-medium text-muted-foreground">CTR</th>
+                <tr className="bg-muted/50 border-b">
+                  <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">URL</th>
+                  <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Запросы</th>
+                  <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Позиция</th>
+                  <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Клики</th>
+                  <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">CTR</th>
                 </tr>
               </thead>
               <tbody>
                 {topPages.map((row, i) => (
-                  <tr key={i} className="border-b last:border-0 hover:bg-muted/30">
+                  <tr key={i} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
                     <td className="py-3 px-4 font-mono text-xs text-blue-600">{row.url}</td>
                     <td className="py-3 px-4 text-right text-muted-foreground">{row.queries.toLocaleString("ru")}</td>
                     <td className="py-3 px-4 text-right font-semibold">{row.position}</td>
@@ -109,16 +109,16 @@ export default function SeoPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b bg-muted/30">
-                  <th className="text-left py-3 px-4 font-medium text-muted-foreground">Ключевое слово</th>
-                  <th className="text-right py-3 px-4 font-medium text-muted-foreground">Частота</th>
-                  <th className="text-right py-3 px-4 font-medium text-muted-foreground">Позиция</th>
-                  <th className="text-center py-3 px-4 font-medium text-muted-foreground">Тренд</th>
+                <tr className="bg-muted/50 border-b">
+                  <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Ключевое слово</th>
+                  <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Частота</th>
+                  <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Позиция</th>
+                  <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Тренд</th>
                 </tr>
               </thead>
               <tbody>
                 {keywords.map((kw, i) => (
-                  <tr key={i} className="border-b last:border-0 hover:bg-muted/30">
+                  <tr key={i} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
                     <td className="py-3 px-4 font-medium">{kw.word}</td>
                     <td className="py-3 px-4 text-right text-muted-foreground">{kw.freq.toLocaleString("ru")}</td>
                     <td className="py-3 px-4 text-right">

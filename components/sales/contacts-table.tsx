@@ -63,15 +63,15 @@ export function ContactsTable({ contacts, onEdit, onArchive, onRestore }: Contac
       <div className="overflow-x-auto">
         <table className="w-full">
           <thead>
-            <tr className="border-b bg-muted/30">
-              <th className="text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3">Имя</th>
-              <th className="text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3">Должность</th>
-              <th className="text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3">Компания</th>
-              <th className="text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3 min-w-[150px]">Телефон</th>
-              <th className="text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3">Email</th>
-              <th className="text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3">Telegram</th>
-              <th className="text-center text-[11px] font-semibold text-muted-foreground uppercase tracking-wider w-8 px-2 py-3">⭐</th>
-              <th className="text-right text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3">Действия</th>
+            <tr className="bg-muted/50 border-b">
+              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Имя</th>
+              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Должность</th>
+              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Компания</th>
+              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3 min-w-[150px]">Телефон</th>
+              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Email</th>
+              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Telegram</th>
+              <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider w-8 px-2 py-3">⭐</th>
+              <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Действия</th>
             </tr>
           </thead>
           <tbody>
@@ -80,7 +80,7 @@ export function ContactsTable({ contacts, onEdit, onArchive, onRestore }: Contac
               const fullName = `${contact.lastName} ${contact.firstName}${contact.middleName ? ` ${contact.middleName}` : ""}`
 
               return (
-                <tr key={contact.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
+                <tr key={contact.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2.5">
                       <Avatar className="w-8 h-8 shrink-0">

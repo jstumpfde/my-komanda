@@ -233,12 +233,12 @@ export default function FlightRiskPage() {
                 <div className="border border-border rounded-xl overflow-hidden">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="bg-muted/50">
-                        <th className="text-left font-medium px-4 py-3">Сотрудник</th>
-                        <th className="text-left font-medium px-4 py-3">Отдел</th>
-                        <th className="text-center font-medium px-4 py-3">Балл</th>
-                        <th className="text-center font-medium px-4 py-3">Уровень</th>
-                        <th className="text-center font-medium px-4 py-3">Тренд</th>
+                      <tr className="bg-muted/50 border-b">
+                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Сотрудник</th>
+                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Отдел</th>
+                        <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Балл</th>
+                        <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Уровень</th>
+                        <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Тренд</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -247,7 +247,7 @@ export default function FlightRiskPage() {
                         const trd = TREND_ICON[s.trend] ?? TREND_ICON.stable
                         const TrendIcon = trd.icon
                         return (
-                          <tr key={s.id} className="border-t border-border hover:bg-muted/30 transition-colors">
+                          <tr key={s.id} className="border-t border-border hover:bg-muted/50 transition-colors">
                             <td className="px-4 py-3">
                               <p className="font-medium">{s.employeeName}</p>
                               <p className="text-xs text-muted-foreground">{s.position}</p>

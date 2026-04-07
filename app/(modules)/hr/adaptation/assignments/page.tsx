@@ -156,13 +156,13 @@ export default function AdaptationAssignmentsPage() {
                 <CardContent className="p-0">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="border-b bg-muted/30">
-                        <th className="text-left px-4 py-3 font-medium text-muted-foreground">Сотрудник</th>
-                        <th className="text-left px-4 py-3 font-medium text-muted-foreground">План</th>
-                        <th className="text-left px-4 py-3 font-medium text-muted-foreground">День</th>
-                        <th className="text-left px-4 py-3 font-medium text-muted-foreground w-36">Прогресс</th>
-                        <th className="text-left px-4 py-3 font-medium text-muted-foreground">Статус</th>
-                        <th className="text-left px-4 py-3 font-medium text-muted-foreground">Дата старта</th>
+                      <tr className="bg-muted/50 border-b">
+                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Сотрудник</th>
+                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">План</th>
+                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">День</th>
+                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3 w-36">Прогресс</th>
+                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Статус</th>
+                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Дата старта</th>
                         <th className="px-4 py-3" />
                       </tr>
                     </thead>
@@ -173,7 +173,7 @@ export default function AdaptationAssignmentsPage() {
                           ? new Date(a.startDate).toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", year: "2-digit" })
                           : "—"
                         return (
-                          <tr key={a.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
+                          <tr key={a.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
                             <td className="px-4 py-3">
                               <div className="flex items-center gap-2">
                                 <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center text-xs font-medium text-primary">
