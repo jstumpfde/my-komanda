@@ -308,24 +308,40 @@ function TagInput({ tags, onChange, placeholder }: {
 function TagInputWithSuggestions({ tags, onChange, placeholder, suggestions }: {
   tags: string[]; onChange: (t: string[]) => void; placeholder: string; suggestions: string[]
 }) {
-  const available = suggestions.filter(s => !tags.includes(s))
+  const [custom, setCustom] = useState("")
+  const addCustom = () => {
+    const v = custom.trim()
+    if (v && !tags.includes(v)) onChange([...tags, v])
+    setCustom("")
+  }
   return (
     <div className="space-y-2">
-      {available.length > 0 && (
-        <div className="flex flex-wrap gap-1">
-          {available.map(s => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => onChange([...tags, s])}
-              className="text-[11px] px-2 py-0.5 rounded-full border border-dashed border-muted-foreground/30 text-muted-foreground hover:border-primary hover:text-primary transition-colors bg-[var(--input-bg)]"
-            >
-              + {s}
-            </button>
-          ))}
-        </div>
-      )}
-      <TagInput tags={tags} onChange={onChange} placeholder={placeholder} />
+      <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+        {suggestions.map(s => (
+          <label key={s} className="flex items-center gap-1.5 text-sm cursor-pointer">
+            <Checkbox
+              checked={tags.includes(s)}
+              onCheckedChange={(checked) => {
+                if (checked) onChange([...tags, s])
+                else onChange(tags.filter(x => x !== s))
+              }}
+            />
+            {s}
+          </label>
+        ))}
+      </div>
+      <div className="flex gap-2">
+        <Input
+          value={custom}
+          onChange={e => setCustom(e.target.value)}
+          placeholder="Добавить свой навык..."
+          className="h-8 text-sm bg-[var(--input-bg)] border border-input"
+          onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addCustom() } }}
+        />
+        <Button type="button" variant="outline" size="sm" className="h-8 px-3" onClick={addCustom}>
+          <Plus className="w-3.5 h-3.5" />
+        </Button>
+      </div>
     </div>
   )
 }
