@@ -12,6 +12,7 @@ import { Slider } from "@/components/ui/slider"
 import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { ChevronDown, ChevronUp, Plus, X, Save, Loader2, Trash2, GripVertical, Eye, Copy } from "lucide-react"
 import { toast } from "sonner"
 import { POSITION_CATEGORIES } from "@/lib/position-classifier"
@@ -628,6 +629,115 @@ function QuestionEditor({ questions, onChange }: {
   )
 }
 
+// ─── Category field with custom categories ──────────────────────────────────
+
+function CategoryField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [customCategories, setCustomCategories] = useState<{ value: string; label: string }[]>([])
+  const [modalOpen, setModalOpen] = useState(false)
+  const [newCategoryName, setNewCategoryName] = useState("")
+  const [creating, setCreating] = useState(false)
+
+  useEffect(() => {
+    fetch("/api/vacancy-categories")
+      .then(r => r.ok ? r.json() : null)
+      .then((data: { custom?: { id: string; name: string }[] } | null) => {
+        if (data?.custom) {
+          setCustomCategories(data.custom.map(c => ({ value: `custom:${c.id}`, label: c.name })))
+        }
+      })
+      .catch(() => {})
+  }, [])
+
+  const allOptions = [
+    ...POSITION_CATEGORY_OPTIONS,
+    ...customCategories,
+  ]
+
+  const handleCreate = async () => {
+    const name = newCategoryName.trim()
+    if (!name) return
+    setCreating(true)
+    try {
+      const res = await fetch("/api/vacancy-categories", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error((err as { error?: string }).error || "Ошибка")
+      }
+      const created = await res.json() as { id: string; name: string }
+      const newVal = `custom:${created.id}`
+      setCustomCategories(prev => [...prev, { value: newVal, label: created.name }])
+      onChange(newVal)
+      setNewCategoryName("")
+      setModalOpen(false)
+      toast.success("Категория добавлена")
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Не удалось создать категорию")
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-xs">Категория</Label>
+      <div className="flex items-center gap-3 w-full">
+        <Select value={value} onValueChange={onChange}>
+          <SelectTrigger className="h-9 bg-[var(--input-bg)] border border-input min-w-[300px] flex-1">
+            <SelectValue placeholder="Выберите категорию" />
+          </SelectTrigger>
+          <SelectContent>
+            {POSITION_CATEGORY_OPTIONS.length > 0 && (
+              <>
+                <div className="px-2 py-1 text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Системные</div>
+                {POSITION_CATEGORY_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+              </>
+            )}
+            {customCategories.length > 0 && (
+              <>
+                <div className="px-2 py-1 mt-1 text-[10px] font-medium text-muted-foreground uppercase tracking-wider border-t">Пользовательские</div>
+                {customCategories.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+              </>
+            )}
+          </SelectContent>
+        </Select>
+        <Button type="button" variant="outline" size="sm" className="h-9 gap-1 text-xs shrink-0 whitespace-nowrap" onClick={() => setModalOpen(true)}>
+          <Plus className="w-3.5 h-3.5" />
+          Категория
+        </Button>
+      </div>
+
+      <Dialog open={modalOpen} onOpenChange={setModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Новая категория</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label className="text-sm">Название категории</Label>
+            <Input
+              value={newCategoryName}
+              onChange={e => setNewCategoryName(e.target.value)}
+              placeholder="Например: Логистика"
+              maxLength={100}
+              onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); handleCreate() } }}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setModalOpen(false)}>Отмена</Button>
+            <Button onClick={handleCreate} disabled={creating || !newCategoryName.trim()}>
+              {creating && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Сохранить
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}
+
 // ─── Main component ──────────────────────────────────────────────────────────
 
 export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
@@ -802,21 +912,7 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
 
       {/* ── 2. Должность ── */}
       <Section title="Должность" number={2} filled={sectionFilled(2)}>
-        <div className="space-y-1.5">
-          <Label className="text-xs">Категория</Label>
-          <div className="flex items-center gap-2">
-            <Select value={data.positionCategory} onValueChange={v => set("positionCategory", v)}>
-              <SelectTrigger className="h-9 bg-[var(--input-bg)] border border-input min-w-[300px]"><SelectValue placeholder="Выберите категорию" /></SelectTrigger>
-              <SelectContent>
-                {POSITION_CATEGORY_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            <Button type="button" variant="outline" size="sm" className="h-9 gap-1 text-xs shrink-0" onClick={() => toast("Добавление категорий будет доступно в настройках")}>
-              <Plus className="w-3.5 h-3.5" />
-              Категория
-            </Button>
-          </div>
-        </div>
+        <CategoryField value={data.positionCategory} onChange={v => set("positionCategory", v)} />
         <div className="space-y-1.5">
           <Label className="text-xs">Формат работы</Label>
           <div className="flex flex-wrap gap-3">
@@ -839,9 +935,9 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
             ))}
           </div>
         </div>
-        <div className="space-y-1.5">
+        <div className="w-full space-y-1.5">
           <Label className="text-xs">Город</Label>
-          <Input value={data.positionCity} onChange={e => set("positionCity", e.target.value)} placeholder="Москва" className="h-9 bg-[var(--input-bg)] border border-input w-full" />
+          <Input value={data.positionCity} onChange={e => set("positionCity", e.target.value)} placeholder="Москва" className="h-9 bg-[var(--input-bg)] border border-input min-w-[300px] flex-1 w-full" />
         </div>
       </Section>
 

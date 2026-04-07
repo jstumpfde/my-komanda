@@ -1119,6 +1119,15 @@ export const visitLog = pgTable("visit_log", {
   createdAt: timestamp("created_at").defaultNow(),
 })
 
+// ─── Custom Vacancy Categories ───────────────────────────────────────────────
+
+export const customVacancyCategories = pgTable("custom_vacancy_categories", {
+  id:        uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  name:      text("name").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (t) => [unique().on(t.companyId, t.name)])
+
 // ─── User Sessions (online tracking) ────────────────────────────────────────
 
 export const userSessions = pgTable("user_sessions", {

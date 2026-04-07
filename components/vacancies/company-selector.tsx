@@ -186,44 +186,44 @@ export function CompanySelector({
         <div className="space-y-3">
           {/* Company selector */}
           <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <Label className="text-xs text-muted-foreground">Компания-клиент</Label>
-              <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={() => setCompanyModalOpen(true)}>
-                <Plus className="w-3 h-3" />
+            <Label className="text-xs text-muted-foreground">Компания-клиент</Label>
+            <div className="flex items-center gap-3 w-full">
+              <Select value={clientCompanyId || ""} onValueChange={(v) => { onCompanyChange(v); onContactChange(null) }}>
+                <SelectTrigger className="bg-[var(--input-bg)] border border-input min-w-[300px] flex-1">
+                  <SelectValue placeholder="Выберите компанию" />
+                </SelectTrigger>
+                <SelectContent>
+                  <div className="px-2 pb-2">
+                    <div className="relative">
+                      <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                      <Input
+                        className="pl-7 h-8 text-sm"
+                        placeholder="Поиск..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        onKeyDown={(e) => e.stopPropagation()}
+                      />
+                    </div>
+                  </div>
+                  {filteredCompanies.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      <div className="flex items-center gap-2">
+                        <Building2 className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                        <span>{c.name}</span>
+                        {c.inn && <span className="text-xs text-muted-foreground ml-1">ИНН {c.inn}</span>}
+                      </div>
+                    </SelectItem>
+                  ))}
+                  {filteredCompanies.length === 0 && (
+                    <div className="py-4 text-center text-sm text-muted-foreground">Не найдено</div>
+                  )}
+                </SelectContent>
+              </Select>
+              <Button variant="outline" size="sm" className="h-9 gap-1 text-xs shrink-0 whitespace-nowrap" onClick={() => setCompanyModalOpen(true)}>
+                <Plus className="w-3.5 h-3.5" />
                 Новая компания
               </Button>
             </div>
-            <Select value={clientCompanyId || ""} onValueChange={(v) => { onCompanyChange(v); onContactChange(null) }}>
-              <SelectTrigger className="bg-[var(--input-bg)] border border-input">
-                <SelectValue placeholder="Выберите компанию" />
-              </SelectTrigger>
-              <SelectContent>
-                <div className="px-2 pb-2">
-                  <div className="relative">
-                    <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-                    <Input
-                      className="pl-7 h-8 text-sm"
-                      placeholder="Поиск..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      onKeyDown={(e) => e.stopPropagation()}
-                    />
-                  </div>
-                </div>
-                {filteredCompanies.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    <div className="flex items-center gap-2">
-                      <Building2 className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                      <span>{c.name}</span>
-                      {c.inn && <span className="text-xs text-muted-foreground ml-1">ИНН {c.inn}</span>}
-                    </div>
-                  </SelectItem>
-                ))}
-                {filteredCompanies.length === 0 && (
-                  <div className="py-4 text-center text-sm text-muted-foreground">Не найдено</div>
-                )}
-              </SelectContent>
-            </Select>
           </div>
 
           {/* Contact selector */}
