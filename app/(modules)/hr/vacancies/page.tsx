@@ -374,6 +374,7 @@ export default function VacanciesPage() {
   }, [importUrl])
 
   const handleCreateVacancy = useCallback(async () => {
+    console.log("[CREATE] clicked, title:", newVacancyTitle, "aiText length:", aiText.length, "creating:", creating)
     if (!newVacancyTitle.trim()) { toast.error("Введите название вакансии"); return }
     setCreating(true)
     try {
@@ -429,12 +430,15 @@ export default function VacanciesPage() {
           ...(Object.keys(descriptionJson).length > 0 ? { description_json: descriptionJson } : {}),
         }),
       })
-      if (!res.ok) throw new Error()
+      console.log("[CREATE] POST response status:", res.status)
+      if (!res.ok) throw new Error(`POST failed: ${res.status}`)
       const data = await res.json() as { id: string }
+      console.log("[CREATE] vacancy created, id:", data.id)
       setCreateDialogOpen(false)
       resetCreateDialog()
       router.push(`/hr/vacancies/${data.id}`)
-    } catch {
+    } catch (err) {
+      console.error("[CREATE] error:", err)
       toast.error("Не удалось создать вакансию")
     } finally {
       setCreating(false)
