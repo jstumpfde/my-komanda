@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import {
   Search, Plus, Eye, Pin, ClipboardList, BookOpen, Monitor,
-  Users, Phone, GraduationCap,
+  Users, Phone, GraduationCap, ArrowUpDown, ArrowUp, ArrowDown,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -68,8 +68,22 @@ function formatDate(dateStr: string): string {
 
 // ─── Page ───────────────────────────────────────────────────────────────────
 
+type SortCol = "views" | "date" | null
+type SortDir = "asc" | "desc"
+
 export default function KnowledgePage() {
   const [search, setSearch] = useState("")
+  const [sortCol, setSortCol] = useState<SortCol>(null)
+  const [sortDir, setSortDir] = useState<SortDir>("desc")
+
+  const toggleSort = (col: SortCol) => {
+    if (sortCol === col) {
+      setSortDir(d => d === "asc" ? "desc" : "asc")
+    } else {
+      setSortCol(col)
+      setSortDir("desc")
+    }
+  }
 
   const filteredCategories = useMemo(() => {
     if (!search.trim()) return CATEGORIES
@@ -80,12 +94,22 @@ export default function KnowledgePage() {
   }, [search])
 
   const filteredArticles = useMemo(() => {
-    if (!search.trim()) return POPULAR_ARTICLES
-    const q = search.trim().toLowerCase()
-    return POPULAR_ARTICLES.filter(
-      (a) => a.title.toLowerCase().includes(q) || a.category.toLowerCase().includes(q),
-    )
-  }, [search])
+    let list = POPULAR_ARTICLES
+    if (search.trim()) {
+      const q = search.trim().toLowerCase()
+      list = list.filter(
+        (a) => a.title.toLowerCase().includes(q) || a.category.toLowerCase().includes(q),
+      )
+    }
+    if (sortCol) {
+      list = [...list].sort((a, b) => {
+        const mul = sortDir === "asc" ? 1 : -1
+        if (sortCol === "views") return (a.views - b.views) * mul
+        return (a.date.localeCompare(b.date)) * mul
+      })
+    }
+    return list
+  }, [search, sortCol, sortDir])
 
   return (
     <SidebarProvider defaultOpen={true}>
@@ -153,8 +177,18 @@ export default function KnowledgePage() {
                     <tr className="border-b bg-muted/50">
                       <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Название</th>
                       <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Категория</th>
-                      <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Просмотров</th>
-                      <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Дата</th>
+                      <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">
+                        <button type="button" onClick={() => toggleSort("views")} className={cn("inline-flex items-center gap-1 select-none transition-colors", sortCol === "views" ? "text-foreground" : "text-muted-foreground hover:text-foreground")}>
+                          Просмотров
+                          {sortCol === "views" ? (sortDir === "asc" ? <ArrowUp className="size-3.5" /> : <ArrowDown className="size-3.5" />) : <ArrowUpDown className="size-3.5 opacity-40" />}
+                        </button>
+                      </th>
+                      <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">
+                        <button type="button" onClick={() => toggleSort("date")} className={cn("inline-flex items-center gap-1 select-none transition-colors", sortCol === "date" ? "text-foreground" : "text-muted-foreground hover:text-foreground")}>
+                          Дата
+                          {sortCol === "date" ? (sortDir === "asc" ? <ArrowUp className="size-3.5" /> : <ArrowDown className="size-3.5" />) : <ArrowUpDown className="size-3.5 opacity-40" />}
+                        </button>
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
