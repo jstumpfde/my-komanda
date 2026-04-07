@@ -38,6 +38,7 @@ export async function POST(req: NextRequest) {
     return apiSuccess(company, 201)
   } catch (err) {
     if (err instanceof Response) return err
+    console.error("[companies POST]", err)
     const msg = err instanceof Error ? err.message : ""
     if (msg.includes("unique")) return apiError("Компания с таким ИНН уже зарегистрирована", 409)
     return apiError("Internal server error", 500)
@@ -175,6 +176,7 @@ export async function PUT(req: NextRequest) {
     return apiSuccess(updated)
   } catch (err) {
     if (err instanceof Response) return err
+    console.error("[companies PUT]", err)
     return apiError("Internal server error", 500)
   }
 }
