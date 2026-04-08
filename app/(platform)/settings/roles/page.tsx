@@ -90,7 +90,7 @@ export default function RolesPage() {
 
       {/* Trash access setting */}
       <Card>
-        <CardContent className="pt-5">
+        <CardContent className="p-5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="flex items-center justify-center size-9 rounded-lg bg-muted shrink-0">
@@ -112,7 +112,7 @@ export default function RolesPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {ROLES.map(r => (
           <Card key={r.role}>
-            <CardContent className="pt-5">
+            <CardContent className="p-5">
               <div className="flex items-start gap-3 mb-3">
                 <div className="flex items-center justify-center size-9 rounded-lg bg-muted shrink-0">
                   <Shield className="size-4 text-muted-foreground" />
@@ -139,7 +139,7 @@ export default function RolesPage() {
 
       {/* Permissions matrix */}
       <Card>
-        <CardHeader className="pb-2">
+        <CardHeader className="pb-2 pt-4 px-5">
           <CardTitle className="text-sm font-medium">Матрица прав доступа</CardTitle>
         </CardHeader>
         <CardContent className="overflow-x-auto">

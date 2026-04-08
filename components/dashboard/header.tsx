@@ -10,7 +10,7 @@ import {
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { useSidebar } from "@/components/ui/sidebar"
 import { Badge } from "@/components/ui/badge"
 import { useAuth, ROLE_LABELS, ROLE_ICONS, type UserRole } from "@/lib/auth"
@@ -221,6 +221,7 @@ export function DashboardHeader() {
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="h-10 w-10 rounded-full p-0">
                   <Avatar className="h-10 w-10">
+                    {user.avatar && <AvatarImage src={user.avatar} alt={user.name} />}
                     <AvatarFallback className="text-sm font-semibold">{initials}</AvatarFallback>
                   </Avatar>
                 </Button>
@@ -228,6 +229,7 @@ export function DashboardHeader() {
               <DropdownMenuContent align="end" className="w-56">
                 <div className="flex items-center gap-3 p-3 border-b">
                   <Avatar className="h-10 w-10">
+                    {user.avatar && <AvatarImage src={user.avatar} alt={user.name} />}
                     <AvatarFallback className="text-xs">{initials}</AvatarFallback>
                   </Avatar>
                   <div className="flex-1 min-w-0">

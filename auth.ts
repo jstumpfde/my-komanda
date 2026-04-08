@@ -10,16 +10,16 @@ import { VKProvider } from "@/lib/auth/vk-provider"
 
 // Expose a stable ref so the JWT callback can read the DB
 // (needed when updateSession() is called after onboarding saves companyId)
-const getFreshUserFields = async (userId: string): Promise<{ companyId: string | null; name: string | null }> => {
+const getFreshUserFields = async (userId: string): Promise<{ companyId: string | null; name: string | null; avatarUrl: string | null }> => {
   try {
     const [row] = await db
-      .select({ companyId: users.companyId, name: users.name })
+      .select({ companyId: users.companyId, name: users.name, avatarUrl: users.avatarUrl })
       .from(users)
       .where(eq(users.id, userId))
       .limit(1)
-    return { companyId: row?.companyId ?? null, name: row?.name ?? null }
+    return { companyId: row?.companyId ?? null, name: row?.name ?? null, avatarUrl: row?.avatarUrl ?? null }
   } catch {
-    return { companyId: null, name: null }
+    return { companyId: null, name: null, avatarUrl: null }
   }
 }
 
@@ -33,6 +33,7 @@ declare module "next-auth" {
       name: string
       role: UserRole
       companyId: string | null
+      avatarUrl: string | null
     }
   }
 
@@ -133,7 +134,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   callbacks: {
     // Разрешаем все маршруты — контроль доступа в middleware.ts
     authorized: () => true,
-    async jwt({ token, user, trigger }) {
+    async jwt({ token, user, trigger, session: sessionData }) {
       if (user) {
         // Initial sign-in: populate token from the user returned by authorize()
         token.id = user.id as string
@@ -141,12 +142,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.companyId = (user.companyId ?? null) as string | null
       }
       // updateSession() fires with trigger === "update".
-      // After onboarding saves companyId via PATCH /api/auth/me we must
-      // re-read the DB so the JWT (and middleware) see the new companyId.
       if (trigger === "update" && token.id) {
+        // Accept name directly from update() call (avoids DB race condition)
+        const updateData = sessionData as Record<string, unknown> | undefined
+        if (updateData?.name) token.name = updateData.name as string
+
         const fresh = await getFreshUserFields(token.id as string)
         token.companyId = fresh.companyId
-        if (fresh.name) token.name = fresh.name
+        if (fresh.name && !updateData?.name) token.name = fresh.name
+        token.avatarUrl = fresh.avatarUrl
       }
       return token
     },
@@ -155,6 +159,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       session.user.name = (token.name as string) ?? session.user.name
       session.user.role = token.role as UserRole
       session.user.companyId = (token.companyId as string | null) ?? null
+      session.user.avatarUrl = (token.avatarUrl as string | null) ?? null
       return session
     },
   },

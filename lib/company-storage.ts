@@ -246,6 +246,20 @@ export async function updateCompanyApi(payload: ApiCompanyUpdatePayload) {
   return res.json() as Promise<unknown>
 }
 
+/** PATCH /api/companies — partial update (autosave) */
+export async function patchCompanyApi(payload: Record<string, unknown>) {
+  const res = await fetch("/api/companies", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) {
+    const d = await res.json() as { error?: string }
+    throw new Error(d.error ?? `HTTP ${res.status}`)
+  }
+  return res.json() as Promise<unknown>
+}
+
 /** GET /api/companies/by-inn?inn=... — server-proxied DaData lookup */
 export async function fetchCompanyByInn(inn: string) {
   const res = await fetch(`/api/companies/by-inn?inn=${encodeURIComponent(inn)}`)

@@ -106,6 +106,9 @@ export const companies = pgTable("companies", {
   brandBgColor:       text("brand_bg_color").default("#f0f4ff"),
   brandTextColor:     text("brand_text_color").default("#1e293b"),
   customTheme:        jsonb("custom_theme"),       // { primary, background, foreground, sidebar, accent }
+  // join link
+  joinCode:           text("join_code").unique(),
+  joinEnabled:        boolean("join_enabled").default(true),
   // billing / subscription
   planId:             uuid("plan_id").references(() => plans.id),
   billingEmail:       text("billing_email"),
@@ -124,6 +127,8 @@ export const users = pgTable("users", {
   role: text("role").notNull(), // 'admin' | 'manager' | 'client' | 'client_hr'
   companyId: uuid("company_id").references(() => companies.id),
   avatarUrl: text("avatar_url"),
+  position: text("position"),                  // реальная должность (не роль в системе)
+  permissions: jsonb("permissions").default("{}"), // { manage_company, manage_team, manage_billing, ... }
   isActive: boolean("is_active").default(true),
   createdAt: timestamp("created_at").defaultNow(),
 })
@@ -1150,4 +1155,31 @@ export const userSessions = pgTable("user_sessions", {
   ip:           text("ip"),
   userAgent:    text("user_agent"),
   isOnline:     boolean("is_online").default(true),
+})
+
+// ─── Demo Templates & Vacancy Demos ──────────────────────────────────────────
+
+export const demoTemplates = pgTable("demo_templates", {
+  id:            uuid("id").primaryKey().defaultRandom(),
+  tenantId:      uuid("tenant_id").references(() => companies.id, { onDelete: "cascade" }),
+  name:          text("name").notNull(),
+  niche:         text("niche").notNull().default("universal"),
+  length:        text("length").notNull().default("standard"),
+  isSystem:      boolean("is_system").default(false),
+  sections:      jsonb("sections").notNull().default("[]"),
+  variablesUsed: jsonb("variables_used").default("[]"),
+  createdAt:     timestamp("created_at").defaultNow(),
+  updatedAt:     timestamp("updated_at").defaultNow(),
+})
+
+export const vacancyDemos = pgTable("vacancy_demos", {
+  id:          uuid("id").primaryKey().defaultRandom(),
+  vacancyId:   uuid("vacancy_id").references(() => vacancies.id, { onDelete: "cascade" }).notNull(),
+  templateId:  uuid("template_id").references(() => demoTemplates.id),
+  name:        text("name").notNull(),
+  status:      text("status").notNull().default("draft"),
+  sections:    jsonb("sections").notNull().default("[]"),
+  settings:    jsonb("settings").default("{}"),
+  createdAt:   timestamp("created_at").defaultNow(),
+  updatedAt:   timestamp("updated_at").defaultNow(),
 })

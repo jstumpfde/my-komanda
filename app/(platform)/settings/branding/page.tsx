@@ -146,13 +146,13 @@ export default function BrandingPage() {
 
       <div className="space-y-3">
         <Card>
-          <CardHeader className="pb-2 pt-4 px-4">
+          <CardHeader className="pb-2 pt-4 px-5">
             <CardTitle className="text-base flex items-center gap-2">
               <Palette className="w-4 h-4" /> Брендинг
               {!canBrand && <Badge variant="outline" className="text-[10px] ml-2"><Lock className="w-3 h-3 mr-1" /> Business+</Badge>}
             </CardTitle>
           </CardHeader>
-          <CardContent className={cn("px-4 pb-4 pt-0 space-y-4", !canBrand && "opacity-60")}>
+          <CardContent className={cn("px-5 pb-4 pt-0 space-y-4", !canBrand && "opacity-60")}>
             {!canBrand && (
               <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
                 <Lock className="w-4 h-4 text-amber-600" />
@@ -416,7 +416,7 @@ export default function BrandingPage() {
 
         {/* ─── Цвета платформы (beta) — Задача 9 ────────────────────────────── */}
         <Card>
-          <CardHeader className="pb-2 pt-4 px-4">
+          <CardHeader className="pb-2 pt-4 px-5">
             <CardTitle className="text-base flex items-center gap-2">
               <Palette className="w-4 h-4 text-violet-500" />
               Цвета платформы
@@ -424,7 +424,7 @@ export default function BrandingPage() {
               {!canBrand && <Badge variant="outline" className="text-[10px] ml-1"><Lock className="w-3 h-3 mr-1" /> Pro</Badge>}
             </CardTitle>
           </CardHeader>
-          <CardContent className="px-4 pb-4 pt-0 space-y-4">
+          <CardContent className="px-5 pb-4 pt-0 space-y-4">
             {!canBrand ? (
               /* Стандартные темы как карточки */
               <div className="space-y-3">

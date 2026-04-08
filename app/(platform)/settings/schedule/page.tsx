@@ -1,518 +1,368 @@
 "use client"
 
 import { useState } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { Switch } from "@/components/ui/switch"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Switch } from "@/components/ui/switch"
-import { Separator } from "@/components/ui/separator"
+import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Badge } from "@/components/ui/badge"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
-import { Calendar, Clock, Save, Plus, X, Bell, MessageSquare, Link2, Trash2, RefreshCw, CheckCircle2 } from "lucide-react"
+import {
+  Globe, Clock, Coffee, CalendarOff, Palmtree, Save, Plus, Trash2, Copy,
+} from "lucide-react"
+import Link from "next/link"
+
+// ─── Data ───────────────────────────────────────────────────────────────────
 
 const WEEKDAYS = [
-  { id: "mon", label: "Пн" }, { id: "tue", label: "Вт" }, { id: "wed", label: "Ср" },
-  { id: "thu", label: "Чт" }, { id: "fri", label: "Пт" }, { id: "sat", label: "Сб" }, { id: "sun", label: "Вс" },
+  { id: "mon", label: "Понедельник", short: "Пн" },
+  { id: "tue", label: "Вторник", short: "Вт" },
+  { id: "wed", label: "Среда", short: "Ср" },
+  { id: "thu", label: "Четверг", short: "Чт" },
+  { id: "fri", label: "Пятница", short: "Пт" },
+  { id: "sat", label: "Суббота", short: "Сб" },
+  { id: "sun", label: "Воскресенье", short: "Вс" },
 ]
 
-export default function ScheduleSettingsPage() {
-  type DaySchedule = { enabled: boolean; start: string; end: string }
-  const [daySchedule, setDaySchedule] = useState<Record<string, DaySchedule>>({
-    mon: { enabled: true,  start: "09:00", end: "19:00" },
-    tue: { enabled: true,  start: "09:00", end: "18:00" },
-    wed: { enabled: true,  start: "09:00", end: "19:00" },
-    thu: { enabled: true,  start: "09:00", end: "18:00" },
-    fri: { enabled: true,  start: "09:00", end: "18:00" },
-    sat: { enabled: false, start: "10:00", end: "15:00" },
-    sun: { enabled: false, start: "10:00", end: "15:00" },
-  })
-  const workDays = Object.entries(daySchedule).filter(([, v]) => v.enabled).map(([k]) => k)
-  const updateDay = (id: string, patch: Partial<DaySchedule>) =>
-    setDaySchedule(prev => ({ ...prev, [id]: { ...prev[id], ...patch } }))
-  const [scheduleExpanded, setScheduleExpanded] = useState(false)
+const HALF_HOURS = Array.from({ length: 24 }, (_, i) => `${String(i).padStart(2, "0")}:00`)
+  .flatMap((h) => [h, h.replace(":00", ":30")])
 
-  // Краткое описание расписания для свёрнутого вида
-  const scheduleSummary = (() => {
-    const enabled = WEEKDAYS.filter(d => daySchedule[d.id].enabled)
-    if (enabled.length === 0) return "Нет рабочих дней"
-    // группируем дни с одинаковым временем
-    const groups: { days: string[]; start: string; end: string }[] = []
-    enabled.forEach(d => {
-      const s = daySchedule[d.id]
-      const g = groups.find(g => g.start === s.start && g.end === s.end)
-      if (g) g.days.push(d.label)
-      else groups.push({ days: [d.label], start: s.start, end: s.end })
-    })
-    return groups.map(g =>
-      g.days.length > 2
-        ? `${g.days[0]}–${g.days[g.days.length - 1]} ${g.start}–${g.end}`
-        : `${g.days.join(", ")} ${g.start}–${g.end}`
-    ).join("  •  ")
-  })()
-  const [defaultDuration, setDefaultDuration] = useState("45")
-  const [buffer, setBuffer] = useState("15")
-  type BlockedEntry = { id: string } & ({ type: "date"; date: string } | { type: "range"; from: string; to: string })
-  const [blockedDates, setBlockedDates] = useState<BlockedEntry[]>([
-    { id: "b1", type: "date", date: "2026-03-20" },
-    { id: "b2", type: "date", date: "2026-04-01" },
-  ])
-  const [addMode, setAddMode] = useState<"date" | "range" | "hours">("date")
-  const [newBlockedDate, setNewBlockedDate] = useState("")
-  const [rangeFrom, setRangeFrom] = useState("")
-  const [rangeTo, setRangeTo] = useState("")
-  // Недоступные часы
-  type BlockedHour = { id: string; day: string; from: string; to: string }
-  const [blockedHours, setBlockedHours] = useState<BlockedHour[]>([])
-  const [hourDay, setHourDay] = useState("everyday")
-  const [hourFrom, setHourFrom] = useState("12:00")
-  const [hourTo, setHourTo] = useState("13:00")
-  const DAY_OPTIONS = [
-    { value: "everyday", label: "Каждый день" },
-    { value: "mon", label: "Пн" }, { value: "tue", label: "Вт" }, { value: "wed", label: "Ср" },
-    { value: "thu", label: "Чт" }, { value: "fri", label: "Пт" }, { value: "sat", label: "Сб" }, { value: "sun", label: "Вс" },
-  ]
-  const addBlockedHour = () => {
-    if (!hourFrom || !hourTo || hourFrom >= hourTo) { toast.error("Укажите корректный диапазон часов"); return }
-    setBlockedHours(prev => [...prev, { id: Date.now().toString(), day: hourDay, from: hourFrom, to: hourTo }])
-    toast.success("Временной блок добавлен")
-  }
-  // Обед
+const TIMEZONES = [
+  { value: "Europe/Kaliningrad", label: "Калининград (UTC+2)" },
+  { value: "Europe/Moscow", label: "Москва (UTC+3)" },
+  { value: "Europe/Samara", label: "Самара (UTC+4)" },
+  { value: "Asia/Yekaterinburg", label: "Екатеринбург (UTC+5)" },
+  { value: "Asia/Omsk", label: "Омск (UTC+6)" },
+  { value: "Asia/Novosibirsk", label: "Новосибирск (UTC+7)" },
+  { value: "Asia/Irkutsk", label: "Иркутск (UTC+8)" },
+  { value: "Asia/Yakutsk", label: "Якутск (UTC+9)" },
+  { value: "Asia/Vladivostok", label: "Владивосток (UTC+10)" },
+  { value: "Asia/Magadan", label: "Магадан (UTC+11)" },
+  { value: "Asia/Kamchatka", label: "Камчатка (UTC+12)" },
+]
+
+interface DaySchedule { enabled: boolean; from: string; to: string }
+
+const DEFAULT_SCHEDULE: DaySchedule[] = [
+  { enabled: true, from: "09:00", to: "18:00" },
+  { enabled: true, from: "09:00", to: "18:00" },
+  { enabled: true, from: "09:00", to: "18:00" },
+  { enabled: true, from: "09:00", to: "18:00" },
+  { enabled: true, from: "09:00", to: "18:00" },
+  { enabled: false, from: "10:00", to: "15:00" },
+  { enabled: false, from: "10:00", to: "15:00" },
+]
+
+interface Holiday { id: string; date: string; name: string }
+
+const RU_HOLIDAYS: Holiday[] = [
+  { id: "h1", date: "01.01", name: "Новый год" },
+  { id: "h2", date: "07.01", name: "Рождество" },
+  { id: "h3", date: "23.02", name: "День защитника Отечества" },
+  { id: "h4", date: "08.03", name: "Международный женский день" },
+  { id: "h5", date: "01.05", name: "Праздник Весны и Труда" },
+  { id: "h6", date: "09.05", name: "День Победы" },
+  { id: "h7", date: "12.06", name: "День России" },
+  { id: "h8", date: "04.11", name: "День народного единства" },
+]
+
+type AbsenceType = "vacation" | "sick" | "dayoff" | "remote" | "business_trip"
+type AbsenceStatus = "planned" | "approved" | "pending" | "rejected"
+
+const ABSENCE_TYPES: Record<AbsenceType, string> = {
+  vacation: "Отпуск", sick: "Больничный", dayoff: "Отгул", remote: "Удалёнка", business_trip: "Командировка",
+}
+
+const ABSENCE_STATUS_CFG: Record<AbsenceStatus, { label: string; cls: string }> = {
+  planned:  { label: "Запланирован", cls: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" },
+  approved: { label: "Одобрен",     cls: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400" },
+  pending:  { label: "На рассмотрении", cls: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" },
+  rejected: { label: "Отклонён",    cls: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" },
+}
+
+interface Absence {
+  id: string; employee: string; type: AbsenceType; dateFrom: string; dateTo: string; status: AbsenceStatus; comment: string
+}
+
+const MOCK_EMPLOYEES = ["Иванова Анна", "Петров Андрей", "Сидорова Ксения", "Козлов Дмитрий", "Новиков Роман"]
+
+// ─── Page ───────────────────────────────────────────────────────────────────
+
+export default function CompanySchedulePage() {
+  // Schedule
+  const [schedule, setSchedule] = useState<DaySchedule[]>(DEFAULT_SCHEDULE)
+  const [timezone, setTimezone] = useState("Europe/Moscow")
+  // Lunch
   const [lunchEnabled, setLunchEnabled] = useState(true)
   const [lunchFrom, setLunchFrom] = useState("13:00")
   const [lunchTo, setLunchTo] = useState("14:00")
+  // Holidays
+  const [holidays, setHolidays] = useState<Holiday[]>(RU_HOLIDAYS)
+  const [newHolidayDate, setNewHolidayDate] = useState("")
+  const [newHolidayName, setNewHolidayName] = useState("")
+  // Absences
+  const [absences, setAbsences] = useState<Absence[]>([])
+  const [absenceDialogOpen, setAbsenceDialogOpen] = useState(false)
+  const [absForm, setAbsForm] = useState({ employee: "", type: "vacation" as AbsenceType, dateFrom: "", dateTo: "", comment: "" })
 
-  // Интеграции с календарями
-  type CalProvider = "google" | "outlook" | "apple" | "caldav"
-  type CalIntegration = { id: string; provider: CalProvider; label: string; url?: string; status: "connected" | "syncing" | "error" }
-  const [calIntegrations, setCalIntegrations] = useState<CalIntegration[]>([])
-  const [calProvider, setCalProvider] = useState<CalProvider>("google")
-  const [calUrl, setCalUrl] = useState("")
+  const updateDay = (i: number, patch: Partial<DaySchedule>) =>
+    setSchedule((prev) => prev.map((d, idx) => (idx === i ? { ...d, ...patch } : d)))
 
-  const CAL_PROVIDERS: Record<CalProvider, { label: string; icon: string; needsUrl: boolean; hint: string }> = {
-    google:  { label: "Google Calendar",  icon: "🗓️", needsUrl: false, hint: "Подключение через OAuth" },
-    outlook: { label: "Outlook / Microsoft 365", icon: "📅", needsUrl: false, hint: "Подключение через Microsoft OAuth" },
-    apple:   { label: "Apple Calendar (iCloud)", icon: "🍎", needsUrl: true,  hint: "Вставьте CalDAV URL из настроек iCloud" },
-    caldav:  { label: "Другой CalDAV",    icon: "🔗", needsUrl: true,  hint: "URL-адрес CalDAV-сервера" },
+  const applyToAll = () => {
+    const first = schedule.find((d) => d.enabled)
+    if (!first) return
+    setSchedule((prev) => prev.map((d) => d.enabled ? { ...d, from: first.from, to: first.to } : d))
+    toast.success("Время применено ко всем рабочим дням")
   }
 
-  const addCalIntegration = () => {
-    const p = CAL_PROVIDERS[calProvider]
-    if (p.needsUrl && !calUrl.trim()) { toast.error("Введите URL календаря"); return }
-    const newInt: CalIntegration = {
-      id: Date.now().toString(),
-      provider: calProvider,
-      label: p.label,
-      url: calUrl || undefined,
-      status: "connected",
-    }
-    setCalIntegrations(prev => [...prev, newInt])
-    setCalUrl("")
-    toast.success(`${p.label} подключён`)
+  const addHoliday = () => {
+    if (!newHolidayDate || !newHolidayName.trim()) return
+    setHolidays((prev) => [...prev, { id: `h-${Date.now()}`, date: newHolidayDate, name: newHolidayName.trim() }])
+    setNewHolidayDate("")
+    setNewHolidayName("")
   }
 
-  const removeCalIntegration = (id: string) => {
-    setCalIntegrations(prev => prev.filter(c => c.id !== id))
-    toast.info("Календарь отключён")
+  const addAbsence = () => {
+    if (!absForm.employee || !absForm.dateFrom || !absForm.dateTo) return
+    setAbsences((prev) => [...prev, { ...absForm, id: `a-${Date.now()}`, status: "pending" }])
+    setAbsForm({ employee: "", type: "vacation", dateFrom: "", dateTo: "", comment: "" })
+    setAbsenceDialogOpen(false)
+    toast.success("Отсутствие добавлено")
   }
-
-  const syncCalIntegration = (id: string) => {
-    setCalIntegrations(prev => prev.map(c => c.id === id ? { ...c, status: "syncing" } : c))
-    setTimeout(() => {
-      setCalIntegrations(prev => prev.map(c => c.id === id ? { ...c, status: "connected" } : c))
-      toast.success("Синхронизация завершена")
-    }, 1500)
-  }
-
-  // Напоминания
-  const [remind24h, setRemind24h] = useState(true)
-  const [remindMorning, setRemindMorning] = useState(true)
-  const [remindBeforeHours, setRemindBeforeHours] = useState("2")
-  const [remindNoShow, setRemindNoShow] = useState(false)
-  const [noShowDelay, setNoShowDelay] = useState("15")
-
-
-  const addBlockedDate = () => {
-    if (addMode === "date") {
-      if (!newBlockedDate) return
-      setBlockedDates(prev => [...prev, { id: Date.now().toString(), type: "date", date: newBlockedDate }])
-      setNewBlockedDate("")
-    } else {
-      if (!rangeFrom || !rangeTo || rangeFrom > rangeTo) { toast.error("Укажите корректный период"); return }
-      setBlockedDates(prev => [...prev, { id: Date.now().toString(), type: "range", from: rangeFrom, to: rangeTo }])
-      setRangeFrom(""); setRangeTo("")
-    }
-  }
-
-  const fmtDate = (d: string) => new Date(d + "T00:00:00").toLocaleDateString("ru-RU", { day: "numeric", month: "short" })
 
   return (
-        <>
-<div className="mb-6">
-              <h1 className="text-xl font-semibold text-foreground mb-1">Планировщик слотов</h1>
-              <p className="text-muted-foreground text-sm">Настройки расписания и напоминаний для интервью</p>
+    <>
+      <div className="flex items-center justify-between mb-5">
+        <div>
+          <h1 className="text-xl font-semibold text-foreground mb-0.5">Расписание компании</h1>
+          <p className="text-sm text-muted-foreground">График работы, перерывы, выходные и отпуска</p>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <Globe className="size-4 text-muted-foreground" />
+          <Select value={timezone} onValueChange={setTimezone}>
+            <SelectTrigger className="w-64 h-9 text-sm bg-[var(--input-bg)]"><SelectValue /></SelectTrigger>
+            <SelectContent>{TIMEZONES.map((tz) => <SelectItem key={tz.value} value={tz.value}>{tz.label}</SelectItem>)}</SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      <div className="space-y-4 max-w-3xl">
+
+        {/* ═══ Рабочие дни ═══ */}
+        <Card className="rounded-xl border border-border p-5">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Clock className="size-4 text-muted-foreground" />
+              <span className="text-sm font-medium">Рабочие дни и часы</span>
             </div>
-
-            <div className="space-y-6">
-              {/* Рабочие дни */}
-              <Card>
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-base flex items-center gap-2"><Calendar className="w-4 h-4" /> Рабочее расписание</CardTitle>
-                    <button
-                      onClick={() => setScheduleExpanded(p => !p)}
-                      className="text-xs text-primary hover:underline flex items-center gap-1"
-                    >
-                      {scheduleExpanded ? "∧ Свернуть" : "∨ Настроить"}
-                    </button>
+            <Button variant="ghost" size="sm" className="text-xs gap-1.5 h-7" onClick={applyToAll}>
+              <Copy className="size-3" />Применить ко всем
+            </Button>
+          </div>
+          <div className="space-y-0">
+            {WEEKDAYS.map((day, i) => (
+              <div key={day.id} className={cn(
+                "flex items-center gap-3 py-2 px-2 rounded transition-colors",
+                i % 2 === 1 && "bg-muted/30",
+                "hover:bg-muted/40",
+              )}>
+                <Switch checked={schedule[i].enabled} onCheckedChange={(v) => updateDay(i, { enabled: v })} />
+                <span className={cn("min-w-[80px] text-sm font-medium", !schedule[i].enabled && "text-muted-foreground")}>{day.short}</span>
+                {schedule[i].enabled ? (
+                  <div className="flex items-center gap-2">
+                    <Select value={schedule[i].from} onValueChange={(v) => updateDay(i, { from: v })}>
+                      <SelectTrigger className="w-24 h-9 text-sm bg-[var(--input-bg)]"><SelectValue /></SelectTrigger>
+                      <SelectContent>{HALF_HOURS.map((h) => <SelectItem key={h} value={h}>{h}</SelectItem>)}</SelectContent>
+                    </Select>
+                    <span className="text-muted-foreground text-sm">—</span>
+                    <Select value={schedule[i].to} onValueChange={(v) => updateDay(i, { to: v })}>
+                      <SelectTrigger className="w-24 h-9 text-sm bg-[var(--input-bg)]"><SelectValue /></SelectTrigger>
+                      <SelectContent>{HALF_HOURS.map((h) => <SelectItem key={h} value={h}>{h}</SelectItem>)}</SelectContent>
+                    </Select>
                   </div>
-                </CardHeader>
-
-                {/* Свёрнутый вид */}
-                {!scheduleExpanded && (
-                  <CardContent className="pt-0 pb-4">
-                    <p className="text-sm text-foreground">{scheduleSummary}</p>
-                  </CardContent>
+                ) : (
+                  <span className="text-sm text-muted-foreground">Выходной</span>
                 )}
+              </div>
+            ))}
+          </div>
+        </Card>
 
-                {/* Развёрнутый вид */}
-                {scheduleExpanded && (
-                  <CardContent className="space-y-1 pt-0">
-                    {WEEKDAYS.map(d => {
-                      const s = daySchedule[d.id]
-                      return (
-                        <div key={d.id} className="flex items-center gap-3 py-2">
-                          <span className="w-6 text-sm font-medium text-foreground shrink-0">{d.label}</span>
-                          <Switch checked={s.enabled} onCheckedChange={v => updateDay(d.id, { enabled: v })} />
-                          {s.enabled ? (
-                            <div className="flex items-center gap-2">
-                              <Input type="time" value={s.start} onChange={e => updateDay(d.id, { start: e.target.value })} className="h-9 w-28 text-sm" />
-                              <span className="text-muted-foreground">—</span>
-                              <Input type="time" value={s.end} onChange={e => updateDay(d.id, { end: e.target.value })} className="h-9 w-28 text-sm" />
-                            </div>
-                          ) : (
-                            <span className="text-sm text-muted-foreground">Выходной</span>
-                          )}
-                        </div>
-                      )
-                    })}
-                  </CardContent>
-                )}
+        {/* ═══ Обеденный перерыв ═══ */}
+        <Card className="rounded-xl border border-border p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <Coffee className="size-4 text-muted-foreground" />
+            <span className="text-sm font-medium">Обеденный перерыв</span>
+          </div>
+          <div>
+            <div className="flex items-center gap-4">
+              <Switch checked={lunchEnabled} onCheckedChange={setLunchEnabled} />
+              <span className={cn("text-sm", !lunchEnabled && "text-muted-foreground")}>{lunchEnabled ? "Перерыв включён" : "Без перерыва"}</span>
+              {lunchEnabled && (
+                <div className="flex items-center gap-2 ml-2">
+                  <Select value={lunchFrom} onValueChange={setLunchFrom}>
+                    <SelectTrigger className="w-24 h-9 text-sm bg-[var(--input-bg)]"><SelectValue /></SelectTrigger>
+                    <SelectContent>{HALF_HOURS.map((h) => <SelectItem key={h} value={h}>{h}</SelectItem>)}</SelectContent>
+                  </Select>
+                  <span className="text-muted-foreground">—</span>
+                  <Select value={lunchTo} onValueChange={setLunchTo}>
+                    <SelectTrigger className="w-24 h-9 text-sm bg-[var(--input-bg)]"><SelectValue /></SelectTrigger>
+                    <SelectContent>{HALF_HOURS.map((h) => <SelectItem key={h} value={h}>{h}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
+          </div>
+        </Card>
 
-                <CardContent className="pt-0 space-y-4">
+        {/* ═══ Праздничные дни ═══ */}
+        <Card className="rounded-xl border border-border p-5">
+          <div className="flex items-center gap-2 mb-1">
+            <CalendarOff className="size-4 text-muted-foreground" />
+            <span className="text-sm font-medium">Выходные и праздничные дни</span>
+          </div>
+          <p className="text-xs text-muted-foreground mb-3">Даты когда компания не работает</p>
+          <div className="space-y-2">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b bg-muted/50">
+                  <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-3 py-2">Дата</th>
+                  <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-3 py-2">Название</th>
+                  <th className="w-10 px-3 py-2" />
+                </tr>
+              </thead>
+              <tbody>
+                {holidays.map((h) => (
+                  <tr key={h.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
+                    <td className="px-3 py-2 text-sm font-mono text-muted-foreground">{h.date}</td>
+                    <td className="px-3 py-2 text-sm">{h.name}</td>
+                    <td className="px-3 py-2">
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setHolidays((prev) => prev.filter((x) => x.id !== h.id))}>
+                        <Trash2 className="size-3.5 text-muted-foreground" />
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div className="flex items-center gap-2 pt-1">
+              <Input value={newHolidayDate} onChange={(e) => setNewHolidayDate(e.target.value)} placeholder="ДД.ММ" className="w-24 h-9 text-sm bg-[var(--input-bg)] font-mono" maxLength={5} />
+              <Input value={newHolidayName} onChange={(e) => setNewHolidayName(e.target.value)} placeholder="Название праздника" className="flex-1 h-9 text-sm bg-[var(--input-bg)]" onKeyDown={(e) => { if (e.key === "Enter") addHoliday() }} />
+              <Button variant="outline" size="sm" className="h-9 gap-1.5 text-xs shrink-0" onClick={addHoliday} disabled={!newHolidayDate || !newHolidayName.trim()}>
+                <Plus className="size-3.5" />Добавить
+              </Button>
+            </div>
+          </div>
+        </Card>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                      <Label className="text-sm">Длительность по умолчанию</Label>
-                      <Select value={defaultDuration} onValueChange={setDefaultDuration}>
-                        <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="15">15 мин</SelectItem>
-                          <SelectItem value="30">30 мин</SelectItem>
-                          <SelectItem value="45">45 мин</SelectItem>
-                          <SelectItem value="60">60 мин</SelectItem>
-                          <SelectItem value="90">90 мин</SelectItem>
-                          <SelectItem value="120">120 мин</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-sm">Буфер между встречами</Label>
-                      <Select value={buffer} onValueChange={setBuffer}>
-                        <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="5">5 мин</SelectItem>
-                          <SelectItem value="10">10 мин</SelectItem>
-                          <SelectItem value="15">15 мин</SelectItem>
-                          <SelectItem value="20">20 мин</SelectItem>
-                          <SelectItem value="30">30 мин</SelectItem>
-                          <SelectItem value="45">45 мин</SelectItem>
-                          <SelectItem value="60">60 мин</SelectItem>
-                          <SelectItem value="90">90 мин</SelectItem>
-                          <SelectItem value="120">120 мин</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+        {/* ═══ Отпуска и отсутствия ═══ */}
+        <Card className="rounded-xl border border-border p-5">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Palmtree className="size-4 text-muted-foreground" />
+              <span className="text-sm font-medium">Отпуска и отсутствия</span>
+            </div>
+            <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" onClick={() => setAbsenceDialogOpen(true)}>
+              <Plus className="size-3" />Добавить
+            </Button>
+          </div>
+          <div>
+            {absences.length === 0 ? (
+              <div className="py-4 text-center text-sm text-muted-foreground">Нет запланированных отпусков</div>
+            ) : (
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b bg-muted/50">
+                    <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-3 py-2">Сотрудник</th>
+                    <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-3 py-2">Тип</th>
+                    <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-3 py-2">Начало</th>
+                    <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-3 py-2">Окончание</th>
+                    <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-3 py-2">Статус</th>
+                    <th className="w-10 px-3 py-2" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {absences.map((a) => {
+                    const st = ABSENCE_STATUS_CFG[a.status]
+                    return (
+                      <tr key={a.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
+                        <td className="px-3 py-2.5 text-sm font-medium">{a.employee}</td>
+                        <td className="px-3 py-2.5 text-sm text-muted-foreground">{ABSENCE_TYPES[a.type]}</td>
+                        <td className="px-3 py-2.5 text-sm text-muted-foreground font-mono">{a.dateFrom}</td>
+                        <td className="px-3 py-2.5 text-sm text-muted-foreground font-mono">{a.dateTo}</td>
+                        <td className="px-3 py-2.5"><Badge variant="outline" className={cn("text-[10px] px-2.5 py-0.5 rounded-full font-medium border-transparent", st.cls)}>{st.label}</Badge></td>
+                        <td className="px-3 py-2.5">
+                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setAbsences((prev) => prev.filter((x) => x.id !== a.id))}>
+                            <Trash2 className="size-3.5 text-muted-foreground" />
+                          </Button>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </Card>
 
-              {/* Недоступные даты */}
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base flex items-center gap-2"><X className="w-4 h-4" /> Недоступное время</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
+        {/* ═══ Ссылка на HR ═══ */}
+        <div className="rounded-lg border border-dashed border-border p-3 flex items-center justify-between">
+          <p className="text-sm text-muted-foreground">Настройки интервью и слотов для кандидатов</p>
+          <Link href="/hr/hiring-settings">
+            <Button variant="ghost" size="sm" className="text-xs">Настройки найма →</Button>
+          </Link>
+        </div>
 
-                  {/* Обед */}
-                  <div className="p-3 rounded-lg border bg-muted/20 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-sm font-medium flex items-center gap-2">
-                        🍽️ Перерыв на обед
-                      </Label>
-                      <Switch checked={lunchEnabled} onCheckedChange={setLunchEnabled} />
-                    </div>
-                    {lunchEnabled && (
-                      <div className="flex items-center gap-2 pt-1">
-                        <Label className="text-xs text-muted-foreground whitespace-nowrap">с</Label>
-                        <Input type="time" value={lunchFrom} onChange={e => setLunchFrom(e.target.value)} className="h-8 w-32 text-sm" />
-                        <Label className="text-xs text-muted-foreground whitespace-nowrap">до</Label>
-                        <Input type="time" value={lunchTo} onChange={e => setLunchTo(e.target.value)} className="h-8 w-32 text-sm" />
-                        <span className="text-xs text-muted-foreground">каждый день</span>
-                      </div>
-                    )}
-                  </div>
+        {/* ═══ Сохранить ═══ */}
+        <div className="flex justify-end pb-2">
+          <Button className="gap-2 h-9 px-5" onClick={() => toast.success("Расписание сохранено")}>
+            <Save className="size-4" />Сохранить
+          </Button>
+        </div>
+      </div>
 
-                  {/* Переключатель режима */}
-                  <div className="flex gap-1 p-1 rounded-lg bg-muted/50 w-fit">
-                    {(["date", "range", "hours"] as const).map(m => (
-                      <button key={m}
-                        className={cn("px-3 py-1 rounded-md text-xs font-medium transition-all",
-                          addMode === m ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground")}
-                        onClick={() => setAddMode(m)}
-                      >
-                        {m === "date" ? "Дата" : m === "range" ? "Период (отпуск)" : "Часы"}
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Добавленные даты */}
-                  {(addMode === "date" || addMode === "range") && (
-                    <>
-                      <div className="flex flex-wrap gap-2">
-                        {blockedDates.map(entry => (
-                          <Badge key={entry.id} variant="outline" className="gap-1.5 text-xs">
-                            {entry.type === "date" ? fmtDate(entry.date) : `${fmtDate(entry.from)} — ${fmtDate(entry.to)}`}
-                            <button onClick={() => setBlockedDates(prev => prev.filter(x => x.id !== entry.id))}><X className="w-3 h-3" /></button>
-                          </Badge>
-                        ))}
-                      </div>
-                      {addMode === "date" ? (
-                        <div className="flex items-center gap-2">
-                          <Input type="date" value={newBlockedDate} onChange={e => setNewBlockedDate(e.target.value)} className="h-9 w-48" />
-                          <Button variant="outline" size="sm" onClick={addBlockedDate}><Plus className="w-3.5 h-3.5 mr-1" /> Добавить</Button>
-                        </div>
-                      ) : (
-                        <div className="flex flex-wrap items-center gap-2">
-                          <div className="flex items-center gap-2">
-                            <Label className="text-xs text-muted-foreground whitespace-nowrap">с</Label>
-                            <Input type="date" value={rangeFrom} onChange={e => setRangeFrom(e.target.value)} className="h-9 w-44" />
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Label className="text-xs text-muted-foreground whitespace-nowrap">по</Label>
-                            <Input type="date" value={rangeTo} onChange={e => setRangeTo(e.target.value)} className="h-9 w-44" />
-                          </div>
-                          <Button variant="outline" size="sm" onClick={addBlockedDate}><Plus className="w-3.5 h-3.5 mr-1" /> Добавить</Button>
-                        </div>
-                      )}
-                    </>
-                  )}
-
-                  {/* Недоступные часы */}
-                  {addMode === "hours" && (
-                    <div className="space-y-3">
-                      {blockedHours.length > 0 && (
-                        <div className="space-y-1.5">
-                          {blockedHours.map(h => {
-                            const dayLabel = DAY_OPTIONS.find(d => d.value === h.day)?.label ?? h.day
-                            return (
-                              <div key={h.id} className="flex items-center gap-2 p-2 rounded-lg border bg-muted/20 text-sm">
-                                <span className="text-xs font-medium text-muted-foreground w-20 shrink-0">{dayLabel}</span>
-                                <span className="flex-1">{h.from} — {h.to}</span>
-                                <button onClick={() => setBlockedHours(prev => prev.filter(x => x.id !== h.id))} className="text-muted-foreground hover:text-destructive transition-colors">
-                                  <X className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                            )
-                          })}
-                        </div>
-                      )}
-                      <div className="flex flex-wrap items-end gap-2">
-                        <div className="space-y-1">
-                          <Label className="text-xs text-muted-foreground">День недели</Label>
-                          <Select value={hourDay} onValueChange={setHourDay}>
-                            <SelectTrigger className="h-9 w-40"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              {DAY_OPTIONS.map(d => <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>)}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-xs text-muted-foreground">с</Label>
-                          <Input type="time" value={hourFrom} onChange={e => setHourFrom(e.target.value)} className="h-9 w-32 text-sm" />
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-xs text-muted-foreground">до</Label>
-                          <Input type="time" value={hourTo} onChange={e => setHourTo(e.target.value)} className="h-9 w-32 text-sm" />
-                        </div>
-                        <Button variant="outline" size="sm" className="h-9" onClick={addBlockedHour}><Plus className="w-3.5 h-3.5 mr-1" /> Добавить</Button>
-                      </div>
-                    </div>
-                  )}
-
-                </CardContent>
-              </Card>
-
-              {/* Напоминания */}
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base flex items-center gap-2"><Bell className="w-4 h-4" /> Напоминания кандидатам</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <Label className="text-sm font-medium">За 24 часа до встречи</Label>
-                      <p className="text-xs text-muted-foreground">Сообщение в канал кандидата</p>
-                    </div>
-                    <Switch checked={remind24h} onCheckedChange={setRemind24h} />
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <Label className="text-sm font-medium">Утреннее напоминание</Label>
-                      <p className="text-xs text-muted-foreground">В 10:00 или за настраиваемое время</p>
-                    </div>
-                    <Switch checked={remindMorning} onCheckedChange={setRemindMorning} />
-                  </div>
-
-                  {remindMorning && (
-                    <div className="flex items-center justify-between pl-4 border-l-2 border-primary/20">
-                      <Label className="text-sm">За сколько часов до встречи</Label>
-                      <Select value={remindBeforeHours} onValueChange={setRemindBeforeHours}>
-                        <SelectTrigger className="w-[120px] h-9"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="1">1 час</SelectItem>
-                          <SelectItem value="2">2 часа</SelectItem>
-                          <SelectItem value="3">3 часа</SelectItem>
-                          <SelectItem value="4">4 часа</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
-
-                  <Separator />
-
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <Label className="text-sm font-medium">Если не пришёл</Label>
-                      <p className="text-xs text-muted-foreground">Бот напишет кандидату после неявки</p>
-                    </div>
-                    <Switch checked={remindNoShow} onCheckedChange={setRemindNoShow} />
-                  </div>
-
-                  {remindNoShow && (
-                    <div className="flex items-center justify-between pl-4 border-l-2 border-primary/20">
-                      <Label className="text-sm">Через сколько минут</Label>
-                      <Select value={noShowDelay} onValueChange={setNoShowDelay}>
-                        <SelectTrigger className="w-[120px] h-9"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="15">15 мин</SelectItem>
-                          <SelectItem value="30">30 мин</SelectItem>
-                          <SelectItem value="60">60 мин</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* Интеграции с календарями */}
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Link2 className="w-4 h-4" /> Интеграции с календарями
-                  </CardTitle>
-                  <p className="text-xs text-muted-foreground">Подключите внешние календари — занятое время автоматически блокируется для записи</p>
-                </CardHeader>
-                <CardContent className="space-y-4">
-
-                  {/* Подключённые */}
-                  {calIntegrations.length > 0 && (
-                    <div className="space-y-2">
-                      {calIntegrations.map(cal => (
-                        <div key={cal.id} className="flex items-center gap-3 p-3 rounded-lg border bg-muted/20">
-                          <span className="text-lg shrink-0">{CAL_PROVIDERS[cal.provider].icon}</span>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-foreground">{cal.label}</p>
-                            {cal.url && <p className="text-xs text-muted-foreground truncate">{cal.url}</p>}
-                          </div>
-                          <div className="flex items-center gap-1.5 shrink-0">
-                            {cal.status === "connected" && <CheckCircle2 className="w-4 h-4 text-emerald-600" />}
-                            {cal.status === "syncing" && <RefreshCw className="w-4 h-4 text-primary animate-spin" />}
-                            {cal.status === "error" && <X className="w-4 h-4 text-destructive" />}
-                            <button
-                              onClick={() => syncCalIntegration(cal.id)}
-                              className="p-1 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-                              title="Синхронизировать"
-                            >
-                              <RefreshCw className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              onClick={() => removeCalIntegration(cal.id)}
-                              className="p-1 rounded hover:bg-destructive/10 transition-colors text-muted-foreground hover:text-destructive"
-                              title="Отключить"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Добавить */}
-                  <div className="space-y-3 p-3 rounded-lg border border-dashed">
-                    <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Добавить календарь</Label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {(Object.entries(CAL_PROVIDERS) as [CalProvider, typeof CAL_PROVIDERS[CalProvider]][]).map(([key, p]) => (
-                        <button
-                          key={key}
-                          onClick={() => { setCalProvider(key); setCalUrl("") }}
-                          className={cn(
-                            "flex items-center gap-2 p-2.5 rounded-lg border text-left text-sm transition-all",
-                            calProvider === key
-                              ? "border-primary bg-primary/5 text-foreground"
-                              : "border-border hover:border-primary/30 text-muted-foreground"
-                          )}
-                        >
-                          <span>{p.icon}</span>
-                          <span className="text-xs font-medium leading-tight">{p.label}</span>
-                        </button>
-                      ))}
-                    </div>
-
-                    {CAL_PROVIDERS[calProvider].needsUrl && (
-                      <div className="space-y-1">
-                        <Input
-                          placeholder={calProvider === "apple" ? "https://caldav.icloud.com/…" : "https://your-server/caldav/…"}
-                          value={calUrl}
-                          onChange={e => setCalUrl(e.target.value)}
-                          className="h-9 text-sm"
-                        />
-                        <p className="text-[11px] text-muted-foreground">{CAL_PROVIDERS[calProvider].hint}</p>
-                      </div>
-                    )}
-
-                    {!CAL_PROVIDERS[calProvider].needsUrl && (
-                      <p className="text-xs text-muted-foreground">{CAL_PROVIDERS[calProvider].hint}</p>
-                    )}
-
-                    <Button size="sm" className="gap-1.5 w-full" onClick={addCalIntegration}>
-                      <Plus className="w-3.5 h-3.5" />
-                      Подключить {CAL_PROVIDERS[calProvider].label}
-                    </Button>
-                  </div>
-
-                </CardContent>
-              </Card>
-
-              <div className="flex justify-end">
-                <Button className="gap-1.5" onClick={() => toast.success("Настройки расписания сохранены")}><Save className="w-4 h-4" /> Сохранить</Button>
+      {/* ═══ Модалка: добавить отсутствие ═══ */}
+      <Dialog open={absenceDialogOpen} onOpenChange={setAbsenceDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle>Добавить отсутствие</DialogTitle></DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Сотрудник</Label>
+              <Select value={absForm.employee} onValueChange={(v) => setAbsForm({ ...absForm, employee: v })}>
+                <SelectTrigger className="h-9 text-sm bg-[var(--input-bg)]"><SelectValue placeholder="Выберите сотрудника" /></SelectTrigger>
+                <SelectContent>{MOCK_EMPLOYEES.map((e) => <SelectItem key={e} value={e}>{e}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Тип</Label>
+              <Select value={absForm.type} onValueChange={(v) => setAbsForm({ ...absForm, type: v as AbsenceType })}>
+                <SelectTrigger className="h-9 text-sm bg-[var(--input-bg)]"><SelectValue /></SelectTrigger>
+                <SelectContent>{Object.entries(ABSENCE_TYPES).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Дата начала</Label>
+                <Input type="date" value={absForm.dateFrom} onChange={(e) => setAbsForm({ ...absForm, dateFrom: e.target.value })} className="h-9 text-sm bg-[var(--input-bg)]" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Дата окончания</Label>
+                <Input type="date" value={absForm.dateTo} onChange={(e) => setAbsForm({ ...absForm, dateTo: e.target.value })} className="h-9 text-sm bg-[var(--input-bg)]" />
               </div>
             </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Комментарий</Label>
+              <Textarea value={absForm.comment} onChange={(e) => setAbsForm({ ...absForm, comment: e.target.value })} rows={2} placeholder="Необязательно" className="text-sm bg-[var(--input-bg)]" />
+            </div>
+            <Button onClick={addAbsence} disabled={!absForm.employee || !absForm.dateFrom || !absForm.dateTo} className="w-full">Добавить</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }

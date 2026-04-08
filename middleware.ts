@@ -14,6 +14,7 @@ const PUBLIC_PREFIXES = [
   "/schedule/",
   "/ref/",
   "/v/",
+  "/join/",
   "/api/auth",
   "/api/access-requests",
   "/api/visit-log",
@@ -34,8 +35,9 @@ const MODULE_PATH_MAP: { prefix: string; slugs: string[]; moduleParam: string }[
   { prefix: "/hr/",        slugs: HR_MODULE_SLUGS, moduleParam: "recruiting" },
   { prefix: "/marketing/", slugs: ["marketing"],   moduleParam: "marketing" },
   { prefix: "/sales/",     slugs: ["sales"],       moduleParam: "sales" },
-  { prefix: "/logistics/",  slugs: ["logistics"],   moduleParam: "logistics" },
+  { prefix: "/logistics/", slugs: ["logistics"],   moduleParam: "logistics" },
   { prefix: "/knowledge/", slugs: ["knowledge"],   moduleParam: "knowledge" },
+  { prefix: "/tasks/",     slugs: ["tasks"],       moduleParam: "tasks" },
 ]
 
 export default auth(async (req) => {

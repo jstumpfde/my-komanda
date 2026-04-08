@@ -5,8 +5,8 @@ import { inviteLinks, users } from "@/lib/db/schema"
 import { eq, and, desc } from "drizzle-orm"
 import { randomBytes } from "crypto"
 
-// Роли, которым разрешено создавать ссылки
-const CAN_INVITE = ["platform_admin", "platform_manager", "director", "hr_lead"]
+// Роли, которым разрешено создавать ссылки (включая legacy DB-имена)
+const CAN_INVITE = ["platform_admin", "platform_manager", "director", "hr_lead", "admin", "manager"]
 
 // ─── GET /api/invites — список ссылок компании ────────────────────────────────
 

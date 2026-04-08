@@ -16,6 +16,7 @@ export type UserRole =
   | "hr_manager"
   | "department_head"
   | "observer"
+  | "employee"
 
 export const PLATFORM_ROLES: UserRole[] = ["platform_admin", "platform_manager"]
 export const CLIENT_ROLES: UserRole[] = ["director", "hr_lead", "hr_manager", "department_head", "observer"]
@@ -76,6 +77,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         email: session.user.email ?? "",
         role,
         companyId: session.user.companyId ?? null,
+        avatar: session.user.avatarUrl ?? undefined,
       }
     : FALLBACK_USER
 
@@ -123,6 +125,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   hr_manager: "HR-менеджер",
   department_head: "Руководитель отдела",
   observer: "Наблюдатель",
+  employee: "Сотрудник",
 }
 
 export const ROLE_ICONS: Record<UserRole, string> = {
@@ -133,6 +136,7 @@ export const ROLE_ICONS: Record<UserRole, string> = {
   hr_manager: "🏢",
   department_head: "👥",
   observer: "👁️",
+  employee: "👤",
 }
 
 // Sidebar visibility per role
@@ -152,6 +156,8 @@ export function getVisibleSections(role: UserRole) {
       return { main: true, hiring: false, tools: false, settings: false, admin: false }
     case "observer":
       return { main: true, hiring: false, tools: false, settings: false, admin: false }
+    case "employee":
+      return { main: false, hiring: false, tools: false, settings: false, admin: false }
   }
 }
 
@@ -165,5 +171,6 @@ export function getVisibleSettings(role: UserRole): string[] {
     case "hr_manager": return ["profile", "notifications"]
     case "department_head": return ["profile", "notifications"]
     case "observer": return ["profile"]
+    case "employee": return ["profile"]
   }
 }

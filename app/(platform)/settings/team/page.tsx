@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useRef } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -9,15 +9,16 @@ import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Switch } from "@/components/ui/switch"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import {
   Users, Plus, Settings, Trash2, Save, UserPlus,
   Mail, AlertTriangle, Check,
   CalendarClock, Link2, Copy, X,
-  Loader2, ExternalLink,
+  Loader2, ExternalLink, Camera,
 } from "lucide-react"
 import { getVacancyCategories } from "@/lib/vacancy-storage"
 import { useLocalStorage } from "@/hooks/use-local-storage"
@@ -30,8 +31,9 @@ type TeamRole =
   | "hr_manager"
   | "department_head"
   | "observer"
+  | "employee"
 
-type MemberStatus = "active" | "invited" | "disabled"
+type MemberStatus = "active" | "invited" | "disabled" | "pending"
 type CandidateVisibility = "own" | "all" | "categories"
 
 interface TeamMember {
@@ -41,10 +43,12 @@ interface TeamMember {
   role: TeamRole
   status: MemberStatus
   avatar: string
+  avatarUrl?: string
   vacancyIds: string[]
   categories: string[]
   candidateVisibility: CandidateVisibility
   substituteId?: string
+  permissions?: Record<string, boolean>
 }
 
 interface InviteLink {
@@ -66,43 +70,42 @@ const ROLE_CONFIG: Record<TeamRole, { label: string; description: string; color:
   director: {
     label: "Директор",
     description: "Полный доступ + управление тарифом и настройками",
-    color: "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800",
+    color: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
   },
   hr_lead: {
     label: "Главный HR",
     description: "Видит всех кандидатов + управление командой",
-    color: "bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-200 dark:border-purple-800",
+    color: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
   },
   hr_manager: {
     label: "HR-менеджер",
     description: "Работа с кандидатами (настраивается по категориям)",
-    color: "bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800",
+    color: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
   },
   department_head: {
     label: "Руководитель отдела",
     description: "Просмотр своей категории + одобрение/отклонение",
-    color: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800",
+    color: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400",
   },
   observer: {
     label: "Наблюдатель",
     description: "Только просмотр аналитики",
-    color: "bg-muted text-muted-foreground border-border",
+    color: "bg-gray-100 text-gray-700 dark:bg-gray-800/30 dark:text-gray-400",
   },
-}
-
-const STATUS_CONFIG: Record<MemberStatus, { label: string; icon: typeof Check; color: string }> = {
-  active:   { label: "Активен",   icon: Check,         color: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800" },
-  invited:  { label: "Приглашён", icon: CalendarClock, color: "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800" },
-  disabled: { label: "Отключён",  icon: AlertTriangle, color: "bg-red-500/10 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800" },
+  employee: {
+    label: "Сотрудник",
+    description: "Только профиль, ожидает настройки прав",
+    color: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
+  },
 }
 
 // ─── Тестовые данные ────────────────────────────────────────
 
 const INITIAL_MEMBERS: TeamMember[] = [
-  { id: "m1", name: "Анна Иванова",   email: "anna@romashka.ru",    role: "hr_lead",         status: "active",  avatar: "АИ", vacancyIds: [], categories: [], candidateVisibility: "all" },
-  { id: "m2", name: "Дмитрий Козлов", email: "dmitry@romashka.ru",  role: "hr_manager",      status: "active",  avatar: "ДК", vacancyIds: [], categories: [], candidateVisibility: "own" },
-  { id: "m3", name: "Михаил Романов", email: "mikhail@romashka.ru", role: "department_head", status: "active",  avatar: "МР", vacancyIds: [], categories: [], candidateVisibility: "categories" },
-  { id: "m4", name: "Ольга Тихонова", email: "olga@romashka.ru",    role: "observer",        status: "invited", avatar: "ОТ", vacancyIds: [], categories: [], candidateVisibility: "all" },
+  { id: "m1", name: "Анна Иванова",   email: "anna@romashka.ru",    role: "hr_lead",         status: "active",  avatar: "АИ", avatarUrl: undefined, vacancyIds: [], categories: [], candidateVisibility: "all" },
+  { id: "m2", name: "Дмитрий Козлов", email: "dmitry@romashka.ru",  role: "hr_manager",      status: "active",  avatar: "ДК", avatarUrl: undefined, vacancyIds: [], categories: [], candidateVisibility: "own" },
+  { id: "m3", name: "Михаил Романов", email: "mikhail@romashka.ru", role: "department_head", status: "active",  avatar: "МР", avatarUrl: undefined, vacancyIds: [], categories: [], candidateVisibility: "categories" },
+  { id: "m4", name: "Ольга Тихонова", email: "olga@romashka.ru",    role: "observer",        status: "invited", avatar: "ОТ", avatarUrl: undefined, vacancyIds: [], categories: [], candidateVisibility: "all" },
 ]
 
 // ─── Компонент ──────────────────────────────────────────────
@@ -115,6 +118,21 @@ export default function TeamPage() {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const vacancyCategories = getVacancyCategories()
   const allVacancies = vacancyCategories.flatMap(cat => cat.items)
+  const avatarInputRef = useRef<HTMLInputElement>(null)
+
+  // Join link state
+  const [joinCode] = useState("demo-abc123")
+  const [joinEnabled, setJoinEnabled] = useState(true)
+
+  // Edit permissions state
+  const [editPermissions, setEditPermissions] = useState<Record<string, boolean>>({
+    manage_company: false,
+    manage_team: false,
+    manage_billing: false,
+    create_vacancies: false,
+    edit_knowledge: false,
+    view_analytics: false,
+  })
 
   // Invite by email form
   const [inviteEmail, setInviteEmail]           = useState("")
@@ -190,13 +208,23 @@ export default function TeamPage() {
 
   const openEdit = (member: TeamMember) => {
     setEditMember({ ...member })
+    setEditPermissions({
+      manage_company: false,
+      manage_team: false,
+      manage_billing: false,
+      create_vacancies: false,
+      edit_knowledge: false,
+      view_analytics: false,
+      ...(member.permissions ?? {}),
+    })
     setSheetOpen(true)
     setConfirmDelete(false)
   }
 
   const handleSaveMember = () => {
     if (!editMember) return
-    setMembers(prev => prev.map(m => m.id === editMember.id ? editMember : m))
+    const updated = { ...editMember, permissions: editPermissions }
+    setMembers(prev => prev.map(m => m.id === updated.id ? updated : m))
     setSheetOpen(false)
     toast.success(`Настройки ${editMember.name} сохранены`)
   }
@@ -205,7 +233,7 @@ export default function TeamPage() {
     if (!editMember) return
     setMembers(prev => prev.filter(m => m.id !== editMember.id))
     setSheetOpen(false)
-    toast.error(`${editMember.name} удалён из команды`)
+    toast.error(`${editMember.name} удален из команды`)
   }
 
   const handleInvite = () => {
@@ -218,6 +246,7 @@ export default function TeamPage() {
       role: inviteRole,
       status: "invited",
       avatar: initials,
+      avatarUrl: undefined,
       vacancyIds: inviteVacancyIds,
       categories: [],
       candidateVisibility: inviteRole === "observer" ? "all" : "own",
@@ -245,6 +274,65 @@ export default function TeamPage() {
       prev.includes(vacId) ? prev.filter(v => v !== vacId) : [...prev, vacId]
     )
 
+  // ── Avatar upload ────────────────────────────────────────
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!editMember) return
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    const formData = new FormData()
+    formData.append("file", file)
+    formData.append("userId", editMember.id)
+
+    try {
+      const res = await fetch("/api/team/avatar", {
+        method: "POST",
+        body: formData,
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? "Ошибка загрузки")
+      const newUrl = data.avatarUrl ?? URL.createObjectURL(file)
+      updateEdit({ avatarUrl: newUrl })
+      setMembers(prev => prev.map(m => m.id === editMember.id ? { ...m, avatarUrl: newUrl } : m))
+      toast.success("Фото профиля обновлено")
+    } catch {
+      // Fallback: use local object URL if API not available
+      const localUrl = URL.createObjectURL(file)
+      updateEdit({ avatarUrl: localUrl })
+      setMembers(prev => prev.map(m => m.id === editMember.id ? { ...m, avatarUrl: localUrl } : m))
+      toast.success("Фото профиля обновлено")
+    }
+
+    // Reset input
+    if (avatarInputRef.current) avatarInputRef.current.value = ""
+  }
+
+  const handleAvatarDelete = async () => {
+    if (!editMember) return
+    try {
+      await fetch("/api/team/avatar", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: editMember.id }),
+      })
+    } catch {
+      // Ignore API errors, still remove locally
+    }
+    updateEdit({ avatarUrl: undefined })
+    setMembers(prev => prev.map(m => m.id === editMember.id ? { ...m, avatarUrl: undefined } : m))
+    toast.success("Фото профиля удалено")
+  }
+
+  // ── Select all / deselect all vacancies ──────────────────
+
+  const handleSelectAllVacancies = () => {
+    if (!editMember) return
+    const allIds = allVacancies.map(v => v.id)
+    const allSelected = allIds.every(id => editMember.vacancyIds.includes(id))
+    updateEdit({ vacancyIds: allSelected ? [] : allIds })
+  }
+
   // ─── Render ─────────────────────────────────────────────
 
   return (
@@ -267,30 +355,64 @@ export default function TeamPage() {
         </div>
       </div>
 
+      {/* Ссылка для присоединения */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="text-base">Ссылка для присоединения к компании</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Любой сотрудник может присоединиться по этой ссылке. После регистрации он попадёт в компанию с ролью &laquo;Сотрудник&raquo; — настройте права в карточке.
+          </p>
+          <div className="flex items-center gap-2">
+            <div className="bg-muted px-3 py-2 rounded-lg font-mono text-sm flex-1 truncate">
+              company24.pro/join/{joinCode}
+            </div>
+            <Button
+              variant="outline"
+              size="icon"
+              className="shrink-0"
+              onClick={() => {
+                navigator.clipboard.writeText(`company24.pro/join/${joinCode}`)
+                toast.success("Ссылка скопирована")
+              }}
+            >
+              <Copy className="w-4 h-4" />
+            </Button>
+          </div>
+          <div className="flex items-center gap-2">
+            <Switch checked={joinEnabled} onCheckedChange={setJoinEnabled} />
+            <span className="text-sm text-foreground">Ссылка активна</span>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Таблица участников */}
       <Card className="mb-8">
         <CardContent className="p-0">
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="border-b bg-muted/50">
-                  <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Участник</th>
-                  <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Роль</th>
-                  <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Email</th>
-                  <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Статус</th>
-                  <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Действия</th>
+                <tr className="bg-muted/50 border-b">
+                  <th className="text-left uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-3">Участник</th>
+                  <th className="text-left uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-3">Роль</th>
+                  <th className="text-left uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-3">Email</th>
+                  <th className="text-center uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-3">Статус</th>
+                  <th className="text-center uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-3">Действия</th>
                 </tr>
               </thead>
               <tbody>
                 {members.map(member => {
-                  const roleCfg    = ROLE_CONFIG[member.role]
-                  const statusCfg  = STATUS_CONFIG[member.status]
-                  const StatusIcon = statusCfg.icon
+                  const roleCfg = ROLE_CONFIG[member.role]
+                  const isActive = member.status === "active"
                   return (
-                    <tr key={member.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
+                    <tr key={member.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
                           <Avatar className="w-8 h-8 shrink-0">
+                            {member.avatarUrl && (
+                              <AvatarImage src={member.avatarUrl} alt={member.name} />
+                            )}
                             <AvatarFallback className="bg-primary/10 text-primary text-xs font-medium">
                               {member.avatar}
                             </AvatarFallback>
@@ -299,16 +421,32 @@ export default function TeamPage() {
                         </div>
                       </td>
                       <td className="px-4 py-3">
-                        <Badge variant="outline" className={cn("text-xs", roleCfg.color)}>
+                        <span className={cn(
+                          "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border-transparent",
+                          roleCfg.color
+                        )}>
                           {roleCfg.label}
-                        </Badge>
+                        </span>
                       </td>
                       <td className="px-4 py-3 text-sm text-muted-foreground">{member.email}</td>
                       <td className="text-center px-4 py-3">
-                        <Badge variant="outline" className={cn("text-xs", statusCfg.color)}>
-                          <StatusIcon className="w-3 h-3 mr-1" />
-                          {statusCfg.label}
-                        </Badge>
+                        <span className="inline-flex items-center gap-1.5 text-xs">
+                          <span className={cn(
+                            "w-2 h-2 rounded-full shrink-0",
+                            member.role === "employee" || member.status === "pending"
+                              ? "bg-yellow-500"
+                              : isActive ? "bg-emerald-500" : "bg-gray-400"
+                          )} />
+                          <span className={
+                            member.role === "employee" || member.status === "pending"
+                              ? "text-yellow-600 dark:text-yellow-400"
+                              : isActive ? "text-foreground" : "text-muted-foreground"
+                          }>
+                            {member.role === "employee" || member.status === "pending"
+                              ? "Ожидает настройки"
+                              : isActive ? "Активен" : "Не в сети"}
+                          </span>
+                        </span>
                       </td>
                       <td className="text-center px-4 py-3">
                         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(member)}>
@@ -436,12 +574,15 @@ export default function TeamPage() {
                   <div className="flex-1 min-w-0 space-y-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       {roleCfg && (
-                        <Badge variant="outline" className={cn("text-xs", roleCfg.color)}>
+                        <span className={cn(
+                          "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border-transparent",
+                          roleCfg.color
+                        )}>
                           {roleCfg.label}
-                        </Badge>
+                        </span>
                       )}
                       {link.label && (
-                        <span className="text-xs text-muted-foreground italic">«{link.label}»</span>
+                        <span className="text-xs text-muted-foreground italic">&laquo;{link.label}&raquo;</span>
                       )}
                       <span className="text-xs text-muted-foreground">{expiresLabel}</span>
                       <span className="text-xs text-muted-foreground">использований: {usageLabel}</span>
@@ -495,11 +636,11 @@ export default function TeamPage() {
                             {ROLE_CONFIG[link.role as TeamRole]?.label ?? link.role}
                           </Badge>
                           {link.label && (
-                            <span className="text-xs text-muted-foreground">«{link.label}»</span>
+                            <span className="text-xs text-muted-foreground">&laquo;{link.label}&raquo;</span>
                           )}
                         </div>
                         <p className="text-xs text-muted-foreground font-mono truncate mt-0.5">
-                          …{link.token.slice(-8)}
+                          ...{link.token.slice(-8)}
                         </p>
                       </div>
                       <Badge variant="outline" className="text-xs shrink-0">Деактивирована</Badge>
@@ -521,16 +662,44 @@ export default function TeamPage() {
 
           {editMember && (
             <div className="space-y-6 mt-2">
-              <div className="flex items-center gap-3">
-                <Avatar className="w-12 h-12">
-                  <AvatarFallback className="bg-primary/10 text-primary font-medium">
-                    {editMember.avatar}
-                  </AvatarFallback>
-                </Avatar>
-                <div>
-                  <p className="font-medium text-foreground">{editMember.name}</p>
-                  <p className="text-sm text-muted-foreground">{editMember.email}</p>
-                </div>
+              {/* Avatar section */}
+              <div className="flex flex-col items-center gap-2">
+                <input
+                  ref={avatarInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleAvatarUpload}
+                />
+                <button
+                  type="button"
+                  className="relative group cursor-pointer"
+                  onClick={() => avatarInputRef.current?.click()}
+                >
+                  <Avatar className="w-16 h-16">
+                    {editMember.avatarUrl && (
+                      <AvatarImage src={editMember.avatarUrl} alt={editMember.name} />
+                    )}
+                    <AvatarFallback className="bg-primary/10 text-primary text-lg font-medium">
+                      {editMember.avatar}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="absolute inset-0 rounded-full bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                    <Camera className="w-5 h-5 text-white" />
+                  </div>
+                </button>
+                <p className="text-xs text-muted-foreground">Нажмите для загрузки фото</p>
+                {editMember.avatarUrl && (
+                  <button
+                    type="button"
+                    className="text-xs text-destructive hover:underline"
+                    onClick={handleAvatarDelete}
+                  >
+                    Удалить фото
+                  </button>
+                )}
+                <p className="font-medium text-foreground">{editMember.name}</p>
+                <p className="text-sm text-muted-foreground -mt-1">{editMember.email}</p>
               </div>
 
               <Separator />
@@ -538,7 +707,7 @@ export default function TeamPage() {
               <div className="space-y-2">
                 <Label className="text-sm font-medium">Роль</Label>
                 <Select value={editMember.role} onValueChange={(v) => updateEdit({ role: v as TeamRole })}>
-                  <SelectTrigger className="h-9">
+                  <SelectTrigger className="h-9 bg-[var(--input-bg)]">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -553,7 +722,21 @@ export default function TeamPage() {
               <Separator />
 
               <div className="space-y-3">
-                <Label className="text-sm font-medium">Доступные вакансии</Label>
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium">Доступные вакансии</Label>
+                  {allVacancies.length > 0 && (
+                    <button
+                      type="button"
+                      className="text-xs text-primary hover:underline"
+                      onClick={handleSelectAllVacancies}
+                    >
+                      {allVacancies.every(v => editMember.vacancyIds.includes(v.id))
+                        ? "Снять все"
+                        : "Выбрать все"
+                      }
+                    </button>
+                  )}
+                </div>
                 {allVacancies.length === 0 ? (
                   <p className="text-xs text-muted-foreground">Нет созданных вакансий</p>
                 ) : (
@@ -585,10 +768,10 @@ export default function TeamPage() {
                     <button
                       key={opt.value}
                       className={cn(
-                        "w-full flex items-start gap-3 p-3 rounded-lg border text-left transition-all",
+                        "w-full flex items-start gap-3 p-3 rounded-lg text-left transition-all",
                         editMember.candidateVisibility === opt.value
-                          ? "border-primary bg-primary/5 ring-2 ring-primary/20"
-                          : "border-border hover:border-primary/30"
+                          ? "border-2 border-primary bg-primary/5"
+                          : "border border-border hover:border-primary/30"
                       )}
                       onClick={() => updateEdit({ candidateVisibility: opt.value })}
                     >
@@ -611,6 +794,39 @@ export default function TeamPage() {
 
               <Separator />
 
+              <div className="space-y-3">
+                <Label className="text-xs uppercase tracking-wider text-muted-foreground font-medium">Права доступа</Label>
+                <div className="border rounded-lg divide-y">
+                  {([
+                    { key: "manage_company", label: "Может настраивать компанию" },
+                    { key: "manage_team", label: "Может управлять командой" },
+                    { key: "manage_billing", label: "Может управлять тарифом" },
+                    { key: "create_vacancies", label: "Может создавать вакансии" },
+                    { key: "edit_knowledge", label: "Может редактировать базу знаний" },
+                    { key: "view_analytics", label: "Может видеть аналитику" },
+                  ] as const).map(perm => {
+                    const isFullAccess = editMember.role === "director" || editMember.role === "hr_lead"
+                    return (
+                      <label key={perm.key} className="flex items-center gap-2.5 px-3 py-2 hover:bg-muted/20 cursor-pointer">
+                        <Checkbox
+                          checked={isFullAccess ? true : !!editPermissions[perm.key]}
+                          disabled={isFullAccess}
+                          onCheckedChange={(checked) => {
+                            setEditPermissions(prev => ({ ...prev, [perm.key]: !!checked }))
+                          }}
+                        />
+                        <span className="text-sm text-foreground">{perm.label}</span>
+                      </label>
+                    )
+                  })}
+                </div>
+                {(editMember.role === "director" || editMember.role === "hr_lead") && (
+                  <p className="text-xs text-muted-foreground">Для этой роли все права включены по умолчанию</p>
+                )}
+              </div>
+
+              <Separator />
+
               <div className="space-y-2">
                 <Label className="text-sm font-medium flex items-center gap-2">
                   <CalendarClock className="w-4 h-4 text-muted-foreground" />
@@ -620,7 +836,7 @@ export default function TeamPage() {
                   value={editMember.substituteId || "none"}
                   onValueChange={(v) => updateEdit({ substituteId: v === "none" ? undefined : v })}
                 >
-                  <SelectTrigger className="h-9">
+                  <SelectTrigger className="h-9 bg-[var(--input-bg)]">
                     <SelectValue placeholder="Не выбрано" />
                   </SelectTrigger>
                   <SelectContent>
@@ -638,14 +854,14 @@ export default function TeamPage() {
               <Separator />
 
               <div className="space-y-3 pt-2">
-                <Button className="w-full gap-1.5" onClick={handleSaveMember}>
+                <Button className="w-full h-10 gap-1.5" onClick={handleSaveMember}>
                   <Save className="w-4 h-4" />
                   Сохранить
                 </Button>
 
                 {!confirmDelete ? (
                   <Button
-                    variant="outline"
+                    variant="ghost"
                     className="w-full gap-1.5 text-destructive hover:text-destructive hover:bg-destructive/10"
                     onClick={() => setConfirmDelete(true)}
                   >
@@ -703,7 +919,7 @@ export default function TeamPage() {
             <div className="space-y-1.5">
               <Label className="text-sm">Роль</Label>
               <Select value={inviteRole} onValueChange={v => setInviteRole(v as TeamRole)}>
-                <SelectTrigger>
+                <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -723,14 +939,15 @@ export default function TeamPage() {
                 <div className="space-y-1 max-h-48 overflow-y-auto">
                   {vacancyCategories.map(cat => (
                     <div key={cat.id}>
-                      <p className="text-xs font-medium text-muted-foreground px-1 pt-1">{cat.name}</p>
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider px-1 pt-2 mb-1">{cat.name}</p>
                       {cat.items.map(vac => (
-                        <label key={vac.id} className="flex items-center gap-2 px-1 py-1 cursor-pointer hover:bg-muted/20 rounded">
+                        <label key={vac.id} className="flex items-start gap-2 px-1 py-1.5 cursor-pointer hover:bg-muted/20 rounded w-full">
                           <Checkbox
                             checked={inviteVacancyIds.includes(vac.id)}
                             onCheckedChange={() => toggleInviteVacancy(vac.id)}
+                            className="mt-0.5 shrink-0"
                           />
-                          <span className="text-sm text-foreground">{vac.name}</span>
+                          <span className="text-sm text-foreground break-words">{vac.name}</span>
                         </label>
                       ))}
                     </div>

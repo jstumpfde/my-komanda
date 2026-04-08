@@ -11,6 +11,7 @@ export const MODULE_REGISTRY: Record<ModuleId, ModuleConfig> = {
       // Найм
       { label: 'Дашборд',          href: '/hr/dashboard',         icon: 'LayoutDashboard' },
       { label: 'Вакансии',         href: '/hr/vacancies',         icon: 'Briefcase' },
+      { label: 'Библиотека',       href: '/hr/library',           icon: 'Library' },
       { label: 'Кандидаты',        href: '/hr/candidates',        icon: 'UserCheck' },
       { label: 'Talent Pool',      href: '/hr/talent-pool',       icon: 'Users' },
       { label: 'Аналитика найма',  href: '/hr/analytics',         icon: 'BarChart3' },

@@ -71,6 +71,9 @@ export async function GET() {
   }
 }
 
+// PATCH delegates to PUT — both support partial updates
+export const PATCH = PUT
+
 export async function PUT(req: NextRequest) {
   try {
     const user = await requireAuth()

@@ -14,7 +14,8 @@ import {
   Phone, Mail, Globe, MapPin, Calendar, Users, Briefcase,
   FileText, CreditCard, Info, Eye, Plus, X, ChevronDown, ChevronUp,
 } from "lucide-react"
-import { fetchCompanyApi, updateCompanyApi, fetchCompanyByInn } from "@/lib/company-storage"
+import { fetchCompanyApi, updateCompanyApi, patchCompanyApi, fetchCompanyByInn } from "@/lib/company-storage"
+import { useAutoSave } from "@/lib/hooks/use-auto-save"
 
 // ─── DaData types ────────────────────────────────────────────
 
@@ -108,6 +109,17 @@ export default function CompanyProfilePage() {
   const [description, setDescription] = useState(""); const [registrationDate, setRegistrationDate] = useState(""); const [employeeCount, setEmployeeCount] = useState("")
   const [industry, setIndustry] = useState(""); const [officeAddress, setOfficeAddress] = useState(""); const [weekSchedule, setWeekSchedule] = useState<DaySchedule[]>(DEFAULT_SCHEDULE); const [scheduleExpanded, setScheduleExpanded] = useState(false)
   const [saving, setSaving] = useState(false)
+
+  const saveFn = useCallback(async (payload: Record<string, unknown>) => {
+    await patchCompanyApi(payload)
+  }, [])
+  const { schedule: autoSave, saveNow } = useAutoSave(saveFn)
+
+  // Helper: onChange + schedule autosave for a field
+  const field = (apiKey: string, setter: (v: string) => void) => ({
+    onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => { setter(e.target.value); autoSave(apiKey, e.target.value) },
+    onBlur: (e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement>) => { saveNow(apiKey, e.target.value) },
+  })
 
   const applyDadataResult = (result: DadataResult & { inn?: string }) => {
     setFullName(result.fullName); setShortName(result.shortName); setKpp(result.kpp); setOgrn(result.ogrn)
@@ -218,7 +230,7 @@ export default function CompanyProfilePage() {
       <div className="space-y-3">
         {/* ═══ Компания ═══════════════════════════════════ */}
         <Card>
-          <CardHeader className="pb-2 pt-4 px-4">
+          <CardHeader className="pb-2 pt-4 px-5">
             <CardTitle className="text-base flex items-center gap-2">
               <Building2 className="w-4 h-4" /> Компания
               {companyStatus === "active" && <Badge variant="outline" className="ml-2 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 text-xs"><CheckCircle2 className="w-3 h-3 mr-1" /> Действующая</Badge>}
@@ -228,7 +240,7 @@ export default function CompanyProfilePage() {
               {companyStatus === "reorganizing" && <Badge variant="outline" className="ml-2 bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800 text-xs">Реорганизация</Badge>}
             </CardTitle>
           </CardHeader>
-          <CardContent className="px-4 pb-4 pt-0">
+          <CardContent className="px-5 pb-4 pt-0">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label className="text-sm">ИНН</Label>
@@ -240,7 +252,7 @@ export default function CompanyProfilePage() {
                   }
                 </div>
               </div>
-              <div className="space-y-1"><Label className="text-sm">КПП</Label><Input value={kpp} onChange={e => setKpp(e.target.value)} placeholder="770701001" className={cn("font-mono", ph)} /></div>
+              <div className="space-y-1"><Label className="text-sm">КПП</Label><Input value={kpp} {...field("kpp", setKpp)} placeholder="770701001" className={cn("font-mono", ph)} /></div>
               <div className="space-y-1 relative" ref={nameContainerRef}>
                 <Label className="text-sm">Краткое название</Label>
                 <Input value={shortName} onChange={e => handleShortNameChange(e.target.value)} placeholder='ООО «Ромашка»' autoComplete="off" className={ph} />
@@ -250,10 +262,10 @@ export default function CompanyProfilePage() {
                   </div>
                 )}
               </div>
-              <div className="space-y-1"><Label className="text-sm">Полное название</Label><Input value={fullName} onChange={e => setFullName(e.target.value)} placeholder='ООО «РОМАШКА»' className={ph} /></div>
-              <div className="space-y-1"><Label className="text-sm">ОГРН</Label><Input value={ogrn} onChange={e => setOgrn(e.target.value)} placeholder="1037707049388" className={cn("font-mono", ph)} /></div>
-              <div className="space-y-1"><Label className="text-sm">Руководитель</Label><Input value={director} onChange={e => setDirector(e.target.value)} placeholder="Иванов А.С." className={ph} /></div>
-              <div className="space-y-1 sm:col-span-2"><Label className="text-sm">Юридический адрес</Label><Input value={legalAddress} onChange={e => setLegalAddress(e.target.value)} placeholder="125009, г. Москва, ул. Тверская, д. 1" className={ph} /></div>
+              <div className="space-y-1"><Label className="text-sm">Полное название</Label><Input value={fullName} {...field("full_name", setFullName)} placeholder='ООО «РОМАШКА»' className={ph} /></div>
+              <div className="space-y-1"><Label className="text-sm">ОГРН</Label><Input value={ogrn} {...field("ogrn", setOgrn)} placeholder="1037707049388" className={cn("font-mono", ph)} /></div>
+              <div className="space-y-1"><Label className="text-sm">Руководитель</Label><Input value={director} {...field("director", setDirector)} placeholder="Иванов А.С." className={ph} /></div>
+              <div className="space-y-1 sm:col-span-2"><Label className="text-sm">Юридический адрес</Label><Input value={legalAddress} {...field("legal_address", setLegalAddress)} placeholder="125009, г. Москва, ул. Тверская, д. 1" className={ph} /></div>
               <div className="space-y-1 sm:col-span-2">
                 <Label className="text-sm">Почтовый адрес</Label>
                 <div className="flex items-center gap-2 mb-1.5">
@@ -262,19 +274,19 @@ export default function CompanyProfilePage() {
                 </div>
                 <Input value={postalSameAsLegal ? legalAddress : postalAddress} onChange={e => !postalSameAsLegal && setPostalAddress(e.target.value)} readOnly={postalSameAsLegal} className={cn(postalSameAsLegal && "bg-muted/50 text-muted-foreground cursor-default select-none", ph)} placeholder="125009, г. Москва, ул. Тверская, д. 1" />
               </div>
-              <div className="space-y-1"><Label className="text-sm">Почтовый индекс</Label><Input value={postalIndex} onChange={e => setPostalIndex(e.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="125009" className={cn("font-mono", ph)} maxLength={6} /></div>
-              <div className="space-y-1"><Label className="text-sm flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5 text-muted-foreground" /> Город</Label><Input value={postalCity} onChange={e => setPostalCity(e.target.value)} placeholder="Москва" className={ph} /></div>
-              <div className="space-y-1"><Label className="text-sm flex items-center gap-1.5"><Mail className="w-3.5 h-3.5 text-muted-foreground" /> Email</Label><Input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="hr@romashka.ru" className={ph} /></div>
-              <div className="space-y-1"><Label className="text-sm flex items-center gap-1.5"><Phone className="w-3.5 h-3.5 text-muted-foreground" /> Телефон</Label><Input value={phone} onChange={e => setPhone(e.target.value)} placeholder="+7 (495) 123-45-67" className={ph} /></div>
-              <div className="space-y-1"><Label className="text-sm flex items-center gap-1.5"><Globe className="w-3.5 h-3.5 text-muted-foreground" /> Сайт</Label><Input value={website} onChange={e => setWebsite(e.target.value)} placeholder="https://romashka.ru" className={ph} /></div>
+              <div className="space-y-1"><Label className="text-sm">Почтовый индекс</Label><Input value={postalIndex} onChange={e => { const v = e.target.value.replace(/\D/g, "").slice(0, 6); setPostalIndex(v); autoSave("postal_code", v) }} onBlur={() => saveNow("postal_code", postalIndex)} placeholder="125009" className={cn("font-mono", ph)} maxLength={6} /></div>
+              <div className="space-y-1"><Label className="text-sm flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5 text-muted-foreground" /> Город</Label><Input value={postalCity} {...field("city", setPostalCity)} placeholder="Москва" className={ph} /></div>
+              <div className="space-y-1"><Label className="text-sm flex items-center gap-1.5"><Mail className="w-3.5 h-3.5 text-muted-foreground" /> Email</Label><Input type="email" value={email} {...field("email", setEmail)} placeholder="hr@romashka.ru" className={ph} /></div>
+              <div className="space-y-1"><Label className="text-sm flex items-center gap-1.5"><Phone className="w-3.5 h-3.5 text-muted-foreground" /> Телефон</Label><Input value={phone} {...field("phone", setPhone)} placeholder="+7 (495) 123-45-67" className={ph} /></div>
+              <div className="space-y-1"><Label className="text-sm flex items-center gap-1.5"><Globe className="w-3.5 h-3.5 text-muted-foreground" /> Сайт</Label><Input value={website} {...field("website", setWebsite)} placeholder="https://romashka.ru" className={ph} /></div>
             </div>
           </CardContent>
         </Card>
 
         {/* ═══ Банковские реквизиты ════════════════════════ */}
         <Card>
-          <CardHeader className="pb-2 pt-4 px-4"><CardTitle className="text-base flex items-center gap-2"><CreditCard className="w-4 h-4" /> Банковские реквизиты</CardTitle></CardHeader>
-          <CardContent className="px-4 pb-4 pt-0 space-y-4">
+          <CardHeader className="pb-2 pt-4 px-5"><CardTitle className="text-base flex items-center gap-2"><CreditCard className="w-4 h-4" /> Банковские реквизиты</CardTitle></CardHeader>
+          <CardContent className="px-5 pb-4 pt-0 space-y-4">
             {accounts.map(account => (
               <div key={account.id} className="space-y-2 p-3 rounded-lg border border-border/60 bg-muted/10">
                 <div className="flex items-center justify-between">
@@ -327,63 +339,6 @@ export default function CompanyProfilePage() {
           </CardContent>
         </Card>
 
-        {/* ═══ Данные для демонстрации ════════════════════ */}
-        <Card>
-          <CardHeader className="pb-2 pt-4 px-4"><CardTitle className="text-base flex items-center gap-2"><Eye className="w-4 h-4" /> Данные для демонстрации должности</CardTitle></CardHeader>
-          <CardContent className="px-4 pb-4 pt-0 space-y-3">
-            <div className="flex items-start gap-2 p-2.5 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800">
-              <Info className="w-4 h-4 text-blue-600 dark:text-blue-400 mt-0.5 shrink-0" />
-              <p className="text-xs text-blue-700 dark:text-blue-400">Эти данные подставляются в шаблоны через переменные: {"{{компания_описание}}"}, {"{{дата_регистрации}}"}, {"{{сотрудников}}"} и т.д.</p>
-            </div>
-            <div className="space-y-1">
-              <Label className="text-sm flex items-center gap-2">Описание компании <Badge variant="outline" className="text-[10px] font-mono">{"{{компания_описание}}"}</Badge></Label>
-              <textarea className={cn("w-full border rounded-lg p-2.5 text-sm resize-none h-20 bg-background focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none", ph)} value={description} onChange={e => setDescription(e.target.value)} placeholder="Современная компания, специализирующаяся на..." />
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label className="text-sm flex items-center gap-2"><Calendar className="w-3.5 h-3.5 text-muted-foreground" /> Дата регистрации <Badge variant="outline" className="text-[10px] font-mono">{"{{дата_регистрации}}"}</Badge></Label>
-                <div className="flex items-center gap-2">
-                  <Input type="date" value={registrationDate} onChange={e => setRegistrationDate(e.target.value)} className="flex-1" />
-                  {years !== null && <Badge variant="secondary" className="text-xs whitespace-nowrap shrink-0">{pluralYears(years)}</Badge>}
-                </div>
-              </div>
-              <div className="space-y-1"><Label className="text-sm flex items-center gap-2"><Users className="w-3.5 h-3.5 text-muted-foreground" /> Количество сотрудников <Badge variant="outline" className="text-[10px] font-mono">{"{{сотрудников}}"}</Badge></Label><Input value={employeeCount} onChange={e => setEmployeeCount(e.target.value)} placeholder="150" className={ph} /></div>
-              <div className="space-y-1"><Label className="text-sm flex items-center gap-2"><Briefcase className="w-3.5 h-3.5 text-muted-foreground" /> Сфера деятельности <Badge variant="outline" className="text-[10px] font-mono">{"{{сфера}}"}</Badge></Label><Input value={industry} onChange={e => setIndustry(e.target.value)} placeholder="IT, B2B продажи" className={ph} /></div>
-              <div className="space-y-1">
-                <Label className="text-sm flex items-center gap-2"><MapPin className="w-3.5 h-3.5 text-muted-foreground" /> Адрес офиса <Badge variant="outline" className="text-[10px] font-mono">{"{{адрес_офиса}}"}</Badge></Label>
-                <Input value={officeAddress} onChange={e => setOfficeAddress(e.target.value)} placeholder={legalAddress || "ул. Примерная, 1"} className={ph} />
-                {!officeAddress && legalAddress && <p className="text-[10px] text-muted-foreground/40">По умолчанию = юридический адрес</p>}
-              </div>
-              <div className="space-y-1 sm:col-span-2">
-                <div className="flex items-center justify-between">
-                  <Label className="text-sm flex items-center gap-2"><FileText className="w-3.5 h-3.5 text-muted-foreground" /> График работы <Badge variant="outline" className="text-[10px] font-mono">{"{{график}}"}</Badge></Label>
-                  <button type="button" onClick={() => setScheduleExpanded(!scheduleExpanded)} className="text-xs text-primary hover:underline flex items-center gap-1">
-                    {scheduleExpanded ? <><ChevronUp className="w-3 h-3" /> Свернуть</> : <><ChevronDown className="w-3 h-3" /> Настроить</>}
-                  </button>
-                </div>
-                {!scheduleExpanded ? (
-                  <div className="text-sm text-foreground px-3 py-2 rounded-lg border border-border/60 bg-muted/10">{formatScheduleSummary(weekSchedule)}</div>
-                ) : (
-                  <div className="space-y-1.5 p-3 rounded-lg border border-border/60 bg-muted/10">
-                    {weekSchedule.map((day, i) => (
-                      <div key={i} className="flex items-center gap-3">
-                        <div className="w-8 text-sm font-medium text-foreground">{DAY_LABELS[i]}</div>
-                        <Switch checked={day.enabled} onCheckedChange={checked => updateDaySchedule(i, { enabled: checked })} />
-                        {day.enabled ? (
-                          <div className="flex items-center gap-1.5">
-                            <Input type="time" value={day.from} onChange={e => updateDaySchedule(i, { from: e.target.value })} className="h-8 w-24 text-sm" />
-                            <span className="text-xs text-muted-foreground">—</span>
-                            <Input type="time" value={day.to} onChange={e => updateDaySchedule(i, { to: e.target.value })} className="h-8 w-24 text-sm" />
-                          </div>
-                        ) : <span className="text-xs text-muted-foreground">Выходной</span>}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
 
         {/* ═══ Сохранить ══════════════════════════════════ */}
         <div className="flex justify-end pb-4">

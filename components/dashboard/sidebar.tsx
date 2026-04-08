@@ -11,7 +11,7 @@ import {
   Settings, Shield, ChevronRight, ChevronDown, LogOut, Calendar, CalendarDays, Share2, ShieldCheck,
   ClipboardList, ClipboardCheck, UserCheck2, Trophy, HeartHandshake, BookOpen, Award, Zap,
   AlertTriangle, UserMinus, Brain, Radar, Bot, Store, TrendingDown, Handshake,
-  BookMarked, GraduationCap, Target, PieChart, FilePlus,
+  BookMarked, GraduationCap, Target, PieChart, FilePlus, Lock, Library,
   type LucideIcon,
 } from "lucide-react"
 import {
@@ -46,7 +46,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   Settings, Shield, Calendar, CalendarDays, Share2, ShieldCheck, ClipboardList, ClipboardCheck,
   UserCheck2, Trophy, BarChart2, HeartHandshake, BookOpen, Award, Zap, ChevronRight,
   AlertTriangle, UserMinus, Brain, Radar, Bot, Store, TrendingDown, Handshake,
-  BookMarked, GraduationCap, Target, PieChart, FilePlus,
+  BookMarked, GraduationCap, Target, PieChart, FilePlus, Library,
 }
 function getIcon(name: string): LucideIcon {
   return ICON_MAP[name] ?? Settings
@@ -142,6 +142,17 @@ export function DashboardSidebar() {
 
   const vis = getVisibleSections(role) ?? { main: true, hiring: false, tools: false, settings: false, admin: false }
   const visSettings = getVisibleSettings(role) ?? ['profile']
+
+  // Company branding
+  const [companyLogo, setCompanyLogo] = useState<string | null>(null)
+  const [companyName, setCompanyName] = useState<string | null>(null)
+  useEffect(() => {
+    fetch('/api/companies').then(r => r.ok ? r.json() : null)
+      .then((d: { logoUrl?: string; name?: string } | null) => {
+        if (d?.logoUrl) setCompanyLogo(d.logoUrl)
+        if (d?.name) setCompanyName(d.name)
+      }).catch(() => {})
+  }, [])
 
   // Active modules fetched from API
   const [activeModules, setActiveModules] = useState<ModuleId[]>(['hr', 'knowledge', 'tasks', 'sales'])
@@ -327,12 +338,16 @@ export function DashboardSidebar() {
       {/* ── Header ── */}
       <SidebarHeader className="p-4 border-b border-sidebar-border">
         <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground shrink-0">
-            <Briefcase className="size-5" />
-          </div>
+          {companyLogo ? (
+            <img src={companyLogo} alt="" className="h-9 w-9 rounded-lg object-contain shrink-0" />
+          ) : (
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground shrink-0">
+              <Briefcase className="size-5" />
+            </div>
+          )}
           <div className="overflow-hidden group-data-[collapsible=icon]:hidden">
-            <span className="font-semibold text-sidebar-foreground text-base tracking-tight">Company24.Pro</span>
-            <p className="text-xs text-sidebar-foreground/70 tracking-wide truncate">AI Business System</p>
+            <span className="font-semibold text-sidebar-foreground text-base tracking-tight">{companyName || "Company24.Pro"}</span>
+            <p className="text-xs text-sidebar-foreground/70 tracking-wide truncate">{companyName ? "Платформа управления" : "AI Business System"}</p>
           </div>
         </div>
       </SidebarHeader>
@@ -442,21 +457,29 @@ export function DashboardSidebar() {
                 onOpenChange={() => isModuleEnabled && toggleModule(id)}
               >
                 {/* ── Module header (accordion trigger) — Style A: color bar left ── */}
+                {!isModuleEnabled ? (
+                  <Link
+                    href={`/upgrade?module=${id}`}
+                    style={{ borderLeft: '3px solid transparent' }}
+                    className="flex items-center gap-2.5 w-full px-3 py-2.5 text-sm font-semibold transition-all duration-150 rounded-none rounded-r-lg hover:bg-sidebar-accent/50 opacity-50 text-sidebar-foreground/70"
+                  >
+                    <ModIcon className="size-4 shrink-0" />
+                    <span className="flex-1 text-left">{mod.name}</span>
+                    <Lock className="size-3.5 text-sidebar-foreground/30" />
+                  </Link>
+                ) : (
                 <CollapsibleTrigger
-                  disabled={!isModuleEnabled}
                   style={isModuleActive ? { borderLeft: `3px solid ${MODULE_BORDER_COLORS[id]}` } : { borderLeft: '3px solid transparent' }}
                   className={cn(
                     "flex items-center gap-2.5 w-full px-3 py-2.5 text-sm font-semibold transition-all duration-150 rounded-none rounded-r-lg",
-                    isModuleEnabled ? "hover:bg-sidebar-accent" : "cursor-default opacity-50",
+                    "hover:bg-sidebar-accent",
                     isModuleActive
                       ? cn(MODULE_BG_COLORS[id], MODULE_COLORS[id])
                       : "text-sidebar-foreground/70"
                   )}>
                   <ModIcon className={cn("size-4 shrink-0", isModuleActive && MODULE_COLORS[id])} />
                   <span className="flex-1 text-left">{mod.name}</span>
-                  {!isModuleEnabled ? (
-                    <span className="text-[10px] text-sidebar-foreground/30 font-normal border border-sidebar-foreground/20 rounded px-1 py-0.5">Скоро</span>
-                  ) : !hasItems ? (
+                  {!hasItems ? (
                     <span className="text-[10px] text-sidebar-foreground/30 font-normal">Скоро</span>
                   ) : (
                     <ChevronRight className={cn(
@@ -465,6 +488,7 @@ export function DashboardSidebar() {
                     )} />
                   )}
                 </CollapsibleTrigger>
+                )}
 
                 {/* ── Module content: sub-groups as nested accordions ── */}
                 {hasItems && (

@@ -199,7 +199,7 @@ export default function IntegrationsPage() {
               {isAnyCrmConnected && (
                 <>
                   <Card>
-                    <CardHeader className="pb-3">
+                    <CardHeader className="pb-2 pt-4 px-5">
                       <CardTitle className="text-base flex items-center gap-2"><RefreshCw className="w-4 h-4" /> Настройки синхронизации</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-4">
@@ -240,7 +240,7 @@ export default function IntegrationsPage() {
 
                   {/* Status mapping */}
                   <Card>
-                    <CardHeader className="pb-3">
+                    <CardHeader className="pb-2 pt-4 px-5">
                       <CardTitle className="text-base flex items-center gap-2"><ArrowRight className="w-4 h-4" /> Маппинг статусов</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-3">
@@ -250,7 +250,7 @@ export default function IntegrationsPage() {
                           <span className="text-sm text-foreground w-40 shrink-0">{stage}</span>
                           <ArrowRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                           <Select value={statusMap[stage] || ""} onValueChange={v => setStatusMap(prev => ({ ...prev, [stage]: v }))}>
-                            <SelectTrigger className="h-8 text-xs flex-1"><SelectValue /></SelectTrigger>
+                            <SelectTrigger className="h-8 text-xs flex-1 bg-[var(--input-bg)]"><SelectValue /></SelectTrigger>
                             <SelectContent>
                               {CRM_STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
                             </SelectContent>
@@ -289,11 +289,11 @@ export default function IntegrationsPage() {
           <div className="space-y-4 pt-2">
             <div className="space-y-1.5">
               <Label className="text-sm">URL портала</Label>
-              <Input value={portalUrl} onChange={e => setPortalUrl(e.target.value)} placeholder="portal.bitrix24.ru" />
+              <Input value={portalUrl} onChange={e => setPortalUrl(e.target.value)} placeholder="portal.bitrix24.ru" className="bg-[var(--input-bg)]" />
             </div>
             <div className="space-y-1.5">
               <Label className="text-sm">API ключ (вебхук)</Label>
-              <Input value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="xxxxxxxxxxxx" type="password" />
+              <Input value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="xxxxxxxxxxxx" type="password" className="bg-[var(--input-bg)]" />
             </div>
             <Button className="w-full" onClick={handleConnectBitrix} disabled={connecting}>
               {connecting ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Подключение...</> : "Подключить"}

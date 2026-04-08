@@ -1,16 +1,16 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useSession } from "next-auth/react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Separator } from "@/components/ui/separator"
 import { toast } from "sonner"
-import { Loader2, User, Mail, Lock, Shield, Save, Eye, EyeOff } from "lucide-react"
+import { Loader2, User, Mail, Lock, Shield, Save, Eye, EyeOff, Camera, Trash2 } from "lucide-react"
 
 // ─── Helpers ──────────────────────────────────────────────────
 
@@ -59,6 +59,39 @@ export default function ProfileSettingsPage() {
   const [showConfirm, setShowConfirm] = useState(false)
   const [savingPassword, setSavingPassword] = useState(false)
 
+  // Avatar
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
+  const [uploadingAvatar, setUploadingAvatar] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > 2 * 1024 * 1024) { toast.error("Максимум 2 МБ"); return }
+    setUploadingAvatar(true)
+    try {
+      const fd = new FormData()
+      fd.append("file", file)
+      const res = await fetch("/api/team/avatar", { method: "POST", body: fd })
+      const data = await res.json() as { data?: { avatarUrl?: string } }
+      if (res.ok && data.data?.avatarUrl) {
+        setAvatarUrl(data.data.avatarUrl)
+        await updateSession({})
+        toast.success("Фото обновлено")
+      } else { toast.error("Ошибка загрузки") }
+    } catch { toast.error("Ошибка сети") }
+    finally { setUploadingAvatar(false); if (fileInputRef.current) fileInputRef.current.value = "" }
+  }
+
+  const handleAvatarDelete = async () => {
+    try {
+      await fetch("/api/team/avatar", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) })
+      setAvatarUrl(null)
+      await updateSession({})
+      toast.success("Фото удалено")
+    } catch { toast.error("Ошибка") }
+  }
+
   // Load profile from API
   useEffect(() => {
     fetch("/api/auth/me")
@@ -67,6 +100,7 @@ export default function ProfileSettingsPage() {
         const p = data.data ?? (data as unknown as UserProfile)
         setProfile(p)
         setName(p.name ?? "")
+        setAvatarUrl((p as unknown as { avatarUrl?: string }).avatarUrl ?? null)
       })
       .catch(() => {
         // Fallback to session data
@@ -162,13 +196,13 @@ export default function ProfileSettingsPage() {
             <div className="space-y-4">
               {/* ═══ Информация об аккаунте ══════════════════════ */}
               <Card>
-                <CardHeader className="pb-2 pt-4 px-4">
+                <CardHeader className="pb-2 pt-4 px-5">
                   <CardTitle className="text-base flex items-center gap-2">
                     <User className="w-4 h-4" />
                     Аккаунт
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="px-4 pb-4 pt-0">
+                <CardContent className="px-5 pb-4 pt-0">
                   {loadingProfile ? (
                     <div className="flex items-center gap-3 py-2">
                       <div className="w-14 h-14 rounded-full bg-muted animate-pulse" />
@@ -179,11 +213,25 @@ export default function ProfileSettingsPage() {
                     </div>
                   ) : (
                     <div className="flex items-center gap-4 py-1">
-                      <Avatar className="w-14 h-14 text-lg">
-                        <AvatarFallback className="bg-primary/10 text-primary font-semibold">
-                          {initials || "?"}
-                        </AvatarFallback>
-                      </Avatar>
+                      <div className="relative group">
+                        <button type="button" onClick={() => fileInputRef.current?.click()} className="rounded-full focus:outline-none focus:ring-2 focus:ring-primary/30" disabled={uploadingAvatar}>
+                          <Avatar className="w-14 h-14 text-lg">
+                            {avatarUrl && <AvatarImage src={avatarUrl} alt={displayName} />}
+                            <AvatarFallback className="bg-primary/10 text-primary font-semibold">
+                              {uploadingAvatar ? <Loader2 className="w-5 h-5 animate-spin" /> : (initials || "?")}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="absolute inset-0 rounded-full bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                            <Camera className="w-5 h-5 text-white" />
+                          </div>
+                        </button>
+                        <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handleAvatarUpload} />
+                        {avatarUrl && (
+                          <button type="button" onClick={handleAvatarDelete} className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-destructive text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity" title="Удалить фото">
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        )}
+                      </div>
                       <div>
                         <p className="font-semibold text-foreground text-base">{displayName}</p>
                         <p className="text-sm text-muted-foreground flex items-center gap-1.5 mt-0.5">
@@ -207,13 +255,13 @@ export default function ProfileSettingsPage() {
 
               {/* ═══ Изменить имя ════════════════════════════════ */}
               <Card>
-                <CardHeader className="pb-2 pt-4 px-4">
+                <CardHeader className="pb-2 pt-4 px-5">
                   <CardTitle className="text-base flex items-center gap-2">
                     <User className="w-4 h-4" />
                     Имя
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="px-4 pb-4 pt-0 space-y-3">
+                <CardContent className="px-5 pb-4 pt-0 space-y-3">
                   <div className="space-y-1">
                     <Label className="text-sm">Полное имя</Label>
                     <Input
@@ -244,13 +292,13 @@ export default function ProfileSettingsPage() {
 
               {/* ═══ Смена пароля ════════════════════════════════ */}
               <Card>
-                <CardHeader className="pb-2 pt-4 px-4">
+                <CardHeader className="pb-2 pt-4 px-5">
                   <CardTitle className="text-base flex items-center gap-2">
                     <Lock className="w-4 h-4" />
                     Пароль
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="px-4 pb-4 pt-0 space-y-3">
+                <CardContent className="px-5 pb-4 pt-0 space-y-3">
                   <div className="space-y-1">
                     <Label className="text-sm">Текущий пароль</Label>
                     <div className="relative">
@@ -378,13 +426,13 @@ export default function ProfileSettingsPage() {
 
               {/* ═══ Email ═══════════════════════════════════════ */}
               <Card>
-                <CardHeader className="pb-2 pt-4 px-4">
+                <CardHeader className="pb-2 pt-4 px-5">
                   <CardTitle className="text-base flex items-center gap-2">
                     <Mail className="w-4 h-4" />
                     Email
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="px-4 pb-4 pt-0 space-y-2">
+                <CardContent className="px-5 pb-4 pt-0 space-y-2">
                   <div className="space-y-1">
                     <Label className="text-sm">Адрес электронной почты</Label>
                     <Input
