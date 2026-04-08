@@ -73,7 +73,7 @@ export default function OverviewPage() {
       <SidebarInset>
         <DashboardHeader />
         <main className="flex-1 overflow-auto bg-background">
-          <div className="p-4 sm:p-6 max-w-6xl">
+          <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
             {/* Greeting */}
             <div className="mb-6">
               <h1 className="text-2xl font-semibold text-foreground">

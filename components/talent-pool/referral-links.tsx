@@ -116,7 +116,7 @@ export function ReferralLinks({ bonusPerHire }: ReferralLinksProps) {
               {links.map((r) => {
                 const earnedBonus = r.hired * bonusPerHire
                 return (
-                  <tr key={r.id} className="border-b last:border-0 hover:bg-muted/20">
+                  <tr key={r.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
                     <td className="px-4 py-2.5">
                       <p className="text-[13px] font-medium">{r.name}</p>
                       {r.position && <p className="text-[11px] text-muted-foreground">{r.position}</p>}

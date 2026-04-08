@@ -139,7 +139,7 @@ export default function IntegratorDetailPage({ params }: { params: Promise<{ id:
       <SidebarInset>
         <DashboardHeader />
         <main className="flex-1 overflow-auto bg-background">
-          <div className="p-4 sm:p-6 max-w-5xl">
+          <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
             {/* Заголовок */}
             <div className="flex items-center gap-3 mb-6">
               <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => router.push("/admin/integrators")}>

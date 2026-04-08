@@ -131,7 +131,7 @@ export function FormsManager({ open, onOpenChange, enabledSources }: FormsManage
               </thead>
               <tbody>
                 {forms.map((f) => (
-                  <tr key={f.id} className="border-b last:border-0 hover:bg-muted/20">
+                  <tr key={f.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
                     <td className="px-4 py-2.5 text-[13px] font-medium">{f.name}</td>
                     <td className="px-3 py-2.5">
                       <Badge variant="outline" className={cn("text-[10px] border-transparent", f.type === "internal" ? "bg-purple-500/10 text-purple-700" : "bg-blue-500/10 text-blue-700")}>

@@ -519,7 +519,7 @@ export default function VacancyPage() {
         <SidebarInset>
           <DashboardHeader />
           <main className="flex-1 overflow-auto bg-background">
-            <div className="p-4 sm:p-6 space-y-4 animate-pulse">
+            <div className="py-6 space-y-4 animate-pulse" style={{ paddingLeft: 56, paddingRight: 56 }}>
               <div className="h-8 w-64 bg-muted rounded" />
               <div className="h-4 w-40 bg-muted rounded" />
               <div className="flex gap-4 mt-6">
@@ -541,7 +541,7 @@ export default function VacancyPage() {
         <SidebarInset>
           <DashboardHeader />
           <main className="flex-1 overflow-auto bg-background">
-            <div className="p-4 sm:p-6 flex flex-col items-center justify-center min-h-[60vh] gap-4 text-center">
+            <div className="py-6 flex flex-col items-center justify-center min-h-[60vh] gap-4 text-center" style={{ paddingLeft: 56, paddingRight: 56 }}>
               <AlertTriangle className="w-12 h-12 text-muted-foreground/40" />
               <h2 className="text-xl font-semibold text-foreground">Вакансия не найдена</h2>
               <p className="text-sm text-muted-foreground">Вакансия не существует или у вас нет доступа к ней</p>
@@ -559,7 +559,7 @@ export default function VacancyPage() {
       <SidebarInset>
         <DashboardHeader />
         <main className="flex-1 overflow-auto bg-background">
-          <div className="p-4 sm:p-6">
+          <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
             {/* ═══ Breadcrumb ═══════════════════════════════ */}
             <Button variant="ghost" size="sm" className="gap-1 text-sm text-muted-foreground -ml-2 mb-2" onClick={() => router.push("/hr/vacancies")}>
               <ChevronLeft className="w-3.5 h-3.5" />

@@ -118,7 +118,7 @@ function DashboardContent() {
       <SidebarInset>
         <DashboardHeader />
         <main className="flex-1 overflow-auto bg-background">
-          <div className="p-4 sm:p-6 space-y-5 max-w-[1400px]">
+          <div className="py-6 space-y-5" style={{ paddingLeft: 56, paddingRight: 56 }}>
 
             {/* ═══ Header ═══ */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -162,11 +162,11 @@ function DashboardContent() {
                         <h.icon className="w-3.5 h-3.5" style={{ color: h.color }} />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="text-xs font-medium leading-tight">{h.title}</p>
-                        <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">{h.desc}</p>
+                        <p className="text-sm font-semibold leading-tight text-foreground/85">{h.title}</p>
+                        <p className="text-[13px] text-foreground/65 mt-0.5 leading-snug">{h.desc}</p>
                       </div>
                     </div>
-                    <Button variant="ghost" size="sm" className="h-6 text-[11px] self-end gap-1 text-muted-foreground">
+                    <Button variant="ghost" size="sm" className="h-7 text-xs font-medium self-end gap-1 text-foreground/70">
                       {h.action}<ChevronRight className="w-3 h-3" />
                     </Button>
                   </div>

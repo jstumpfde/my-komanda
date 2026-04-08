@@ -10,16 +10,16 @@ import { VKProvider } from "@/lib/auth/vk-provider"
 
 // Expose a stable ref so the JWT callback can read the DB
 // (needed when updateSession() is called after onboarding saves companyId)
-const getCompanyId = async (userId: string): Promise<string | null> => {
+const getFreshUserFields = async (userId: string): Promise<{ companyId: string | null; name: string | null }> => {
   try {
     const [row] = await db
-      .select({ companyId: users.companyId })
+      .select({ companyId: users.companyId, name: users.name })
       .from(users)
       .where(eq(users.id, userId))
       .limit(1)
-    return row?.companyId ?? null
+    return { companyId: row?.companyId ?? null, name: row?.name ?? null }
   } catch {
-    return null
+    return { companyId: null, name: null }
   }
 }
 
@@ -144,13 +144,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       // After onboarding saves companyId via PATCH /api/auth/me we must
       // re-read the DB so the JWT (and middleware) see the new companyId.
       if (trigger === "update" && token.id) {
-        const fresh = await getCompanyId(token.id as string)
-        token.companyId = fresh
+        const fresh = await getFreshUserFields(token.id as string)
+        token.companyId = fresh.companyId
+        if (fresh.name) token.name = fresh.name
       }
       return token
     },
     async session({ session, token }) {
       session.user.id = token.id as string
+      session.user.name = (token.name as string) ?? session.user.name
       session.user.role = token.role as UserRole
       session.user.companyId = (token.companyId as string | null) ?? null
       return session

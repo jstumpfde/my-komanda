@@ -137,7 +137,7 @@ export default function AdminPlanEditPage() {
       <SidebarInset>
         <DashboardHeader />
         <main className="flex-1 overflow-auto bg-background">
-          <div className="p-4 sm:p-6 max-w-2xl space-y-6">
+          <div className="py-6 space-y-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
             {/* Шапка */}
             <div className="flex items-center gap-3">
               <Button asChild variant="ghost" size="icon" className="h-8 w-8">

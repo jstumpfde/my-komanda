@@ -98,7 +98,7 @@ export default function AdminIntegratorsPage() {
       <SidebarInset>
         <DashboardHeader />
         <main className="flex-1 overflow-auto bg-background">
-          <div className="p-4 sm:p-6 max-w-5xl">
+          <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
             <div className="flex items-center justify-between mb-6">
               <div>
                 <div className="flex items-center gap-2 mb-1">

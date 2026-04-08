@@ -11,7 +11,7 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
       <SidebarInset>
         <SettingsHeader />
         <div className="flex-1 overflow-auto bg-background min-w-0">
-          <div className="py-6 max-w-5xl" style={{ paddingLeft: 56, paddingRight: 56 }}>{children}</div>
+          <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>{children}</div>
         </div>
       </SidebarInset>
     </SidebarProvider>

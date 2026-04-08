@@ -100,7 +100,7 @@ export function ReferralTab() {
                 {REFERRERS.map((r) => {
                   const bonus = r.hired * rules.bonusPerHire
                   return (
-                    <tr key={r.name} className="border-b last:border-0 hover:bg-muted/20">
+                    <tr key={r.name} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
                       <td className="px-4 py-2.5">
                         <p className="text-sm font-medium">{r.name}</p>
                         <p className="text-[11px] text-muted-foreground">{r.position}</p>

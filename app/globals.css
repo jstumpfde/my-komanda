@@ -6,9 +6,9 @@
 
 /* Light theme - чистый белый */
 :root {
-  --background: oklch(0.98 0.002 250);
+  --background: oklch(0.965 0.004 80);
   --foreground: oklch(0.16 0.03 260);
-  --card: oklch(0.97 0.002 250);
+  --card: oklch(0.995 0.002 80);
   --card-foreground: oklch(0.16 0.03 260);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.16 0.03 260);

@@ -21,7 +21,7 @@ import {
   Plus, Upload, Rocket, Users, Mail, BarChart3, Search,
   MoreHorizontal, Heart, Pause, Play, Sparkles, Send,
   TrendingUp, Eye, MessageSquare, UserPlus, Clock, Trash2, GripVertical,
-  ClipboardList, ChevronDown, ChevronRight, FileText,
+  ClipboardList, ChevronDown, ChevronRight, FileText, ArrowUpDown,
 } from "lucide-react"
 import { ScoringBadge, type ScoreBreakdown } from "@/components/talent-pool/scoring-badge"
 import { ReferralTab } from "@/components/talent-pool/referral-tab"
@@ -124,6 +124,15 @@ export default function TalentPoolPage() {
   const [sources] = useState<SourceItem[]>(INITIAL_SOURCES)
   const [expandedFilterSources, setExpandedFilterSources] = useState<Set<string>>(new Set())
   const [thanked, setThanked] = useState<Set<string>>(new Set())
+  const [colSort, setColSort] = useState<{ column: string; dir: "asc" | "desc" }>({ column: "name", dir: "asc" })
+
+  const toggleColSort = (column: string) => {
+    setColSort((prev) => {
+      if (prev.column !== column) return { column, dir: "asc" }
+      if (prev.dir === "asc") return { column, dir: "desc" }
+      return { column: "name", dir: "asc" }
+    })
+  }
 
   const enabledSources = sources.filter((s) => s.enabled)
 
@@ -159,6 +168,12 @@ export default function TalentPoolPage() {
       if (!matchesDirect && !parentSource) return false
     }
     return true
+  }).sort((a, b) => {
+    const mul = colSort.dir === "asc" ? 1 : -1
+    if (colSort.column === "name") return mul * a.name.localeCompare(b.name, "ru")
+    if (colSort.column === "score") return mul * (a.score - b.score)
+    if (colSort.column === "contact") return mul * (a.lastContact.getTime() - b.lastContact.getTime())
+    return 0
   })
 
   const toggleSourceFilter = (name: string) => {
@@ -288,13 +303,25 @@ export default function TalentPoolPage() {
                     <table className="w-full">
                       <thead>
                         <tr className="bg-muted/50 border-b border-border">
-                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Имя</th>
+                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">
+                          <button onClick={() => toggleColSort("name")} className={cn("inline-flex items-center gap-1 select-none transition-colors", colSort.column === "name" ? "text-foreground" : "text-muted-foreground hover:text-foreground")}>
+                            Имя <ArrowUpDown className={cn("size-3", colSort.column !== "name" && "opacity-40")} />
+                          </button>
+                        </th>
                         <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Должность</th>
                         <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Компания</th>
                         <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Источник</th>
-                        <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Скоринг</th>
+                        <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">
+                          <button onClick={() => toggleColSort("score")} className={cn("inline-flex items-center gap-1 select-none transition-colors", colSort.column === "score" ? "text-foreground" : "text-muted-foreground hover:text-foreground")}>
+                            Скоринг <ArrowUpDown className={cn("size-3", colSort.column !== "score" && "opacity-40")} />
+                          </button>
+                        </th>
                         <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Статус</th>
-                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Контакт</th>
+                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">
+                          <button onClick={() => toggleColSort("contact")} className={cn("inline-flex items-center gap-1 select-none transition-colors", colSort.column === "contact" ? "text-foreground" : "text-muted-foreground hover:text-foreground")}>
+                            Контакт <ArrowUpDown className={cn("size-3", colSort.column !== "contact" && "opacity-40")} />
+                          </button>
+                        </th>
                         <th className="px-4 py-3"></th>
                       </tr>
                       </thead>

@@ -1061,9 +1061,9 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
             ))}
           </div>
         </div>
-        <div className="space-y-1.5 max-w-lg">
+        <div className="space-y-1.5">
           <Label className="text-xs">Город</Label>
-          <Input value={data.positionCity} onChange={e => set("positionCity", e.target.value)} placeholder="Москва" className="h-9 bg-[var(--input-bg)] border border-input min-w-[300px] flex-1" />
+          <Input value={data.positionCity} onChange={e => set("positionCity", e.target.value)} placeholder="Москва" className="h-9 bg-[var(--input-bg)] border border-input w-1/2 min-w-[300px]" />
         </div>
       </Section>
 

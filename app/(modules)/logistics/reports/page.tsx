@@ -75,7 +75,7 @@ export default function LogisticsReportsPage() {
       <SidebarInset>
         <DashboardHeader />
         <main className="flex-1 overflow-auto bg-background">
-          <div className="p-4 sm:p-6 max-w-5xl space-y-6">
+          <div className="py-6 space-y-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
             {/* Header */}
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
