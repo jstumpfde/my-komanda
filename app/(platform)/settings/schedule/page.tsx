@@ -154,52 +154,56 @@ export default function CompanySchedulePage() {
       <div className="space-y-4 max-w-3xl">
 
         {/* ═══ Рабочие дни ═══ */}
-        <Card className="rounded-xl border border-border p-5">
-          <div className="flex items-center justify-between mb-3">
+        <Card className="rounded-xl border border-border overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-3 border-b">
             <div className="flex items-center gap-2">
               <Clock className="size-4 text-muted-foreground" />
-              <span className="text-sm font-medium">Рабочие дни и часы</span>
+              <span className="text-sm font-semibold">Рабочие дни и часы</span>
             </div>
             <Button variant="ghost" size="sm" className="text-xs gap-1.5 h-7" onClick={applyToAll}>
               <Copy className="size-3" />Применить ко всем
             </Button>
           </div>
-          <div className="space-y-0">
-            {WEEKDAYS.map((day, i) => (
-              <div key={day.id} className={cn(
-                "flex items-center gap-3 py-2 px-2 rounded transition-colors",
-                i % 2 === 1 && "bg-muted/30",
-                "hover:bg-muted/40",
-              )}>
-                <Switch checked={schedule[i].enabled} onCheckedChange={(v) => updateDay(i, { enabled: v })} />
-                <span className={cn("min-w-[80px] text-sm font-medium", !schedule[i].enabled && "text-muted-foreground")}>{day.short}</span>
-                {schedule[i].enabled ? (
-                  <div className="flex items-center gap-2">
-                    <Select value={schedule[i].from} onValueChange={(v) => updateDay(i, { from: v })}>
-                      <SelectTrigger className="w-24 h-9 text-sm bg-[var(--input-bg)]"><SelectValue /></SelectTrigger>
-                      <SelectContent>{HALF_HOURS.map((h) => <SelectItem key={h} value={h}>{h}</SelectItem>)}</SelectContent>
-                    </Select>
-                    <span className="text-muted-foreground text-sm">—</span>
-                    <Select value={schedule[i].to} onValueChange={(v) => updateDay(i, { to: v })}>
-                      <SelectTrigger className="w-24 h-9 text-sm bg-[var(--input-bg)]"><SelectValue /></SelectTrigger>
-                      <SelectContent>{HALF_HOURS.map((h) => <SelectItem key={h} value={h}>{h}</SelectItem>)}</SelectContent>
-                    </Select>
-                  </div>
-                ) : (
-                  <span className="text-sm text-muted-foreground">Выходной</span>
-                )}
-              </div>
-            ))}
+          {/* Header row */}
+          <div className="grid grid-cols-[48px_80px_1fr] items-center px-4 py-2 bg-muted/20 border-b">
+            <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide"></span>
+            <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">День</span>
+            <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Часы</span>
           </div>
+          {/* Rows */}
+          {WEEKDAYS.map((day, i) => (
+            <div key={day.id} className={cn(
+              "grid grid-cols-[48px_80px_1fr] items-center px-4 py-2.5 border-b last:border-b-0",
+              i % 2 === 0 ? "bg-background" : "bg-muted/10",
+            )}>
+              <div><Switch checked={schedule[i].enabled} onCheckedChange={(v) => updateDay(i, { enabled: v })} /></div>
+              <span className={cn("text-sm font-medium", !schedule[i].enabled && "text-muted-foreground")}>{day.short}</span>
+              {schedule[i].enabled ? (
+                <div className="flex items-center gap-2">
+                  <Select value={schedule[i].from} onValueChange={(v) => updateDay(i, { from: v })}>
+                    <SelectTrigger className="w-24 h-8 text-sm bg-[var(--input-bg)]"><SelectValue /></SelectTrigger>
+                    <SelectContent>{HALF_HOURS.map((h) => <SelectItem key={h} value={h}>{h}</SelectItem>)}</SelectContent>
+                  </Select>
+                  <span className="text-muted-foreground text-xs">—</span>
+                  <Select value={schedule[i].to} onValueChange={(v) => updateDay(i, { to: v })}>
+                    <SelectTrigger className="w-24 h-8 text-sm bg-[var(--input-bg)]"><SelectValue /></SelectTrigger>
+                    <SelectContent>{HALF_HOURS.map((h) => <SelectItem key={h} value={h}>{h}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+              ) : (
+                <span className="text-sm text-muted-foreground">Выходной</span>
+              )}
+            </div>
+          ))}
         </Card>
 
         {/* ═══ Обеденный перерыв ═══ */}
-        <Card className="rounded-xl border border-border p-5">
-          <div className="flex items-center gap-2 mb-3">
+        <Card className="rounded-xl border border-border overflow-hidden">
+          <div className="flex items-center gap-2 px-4 py-3 border-b">
             <Coffee className="size-4 text-muted-foreground" />
-            <span className="text-sm font-medium">Обеденный перерыв</span>
+            <span className="text-sm font-semibold">Обеденный перерыв</span>
           </div>
-          <div>
+          <div className="px-4 py-3">
             <div className="flex items-center gap-4">
               <Switch checked={lunchEnabled} onCheckedChange={setLunchEnabled} />
               <span className={cn("text-sm", !lunchEnabled && "text-muted-foreground")}>{lunchEnabled ? "Перерыв включён" : "Без перерыва"}</span>
@@ -221,13 +225,17 @@ export default function CompanySchedulePage() {
         </Card>
 
         {/* ═══ Праздничные дни ═══ */}
-        <Card className="rounded-xl border border-border p-5">
-          <div className="flex items-center gap-2 mb-1">
-            <CalendarOff className="size-4 text-muted-foreground" />
-            <span className="text-sm font-medium">Выходные и праздничные дни</span>
+        <Card className="rounded-xl border border-border overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-3 border-b">
+            <div>
+              <div className="flex items-center gap-2">
+                <CalendarOff className="size-4 text-muted-foreground" />
+                <span className="text-sm font-semibold">Выходные и праздничные дни</span>
+              </div>
+              <p className="text-xs text-muted-foreground mt-0.5 ml-6">Даты когда компания не работает</p>
+            </div>
           </div>
-          <p className="text-xs text-muted-foreground mb-3">Даты когда компания не работает</p>
-          <div className="space-y-2">
+          <div className="space-y-0">
             <table className="w-full">
               <thead>
                 <tr className="border-b bg-muted/50">
@@ -250,10 +258,10 @@ export default function CompanySchedulePage() {
                 ))}
               </tbody>
             </table>
-            <div className="flex items-center gap-2 pt-1">
-              <Input value={newHolidayDate} onChange={(e) => setNewHolidayDate(e.target.value)} placeholder="ДД.ММ" className="w-24 h-9 text-sm bg-[var(--input-bg)] font-mono" maxLength={5} />
-              <Input value={newHolidayName} onChange={(e) => setNewHolidayName(e.target.value)} placeholder="Название праздника" className="flex-1 h-9 text-sm bg-[var(--input-bg)]" onKeyDown={(e) => { if (e.key === "Enter") addHoliday() }} />
-              <Button variant="outline" size="sm" className="h-9 gap-1.5 text-xs shrink-0" onClick={addHoliday} disabled={!newHolidayDate || !newHolidayName.trim()}>
+            <div className="flex items-center gap-2 px-4 py-3 border-t">
+              <Input value={newHolidayDate} onChange={(e) => setNewHolidayDate(e.target.value)} placeholder="ДД.ММ" className="w-24 h-8 text-sm bg-[var(--input-bg)] font-mono" maxLength={5} />
+              <Input value={newHolidayName} onChange={(e) => setNewHolidayName(e.target.value)} placeholder="Название праздника" className="flex-1 h-8 text-sm bg-[var(--input-bg)]" onKeyDown={(e) => { if (e.key === "Enter") addHoliday() }} />
+              <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs shrink-0" onClick={addHoliday} disabled={!newHolidayDate || !newHolidayName.trim()}>
                 <Plus className="size-3.5" />Добавить
               </Button>
             </div>
@@ -261,11 +269,11 @@ export default function CompanySchedulePage() {
         </Card>
 
         {/* ═══ Отпуска и отсутствия ═══ */}
-        <Card className="rounded-xl border border-border p-5">
-          <div className="flex items-center justify-between mb-3">
+        <Card className="rounded-xl border border-border overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-3 border-b">
             <div className="flex items-center gap-2">
               <Palmtree className="size-4 text-muted-foreground" />
-              <span className="text-sm font-medium">Отпуска и отсутствия</span>
+              <span className="text-sm font-semibold">Отпуска и отсутствия</span>
             </div>
             <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" onClick={() => setAbsenceDialogOpen(true)}>
               <Plus className="size-3" />Добавить
@@ -273,7 +281,7 @@ export default function CompanySchedulePage() {
           </div>
           <div>
             {absences.length === 0 ? (
-              <div className="py-4 text-center text-sm text-muted-foreground">Нет запланированных отпусков</div>
+              <div className="py-6 text-center text-sm text-muted-foreground">Нет запланированных отпусков</div>
             ) : (
               <table className="w-full">
                 <thead>

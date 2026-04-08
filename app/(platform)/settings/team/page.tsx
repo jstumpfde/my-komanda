@@ -391,14 +391,14 @@ export default function TeamPage() {
       <Card className="mb-8">
         <CardContent className="p-0">
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="w-full table-fixed">
               <thead>
                 <tr className="bg-muted/50 border-b">
                   <th className="text-left uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-3">Участник</th>
-                  <th className="text-left uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-3">Роль</th>
-                  <th className="text-left uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-3">Email</th>
-                  <th className="text-center uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-3">Статус</th>
-                  <th className="text-center uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-3">Действия</th>
+                  <th className="text-left uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-3 w-[180px]">Роль</th>
+                  <th className="text-left uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-3 w-[250px]">Email</th>
+                  <th className="text-center uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-3 w-[120px]">Статус</th>
+                  <th className="text-center uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-3 w-[80px]">Действия</th>
                 </tr>
               </thead>
               <tbody>
@@ -406,7 +406,7 @@ export default function TeamPage() {
                   const roleCfg = ROLE_CONFIG[member.role]
                   const isActive = member.status === "active"
                   return (
-                    <tr key={member.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
+                    <tr key={member.id} className="border-b border-border/50 last:border-0 hover:bg-muted/50 transition-colors">
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
                           <Avatar className="w-8 h-8 shrink-0">
@@ -707,7 +707,7 @@ export default function TeamPage() {
               <div className="space-y-2">
                 <Label className="text-sm font-medium">Роль</Label>
                 <Select value={editMember.role} onValueChange={(v) => updateEdit({ role: v as TeamRole })}>
-                  <SelectTrigger className="h-9 bg-[var(--input-bg)]">
+                  <SelectTrigger className="h-9 w-full max-w-[280px] bg-[var(--input-bg)] border rounded-lg">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -836,7 +836,7 @@ export default function TeamPage() {
                   value={editMember.substituteId || "none"}
                   onValueChange={(v) => updateEdit({ substituteId: v === "none" ? undefined : v })}
                 >
-                  <SelectTrigger className="h-9 bg-[var(--input-bg)]">
+                  <SelectTrigger className="h-9 w-full max-w-[280px] bg-[var(--input-bg)] border rounded-lg">
                     <SelectValue placeholder="Не выбрано" />
                   </SelectTrigger>
                   <SelectContent>
