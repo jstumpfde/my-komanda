@@ -10,6 +10,15 @@ import {
   Clock, TrendingUp, Award, Building2,
   Bot, Handshake,
   Menu, X as XIcon, TrendingDown, Play,
+  Crown, UserCheck, ShoppingCart, Briefcase, BookOpen, GraduationCap,
+  Calendar, Store, Globe, Mail, FileText, PenTool, Search,
+  PieChart, Phone, Database, FileSignature, Package, KanbanSquare,
+  Send, MessageCircle, Palette, Bell, Share2,
+  Stethoscope, Scissors, UtensilsCrossed, Wrench, Monitor, School,
+  Home, Hotel, Dumbbell, Scale, TrendingUp as TrendingUpIcon, Factory,
+  ChevronDown, ChevronUp, Sparkles, Shield, Eye, HeartPulse, Mic,
+  RefreshCw, AlertTriangle, Calculator, ClipboardList, LayoutDashboard,
+  FileBarChart, Lightbulb,
 } from "lucide-react"
 
 // ─── Scroll reveal hook ──────────────────────────────────────────────────────
@@ -262,7 +271,6 @@ const COUNTER_METRICS = [
   { end: 60, suffix: "%", prefix: "", label: "быстрее найм", icon: Clock },
   { end: 3, suffix: "x", prefix: "", label: "меньше рутины", icon: TrendingUp },
   { end: 4, suffix: "x", prefix: "ROI ", label: "за 3 месяца", icon: Award },
-  { end: 500, suffix: "+", prefix: "", label: "компаний доверяют", icon: Building2 },
 ]
 
 const FOOTER_COLS = [
@@ -271,9 +279,197 @@ const FOOTER_COLS = [
   { title: "Юридическое", links: ["Политика конфиденциальности", "Условия использования", "Оферта"] },
 ]
 
+// ─── Role cards data ────────────────────────────────────────────────────────
+
+const ROLE_CARDS = [
+  {
+    icon: Crown,
+    title: "Собственник бизнеса",
+    color: "violet",
+    borderColor: "border-violet-500/40",
+    bgColor: "bg-violet-500/5",
+    hoverBg: "hover:bg-violet-500/10",
+    iconBg: "bg-violet-500/10",
+    iconColor: "text-violet-400",
+    badgeColors: "bg-violet-500/10 text-violet-400 border-violet-500/20",
+    pains: [
+      "Нет единой картины бизнеса",
+      "Деньги уходят — непонятно куда",
+      "Сотрудники работают вслепую",
+    ],
+    solution: "Дашборд всего бизнеса в одном окне. AI-агенты контролируют процессы и сигнализируют о проблемах до того, как они станут убытками",
+    modules: ["ROI-аналитика", "MarketRadar", "TaskFlow AI"],
+  },
+  {
+    icon: Users,
+    title: "HR-директор",
+    color: "emerald",
+    borderColor: "border-emerald-500/40",
+    bgColor: "bg-emerald-500/5",
+    hoverBg: "hover:bg-emerald-500/10",
+    iconBg: "bg-emerald-500/10",
+    iconColor: "text-emerald-400",
+    badgeColors: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+    pains: [
+      "Сотни нерелевантных откликов",
+      "Кандидаты уходят пока разбираете резюме",
+      "Адаптация новичков — хаос",
+    ],
+    solution: "AI фильтрует кандидатов за секунды, проводит демонстрацию должности, назначает интервью. К вам приходят только те, кто сказал «да, я хочу»",
+    modules: ["HR и найм", "Talent Pool", "Адаптация", "LMS"],
+  },
+  {
+    icon: DollarSign,
+    title: "Руководитель продаж",
+    color: "orange",
+    borderColor: "border-orange-500/40",
+    bgColor: "bg-orange-500/5",
+    hoverBg: "hover:bg-orange-500/10",
+    iconBg: "bg-orange-500/10",
+    iconColor: "text-orange-400",
+    badgeColors: "bg-orange-500/10 text-orange-400 border-orange-500/20",
+    pains: [
+      "Менеджеры забывают перезвонить",
+      "Непонятно почему сделки сливаются",
+      "Нет контроля качества звонков",
+    ],
+    solution: "AI-РОП слушает 100% звонков, оценивает каждого менеджера, подсказывает где теряются сделки. Автоматические follow-up и прогнозы",
+    modules: ["CRM", "Речевая аналитика", "Email-рассылки"],
+  },
+  {
+    icon: Megaphone,
+    title: "Маркетолог",
+    color: "pink",
+    borderColor: "border-pink-500/40",
+    bgColor: "bg-pink-500/5",
+    hoverBg: "hover:bg-pink-500/10",
+    iconBg: "bg-pink-500/10",
+    iconColor: "text-pink-400",
+    badgeColors: "bg-pink-500/10 text-pink-400 border-pink-500/20",
+    pains: [
+      "Контент нужен каждый день — рук не хватает",
+      "Непонятно какой канал приносит клиентов",
+      "Конкуренты обгоняют",
+    ],
+    solution: "AI генерирует контент, анализирует конкурентов в реальном времени, считает ROI каждого канала. Вы управляете стратегией, рутину делает система",
+    modules: ["MarketRadar", "Контент-завод", "SEO + реклама"],
+  },
+]
+
+// ─── Modules grid data ──────────────────────────────────────────────────────
+
+const MODULE_GRID = [
+  { icon: Users, name: "HR и найм", desc: "Воронка найма на автопилоте — от отклика до оффера", status: "active" as const, color: "green" },
+  { icon: UserCheck, name: "Talent Pool", desc: "База пассивных кандидатов с AI-скорингом и прогревом", status: "active" as const, color: "green" },
+  { icon: BookOpen, name: "Адаптация и онбординг", desc: "Программы ввода в должность с наставниками и геймификацией", status: "active" as const, color: "green" },
+  { icon: GraduationCap, name: "Обучение и развитие (LMS)", desc: "AI-курсы, матрица навыков, прогноз увольнений", status: "active" as const, color: "green" },
+  { icon: Calendar, name: "Запись и бронирование", desc: "Онлайн-запись к специалистам и бронирование объектов", status: "soon" as const, color: "yellow" },
+  { icon: Store, name: "Мини-каталог", desc: "Каталог товаров и услуг с публичной витриной", status: "soon" as const, color: "yellow" },
+  { icon: Globe, name: "MarketRadar", desc: "Аудит бизнеса + мониторинг конкурентов из 35 источников", status: "active" as const, color: "green" },
+  { icon: Mail, name: "Email + мессенджеры", desc: "Рассылки, цепочки, A/B-тесты по всем каналам", status: "soon" as const, color: "yellow" },
+  { icon: PenTool, name: "Контент-завод", desc: "AI-генерация блогов, постов, описаний товаров", status: "soon" as const, color: "yellow" },
+  { icon: Palette, name: "Конструктор сайтов", desc: "Лендинги и карьерные страницы drag-and-drop", status: "soon" as const, color: "yellow" },
+  { icon: Search, name: "SEO + реклама + репутация", desc: "Позиции, Директ, мониторинг отзывов, AI-рекомендации", status: "soon" as const, color: "yellow" },
+  { icon: PieChart, name: "ROI-аналитика", desc: "Единый дашборд: стоимость найма, CAC, unit-экономика", status: "soon" as const, color: "yellow" },
+  { icon: Handshake, name: "CRM / воронка продаж", desc: "Контакты, сделки, прогнозы, интеграции с Битрикс24/AmoCRM", status: "soon" as const, color: "yellow" },
+  { icon: Phone, name: "Речевая аналитика + AI-РОП", desc: "Транскрипция звонков, контроль качества, score менеджеров", status: "soon" as const, color: "yellow" },
+  { icon: Database, name: "База знаний", desc: "Единая база компании — фундамент для всех AI-агентов", status: "active" as const, color: "green" },
+  { icon: FileSignature, name: "Документы и договоры", desc: "Шаблоны, AI-заполнение, согласование, ЭЦП", status: "soon" as const, color: "yellow" },
+  { icon: Package, name: "Склад, учёт, финансы", desc: "Остатки, P&L, cashflow, бюджетирование", status: "dev" as const, color: "gray" },
+  { icon: KanbanSquare, name: "TaskFlow AI / проекты", desc: "Канбан задач с AI-назначением и координацией", status: "dev" as const, color: "gray" },
+]
+
+// ─── AI Agents expanded data ────────────────────────────────────────────────
+
+const AI_AGENTS_EXPANDED = [
+  // HR (green)
+  { name: "Скоринг-агент", desc: "Оценивает кандидатов по 50+ параметрам", group: "HR", color: "emerald" },
+  { name: "Коммуникатор", desc: "Пишет кандидатам, назначает интервью", group: "HR", color: "emerald" },
+  { name: "Парсер резюме", desc: "Извлекает данные из любого формата", group: "HR", color: "emerald" },
+  { name: "Стоп-фактор агент", desc: "Проверяет город, зарплату, опыт, гражданство", group: "HR", color: "emerald" },
+  { name: "Агент демонстрации", desc: "Генерирует мини-курсы из анкеты вакансии", group: "HR", color: "emerald" },
+  { name: "Агент адаптации", desc: "Ведёт новичка через онбординг", group: "HR", color: "emerald" },
+  { name: "Flight Risk агент", desc: "Прогнозирует увольнения", group: "HR", color: "emerald" },
+  { name: "Агент пульс-опросов", desc: "Проводит eNPS и анализирует тренды", group: "HR", color: "emerald" },
+  { name: "Агент Talent Pool", desc: "Прогревает пассивных кандидатов", group: "HR", color: "emerald" },
+  { name: "Реферальный агент", desc: "Трекинг рекомендаций и бонусов", group: "HR", color: "emerald" },
+  // Sales (orange)
+  { name: "AI-РОП", desc: "Контролирует качество 100% звонков", group: "Продажи", color: "orange" },
+  { name: "Квалификатор лидов", desc: "Скорит входящие заявки", group: "Продажи", color: "orange" },
+  { name: "Follow-up агент", desc: "Напоминает о забытых сделках", group: "Продажи", color: "orange" },
+  { name: "Прогнозист", desc: "Предсказывает закрытие сделок", group: "Продажи", color: "orange" },
+  { name: "Агент переписок", desc: "Анализирует чаты с клиентами", group: "Продажи", color: "orange" },
+  { name: "Агент возражений", desc: "Выделяет паттерны возражений", group: "Продажи", color: "orange" },
+  { name: "Агент обучения продажников", desc: "Подбирает лучшие звонки как примеры", group: "Продажи", color: "orange" },
+  { name: "Агент SLA", desc: "Алерт если клиент ждёт ответ >2ч", group: "Продажи", color: "orange" },
+  // Marketing (pink)
+  { name: "Аналитик конкурентов", desc: "Мониторит 35 источников", group: "Маркетинг", color: "pink" },
+  { name: "Контент-генератор", desc: "Пишет блоги, посты, описания", group: "Маркетинг", color: "pink" },
+  { name: "SEO-агент", desc: "Рекомендации по позициям и мета-тегам", group: "Маркетинг", color: "pink" },
+  { name: "Репутация-агент", desc: "Мониторит отзывы, генерирует ответы", group: "Маркетинг", color: "pink" },
+  { name: "Email-агент", desc: "A/B тесты, оптимизация цепочек", group: "Маркетинг", color: "pink" },
+  { name: "Рекламный агент", desc: "Оптимизация бюджетов Директ/VK Ads", group: "Маркетинг", color: "pink" },
+  { name: "Контент-планер", desc: "Составляет план публикаций на месяц", group: "Маркетинг", color: "pink" },
+  { name: "UTM-агент", desc: "Трекинг источников трафика", group: "Маркетинг", color: "pink" },
+  // Operations (teal)
+  { name: "Документ-агент", desc: "Заполняет шаблоны из CRM данных", group: "Операции", color: "teal" },
+  { name: "Задач-координатор", desc: "Распределяет задачи по загрузке", group: "Операции", color: "teal" },
+  { name: "Склад-агент", desc: "Алерты по минимальным остаткам", group: "Операции", color: "teal" },
+  { name: "Финансовый агент", desc: "Прогноз cashflow", group: "Операции", color: "teal" },
+  { name: "Инвентаризация-агент", desc: "Автосверка факт vs учёт", group: "Операции", color: "teal" },
+  { name: "Бюджет-агент", desc: "Отклонения план-факт", group: "Операции", color: "teal" },
+  // Analytics (blue)
+  { name: "ROI-агент", desc: "Считает окупаемость каждого канала", group: "Аналитика", color: "blue" },
+  { name: "Unit-экономика агент", desc: "LTV, CAC, маржа", group: "Аналитика", color: "blue" },
+  { name: "Дашборд-агент", desc: "Собирает KPI из всех модулей", group: "Аналитика", color: "blue" },
+  { name: "Отчёт-агент", desc: "Генерирует PDF по расписанию", group: "Аналитика", color: "blue" },
+  { name: "AI-инсайты", desc: "Автоматические выводы и рекомендации", group: "Аналитика", color: "blue" },
+  // Communications (purple)
+  { name: "Telegram-бот", desc: "Рассылки, автоответы, мини-формы", group: "Коммуникации", color: "violet" },
+  { name: "WhatsApp-агент", desc: "Шаблоны, очередь, статусы", group: "Коммуникации", color: "violet" },
+  { name: "Email-конструктор", desc: "Drag-and-drop письма", group: "Коммуникации", color: "violet" },
+  { name: "Напоминание-агент", desc: "SMS/Telegram за 24ч и 2ч до встречи", group: "Коммуникации", color: "violet" },
+  { name: "VK-агент", desc: "Рассылки через сообщества", group: "Коммуникации", color: "violet" },
+]
+
+const AGENT_COLOR_MAP: Record<string, { bg: string; text: string; dot: string; border: string }> = {
+  emerald: { bg: "bg-emerald-500/10", text: "text-emerald-400", dot: "bg-emerald-400", border: "border-emerald-500/20" },
+  orange: { bg: "bg-orange-500/10", text: "text-orange-400", dot: "bg-orange-400", border: "border-orange-500/20" },
+  pink: { bg: "bg-pink-500/10", text: "text-pink-400", dot: "bg-pink-400", border: "border-pink-500/20" },
+  teal: { bg: "bg-teal-500/10", text: "text-teal-400", dot: "bg-teal-400", border: "border-teal-500/20" },
+  blue: { bg: "bg-blue-500/10", text: "text-blue-400", dot: "bg-blue-400", border: "border-blue-500/20" },
+  violet: { bg: "bg-violet-500/10", text: "text-violet-400", dot: "bg-violet-400", border: "border-violet-500/20" },
+}
+
+const AGENT_GROUP_LABELS: Record<string, { label: string; color: string }> = {
+  "HR": { label: "HR", color: "emerald" },
+  "Продажи": { label: "Продажи", color: "orange" },
+  "Маркетинг": { label: "Маркетинг", color: "pink" },
+  "Операции": { label: "Операции", color: "teal" },
+  "Аналитика": { label: "Аналитика", color: "blue" },
+  "Коммуникации": { label: "Коммуникации", color: "violet" },
+}
+
+// ─── Industries data ────────────────────────────────────────────────────────
+
+const INDUSTRIES = [
+  { emoji: "🏥", name: "Клиника / стоматология", modules: ["Бронирование", "Каталог", "HR", "CRM"], desc: "Запись пациентов, расписание врачей, найм медперсонала — в одной системе" },
+  { emoji: "✂️", name: "Салон красоты / барбершоп", modules: ["Бронирование", "Каталог", "Маркетинг"], desc: "Онлайн-запись, напоминания клиентам, учёт мастеров" },
+  { emoji: "🍽️", name: "Ресторан / кафе", modules: ["Бронирование", "Склад", "HR", "Маркетинг"], desc: "Бронь столиков, складской учёт продуктов, найм поваров и официантов" },
+  { emoji: "🔧", name: "Автосервис", modules: ["Бронирование", "CRM", "Склад", "Каталог"], desc: "Запись на ремонт, учёт запчастей, CRM для постоянных клиентов" },
+  { emoji: "💻", name: "IT-компания", modules: ["HR", "LMS", "TaskFlow", "База знаний"], desc: "Найм разработчиков, онбординг, управление проектами" },
+  { emoji: "📚", name: "Образование / курсы", modules: ["LMS", "Бронирование", "Контент", "Маркетинг"], desc: "Курсы, расписание занятий, набор преподавателей" },
+  { emoji: "🏠", name: "Агентство недвижимости", modules: ["CRM", "Контент", "Лендинги", "Речевая аналитика"], desc: "Воронка сделок, контроль звонков менеджеров, генерация объявлений" },
+  { emoji: "🏨", name: "Отель / хостел / глэмпинг", modules: ["Бронирование", "CRM", "Маркетинг"], desc: "Календарь занятости номеров, онлайн-бронирование, email-цепочки" },
+  { emoji: "🏋️", name: "Фитнес / спорт", modules: ["Бронирование", "Каталог", "HR", "LMS"], desc: "Запись на тренировки, расписание тренеров, программы тренировок" },
+  { emoji: "⚖️", name: "Юридическая компания", modules: ["CRM", "Документы", "База знаний", "TaskFlow"], desc: "Ведение дел, генерация договоров, контроль сроков" },
+  { emoji: "📈", name: "Рекламное агентство", modules: ["MarketRadar", "Контент", "CRM", "TaskFlow"], desc: "Анализ конкурентов клиентов, генерация контента, управление проектами" },
+  { emoji: "🏭", name: "Производство", modules: ["Склад", "TaskFlow", "HR", "Финансы"], desc: "Учёт сырья и продукции, планирование, найм рабочих" },
+]
+
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
-function MetricCounter({ end, suffix, prefix, label, icon: Icon }: typeof COUNTER_METRICS[number]) {
+function MetricCounter({ end, suffix, prefix, label }: typeof COUNTER_METRICS[number]) {
   const { value, ref } = useCountUp(end, 2000)
   return (
     <div ref={ref} className="text-center">
@@ -583,6 +779,10 @@ const CUSTOM_STYLES = `
   from { opacity: 0; transform: translateY(30px); }
   to { opacity: 1; transform: translateY(0); }
 }
+@keyframes agent-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
 `
 
 // ─── Landing Page ────────────────────────────────────────────────────────────
@@ -591,6 +791,8 @@ export default function LandingPage() {
   const [activeModule, setActiveModule] = useState("hr")
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
+  const [activeRole, setActiveRole] = useState<number | null>(null)
+  const [moduleFilter, setModuleFilter] = useState<"all" | "active" | "soon">("all")
   // Section reveals
   const howWesolve = useReveal()
   const [featureTab, setFeatureTab] = useState(0)
@@ -603,6 +805,10 @@ export default function LandingPage() {
   const [pricingUsers, setPricingUsers] = useState(3)
   const [selectedModules, setSelectedModules] = useState<Record<string, boolean>>({ hr: true })
   const cta = useReveal()
+  const rolesReveal = useReveal()
+  const moduleGridReveal = useReveal()
+  const agentsNewReveal = useReveal()
+  const industriesReveal = useReveal()
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20)
@@ -611,6 +817,17 @@ export default function LandingPage() {
   }, [])
 
   const currentModule = MODULES.find((m) => m.id === activeModule) ?? MODULES[0]
+
+  const filteredModules = MODULE_GRID.filter((m) => {
+    if (moduleFilter === "all") return true
+    if (moduleFilter === "active") return m.status === "active"
+    if (moduleFilter === "soon") return m.status === "soon" || m.status === "dev"
+    return true
+  })
+
+  // Show first 20 agents visually
+  const visibleAgents = AI_AGENTS_EXPANDED.slice(0, 20)
+  const remainingAgentsCount = AI_AGENTS_EXPANDED.length - visibleAgents.length
 
   return (
     <div className="min-h-screen bg-gray-950 text-white antialiased scroll-smooth">
@@ -644,7 +861,7 @@ export default function LandingPage() {
               <Link href="/login">Войти</Link>
             </Button>
 <Button size="sm" className="bg-gradient-to-r from-indigo-500 to-violet-500 hover:from-indigo-600 hover:to-violet-600 shadow-lg shadow-indigo-500/20 text-white" asChild>
-              <Link href="/register">Попробовать бесплатно</Link>
+              <Link href="/register">Запросить демо</Link>
             </Button>
           </div>
 
@@ -665,7 +882,7 @@ export default function LandingPage() {
                 <Link href="/login">Войти</Link>
               </Button>
               <Button size="sm" className="flex-1 bg-gradient-to-r from-indigo-500 to-violet-500 text-white" asChild>
-                <Link href="/register">Бесплатно</Link>
+                <Link href="/register">Демо</Link>
               </Button>
             </div>
           </div>
@@ -716,7 +933,7 @@ export default function LandingPage() {
 
               <div className="flex flex-wrap gap-4 mb-8">
                 <Button size="lg" className="bg-gradient-to-r from-indigo-500 to-violet-500 hover:from-indigo-600 hover:to-violet-600 h-14 px-10 text-base shadow-xl shadow-indigo-500/30 transition-all hover:shadow-2xl hover:shadow-indigo-500/40 hover:scale-[1.02] text-white rounded-2xl" asChild>
-                  <Link href="/register">Начать бесплатно <ArrowRight className="w-5 h-5 ml-2" /></Link>
+                  <Link href="/register">Запросить демо <ArrowRight className="w-5 h-5 ml-2" /></Link>
                 </Button>
                 <Button variant="outline" size="lg" className="h-14 px-10 text-base rounded-2xl border-gray-700 text-gray-300 hover:bg-gray-800 hover:border-indigo-500 hover:text-indigo-400 transition-all">
                   <Play className="w-4 h-4 mr-2" /> Смотреть демо
@@ -724,11 +941,91 @@ export default function LandingPage() {
               </div>
 
               <p className="text-sm text-gray-500">
-                Бесплатно 14 дней · Без привязки карты · company24.pro
+                Покажем платформу и подберём модули под ваш бизнес
               </p>
             </div>
 
             <HeroDashboard />
+          </div>
+        </div>
+      </section>
+
+      {/* ── ВЫБЕРИТЕ СВОЮ РОЛЬ ── */}
+      <section className="py-24 md:py-28 bg-gray-950">
+        <div
+          ref={rolesReveal.ref}
+          className={cn(
+            "max-w-6xl mx-auto px-4 sm:px-6 transition-all duration-700",
+            rolesReveal.visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-10"
+          )}
+        >
+          <div className="text-center mb-14">
+            <span className="inline-block text-xs font-medium tracking-widest uppercase text-indigo-500 bg-indigo-500/10 border border-indigo-500/20 px-4 py-1.5 rounded-full mb-4">
+              Найдите себя
+            </span>
+            <h2 className="text-3xl md:text-4xl font-bold text-gray-100 mb-3">Какую задачу вы решаете?</h2>
+            <p className="text-gray-400 text-lg max-w-2xl mx-auto">Company24.pro подстраивается под вашу роль в компании</p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+            {ROLE_CARDS.map((role, idx) => {
+              const isActive = activeRole === idx
+              return (
+                <button
+                  key={role.title}
+                  onClick={() => setActiveRole(isActive ? null : idx)}
+                  className={cn(
+                    "text-left rounded-2xl border p-6 transition-all duration-300 cursor-pointer",
+                    "bg-gray-900 hover:shadow-xl",
+                    isActive ? role.borderColor + " " + role.bgColor + " shadow-lg" : "border-gray-800 hover:-translate-y-1",
+                    !isActive && activeRole !== null && "opacity-60"
+                  )}
+                >
+                  <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center mb-4", role.iconBg)}>
+                    <role.icon className={cn("w-6 h-6", role.iconColor)} />
+                  </div>
+                  <h3 className="font-bold text-lg mb-2 text-gray-100">{role.title}</h3>
+
+                  <div className={cn(
+                    "overflow-hidden transition-all duration-300",
+                    isActive ? "max-h-[500px] opacity-100" : "max-h-0 opacity-0"
+                  )}>
+                    <div className="pt-3 space-y-3">
+                      <div>
+                        <p className="text-xs font-medium uppercase tracking-wider text-red-400 mb-2">Боли</p>
+                        <ul className="space-y-1.5">
+                          {role.pains.map((pain) => (
+                            <li key={pain} className="flex items-start gap-2 text-sm text-gray-400">
+                              <X className="w-3.5 h-3.5 text-red-400 shrink-0 mt-0.5" />
+                              {pain}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium uppercase tracking-wider text-emerald-400 mb-2">Решение</p>
+                        <p className="text-sm text-gray-300 leading-relaxed">{role.solution}</p>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5 pt-1">
+                        {role.modules.map((mod) => (
+                          <span key={mod} className={cn("text-xs font-medium px-2.5 py-1 rounded-full border", role.badgeColors)}>
+                            {mod}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className={cn(
+                    "flex items-center gap-1 mt-3 text-sm transition-colors",
+                    isActive ? role.iconColor : "text-gray-500"
+                  )}>
+                    {isActive ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                    <span>{isActive ? "Свернуть" : "Подробнее"}</span>
+                  </div>
+                </button>
+              )
+            })}
           </div>
         </div>
       </section>
@@ -942,7 +1239,82 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── МОДУЛИ ── */}
+      {/* ── НОВАЯ СЕКЦИЯ: 15 МОДУЛЕЙ ── */}
+      <section className="py-24 md:py-28 bg-gray-950">
+        <div
+          ref={moduleGridReveal.ref}
+          className={cn(
+            "max-w-7xl mx-auto px-4 sm:px-6 transition-all duration-700",
+            moduleGridReveal.visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-10"
+          )}
+        >
+          <div className="text-center mb-10">
+            <span className="inline-block text-xs font-medium tracking-widest uppercase text-indigo-500 bg-indigo-500/10 border border-indigo-500/20 px-4 py-1.5 rounded-full mb-4">
+              Модули
+            </span>
+            <h2 className="text-3xl md:text-4xl font-bold text-gray-100 mb-3">15 модулей. Подключайте только нужные.</h2>
+            <p className="text-gray-400 text-lg max-w-3xl mx-auto">Каждый модуль работает самостоятельно и усиливает остальные. Начните с одного — масштабируйтесь по мере роста.</p>
+          </div>
+
+          {/* Filter buttons */}
+          <div className="flex justify-center mb-10">
+            <div className="inline-flex bg-gray-800 rounded-2xl border border-gray-700 p-1.5 gap-1">
+              {([
+                { key: "all" as const, label: "Все" },
+                { key: "active" as const, label: "Работает" },
+                { key: "soon" as const, label: "Скоро" },
+              ]).map((f) => (
+                <button
+                  key={f.key}
+                  onClick={() => setModuleFilter(f.key)}
+                  className={cn(
+                    "px-5 py-2.5 rounded-xl text-sm font-medium transition-all duration-200",
+                    moduleFilter === f.key
+                      ? "bg-indigo-500 text-white shadow-md"
+                      : "text-gray-400 hover:text-gray-200 hover:bg-gray-800"
+                  )}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Module grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {filteredModules.map((mod) => {
+              const statusLabel = mod.status === "active" ? "Работает" : mod.status === "soon" ? "Скоро" : "В разработке"
+              const statusColors = mod.status === "active"
+                ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                : mod.status === "soon"
+                  ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                  : "bg-gray-700/50 text-gray-400 border-gray-600/30"
+              const iconColorClass = mod.status === "active" ? "text-emerald-400" : mod.status === "soon" ? "text-amber-400" : "text-gray-500"
+              const iconBgClass = mod.status === "active" ? "bg-emerald-500/10" : mod.status === "soon" ? "bg-amber-500/10" : "bg-gray-700/30"
+
+              return (
+                <div
+                  key={mod.name}
+                  className="bg-gray-900 rounded-2xl border border-gray-800 p-5 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group"
+                >
+                  <div className="flex items-start justify-between mb-3">
+                    <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center", iconBgClass)}>
+                      <mod.icon className={cn("w-5 h-5", iconColorClass)} />
+                    </div>
+                    <span className={cn("text-[10px] font-medium px-2.5 py-1 rounded-full border", statusColors)}>
+                      {statusLabel}
+                    </span>
+                  </div>
+                  <h3 className="font-semibold text-sm text-gray-100 mb-1.5">{mod.name}</h3>
+                  <p className="text-xs text-gray-400 leading-relaxed">{mod.desc}</p>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      </section>
+
+      {/* ── МОДУЛИ (старая секция — табы) ── */}
       <section id="modules" className="bg-gray-950 py-24 md:py-28">
         <div
           ref={modules.ref}
@@ -1044,8 +1416,8 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── 3 ШАГА ── */}
-      <section className="py-24 md:py-28 bg-gray-950">
+      {/* ── 3 ШАГА (СКРЫТО) ── */}
+      <section className="py-24 md:py-28 bg-gray-950 hidden">
         <div
           ref={steps.ref}
           className={cn(
@@ -1076,8 +1448,77 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── AI-АГЕНТЫ ── */}
+      {/* ── AI-АГЕНТЫ (НОВАЯ ВЕРСИЯ — 50+) ── */}
       <section className="py-24 md:py-28 bg-gray-950">
+        <div
+          ref={agentsNewReveal.ref}
+          className={cn(
+            "max-w-7xl mx-auto px-4 sm:px-6 transition-all duration-700",
+            agentsNewReveal.visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-10"
+          )}
+        >
+          <div className="text-center mb-14">
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium tracking-widest uppercase text-violet-500 bg-violet-500/10 border border-violet-500/20 px-4 py-1.5 rounded-full mb-4">
+              <Bot className="w-3.5 h-3.5" /> AI-агенты
+            </span>
+            <h2 className="text-3xl md:text-4xl font-bold text-gray-100 mb-3">50+ AI-агентов работают на вас</h2>
+            <p className="text-gray-400 text-lg max-w-3xl mx-auto">Каждый процесс обслуживает специализированный AI-агент. Они работают 24/7, не устают и не забывают.</p>
+          </div>
+
+          {/* Group labels */}
+          <div className="flex flex-wrap justify-center gap-3 mb-8">
+            {Object.entries(AGENT_GROUP_LABELS).map(([key, { label, color }]) => {
+              const colors = AGENT_COLOR_MAP[color]
+              return (
+                <span key={key} className={cn("text-xs font-medium px-3 py-1.5 rounded-full border", colors.bg, colors.text, colors.border)}>
+                  {label}
+                </span>
+              )
+            })}
+          </div>
+
+          {/* Agent grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+            {visibleAgents.map((agent) => {
+              const colors = AGENT_COLOR_MAP[agent.color]
+              return (
+                <div
+                  key={agent.name}
+                  className={cn(
+                    "bg-gray-900/80 backdrop-blur-sm rounded-xl border border-gray-800 p-4 transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5 group relative"
+                  )}
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="relative shrink-0">
+                      <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center", colors.bg)}>
+                        <Bot className={cn("w-4 h-4", colors.text)} />
+                      </div>
+                      <span
+                        className={cn("absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full", colors.dot)}
+                        style={{ animation: "agent-pulse 2s ease-in-out infinite" }}
+                      />
+                    </div>
+                    <div className="min-w-0">
+                      <h4 className="font-semibold text-sm text-gray-100 truncate">{agent.name}</h4>
+                      <p className="text-xs text-gray-500 leading-relaxed mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200">{agent.desc}</p>
+                    </div>
+                  </div>
+                  <span className={cn("text-[9px] font-medium px-1.5 py-0.5 rounded mt-2 inline-block", colors.bg, colors.text)}>
+                    {agent.group}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+
+          <p className="text-center text-gray-500 mt-8 text-base">
+            И ещё {remainingAgentsCount}+ агентов для каждого процесса вашего бизнеса
+          </p>
+        </div>
+      </section>
+
+      {/* ── СТАРЫЕ AI-АГЕНТЫ (СКРЫТО) ── */}
+      <section className="py-24 md:py-28 bg-gray-950 hidden">
         <div
           ref={agents.ref}
           className={cn(
@@ -1113,8 +1554,54 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── МЕТРИКИ ── */}
-      <section className="py-20 md:py-24 bg-gradient-to-r from-indigo-500 via-violet-500 to-purple-500 relative overflow-hidden">
+      {/* ── ОТРАСЛИ ── */}
+      <section className="py-24 md:py-28 bg-gray-950">
+        <div
+          ref={industriesReveal.ref}
+          className={cn(
+            "max-w-7xl mx-auto px-4 sm:px-6 transition-all duration-700",
+            industriesReveal.visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-10"
+          )}
+        >
+          <div className="text-center mb-14">
+            <span className="inline-block text-xs font-medium tracking-widest uppercase text-indigo-500 bg-indigo-500/10 border border-indigo-500/20 px-4 py-1.5 rounded-full mb-4">
+              Отрасли
+            </span>
+            <h2 className="text-3xl md:text-4xl font-bold text-gray-100 mb-3">Готовые решения для 15+ отраслей</h2>
+            <p className="text-gray-400 text-lg max-w-2xl mx-auto">Выберите свою нишу — мы уже знаем какие модули вам нужны</p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {INDUSTRIES.map((ind) => (
+              <div
+                key={ind.name}
+                className="bg-gray-900 rounded-2xl border border-gray-800 p-6 hover:shadow-xl hover:-translate-y-1 transition-all duration-300"
+              >
+                <div className="flex items-start gap-4 mb-3">
+                  <span className="text-3xl">{ind.emoji}</span>
+                  <div>
+                    <h3 className="font-semibold text-base text-gray-100">{ind.name}</h3>
+                    <p className="text-sm text-gray-400 mt-1 leading-relaxed">{ind.desc}</p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {ind.modules.map((mod) => (
+                    <span
+                      key={mod}
+                      className="text-[10px] font-medium px-2.5 py-1 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20"
+                    >
+                      {mod}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── МЕТРИКИ (СКРЫТО) ── */}
+      <section className="py-20 md:py-24 bg-gradient-to-r from-indigo-500 via-violet-500 to-purple-500 relative overflow-hidden hidden">
         <div className="absolute inset-0 pointer-events-none">
           <div className="absolute top-0 right-0 w-[300px] h-[300px] bg-white/5 rounded-full blur-3xl" />
           <div className="absolute bottom-0 left-0 w-[200px] h-[200px] bg-white/5 rounded-full blur-3xl" />
@@ -1128,8 +1615,8 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── ТАРИФЫ ── */}
-      <section id="pricing" className="py-24 md:py-28 bg-gray-950">
+      {/* ── ТАРИФЫ (СКРЫТО) ── */}
+      <section id="pricing" className="py-24 md:py-28 bg-gray-950 hidden">
         <div
           ref={pricing.ref}
           className={cn(
@@ -1265,9 +1752,9 @@ export default function LandingPage() {
                     asChild={hasModules}
                   >
                     {hasModules ? (
-                      <Link href="/register">Начать бесплатно — 14 дней</Link>
+                      <Link href="/register">Оставить заявку</Link>
                     ) : (
-                      <span>Начать бесплатно — 14 дней</span>
+                      <span>Оставить заявку</span>
                     )}
                   </Button>
                 </div>
@@ -1290,12 +1777,12 @@ export default function LandingPage() {
           )}
         >
           <h2 className="text-3xl md:text-5xl font-bold mb-5 text-gray-100">
-            Попробуйте Company24.pro{" "}
-            <span className="bg-gradient-to-r from-indigo-500 to-violet-500 bg-clip-text text-transparent">бесплатно</span>
+            Попробуйте{" "}
+            <span className="bg-gradient-to-r from-indigo-500 to-violet-500 bg-clip-text text-transparent">Company24.pro</span>
           </h2>
-          <p className="text-xl text-gray-400 mb-10">14 дней полного доступа. Без привязки карты.</p>
+          <p className="text-xl text-gray-400 mb-10">Оставьте заявку — покажем платформу и подберём модули под ваш бизнес</p>
           <Button size="lg" className="bg-gradient-to-r from-indigo-500 to-violet-500 hover:from-indigo-600 hover:to-violet-600 h-14 px-12 text-lg shadow-xl shadow-indigo-500/20 transition-all hover:shadow-2xl hover:scale-[1.02] text-white rounded-2xl" asChild>
-            <Link href="/register">Начать бесплатно <ArrowRight className="w-5 h-5 ml-2" /></Link>
+            <Link href="/register">Оставить заявку <ArrowRight className="w-5 h-5 ml-2" /></Link>
           </Button>
         </div>
       </section>

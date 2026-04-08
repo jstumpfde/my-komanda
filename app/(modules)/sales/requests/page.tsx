@@ -10,9 +10,16 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select"
 import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import {
   Inbox, Mail, Phone, Building2, MessageSquare, Clock, CheckCircle2,
   XCircle, UserCheck, Loader2, Trash2, RefreshCw, List, LayoutGrid,
-  PauseCircle, HelpCircle,
+  PauseCircle, HelpCircle, MoreHorizontal,
 } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
@@ -94,6 +101,15 @@ export default function AccessRequestsPage() {
       toast.success("Заявка удалена")
     } catch {
       toast.error("Ошибка удаления")
+    }
+  }
+
+  const [confirmDisconnect, setConfirmDisconnect] = useState<string | null>(null)
+
+  const handleDisconnect = () => {
+    if (confirmDisconnect) {
+      updateStatus(confirmDisconnect, "new")
+      setConfirmDisconnect(null)
     }
   }
 
@@ -222,35 +238,57 @@ export default function AccessRequestsPage() {
 
                         {/* Actions */}
                         <div className="flex items-center gap-1.5 shrink-0">
-                          {r.status === "new" && (
-                            <>
-                              <Button size="sm" variant="outline" className="h-7 text-[11px] gap-1" onClick={() => updateStatus(r.id, "contacted")}>
-                                <Phone className="size-3" />
-                                Связались
-                              </Button>
-                              <Button size="sm" className="h-7 text-[11px] gap-1" onClick={() => updateStatus(r.id, "approved")}>
-                                <UserCheck className="size-3" />
-                                Подключить
-                              </Button>
-                            </>
-                          )}
-                          {r.status === "contacted" && (
-                            <>
-                              <Button size="sm" className="h-7 text-[11px] gap-1" onClick={() => updateStatus(r.id, "approved")}>
-                                <CheckCircle2 className="size-3" />
-                                Подключить
-                              </Button>
-                              <Button size="sm" variant="outline" className="h-7 text-[11px] gap-1 text-destructive" onClick={() => updateStatus(r.id, "rejected")}>
-                                <XCircle className="size-3" />
-                                Отменить
-                              </Button>
-                            </>
-                          )}
-                          {(r.status === "approved" || r.status === "rejected") && (
-                            <Button size="sm" variant="ghost" className="h-7 text-[11px] gap-1 text-muted-foreground" onClick={() => deleteRequest(r.id)}>
-                              <Trash2 className="size-3" />
+                          {r.status !== "approved" && (
+                            <Button size="sm" className="h-7 text-[11px] gap-1" onClick={() => updateStatus(r.id, "approved")}>
+                              <CheckCircle2 className="size-3" />Подключить
                             </Button>
                           )}
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button size="sm" variant="ghost" className="h-7 w-7 p-0"><MoreHorizontal className="size-4" /></Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              {r.status !== "new" && (
+                                <DropdownMenuItem className="gap-2 text-xs cursor-pointer" onClick={() => updateStatus(r.id, "new")}>
+                                  <Inbox className="size-3.5" />Новый
+                                </DropdownMenuItem>
+                              )}
+                              {r.status !== "contacted" && (
+                                <DropdownMenuItem className="gap-2 text-xs cursor-pointer" onClick={() => updateStatus(r.id, "contacted")}>
+                                  <Phone className="size-3.5" />Связались
+                                </DropdownMenuItem>
+                              )}
+                              {r.status !== "deciding" && (
+                                <DropdownMenuItem className="gap-2 text-xs cursor-pointer" onClick={() => updateStatus(r.id, "deciding")}>
+                                  <HelpCircle className="size-3.5" />Решает
+                                </DropdownMenuItem>
+                              )}
+                              {r.status !== "postponed" && (
+                                <DropdownMenuItem className="gap-2 text-xs cursor-pointer" onClick={() => updateStatus(r.id, "postponed")}>
+                                  <PauseCircle className="size-3.5" />Отложить
+                                </DropdownMenuItem>
+                              )}
+                              {r.status !== "approved" && (
+                                <DropdownMenuItem className="gap-2 text-xs cursor-pointer" onClick={() => updateStatus(r.id, "approved")}>
+                                  <CheckCircle2 className="size-3.5 text-emerald-600" />Подключить
+                                </DropdownMenuItem>
+                              )}
+                              {r.status === "approved" && (
+                                <DropdownMenuItem className="gap-2 text-xs cursor-pointer text-amber-600" onClick={() => setConfirmDisconnect(r.id)}>
+                                  <XCircle className="size-3.5" />Отключить
+                                </DropdownMenuItem>
+                              )}
+                              <DropdownMenuSeparator />
+                              {r.status !== "rejected" && (
+                                <DropdownMenuItem className="gap-2 text-xs cursor-pointer text-destructive" onClick={() => updateStatus(r.id, "rejected")}>
+                                  <XCircle className="size-3.5" />Отклонить
+                                </DropdownMenuItem>
+                              )}
+                              <DropdownMenuItem className="gap-2 text-xs cursor-pointer text-destructive" onClick={() => deleteRequest(r.id)}>
+                                <Trash2 className="size-3.5" />Удалить
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </div>
                       </div>
                     </div>
@@ -346,6 +384,19 @@ export default function AccessRequestsPage() {
           </div>
         </div>
       </SidebarInset>
+
+      <AlertDialog open={!!confirmDisconnect} onOpenChange={(open) => !open && setConfirmDisconnect(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Отключить клиента?</AlertDialogTitle>
+            <AlertDialogDescription>Заявка вернётся в статус «Новый». Вы уверены?</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Отмена</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDisconnect} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Отключить</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </SidebarProvider>
   )
 }
