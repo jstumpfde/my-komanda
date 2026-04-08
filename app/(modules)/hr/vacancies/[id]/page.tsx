@@ -28,8 +28,9 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Checkbox } from "@/components/ui/checkbox"
 import { Slider } from "@/components/ui/slider"
 import { Input } from "@/components/ui/input"
-import { Plus, Clock, Pause, Play, Archive, RotateCcw, Trash2, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, Zap, Globe, AlertTriangle, TrendingUp, Calendar, MapPin, DollarSign, Filter, X, Link2, Copy, Save, Sparkles, Eye, Check, Loader2, Download, ExternalLink, ClipboardList, ChevronLeft, ChevronRight } from "lucide-react"
+import { Plus, Clock, Pause, Play, Archive, RotateCcw, Trash2, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, Zap, Globe, AlertTriangle, TrendingUp, Calendar, MapPin, DollarSign, Filter, X, Link2, Copy, Save, Sparkles, Eye, Check, Loader2, Download, ExternalLink, ClipboardList, ChevronLeft, ChevronRight, ChevronDown, CheckCircle2, XCircle } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
 import { defaultColumnColors, type CandidateAction, getNextColumnId, PROGRESS_BY_COLUMN } from "@/lib/column-config"
@@ -63,7 +64,7 @@ interface ColumnData {
   candidates: Candidate[]
 }
 
-type VacancyStatus = "draft" | "active" | "archived" | "published" | "paused" | "closed"
+type VacancyStatus = "draft" | "active" | "paused" | "closed_success" | "closed_cancelled"
 
 function emptyColumns(): ColumnData[] {
   return Object.entries(defaultColumnColors).map(([id, c]) => ({
@@ -80,10 +81,9 @@ const defaultSettings: CardDisplaySettings = {
 const STATUS_CONFIG: Record<VacancyStatus, { label: string; color: string }> = {
   draft: { label: "Черновик", color: "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800" },
   active: { label: "Активна", color: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800" },
-  published: { label: "Активна", color: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800" },
   paused: { label: "Приостановлена", color: "bg-slate-500/10 text-slate-700 dark:text-slate-400 border-slate-200 dark:border-slate-800" },
-  closed: { label: "Закрыта", color: "bg-muted text-muted-foreground border-border" },
-  archived: { label: "В архиве", color: "bg-muted text-muted-foreground border-border" },
+  closed_success: { label: "Закрыта (найден)", color: "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800" },
+  closed_cancelled: { label: "Закрыта (отменена)", color: "bg-red-500/10 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800" },
 }
 
 // Map ApiCandidate → Candidate (for the kanban card)
@@ -123,7 +123,7 @@ export default function VacancyPage() {
     if (apiVacancy?.status) {
       const s = apiVacancy.status as VacancyStatus
       setStatus(s)
-      const isPublished = s === "published" || s === "active" || s === "closed"
+      const isPublished = s === "active" || s === "closed_success" || s === "closed_cancelled"
       setActiveTab(prev => prev === "anketa" || prev === "analytics" ? (isPublished ? "analytics" : "anketa") : prev)
     }
     // Load custom columns from description_json (skip hidden ones)
@@ -183,7 +183,7 @@ export default function VacancyPage() {
   const [brandCustomDomain, setBrandCustomDomain] = useState("")
   const [editingSlug, setEditingSlug] = useState(false)
   const [brandSaving, setBrandSaving] = useState(false)
-  const defaultTab = (status === "published" || status === "active" || status === "closed") ? "analytics" : "anketa"
+  const defaultTab = (status === "active" || status === "closed_success" || status === "closed_cancelled") ? "analytics" : "anketa"
   const [activeTab, setActiveTab] = useState(defaultTab)
   const [anPeriod, setAnPeriod] = useState("all")
   const [anSources, setAnSources] = useState<string[]>([])
@@ -579,27 +579,41 @@ export default function VacancyPage() {
                     </button>
                   )}
                   <Badge variant="outline" className={statusCfg.color}>{statusCfg.label}</Badge>
-                  {(status === "active" || status === "published") && apiVacancy?.createdAt && <span className="flex items-center gap-1.5 text-xs text-muted-foreground"><Clock className="size-3.5" />{Math.floor((Date.now() - new Date(apiVacancy.createdAt).getTime()) / 86400000)} дн.</span>}
+                  {status === "active" && apiVacancy?.createdAt && <span className="flex items-center gap-1.5 text-xs text-muted-foreground"><Clock className="size-3.5" />{Math.floor((Date.now() - new Date(apiVacancy.createdAt).getTime()) / 86400000)} дн.</span>}
                 </div>
                 <p className="text-muted-foreground text-xs">{totalCandidates} кандидатов · {vacancyTitle} · {apiVacancy?.city ?? "Москва"}</p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 {status === "draft" && <>
                   <Button size="sm" className="h-8 gap-1.5 text-xs" onClick={() => { setStatus("active"); toast.success("Вакансия запущена") }}><Play className="size-3.5" />Запустить</Button>
-                  <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs text-muted-foreground" onClick={() => { setStatus("archived"); toast("В архив") }}><Archive className="size-3.5" />В архив</Button>
+                  <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs text-muted-foreground" onClick={() => { setStatus("closed_cancelled"); toast("В архив") }}><Archive className="size-3.5" />В архив</Button>
                 </>}
                 {status === "active" && <>
                   <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs text-destructive" onClick={() => { setStatus("paused"); toast.warning("Вакансия приостановлена") }}><Pause className="size-3.5" />Остановить</Button>
-                  <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs text-muted-foreground" onClick={() => { setStatus("archived"); toast("В архив") }}><Archive className="size-3.5" />В архив</Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs"><X className="size-3.5" />Закрыть вакансию<ChevronDown className="size-3 ml-0.5 opacity-50" /></Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => { setStatus("closed_success"); toast.success("Вакансия закрыта — кандидат найден") }}><CheckCircle2 className="size-3.5 text-blue-600" />Кандидат найден</DropdownMenuItem>
+                      <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => { setStatus("closed_cancelled"); toast.warning("Вакансия отменена") }}><XCircle className="size-3.5 text-red-600" />Отменить вакансию</DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </>}
                 {status === "paused" && <>
                   <Button size="sm" className="h-8 gap-1.5 text-xs" onClick={() => { setStatus("active"); toast.success("Вакансия запущена") }}><Play className="size-3.5" />Запустить</Button>
-                  <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs text-muted-foreground" onClick={() => { setStatus("archived"); toast("В архив") }}><Archive className="size-3.5" />В архив</Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs"><X className="size-3.5" />Закрыть вакансию<ChevronDown className="size-3 ml-0.5 opacity-50" /></Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => { setStatus("closed_success"); toast.success("Вакансия закрыта — кандидат найден") }}><CheckCircle2 className="size-3.5 text-blue-600" />Кандидат найден</DropdownMenuItem>
+                      <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => { setStatus("closed_cancelled"); toast.warning("Вакансия отменена") }}><XCircle className="size-3.5 text-red-600" />Отменить вакансию</DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs text-muted-foreground" onClick={() => { setStatus("closed_cancelled"); toast("В архив") }}><Archive className="size-3.5" />В архив</Button>
                 </>}
-                {status === "archived" && <>
-                  <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={() => { setStatus("draft"); toast.success("Восстановлена") }}><RotateCcw className="size-3.5" />Восстановить</Button>
-                  <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs text-destructive" onClick={() => toast.error("Удаление (заглушка)")}><Trash2 className="size-3.5" />Удалить</Button>
-                </>}
+                {(status === "closed_success" || status === "closed_cancelled") && null}
                 <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs text-muted-foreground" disabled={duplicating} onClick={handleDuplicate}>
                   {duplicating ? <Loader2 className="size-3.5 animate-spin" /> : <Copy className="size-3.5" />}Создать похожую
                 </Button>
@@ -610,7 +624,7 @@ export default function VacancyPage() {
             <Tabs value={activeTab} onValueChange={setActiveTab}>
               <div className="flex items-center justify-between gap-3 mb-3 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
                 <TabsList className="shrink-0">
-                  {(status === "published" || status === "active" || status === "closed" ? [
+                  {(status === "active" || status === "closed_success" || status === "closed_cancelled" ? [
                     { value: "analytics", icon: BarChart3, label: "Аналитика" },
                     { value: "candidates", icon: Kanban, label: "Кандидаты" },
                     { value: "course", icon: BookOpen, label: "Демонстрация" },
@@ -1303,7 +1317,7 @@ export default function VacancyPage() {
 
             {/* ═══ Bottom tab navigation ══════════════════ */}
             {(() => {
-              const tabOrder = (status === "published" || status === "active" || status === "closed")
+              const tabOrder = (status === "active" || status === "closed_success" || status === "closed_cancelled")
                 ? ["analytics", "candidates", "course", "anketa", "automation", "settings"]
                 : ["anketa", "course", "candidates", "analytics", "automation", "settings"]
               const tabLabels: Record<string, string> = { anketa: "Анкета", course: "Демонстрация", candidates: "Кандидаты", analytics: "Аналитика", automation: "Автоматизация", settings: "Настройки" }

@@ -45,34 +45,32 @@ import {
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const STATUS_LABELS: Record<string, string> = {
-  active: "Активна",
   draft: "Черновик",
-  published: "Опубликована",
+  active: "Активна",
   paused: "Приостановлена",
-  closed: "Закрыта",
-  archived: "Архив",
+  closed_success: "Закрыта (найден)",
+  closed_cancelled: "Закрыта (отменена)",
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  active:    "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
-  published: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
-  draft:     "bg-amber-500/15 text-amber-700 dark:text-amber-400",
-  paused:    "bg-orange-500/15 text-orange-700 dark:text-orange-400",
-  closed:    "bg-muted text-muted-foreground",
-  archived:  "bg-muted text-muted-foreground",
+  draft:             "bg-amber-500/15 text-amber-700 dark:text-amber-400",
+  active:            "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
+  paused:            "bg-slate-500/15 text-slate-700 dark:text-slate-400",
+  closed_success:    "bg-blue-500/15 text-blue-700 dark:text-blue-400",
+  closed_cancelled:  "bg-red-500/15 text-red-700 dark:text-red-400",
 }
 
 const STATUS_ORDER: Record<string, number> = {
-  active: 0, published: 1, draft: 2, paused: 3, closed: 4, archived: 5,
+  active: 0, draft: 1, paused: 2, closed_success: 3, closed_cancelled: 4,
 }
 
 const STATUS_FILTER_OPTIONS = [
-  { value: "all",       label: "Все статусы" },
-  { value: "draft",     label: "Черновик" },
-  { value: "published", label: "Опубликована" },
-  { value: "active",    label: "Активна" },
-  { value: "paused",    label: "На паузе" },
-  { value: "closed",    label: "Закрыта" },
+  { value: "all",              label: "Все статусы" },
+  { value: "draft",            label: "Черновик" },
+  { value: "active",           label: "Активна" },
+  { value: "paused",           label: "Приостановлена" },
+  { value: "closed_success",   label: "Закрыта (найден)" },
+  { value: "closed_cancelled", label: "Закрыта (отменена)" },
 ]
 
 type ViewMode = "list" | "tiles" | "table"
