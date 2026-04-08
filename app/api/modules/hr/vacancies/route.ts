@@ -83,29 +83,38 @@ export async function POST(req: NextRequest) {
 
     const slug = `${transliterate(body.title)}-${nanoid(6)}`
 
+    console.log("[POST /api/modules/hr/vacancies] creating:", {
+      companyId: user.companyId, userId: user.id, title: body.title.trim(), slug,
+    })
+
+    const insertValues: Record<string, unknown> = {
+      companyId: user.companyId,
+      title: body.title.trim(),
+      status: "draft",
+      slug,
+    }
+
+    // createdBy might be null for some auth flows — make it optional
+    if (user.id) insertValues.createdBy = user.id
+    if (body.description?.trim()) insertValues.description = body.description.trim()
+    if (body.city) insertValues.city = body.city
+    if (body.format) insertValues.format = body.format
+    if (body.employment) insertValues.employment = body.employment
+    if (body.category) insertValues.category = body.category
+    if (body.salary_min) insertValues.salaryMin = body.salary_min
+    if (body.salary_max) insertValues.salaryMax = body.salary_max
+    if (body.description_json) insertValues.descriptionJson = body.description_json
+
     const [vacancy] = await db
       .insert(vacancies)
-      .values({
-        companyId: user.companyId,
-        createdBy: user.id,
-        title: body.title.trim(),
-        description: body.description?.trim() || null,
-        city: body.city,
-        format: body.format,
-        employment: body.employment,
-        category: body.category,
-        salaryMin: body.salary_min,
-        salaryMax: body.salary_max,
-        status: "draft" as const,
-        slug,
-        descriptionJson: body.description_json || null,
-      })
+      .values(insertValues as typeof vacancies.$inferInsert)
       .returning()
 
+    console.log("[POST /api/modules/hr/vacancies] created:", vacancy.id)
     return apiSuccess(vacancy, 201)
   } catch (err) {
     if (err instanceof Response) return err
-    console.error("[POST /api/modules/hr/vacancies]", err)
-    return apiError("Internal server error", 500)
+    console.error("[POST /api/modules/hr/vacancies] ERROR:", err)
+    return apiError(err instanceof Error ? err.message : "Internal server error", 500)
   }
 }

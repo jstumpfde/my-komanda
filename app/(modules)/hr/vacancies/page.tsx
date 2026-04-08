@@ -336,8 +336,8 @@ export default function VacanciesPage() {
       toast.error("Неподдерживаемый формат. Используйте DOCX, PDF или TXT")
       return
     }
-    if (file.size > 10 * 1024 * 1024) {
-      toast.error("Файл слишком большой (максимум 10 МБ)")
+    if (file.size > 50 * 1024 * 1024) {
+      toast.error("Файл слишком большой (максимум 50 МБ)")
       return
     }
     setUploading(true)
@@ -429,7 +429,11 @@ export default function VacanciesPage() {
         }),
       })
       console.log("[CREATE] POST response status:", res.status)
-      if (!res.ok) throw new Error(`POST failed: ${res.status}`)
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({})) as { error?: string }
+        console.error("[CREATE] server error:", res.status, errBody)
+        throw new Error(errBody.error || `HTTP ${res.status}`)
+      }
       const data = await res.json() as { id: string }
       console.log("[CREATE] vacancy created, id:", data.id)
       setCreateDialogOpen(false)
@@ -437,7 +441,8 @@ export default function VacanciesPage() {
       router.push(`/hr/vacancies/${data.id}`)
     } catch (err) {
       console.error("[CREATE] error:", err)
-      toast.error("Не удалось создать вакансию")
+      const msg = err instanceof Error ? err.message : "Неизвестная ошибка"
+      toast.error(`Не удалось создать вакансию: ${msg}`)
     } finally {
       setCreating(false)
     }

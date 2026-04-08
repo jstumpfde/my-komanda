@@ -187,7 +187,7 @@ export const salesContacts = pgTable("sales_contacts", {
 export const vacancies = pgTable("vacancies", {
   id: uuid("id").primaryKey().defaultRandom(),
   companyId: uuid("company_id").references(() => companies.id).notNull(),
-  createdBy: uuid("created_by").references(() => users.id).notNull(),
+  createdBy: uuid("created_by").references(() => users.id),
   title: text("title").notNull(),
   description: text("description"),
   city: text("city"),

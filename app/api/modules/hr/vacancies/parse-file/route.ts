@@ -12,9 +12,9 @@ export async function POST(req: NextRequest) {
       return apiError("Файл не загружен", 400)
     }
 
-    const maxSize = 10 * 1024 * 1024 // 10 MB
+    const maxSize = 50 * 1024 * 1024 // 50 MB
     if (file.size > maxSize) {
-      return apiError("Файл слишком большой (максимум 10 МБ)", 400)
+      return apiError("Файл слишком большой (максимум 50 МБ)", 400)
     }
 
     const name = file.name.toLowerCase()
