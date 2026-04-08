@@ -229,15 +229,10 @@ export function CompanySelector({
           {/* Contact selector */}
           {clientCompanyId && (
             <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <Label className="text-xs text-muted-foreground">Контактное лицо</Label>
-                <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={() => setContactModalOpen(true)}>
-                  <Plus className="w-3 h-3" />
-                  Новый контакт
-                </Button>
-              </div>
+              <Label className="text-xs text-muted-foreground">Контактное лицо</Label>
+              <div className="flex items-center gap-3 w-full">
               <Select value={clientContactId || ""} onValueChange={onContactChange}>
-                <SelectTrigger className="bg-[var(--input-bg)] border border-input">
+                <SelectTrigger className="bg-[var(--input-bg)] border border-input w-1/2 min-w-[300px]" style={{ maxWidth: "calc(100% - 160px)" }}>
                   <SelectValue placeholder="Выберите контакт" />
                 </SelectTrigger>
                 <SelectContent>
@@ -255,6 +250,11 @@ export function CompanySelector({
                   )}
                 </SelectContent>
               </Select>
+              <Button variant="outline" size="sm" className="h-9 gap-1 text-xs shrink-0 whitespace-nowrap" onClick={() => setContactModalOpen(true)}>
+                <Plus className="w-3.5 h-3.5" />
+                Новый контакт
+              </Button>
+              </div>
             </div>
           )}
         </div>

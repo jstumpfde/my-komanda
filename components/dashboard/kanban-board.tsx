@@ -166,12 +166,12 @@ export function KanbanBoard({ settings, viewMode, onViewModeChange, columns = []
                   {/* Column Header */}
                   <div className="mb-3 rounded-xl overflow-visible group relative">
                     <div
-                      className="flex items-center justify-between px-3.5 py-2.5 rounded-xl"
+                      className="flex items-center justify-between px-3 py-1.5 rounded-full w-fit"
                       style={{ background: `linear-gradient(135deg, ${column.colorFrom}, ${column.colorTo})` }}
                     >
                       <div className="flex items-center gap-1.5">
-                        <h3 className="font-semibold text-white text-sm">{column.title}</h3>
-                        <span className="text-white font-bold text-sm">{column.count}</span>
+                        <h3 className="font-medium text-white text-xs">{column.title}</h3>
+                        <span className="text-white/90 font-bold text-xs">{column.count}</span>
                       </div>
                       <ColumnColorPicker
                         colorFrom={column.colorFrom}

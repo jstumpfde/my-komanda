@@ -3,13 +3,6 @@
 import React, { useState, useCallback, forwardRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
 import { Plus, GraduationCap, Loader2, Check, AlertCircle } from "lucide-react"
 import { toast } from "sonner"
 import { type Demo, DEFAULT_LESSONS } from "@/lib/course-types"
@@ -18,15 +11,14 @@ import { useDemo } from "@/hooks/use-demo"
 
 interface CourseTabProps {
   vacancyId: string
+  vacancyTitle?: string
   editorRef?: React.Ref<NotionEditorHandle>
   onSaveStatusChange?: (status: "saved" | "saving") => void
 }
 
 export const CourseTab = forwardRef<NotionEditorHandle, CourseTabProps>(
-  function CourseTab({ vacancyId, editorRef, onSaveStatusChange }, _ref) {
+  function CourseTab({ vacancyId, vacancyTitle, editorRef, onSaveStatusChange }, _ref) {
     const { demo, loading, error, saveStatus, createDemo, updateDemo } = useDemo(vacancyId)
-    const [createDialogOpen, setCreateDialogOpen] = useState(false)
-    const [newTitle, setNewTitle] = useState("")
     const [creating, setCreating] = useState(false)
 
     // Sync save status to parent
@@ -37,13 +29,11 @@ export const CourseTab = forwardRef<NotionEditorHandle, CourseTabProps>(
     }, [saveStatus, onSaveStatusChange])
 
     const handleCreateDemo = async () => {
-      if (!newTitle.trim()) return
+      const title = vacancyTitle || "Демонстрация"
       setCreating(true)
-      const created = await createDemo(newTitle.trim(), DEFAULT_LESSONS)
+      const created = await createDemo(title, DEFAULT_LESSONS)
       setCreating(false)
       if (created) {
-        setNewTitle("")
-        setCreateDialogOpen(false)
         toast.success(`Демонстрация «${created.title}» создана`)
       } else {
         toast.error("Не удалось создать демонстрацию")
@@ -122,30 +112,12 @@ export const CourseTab = forwardRef<NotionEditorHandle, CourseTabProps>(
             <p className="text-sm text-muted-foreground mb-4 max-w-md mx-auto">
               Кандидаты пройдут интерактивный обзор компании, роли и дохода перед интервью
             </p>
-            <Button size="sm" className="gap-1.5" onClick={() => setCreateDialogOpen(true)}>
-              <Plus className="w-3.5 h-3.5" />Создать демонстрацию
+            <Button size="sm" className="gap-1.5" onClick={handleCreateDemo} disabled={creating}>
+              {creating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+              Создать демонстрацию
             </Button>
           </CardContent>
         </Card>
-
-        <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader><DialogTitle>Новая демонстрация</DialogTitle></DialogHeader>
-            <div className="grid gap-3 py-2">
-              <Input
-                placeholder="Название демонстрации"
-                value={newTitle}
-                onChange={(e) => setNewTitle(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") handleCreateDemo() }}
-                autoFocus
-              />
-              <Button onClick={handleCreateDemo} disabled={!newTitle.trim() || creating}>
-                {creating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-                Создать
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
       </div>
     )
   }

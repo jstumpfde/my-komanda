@@ -78,7 +78,7 @@ const defaultSettings: CardDisplaySettings = {
 
 
 const STATUS_CONFIG: Record<VacancyStatus, { label: string; color: string }> = {
-  draft: { label: "Не опубликована", color: "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800" },
+  draft: { label: "Черновик", color: "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800" },
   active: { label: "Активна", color: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800" },
   published: { label: "Активна", color: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800" },
   paused: { label: "Остановлена", color: "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800" },
@@ -585,11 +585,11 @@ export default function VacancyPage() {
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 {status === "draft" && <>
-                  <Button size="sm" className="h-8 gap-1.5 text-xs" onClick={() => { setStatus("active"); toast.success("Опубликована") }}><Play className="size-3.5" />Опубликовать</Button>
+                  <Button size="sm" className="h-8 gap-1.5 text-xs" onClick={() => { setStatus("active"); toast.success("Вакансия запущена") }}><Play className="size-3.5" />Запустить</Button>
                   <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs text-muted-foreground" onClick={() => { setStatus("archived"); toast("В архив") }}><Archive className="size-3.5" />В архив</Button>
                 </>}
                 {status === "active" && <>
-                  <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs text-amber-600" onClick={() => { setStatus("draft"); toast.warning("Остановлена") }}><Pause className="size-3.5" />Остановить</Button>
+                  <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs text-destructive" onClick={() => { setStatus("draft"); toast.warning("Вакансия остановлена") }}><Pause className="size-3.5" />Остановить</Button>
                   <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs text-muted-foreground" onClick={() => { setStatus("archived"); toast("В архив") }}><Archive className="size-3.5" />В архив</Button>
                 </>}
                 {status === "archived" && <>
@@ -713,6 +713,7 @@ export default function VacancyPage() {
               <TabsContent value="course">
                 <CourseTab
                   vacancyId={id}
+                  vacancyTitle={vacancyTitle}
                   editorRef={courseEditorRef}
                   onSaveStatusChange={setCourseEditorSaveStatus}
                 />
@@ -1308,7 +1309,11 @@ export default function VacancyPage() {
               const goTab = (tab: string) => { setActiveTab(tab); window.scrollTo({ top: 0, behavior: "smooth" }) }
               return (
                 <div className="flex items-center justify-between mt-6 pt-4 border-t">
-                  <div>
+                  <div className="flex items-center gap-2">
+                    <Button variant="ghost" size="sm" className="gap-1.5 text-xs" onClick={() => router.push("/hr/vacancies")}>
+                      <ChevronLeft className="w-3.5 h-3.5" />
+                      Все вакансии
+                    </Button>
                     {prevTab && (
                       <Button variant="ghost" size="sm" className="gap-1.5 text-xs" onClick={() => goTab(prevTab)}>
                         <ChevronLeft className="w-3.5 h-3.5" />

@@ -54,10 +54,10 @@ export function ColumnColorPicker({ colorFrom, colorTo, onColorChange, title, on
         <Button
           variant="ghost"
           size="icon"
-          className="h-6 w-6 rounded-md hover:bg-white/20"
+          className="h-5 w-5 rounded-md hover:bg-white/20 ml-1"
           title="Изменить цвет"
         >
-          <Pipette className="w-3.5 h-3.5 text-white/70" />
+          <Pipette className="w-3 h-3 text-white/60" />
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-52 p-3" align="end" side="bottom">
