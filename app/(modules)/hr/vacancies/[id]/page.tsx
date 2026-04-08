@@ -81,7 +81,7 @@ const STATUS_CONFIG: Record<VacancyStatus, { label: string; color: string }> = {
   draft: { label: "Черновик", color: "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800" },
   active: { label: "Активна", color: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800" },
   published: { label: "Активна", color: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800" },
-  paused: { label: "Остановлена", color: "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800" },
+  paused: { label: "Приостановлена", color: "bg-slate-500/10 text-slate-700 dark:text-slate-400 border-slate-200 dark:border-slate-800" },
   closed: { label: "Закрыта", color: "bg-muted text-muted-foreground border-border" },
   archived: { label: "В архиве", color: "bg-muted text-muted-foreground border-border" },
 }
@@ -589,7 +589,11 @@ export default function VacancyPage() {
                   <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs text-muted-foreground" onClick={() => { setStatus("archived"); toast("В архив") }}><Archive className="size-3.5" />В архив</Button>
                 </>}
                 {status === "active" && <>
-                  <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs text-destructive" onClick={() => { setStatus("draft"); toast.warning("Вакансия остановлена") }}><Pause className="size-3.5" />Остановить</Button>
+                  <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs text-destructive" onClick={() => { setStatus("paused"); toast.warning("Вакансия приостановлена") }}><Pause className="size-3.5" />Остановить</Button>
+                  <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs text-muted-foreground" onClick={() => { setStatus("archived"); toast("В архив") }}><Archive className="size-3.5" />В архив</Button>
+                </>}
+                {status === "paused" && <>
+                  <Button size="sm" className="h-8 gap-1.5 text-xs" onClick={() => { setStatus("active"); toast.success("Вакансия запущена") }}><Play className="size-3.5" />Запустить</Button>
                   <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs text-muted-foreground" onClick={() => { setStatus("archived"); toast("В архив") }}><Archive className="size-3.5" />В архив</Button>
                 </>}
                 {status === "archived" && <>
