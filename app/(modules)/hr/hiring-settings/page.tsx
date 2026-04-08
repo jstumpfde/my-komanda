@@ -15,7 +15,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
-import { Settings, Clock, Save, Bell, GitBranch, MessageSquare, ShieldAlert, Plus, Pencil, Trash2 } from "lucide-react"
+import { Settings, Clock, Save, Bell, GitBranch, MessageSquare, ShieldAlert, Plus, Pencil, Trash2, Palette, Play } from "lucide-react"
 import { toast } from "sonner"
 
 // ─── Constants ─────────────────────────────────────────────────────────────
@@ -152,6 +152,14 @@ export default function HiringSettingsPage() {
   const [sfAutoReject, setSfAutoReject] = useState(false)
   const [sfRejectTemplate, setSfRejectTemplate] = useState("Вежливый отказ")
 
+  // ── Branding state ──
+  const [brandCompanyName, setBrandCompanyName] = useState("")
+  const [brandGreeting, setBrandGreeting] = useState("Привет, {name}! 👋")
+  const [brandTheme, setBrandTheme] = useState("light")
+  const [brandPrimary, setBrandPrimary] = useState("#3b82f6")
+  const [brandBg, setBrandBg] = useState("#f0f4ff")
+  const [brandText, setBrandText] = useState("#1e293b")
+
   // ── Helpers ──
   const toggleDay = (id: string) =>
     setInterviewDays((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n })
@@ -215,6 +223,7 @@ export default function HiringSettingsPage() {
                 <TabsTrigger value="funnel" className="gap-1.5"><GitBranch className="size-3.5" />Воронка</TabsTrigger>
                 <TabsTrigger value="messages" className="gap-1.5"><MessageSquare className="size-3.5" />Сообщения</TabsTrigger>
                 <TabsTrigger value="stopfactors" className="gap-1.5"><ShieldAlert className="size-3.5" />Стоп-факторы</TabsTrigger>
+                <TabsTrigger value="branding" className="gap-1.5"><Palette className="size-3.5" />Брендинг</TabsTrigger>
               </TabsList>
 
               {/* ═══ TAB 1: Расписание ═══ */}
@@ -673,6 +682,120 @@ export default function HiringSettingsPage() {
 
                   <div className="flex justify-end">
                     <Button className="gap-2" onClick={() => toast.success("Стоп-факторы сохранены")}>
+                      <Save className="size-4" />Сохранить
+                    </Button>
+                  </div>
+                </div>
+              </TabsContent>
+
+              {/* ═══ TAB: Брендинг ═══ */}
+              <TabsContent value="branding">
+                <div className="space-y-4 max-w-3xl">
+
+                  {/* Страница кандидата */}
+                  <Card>
+                    <CardHeader className="pb-2 pt-4 px-5">
+                      <CardTitle className="text-sm font-medium flex items-center gap-2"><Palette className="size-4 text-muted-foreground" />Страница кандидата</CardTitle>
+                    </CardHeader>
+                    <CardContent className="px-5 pb-4 pt-0 space-y-3">
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-muted-foreground">Название компании (для кандидатов)</Label>
+                        <Input value={brandCompanyName} onChange={e => setBrandCompanyName(e.target.value)} placeholder="ООО Ромашка" className="h-9 bg-[var(--input-bg)]" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-muted-foreground">Приветствие</Label>
+                        <Input value={brandGreeting} onChange={e => setBrandGreeting(e.target.value)} placeholder="Привет, {name}! 👋" className="h-9 bg-[var(--input-bg)]" />
+                        <p className="text-[11px] text-muted-foreground"><code className="bg-muted px-1 rounded">{"{name}"}</code> — будет заменено на имя кандидата</p>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Тема */}
+                  <Card>
+                    <CardHeader className="pb-2 pt-4 px-5">
+                      <CardTitle className="text-sm font-medium">Тема демонстрации</CardTitle>
+                    </CardHeader>
+                    <CardContent className="px-5 pb-4 pt-0">
+                      <div className="flex flex-wrap gap-2">
+                        {[
+                          { id: "light", label: "☀️ Светлая" },
+                          { id: "dark", label: "🌙 Тёмная" },
+                          { id: "brand", label: "🎨 Под бренд" },
+                          { id: "neutral", label: "⚪ Нейтральная" },
+                        ].map(t => (
+                          <button key={t.id} type="button" onClick={() => setBrandTheme(t.id)} className={cn(
+                            "h-9 px-4 rounded-full text-sm font-medium transition-all",
+                            brandTheme === t.id ? "bg-primary text-primary-foreground shadow-sm" : "border border-border hover:border-primary/50",
+                          )}>{t.label}</button>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Цвета */}
+                  <Card>
+                    <CardHeader className="pb-2 pt-4 px-5">
+                      <CardTitle className="text-sm font-medium">Цвета для кандидатов</CardTitle>
+                    </CardHeader>
+                    <CardContent className="px-5 pb-4 pt-0">
+                      <div className="grid grid-cols-3 gap-3">
+                        <div className="space-y-1">
+                          <Label className="text-xs text-muted-foreground">Основной</Label>
+                          <div className="flex items-center gap-2">
+                            <input type="color" value={brandPrimary} onChange={e => setBrandPrimary(e.target.value)} className="w-9 h-9 rounded-lg border cursor-pointer" />
+                            <Input value={brandPrimary} onChange={e => setBrandPrimary(e.target.value)} className="h-9 font-mono text-xs flex-1 bg-[var(--input-bg)]" />
+                          </div>
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs text-muted-foreground">Фон</Label>
+                          <div className="flex items-center gap-2">
+                            <input type="color" value={brandBg} onChange={e => setBrandBg(e.target.value)} className="w-9 h-9 rounded-lg border cursor-pointer" />
+                            <Input value={brandBg} onChange={e => setBrandBg(e.target.value)} className="h-9 font-mono text-xs flex-1 bg-[var(--input-bg)]" />
+                          </div>
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs text-muted-foreground">Текст</Label>
+                          <div className="flex items-center gap-2">
+                            <input type="color" value={brandText} onChange={e => setBrandText(e.target.value)} className="w-9 h-9 rounded-lg border cursor-pointer" />
+                            <Input value={brandText} onChange={e => setBrandText(e.target.value)} className="h-9 font-mono text-xs flex-1 bg-[var(--input-bg)]" />
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Превью */}
+                  <Card>
+                    <CardHeader className="pb-2 pt-4 px-5">
+                      <CardTitle className="text-sm font-medium">Превью</CardTitle>
+                    </CardHeader>
+                    <CardContent className="px-5 pb-4 pt-0">
+                      <div className="rounded-xl border overflow-hidden" style={{ backgroundColor: brandBg }}>
+                        <div className="p-4 space-y-3">
+                          <div className="flex items-center gap-2">
+                            <div className="w-9 h-9 rounded-lg flex items-center justify-center text-white font-bold text-sm" style={{ backgroundColor: brandPrimary }}>{brandCompanyName ? brandCompanyName[0] : "К"}</div>
+                            <span className="text-base font-bold" style={{ color: brandText }}>{brandCompanyName || "Компания"}</span>
+                          </div>
+                          <div>
+                            <h3 className="text-lg font-bold" style={{ color: brandText }}>{brandGreeting.replace("{name}", "Иван")}</h3>
+                            <p className="text-sm mt-1" style={{ color: brandText + "99" }}>Менеджер по продажам · {brandCompanyName || "Компания"}</p>
+                          </div>
+                          <div className="h-10 w-fit px-5 rounded-lg flex items-center justify-center text-white text-sm font-medium" style={{ backgroundColor: brandPrimary }}>
+                            <Play className="w-4 h-4 mr-1.5" />Начать демонстрацию
+                          </div>
+                          <div className="space-y-1">
+                            <div className="flex justify-between text-xs" style={{ color: brandText + "80" }}><span>Урок 3 из 12</span><span>25%</span></div>
+                            <div className="h-2 rounded-full" style={{ backgroundColor: brandPrimary + "20" }}>
+                              <div className="h-full rounded-full w-1/4" style={{ backgroundColor: brandPrimary }} />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <div className="flex justify-end">
+                    <Button className="gap-2" onClick={() => toast.success("Брендинг для кандидатов сохранён")}>
                       <Save className="size-4" />Сохранить
                     </Button>
                   </div>

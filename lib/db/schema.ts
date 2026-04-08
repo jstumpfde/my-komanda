@@ -36,6 +36,7 @@ export const plans = pgTable("plans", {
   sortOrder:  integer("sort_order").default(0),
   trialDays:  integer("trial_days").default(14),
   isArchived: boolean("is_archived").default(false),
+  allowCustomBranding: boolean("allow_custom_branding").default(true),
   archivedAt: timestamp("archived_at"),
   createdAt:  timestamp("created_at").defaultNow(),
 })
