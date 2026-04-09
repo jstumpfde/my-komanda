@@ -942,13 +942,6 @@ function NotionBlock({ block, idx, totalBlocks, isHovered, isDragging, isDragOve
         isHovered ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
       )}>
         <button
-          onClick={onDuplicate}
-          title="Дублировать блок"
-          className="w-5 h-5 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-        >
-          <Copy className="w-3 h-3" />
-        </button>
-        <button
           title="Перетащить"
           className="w-5 h-5 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-grab active:cursor-grabbing"
           draggable
@@ -956,6 +949,13 @@ function NotionBlock({ block, idx, totalBlocks, isHovered, isDragging, isDragOve
           onDragEnd={() => { isDragStarted.current = false; onDragEnd() }}
         >
           <GripVertical className="w-3 h-3" />
+        </button>
+        <button
+          onClick={onDuplicate}
+          title="Дублировать блок"
+          className="w-5 h-5 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+        >
+          <Copy className="w-3 h-3" />
         </button>
         <button
           onClick={onMoveUp}
@@ -2208,9 +2208,24 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
             )}
           </div>
           <LayoutPicker value={layout} onChange={(v) => onUpdate({ fileLayout: v.replace("image", "file") as Block["fileLayout"] })} prefix="file" />
+          {isSet && !isSide && (
+            <div className="flex items-center gap-1">
+              {(["left", "center", "right"] as const).map((a) => (
+                <button
+                  key={a}
+                  onClick={() => onUpdate({ fileAlign: a })}
+                  className={cn("h-7 px-2.5 text-xs rounded border transition-colors",
+                    (block.fileAlign || "left") === a ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:text-foreground hover:bg-muted"
+                  )}
+                >
+                  {a === "left" ? <AlignLeft className="w-3.5 h-3.5" /> : a === "center" ? <AlignCenter className="w-3.5 h-3.5" /> : <AlignRight className="w-3.5 h-3.5" />}
+                </button>
+              ))}
+            </div>
+          )}
           {isSet ? (
-            <div className={cn("flex gap-3", isSide ? (layout === "file-left" ? "flex-row" : "flex-row-reverse") : "flex-col")}>
-              <div className={cn("flex flex-col gap-1", isSide ? "w-1/2 shrink-0" : "w-full")}>
+            <div className={cn("flex gap-3", isSide ? (layout === "file-left" ? "flex-row" : "flex-row-reverse") : "flex-col", !isSide && (block.fileAlign === "center" ? "items-center" : block.fileAlign === "right" ? "items-end" : "items-start"))}>
+              <div className={cn("flex flex-col gap-1", isSide ? "w-1/2 shrink-0" : "w-full max-w-md")}>
                 <MiniRichEditor
                   html={block.fileTitleTop || ""}
                   onChange={(v) => onUpdate({ fileTitleTop: v })}
@@ -2466,7 +2481,8 @@ function InlineBetweenBar({ onAdd }: { onAdd: (type: BlockType) => void }) {
 
   return (
     <div
-      className="relative flex items-center group/between h-1 my-2"
+      className="relative w-full flex items-center group/between my-1"
+      style={{ minHeight: 16 }}
       onMouseEnter={() => setVisible(true)}
       onMouseLeave={() => setVisible(false)}
     >
@@ -3421,8 +3437,8 @@ function SimplePreviewBlock({ block }: { block: Block }) {
       const layout = block.fileLayout || "full"
       const isSide = layout === "file-left" || layout === "file-right"
       return (
-        <div className={cn("flex gap-3 items-start", isSide ? (layout === "file-left" ? "flex-row" : "flex-row-reverse") : "flex-col")}>
-          <div className={cn("flex flex-col gap-1.5", isSide ? "w-1/2 shrink-0" : "w-full")}>
+        <div className={cn("flex gap-3 items-start", isSide ? (layout === "file-left" ? "flex-row" : "flex-row-reverse") : "flex-col", !isSide && (block.fileAlign === "center" ? "items-center" : block.fileAlign === "right" ? "items-end" : "items-start"))}>
+          <div className={cn("flex flex-col gap-1.5", isSide ? "w-1/2 shrink-0" : "w-full max-w-md")}>
             {block.fileTitleTop && <p className="text-xs text-muted-foreground leading-snug">{block.fileTitleTop}</p>}
             <div className="flex items-center gap-3 p-3 bg-muted/30 rounded-xl border border-border">
               <FileText className="w-7 h-7 text-primary shrink-0" />
@@ -3448,11 +3464,11 @@ function SimplePreviewBlock({ block }: { block: Block }) {
       const icon = block.infoIcon || "!"
       return (
         <div
-          className="flex gap-3 items-start"
+          className="flex gap-3 items-center"
           style={{ borderLeft: `4px solid ${color}`, background: `${color}1A`, borderRadius: "8px", padding: "16px" }}
         >
           <div
-            className="flex-shrink-0 flex items-center justify-center font-bold select-none leading-none mt-0.5"
+            className="flex-shrink-0 flex items-center justify-center font-bold select-none leading-none"
             style={{ fontSize: 48, color, minWidth: 52 }}
           >
             {icon}

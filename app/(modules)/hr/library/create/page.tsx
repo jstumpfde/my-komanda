@@ -1,11 +1,12 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
-import { ArrowRight } from "lucide-react"
+import { ArrowRight, Upload, X, FileText, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { toast } from "sonner"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
@@ -26,6 +27,7 @@ const LEVELS = ["Линейный", "Старший / ведущий", "Руко
 const TEMPLATES = [
   { id: "empty", name: "Пустая демонстрация", desc: "Начать с нуля", department: null as string | null, market: null as string | null, subblocks: 0 },
   { id: "b2b", name: "Менеджер по продажам B2B", desc: "20 подблоков, стандартная", department: "Продажи", market: "B2B", subblocks: 20 },
+  { id: "document", name: "Из документа", desc: "Загрузить DOCX, PDF или TXT", department: null as string | null, market: null as string | null, subblocks: 0 },
 ]
 
 // ─── Pill component ─────────────────────────────────────────────────────────
@@ -72,12 +74,16 @@ export default function CreateDemoPage() {
   const [selectedTemplate, setSelectedTemplate] = useState("empty")
   // 7. Demo name
   const [demoName, setDemoName] = useState("")
+  // 8. Document upload
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null)
+  const [parsing, setParsing] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const lengthKeys = Object.keys(LENGTH_LABELS) as DemoLength[]
 
   // Filter templates by department + market
   const filteredTemplates = TEMPLATES.filter((t) => {
-    if (t.id === "empty") return true
+    if (t.id === "empty" || t.id === "document") return true
     if (t.department && department && t.department !== department) return false
     if (t.market && marketType && t.market !== marketType) return false
     return true
@@ -85,22 +91,72 @@ export default function CreateDemoPage() {
 
   // Auto-select matching template
   useEffect(() => {
-    const match = filteredTemplates.find((t) => t.id !== "empty")
+    const match = filteredTemplates.find((t) => t.id !== "empty" && t.id !== "document")
     setSelectedTemplate(match ? match.id : "empty")
   }, [department, marketType]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-fill demo name
   useEffect(() => {
     if (positionName && !demoName) {
-      setDemoName(`Демонстрация: ${positionName} — {{компания}}`)
+      setDemoName(`Демонстрация: ${positionName.slice(0, 30)}`)
     }
   }, [positionName]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const canCreate = positionName.trim() && department && selectedLength
+  const canCreate = positionName.trim() && department && selectedLength && (selectedTemplate !== "document" || uploadedFile)
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     if (!canCreate) return
     const name = demoName.trim() || `Демонстрация: ${positionName}`
+
+    // If document template — parse file first
+    if (selectedTemplate === "document" && uploadedFile) {
+      setParsing(true)
+      try {
+        const formData = new FormData()
+        formData.append("file", uploadedFile)
+        const res = await fetch("/api/demo-templates/parse-document", { method: "POST", body: formData })
+        const data = await res.json()
+        if (!res.ok) { toast.error(data.error || "Ошибка парсинга"); setParsing(false); return }
+
+        // Create template with parsed lessons
+        const createRes = await fetch("/api/demo-templates", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name,
+            niche: department || "universal",
+            length: selectedLength,
+            sections: data.lessons.map((l: { emoji: string; title: string; blocks: { type: string; content: string }[] }, i: number) => ({
+              id: `lesson-${Date.now()}-${i}`,
+              emoji: l.emoji || "📄",
+              title: l.title,
+              blocks: l.blocks.map((b: { type: string; content: string }, j: number) => ({
+                id: `blk-${Date.now()}-${i}-${j}`,
+                type: b.type,
+                content: b.content,
+                imageUrl: "", imageLayout: "full", imageCaption: "", imageTitleTop: "",
+                videoUrl: "", videoLayout: "full", videoTitleTop: "", videoCaption: "",
+                audioUrl: "", audioTitle: "", audioLayout: "full", audioTitleTop: "", audioCaption: "",
+                fileUrl: "", fileName: "", fileLayout: "full", fileTitleTop: "", fileCaption: "",
+                infoStyle: "info", infoColor: "", infoIcon: "", infoSize: "m",
+                buttonText: "Подробнее", buttonUrl: "", buttonVariant: "primary", buttonColor: "", buttonIconBefore: "", buttonIconAfter: "",
+                taskTitle: "", taskDescription: "", questions: [],
+              })),
+            })),
+          }),
+        })
+        const created = await createRes.json()
+        if (!createRes.ok) { toast.error(created.error || "Ошибка создания"); setParsing(false); return }
+        const id = (created.data ?? created).id
+        toast.success("Документ импортирован")
+        router.push(`/hr/library/create/editor?id=${id}`)
+      } catch {
+        toast.error("Ошибка сети")
+      }
+      setParsing(false)
+      return
+    }
+
     const params = new URLSearchParams({
       length: selectedLength,
       department: department!,
@@ -111,6 +167,21 @@ export default function CreateDemoPage() {
       position: positionName.trim(),
     })
     router.push(`/hr/library/create/editor?${params.toString()}`)
+  }
+
+  const handleFileSelect = (files: FileList | null) => {
+    const file = files?.[0]
+    if (!file) return
+    const ext = file.name.split(".").pop()?.toLowerCase()
+    if (!["docx", "pdf", "txt", "md"].includes(ext || "")) {
+      toast.error("Поддерживаются: DOCX, PDF, TXT, MD")
+      return
+    }
+    if (file.size > 50 * 1024 * 1024) {
+      toast.error("Файл слишком большой (макс 50МБ)")
+      return
+    }
+    setUploadedFile(file)
   }
 
   return (
@@ -134,7 +205,8 @@ export default function CreateDemoPage() {
                 <Input
                   value={positionName}
                   onChange={(e) => setPositionName(e.target.value)}
-                  placeholder="Например: Менеджер по продажам, Оператор колл-центра"
+                  maxLength={100}
+                  placeholder="Например: Менеджер по продажам"
                   className="h-10 bg-[var(--input-bg)]"
                 />
               </div>
@@ -231,6 +303,42 @@ export default function CreateDemoPage() {
                     )
                   })}
                 </div>
+
+                {/* File upload zone for "Из документа" */}
+                {selectedTemplate === "document" && (
+                  <div className="mt-3">
+                    {uploadedFile ? (
+                      <div className="flex items-center gap-3 p-3 rounded-lg border border-border bg-muted/30">
+                        <FileText className="w-6 h-6 text-primary shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{uploadedFile.name}</p>
+                          <p className="text-xs text-muted-foreground">{(uploadedFile.size / 1024).toFixed(0)} КБ</p>
+                        </div>
+                        <button onClick={() => setUploadedFile(null)} className="text-muted-foreground hover:text-destructive transition-colors">
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div
+                        onDragOver={(e) => e.preventDefault()}
+                        onDrop={(e) => { e.preventDefault(); handleFileSelect(e.dataTransfer.files) }}
+                        onClick={() => fileInputRef.current?.click()}
+                        className="border-2 border-dashed border-border rounded-xl p-8 text-center cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-colors"
+                      >
+                        <Upload className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+                        <p className="text-sm font-medium">Перетащите файл или нажмите для выбора</p>
+                        <p className="text-xs text-muted-foreground mt-1">DOCX, PDF, TXT, MD · Макс 50 МБ</p>
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept=".docx,.pdf,.txt,.md"
+                          className="hidden"
+                          onChange={(e) => handleFileSelect(e.target.files)}
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* ═══ 7. Название демонстрации ═══ */}
@@ -239,21 +347,22 @@ export default function CreateDemoPage() {
                 <Input
                   value={demoName}
                   onChange={(e) => setDemoName(e.target.value)}
-                  placeholder={positionName ? `Демонстрация: ${positionName} — {{компания}}` : "Демонстрация: Менеджер по продажам — {{компания}}"}
+                  maxLength={76}
+                  placeholder={positionName ? `Демонстрация: ${positionName}` : "Демонстрация: Менеджер по продажам"}
                   className="h-10 bg-[var(--input-bg)]"
                 />
-                <p className="text-xs text-muted-foreground mt-1">Можно оставить пустым — заполнится автоматически</p>
+                <p className="text-xs text-muted-foreground mt-1">Максимум 76 символов</p>
               </div>
 
               {/* ═══ Create button ═══ */}
               <div className="flex justify-end pt-2 pb-4">
                 <Button
                   onClick={handleCreate}
-                  disabled={!canCreate}
+                  disabled={!canCreate || parsing}
                   className="h-10 px-6 gap-2"
                 >
-                  Создать демонстрацию
-                  <ArrowRight className="w-4 h-4" />
+                  {parsing ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
+                  {parsing ? "Импорт документа..." : "Создать демонстрацию"}
                 </Button>
               </div>
 

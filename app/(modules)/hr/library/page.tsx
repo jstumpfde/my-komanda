@@ -2,10 +2,8 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
-import { Plus, Eye, BookOpen, Pencil, Trash2, Loader2 } from "lucide-react"
+import { Plus, Eye, BookOpen, Pencil, Trash2, Loader2, LayoutGrid, List } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { Card, CardContent } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
@@ -17,7 +15,7 @@ import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { LENGTH_LABELS, NICHE_LABELS } from "@/lib/demo-types"
 import { toast } from "sonner"
 
-interface TemplateRow {
+interface TemplateData {
   id: string
   name: string
   niche: string
@@ -30,7 +28,8 @@ interface TemplateRow {
 
 export default function LibraryPage() {
   const [activeTab, setActiveTab] = useState("my")
-  const [templates, setTemplates] = useState<TemplateRow[]>([])
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
+  const [templates, setTemplates] = useState<TemplateData[]>([])
   const [loading, setLoading] = useState(true)
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
@@ -100,10 +99,20 @@ export default function LibraryPage() {
             </div>
           ) : (
             <Tabs value={activeTab} onValueChange={setActiveTab}>
-              <TabsList className="mb-4">
-                <TabsTrigger value="my">Мои шаблоны ({myTemplates.length})</TabsTrigger>
-                <TabsTrigger value="system">Системные ({systemTemplates.length})</TabsTrigger>
-              </TabsList>
+              <div className="flex items-center justify-between mb-4">
+                <TabsList>
+                  <TabsTrigger value="my">Мои шаблоны ({myTemplates.length})</TabsTrigger>
+                  <TabsTrigger value="system">Системные ({systemTemplates.length})</TabsTrigger>
+                </TabsList>
+                <div className="flex items-center gap-1 border border-border rounded-lg p-0.5">
+                  <button onClick={() => setViewMode("grid")} className={cn("p-1.5 rounded-md transition-colors", viewMode === "grid" ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground")}>
+                    <LayoutGrid className="w-4 h-4" />
+                  </button>
+                  <button onClick={() => setViewMode("list")} className={cn("p-1.5 rounded-md transition-colors", viewMode === "list" ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground")}>
+                    <List className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
 
               <TabsContent value="my">
                 {myTemplates.length === 0 ? (
@@ -119,24 +128,28 @@ export default function LibraryPage() {
                       </Link>
                     </Button>
                   </div>
-                ) : (
+                ) : viewMode === "grid" ? (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     {myTemplates.map((template) => (
                       <TemplateCard key={template.id} template={template} onDelete={() => setDeleteId(template.id)} />
                     ))}
                   </div>
+                ) : (
+                  <TemplateTable templates={myTemplates} onDelete={(id) => setDeleteId(id)} />
                 )}
               </TabsContent>
 
               <TabsContent value="system">
                 {systemTemplates.length === 0 ? (
                   <p className="text-sm text-muted-foreground text-center py-12">Системные шаблоны пока недоступны</p>
-                ) : (
+                ) : viewMode === "grid" ? (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     {systemTemplates.map((template) => (
                       <TemplateCard key={template.id} template={template} />
                     ))}
                   </div>
+                ) : (
+                  <TemplateTable templates={systemTemplates} />
                 )}
               </TabsContent>
             </Tabs>
@@ -162,41 +175,120 @@ export default function LibraryPage() {
   )
 }
 
-function TemplateCard({ template, onDelete }: { template: TemplateRow; onDelete?: () => void }) {
+function TemplateCard({ template, onDelete }: { template: TemplateData; onDelete?: () => void }) {
   const nicheInfo = NICHE_LABELS[template.niche]
   const lengthInfo = LENGTH_LABELS[template.length]
   const lessonsCount = Array.isArray(template.sections) ? template.sections.length : 0
   const updatedAt = template.updatedAt ? new Date(template.updatedAt).toLocaleDateString("ru-RU") : ""
+  const firstEmoji = Array.isArray(template.sections) && template.sections.length > 0
+    ? (template.sections[0] as { emoji?: string })?.emoji || "📄"
+    : "📄"
 
   return (
-    <Card className="rounded-xl shadow-sm hover:shadow-md transition-shadow">
-      <CardContent className="p-5">
-        <p className="text-sm font-semibold mb-2">{template.name}</p>
-
-        <div className="flex flex-wrap gap-1.5 mb-2">
-          {template.isSystem && <Badge variant="secondary" className="text-xs">Системный</Badge>}
-          {nicheInfo && <Badge className="text-xs bg-blue-100 text-blue-700 hover:bg-blue-100">{nicheInfo.label}</Badge>}
-          {lengthInfo && <Badge variant="outline" className="text-xs">{lengthInfo.label}</Badge>}
+    <Link href={`/hr/library/create/editor?id=${template.id}`}>
+      <div className="rounded-xl border border-border p-5 hover:shadow-md hover:border-primary/30 transition-all cursor-pointer group bg-card">
+        {/* Row 1: Emoji + Title */}
+        <div className="flex items-center gap-3 mb-3">
+          <span className="text-2xl shrink-0">{firstEmoji}</span>
+          <p className="text-base font-medium text-foreground group-hover:text-primary transition-colors truncate">{template.name}</p>
         </div>
 
-        <p className="text-xs text-muted-foreground mb-3">
-          {lessonsCount} {lessonsCount === 1 ? "урок" : lessonsCount < 5 ? "урока" : "уроков"}
-          {updatedAt && <span className="ml-2">{updatedAt}</span>}
-        </p>
+        {/* Row 2: Pill badges */}
+        <div className="flex flex-wrap gap-1.5 mb-3">
+          {nicheInfo && (
+            <span className="inline-flex items-center rounded-full bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400 px-2.5 py-0.5 text-xs font-medium">{nicheInfo.label}</span>
+          )}
+          {lengthInfo && (
+            <span className="inline-flex items-center rounded-full bg-purple-100 text-purple-700 dark:bg-purple-950/40 dark:text-purple-400 px-2.5 py-0.5 text-xs font-medium">{lengthInfo.label}</span>
+          )}
+          <span className="inline-flex items-center rounded-full bg-muted text-muted-foreground px-2.5 py-0.5 text-xs font-medium">
+            {lessonsCount} {lessonsCount === 1 ? "урок" : lessonsCount < 5 ? "урока" : "уроков"}
+          </span>
+          {template.isSystem && (
+            <span className="inline-flex items-center rounded-full bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 px-2.5 py-0.5 text-xs font-medium">Системный</span>
+          )}
+        </div>
 
+        {/* Row 3: Date */}
+        {updatedAt && (
+          <p className="text-xs text-muted-foreground mb-4">Обновлено {updatedAt}</p>
+        )}
+
+        {/* Row 4: Actions */}
         <div className="flex items-center gap-2">
-          <Button size="sm" asChild>
-            <Link href={`/hr/library/create/editor?id=${template.id}`}>
-              <Pencil className="h-3.5 w-3.5 mr-1" />Редактировать
+          <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 flex-1">
+            <Pencil className="h-3 w-3" />Редактировать
+          </Button>
+          <Button size="sm" variant="outline" className="h-8 w-8 p-0" asChild onClick={(e) => e.stopPropagation()}>
+            <Link href={`/hr/library/preview/${template.id}`} target="_blank">
+              <Eye className="h-3.5 w-3.5" />
             </Link>
           </Button>
           {!template.isSystem && onDelete && (
-            <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-destructive" onClick={onDelete}>
+            <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive" onClick={(e) => { e.preventDefault(); e.stopPropagation(); onDelete() }}>
               <Trash2 className="h-3.5 w-3.5" />
             </Button>
           )}
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </Link>
+  )
+}
+
+function TemplateTable({ templates, onDelete }: { templates: TemplateData[]; onDelete?: (id: string) => void }) {
+  return (
+    <div className="rounded-xl border border-border overflow-hidden bg-card">
+      <table className="w-full">
+        <thead className="bg-muted/50 border-b border-border">
+          <tr>
+            <th className="text-left uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-3">Название</th>
+            <th className="text-left uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-3">Формат</th>
+            <th className="text-center uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-3">Уроков</th>
+            <th className="text-left uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-3">Обновлено</th>
+            <th className="text-right uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-3">Действия</th>
+          </tr>
+        </thead>
+        <tbody>
+          {templates.map((template) => {
+            const lengthInfo = LENGTH_LABELS[template.length]
+            const lessonsCount = Array.isArray(template.sections) ? template.sections.length : 0
+            const updatedAt = template.updatedAt ? new Date(template.updatedAt).toLocaleDateString("ru-RU") : ""
+            const firstEmoji = Array.isArray(template.sections) && template.sections.length > 0
+              ? (template.sections[0] as { emoji?: string })?.emoji || "📄"
+              : "📄"
+            return (
+              <tr key={template.id} className="border-b border-border/50 hover:bg-muted/50 transition-colors group">
+                <td className="px-4 py-3">
+                  <Link href={`/hr/library/create/editor?id=${template.id}`} className="flex items-center gap-2 min-w-0">
+                    <span className="text-lg shrink-0">{firstEmoji}</span>
+                    <span className="text-sm font-medium text-foreground group-hover:text-primary transition-colors truncate max-w-sm">{template.name}</span>
+                  </Link>
+                </td>
+                <td className="px-4 py-3">
+                  {lengthInfo && <span className="inline-flex items-center rounded-full bg-purple-100 text-purple-700 dark:bg-purple-950/40 dark:text-purple-400 px-2 py-0.5 text-[10px] font-medium">{lengthInfo.label}</span>}
+                </td>
+                <td className="px-4 py-3 text-center text-sm text-muted-foreground">{lessonsCount}</td>
+                <td className="px-4 py-3 text-sm text-muted-foreground whitespace-nowrap">{updatedAt}</td>
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-1 justify-end">
+                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0" asChild>
+                      <Link href={`/hr/library/create/editor?id=${template.id}`}><Pencil className="h-3.5 w-3.5" /></Link>
+                    </Button>
+                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0" asChild>
+                      <Link href={`/hr/library/preview/${template.id}`} target="_blank"><Eye className="h-3.5 w-3.5" /></Link>
+                    </Button>
+                    {!template.isSystem && onDelete && (
+                      <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive" onClick={() => onDelete(template.id)}>
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
   )
 }

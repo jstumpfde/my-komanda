@@ -40,12 +40,13 @@ export async function POST(req: NextRequest) {
     }
 
     if (!body.name?.trim()) return apiError("Название обязательно", 400)
+    const safeName = body.name.trim().substring(0, 76)
 
     const [created] = await db
       .insert(demoTemplates)
       .values({
         tenantId: user.companyId,
-        name: body.name.trim(),
+        name: safeName,
         niche: body.niche || "universal",
         length: body.length || "standard",
         isSystem: false,

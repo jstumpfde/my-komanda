@@ -57,6 +57,7 @@ export interface Block {
   fileCaption: string
   imageSize?: "S" | "M" | "L"
   videoSize?: "S" | "M" | "L"
+  fileAlign?: "left" | "center" | "right"
   infoStyle: "info" | "warning" | "success" | "error"
   infoColor?: string
   infoIcon?: string
