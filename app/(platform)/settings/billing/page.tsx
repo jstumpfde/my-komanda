@@ -195,21 +195,11 @@ export default function BillingPage() {
         toast.error(d.error ?? "Ошибка смены тарифа")
         return
       }
-      const invRes = await fetch("/api/billing/invoices", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ planId: confirmPlan.id }),
-      })
-      const newInvoice = invRes.ok ? await invRes.json() : null
 
-      const [subData, invData] = await Promise.all([
-        fetch("/api/billing/subscription").then(r => r.json()),
-        fetch("/api/billing/invoices").then(r => r.json()),
-      ])
+      const subData = await fetch("/api/billing/subscription").then(r => r.json())
       setSubscription(subData)
-      setInvoices(Array.isArray(invData) ? invData : [])
 
-      toast.success(`Тариф «${confirmPlan.name}» активирован${newInvoice ? `. Счёт ${newInvoice.invoiceNumber} создан` : ""}`)
+      toast.success(`Тариф «${confirmPlan.name}» активирован`)
       setConfirmPlan(null)
     } catch {
       toast.error("Ошибка при смене тарифа")
