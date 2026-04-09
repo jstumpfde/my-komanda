@@ -2481,8 +2481,8 @@ function InlineBetweenBar({ onAdd }: { onAdd: (type: BlockType) => void }) {
 
   return (
     <div
-      className="relative w-full flex items-center group/between my-1"
-      style={{ minHeight: 16 }}
+      className="relative w-full flex items-center group/between my-2"
+      style={{ minHeight: 8 }}
       onMouseEnter={() => setVisible(true)}
       onMouseLeave={() => setVisible(false)}
     >

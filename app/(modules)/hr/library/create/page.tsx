@@ -60,28 +60,18 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 export default function CreateDemoPage() {
   const router = useRouter()
 
-  // 1. Position name
-  const [positionName, setPositionName] = useState("")
-  // 2. Department
-  const [department, setDepartment] = useState<string | null>(null)
-  // 3. Market type
-  const [marketType, setMarketType] = useState<string | null>(null)
-  // 4. Level
-  const [level, setLevel] = useState<string | null>(null)
-  // 5. Format
-  const [selectedLength, setSelectedLength] = useState<DemoLength>("standard")
-  // 6. Template
-  const [selectedTemplate, setSelectedTemplate] = useState("empty")
-  // 7. Demo name
   const [demoName, setDemoName] = useState("")
-  // 8. Document upload
+  const [department, setDepartment] = useState<string | null>(null)
+  const [marketType, setMarketType] = useState<string | null>(null)
+  const [level, setLevel] = useState<string | null>(null)
+  const [selectedLength, setSelectedLength] = useState<DemoLength>("standard")
+  const [selectedTemplate, setSelectedTemplate] = useState("empty")
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
   const [parsing, setParsing] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const lengthKeys = Object.keys(LENGTH_LABELS) as DemoLength[]
 
-  // Filter templates by department + market
   const filteredTemplates = TEMPLATES.filter((t) => {
     if (t.id === "empty" || t.id === "document") return true
     if (t.department && department && t.department !== department) return false
@@ -89,24 +79,11 @@ export default function CreateDemoPage() {
     return true
   })
 
-  // Auto-select matching template
-  useEffect(() => {
-    const match = filteredTemplates.find((t) => t.id !== "empty" && t.id !== "document")
-    setSelectedTemplate(match ? match.id : "empty")
-  }, [department, marketType]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Auto-fill demo name
-  useEffect(() => {
-    if (positionName && !demoName) {
-      setDemoName(`Демонстрация: ${positionName.slice(0, 30)}`)
-    }
-  }, [positionName]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const canCreate = positionName.trim() && department && selectedLength && (selectedTemplate !== "document" || uploadedFile)
+  const canCreate = demoName.trim().length >= 3 && (selectedTemplate !== "document" || uploadedFile)
 
   const handleCreate = async () => {
     if (!canCreate) return
-    const name = demoName.trim() || `Демонстрация: ${positionName}`
+    const name = demoName.trim()
 
     // If document template — parse file first
     if (selectedTemplate === "document" && uploadedFile) {
@@ -118,7 +95,6 @@ export default function CreateDemoPage() {
         const data = await res.json()
         if (!res.ok) { toast.error(data.error || "Ошибка парсинга"); setParsing(false); return }
 
-        // Create template with parsed lessons
         const createRes = await fetch("/api/demo-templates", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -159,12 +135,11 @@ export default function CreateDemoPage() {
 
     const params = new URLSearchParams({
       length: selectedLength,
-      department: department!,
+      ...(department ? { department } : {}),
       ...(marketType ? { market: marketType } : {}),
       ...(level ? { level } : {}),
       template: selectedTemplate,
       name,
-      position: positionName.trim(),
     })
     router.push(`/hr/library/create/editor?${params.toString()}`)
   }
@@ -196,19 +171,20 @@ export default function CreateDemoPage() {
               {/* Header */}
               <div>
                 <h1 className="text-xl font-semibold">Новая демонстрация</h1>
-                <p className="text-sm text-muted-foreground mt-0.5">Заполните параметры — чем точнее, тем лучше подберётся шаблон</p>
+                <p className="text-sm text-muted-foreground mt-0.5">Заполните название и выберите параметры</p>
               </div>
 
-              {/* ═══ 1. Название должности ═══ */}
+              {/* ═══ 1. Название ═══ */}
               <div>
-                <SectionLabel>Должность</SectionLabel>
+                <SectionLabel>Название демонстрации *</SectionLabel>
                 <Input
-                  value={positionName}
-                  onChange={(e) => setPositionName(e.target.value)}
-                  maxLength={100}
-                  placeholder="Например: Менеджер по продажам"
+                  value={demoName}
+                  onChange={(e) => setDemoName(e.target.value)}
+                  maxLength={76}
+                  placeholder="Например: Менеджер по продажам B2B — Компания"
                   className="h-10 bg-[var(--input-bg)]"
                 />
+                <p className="text-xs text-muted-foreground mt-1">Обязательное поле, минимум 3 символа</p>
               </div>
 
               {/* ═══ 2. Отдел ═══ */}
@@ -339,19 +315,6 @@ export default function CreateDemoPage() {
                     )}
                   </div>
                 )}
-              </div>
-
-              {/* ═══ 7. Название демонстрации ═══ */}
-              <div>
-                <SectionLabel>Название</SectionLabel>
-                <Input
-                  value={demoName}
-                  onChange={(e) => setDemoName(e.target.value)}
-                  maxLength={76}
-                  placeholder={positionName ? `Демонстрация: ${positionName}` : "Демонстрация: Менеджер по продажам"}
-                  className="h-10 bg-[var(--input-bg)]"
-                />
-                <p className="text-xs text-muted-foreground mt-1">Максимум 76 символов</p>
               </div>
 
               {/* ═══ Create button ═══ */}
