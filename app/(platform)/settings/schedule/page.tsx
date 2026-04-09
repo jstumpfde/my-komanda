@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -13,8 +13,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import {
-  Globe, Clock, Coffee, CalendarOff, Palmtree, Save, Plus, Trash2, Copy, ChevronDown, Users, Settings,
+  Globe, Clock, Coffee, CalendarOff, Palmtree, Save, Plus, Trash2, Copy, ChevronDown, Users, Settings, Loader2,
 } from "lucide-react"
+import { type CountryCode, COUNTRY_LABELS, getHolidaysForCountry } from "@/lib/holidays"
 
 // ─── Data ───────────────────────────────────────────────────────────────────
 
@@ -43,6 +44,9 @@ const TIMEZONES = [
   { value: "Asia/Vladivostok", label: "Владивосток (UTC+10)" },
   { value: "Asia/Magadan", label: "Магадан (UTC+11)" },
   { value: "Asia/Kamchatka", label: "Камчатка (UTC+12)" },
+  { value: "Asia/Almaty", label: "Алматы (UTC+6)" },
+  { value: "Asia/Tashkent", label: "Ташкент (UTC+5)" },
+  { value: "Europe/Minsk", label: "Минск (UTC+3)" },
 ]
 
 interface DaySchedule { enabled: boolean; from: string; to: string }
@@ -57,18 +61,7 @@ const DEFAULT_SCHEDULE: DaySchedule[] = [
   { enabled: false, from: "10:00", to: "15:00" },
 ]
 
-interface Holiday { id: string; date: string; name: string }
-
-const RU_HOLIDAYS: Holiday[] = [
-  { id: "h1", date: "01.01", name: "Новый год" },
-  { id: "h2", date: "07.01", name: "Рождество" },
-  { id: "h3", date: "23.02", name: "День защитника Отечества" },
-  { id: "h4", date: "08.03", name: "Международный женский день" },
-  { id: "h5", date: "01.05", name: "Праздник Весны и Труда" },
-  { id: "h6", date: "09.05", name: "День Победы" },
-  { id: "h7", date: "12.06", name: "День России" },
-  { id: "h8", date: "04.11", name: "День народного единства" },
-]
+interface Holiday { id: string; date: string; name: string; isCustom?: boolean }
 
 type AbsenceType = "vacation" | "sick" | "dayoff" | "remote" | "business_trip"
 type AbsenceStatus = "planned" | "approved" | "pending" | "rejected"
@@ -123,7 +116,6 @@ function formatIndividualSchedule(days: Record<string, { active: boolean; start:
   return parts.join(", ")
 }
 
-// Mock data: employees with individual schedules (loaded from team members with customSchedule)
 const MOCK_INDIVIDUAL_SCHEDULES: IndividualSchedule[] = [
   {
     employeeId: "m1", employeeName: "Анна Иванова",
@@ -160,18 +152,30 @@ function scheduleSummary(schedule: DaySchedule[]): string {
   return parts.join(", ")
 }
 
+function buildHolidays(country: CountryCode, customHolidays: Holiday[]): Holiday[] {
+  const base = getHolidaysForCountry(country).map((h, i) => ({
+    id: `country-${i}`,
+    date: h.date,
+    name: h.name,
+    isCustom: false,
+  }))
+  return [...base, ...customHolidays]
+}
+
 // ─── Page ───────────────────────────────────────────────────────────────────
 
 export default function CompanySchedulePage() {
   // Schedule
   const [schedule, setSchedule] = useState<DaySchedule[]>(DEFAULT_SCHEDULE)
   const [timezone, setTimezone] = useState("Europe/Moscow")
+  const [country, setCountry] = useState<CountryCode>("RU")
   // Lunch
   const [lunchEnabled, setLunchEnabled] = useState(true)
   const [lunchFrom, setLunchFrom] = useState("13:00")
   const [lunchTo, setLunchTo] = useState("14:00")
   // Holidays
-  const [holidays, setHolidays] = useState<Holiday[]>(RU_HOLIDAYS)
+  const [customHolidays, setCustomHolidays] = useState<Holiday[]>([])
+  const holidays = buildHolidays(country, customHolidays)
   const [newHolidayDate, setNewHolidayDate] = useState("")
   const [newHolidayName, setNewHolidayName] = useState("")
   // Absences
@@ -179,7 +183,34 @@ export default function CompanySchedulePage() {
   const [absenceDialogOpen, setAbsenceDialogOpen] = useState(false)
   const [absForm, setAbsForm] = useState({ employee: "", type: "vacation" as AbsenceType, dateFrom: "", dateTo: "", comment: "" })
   // Individual schedules
-  const [individualSchedules] = useState<IndividualSchedule[]>(MOCK_INDIVIDUAL_SCHEDULES)
+  const [individualSchedules, setIndividualSchedules] = useState<IndividualSchedule[]>(MOCK_INDIVIDUAL_SCHEDULES)
+  const [editingEmployeeId, setEditingEmployeeId] = useState<string | null>(null)
+  const [editingDays, setEditingDays] = useState<Record<string, { active: boolean; start: string; end: string }>>({})
+  const [savingSchedule, setSavingSchedule] = useState(false)
+
+  const startEditSchedule = (emp: IndividualSchedule) => {
+    setEditingEmployeeId(emp.employeeId)
+    setEditingDays({ ...emp.days })
+  }
+
+  const saveIndividualSchedule = async () => {
+    if (!editingEmployeeId) return
+    setSavingSchedule(true)
+    try {
+      await fetch(`/api/team/${editingEmployeeId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ custom_schedule: { enabled: true, days: editingDays } }),
+      })
+      setIndividualSchedules(prev => prev.map(e =>
+        e.employeeId === editingEmployeeId ? { ...e, days: editingDays } : e
+      ))
+      setEditingEmployeeId(null)
+      toast.success("Индивидуальный график сохранён")
+    } catch { toast.error("Ошибка сохранения") }
+    finally { setSavingSchedule(false) }
+  }
+
   // Accordion state
   const [expanded, setExpanded] = useState<Set<string>>(new Set(["schedule"]))
 
@@ -202,9 +233,13 @@ export default function CompanySchedulePage() {
 
   const addHoliday = () => {
     if (!newHolidayDate || !newHolidayName.trim()) return
-    setHolidays((prev) => [...prev, { id: `h-${Date.now()}`, date: newHolidayDate, name: newHolidayName.trim() }])
+    setCustomHolidays((prev) => [...prev, { id: `h-${Date.now()}`, date: newHolidayDate, name: newHolidayName.trim(), isCustom: true }])
     setNewHolidayDate("")
     setNewHolidayName("")
+  }
+
+  const removeHoliday = (id: string) => {
+    setCustomHolidays((prev) => prev.filter((x) => x.id !== id))
   }
 
   const addAbsence = () => {
@@ -216,7 +251,7 @@ export default function CompanySchedulePage() {
   }
 
   const lunchSummary = lunchEnabled ? `${lunchFrom}–${lunchTo}` : "Выключен"
-  const holidaySummary = `${holidays.length} ${holidays.length === 1 ? "праздник" : holidays.length < 5 ? "праздника" : "праздников"}`
+  const holidaySummary = `${holidays.length} ${holidays.length === 1 ? "праздник" : holidays.length < 5 ? "праздника" : "праздников"} (${COUNTRY_LABELS[country]})`
   const absenceSummary = absences.length === 0 ? "Нет запланированных" : `${absences.length} запланировано`
   const individualSummary = individualSchedules.length === 0
     ? "Все по графику компании"
@@ -224,21 +259,31 @@ export default function CompanySchedulePage() {
 
   return (
     <>
-      <div className="flex items-center justify-between mb-5">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-5">
         <div>
           <h1 className="text-xl font-semibold text-foreground mb-0.5">Расписание компании</h1>
           <p className="text-sm text-muted-foreground">График работы, перерывы, выходные и отпуска</p>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <Globe className="size-4 text-muted-foreground" />
-          <Select value={timezone} onValueChange={setTimezone}>
-            <SelectTrigger className="w-64 h-9 text-sm bg-[var(--input-bg)]"><SelectValue /></SelectTrigger>
-            <SelectContent>{TIMEZONES.map((tz) => <SelectItem key={tz.value} value={tz.value}>{tz.label}</SelectItem>)}</SelectContent>
+        <div className="flex items-center gap-3 shrink-0">
+          <Select value={country} onValueChange={(v) => setCountry(v as CountryCode)}>
+            <SelectTrigger className="w-44 h-9 text-sm bg-[var(--input-bg)]"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {(Object.entries(COUNTRY_LABELS) as [CountryCode, string][]).map(([code, label]) => (
+                <SelectItem key={code} value={code}>{label}</SelectItem>
+              ))}
+            </SelectContent>
           </Select>
+          <div className="flex items-center gap-2">
+            <Globe className="size-4 text-muted-foreground" />
+            <Select value={timezone} onValueChange={setTimezone}>
+              <SelectTrigger className="w-64 h-9 text-sm bg-[var(--input-bg)]"><SelectValue /></SelectTrigger>
+              <SelectContent>{TIMEZONES.map((tz) => <SelectItem key={tz.value} value={tz.value}>{tz.label}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
         </div>
       </div>
 
-      <div className="space-y-3 max-w-3xl">
+      <div className="space-y-3">
 
         {/* ═══ Аккордеон 1: Рабочие дни ═══ */}
         <Card className="overflow-hidden">
@@ -362,11 +407,22 @@ export default function CompanySchedulePage() {
                   idx % 2 === 0 ? "bg-background" : "bg-muted/10",
                 )}>
                   <span className="text-sm font-mono text-muted-foreground">{h.date}</span>
-                  <span className="text-sm">{h.name}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm">{h.name}</span>
+                    {!h.isCustom && (
+                      <Badge variant="outline" className="text-[9px] px-1.5 py-0 text-muted-foreground">
+                        {COUNTRY_LABELS[country]}
+                      </Badge>
+                    )}
+                  </div>
                   <div className="flex justify-center">
-                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setHolidays((prev) => prev.filter((x) => x.id !== h.id))}>
-                      <Trash2 className="size-3 text-muted-foreground" />
-                    </Button>
+                    {h.isCustom ? (
+                      <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => removeHoliday(h.id)}>
+                        <Trash2 className="size-3 text-muted-foreground" />
+                      </Button>
+                    ) : (
+                      <span />
+                    )}
                   </div>
                 </div>
               ))}
@@ -475,26 +531,65 @@ export default function CompanySchedulePage() {
                     <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">График</span>
                     <span />
                   </div>
-                  {individualSchedules.map((emp, idx) => (
-                    <div key={emp.employeeId} className={cn(
-                      "grid grid-cols-[1fr_2fr_40px] items-center px-4 py-1.5 border-b last:border-b-0",
-                      idx % 2 === 0 ? "bg-background" : "bg-muted/10",
-                    )}>
-                      <span className="text-sm font-medium truncate">{emp.employeeName}</span>
-                      <span className="text-xs text-muted-foreground truncate">{formatIndividualSchedule(emp.days)}</span>
-                      <div className="flex justify-center">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6"
-                          title="Настроить график"
-                          onClick={() => toast.success(`Откройте настройки ${emp.employeeName} в разделе Команда`)}
-                        >
-                          <Settings className="size-3 text-muted-foreground" />
-                        </Button>
+                  {individualSchedules.map((emp, idx) => {
+                    const isEditing = editingEmployeeId === emp.employeeId
+                    return (
+                      <div key={emp.employeeId} className="border-b last:border-b-0">
+                        <div className={cn(
+                          "grid grid-cols-[1fr_2fr_40px] items-center px-4 py-1.5",
+                          idx % 2 === 0 ? "bg-background" : "bg-muted/10",
+                        )}>
+                          <span className="text-sm font-medium truncate">{emp.employeeName}</span>
+                          <span className="text-xs text-muted-foreground truncate">{formatIndividualSchedule(emp.days)}</span>
+                          <div className="flex justify-center">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6"
+                              title="Настроить график"
+                              onClick={() => isEditing ? setEditingEmployeeId(null) : startEditSchedule(emp)}
+                            >
+                              <Settings className={cn("size-3", isEditing ? "text-primary" : "text-muted-foreground")} />
+                            </Button>
+                          </div>
+                        </div>
+                        {isEditing && (
+                          <div className="px-4 py-2 bg-muted/5 border-t space-y-1">
+                            {WEEKDAY_IDS.map((dayId, di) => {
+                              const d = editingDays[dayId] ?? { active: false, start: "09:00", end: "18:00" }
+                              return (
+                                <div key={dayId} className={cn("grid grid-cols-[32px_40px_1fr] items-center py-1", di % 2 !== 0 && "bg-muted/10 -mx-4 px-4")}>
+                                  <Switch checked={d.active} onCheckedChange={v => setEditingDays(prev => ({ ...prev, [dayId]: { ...d, active: v } }))} className="scale-75" />
+                                  <span className={cn("text-xs font-medium", !d.active && "text-muted-foreground")}>{WEEKDAY_SHORT[dayId]}</span>
+                                  {d.active ? (
+                                    <div className="flex items-center gap-1.5">
+                                      <Select value={d.start} onValueChange={v => setEditingDays(prev => ({ ...prev, [dayId]: { ...d, start: v } }))}>
+                                        <SelectTrigger className="w-20 h-7 text-xs bg-[var(--input-bg)]"><SelectValue /></SelectTrigger>
+                                        <SelectContent>{HALF_HOURS.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}</SelectContent>
+                                      </Select>
+                                      <span className="text-muted-foreground text-[10px]">—</span>
+                                      <Select value={d.end} onValueChange={v => setEditingDays(prev => ({ ...prev, [dayId]: { ...d, end: v } }))}>
+                                        <SelectTrigger className="w-20 h-7 text-xs bg-[var(--input-bg)]"><SelectValue /></SelectTrigger>
+                                        <SelectContent>{HALF_HOURS.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}</SelectContent>
+                                      </Select>
+                                    </div>
+                                  ) : (
+                                    <span className="text-xs text-muted-foreground">Выходной</span>
+                                  )}
+                                </div>
+                              )
+                            })}
+                            <div className="flex justify-end gap-2 pt-1">
+                              <Button variant="ghost" size="sm" className="text-xs h-7" onClick={() => setEditingEmployeeId(null)}>Отмена</Button>
+                              <Button size="sm" className="text-xs h-7 gap-1" onClick={saveIndividualSchedule} disabled={savingSchedule}>
+                                {savingSchedule ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}Сохранить
+                              </Button>
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </>
               )}
             </CardContent>

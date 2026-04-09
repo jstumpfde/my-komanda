@@ -107,6 +107,8 @@ export const companies = pgTable("companies", {
   brandBgColor:       text("brand_bg_color").default("#f0f4ff"),
   brandTextColor:     text("brand_text_color").default("#1e293b"),
   customTheme:        jsonb("custom_theme"),       // { primary, background, foreground, sidebar, accent }
+  brandName:          text("brand_name"),
+  brandSlogan:        text("brand_slogan"),
   subdomain:          text("subdomain").unique(),
   // join link
   joinCode:           text("join_code").unique(),
@@ -879,18 +881,23 @@ export const smsCodes = pgTable("sms_codes", {
 
 export const invoices = pgTable("invoices", {
   id:            uuid("id").primaryKey().defaultRandom(),
-  companyId:     uuid("company_id").references(() => companies.id).notNull(),
-  number:        text("number").notNull().unique(),
+  companyId:     uuid("company_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
   planId:        uuid("plan_id").references(() => plans.id),
+  invoiceNumber: text("invoice_number").notNull().unique(),
   amountKopecks: bigint("amount_kopecks", { mode: "number" }).notNull(),
-  status:        text("status").default("draft"), // 'draft'|'issued'|'paid'|'cancelled'
+  periodStart:   timestamp("period_start", { mode: "date" }),
+  periodEnd:     timestamp("period_end", { mode: "date" }),
+  status:        text("status").default("pending").notNull(), // 'pending'|'issued'|'paid'|'cancelled'
+  buyerName:     text("buyer_name"),
+  buyerInn:      text("buyer_inn"),
+  buyerKpp:      text("buyer_kpp"),
   issuedAt:      timestamp("issued_at", { withTimezone: true }),
   paidAt:        timestamp("paid_at", { withTimezone: true }),
   dueDate:       timestamp("due_date", { withTimezone: true }),
   paymentMethod: text("payment_method"),
-  pdfUrl:        text("pdf_url"),
+  pdfPath:       text("pdf_path"),
   notes:         text("notes"),
-  createdAt:     timestamp("created_at").defaultNow(),
+  createdAt:     timestamp("created_at", { withTimezone: true }).defaultNow(),
 })
 
 export const subscriptionHistory = pgTable("subscription_history", {
@@ -1018,6 +1025,8 @@ export const accessRequests = pgTable("access_requests", {
   companyName: text("company_name"),
   comment:     text("comment"),
   status:      text("status").default("new"),   // new | contacted | approved | rejected
+  requestType: text("request_type").default("access"), // access | demo | tariff_change | ...
+  newValue:    text("new_value"),
   createdAt:   timestamp("created_at").defaultNow(),
 })
 

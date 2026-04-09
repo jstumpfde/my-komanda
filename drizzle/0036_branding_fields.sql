@@ -1,0 +1,2 @@
+ALTER TABLE companies ADD COLUMN IF NOT EXISTS brand_name TEXT;
+ALTER TABLE companies ADD COLUMN IF NOT EXISTS brand_slogan TEXT;

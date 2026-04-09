@@ -1,6 +1,9 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
+import { DashboardSidebar } from "@/components/dashboard/sidebar"
+import { DashboardHeader } from "@/components/dashboard/header"
+import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -159,6 +162,11 @@ export default function IntegrationsPage() {
   }
 
   return (
+    <SidebarProvider defaultOpen={true}>
+      <DashboardSidebar />
+      <SidebarInset>
+        <DashboardHeader />
+        <div className="flex-1 overflow-auto bg-background min-w-0">
     <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
       <div className="mb-6">
         <h1 className="text-xl font-semibold text-foreground mb-1">Интеграции</h1>
@@ -423,5 +431,8 @@ export default function IntegrationsPage() {
 
       </div>
     </div>
+        </div>
+      </SidebarInset>
+    </SidebarProvider>
   )
 }

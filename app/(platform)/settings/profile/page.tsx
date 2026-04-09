@@ -11,6 +11,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Separator } from "@/components/ui/separator"
 import { toast } from "sonner"
 import { Loader2, User, Mail, Lock, Shield, Save, Eye, EyeOff, Camera, Trash2 } from "lucide-react"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Textarea } from "@/components/ui/textarea"
 
 // ─── Helpers ──────────────────────────────────────────────────
 
@@ -176,6 +178,29 @@ export default function ProfileSettingsPage() {
     }
   }
 
+  const [emailChangeOpen, setEmailChangeOpen] = useState(false)
+  const [newEmail, setNewEmail] = useState("")
+  const [emailReason, setEmailReason] = useState("")
+  const [emailSubmitting, setEmailSubmitting] = useState(false)
+
+  const handleEmailChangeRequest = async () => {
+    if (!newEmail.trim()) { toast.error("Введите новый email"); return }
+    setEmailSubmitting(true)
+    try {
+      const res = await fetch("/api/access-requests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ requestType: "email_change", newValue: newEmail.trim(), message: emailReason.trim() || undefined }),
+      })
+      if (!res.ok) throw new Error()
+      toast.success("Запрос отправлен")
+      setEmailChangeOpen(false)
+      setNewEmail("")
+      setEmailReason("")
+    } catch { toast.error("Ошибка отправки запроса") }
+    finally { setEmailSubmitting(false) }
+  }
+
   const displayName = profile?.name ?? session?.user?.name ?? "—"
   const displayEmail = profile?.email ?? session?.user?.email ?? "—"
   const displayRole = profile?.role ?? session?.user?.role ?? "client"
@@ -188,7 +213,7 @@ export default function ProfileSettingsPage() {
 
   return (
         <>
-            <div className="mb-6">
+            <div className="mb-4">
               <h1 className="text-xl font-semibold text-foreground mb-1">Профиль</h1>
               <p className="text-muted-foreground text-sm">Личные данные и настройки безопасности</p>
             </div>
@@ -435,18 +460,41 @@ export default function ProfileSettingsPage() {
                 <CardContent className="px-5 pb-4 pt-0 space-y-2">
                   <div className="space-y-1">
                     <Label className="text-sm">Адрес электронной почты</Label>
-                    <Input
-                      value={displayEmail}
-                      readOnly
-                      className="bg-muted/50 text-muted-foreground cursor-default select-none"
-                    />
-                    <p className="text-[11px] text-muted-foreground">
-                      Email используется для входа. Для изменения обратитесь к администратору.
-                    </p>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        value={displayEmail}
+                        readOnly
+                        className="bg-muted/50 text-muted-foreground cursor-default select-none flex-1"
+                      />
+                      <Button variant="outline" size="sm" className="text-xs shrink-0" onClick={() => setEmailChangeOpen(true)}>
+                        Запросить изменение
+                      </Button>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
             </div>
+
+      {/* ═══ Модалка: запрос смены email ═══ */}
+      <Dialog open={emailChangeOpen} onOpenChange={setEmailChangeOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle>Запрос на изменение email</DialogTitle></DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Новый email *</Label>
+              <Input type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="new@example.com" className="h-9 text-sm bg-[var(--input-bg)]" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Причина (необязательно)</Label>
+              <Textarea value={emailReason} onChange={e => setEmailReason(e.target.value)} rows={2} placeholder="Почему нужно сменить email" className="text-sm bg-[var(--input-bg)]" />
+            </div>
+            <Button onClick={handleEmailChangeRequest} disabled={emailSubmitting || !newEmail.trim()} className="w-full">
+              {emailSubmitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+              Отправить запрос
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }

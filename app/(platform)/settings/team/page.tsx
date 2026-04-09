@@ -18,7 +18,7 @@ import {
   Users, Plus, Settings, Trash2, Save, UserPlus,
   Mail, AlertTriangle, Check,
   CalendarClock, Link2, Copy, X, Clock, RotateCcw,
-  Loader2, ExternalLink, Camera,
+  Loader2, ExternalLink, Camera, KeyRound, Ban, ChevronDown,
 } from "lucide-react"
 import { getVacancyCategories } from "@/lib/vacancy-storage"
 import { useLocalStorage } from "@/hooks/use-local-storage"
@@ -36,42 +36,6 @@ type TeamRole =
 type MemberStatus = "active" | "invited" | "disabled" | "pending"
 type CandidateVisibility = "own" | "all" | "categories"
 
-interface DaySchedule { active: boolean; start: string; end: string }
-interface CustomSchedule { enabled: boolean; days: Record<string, DaySchedule> }
-
-const WEEKDAY_IDS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const
-const WEEKDAY_LABELS: Record<string, string> = { mon: "Пн", tue: "Вт", wed: "Ср", thu: "Чт", fri: "Пт", sat: "Сб", sun: "Вс" }
-const HALF_HOURS = Array.from({ length: 24 }, (_, i) => `${String(i).padStart(2, "0")}:00`).flatMap(h => [h, h.replace(":00", ":30")])
-
-const DEFAULT_COMPANY_SCHEDULE: Record<string, DaySchedule> = {
-  mon: { active: true, start: "09:00", end: "18:00" }, tue: { active: true, start: "09:00", end: "18:00" },
-  wed: { active: true, start: "09:00", end: "18:00" }, thu: { active: true, start: "09:00", end: "18:00" },
-  fri: { active: true, start: "09:00", end: "18:00" }, sat: { active: false, start: "10:00", end: "15:00" },
-  sun: { active: false, start: "10:00", end: "15:00" },
-}
-
-function formatCustomSchedule(days: Record<string, DaySchedule>): string {
-  const enabled = WEEKDAY_IDS.map(id => days[id]?.active ? { day: WEEKDAY_LABELS[id], start: days[id].start, end: days[id].end } : null).filter(Boolean)
-  const disabled = WEEKDAY_IDS.map(id => !days[id]?.active ? WEEKDAY_LABELS[id] : null).filter(Boolean)
-  if (enabled.length === 0) return "Все дни — выходные"
-  const groups: { days: string[]; start: string; end: string }[] = []
-  for (const item of enabled) {
-    if (!item) continue
-    const last = groups[groups.length - 1]
-    if (last && last.start === item.start && last.end === item.end) last.days.push(item.day)
-    else groups.push({ days: [item.day], start: item.start, end: item.end })
-  }
-  const parts = groups.map(g => {
-    const d = g.days.length > 2 ? `${g.days[0]}–${g.days[g.days.length - 1]}` : g.days.join(", ")
-    return `${d} ${g.start}–${g.end}`
-  })
-  if (disabled.length > 0) {
-    const d = disabled.length > 2 ? `${disabled[0]}–${disabled[disabled.length - 1]}` : disabled.join(", ")
-    parts.push(`${d} выходной`)
-  }
-  return parts.join(", ")
-}
-
 interface TeamMember {
   id: string
   name: string
@@ -85,7 +49,6 @@ interface TeamMember {
   candidateVisibility: CandidateVisibility
   substituteId?: string
   permissions?: Record<string, boolean>
-  customSchedule?: CustomSchedule | null
 }
 
 interface InviteLink {
@@ -136,45 +99,45 @@ const ROLE_CONFIG: Record<TeamRole, { label: string; description: string; color:
   },
 }
 
+const PERMISSIONS_CONFIG = [
+  { key: "manage_company", label: "Настройки компании" },
+  { key: "manage_team", label: "Управление командой" },
+  { key: "manage_billing", label: "Управление тарифом" },
+  { key: "create_vacancies", label: "Создание вакансий" },
+  { key: "edit_knowledge", label: "База знаний" },
+  { key: "view_analytics", label: "Аналитика" },
+] as const
+
 // ─── Тестовые данные ────────────────────────────────────────
 
 const INITIAL_MEMBERS: TeamMember[] = [
-  { id: "m1", name: "Анна Иванова",   email: "anna@romashka.ru",    role: "hr_lead",         status: "active",  avatar: "АИ", avatarUrl: undefined, vacancyIds: [], categories: [], candidateVisibility: "all", customSchedule: null },
-  { id: "m2", name: "Дмитрий Козлов", email: "dmitry@romashka.ru",  role: "hr_manager",      status: "active",  avatar: "ДК", avatarUrl: undefined, vacancyIds: [], categories: [], candidateVisibility: "own", customSchedule: null },
-  { id: "m3", name: "Михаил Романов", email: "mikhail@romashka.ru", role: "department_head", status: "active",  avatar: "МР", avatarUrl: undefined, vacancyIds: [], categories: [], candidateVisibility: "categories", customSchedule: null },
-  { id: "m4", name: "Ольга Тихонова", email: "olga@romashka.ru",    role: "observer",        status: "invited", avatar: "ОТ", avatarUrl: undefined, vacancyIds: [], categories: [], candidateVisibility: "all", customSchedule: null },
+  { id: "m1", name: "Анна Иванова",   email: "anna@romashka.ru",    role: "hr_lead",         status: "active",  avatar: "АИ", avatarUrl: undefined, vacancyIds: [], categories: [], candidateVisibility: "all" },
+  { id: "m2", name: "Дмитрий Козлов", email: "dmitry@romashka.ru",  role: "hr_manager",      status: "active",  avatar: "ДК", avatarUrl: undefined, vacancyIds: [], categories: [], candidateVisibility: "own" },
+  { id: "m3", name: "Михаил Романов", email: "mikhail@romashka.ru", role: "department_head", status: "active",  avatar: "МР", avatarUrl: undefined, vacancyIds: [], categories: [], candidateVisibility: "categories" },
+  { id: "m4", name: "Ольга Тихонова", email: "olga@romashka.ru",    role: "observer",        status: "invited", avatar: "ОТ", avatarUrl: undefined, vacancyIds: [], categories: [], candidateVisibility: "all" },
 ]
 
 // ─── Компонент ──────────────────────────────────────────────
 
 export default function TeamPage() {
   const [members, setMembers] = useLocalStorage<TeamMember[]>("team-members", INITIAL_MEMBERS)
-  const [editMember, setEditMember]   = useState<TeamMember | null>(null)
-  const [sheetOpen, setSheetOpen]     = useState(false)
-  const [inviteOpen, setInviteOpen]   = useState(false)
-  const [confirmDelete, setConfirmDelete] = useState(false)
-  const vacancyCategories = getVacancyCategories()
-  const allVacancies = vacancyCategories.flatMap(cat => cat.items)
-  const avatarInputRef = useRef<HTMLInputElement>(null)
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [inviteOpen, setInviteOpen] = useState(false)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+
+  // Inline edit state for expanded row
+  const [editRole, setEditRole] = useState<TeamRole>("hr_manager")
+  const [editPermissions, setEditPermissions] = useState<Record<string, boolean>>({})
 
   // Join link state
   const [joinCode] = useState("demo-abc123")
   const [joinEnabled, setJoinEnabled] = useState(true)
 
-  // Edit permissions state
-  const [editPermissions, setEditPermissions] = useState<Record<string, boolean>>({
-    manage_company: false,
-    manage_team: false,
-    manage_billing: false,
-    create_vacancies: false,
-    edit_knowledge: false,
-    view_analytics: false,
-  })
-
   // Invite by email form
-  const [inviteEmail, setInviteEmail]           = useState("")
-  const [inviteRole, setInviteRole]             = useState<TeamRole>("hr_manager")
+  const [inviteEmail, setInviteEmail] = useState("")
+  const [inviteRole, setInviteRole] = useState<TeamRole>("hr_manager")
   const [inviteVacancyIds, setInviteVacancyIds] = useState<string[]>([])
+  const vacancyCategories = getVacancyCategories()
 
   // ── Invite links state ──────────────────────────────────
   const [linkDialogOpen, setLinkDialogOpen] = useState(false)
@@ -241,10 +204,15 @@ export default function TeamPage() {
     toast.success("Ссылка скопирована в буфер обмена")
   }
 
-  // ── Member CRUD ──────────────────────────────────────────
+  // ── Expand row ──────────────────────────────────────────
 
-  const openEdit = (member: TeamMember) => {
-    setEditMember({ ...member })
+  const toggleExpand = (member: TeamMember) => {
+    if (expandedId === member.id) {
+      setExpandedId(null)
+      return
+    }
+    setExpandedId(member.id)
+    setEditRole(member.role)
     setEditPermissions({
       manage_company: false,
       manage_team: false,
@@ -254,24 +222,39 @@ export default function TeamPage() {
       view_analytics: false,
       ...(member.permissions ?? {}),
     })
-    setSheetOpen(true)
-    setConfirmDelete(false)
+    setConfirmDeleteId(null)
   }
 
-  const handleSaveMember = () => {
-    if (!editMember) return
-    const updated = { ...editMember, permissions: editPermissions }
-    setMembers(prev => prev.map(m => m.id === updated.id ? updated : m))
-    setSheetOpen(false)
-    toast.success(`Настройки ${editMember.name} сохранены`)
+  const handleSaveInline = (memberId: string) => {
+    setMembers(prev => prev.map(m =>
+      m.id === memberId ? { ...m, role: editRole, permissions: editPermissions } : m
+    ))
+    setExpandedId(null)
+    toast.success("Настройки сохранены")
   }
 
-  const handleDeleteMember = () => {
-    if (!editMember) return
-    setMembers(prev => prev.filter(m => m.id !== editMember.id))
-    setSheetOpen(false)
-    toast.error(`${editMember.name} удален из команды`)
+  const handleDeleteMember = (memberId: string) => {
+    const member = members.find(m => m.id === memberId)
+    setMembers(prev => prev.filter(m => m.id !== memberId))
+    setExpandedId(null)
+    toast.error(`${member?.name ?? "Участник"} удалён из команды`)
   }
+
+  const handleBlockMember = (memberId: string) => {
+    setMembers(prev => prev.map(m =>
+      m.id === memberId ? { ...m, status: m.status === "disabled" ? "active" : "disabled" as MemberStatus } : m
+    ))
+    const member = members.find(m => m.id === memberId)
+    const wasDisabled = member?.status === "disabled"
+    toast.success(wasDisabled ? `${member?.name} разблокирован` : `${member?.name} заблокирован`)
+  }
+
+  const handleResetPassword = (memberId: string) => {
+    const member = members.find(m => m.id === memberId)
+    toast.success(`Ссылка для сброса пароля отправлена на ${member?.email}`)
+  }
+
+  // ── Invite ──────────────────────────────────────────────
 
   const handleInvite = () => {
     if (!inviteEmail) { toast.error("Введите email"); return }
@@ -295,87 +278,17 @@ export default function TeamPage() {
     toast.success(`Приглашение отправлено на ${inviteEmail}`)
   }
 
-  const updateEdit = (patch: Partial<TeamMember>) =>
-    setEditMember(prev => prev ? { ...prev, ...patch } : null)
-
-  const toggleEditVacancy = (vacId: string) => {
-    if (!editMember) return
-    const ids = editMember.vacancyIds.includes(vacId)
-      ? editMember.vacancyIds.filter(v => v !== vacId)
-      : [...editMember.vacancyIds, vacId]
-    updateEdit({ vacancyIds: ids })
-  }
-
   const toggleInviteVacancy = (vacId: string) =>
     setInviteVacancyIds(prev =>
       prev.includes(vacId) ? prev.filter(v => v !== vacId) : [...prev, vacId]
     )
-
-  // ── Avatar upload ────────────────────────────────────────
-
-  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!editMember) return
-    const file = e.target.files?.[0]
-    if (!file) return
-
-    const formData = new FormData()
-    formData.append("file", file)
-    formData.append("userId", editMember.id)
-
-    try {
-      const res = await fetch("/api/team/avatar", {
-        method: "POST",
-        body: formData,
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error ?? "Ошибка загрузки")
-      const newUrl = data.avatarUrl ?? URL.createObjectURL(file)
-      updateEdit({ avatarUrl: newUrl })
-      setMembers(prev => prev.map(m => m.id === editMember.id ? { ...m, avatarUrl: newUrl } : m))
-      toast.success("Фото профиля обновлено")
-    } catch {
-      // Fallback: use local object URL if API not available
-      const localUrl = URL.createObjectURL(file)
-      updateEdit({ avatarUrl: localUrl })
-      setMembers(prev => prev.map(m => m.id === editMember.id ? { ...m, avatarUrl: localUrl } : m))
-      toast.success("Фото профиля обновлено")
-    }
-
-    // Reset input
-    if (avatarInputRef.current) avatarInputRef.current.value = ""
-  }
-
-  const handleAvatarDelete = async () => {
-    if (!editMember) return
-    try {
-      await fetch("/api/team/avatar", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: editMember.id }),
-      })
-    } catch {
-      // Ignore API errors, still remove locally
-    }
-    updateEdit({ avatarUrl: undefined })
-    setMembers(prev => prev.map(m => m.id === editMember.id ? { ...m, avatarUrl: undefined } : m))
-    toast.success("Фото профиля удалено")
-  }
-
-  // ── Select all / deselect all vacancies ──────────────────
-
-  const handleSelectAllVacancies = () => {
-    if (!editMember) return
-    const allIds = allVacancies.map(v => v.id)
-    const allSelected = allIds.every(id => editMember.vacancyIds.includes(id))
-    updateEdit({ vacancyIds: allSelected ? [] : allIds })
-  }
 
   // ─── Render ─────────────────────────────────────────────
 
   return (
     <>
       {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4">
         <div>
           <h1 className="text-xl font-semibold text-foreground mb-1">Команда</h1>
           <p className="text-muted-foreground text-sm">Управление участниками и ролями</p>
@@ -393,7 +306,7 @@ export default function TeamPage() {
       </div>
 
       {/* Ссылка для присоединения */}
-      <Card className="mb-6">
+      <Card className="mb-4">
         <CardHeader>
           <CardTitle className="text-base">Ссылка для присоединения к компании</CardTitle>
         </CardHeader>
@@ -435,70 +348,33 @@ export default function TeamPage() {
                   <th className="text-left uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-2.5 w-[160px]">Роль</th>
                   <th className="text-left uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-2.5 w-[220px]">Email</th>
                   <th className="text-center uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-2.5 w-[100px]">Статус</th>
-                  <th className="text-center uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-2.5 w-[60px]">Действия</th>
+                  <th className="text-center uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-2.5 w-[60px]"></th>
                 </tr>
               </thead>
               <tbody>
                 {members.map(member => {
                   const roleCfg = ROLE_CONFIG[member.role]
                   const isActive = member.status === "active"
+                  const isExpanded = expandedId === member.id
                   return (
-                    <tr key={member.id} className="border-b border-border/50 last:border-0 hover:bg-muted/50 transition-colors">
-                      <td className="px-4 py-2.5">
-                        <div className="flex items-center gap-3">
-                          <Avatar className="w-8 h-8 shrink-0">
-                            {member.avatarUrl && (
-                              <AvatarImage src={member.avatarUrl} alt={member.name} />
-                            )}
-                            <AvatarFallback className="bg-primary/10 text-primary text-xs font-medium">
-                              {member.avatar}
-                            </AvatarFallback>
-                          </Avatar>
-                          <span className="text-sm font-medium text-foreground truncate">{member.name}</span>
-                          {member.customSchedule?.enabled && (
-                            <span title="Индивидуальный график"><Clock className="w-3 h-3 text-blue-500 shrink-0" /></span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-4 py-2.5">
-                        <div className="flex items-center">
-                          <span className={cn(
-                            "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border-transparent whitespace-nowrap",
-                            roleCfg.color
-                          )}>
-                            {roleCfg.label}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-2.5 text-sm text-muted-foreground truncate">{member.email}</td>
-                      <td className="text-center px-4 py-2.5">
-                        <div className="flex items-center justify-center">
-                          <span className="inline-flex items-center gap-1.5 text-xs">
-                            <span className={cn(
-                              "w-2 h-2 rounded-full shrink-0",
-                              member.role === "employee" || member.status === "pending"
-                                ? "bg-yellow-500"
-                                : isActive ? "bg-emerald-500" : "bg-gray-400"
-                            )} />
-                            <span className={cn(
-                              "whitespace-nowrap",
-                              member.role === "employee" || member.status === "pending"
-                                ? "text-yellow-600 dark:text-yellow-400"
-                                : isActive ? "text-foreground" : "text-muted-foreground"
-                            )}>
-                              {member.role === "employee" || member.status === "pending"
-                                ? "Ожидает"
-                                : isActive ? "Активен" : "Не в сети"}
-                            </span>
-                          </span>
-                        </div>
-                      </td>
-                      <td className="text-center px-4 py-2.5">
-                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(member)}>
-                          <Settings className="w-4 h-4" />
-                        </Button>
-                      </td>
-                    </tr>
+                    <MemberRow
+                      key={member.id}
+                      member={member}
+                      roleCfg={roleCfg}
+                      isActive={isActive}
+                      isExpanded={isExpanded}
+                      onToggle={() => toggleExpand(member)}
+                      editRole={editRole}
+                      editPermissions={editPermissions}
+                      onRoleChange={setEditRole}
+                      onPermissionChange={(key, val) => setEditPermissions(prev => ({ ...prev, [key]: val }))}
+                      onSave={() => handleSaveInline(member.id)}
+                      onResetPassword={() => handleResetPassword(member.id)}
+                      onBlock={() => handleBlockMember(member.id)}
+                      onDelete={() => handleDeleteMember(member.id)}
+                      confirmDeleteId={confirmDeleteId}
+                      setConfirmDeleteId={setConfirmDeleteId}
+                    />
                   )
                 })}
               </tbody>
@@ -698,329 +574,6 @@ export default function TeamPage() {
         </DialogContent>
       </Dialog>
 
-      {/* ═══ Диалог редактирования участника ════════════════════ */}
-      <Dialog open={sheetOpen} onOpenChange={setSheetOpen}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Настройки участника</DialogTitle>
-          </DialogHeader>
-
-          {editMember && (
-            <div className="space-y-6 mt-2">
-              {/* Avatar section */}
-              <div className="flex flex-col items-center gap-2">
-                <input
-                  ref={avatarInputRef}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={handleAvatarUpload}
-                />
-                <button
-                  type="button"
-                  className="relative group cursor-pointer"
-                  onClick={() => avatarInputRef.current?.click()}
-                >
-                  <Avatar className="w-16 h-16">
-                    {editMember.avatarUrl && (
-                      <AvatarImage src={editMember.avatarUrl} alt={editMember.name} />
-                    )}
-                    <AvatarFallback className="bg-primary/10 text-primary text-lg font-medium">
-                      {editMember.avatar}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="absolute inset-0 rounded-full bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                    <Camera className="w-5 h-5 text-white" />
-                  </div>
-                </button>
-                <p className="text-xs text-muted-foreground">Нажмите для загрузки фото</p>
-                {editMember.avatarUrl && (
-                  <button
-                    type="button"
-                    className="text-xs text-destructive hover:underline"
-                    onClick={handleAvatarDelete}
-                  >
-                    Удалить фото
-                  </button>
-                )}
-                <p className="font-medium text-foreground">{editMember.name}</p>
-                <p className="text-sm text-muted-foreground -mt-1">{editMember.email}</p>
-              </div>
-
-              <Separator />
-
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Роль</Label>
-                <Select value={editMember.role} onValueChange={(v) => updateEdit({ role: v as TeamRole })}>
-                  <SelectTrigger className="h-9 w-full max-w-[280px] bg-[var(--input-bg)] border rounded-lg">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(Object.entries(ROLE_CONFIG) as [TeamRole, typeof ROLE_CONFIG[TeamRole]][]).map(([key, cfg]) => (
-                      <SelectItem key={key} value={key}>{cfg.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">{ROLE_CONFIG[editMember.role].description}</p>
-              </div>
-
-              <Separator />
-
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <Label className="text-sm font-medium">Доступные вакансии</Label>
-                  {allVacancies.length > 0 && (
-                    <button
-                      type="button"
-                      className="text-xs text-primary hover:underline"
-                      onClick={handleSelectAllVacancies}
-                    >
-                      {allVacancies.every(v => editMember.vacancyIds.includes(v.id))
-                        ? "Снять все"
-                        : "Выбрать все"
-                      }
-                    </button>
-                  )}
-                </div>
-                {allVacancies.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">Нет созданных вакансий</p>
-                ) : (
-                  <div className="border rounded-lg divide-y max-h-48 overflow-y-auto">
-                    {allVacancies.map(vac => (
-                      <label key={vac.id} className="flex items-center gap-2.5 px-3 py-2 hover:bg-muted/20 cursor-pointer">
-                        <Checkbox
-                          checked={editMember.vacancyIds.includes(vac.id)}
-                          onCheckedChange={() => toggleEditVacancy(vac.id)}
-                        />
-                        <span className="text-sm text-foreground flex-1">{vac.name}</span>
-                        <span className="text-xs text-muted-foreground">{vac.candidates} канд.</span>
-                      </label>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <Separator />
-
-              <div className="space-y-3">
-                <Label className="text-sm font-medium">Видимость кандидатов</Label>
-                <div className="space-y-2">
-                  {([
-                    { value: "own"        as const, label: "Только свои",         desc: "Видит только добавленных собой" },
-                    { value: "all"        as const, label: "Все кандидаты",       desc: "Полный доступ ко всем кандидатам" },
-                    { value: "categories" as const, label: "Выбранные категории", desc: "Только по назначенным категориям" },
-                  ]).map(opt => (
-                    <button
-                      key={opt.value}
-                      className={cn(
-                        "w-full flex items-start gap-3 p-3 rounded-lg text-left transition-all",
-                        editMember.candidateVisibility === opt.value
-                          ? "border-2 border-primary bg-primary/5"
-                          : "border border-border hover:border-primary/30"
-                      )}
-                      onClick={() => updateEdit({ candidateVisibility: opt.value })}
-                    >
-                      <div className={cn(
-                        "w-4 h-4 rounded-full border-2 mt-0.5 shrink-0 flex items-center justify-center",
-                        editMember.candidateVisibility === opt.value ? "border-primary" : "border-muted-foreground/40"
-                      )}>
-                        {editMember.candidateVisibility === opt.value && (
-                          <div className="w-2 h-2 rounded-full bg-primary" />
-                        )}
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-foreground">{opt.label}</p>
-                        <p className="text-xs text-muted-foreground">{opt.desc}</p>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <Separator />
-
-              <div className="space-y-3">
-                <Label className="text-xs uppercase tracking-wider text-muted-foreground font-medium">Права доступа</Label>
-                <div className="border rounded-lg divide-y">
-                  {([
-                    { key: "manage_company", label: "Может настраивать компанию" },
-                    { key: "manage_team", label: "Может управлять командой" },
-                    { key: "manage_billing", label: "Может управлять тарифом" },
-                    { key: "create_vacancies", label: "Может создавать вакансии" },
-                    { key: "edit_knowledge", label: "Может редактировать базу знаний" },
-                    { key: "view_analytics", label: "Может видеть аналитику" },
-                  ] as const).map(perm => {
-                    const isFullAccess = editMember.role === "director" || editMember.role === "hr_lead"
-                    return (
-                      <label key={perm.key} className="flex items-center gap-2.5 px-3 py-2 hover:bg-muted/20 cursor-pointer">
-                        <Checkbox
-                          checked={isFullAccess ? true : !!editPermissions[perm.key]}
-                          disabled={isFullAccess}
-                          onCheckedChange={(checked) => {
-                            setEditPermissions(prev => ({ ...prev, [perm.key]: !!checked }))
-                          }}
-                        />
-                        <span className="text-sm text-foreground">{perm.label}</span>
-                      </label>
-                    )
-                  })}
-                </div>
-                {(editMember.role === "director" || editMember.role === "hr_lead") && (
-                  <p className="text-xs text-muted-foreground">Для этой роли все права включены по умолчанию</p>
-                )}
-              </div>
-
-              <Separator />
-
-              {/* ── Индивидуальный график ── */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <Label className="text-sm font-medium flex items-center gap-2">
-                    <Clock className="w-4 h-4 text-blue-500" />
-                    Индивидуальный график
-                  </Label>
-                  <Switch
-                    checked={!!editMember.customSchedule?.enabled}
-                    onCheckedChange={(v) => {
-                      if (v) {
-                        updateEdit({ customSchedule: { enabled: true, days: { ...DEFAULT_COMPANY_SCHEDULE } } })
-                      } else {
-                        updateEdit({ customSchedule: null })
-                      }
-                    }}
-                  />
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {editMember.customSchedule?.enabled
-                    ? "Сотрудник работает по индивидуальному графику"
-                    : "Если выключен — используется график компании (Пн–Пт 09:00–18:00)"}
-                </p>
-                {editMember.customSchedule?.enabled && (
-                  <div className="space-y-1">
-                    <div className="border rounded-lg overflow-hidden">
-                      {WEEKDAY_IDS.map((dayId, idx) => {
-                        const day = editMember.customSchedule!.days[dayId] ?? { active: false, start: "09:00", end: "18:00" }
-                        return (
-                          <div key={dayId} className={cn(
-                            "grid grid-cols-[32px_40px_1fr] items-center px-3 py-1 border-b last:border-b-0",
-                            idx % 2 === 0 ? "bg-background" : "bg-muted/10",
-                          )}>
-                            <Switch
-                              checked={day.active}
-                              onCheckedChange={(v) => {
-                                const days = { ...editMember.customSchedule!.days, [dayId]: { ...day, active: v } }
-                                updateEdit({ customSchedule: { ...editMember.customSchedule!, days } })
-                              }}
-                              className="scale-75"
-                            />
-                            <span className={cn("text-xs font-medium", !day.active && "text-muted-foreground")}>{WEEKDAY_LABELS[dayId]}</span>
-                            {day.active ? (
-                              <div className="flex items-center gap-1.5">
-                                <Select value={day.start} onValueChange={(v) => {
-                                  const days = { ...editMember.customSchedule!.days, [dayId]: { ...day, start: v } }
-                                  updateEdit({ customSchedule: { ...editMember.customSchedule!, days } })
-                                }}>
-                                  <SelectTrigger className="w-20 h-7 text-xs bg-[var(--input-bg)]"><SelectValue /></SelectTrigger>
-                                  <SelectContent>{HALF_HOURS.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}</SelectContent>
-                                </Select>
-                                <span className="text-muted-foreground text-[10px]">—</span>
-                                <Select value={day.end} onValueChange={(v) => {
-                                  const days = { ...editMember.customSchedule!.days, [dayId]: { ...day, end: v } }
-                                  updateEdit({ customSchedule: { ...editMember.customSchedule!, days } })
-                                }}>
-                                  <SelectTrigger className="w-20 h-7 text-xs bg-[var(--input-bg)]"><SelectValue /></SelectTrigger>
-                                  <SelectContent>{HALF_HOURS.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}</SelectContent>
-                                </Select>
-                              </div>
-                            ) : (
-                              <span className="text-xs text-muted-foreground">Выходной</span>
-                            )}
-                          </div>
-                        )
-                      })}
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-xs h-7 gap-1.5"
-                      onClick={() => updateEdit({ customSchedule: { enabled: true, days: { ...DEFAULT_COMPANY_SCHEDULE } } })}
-                    >
-                      <RotateCcw className="w-3 h-3" />Скопировать из графика компании
-                    </Button>
-                  </div>
-                )}
-              </div>
-
-              <Separator />
-
-              <div className="space-y-2">
-                <Label className="text-sm font-medium flex items-center gap-2">
-                  <CalendarClock className="w-4 h-4 text-muted-foreground" />
-                  Замещение (на период отпуска)
-                </Label>
-                <Select
-                  value={editMember.substituteId || "none"}
-                  onValueChange={(v) => updateEdit({ substituteId: v === "none" ? undefined : v })}
-                >
-                  <SelectTrigger className="h-9 w-full max-w-[280px] bg-[var(--input-bg)] border rounded-lg">
-                    <SelectValue placeholder="Не выбрано" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Не выбрано</SelectItem>
-                    {members.filter(m => m.id !== editMember.id && m.status === "active").map(m => (
-                      <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  Коллега получит доступ к кандидатам и задачам на время отсутствия
-                </p>
-              </div>
-
-              <Separator />
-
-              <div className="space-y-3 pt-2">
-                <Button className="w-full h-10 gap-1.5" onClick={handleSaveMember}>
-                  <Save className="w-4 h-4" />
-                  Сохранить
-                </Button>
-
-                {!confirmDelete ? (
-                  <Button
-                    variant="ghost"
-                    className="w-full gap-1.5 text-destructive hover:text-destructive hover:bg-destructive/10"
-                    onClick={() => setConfirmDelete(true)}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                    Удалить из команды
-                  </Button>
-                ) : (
-                  <div className="p-3 rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30 space-y-2">
-                    <div className="flex items-center gap-2">
-                      <AlertTriangle className="w-4 h-4 text-red-600" />
-                      <span className="text-sm font-medium text-red-700 dark:text-red-400">
-                        Удалить {editMember.name}?
-                      </span>
-                    </div>
-                    <p className="text-xs text-red-600 dark:text-red-400">
-                      Участник потеряет доступ ко всем данным. Это действие необратимо.
-                    </p>
-                    <div className="flex gap-2">
-                      <Button size="sm" variant="destructive" className="flex-1" onClick={handleDeleteMember}>
-                        Удалить
-                      </Button>
-                      <Button size="sm" variant="outline" className="flex-1" onClick={() => setConfirmDelete(false)}>
-                        Отмена
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-
       {/* ═══ Диалог приглашения по email ════════════════════════════════ */}
       <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
         <DialogContent className="max-w-md">
@@ -1089,6 +642,225 @@ export default function TeamPage() {
           </div>
         </DialogContent>
       </Dialog>
+    </>
+  )
+}
+
+// ─── Expandable Member Row ──────────────────────────────────
+
+function MemberRow({
+  member,
+  roleCfg,
+  isActive,
+  isExpanded,
+  onToggle,
+  editRole,
+  editPermissions,
+  onRoleChange,
+  onPermissionChange,
+  onSave,
+  onResetPassword,
+  onBlock,
+  onDelete,
+  confirmDeleteId,
+  setConfirmDeleteId,
+}: {
+  member: TeamMember
+  roleCfg: { label: string; description: string; color: string }
+  isActive: boolean
+  isExpanded: boolean
+  onToggle: () => void
+  editRole: TeamRole
+  editPermissions: Record<string, boolean>
+  onRoleChange: (r: TeamRole) => void
+  onPermissionChange: (key: string, val: boolean) => void
+  onSave: () => void
+  onResetPassword: () => void
+  onBlock: () => void
+  onDelete: () => void
+  confirmDeleteId: string | null
+  setConfirmDeleteId: (id: string | null) => void
+}) {
+  const isFullAccess = editRole === "director" || editRole === "hr_lead"
+  const isConfirmingDelete = confirmDeleteId === member.id
+
+  return (
+    <>
+      <tr
+        className={cn(
+          "border-b border-border/50 hover:bg-muted/50 transition-colors cursor-pointer",
+          isExpanded && "bg-muted/30"
+        )}
+        onClick={onToggle}
+      >
+        <td className="px-4 py-2.5">
+          <div className="flex items-center gap-3">
+            <Avatar className="w-8 h-8 shrink-0">
+              {member.avatarUrl && (
+                <AvatarImage src={member.avatarUrl} alt={member.name} />
+              )}
+              <AvatarFallback className="bg-primary/10 text-primary text-xs font-medium">
+                {member.avatar}
+              </AvatarFallback>
+            </Avatar>
+            <span className="text-sm font-medium text-foreground truncate">{member.name}</span>
+          </div>
+        </td>
+        <td className="px-4 py-2.5">
+          <span className={cn(
+            "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border-transparent whitespace-nowrap",
+            roleCfg.color
+          )}>
+            {roleCfg.label}
+          </span>
+        </td>
+        <td className="px-4 py-2.5 text-sm text-muted-foreground truncate">{member.email}</td>
+        <td className="text-center px-4 py-2.5">
+          <span className="inline-flex items-center gap-1.5 text-xs">
+            <span className={cn(
+              "w-2 h-2 rounded-full shrink-0",
+              member.status === "disabled"
+                ? "bg-red-500"
+                : member.role === "employee" || member.status === "pending"
+                  ? "bg-yellow-500"
+                  : isActive ? "bg-emerald-500" : "bg-gray-400"
+            )} />
+            <span className={cn(
+              "whitespace-nowrap",
+              member.status === "disabled"
+                ? "text-red-600 dark:text-red-400"
+                : member.role === "employee" || member.status === "pending"
+                  ? "text-yellow-600 dark:text-yellow-400"
+                  : isActive ? "text-foreground" : "text-muted-foreground"
+            )}>
+              {member.status === "disabled"
+                ? "Заблокирован"
+                : member.role === "employee" || member.status === "pending"
+                  ? "Ожидает"
+                  : isActive ? "Активен" : "Не в сети"}
+            </span>
+          </span>
+        </td>
+        <td className="text-center px-4 py-2.5">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            onClick={(e) => { e.stopPropagation(); onToggle() }}
+          >
+            <ChevronDown className={cn("w-4 h-4 transition-transform", isExpanded && "rotate-180")} />
+          </Button>
+        </td>
+      </tr>
+
+      {/* Expandable content */}
+      {isExpanded && (
+        <tr className="border-b border-border/50">
+          <td colSpan={5} className="p-0">
+            <div className="bg-muted/20 px-6 py-4 space-y-4">
+              <div className="flex flex-col lg:flex-row gap-6">
+                {/* Роль */}
+                <div className="space-y-1.5 min-w-[200px]">
+                  <Label className="text-xs uppercase tracking-wider text-muted-foreground font-medium">Роль</Label>
+                  <Select value={editRole} onValueChange={(v) => onRoleChange(v as TeamRole)}>
+                    <SelectTrigger className="h-9 w-full bg-background border rounded-lg" onClick={e => e.stopPropagation()}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(Object.entries(ROLE_CONFIG) as [TeamRole, typeof ROLE_CONFIG[TeamRole]][]).map(([key, cfg]) => (
+                        <SelectItem key={key} value={key}>{cfg.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">{ROLE_CONFIG[editRole].description}</p>
+                </div>
+
+                {/* Права доступа — 6 чекбоксов в 2 колонки */}
+                <div className="flex-1 space-y-1.5">
+                  <Label className="text-xs uppercase tracking-wider text-muted-foreground font-medium">Права доступа</Label>
+                  <div className="grid grid-cols-2 gap-x-6 gap-y-1">
+                    {PERMISSIONS_CONFIG.map(perm => (
+                      <label
+                        key={perm.key}
+                        className="flex items-center gap-2 py-1.5 cursor-pointer"
+                        onClick={e => e.stopPropagation()}
+                      >
+                        <Checkbox
+                          checked={isFullAccess ? true : !!editPermissions[perm.key]}
+                          disabled={isFullAccess}
+                          onCheckedChange={(checked) => onPermissionChange(perm.key, !!checked)}
+                        />
+                        <span className="text-sm text-foreground">{perm.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                  {isFullAccess && (
+                    <p className="text-xs text-muted-foreground">Для этой роли все права включены автоматически</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Кнопки действий */}
+              <div className="flex items-center gap-2 pt-2 border-t border-border/50">
+                <Button size="sm" className="gap-1.5" onClick={(e) => { e.stopPropagation(); onSave() }}>
+                  <Save className="w-3.5 h-3.5" />
+                  Сохранить
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={(e) => { e.stopPropagation(); onResetPassword() }}
+                >
+                  <KeyRound className="w-3.5 h-3.5" />
+                  Сбросить пароль
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className={cn(
+                    "gap-1.5",
+                    member.status === "disabled"
+                      ? "text-emerald-600 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/20"
+                      : "text-orange-600 hover:text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-950/20"
+                  )}
+                  onClick={(e) => { e.stopPropagation(); onBlock() }}
+                >
+                  <Ban className="w-3.5 h-3.5" />
+                  {member.status === "disabled" ? "Разблокировать" : "Заблокировать"}
+                </Button>
+
+                <div className="ml-auto">
+                  {!isConfirmingDelete ? (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="gap-1.5 text-destructive hover:text-destructive hover:bg-destructive/10"
+                      onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(member.id) }}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      Удалить
+                    </Button>
+                  ) : (
+                    <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
+                      <span className="text-xs text-destructive font-medium flex items-center gap-1">
+                        <AlertTriangle className="w-3.5 h-3.5" />
+                        Удалить {member.name}?
+                      </span>
+                      <Button size="sm" variant="destructive" className="h-7 px-3 text-xs" onClick={onDelete}>
+                        Да, удалить
+                      </Button>
+                      <Button size="sm" variant="outline" className="h-7 px-3 text-xs" onClick={() => setConfirmDeleteId(null)}>
+                        Отмена
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </td>
+        </tr>
+      )}
     </>
   )
 }

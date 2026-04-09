@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
@@ -11,7 +11,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select"
-import { Search, Users, ListFilter, MoreHorizontal, UserPlus, Archive, XCircle } from "lucide-react"
+import { Search, Users, ListFilter, MoreHorizontal, UserPlus, Archive, XCircle, Loader2 } from "lucide-react"
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
@@ -25,83 +25,69 @@ import { cn } from "@/lib/utils"
 interface Candidate {
   id: string
   name: string
-  vacancy: string
-  status: string
-  appliedAt: string
-  source: string
-  city: string
-  avatarColor: string
+  vacancyId: string
+  vacancyTitle: string
+  stage: string
+  createdAt: string
+  source: string | null
+  city: string | null
 }
 
 const STATUS_LABELS: Record<string, string> = {
-  new: "Новый",
-  demo: "На демо",
-  interview: "Интервью",
-  offer: "Оффер",
-  hired: "Принят",
-  rejected: "Отказ",
+  new: "Новый", demo: "На демо", scheduled: "Интервью назначено", interviewed: "Интервью пройдено",
+  interview: "Интервью", decision: "Решение", offer: "Оффер", hired: "Принят",
+  rejected: "Отказ", talent_pool: "Резерв", pending: "Ожидание",
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  new:       "bg-sky-500/15 text-sky-700 dark:text-sky-400",
-  demo:      "bg-blue-500/15 text-blue-700 dark:text-blue-400",
-  interview: "bg-violet-500/15 text-violet-700 dark:text-violet-400",
-  offer:     "bg-amber-500/15 text-amber-700 dark:text-amber-400",
-  hired:     "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
-  rejected:  "bg-muted text-muted-foreground",
+  new:          "bg-sky-500/15 text-sky-700 dark:text-sky-400",
+  demo:         "bg-blue-500/15 text-blue-700 dark:text-blue-400",
+  scheduled:    "bg-amber-500/15 text-amber-700 dark:text-amber-400",
+  interviewed:  "bg-orange-500/15 text-orange-700 dark:text-orange-400",
+  interview:    "bg-violet-500/15 text-violet-700 dark:text-violet-400",
+  decision:     "bg-amber-500/15 text-amber-700 dark:text-amber-400",
+  offer:        "bg-amber-500/15 text-amber-700 dark:text-amber-400",
+  hired:        "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
+  rejected:     "bg-muted text-muted-foreground",
+  talent_pool:  "bg-blue-500/15 text-blue-700 dark:text-blue-400",
+  pending:      "bg-gray-500/15 text-gray-600 dark:text-gray-400",
 }
 
 const STATUS_ORDER: Record<string, number> = {
-  new: 0, demo: 1, interview: 2, offer: 3, hired: 4, rejected: 5,
+  new: 0, demo: 1, scheduled: 2, interviewed: 3, interview: 3, decision: 4, offer: 5, hired: 6, rejected: 7, talent_pool: 8,
 }
 
 const SOURCE_LABELS: Record<string, string> = {
-  hh: "hh.ru",
-  referral: "Реферал",
-  direct: "Прямой",
+  hh: "hh.ru", avito: "Авито", telegram: "Telegram", site: "Сайт",
+  referral: "Реферал", manual: "Вручную", direct: "Прямой",
 }
 
 const STATUS_FILTER = [
   { value: "all", label: "Все статусы" },
   { value: "new", label: "Новый" },
   { value: "demo", label: "На демо" },
-  { value: "interview", label: "Интервью" },
-  { value: "offer", label: "Оффер" },
+  { value: "scheduled", label: "Интервью назн." },
+  { value: "interviewed", label: "Интервью пройд." },
   { value: "hired", label: "Принят" },
   { value: "rejected", label: "Отказ" },
-]
-
-const VACANCY_FILTER = [
-  { value: "all", label: "Все вакансии" },
-  { value: "Менеджер по продажам", label: "Менеджер по продажам" },
-  { value: "Менеджер по продажам (копия)", label: "Менеджер по продажам (копия)" },
-  { value: "Аккаунт-менеджер", label: "Аккаунт-менеджер" },
 ]
 
 const SOURCE_FILTER = [
   { value: "all", label: "Все источники" },
   { value: "hh", label: "hh.ru" },
   { value: "referral", label: "Реферал" },
-  { value: "direct", label: "Прямой" },
+  { value: "manual", label: "Вручную" },
+  { value: "site", label: "Сайт" },
 ]
 
 const FILTER_INPUT = "h-10 text-sm border border-input rounded-md"
 
-// ─── Mock data ───────────────────────────────────────────────────────────────
-
-const CANDIDATES: Candidate[] = [
-  { id: "1", name: "Иван Петров",       vacancy: "Менеджер по продажам", status: "interview", appliedAt: "2026-03-28T10:00:00Z", source: "hh",       city: "Москва",     avatarColor: "#8b5cf6" },
-  { id: "2", name: "Мария Сидорова",    vacancy: "Менеджер по продажам", status: "demo",      appliedAt: "2026-03-30T14:20:00Z", source: "referral",  city: "СПб",        avatarColor: "#3b82f6" },
-  { id: "3", name: "Алексей Козлов",    vacancy: "Аккаунт-менеджер",     status: "new",       appliedAt: "2026-04-01T09:15:00Z", source: "hh",       city: "Москва",     avatarColor: "#ef4444" },
-  { id: "4", name: "Елена Волкова",     vacancy: "Менеджер по продажам", status: "offer",     appliedAt: "2026-03-20T11:00:00Z", source: "direct",    city: "Казань",     avatarColor: "#f59e0b" },
-  { id: "5", name: "Сергей Морозов",    vacancy: "Менеджер по продажам (копия)", status: "hired", appliedAt: "2026-03-15T08:30:00Z", source: "hh",  city: "Москва",     avatarColor: "#22c55e" },
-  { id: "6", name: "Ольга Новикова",    vacancy: "Аккаунт-менеджер",     status: "rejected",  appliedAt: "2026-03-25T16:45:00Z", source: "referral",  city: "СПб",        avatarColor: "#6b7280" },
-  { id: "7", name: "Дмитрий Смирнов",   vacancy: "Менеджер по продажам", status: "new",       appliedAt: "2026-04-02T07:00:00Z", source: "direct",    city: "Екатеринбург", avatarColor: "#0ea5e9" },
-]
+const AVATAR_COLORS = ["#8b5cf6", "#3b82f6", "#ef4444", "#f59e0b", "#22c55e", "#0ea5e9", "#6b7280", "#ec4899"]
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function formatDate(dateStr: string): string {
+function formatDate(dateStr: string | null): string {
+  if (!dateStr) return "—"
   const d = new Date(dateStr)
   return d.toLocaleDateString("ru-RU", { day: "numeric", month: "short", year: "numeric" })
 }
@@ -110,7 +96,12 @@ function getInitials(name: string): string {
   return name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase()
 }
 
-// Column sort
+function avatarColor(id: string): string {
+  let hash = 0
+  for (let i = 0; i < id.length; i++) hash = ((hash << 5) - hash + id.charCodeAt(i)) | 0
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length]
+}
+
 type ColumnSort = { column: string; dir: "asc" | "desc" } | null
 
 function SortableHeader({
@@ -133,12 +124,35 @@ function SortableHeader({
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 export default function CandidatesPage() {
+  const [candidates, setCandidates] = useState<Candidate[]>([])
+  const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [vacancyFilter, setVacancyFilter] = useState("all")
   const [sourceFilter, setSourceFilter] = useState("all")
   const [colSort, setColSort] = useState<ColumnSort>({ column: "date", dir: "desc" })
   const [selected, setSelected] = useState<Set<string>>(new Set())
+
+  useEffect(() => {
+    fetch("/api/modules/hr/candidates")
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(data => setCandidates(Array.isArray(data) ? data : []))
+      .catch(() => setCandidates([]))
+      .finally(() => setLoading(false))
+  }, [])
+
+  const changeStage = async (candidateId: string, stage: string, candidateName: string) => {
+    try {
+      const res = await fetch(`/api/modules/hr/candidates/${candidateId}/stage`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stage }),
+      })
+      if (!res.ok) throw new Error()
+      setCandidates(prev => prev.map(c => c.id === candidateId ? { ...c, stage } : c))
+      toast.success(`${candidateName}: ${STATUS_LABELS[stage] ?? stage}`)
+    } catch { toast.error("Ошибка смены этапа") }
+  }
 
   const toggleColSort = (column: string) => {
     setColSort((prev) => {
@@ -148,34 +162,40 @@ export default function CandidatesPage() {
     })
   }
 
+  // Dynamic vacancy filter options from data
+  const vacancyOptions = useMemo(() => {
+    const titles = [...new Set(candidates.map(c => c.vacancyTitle).filter(Boolean))]
+    return [{ value: "all", label: "Все вакансии" }, ...titles.map(t => ({ value: t, label: t }))]
+  }, [candidates])
+
   const filtered = useMemo(() => {
-    let result = CANDIDATES
+    let result = candidates
 
     if (search.trim()) {
       const q = search.trim().toLowerCase()
       result = result.filter((c) => c.name.toLowerCase().includes(q))
     }
     if (statusFilter !== "all") {
-      result = result.filter((c) => c.status === statusFilter)
+      result = result.filter((c) => c.stage === statusFilter)
     }
     if (vacancyFilter !== "all") {
-      result = result.filter((c) => c.vacancy === vacancyFilter)
+      result = result.filter((c) => c.vacancyTitle === vacancyFilter)
     }
     if (sourceFilter !== "all") {
       result = result.filter((c) => c.source === sourceFilter)
     }
 
     result = [...result].sort((a, b) => {
-      if (!colSort) return new Date(b.appliedAt).getTime() - new Date(a.appliedAt).getTime()
+      if (!colSort) return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       const mul = colSort.dir === "asc" ? 1 : -1
-      if (colSort.column === "status") return mul * ((STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9))
-      if (colSort.column === "date") return mul * (new Date(a.appliedAt).getTime() - new Date(b.appliedAt).getTime())
-      if (colSort.column === "source") return mul * a.source.localeCompare(b.source, "ru")
+      if (colSort.column === "status") return mul * ((STATUS_ORDER[a.stage] ?? 9) - (STATUS_ORDER[b.stage] ?? 9))
+      if (colSort.column === "date") return mul * (new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+      if (colSort.column === "source") return mul * (a.source ?? "").localeCompare(b.source ?? "", "ru")
       return 0
     })
 
     return result
-  }, [search, statusFilter, vacancyFilter, sourceFilter, colSort])
+  }, [candidates, search, statusFilter, vacancyFilter, sourceFilter, colSort])
 
   const allSelected = filtered.length > 0 && filtered.every((c) => selected.has(c.id))
   const toggleOne = (id: string) => { setSelected((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n }) }
@@ -192,7 +212,7 @@ export default function CandidatesPage() {
             <div className="flex items-center justify-between mb-5">
               <div>
                 <h1 className="text-xl font-semibold text-foreground">Кандидаты</h1>
-                <p className="text-sm text-muted-foreground mt-0.5">{filtered.length} из {CANDIDATES.length} кандидатов</p>
+                <p className="text-sm text-muted-foreground mt-0.5">{filtered.length} из {candidates.length} кандидатов</p>
               </div>
             </div>
 
@@ -206,7 +226,7 @@ export default function CandidatesPage() {
               <Select value={vacancyFilter} onValueChange={setVacancyFilter}>
                 <SelectTrigger className={cn("flex-1 min-w-0", FILTER_INPUT)}><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {VACANCY_FILTER.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                  {vacancyOptions.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
                 </SelectContent>
               </Select>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -225,17 +245,28 @@ export default function CandidatesPage() {
 
             {selected.size > 0 && <div className="text-xs text-muted-foreground mb-2">Выбрано: {selected.size}</div>}
 
+            {/* Loading */}
+            {loading && (
+              <div className="flex items-center justify-center py-20">
+                <Loader2 className="size-6 animate-spin text-muted-foreground" />
+              </div>
+            )}
+
             {/* Empty */}
-            {filtered.length === 0 && (
+            {!loading && filtered.length === 0 && (
               <div className="flex flex-col items-center justify-center py-20 text-center">
                 <Users className="size-12 text-muted-foreground/30 mb-4" />
-                <p className="text-muted-foreground font-medium">Кандидатов не найдено</p>
-                <p className="text-sm text-muted-foreground/60 mt-1">Попробуйте изменить фильтры</p>
+                <p className="text-muted-foreground font-medium">
+                  {candidates.length === 0 ? "Нет кандидатов" : "Кандидатов не найдено"}
+                </p>
+                <p className="text-sm text-muted-foreground/60 mt-1">
+                  {candidates.length === 0 ? "Кандидаты появятся после первого отклика" : "Попробуйте изменить фильтры"}
+                </p>
               </div>
             )}
 
             {/* Table */}
-            {filtered.length > 0 && (
+            {!loading && filtered.length > 0 && (
               <div className="rounded-xl border border-border bg-card overflow-hidden">
                 <table className="w-full text-left">
                   <thead>
@@ -262,24 +293,24 @@ export default function CandidatesPage() {
                         <td className="px-4 py-3.5">
                           <div className="flex items-center gap-3">
                             <Avatar className="size-8">
-                              <AvatarFallback className="text-xs font-bold text-white" style={{ backgroundColor: c.avatarColor }}>
+                              <AvatarFallback className="text-xs font-bold text-white" style={{ backgroundColor: avatarColor(c.id) }}>
                                 {getInitials(c.name)}
                               </AvatarFallback>
                             </Avatar>
                             <div>
                               <Link href={`/hr/candidates/${c.id}`} className="text-sm font-medium text-foreground hover:text-primary hover:underline transition-colors">{c.name}</Link>
-                              <p className="text-xs text-muted-foreground">{c.city}</p>
+                              <p className="text-xs text-muted-foreground">{c.city ?? ""}</p>
                             </div>
                           </div>
                         </td>
-                        <td className="px-4 py-3.5 text-sm text-muted-foreground">{c.vacancy}</td>
+                        <td className="px-4 py-3.5 text-sm text-muted-foreground">{c.vacancyTitle}</td>
                         <td className="px-4 py-3.5">
-                          <Badge variant="outline" className={cn("border-0 text-xs", STATUS_COLORS[c.status])}>
-                            {STATUS_LABELS[c.status] ?? c.status}
+                          <Badge variant="outline" className={cn("border-0 text-xs", STATUS_COLORS[c.stage] ?? "bg-muted text-muted-foreground")}>
+                            {STATUS_LABELS[c.stage] ?? c.stage}
                           </Badge>
                         </td>
-                        <td className="px-4 py-3.5 text-sm text-muted-foreground whitespace-nowrap">{formatDate(c.appliedAt)}</td>
-                        <td className="px-4 py-3.5 text-sm text-muted-foreground">{SOURCE_LABELS[c.source] ?? c.source}</td>
+                        <td className="px-4 py-3.5 text-sm text-muted-foreground whitespace-nowrap">{formatDate(c.createdAt)}</td>
+                        <td className="px-4 py-3.5 text-sm text-muted-foreground">{SOURCE_LABELS[c.source ?? ""] ?? c.source ?? "—"}</td>
                         <td className="px-4 py-3.5" onClick={e => e.stopPropagation()}>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
@@ -288,13 +319,13 @@ export default function CandidatesPage() {
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                              <DropdownMenuItem className="gap-2 text-xs" onClick={() => toast.success(`${c.name}: приглашён на интервью`)}>
+                              <DropdownMenuItem className="gap-2 text-xs" onClick={() => changeStage(c.id, "scheduled", c.name)}>
                                 <UserPlus className="w-3.5 h-3.5" />Пригласить на интервью
                               </DropdownMenuItem>
-                              <DropdownMenuItem className="gap-2 text-xs" onClick={() => toast.success(`${c.name}: перемещён в резерв`)}>
+                              <DropdownMenuItem className="gap-2 text-xs" onClick={() => changeStage(c.id, "talent_pool", c.name)}>
                                 <Archive className="w-3.5 h-3.5" />В резерв
                               </DropdownMenuItem>
-                              <DropdownMenuItem className="gap-2 text-xs text-destructive" onClick={() => toast.success(`${c.name}: отказ`)}>
+                              <DropdownMenuItem className="gap-2 text-xs text-destructive" onClick={() => changeStage(c.id, "rejected", c.name)}>
                                 <XCircle className="w-3.5 h-3.5" />Отказать
                               </DropdownMenuItem>
                             </DropdownMenuContent>

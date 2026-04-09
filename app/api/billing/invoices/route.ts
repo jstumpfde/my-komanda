@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
     .insert(invoices)
     .values({
       companyId:     user.companyId,
-      number,
+      invoiceNumber: number,
       planId:        planId ?? null,
       amountKopecks: plan.price,
       status:        "issued",

@@ -13,7 +13,30 @@ export async function GET(req: NextRequest) {
     const vacancyId = url.searchParams.get("vacancy_id")
     const stageParam = url.searchParams.get("stage")
 
-    if (!vacancyId) return apiError("vacancy_id обязателен", 400)
+    // If no vacancy_id — return ALL candidates for this company with vacancy title
+    if (!vacancyId) {
+      const rows = await db
+        .select({
+          id: candidates.id,
+          name: candidates.name,
+          phone: candidates.phone,
+          email: candidates.email,
+          city: candidates.city,
+          source: candidates.source,
+          stage: candidates.stage,
+          score: candidates.score,
+          aiScore: candidates.aiScore,
+          vacancyId: candidates.vacancyId,
+          vacancyTitle: vacancies.title,
+          createdAt: candidates.createdAt,
+          updatedAt: candidates.updatedAt,
+        })
+        .from(candidates)
+        .innerJoin(vacancies, eq(candidates.vacancyId, vacancies.id))
+        .where(eq(vacancies.companyId, user.companyId))
+
+      return apiSuccess(rows)
+    }
 
     // Verify ownership
     const [vac] = await db

@@ -52,7 +52,7 @@ export async function GET(
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <title>Счёт ${invoice.number}</title>
+  <title>Счёт ${invoice.invoiceNumber}</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: Arial, sans-serif; font-size: 13px; color: #111; padding: 40px; }
@@ -79,7 +79,7 @@ export async function GET(
   <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:24px;">
     <div>
       <h1>Счёт на оплату</h1>
-      <p class="subtitle">№ ${invoice.number}</p>
+      <p class="subtitle">№ ${invoice.invoiceNumber}</p>
     </div>
     <div style="text-align:right;">
       <span class="status-badge status-${invoice.status ?? "draft"}">
@@ -154,7 +154,7 @@ export async function GET(
   return new Response(html, {
     headers: {
       "Content-Type": "text/html; charset=utf-8",
-      "Content-Disposition": `attachment; filename="invoice-${invoice.number}.html"`,
+      "Content-Disposition": `attachment; filename="invoice-${invoice.invoiceNumber}.html"`,
     },
   })
 }
