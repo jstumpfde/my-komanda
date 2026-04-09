@@ -18,16 +18,16 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog"
-import { NotionEditor, type NotionEditorHandle } from "@/components/vacancies/notion-editor"
 import { QuizEditor, type QuizQuestion } from "@/components/knowledge/quiz-editor"
+import { UnifiedBlockEditor } from "@/components/editor/unified-block-editor"
+import { type Block, createBlock } from "@/components/editor/types"
 import {
   ChevronRight, Save, Send, Plus, X, UserPlus, Link2, Upload, FileText,
   Loader2, CheckCircle2, ExternalLink, GripVertical, Trash2, ArrowRight,
 } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
-import type { Demo, Lesson } from "@/lib/course-types"
-import { createBlock } from "@/lib/course-types"
+import type { Lesson } from "@/lib/course-types"
 
 // ─── Mock data ──────────────────────────────────────────────────────────────
 
@@ -56,26 +56,8 @@ const MOCK_EMPLOYEES = [
   { id: "e6", name: "Алексей Смирнов", initials: "АС", color: "#6366f1", role: "Тимлид" },
 ]
 
-function createInitialDemo(): Demo {
-  return {
-    id: `article-${Date.now()}`,
-    title: "Новая статья",
-    companyName: "",
-    description: "",
-    status: "draft",
-    createdAt: new Date(),
-    updatedAt: new Date(),
-    coverGradientFrom: "#fef3c7",
-    coverGradientTo: "#fde68a",
-    lessons: [
-      {
-        id: `lesson-${Date.now()}`,
-        emoji: "📄",
-        title: "Основной раздел",
-        blocks: [createBlock("text")],
-      },
-    ],
-  }
+function createInitialBlocks(): Block[] {
+  return [createBlock("text")]
 }
 
 // ─── Import sources ─────────────────────────────────────────────────────────
@@ -463,12 +445,11 @@ function generateMockContent(item: ImportedItem): string {
 
 export default function NewArticlePage() {
   const router = useRouter()
-  const editorRef = useRef<NotionEditorHandle>(null)
   const [title, setTitle] = useState("")
   const [category, setCategory] = useState("")
   const [tags, setTags] = useState<string[]>([])
   const [tagInput, setTagInput] = useState("")
-  const [demo, setDemo] = useState<Demo>(createInitialDemo)
+  const [articleBlocks, setArticleBlocks] = useState<Block[]>(createInitialBlocks)
   const [status, setStatus] = useState("draft")
   const [isPinned, setIsPinned] = useState(false)
   const [reviewerId, setReviewerId] = useState("")
@@ -478,18 +459,11 @@ export default function NewArticlePage() {
   const [showCoAuthorSelect, setShowCoAuthorSelect] = useState(false)
   const [contentTab, setContentTab] = useState<"editor" | "import">("editor")
 
-  const handleDemoUpdate = useCallback((updated: Demo) => {
-    setDemo(updated)
-  }, [])
-
   const handleImportDone = useCallback((lessons: Lesson[]) => {
-    setDemo((prev) => ({
-      ...prev,
-      lessons: [...prev.lessons, ...lessons],
-      updatedAt: new Date(),
-    }))
+    const imported = lessons.flatMap((l) => l.blocks.map((b, i) => ({ ...b, order: articleBlocks.length + i })))
+    setArticleBlocks((prev) => [...prev, ...imported])
     setContentTab("editor")
-  }, [])
+  }, [articleBlocks.length])
 
   // Category management
   const [categories, setCategories] = useState(INITIAL_CATEGORIES)
@@ -728,13 +702,14 @@ export default function NewArticlePage() {
                 </div>
 
                 {contentTab === "editor" ? (
-                  <div className="border rounded-xl overflow-hidden bg-card">
-                    <NotionEditor
-                      ref={editorRef}
-                      demo={demo}
-                      onBack={() => router.push("/knowledge")}
-                      onUpdate={handleDemoUpdate}
-                      hideToolbar
+                  <div className="border rounded-xl overflow-hidden bg-card p-4">
+                    <UnifiedBlockEditor
+                      blocks={articleBlocks}
+                      onBlocksChange={setArticleBlocks}
+                      sectionMode={false}
+                      showToolbar={true}
+                      allowedBlockTypes={["text", "heading", "image", "video", "file", "info"]}
+                      placeholder="Начните писать статью..."
                     />
                   </div>
                 ) : (
