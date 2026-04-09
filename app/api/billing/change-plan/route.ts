@@ -39,8 +39,8 @@ export async function POST(req: NextRequest) {
   await db.insert(subscriptionHistory).values({
     companyId: user.companyId,
     planId,
-    status:    "active",
-    startedAt: now,
+    event:     "plan_changed",
+    details:   { status: "active", changedAt: now.toISOString() },
   })
 
   return NextResponse.json({ success: true, planName: plan.name })

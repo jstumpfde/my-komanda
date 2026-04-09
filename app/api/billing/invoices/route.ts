@@ -53,7 +53,8 @@ export async function POST(req: NextRequest) {
   const number = `MK-${year}-${num}`
 
   const now = new Date()
-  const dueDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
+  const dueDateVal = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
+  const dueDateStr = dueDateVal.toISOString().split("T")[0] // 'YYYY-MM-DD' for date column
 
   const [invoice] = await db
     .insert(invoices)
@@ -62,9 +63,10 @@ export async function POST(req: NextRequest) {
       invoiceNumber: number,
       planId:        planId ?? null,
       amountKopecks: plan.price,
+      amount:        plan.price,
       status:        "issued",
       issuedAt:      now,
-      dueDate,
+      dueDate:       dueDateStr,
     })
     .returning()
 
@@ -72,8 +74,8 @@ export async function POST(req: NextRequest) {
   await db.insert(subscriptionHistory).values({
     companyId: user.companyId,
     planId:    planId ?? null,
-    status:    "invoiced",
-    startedAt: now,
+    event:     "invoice_created",
+    details:   { invoiceId: invoice.id, amount: plan.price },
   })
 
   return NextResponse.json(invoice, { status: 201 })

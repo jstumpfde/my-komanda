@@ -3,9 +3,9 @@ import {
   uuid,
   text,
   integer,
-  bigint,
   boolean,
   timestamp,
+  date,
   jsonb,
   unique,
 } from "drizzle-orm/pg-core"
@@ -883,17 +883,18 @@ export const invoices = pgTable("invoices", {
   id:            uuid("id").primaryKey().defaultRandom(),
   companyId:     uuid("company_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
   planId:        uuid("plan_id").references(() => plans.id),
-  invoiceNumber: text("invoice_number").notNull().unique(),
-  amountKopecks: bigint("amount_kopecks", { mode: "number" }).notNull(),
-  periodStart:   timestamp("period_start", { mode: "date" }),
-  periodEnd:     timestamp("period_end", { mode: "date" }),
+  invoiceNumber: text("invoice_number").notNull(),
+  amountKopecks: integer("amount_kopecks"),
+  amount:        integer("amount"),
+  periodStart:   date("period_start"),
+  periodEnd:     date("period_end"),
   status:        text("status").default("pending").notNull(), // 'pending'|'issued'|'paid'|'cancelled'
   buyerName:     text("buyer_name"),
   buyerInn:      text("buyer_inn"),
   buyerKpp:      text("buyer_kpp"),
   issuedAt:      timestamp("issued_at", { withTimezone: true }),
   paidAt:        timestamp("paid_at", { withTimezone: true }),
-  dueDate:       timestamp("due_date", { withTimezone: true }),
+  dueDate:       date("due_date"),
   paymentMethod: text("payment_method"),
   pdfPath:       text("pdf_path"),
   notes:         text("notes"),
@@ -901,15 +902,12 @@ export const invoices = pgTable("invoices", {
 })
 
 export const subscriptionHistory = pgTable("subscription_history", {
-  id:          uuid("id").primaryKey().defaultRandom(),
-  companyId:   uuid("company_id").references(() => companies.id).notNull(),
-  planId:      uuid("plan_id").references(() => plans.id),
-  status:      text("status").notNull(),
-  startedAt:   timestamp("started_at", { withTimezone: true }).notNull(),
-  expiresAt:   timestamp("expires_at", { withTimezone: true }),
-  cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
-  reason:      text("reason"),
-  createdAt:   timestamp("created_at").defaultNow(),
+  id:        uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  planId:    uuid("plan_id").references(() => plans.id),
+  event:     text("event").notNull(),
+  details:   jsonb("details"),
+  createdAt: timestamp("created_at").defaultNow(),
 })
 
 // ─── Vacancy UTM Links ───────────────────────────────────────────────────────
