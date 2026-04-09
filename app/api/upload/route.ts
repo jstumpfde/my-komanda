@@ -16,7 +16,7 @@ const ALLOWED_TYPES = new Set([
   "application/pdf",
 ])
 
-const MAX_SIZE = 50 * 1024 * 1024 // 50MB
+const MAX_SIZE = 100 * 1024 * 1024 // 100MB
 
 export async function POST(req: NextRequest) {
   const session = await auth()
@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
   if (!file) return NextResponse.json({ error: "Файл не найден" }, { status: 400 })
 
   if (file.size > MAX_SIZE) {
-    return NextResponse.json({ error: "Файл слишком большой (макс 50МБ)" }, { status: 400 })
+    return NextResponse.json({ error: "Файл слишком большой (макс 100МБ)" }, { status: 400 })
   }
 
   if (!ALLOWED_TYPES.has(file.type)) {

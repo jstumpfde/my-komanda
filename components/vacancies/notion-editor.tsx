@@ -236,10 +236,7 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
     const pct = ((previewIdx + 1) / demo.lessons.length) * 100
     return (
       <div className="max-w-4xl mx-auto py-6 px-8">
-        <div className="flex items-center justify-between mb-4">
-          <Button variant="ghost" size="sm" onClick={() => setPreviewMode(false)} className="gap-1.5 text-xs">
-            <X className="w-3.5 h-3.5" />Закрыть превью
-          </Button>
+        <div className="flex items-center justify-end mb-4">
           <Badge variant="outline" className="text-[10px]">Предпросмотр для кандидата</Badge>
         </div>
         <div className="flex items-center gap-3 mb-5">
@@ -304,8 +301,9 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
               {aiGenerating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
               {aiGenerating ? "Генерация..." : "AI"}
             </Button>
-            <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8" onClick={() => { setPreviewIdx(0); setPreviewMode(true) }}>
-              <Eye className="w-3.5 h-3.5" />Превью
+            <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8" onClick={() => { if (previewMode) { setPreviewMode(false) } else { setPreviewIdx(0); setPreviewMode(true) } }}>
+              {previewMode ? <X className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+              {previewMode ? "Закрыть превью" : "Превью"}
             </Button>
           </div>
         </div>
@@ -1133,6 +1131,7 @@ function NotionTextBlock({ block, editorRef, isHovered, onSync, onKeyDown }: Not
         onBlur={onSync}
         onInput={onSync}
         onKeyDown={onKeyDown}
+        onPaste={(e) => { e.preventDefault(); const text = e.clipboardData.getData("text/plain"); document.execCommand("insertText", false, text) }}
       />
 
       {/* Emoji & tag buttons — bottom-right, on hover */}
@@ -1401,6 +1400,7 @@ function MiniRichEditor({ html, onChange, placeholder, singleLine, maxLength, ma
         onBlur={sync}
         onInput={handleInput}
         onKeyDown={handleKeyDown}
+        onPaste={(e) => { e.preventDefault(); const text = e.clipboardData.getData("text/plain"); document.execCommand("insertText", false, text) }}
       />
       {showEmojiBtn && (
         <button
@@ -2747,7 +2747,7 @@ function InfoBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: Partia
     info: "#3b82f6", success: "#22c55e", warning: "#f97316", error: "#ef4444",
   }
   const activeColor = block.infoColor || styleColorMap[block.infoStyle] || "#3b82f6"
-  const activeIcon = block.infoIcon || "i"
+  const activeIcon = block.infoIcon || "!"
 
   const initHsl = hexToHsl(activeColor)
   const [hue, setHue] = useState(initHsl.h)
@@ -2859,6 +2859,7 @@ function InfoBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: Partia
           suppressContentEditableWarning
           data-main-editor="true"
           onInput={syncContent}
+          onPaste={(e) => { e.preventDefault(); const text = e.clipboardData.getData("text/plain"); document.execCommand("insertText", false, text) }}
           className="text-base leading-relaxed outline-none empty:before:content-['Введите_текст...'] empty:before:text-muted-foreground/50 pr-14"
           style={{ direction: "ltr", unicodeBidi: "plaintext" }}
         />
@@ -3444,7 +3445,7 @@ function SimplePreviewBlock({ block }: { block: Block }) {
         info: "#3b82f6", success: "#22c55e", warning: "#f97316", error: "#ef4444",
       }
       const color = block.infoColor || styleColorMap[block.infoStyle] || "#3b82f6"
-      const icon = block.infoIcon || "i"
+      const icon = block.infoIcon || "!"
       return (
         <div
           className="flex gap-3 items-start"
