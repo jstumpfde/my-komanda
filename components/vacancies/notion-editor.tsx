@@ -235,7 +235,7 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
     if (!lesson) { setPreviewMode(false); return null }
     const pct = ((previewIdx + 1) / demo.lessons.length) * 100
     return (
-      <div className="max-w-2xl mx-auto py-6 px-4">
+      <div className="max-w-4xl mx-auto py-6 px-8">
         <div className="flex items-center justify-between mb-4">
           <Button variant="ghost" size="sm" onClick={() => setPreviewMode(false)} className="gap-1.5 text-xs">
             <X className="w-3.5 h-3.5" />Закрыть превью
@@ -630,7 +630,7 @@ function NotionLessonEditor({ lesson, onUpdateLesson, onUpdateBlock, onInsertBlo
   }
 
   return (
-    <div ref={editorAreaRef} className="relative max-w-3xl mx-auto py-6 px-2">
+    <div ref={editorAreaRef} className="relative py-3 px-12">
       {/* Floating toolbar */}
       {floatingToolbar && (
         <div
@@ -711,7 +711,7 @@ function NotionLessonEditor({ lesson, onUpdateLesson, onUpdateBlock, onInsertBlo
 
       {/* Lesson title */}
       {!hideLessonTitle && (
-        <div className="flex items-center gap-3 mb-8 group/title">
+        <div className="flex items-center gap-3 mb-0 group/title">
           <EmojiBtn current={lesson.emoji} onSelect={(v) => onUpdateLesson({ emoji: v })} />
           <input
             className="flex-1 text-3xl font-bold bg-transparent outline-none text-foreground placeholder:text-muted-foreground/30 leading-tight pt-0.5"
@@ -938,7 +938,7 @@ function NotionBlock({ block, idx, totalBlocks, isHovered, isDragging, isDragOve
     >
       {/* Action bar — горизонтальная, вверху справа, внутри блока, при наведении */}
       <div className={cn(
-        "flex items-center gap-0.5 mb-0.5 ml-auto",
+        "absolute right-0 top-0 z-10 flex items-center gap-0.5",
         "bg-background/95 backdrop-blur-sm border border-border rounded-md shadow-sm px-0.5 py-0.5 w-fit",
         "transition-all duration-100",
         isHovered ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
@@ -1976,7 +1976,7 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
             <>
               <div className={cn("flex gap-3", isSide ? (layout === "image-left" ? "flex-row px-4" : "flex-row-reverse px-4") : "flex-col")}>
                 <div className={cn("flex flex-col gap-1", isSide ? "w-1/2 shrink-0" : "w-full")}>
-                  <div className="px-4">
+                  <div className={imgSize === "L" ? "px-0" : "px-4"}>
                     <MiniRichEditor
                       html={block.imageTitleTop || ""}
                       onChange={(v) => onUpdate({ imageTitleTop: v })}
@@ -1991,11 +1991,11 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
                     ref={imgRef}
                     src={block.imageUrl}
                     alt=""
-                    className="object-contain max-w-full max-h-64 bg-muted/30"
+                    className={cn("object-contain max-h-64 bg-muted/30", imgSize !== "L" && "mx-auto")}
                     style={{ borderRadius: 0, width: mediaSizeToWidth(imgSize) }}
                     onLoad={() => setImgHeight(imgRef.current?.offsetHeight ?? 256)}
                   />
-                  <div className="px-4">
+                  <div className={imgSize === "L" ? "px-0" : "px-4"}>
                     <MiniRichEditor
                       html={block.imageCaption || ""}
                       onChange={(v) => onUpdate({ imageCaption: v })}
@@ -2057,8 +2057,8 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
           <div className="px-4"><LayoutPicker value={layout} onChange={(v) => onUpdate({ videoLayout: v.replace("image", "video") as Block["videoLayout"] })} prefix="video" /></div>
           {isSet ? (
             <>
-              <div className={cn("flex gap-3 px-4", isSide ? (layout === "video-left" ? "flex-row" : "flex-row-reverse") : "flex-col")}>
-                <div className={cn("flex flex-col gap-1", isSide ? "w-1/2 shrink-0" : "")} style={!isSide ? { width: mediaSizeToWidth(vidSize) } : undefined}>
+              <div className={cn("flex gap-3", isSide ? "flex-row px-4" : "flex-col", isSide && layout === "video-right" && "flex-row-reverse")}>
+                <div className={cn("flex flex-col gap-1", isSide ? "w-1/2 shrink-0" : "")} style={!isSide ? { width: mediaSizeToWidth(vidSize), margin: vidSize !== "L" ? "0 auto" : undefined } : undefined}>
                   <MiniRichEditor
                     html={block.videoTitleTop || ""}
                     onChange={(v) => onUpdate({ videoTitleTop: v })}
@@ -2067,7 +2067,7 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
                     maxLength={42}
                     className="mb-1"
                   />
-                  <div ref={videoContainerRef} className="rounded-lg bg-black aspect-video overflow-hidden">
+                  <div ref={videoContainerRef} className="bg-black aspect-video overflow-hidden" style={{ borderRadius: vidSize === "L" ? 0 : 8 }}>
                     {embed ? (
                       <iframe
                         src={embed.embedUrl}
@@ -2466,7 +2466,7 @@ function InlineBetweenBar({ onAdd }: { onAdd: (type: BlockType) => void }) {
 
   return (
     <div
-      className="relative flex items-center group/between h-6 my-[6px]"
+      className="relative flex items-center group/between h-1 my-2"
       onMouseEnter={() => setVisible(true)}
       onMouseLeave={() => setVisible(false)}
     >
@@ -3360,7 +3360,7 @@ function SimplePreviewBlock({ block }: { block: Block }) {
       const imgSize = block.imageSize || "L"
       return (
         <div className={cn("flex gap-3", isSide ? (layout === "image-left" ? "flex-row" : "flex-row-reverse") : "flex-col")}>
-          <div className={cn("flex flex-col min-w-0", isSide ? "w-1/2 shrink-0" : "")} style={!isSide ? { width: mediaSizeToWidth(imgSize) } : undefined}>
+          <div className={cn("flex flex-col min-w-0", isSide ? "w-1/2 shrink-0" : "")} style={!isSide ? { width: mediaSizeToWidth(imgSize), margin: imgSize !== "L" ? "0 auto" : undefined } : undefined}>
             {block.imageTitleTop && <div className="text-xs text-muted-foreground italic leading-snug mb-1 truncate max-w-full" dangerouslySetInnerHTML={{ __html: block.imageTitleTop }} />}
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={block.imageUrl} alt="" className="w-full max-w-full object-cover" style={{ borderRadius: 0 }} />
@@ -3380,9 +3380,9 @@ function SimplePreviewBlock({ block }: { block: Block }) {
       const vidSize = block.videoSize || "L"
       return (
         <div className={cn("flex gap-3", isSide ? (layout === "video-left" ? "flex-row" : "flex-row-reverse") : "flex-col")}>
-          <div className={cn("flex flex-col min-w-0", isSide ? "w-1/2 shrink-0" : "")} style={!isSide ? { width: mediaSizeToWidth(vidSize) } : undefined}>
+          <div className={cn("flex flex-col min-w-0", isSide ? "w-1/2 shrink-0" : "")} style={!isSide ? { width: mediaSizeToWidth(vidSize), margin: vidSize !== "L" ? "0 auto" : undefined } : undefined}>
             {block.videoTitleTop && <div className="text-xs text-muted-foreground italic leading-snug mb-1 truncate max-w-full" dangerouslySetInnerHTML={{ __html: block.videoTitleTop }} />}
-            <div className="aspect-video rounded-xl bg-black overflow-hidden">
+            <div className="aspect-video bg-black overflow-hidden" style={{ borderRadius: vidSize === "L" ? 0 : 12 }}>
               {embed ? (
                 <iframe src={embed.embedUrl} className="w-full h-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen title="video" />
               ) : (
