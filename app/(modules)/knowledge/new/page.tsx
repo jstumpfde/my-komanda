@@ -22,7 +22,7 @@ import { NotionEditor, type NotionEditorHandle } from "@/components/vacancies/no
 import { QuizEditor, type QuizQuestion } from "@/components/knowledge/quiz-editor"
 import {
   ChevronRight, Save, Send, Plus, X, UserPlus, Link2, Upload, FileText,
-  Loader2, CheckCircle2, ExternalLink, GripVertical, Trash2, ArrowRight,
+  Loader2, CheckCircle2, ExternalLink, GripVertical, Trash2, ArrowRight, Eye,
 } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
@@ -550,57 +550,128 @@ export default function NewArticlePage() {
         <div className="flex-1 overflow-auto bg-background min-w-0">
           <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
 
-            {/* Breadcrumbs */}
-            <div className="flex items-center gap-1.5 text-sm text-muted-foreground mb-4">
-              <Link href="/knowledge" className="hover:text-foreground transition-colors">База знаний</Link>
-              <ChevronRight className="size-3.5" />
-              <span className="text-foreground font-medium">Новая статья</span>
+            {/* Header */}
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <div className="flex items-center gap-1.5 text-sm text-muted-foreground mb-1">
+                  <Link href="/knowledge" className="hover:text-foreground transition-colors">База знаний</Link>
+                  <ChevronRight className="size-3.5" />
+                  <span className="text-foreground font-medium">Новая статья</span>
+                </div>
+                <h1 className="text-2xl font-bold text-foreground">Новая статья</h1>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => editorRef.current?.openPreview()}>
+                  <Eye className="size-3.5" />Предпросмотр
+                </Button>
+                <Button variant="outline" size="sm" onClick={handleSave} disabled={!title.trim()}>
+                  <Save className="size-3.5 mr-1.5" />Сохранить
+                </Button>
+                <Button size="sm" onClick={handleSave} disabled={!title.trim()}>
+                  Опубликовать
+                </Button>
+              </div>
             </div>
 
-            <h1 className="text-xl font-semibold text-foreground mb-5">Новая статья</h1>
-
-            <div className="max-w-5xl mx-auto space-y-5">
+            <div className="max-w-6xl space-y-5">
 
               {/* Title */}
               <Input
-                placeholder="Заголовок статьи"
+                placeholder="Введите заголовок статьи"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                className="h-12 text-xl font-semibold bg-[var(--input-bg)] border border-border rounded-lg px-4 w-full"
+                className="h-10 text-base font-medium bg-[var(--input-bg)] border border-border rounded-lg px-3 w-full"
               />
 
               {/* Metadata card */}
-              <div className="rounded-xl border border-border p-5">
-                <div className="grid grid-cols-2 gap-4">
-                  {/* Left column */}
-                  <div className="space-y-4">
-                    <div className="space-y-1.5">
-                      <Label className="text-sm font-medium text-foreground">Категория</Label>
-                      <div className="flex items-center gap-2">
-                        <Select value={category} onValueChange={setCategory}>
-                          <SelectTrigger className="h-10 bg-[var(--input-bg)] border border-border rounded-lg w-full">
-                            <SelectValue placeholder="Выберите категорию" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {categories.map((c) => (
-                              <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <Button type="button" variant="outline" size="icon" className="h-10 w-10 shrink-0" onClick={() => setShowNewCategory(true)} title="Добавить категорию">
-                          <Plus className="size-4" />
-                        </Button>
-                      </div>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <Label className="text-sm font-medium text-foreground">Автор</Label>
-                      <Select value={authorId} onValueChange={setAuthorId}>
-                        <SelectTrigger className="h-10 bg-[var(--input-bg)] border border-border rounded-lg w-full">
-                          <SelectValue placeholder="Выберите автора" />
+              <div className="rounded-xl border border-border p-4">
+                <div className="grid grid-cols-2 gap-x-6 gap-y-3">
+                  {/* Row 1: Категория | Теги */}
+                  <div className="space-y-1">
+                    <Label className="text-xs font-medium text-muted-foreground">Категория</Label>
+                    <div className="flex items-center gap-2">
+                      <Select value={category} onValueChange={setCategory}>
+                        <SelectTrigger className="h-9 text-sm bg-[var(--input-bg)] border border-border rounded-lg w-full">
+                          <SelectValue placeholder="Выберите категорию" />
                         </SelectTrigger>
                         <SelectContent>
-                          {MOCK_EMPLOYEES.map((e) => (
+                          {categories.map((c) => (
+                            <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Button type="button" variant="outline" size="icon" className="h-9 w-9 shrink-0" onClick={() => setShowNewCategory(true)} title="Добавить категорию">
+                        <Plus className="size-4" />
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label className="text-xs font-medium text-muted-foreground">Теги</Label>
+                    <div className="flex flex-wrap items-center gap-1.5 min-h-[28px]">
+                      {tags.map((tag) => (
+                        <Badge key={tag} variant="secondary" className="gap-1 pr-1 font-normal">
+                          {tag}
+                          <button type="button" onClick={() => removeTag(tag)} className="hover:text-destructive">
+                            <X className="size-3" />
+                          </button>
+                        </Badge>
+                      ))}
+                    </div>
+                    <Input
+                      placeholder="Введите тег и нажмите Enter"
+                      value={tagInput}
+                      onChange={(e) => setTagInput(e.target.value)}
+                      onKeyDown={handleTagKeyDown}
+                      onBlur={handleAddTag}
+                      className="h-9 text-sm bg-[var(--input-bg)] border border-border rounded-lg w-full"
+                    />
+                  </div>
+
+                  {/* Row 2: Автор | Соавторы */}
+                  <div className="space-y-1">
+                    <Label className="text-xs font-medium text-muted-foreground">Автор</Label>
+                    <Select value={authorId} onValueChange={setAuthorId}>
+                      <SelectTrigger className="h-9 text-sm bg-[var(--input-bg)] border border-border rounded-lg w-full">
+                        <SelectValue placeholder="Выберите автора" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {MOCK_EMPLOYEES.map((e) => (
+                          <SelectItem key={e.id} value={e.id}>
+                            <span className="flex items-center gap-2">
+                              <span className="size-5 rounded-full text-white text-[10px] font-medium flex items-center justify-center shrink-0" style={{ backgroundColor: e.color }}>{e.initials}</span>
+                              {e.name}
+                            </span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label className="text-xs font-medium text-muted-foreground">Соавторы</Label>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {coAuthorIds.map((id) => {
+                        const emp = MOCK_EMPLOYEES.find((e) => e.id === id)
+                        if (!emp) return null
+                        return (
+                          <Badge key={id} variant="secondary" className="gap-1.5 pr-1 font-normal h-8">
+                            <Avatar className="size-5">
+                              <AvatarFallback style={{ backgroundColor: emp.color }} className="text-white text-[9px] font-medium">{emp.initials}</AvatarFallback>
+                            </Avatar>
+                            {emp.name}
+                            <button type="button" onClick={() => setCoAuthorIds((p) => p.filter((x) => x !== id))} className="hover:text-destructive ml-0.5">
+                              <X className="size-3" />
+                            </button>
+                          </Badge>
+                        )
+                      })}
+                      <Select value="" onValueChange={(v) => { if (v && !coAuthorIds.includes(v) && v !== authorId) setCoAuthorIds((p) => [...p, v]) }}>
+                        <SelectTrigger className="h-8 w-44 text-xs bg-[var(--input-bg)] border border-border rounded-lg">
+                          <span className="flex items-center gap-1 text-muted-foreground"><UserPlus className="size-3.5" />Добавить</span>
+                        </SelectTrigger>
+                        <SelectContent>
+                          {MOCK_EMPLOYEES.filter((e) => e.id !== authorId && !coAuthorIds.includes(e.id)).map((e) => (
                             <SelectItem key={e.id} value={e.id}>
                               <span className="flex items-center gap-2">
                                 <span className="size-5 rounded-full text-white text-[10px] font-medium flex items-center justify-center shrink-0" style={{ backgroundColor: e.color }}>{e.initials}</span>
@@ -611,77 +682,17 @@ export default function NewArticlePage() {
                         </SelectContent>
                       </Select>
                     </div>
-
-                    <div className="space-y-1.5">
-                      <Label className="text-sm font-medium text-foreground">Дата создания</Label>
-                      <Input className="h-10 bg-[var(--input-bg)] border border-border rounded-lg w-full" value={new Date().toLocaleDateString("ru-RU")} readOnly disabled />
-                    </div>
                   </div>
 
-                  {/* Right column */}
-                  <div className="space-y-4">
-                    <div className="space-y-1.5">
-                      <Label className="text-sm font-medium text-foreground">Теги</Label>
-                      <div className="flex flex-wrap items-center gap-1.5 min-h-[28px]">
-                        {tags.map((tag) => (
-                          <Badge key={tag} variant="secondary" className="gap-1 pr-1 font-normal">
-                            {tag}
-                            <button type="button" onClick={() => removeTag(tag)} className="hover:text-destructive">
-                              <X className="size-3" />
-                            </button>
-                          </Badge>
-                        ))}
-                      </div>
-                      <Input
-                        placeholder="Введите тег и нажмите Enter"
-                        value={tagInput}
-                        onChange={(e) => setTagInput(e.target.value)}
-                        onKeyDown={handleTagKeyDown}
-                        onBlur={handleAddTag}
-                        className="h-10 bg-[var(--input-bg)] border border-border rounded-lg w-full"
-                      />
-                    </div>
+                  {/* Row 3: Даты */}
+                  <div className="space-y-1">
+                    <Label className="text-xs font-medium text-muted-foreground">Дата создания</Label>
+                    <Input className="h-9 text-sm bg-[var(--input-bg)] border border-border rounded-lg w-full" value={new Date().toLocaleDateString("ru-RU")} readOnly disabled />
+                  </div>
 
-                    <div className="space-y-1.5">
-                      <Label className="text-sm font-medium text-foreground">Соавторы</Label>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        {coAuthorIds.map((id) => {
-                          const emp = MOCK_EMPLOYEES.find((e) => e.id === id)
-                          if (!emp) return null
-                          return (
-                            <Badge key={id} variant="secondary" className="gap-1.5 pr-1 font-normal h-8">
-                              <Avatar className="size-5">
-                                <AvatarFallback style={{ backgroundColor: emp.color }} className="text-white text-[9px] font-medium">{emp.initials}</AvatarFallback>
-                              </Avatar>
-                              {emp.name}
-                              <button type="button" onClick={() => setCoAuthorIds((p) => p.filter((x) => x !== id))} className="hover:text-destructive ml-0.5">
-                                <X className="size-3" />
-                              </button>
-                            </Badge>
-                          )
-                        })}
-                        <Select value="" onValueChange={(v) => { if (v && !coAuthorIds.includes(v) && v !== authorId) setCoAuthorIds((p) => [...p, v]) }}>
-                          <SelectTrigger className="h-8 w-44 text-xs bg-[var(--input-bg)] border border-border rounded-lg">
-                            <span className="flex items-center gap-1 text-muted-foreground"><UserPlus className="size-3.5" />Добавить</span>
-                          </SelectTrigger>
-                          <SelectContent>
-                            {MOCK_EMPLOYEES.filter((e) => e.id !== authorId && !coAuthorIds.includes(e.id)).map((e) => (
-                              <SelectItem key={e.id} value={e.id}>
-                                <span className="flex items-center gap-2">
-                                  <span className="size-5 rounded-full text-white text-[10px] font-medium flex items-center justify-center shrink-0" style={{ backgroundColor: e.color }}>{e.initials}</span>
-                                  {e.name}
-                                </span>
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <Label className="text-sm font-medium text-foreground">Дата обновления</Label>
-                      <Input className="h-10 bg-[var(--input-bg)] border border-border rounded-lg w-full" value={new Date().toLocaleDateString("ru-RU")} readOnly disabled />
-                    </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs font-medium text-muted-foreground">Дата обновления</Label>
+                    <Input className="h-9 text-sm bg-[var(--input-bg)] border border-border rounded-lg w-full" value={new Date().toLocaleDateString("ru-RU")} readOnly disabled />
                   </div>
                 </div>
               </div>
@@ -736,24 +747,27 @@ export default function NewArticlePage() {
               </div>
 
               {/* Status + Actions */}
-              <div className="flex items-center justify-between pt-2">
+              <div className="flex items-center justify-between mt-4">
                 <div className="flex items-center gap-4">
                   <div className="flex items-center gap-2">
-                    <Label className="text-sm font-medium text-foreground shrink-0">Статус</Label>
                     <Select value={status} onValueChange={setStatus}>
-                      <SelectTrigger className="h-10 w-48 bg-[var(--input-bg)] border border-border rounded-lg">
+                      <SelectTrigger className="h-9 w-44 text-sm bg-[var(--input-bg)] border border-border rounded-lg">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="draft">Черновик</SelectItem>
-                        <SelectItem value="review">На проверку</SelectItem>
-                        <SelectItem value="published">Опубликовать</SelectItem>
+                        <SelectItem value="review">На проверке</SelectItem>
+                        <SelectItem value="published">Опубликована</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
+                  <label className="flex items-center gap-2 text-sm cursor-pointer">
+                    <Checkbox checked={isPinned} onCheckedChange={(v) => setIsPinned(!!v)} />
+                    <span className="text-muted-foreground">Закреплённая</span>
+                  </label>
                   {status === "review" && (
                     <Select value={reviewerId} onValueChange={setReviewerId}>
-                      <SelectTrigger className="h-10 w-64 bg-[var(--input-bg)] border border-border rounded-lg">
+                      <SelectTrigger className="h-9 w-60 text-sm bg-[var(--input-bg)] border border-border rounded-lg">
                         <SelectValue placeholder="Выберите проверяющего" />
                       </SelectTrigger>
                       <SelectContent>
@@ -767,21 +781,13 @@ export default function NewArticlePage() {
                   )}
                 </div>
 
-                <div className="flex items-center gap-3">
-                  <Link href="/knowledge">
-                    <Button variant="outline">Отмена</Button>
-                  </Link>
-                  {status === "review" ? (
-                    <Button onClick={handleSendToReview} className="gap-1.5" disabled={!title.trim()}>
-                      <Send className="size-4" />
-                      Отправить на проверку
-                    </Button>
-                  ) : (
-                    <Button onClick={handleSave} className="gap-1.5" disabled={!title.trim()}>
-                      <Save className="size-4" />
-                      Сохранить
-                    </Button>
-                  )}
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" onClick={handleSave} disabled={!title.trim()}>
+                    <Save className="size-3.5 mr-1.5" />Сохранить
+                  </Button>
+                  <Button size="sm" onClick={handleSave} disabled={!title.trim()}>
+                    Опубликовать
+                  </Button>
                 </div>
               </div>
             </div>

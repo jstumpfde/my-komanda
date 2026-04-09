@@ -55,6 +55,8 @@ export interface Block {
   fileLayout?: FileLayout
   fileTitleTop: string
   fileCaption: string
+  imageSize?: "S" | "M" | "L"
+  videoSize?: "S" | "M" | "L"
   infoStyle: "info" | "warning" | "success" | "error"
   infoColor?: string
   infoIcon?: string

@@ -417,6 +417,7 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
               onRemoveBlock={removeBlock}
               onMoveBlock={moveBlock}
               onDuplicateBlock={duplicateBlock}
+              hideLessonTitle={!showSidebar}
             />
           ) : (
             <div className="flex items-center justify-center h-full text-muted-foreground/40 text-sm">
@@ -452,9 +453,10 @@ interface NotionLessonEditorProps {
   onRemoveBlock: (id: string) => void
   onMoveBlock: (idx: number, dir: -1 | 1) => void
   onDuplicateBlock: (idx: number) => void
+  hideLessonTitle?: boolean
 }
 
-function NotionLessonEditor({ lesson, onUpdateLesson, onUpdateBlock, onInsertBlock, onAppendBlock, onRemoveBlock, onMoveBlock, onDuplicateBlock }: NotionLessonEditorProps) {
+function NotionLessonEditor({ lesson, onUpdateLesson, onUpdateBlock, onInsertBlock, onAppendBlock, onRemoveBlock, onMoveBlock, onDuplicateBlock, hideLessonTitle }: NotionLessonEditorProps) {
   const [slashMenu, setSlashMenu] = useState<{ blockIdx: number; x: number; y: number; yTop: number; upward: boolean; query: string } | null>(null)
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null)
   const [dragIdx, setDragIdx] = useState<number | null>(null)
@@ -708,15 +710,17 @@ function NotionLessonEditor({ lesson, onUpdateLesson, onUpdateBlock, onInsertBlo
       )}
 
       {/* Lesson title */}
-      <div className="flex items-center gap-3 mb-8 group/title">
-        <EmojiBtn current={lesson.emoji} onSelect={(v) => onUpdateLesson({ emoji: v })} />
-        <input
-          className="flex-1 text-3xl font-bold bg-transparent outline-none text-foreground placeholder:text-muted-foreground/30 leading-tight pt-0.5"
-          value={lesson.title}
-          onChange={(e) => onUpdateLesson({ title: e.target.value })}
-          placeholder="Название урока"
-        />
-      </div>
+      {!hideLessonTitle && (
+        <div className="flex items-center gap-3 mb-8 group/title">
+          <EmojiBtn current={lesson.emoji} onSelect={(v) => onUpdateLesson({ emoji: v })} />
+          <input
+            className="flex-1 text-3xl font-bold bg-transparent outline-none text-foreground placeholder:text-muted-foreground/30 leading-tight pt-0.5"
+            value={lesson.title}
+            onChange={(e) => onUpdateLesson({ title: e.target.value })}
+            placeholder="Название урока"
+          />
+        </div>
+      )}
 
       {/* Blocks */}
       <div className="space-y-0">
@@ -1459,21 +1463,47 @@ function SourcePicker({
 }) {
   const [mode, setMode] = useState<"choose" | "file" | "url">("choose")
   const [urlDraft, setUrlDraft] = useState("")
+  const [uploading, setUploading] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
-  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    // Video and audio files are too large for base64 / localStorage —
-    // use a blob URL instead (valid for the current session only)
-    if (file.type.startsWith("video/") || file.type.startsWith("audio/")) {
-      const blobUrl = URL.createObjectURL(file)
-      onFile(blobUrl, file.name)
-      return
+
+    setUploading(true)
+    try {
+      const formData = new FormData()
+      formData.append("file", file)
+      const res = await fetch("/api/upload", { method: "POST", body: formData })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Ошибка загрузки" }))
+        toast.error(err.error || "Ошибка загрузки")
+        setUploading(false)
+        return
+      }
+      const data = await res.json()
+      onFile(data.url, file.name)
+    } catch {
+      // Fallback: use local data URL / blob URL
+      if (file.type.startsWith("video/") || file.type.startsWith("audio/")) {
+        const blobUrl = URL.createObjectURL(file)
+        onFile(blobUrl, file.name)
+      } else {
+        const reader = new FileReader()
+        reader.onload = () => onFile(reader.result as string, file.name)
+        reader.readAsDataURL(file)
+      }
     }
-    const reader = new FileReader()
-    reader.onload = () => onFile(reader.result as string, file.name)
-    reader.readAsDataURL(file)
+    setUploading(false)
+  }
+
+  if (uploading) {
+    return (
+      <div className="flex items-center justify-center gap-2 py-4 text-sm text-muted-foreground">
+        <Loader2 className="w-4 h-4 animate-spin" />
+        Загрузка файла...
+      </div>
+    )
   }
 
   if (mode === "choose") {
@@ -1928,9 +1958,10 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
       const layout = block.imageLayout || "full"
       const isSet = !!block.imageUrl
       const isSide = layout === "image-left" || layout === "image-right"
+      const imgSize = block.imageSize || "L"
       return (
-        <div className="rounded-xl border border-dashed border-border bg-muted/20 p-4 space-y-3">
-          <div className="flex items-center justify-between">
+        <div className="rounded-xl border border-dashed border-border bg-muted/20 py-2 px-0 space-y-2">
+          <div className="flex items-center justify-between px-4">
             <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
               <ImageIcon className="w-4 h-4" /><span>Изображение</span>
             </div>
@@ -1940,55 +1971,65 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
               </button>
             )}
           </div>
-          <LayoutPicker value={layout} onChange={(v) => onUpdate({ imageLayout: v as Block["imageLayout"] })} prefix="image" />
+          <div className="px-4"><LayoutPicker value={layout} onChange={(v) => onUpdate({ imageLayout: v as Block["imageLayout"] })} prefix="image" /></div>
           {isSet ? (
-            <div className={cn("flex gap-3", isSide ? (layout === "image-left" ? "flex-row" : "flex-row-reverse") : "flex-col")}>
-              <div className={cn("flex flex-col gap-1", isSide ? "w-1/2 shrink-0" : "w-full")}>
-                <MiniRichEditor
-                  html={block.imageTitleTop || ""}
-                  onChange={(v) => onUpdate({ imageTitleTop: v })}
-                  placeholder="Подпись сверху..."
-                  singleLine
-                  maxLength={42}
-                  className="mb-1"
-                />
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  ref={imgRef}
-                  src={block.imageUrl}
-                  alt=""
-                  className="rounded-lg object-contain w-full max-h-64 bg-muted/30"
-                  onLoad={() => setImgHeight(imgRef.current?.offsetHeight ?? 256)}
-                />
-                <MiniRichEditor
-                  html={block.imageCaption || ""}
-                  onChange={(v) => onUpdate({ imageCaption: v })}
-                  placeholder="Подпись снизу..."
-                  singleLine
-                  maxLength={42}
-                  className="mt-1"
-                />
+            <>
+              <div className={cn("flex gap-3", isSide ? (layout === "image-left" ? "flex-row px-4" : "flex-row-reverse px-4") : "flex-col")}>
+                <div className={cn("flex flex-col gap-1", isSide ? "w-1/2 shrink-0" : "w-full")}>
+                  <div className="px-4">
+                    <MiniRichEditor
+                      html={block.imageTitleTop || ""}
+                      onChange={(v) => onUpdate({ imageTitleTop: v })}
+                      placeholder="Подпись сверху..."
+                      singleLine
+                      maxLength={42}
+                      className="mb-1"
+                    />
+                  </div>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    ref={imgRef}
+                    src={block.imageUrl}
+                    alt=""
+                    className="object-contain max-w-full max-h-64 bg-muted/30"
+                    style={{ borderRadius: 0, width: mediaSizeToWidth(imgSize) }}
+                    onLoad={() => setImgHeight(imgRef.current?.offsetHeight ?? 256)}
+                  />
+                  <div className="px-4">
+                    <MiniRichEditor
+                      html={block.imageCaption || ""}
+                      onChange={(v) => onUpdate({ imageCaption: v })}
+                      placeholder="Подпись снизу..."
+                      singleLine
+                      maxLength={42}
+                      className="mt-1"
+                    />
+                  </div>
+                </div>
+                {/* Текст справа/слева при боковом layout */}
+                {isSide && (
+                  <MiniRichEditor
+                    html={block.content || ""}
+                    onChange={(v) => onUpdate({ content: v })}
+                    placeholder="Текст рядом с изображением..."
+                    maxHeight={imgHeight}
+                    className="flex-1 text-sm not-italic"
+                    showEmojiBtn
+                  />
+                )}
               </div>
-              {/* Текст справа/слева при боковом layout */}
-              {isSide && (
-                <MiniRichEditor
-                  html={block.content || ""}
-                  onChange={(v) => onUpdate({ content: v })}
-                  placeholder="Текст рядом с изображением..."
-                  maxHeight={imgHeight}
-                  className="flex-1 text-sm not-italic"
-                  showEmojiBtn
-                />
-              )}
-            </div>
+              <MediaSizePicker value={imgSize} onChange={(v) => onUpdate({ imageSize: v })} />
+            </>
           ) : (
-            <SourcePicker
-              accept="image/*"
-              urlPlaceholder="https://example.com/photo.jpg"
-              fileLabel="Загрузить изображение"
-              onFile={(dataUrl) => onUpdate({ imageUrl: dataUrl })}
-              onUrl={(url) => onUpdate({ imageUrl: url })}
-            />
+            <div className="px-4">
+              <SourcePicker
+                accept="image/*"
+                urlPlaceholder="https://example.com/photo.jpg"
+                fileLabel="Загрузить изображение"
+                onFile={(dataUrl) => onUpdate({ imageUrl: dataUrl })}
+                onUrl={(url) => onUpdate({ imageUrl: url })}
+              />
+            </div>
           )}
         </div>
       )
@@ -1999,9 +2040,10 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
       const isSet = !!block.videoUrl
       const embed = isSet ? detectVideoService(block.videoUrl) : null
       const isSide = layout === "video-left" || layout === "video-right"
+      const vidSize = block.videoSize || "L"
       return (
-        <div className="rounded-xl border border-dashed border-border bg-muted/20 p-4 space-y-3">
-          <div className="flex items-center justify-between">
+        <div className="rounded-xl border border-dashed border-border bg-muted/20 py-2 px-0 space-y-2">
+          <div className="flex items-center justify-between px-4">
             <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
               <Video className="w-4 h-4" /><span>Видео</span>
               {embed && <span className="text-[10px] font-normal bg-primary/10 text-primary rounded px-1.5 py-0.5">{embed.service}</span>}
@@ -2012,60 +2054,65 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
               </button>
             )}
           </div>
-          <LayoutPicker value={layout} onChange={(v) => onUpdate({ videoLayout: v.replace("image", "video") as Block["videoLayout"] })} prefix="video" />
+          <div className="px-4"><LayoutPicker value={layout} onChange={(v) => onUpdate({ videoLayout: v.replace("image", "video") as Block["videoLayout"] })} prefix="video" /></div>
           {isSet ? (
-            <div className={cn("flex gap-3", isSide ? (layout === "video-left" ? "flex-row" : "flex-row-reverse") : "flex-col")}>
-              <div className={cn("flex flex-col gap-1", isSide ? "w-1/2 shrink-0" : "w-full")}>
-                <MiniRichEditor
-                  html={block.videoTitleTop || ""}
-                  onChange={(v) => onUpdate({ videoTitleTop: v })}
-                  placeholder="Подпись сверху..."
-                  singleLine
-                  maxLength={42}
-                  className="mb-1"
-                />
-                <div ref={videoContainerRef} className="rounded-lg bg-black aspect-video overflow-hidden">
-                  {embed ? (
-                    <iframe
-                      src={embed.embedUrl}
-                      className="w-full h-full"
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                      allowFullScreen
-                      title="video"
-                    />
-                  ) : (
-                    <video src={block.videoUrl} controls className="w-full h-full object-contain" />
-                  )}
+            <>
+              <div className={cn("flex gap-3 px-4", isSide ? (layout === "video-left" ? "flex-row" : "flex-row-reverse") : "flex-col")}>
+                <div className={cn("flex flex-col gap-1", isSide ? "w-1/2 shrink-0" : "")} style={!isSide ? { width: mediaSizeToWidth(vidSize) } : undefined}>
+                  <MiniRichEditor
+                    html={block.videoTitleTop || ""}
+                    onChange={(v) => onUpdate({ videoTitleTop: v })}
+                    placeholder="Подпись сверху..."
+                    singleLine
+                    maxLength={42}
+                    className="mb-1"
+                  />
+                  <div ref={videoContainerRef} className="rounded-lg bg-black aspect-video overflow-hidden">
+                    {embed ? (
+                      <iframe
+                        src={embed.embedUrl}
+                        className="w-full h-full"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen
+                        title="video"
+                      />
+                    ) : (
+                      <video src={block.videoUrl} controls className="w-full h-full object-contain" />
+                    )}
+                  </div>
+                  <MiniRichEditor
+                    html={block.videoCaption || ""}
+                    onChange={(v) => onUpdate({ videoCaption: v })}
+                    placeholder="Подпись снизу..."
+                    singleLine
+                    maxLength={42}
+                    className="mt-1"
+                  />
                 </div>
-                <MiniRichEditor
-                  html={block.videoCaption || ""}
-                  onChange={(v) => onUpdate({ videoCaption: v })}
-                  placeholder="Подпись снизу..."
-                  singleLine
-                  maxLength={42}
-                  className="mt-1"
-                />
+                {isSide && (
+                  <MiniRichEditor
+                    html={block.content || ""}
+                    onChange={(v) => onUpdate({ content: v })}
+                    placeholder="Текст рядом с видео..."
+                    maxHeight={videoHeight}
+                    className="flex-1 text-sm not-italic"
+                    showEmojiBtn
+                  />
+                )}
               </div>
-              {isSide && (
-                <MiniRichEditor
-                  html={block.content || ""}
-                  onChange={(v) => onUpdate({ content: v })}
-                  placeholder="Текст рядом с видео..."
-                  maxHeight={videoHeight}
-                  className="flex-1 text-sm not-italic"
-                  showEmojiBtn
-                />
-              )}
-            </div>
+              <MediaSizePicker value={vidSize} onChange={(v) => onUpdate({ videoSize: v })} />
+            </>
           ) : (
-            <SourcePicker
-              accept="video/*"
-              urlPlaceholder="https://youtube.com/watch?v=... или другой сервис"
-              urlHint="Поддерживаются: YouTube, RuTube, VK, прямые ссылки на видеофайлы"
-              fileLabel="Загрузить видео"
-              onFile={(dataUrl, fileName) => onUpdate({ videoUrl: dataUrl, fileName })}
-              onUrl={(url) => onUpdate({ videoUrl: url })}
-            />
+            <div className="px-4">
+              <SourcePicker
+                accept="video/*"
+                urlPlaceholder="https://youtube.com/watch?v=... или другой сервис"
+                urlHint="Поддерживаются: YouTube, RuTube, VK, прямые ссылки на видеофайлы"
+                fileLabel="Загрузить видео"
+                onFile={(dataUrl, fileName) => onUpdate({ videoUrl: dataUrl, fileName })}
+                onUrl={(url) => onUpdate({ videoUrl: url })}
+              />
+            </div>
           )}
         </div>
       )
@@ -2419,7 +2466,7 @@ function InlineBetweenBar({ onAdd }: { onAdd: (type: BlockType) => void }) {
 
   return (
     <div
-      className="relative flex items-center group/between h-7 my-1"
+      className="relative flex items-center group/between h-6 my-[6px]"
       onMouseEnter={() => setVisible(true)}
       onMouseLeave={() => setVisible(false)}
     >
@@ -2433,7 +2480,7 @@ function InlineBetweenBar({ onAdd }: { onAdd: (type: BlockType) => void }) {
       <div
         className={cn(
           "absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2",
-          "flex items-center justify-center gap-2",
+          "flex items-center justify-center gap-1",
           "transition-all duration-100",
           visible ? "opacity-100 scale-100 pointer-events-auto" : "opacity-0 scale-95 pointer-events-none"
         )}
@@ -2445,31 +2492,31 @@ function InlineBetweenBar({ onAdd }: { onAdd: (type: BlockType) => void }) {
               key={item.type}
               title={item.label}
               onClick={() => onAdd(item.type)}
-              className="w-[42px] h-[42px] rounded-lg flex items-center justify-center"
+              className="w-8 h-8 rounded-md flex items-center justify-center"
               style={{
                 backgroundColor: colors.bg,
                 border: `0.5px solid ${isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)"}`,
-                boxShadow: "0 2px 6px rgba(0,0,0,0.1)",
+                boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
                 transition: "all 0.15s ease",
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.boxShadow = "0 3px 10px rgba(0,0,0,0.15)"
-                e.currentTarget.style.transform = "scale(1.1)"
+                e.currentTarget.style.boxShadow = "0 2px 5px rgba(0,0,0,0.12)"
+                e.currentTarget.style.transform = "scale(1.05)"
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.boxShadow = "0 2px 6px rgba(0,0,0,0.1)"
+                e.currentTarget.style.boxShadow = "0 1px 3px rgba(0,0,0,0.08)"
                 e.currentTarget.style.transform = "scale(1)"
               }}
               onMouseDown={(e) => {
-                e.currentTarget.style.boxShadow = "0 1px 3px rgba(0,0,0,0.1)"
+                e.currentTarget.style.boxShadow = "0 1px 2px rgba(0,0,0,0.08)"
                 e.currentTarget.style.transform = "scale(0.95)"
               }}
               onMouseUp={(e) => {
-                e.currentTarget.style.boxShadow = "0 3px 10px rgba(0,0,0,0.15)"
-                e.currentTarget.style.transform = "scale(1.1)"
+                e.currentTarget.style.boxShadow = "0 2px 5px rgba(0,0,0,0.12)"
+                e.currentTarget.style.transform = "scale(1.05)"
               }}
             >
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
                 {item.svg(colors.icon)}
               </svg>
             </button>
@@ -2478,6 +2525,40 @@ function InlineBetweenBar({ onAdd }: { onAdd: (type: BlockType) => void }) {
       </div>
     </div>
   )
+}
+
+// ─── Media size picker ────────────────────────────────────────────────────
+
+function MediaSizePicker({ value, onChange }: { value: "S" | "M" | "L"; onChange: (v: "S" | "M" | "L") => void }) {
+  const sizes: { label: string; value: "S" | "M" | "L" }[] = [
+    { label: "S", value: "S" },
+    { label: "M", value: "M" },
+    { label: "L", value: "L" },
+  ]
+  return (
+    <div className="flex items-center gap-1 px-4 mt-2">
+      {sizes.map((s) => (
+        <button
+          key={s.value}
+          onClick={() => onChange(s.value)}
+          className={cn(
+            "h-7 px-3 text-xs rounded border transition-colors",
+            value === s.value
+              ? "bg-primary text-primary-foreground border-primary"
+              : "border-border text-muted-foreground hover:text-foreground hover:bg-muted"
+          )}
+        >
+          {s.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function mediaSizeToWidth(size: "S" | "M" | "L"): string {
+  if (size === "S") return "50%"
+  if (size === "M") return "75%"
+  return "100%"
 }
 
 // ─── Formatting button ─────────────────────────────────────────────────────
@@ -3276,12 +3357,13 @@ function SimplePreviewBlock({ block }: { block: Block }) {
       if (!block.imageUrl) return null
       const layout = block.imageLayout || "full"
       const isSide = layout === "image-left" || layout === "image-right"
+      const imgSize = block.imageSize || "L"
       return (
         <div className={cn("flex gap-3", isSide ? (layout === "image-left" ? "flex-row" : "flex-row-reverse") : "flex-col")}>
-          <div className={cn("flex flex-col min-w-0", isSide ? "w-1/2 shrink-0" : "w-full")}>
+          <div className={cn("flex flex-col min-w-0", isSide ? "w-1/2 shrink-0" : "")} style={!isSide ? { width: mediaSizeToWidth(imgSize) } : undefined}>
             {block.imageTitleTop && <div className="text-xs text-muted-foreground italic leading-snug mb-1 truncate max-w-full" dangerouslySetInnerHTML={{ __html: block.imageTitleTop }} />}
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={block.imageUrl} alt="" className="rounded-xl w-full h-48 object-cover" />
+            <img src={block.imageUrl} alt="" className="w-full max-w-full object-cover" style={{ borderRadius: 0 }} />
             {block.imageCaption && <div className="text-xs text-muted-foreground italic leading-snug mt-1 truncate max-w-full" dangerouslySetInnerHTML={{ __html: block.imageCaption }} />}
           </div>
           {isSide && block.content && (
@@ -3295,9 +3377,10 @@ function SimplePreviewBlock({ block }: { block: Block }) {
       const layout = (block.videoLayout || "full") as string
       const isSide = layout === "video-left" || layout === "video-right"
       const embed = detectVideoService(block.videoUrl)
+      const vidSize = block.videoSize || "L"
       return (
         <div className={cn("flex gap-3", isSide ? (layout === "video-left" ? "flex-row" : "flex-row-reverse") : "flex-col")}>
-          <div className={cn("flex flex-col min-w-0", isSide ? "w-1/2 shrink-0" : "w-full")}>
+          <div className={cn("flex flex-col min-w-0", isSide ? "w-1/2 shrink-0" : "")} style={!isSide ? { width: mediaSizeToWidth(vidSize) } : undefined}>
             {block.videoTitleTop && <div className="text-xs text-muted-foreground italic leading-snug mb-1 truncate max-w-full" dangerouslySetInnerHTML={{ __html: block.videoTitleTop }} />}
             <div className="aspect-video rounded-xl bg-black overflow-hidden">
               {embed ? (
