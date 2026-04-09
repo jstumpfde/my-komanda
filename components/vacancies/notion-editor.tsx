@@ -53,6 +53,7 @@ interface NotionEditorProps {
   onUpdate: (demo: Demo) => void
   onSaveStatusChange?: (status: "saved" | "saving") => void
   hideToolbar?: boolean
+  showSidebar?: boolean
   vacancyId?: string
   onOpenLibrary?: () => void
 }
@@ -72,7 +73,7 @@ const SLASH_ITEMS = [
 
 // ─── Main component ────────────────────────────────────────────────────────
 
-export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(function NotionEditorInner({ demo, onBack, onUpdate, onSaveStatusChange, hideToolbar = false, vacancyId, onOpenLibrary }, ref) {
+export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(function NotionEditorInner({ demo, onBack, onUpdate, onSaveStatusChange, hideToolbar = false, showSidebar = true, vacancyId, onOpenLibrary }, ref) {
   const [activeLessonId, setActiveLessonId] = useState(demo.lessons[0]?.id || "")
   const [previewMode, setPreviewMode] = useState(false)
   const [previewIdx, setPreviewIdx] = useState(0)
@@ -314,7 +315,7 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
       <div className="flex gap-4 flex-1 min-h-0">
 
         {/* LEFT — Lesson list */}
-        <div className="w-[260px] flex-shrink-0 border border-border rounded-xl bg-card overflow-hidden flex flex-col">
+        {showSidebar && <div className="w-[260px] flex-shrink-0 border border-border rounded-xl bg-card overflow-hidden flex flex-col">
           <div className="flex items-center justify-between px-3 py-2 border-b border-border">
             <h4 className="text-sm font-semibold text-foreground">Уроки</h4>
             <DropdownMenu>
@@ -401,7 +402,7 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
               )
             })}
           </div>
-        </div>
+        </div>}
 
         {/* RIGHT — Notion-style block editor */}
         <div className="flex-1 min-w-0 overflow-y-auto">
@@ -2357,14 +2358,68 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
   }
 }
 
+// ─── Colorful toolbar icons (SVG) ─────────────────────────────────────────
+
+const TOOLBAR_BLOCK_ITEMS: { type: BlockType; label: string; light: { bg: string; icon: string }; dark: { bg: string; icon: string }; svg: (c: string) => React.ReactNode }[] = [
+  {
+    type: "text", label: "Текст",
+    light: { bg: "#EEEDFE", icon: "#534AB7" }, dark: { bg: "#1e1e2a", icon: "#AFA9EC" },
+    svg: (c) => <><path d="M8 4h2.5v16H8V4zm5.5 5.5h3V20h-3V9.5z" fill={c}/><path d="M4 20h16" stroke={c} strokeWidth="1.5" strokeLinecap="round"/></>,
+  },
+  {
+    type: "image", label: "Фото",
+    light: { bg: "#FBEAF0", icon: "#993556" }, dark: { bg: "#1a1524", icon: "#ED93B1" },
+    svg: (c) => <><rect x="2" y="4" width="20" height="16" rx="3" stroke={c} strokeWidth="1.3"/><path d="M7 16l4-5 3 3 2.5-3L20 16" stroke={c} strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"/><circle cx="8.5" cy="9" r="1.8" fill={c}/></>,
+  },
+  {
+    type: "video", label: "Видео",
+    light: { bg: "#FAECE7", icon: "#993C1D" }, dark: { bg: "#1f1218", icon: "#F09595" },
+    svg: (c) => <><rect x="2" y="4" width="20" height="16" rx="3" stroke={c} strokeWidth="1.3"/><path d="M9.5 8v8l7-4z" fill={c}/></>,
+  },
+  {
+    type: "audio", label: "Аудио",
+    light: { bg: "#E1F5EE", icon: "#0F6E56" }, dark: { bg: "#0f2018", icon: "#5DCAA5" },
+    svg: (c) => <><rect x="8" y="2" width="8" height="12" rx="4" stroke={c} strokeWidth="1.3"/><path d="M5 11a7 7 0 0014 0" stroke={c} strokeWidth="1.3" strokeLinecap="round"/><path d="M12 18v4M9 22h6" stroke={c} strokeWidth="1.3" strokeLinecap="round"/></>,
+  },
+  {
+    type: "file", label: "Файл",
+    light: { bg: "#E6F1FB", icon: "#185FA5" }, dark: { bg: "#1a1e28", icon: "#85B7EB" },
+    svg: (c) => <><path d="M13 2H7a2.5 2.5 0 00-2.5 2.5v15A2.5 2.5 0 007 22h10a2.5 2.5 0 002.5-2.5V8.5L13 2z" stroke={c} strokeWidth="1.3"/><path d="M13 2v7h6.5" stroke={c} strokeWidth="1.3"/></>,
+  },
+  {
+    type: "info", label: "Инфо",
+    light: { bg: "#EFF6FF", icon: "#2563EB" }, dark: { bg: "#172030", icon: "#60A5FA" },
+    svg: (c) => <><circle cx="12" cy="12" r="9" stroke={c} strokeWidth="1.3"/><path d="M12 8v5" stroke={c} strokeWidth="1.5" strokeLinecap="round"/><circle cx="12" cy="16.5" r="1" fill={c}/></>,
+  },
+  {
+    type: "task", label: "Тест",
+    light: { bg: "#EAF3DE", icon: "#3B6D11" }, dark: { bg: "#0f2418", icon: "#4ADE80" },
+    svg: (c) => <><rect x="3" y="3" width="18" height="18" rx="4" stroke={c} strokeWidth="1.3"/><path d="M8 12l3 3 5-5" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></>,
+  },
+  {
+    type: "button", label: "Задание",
+    light: { bg: "#FAEEDA", icon: "#854F0B" }, dark: { bg: "#1f1a0e", icon: "#FBBF24" },
+    svg: (c) => <path d="M12 2l3 6.5h6.5l-5.2 4 2 6.5L12 15.5 5.7 19l2-6.5L2.5 8.5H9z" stroke={c} strokeWidth="1.3" strokeLinejoin="round" fill="none"/>,
+  },
+]
+
 // ─── Inline between bar ────────────────────────────────────────────────────
 
 function InlineBetweenBar({ onAdd }: { onAdd: (type: BlockType) => void }) {
   const [visible, setVisible] = useState(false)
+  const [isDark, setIsDark] = useState(false)
+
+  useEffect(() => {
+    const check = () => setIsDark(document.documentElement.classList.contains("dark"))
+    check()
+    const observer = new MutationObserver(check)
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] })
+    return () => observer.disconnect()
+  }, [])
 
   return (
     <div
-      className="relative flex items-center group/between h-6 my-0.5"
+      className="relative flex items-center group/between h-7 my-1"
       onMouseEnter={() => setVisible(true)}
       onMouseLeave={() => setVisible(false)}
     >
@@ -2375,22 +2430,51 @@ function InlineBetweenBar({ onAdd }: { onAdd: (type: BlockType) => void }) {
       )} />
 
       {/* Иконки по центру */}
-      <div className={cn(
-        "absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2",
-        "flex items-center gap-1 bg-background border border-border rounded-lg shadow-sm px-1.5 py-1",
-        "transition-all duration-100",
-        visible ? "opacity-100 scale-100 pointer-events-auto" : "opacity-0 scale-95 pointer-events-none"
-      )}>
-        {SLASH_ITEMS.map((item) => (
-          <button
-            key={item.type}
-            title={item.label}
-            onClick={() => onAdd(item.type)}
-            className="w-[29px] h-[29px] rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-          >
-            {item.inlineIcon}
-          </button>
-        ))}
+      <div
+        className={cn(
+          "absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2",
+          "flex items-center justify-center gap-2",
+          "transition-all duration-100",
+          visible ? "opacity-100 scale-100 pointer-events-auto" : "opacity-0 scale-95 pointer-events-none"
+        )}
+      >
+        {TOOLBAR_BLOCK_ITEMS.map((item) => {
+          const colors = isDark ? item.dark : item.light
+          return (
+            <button
+              key={item.type}
+              title={item.label}
+              onClick={() => onAdd(item.type)}
+              className="w-[42px] h-[42px] rounded-lg flex items-center justify-center"
+              style={{
+                backgroundColor: colors.bg,
+                border: `0.5px solid ${isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)"}`,
+                boxShadow: "0 2px 6px rgba(0,0,0,0.1)",
+                transition: "all 0.15s ease",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.boxShadow = "0 3px 10px rgba(0,0,0,0.15)"
+                e.currentTarget.style.transform = "scale(1.1)"
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.boxShadow = "0 2px 6px rgba(0,0,0,0.1)"
+                e.currentTarget.style.transform = "scale(1)"
+              }}
+              onMouseDown={(e) => {
+                e.currentTarget.style.boxShadow = "0 1px 3px rgba(0,0,0,0.1)"
+                e.currentTarget.style.transform = "scale(0.95)"
+              }}
+              onMouseUp={(e) => {
+                e.currentTarget.style.boxShadow = "0 3px 10px rgba(0,0,0,0.15)"
+                e.currentTarget.style.transform = "scale(1.1)"
+              }}
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+                {item.svg(colors.icon)}
+              </svg>
+            </button>
+          )
+        })}
       </div>
     </div>
   )

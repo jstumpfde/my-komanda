@@ -1,11 +1,7 @@
 "use client"
 
+import { useState } from "react"
 import {
-  GripVertical,
-  ChevronUp,
-  ChevronDown,
-  Copy,
-  Trash2,
   Plus,
   X,
 } from "lucide-react"
@@ -51,20 +47,24 @@ interface BlockCardProps {
   isLast: boolean
 }
 
-const inputClass = "bg-[var(--input-bg)] border rounded-lg"
+// Seamless input — no border, transparent bg
+const seamlessInput = "border-none bg-transparent shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 px-0"
+// For fields that need structure (URL, selects) — subtle style
+const fieldInput = "bg-muted/30 border-border/50 rounded-lg text-sm h-8"
 
 export function BlockCard({
   block,
   onChange,
-  onDelete,
-  onMoveUp,
-  onMoveDown,
-  onDuplicate,
+  onDelete: _onDelete,
+  onMoveUp: _onMoveUp,
+  onMoveDown: _onMoveDown,
+  onDuplicate: _onDuplicate,
   variables,
-  isFirst,
-  isLast,
+  isFirst: _isFirst,
+  isLast: _isLast,
 }: BlockCardProps) {
   const meta = BLOCK_TYPES.find((bt) => bt.type === block.type)
+  const [focused, setFocused] = useState(false)
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   function updateContent(patch: Record<string, any>) {
@@ -83,7 +83,7 @@ export function BlockCard({
         return (
           <div className="relative">
             {variables && variables.length > 0 && (
-              <div className="absolute top-2 right-2 z-10">
+              <div className="absolute top-1 right-0 z-10">
                 <VariablePicker
                   variables={variables}
                   onInsert={handleVariableInsert}
@@ -91,10 +91,12 @@ export function BlockCard({
               </div>
             )}
             <Textarea
-              className={cn(inputClass, "min-h-[120px]")}
+              className={cn(seamlessInput, "min-h-[60px] resize-none text-sm leading-relaxed")}
               placeholder="Введите текст..."
               value={c.html}
               onChange={(e) => updateContent({ html: e.target.value })}
+              onFocus={() => setFocused(true)}
+              onBlur={() => setFocused(false)}
             />
           </div>
         )
@@ -102,19 +104,22 @@ export function BlockCard({
 
       case "heading": {
         const c = block.content as HeadingContent
+        const sizes = { 1: "text-2xl font-bold", 2: "text-xl font-semibold", 3: "text-lg font-medium" }
         return (
-          <div className="flex gap-3">
+          <div className="flex items-center gap-3">
             <Input
-              className={cn(inputClass, "flex-1")}
+              className={cn(seamlessInput, "flex-1", sizes[c.level])}
               placeholder="Текст заголовка"
               value={c.text}
               onChange={(e) => updateContent({ text: e.target.value })}
+              onFocus={() => setFocused(true)}
+              onBlur={() => setFocused(false)}
             />
             <Select
               value={String(c.level)}
               onValueChange={(v) => updateContent({ level: Number(v) as 1 | 2 | 3 })}
             >
-              <SelectTrigger className={cn(inputClass, "w-24")}>
+              <SelectTrigger className={cn(fieldInput, "w-16 h-7 text-xs opacity-0 group-hover/card:opacity-100 transition-opacity")}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -131,32 +136,34 @@ export function BlockCard({
       case "video": {
         const c = block.content as ImageContent | VideoContent
         return (
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             <Input
-              className={inputClass}
-              placeholder="URL"
+              className={fieldInput}
+              placeholder={block.type === "image" ? "URL изображения" : "URL видео (YouTube)"}
               value={c.url}
               onChange={(e) => updateContent({ url: e.target.value })}
             />
-            <Input
-              className={inputClass}
-              placeholder="Подпись"
-              value={c.caption}
-              onChange={(e) => updateContent({ caption: e.target.value })}
-            />
-            <Select
-              value={c.layout}
-              onValueChange={(v) => updateContent({ layout: v as "full" | "left" | "right" })}
-            >
-              <SelectTrigger className={cn(inputClass, "w-40")}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="full">На всю ширину</SelectItem>
-                <SelectItem value="left">Слева</SelectItem>
-                <SelectItem value="right">Справа</SelectItem>
-              </SelectContent>
-            </Select>
+            <div className="flex gap-2">
+              <Input
+                className={cn(fieldInput, "flex-1")}
+                placeholder="Подпись"
+                value={c.caption}
+                onChange={(e) => updateContent({ caption: e.target.value })}
+              />
+              <Select
+                value={c.layout}
+                onValueChange={(v) => updateContent({ layout: v as "full" | "left" | "right" })}
+              >
+                <SelectTrigger className={cn(fieldInput, "w-36")}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="full">На всю ширину</SelectItem>
+                  <SelectItem value="left">Слева</SelectItem>
+                  <SelectItem value="right">Справа</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         )
       }
@@ -164,19 +171,9 @@ export function BlockCard({
       case "audio": {
         const c = block.content as AudioContent
         return (
-          <div className="space-y-2">
-            <Input
-              className={inputClass}
-              placeholder="URL аудио"
-              value={c.url}
-              onChange={(e) => updateContent({ url: e.target.value })}
-            />
-            <Input
-              className={inputClass}
-              placeholder="Подпись"
-              value={c.caption}
-              onChange={(e) => updateContent({ caption: e.target.value })}
-            />
+          <div className="space-y-1.5">
+            <Input className={fieldInput} placeholder="URL аудио" value={c.url} onChange={(e) => updateContent({ url: e.target.value })} />
+            <Input className={fieldInput} placeholder="Подпись" value={c.caption} onChange={(e) => updateContent({ caption: e.target.value })} />
           </div>
         )
       }
@@ -184,38 +181,31 @@ export function BlockCard({
       case "file": {
         const c = block.content as FileContent
         return (
-          <div className="space-y-2">
-            <Input
-              className={inputClass}
-              placeholder="URL файла"
-              value={c.url}
-              onChange={(e) => updateContent({ url: e.target.value })}
-            />
-            <Input
-              className={inputClass}
-              placeholder="Название файла"
-              value={c.name}
-              onChange={(e) => updateContent({ name: e.target.value })}
-            />
+          <div className="space-y-1.5">
+            <Input className={fieldInput} placeholder="URL файла" value={c.url} onChange={(e) => updateContent({ url: e.target.value })} />
+            <Input className={fieldInput} placeholder="Название файла" value={c.name} onChange={(e) => updateContent({ name: e.target.value })} />
           </div>
         )
       }
 
       case "info": {
         const c = block.content as InfoContent
+        const colorMap: Record<string, string> = {
+          blue: "border-l-blue-500 bg-blue-50/50 dark:bg-blue-950/20",
+          green: "border-l-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/20",
+          yellow: "border-l-amber-500 bg-amber-50/50 dark:bg-amber-950/20",
+          red: "border-l-red-500 bg-red-50/50 dark:bg-red-950/20",
+        }
         return (
-          <div className="space-y-2">
+          <div className={cn("border-l-4 rounded-r-lg p-3 space-y-2", colorMap[c.color] ?? colorMap.blue)}>
             <Textarea
-              className={cn(inputClass, "min-h-[80px]")}
+              className={cn(seamlessInput, "min-h-[60px] resize-none text-sm")}
               placeholder="Текст инфо-блока"
               value={c.text}
               onChange={(e) => updateContent({ text: e.target.value })}
             />
-            <Select
-              value={c.color}
-              onValueChange={(v) => updateContent({ color: v })}
-            >
-              <SelectTrigger className={cn(inputClass, "w-40")}>
+            <Select value={c.color} onValueChange={(v) => updateContent({ color: v })}>
+              <SelectTrigger className={cn(fieldInput, "w-32 h-7 text-xs")}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -232,19 +222,9 @@ export function BlockCard({
       case "button": {
         const c = block.content as ButtonContent
         return (
-          <div className="flex gap-3">
-            <Input
-              className={cn(inputClass, "flex-1")}
-              placeholder="Текст кнопки"
-              value={c.text}
-              onChange={(e) => updateContent({ text: e.target.value })}
-            />
-            <Input
-              className={cn(inputClass, "flex-1")}
-              placeholder="URL ссылки"
-              value={c.url}
-              onChange={(e) => updateContent({ url: e.target.value })}
-            />
+          <div className="flex gap-2">
+            <Input className={cn(fieldInput, "flex-1")} placeholder="Текст кнопки" value={c.text} onChange={(e) => updateContent({ text: e.target.value })} />
+            <Input className={cn(fieldInput, "flex-1")} placeholder="URL ссылки" value={c.url} onChange={(e) => updateContent({ url: e.target.value })} />
           </div>
         )
       }
@@ -252,12 +232,12 @@ export function BlockCard({
       case "test": {
         const c = block.content as TestContent
         return (
-          <div className="space-y-4">
+          <div className="space-y-3">
             {c.questions.map((q, qi) => (
-              <div key={qi} className="space-y-2 rounded-lg border p-3">
+              <div key={qi} className="space-y-2 rounded-lg bg-muted/20 p-3">
                 <div className="flex items-center gap-2">
                   <Input
-                    className={cn(inputClass, "flex-1")}
+                    className={cn(fieldInput, "flex-1 h-9")}
                     placeholder={`Вопрос ${qi + 1}`}
                     value={q.question}
                     onChange={(e) => {
@@ -267,15 +247,7 @@ export function BlockCard({
                     }}
                   />
                   {c.questions.length > 1 && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 shrink-0"
-                      onClick={() => {
-                        const questions = c.questions.filter((_, i) => i !== qi)
-                        updateContent({ questions })
-                      }}
-                    >
+                    <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => updateContent({ questions: c.questions.filter((_, i) => i !== qi) })}>
                       <X className="size-3.5" />
                     </Button>
                   )}
@@ -295,7 +267,7 @@ export function BlockCard({
                         className="accent-primary"
                       />
                       <Input
-                        className={cn(inputClass, "flex-1 h-8 text-sm")}
+                        className={cn(fieldInput, "flex-1 h-7 text-xs")}
                         placeholder={`Вариант ${oi + 1}`}
                         value={opt}
                         onChange={(e) => {
@@ -307,53 +279,30 @@ export function BlockCard({
                         }}
                       />
                       {q.options.length > 2 && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6 shrink-0"
-                          onClick={() => {
-                            const questions = [...c.questions]
-                            const options = q.options.filter((_, i) => i !== oi)
-                            const correct = q.correct >= oi && q.correct > 0 ? q.correct - 1 : q.correct
-                            questions[qi] = { ...q, options, correct }
-                            updateContent({ questions })
-                          }}
-                        >
+                        <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={() => {
+                          const questions = [...c.questions]
+                          const options = q.options.filter((_, i) => i !== oi)
+                          const correct = q.correct >= oi && q.correct > 0 ? q.correct - 1 : q.correct
+                          questions[qi] = { ...q, options, correct }
+                          updateContent({ questions })
+                        }}>
                           <X className="size-3" />
                         </Button>
                       )}
                     </div>
                   ))}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 text-xs"
-                    onClick={() => {
-                      const questions = [...c.questions]
-                      questions[qi] = { ...q, options: [...q.options, ""] }
-                      updateContent({ questions })
-                    }}
-                  >
-                    <Plus className="size-3 mr-1" />
-                    Добавить вариант
+                  <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => {
+                    const questions = [...c.questions]
+                    questions[qi] = { ...q, options: [...q.options, ""] }
+                    updateContent({ questions })
+                  }}>
+                    <Plus className="size-3 mr-1" /> Добавить вариант
                   </Button>
                 </div>
               </div>
             ))}
-            <Button
-              variant="outline"
-              size="sm"
-              className="w-full"
-              onClick={() => {
-                const questions = [
-                  ...c.questions,
-                  { question: "", options: ["", ""], correct: 0 },
-                ]
-                updateContent({ questions })
-              }}
-            >
-              <Plus className="size-4 mr-1" />
-              Добавить вопрос
+            <Button variant="outline" size="sm" className="w-full" onClick={() => updateContent({ questions: [...c.questions, { question: "", options: ["", ""], correct: 0 }] })}>
+              <Plus className="size-4 mr-1" /> Добавить вопрос
             </Button>
           </div>
         )
@@ -362,18 +311,10 @@ export function BlockCard({
       case "task": {
         const c = block.content as TaskContent
         return (
-          <div className="flex gap-3">
-            <Input
-              className={cn(inputClass, "flex-1")}
-              placeholder="Текст задания"
-              value={c.question}
-              onChange={(e) => updateContent({ question: e.target.value })}
-            />
-            <Select
-              value={c.type}
-              onValueChange={(v) => updateContent({ type: v as "text" | "video" | "file" })}
-            >
-              <SelectTrigger className={cn(inputClass, "w-36")}>
+          <div className="flex gap-2">
+            <Input className={cn(fieldInput, "flex-1 h-9")} placeholder="Текст задания" value={c.question} onChange={(e) => updateContent({ question: e.target.value })} />
+            <Select value={c.type} onValueChange={(v) => updateContent({ type: v as "text" | "video" | "file" })}>
+              <SelectTrigger className={cn(fieldInput, "w-28")}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -391,26 +332,21 @@ export function BlockCard({
         return (
           <div className="space-y-2">
             <Textarea
-              className={cn(inputClass, "min-h-[80px]")}
+              className={cn(seamlessInput, "min-h-[60px] resize-none text-sm")}
               placeholder="Промпт / инструкция для записи"
               value={c.prompt}
               onChange={(e) => updateContent({ prompt: e.target.value })}
             />
             <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">Макс. длительность (сек):</span>
-              <Input
-                type="number"
-                className={cn(inputClass, "w-24")}
-                value={c.maxDuration}
-                onChange={(e) => updateContent({ maxDuration: Number(e.target.value) })}
-              />
+              <span className="text-xs text-muted-foreground">Макс. длительность (сек):</span>
+              <Input type="number" className={cn(fieldInput, "w-20")} value={c.maxDuration} onChange={(e) => updateContent({ maxDuration: Number(e.target.value) })} />
             </div>
           </div>
         )
       }
 
       case "divider":
-        return <hr className="border-t border-muted-foreground/20" />
+        return <hr className="border-t border-muted-foreground/20 my-1" />
 
       default:
         return null
@@ -418,51 +354,21 @@ export function BlockCard({
   }
 
   return (
-    <div className="group rounded-lg border p-4">
-      <div className="flex items-center gap-2 mb-3">
-        <GripVertical className="size-4 text-muted-foreground cursor-grab" />
-        <span className="text-base">{meta?.icon}</span>
-        <Badge variant="secondary" className="text-xs font-normal">
-          {meta?.label}
-        </Badge>
-        <div className="flex-1" />
-        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7"
-            onClick={onMoveUp}
-            disabled={isFirst}
-          >
-            <ChevronUp className="size-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7"
-            onClick={onMoveDown}
-            disabled={isLast}
-          >
-            <ChevronDown className="size-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7"
-            onClick={onDuplicate}
-          >
-            <Copy className="size-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 text-destructive hover:text-destructive"
-            onClick={onDelete}
-          >
-            <Trash2 className="size-4" />
-          </Button>
+    <div
+      className={cn(
+        "group/card relative py-1 pl-1 pr-0 transition-all",
+        focused && "border-l-2 border-l-primary",
+        !focused && "border-l-2 border-l-transparent",
+      )}
+    >
+      {/* Type badge — only on hover */}
+      {meta && block.type !== "text" && block.type !== "divider" && (
+        <div className="opacity-0 group-hover/card:opacity-100 transition-opacity mb-1">
+          <Badge variant="secondary" className="text-[10px] font-normal py-0 px-1.5 h-4">
+            {meta.icon} {meta.label}
+          </Badge>
         </div>
-      </div>
+      )}
       <div>{renderContent()}</div>
     </div>
   )
