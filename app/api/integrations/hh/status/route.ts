@@ -1,33 +1,54 @@
 import { NextResponse } from "next/server"
-import { requireCompany } from "@/lib/api-helpers"
+import { auth } from "@/auth"
 import { db } from "@/lib/db"
-import { hhTokens } from "@/lib/db/schema"
-import { eq } from "drizzle-orm"
+import { hhIntegrations } from "@/lib/db/schema"
+import { eq, and } from "drizzle-orm"
 
 export async function GET() {
-  try {
-    const user = await requireCompany()
-
-    const rows = await db
-      .select()
-      .from(hhTokens)
-      .where(eq(hhTokens.companyId, user.companyId))
-      .limit(1)
-
-    const token = rows[0]
-
-    if (!token) {
-      return NextResponse.json({ connected: false })
-    }
-
-    return NextResponse.json({
-      connected: true,
-      employerId: token.hhEmployerId,
-      tokenExpiresAt: token.expiresAt,
-    })
-  } catch (err) {
-    if (err instanceof Response) return err
-    console.error("[HH status]", err)
-    return NextResponse.json({ error: "Ошибка" }, { status: 500 })
+  const session = await auth()
+  if (!session?.user?.companyId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
+
+  const [integration] = await db
+    .select({
+      id: hhIntegrations.id,
+      employerId: hhIntegrations.employerId,
+      employerName: hhIntegrations.employerName,
+      isActive: hhIntegrations.isActive,
+      lastSyncedAt: hhIntegrations.lastSyncedAt,
+      createdAt: hhIntegrations.createdAt,
+    })
+    .from(hhIntegrations)
+    .where(eq(hhIntegrations.companyId, session.user.companyId))
+    .limit(1)
+
+  if (!integration || !integration.isActive) {
+    return NextResponse.json({ connected: false })
+  }
+
+  return NextResponse.json({
+    connected: true,
+    employerId: integration.employerId,
+    employerName: integration.employerName,
+    lastSyncedAt: integration.lastSyncedAt,
+    connectedAt: integration.createdAt,
+  })
+}
+
+export async function DELETE() {
+  const session = await auth()
+  if (!session?.user?.companyId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
+  await db
+    .update(hhIntegrations)
+    .set({ isActive: false, updatedAt: new Date() })
+    .where(and(
+      eq(hhIntegrations.companyId, session.user.companyId),
+      eq(hhIntegrations.isActive, true),
+    ))
+
+  return NextResponse.json({ ok: true })
 }

@@ -220,6 +220,8 @@ export interface ApiCompanyUpdatePayload {
   registration_date?: string
   office_address?: string
   postal_address?: string
+  custom_theme?: Record<string, unknown>
+  subdomain?: string
 }
 
 /** GET /api/companies — fetch the current user's company from the DB */

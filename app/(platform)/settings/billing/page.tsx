@@ -264,24 +264,42 @@ export default function BillingPage() {
             <div className="flex items-center gap-4 flex-wrap">
               <div>
                 <p className="text-lg font-semibold text-foreground">
-                  {subscription?.plan?.name ?? "Без тарифа"}
+                  {subscription?.plan?.name ?? "Пробный период"}
                 </p>
-                {subscription?.plan && (
+                {subscription?.plan ? (
                   <p className="text-sm text-muted-foreground">
                     {formatKopecks(subscription.plan.price)} / месяц
+                  </p>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    {subscription?.daysRemaining != null
+                      ? `Осталось: ${subscription.daysRemaining} ${pluralDays(subscription.daysRemaining)}`
+                      : "Выберите тариф для продолжения"}
                   </p>
                 )}
               </div>
               <Badge
                 variant="outline"
-                className={cn("text-xs", statusBadgeClass(subscription?.status ?? ""))}
+                className={cn("text-xs", statusBadgeClass(subscription?.status ?? "trial"))}
               >
-                {STATUS_LABELS[subscription?.status ?? ""] ?? subscription?.status ?? "—"}
+                {STATUS_LABELS[subscription?.status ?? "trial"] ?? subscription?.status ?? "Пробный"}
               </Badge>
               {subscription?.status === "trial" && subscription.trialEndsAt && (
                 <span className="text-xs text-muted-foreground">
                   Пробный до {formatDate(subscription.trialEndsAt)}
                 </span>
+              )}
+              {!subscription?.plan && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    const el = document.getElementById("plans-section")
+                    el?.scrollIntoView({ behavior: "smooth" })
+                  }}
+                >
+                  Выбрать тариф →
+                </Button>
               )}
             </div>
           )}
@@ -367,13 +385,24 @@ export default function BillingPage() {
 
       {/* Invoices table */}
       <div>
-        <h2 className="text-base font-semibold text-foreground mb-3">Счета</h2>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-base font-semibold text-foreground">Счета</h2>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5 text-xs"
+            onClick={() => toast.success("Запрос на формирование счёта отправлен")}
+          >
+            <CreditCard className="w-3.5 h-3.5" />
+            Запросить счёт
+          </Button>
+        </div>
         {loadingInvoices ? (
           <p className="text-sm text-muted-foreground">Загрузка счетов...</p>
         ) : invoices.length === 0 ? (
           <Card>
             <CardContent className="p-8 text-center">
-              <p className="text-sm text-muted-foreground">Счетов пока нет</p>
+              <p className="text-sm text-muted-foreground">Нет выставленных счетов</p>
             </CardContent>
           </Card>
         ) : (

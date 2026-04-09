@@ -17,7 +17,7 @@ import { toast } from "sonner"
 import {
   Users, Plus, Settings, Trash2, Save, UserPlus,
   Mail, AlertTriangle, Check,
-  CalendarClock, Link2, Copy, X,
+  CalendarClock, Link2, Copy, X, Clock, RotateCcw,
   Loader2, ExternalLink, Camera,
 } from "lucide-react"
 import { getVacancyCategories } from "@/lib/vacancy-storage"
@@ -36,6 +36,42 @@ type TeamRole =
 type MemberStatus = "active" | "invited" | "disabled" | "pending"
 type CandidateVisibility = "own" | "all" | "categories"
 
+interface DaySchedule { active: boolean; start: string; end: string }
+interface CustomSchedule { enabled: boolean; days: Record<string, DaySchedule> }
+
+const WEEKDAY_IDS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const
+const WEEKDAY_LABELS: Record<string, string> = { mon: "Пн", tue: "Вт", wed: "Ср", thu: "Чт", fri: "Пт", sat: "Сб", sun: "Вс" }
+const HALF_HOURS = Array.from({ length: 24 }, (_, i) => `${String(i).padStart(2, "0")}:00`).flatMap(h => [h, h.replace(":00", ":30")])
+
+const DEFAULT_COMPANY_SCHEDULE: Record<string, DaySchedule> = {
+  mon: { active: true, start: "09:00", end: "18:00" }, tue: { active: true, start: "09:00", end: "18:00" },
+  wed: { active: true, start: "09:00", end: "18:00" }, thu: { active: true, start: "09:00", end: "18:00" },
+  fri: { active: true, start: "09:00", end: "18:00" }, sat: { active: false, start: "10:00", end: "15:00" },
+  sun: { active: false, start: "10:00", end: "15:00" },
+}
+
+function formatCustomSchedule(days: Record<string, DaySchedule>): string {
+  const enabled = WEEKDAY_IDS.map(id => days[id]?.active ? { day: WEEKDAY_LABELS[id], start: days[id].start, end: days[id].end } : null).filter(Boolean)
+  const disabled = WEEKDAY_IDS.map(id => !days[id]?.active ? WEEKDAY_LABELS[id] : null).filter(Boolean)
+  if (enabled.length === 0) return "Все дни — выходные"
+  const groups: { days: string[]; start: string; end: string }[] = []
+  for (const item of enabled) {
+    if (!item) continue
+    const last = groups[groups.length - 1]
+    if (last && last.start === item.start && last.end === item.end) last.days.push(item.day)
+    else groups.push({ days: [item.day], start: item.start, end: item.end })
+  }
+  const parts = groups.map(g => {
+    const d = g.days.length > 2 ? `${g.days[0]}–${g.days[g.days.length - 1]}` : g.days.join(", ")
+    return `${d} ${g.start}–${g.end}`
+  })
+  if (disabled.length > 0) {
+    const d = disabled.length > 2 ? `${disabled[0]}–${disabled[disabled.length - 1]}` : disabled.join(", ")
+    parts.push(`${d} выходной`)
+  }
+  return parts.join(", ")
+}
+
 interface TeamMember {
   id: string
   name: string
@@ -49,6 +85,7 @@ interface TeamMember {
   candidateVisibility: CandidateVisibility
   substituteId?: string
   permissions?: Record<string, boolean>
+  customSchedule?: CustomSchedule | null
 }
 
 interface InviteLink {
@@ -102,10 +139,10 @@ const ROLE_CONFIG: Record<TeamRole, { label: string; description: string; color:
 // ─── Тестовые данные ────────────────────────────────────────
 
 const INITIAL_MEMBERS: TeamMember[] = [
-  { id: "m1", name: "Анна Иванова",   email: "anna@romashka.ru",    role: "hr_lead",         status: "active",  avatar: "АИ", avatarUrl: undefined, vacancyIds: [], categories: [], candidateVisibility: "all" },
-  { id: "m2", name: "Дмитрий Козлов", email: "dmitry@romashka.ru",  role: "hr_manager",      status: "active",  avatar: "ДК", avatarUrl: undefined, vacancyIds: [], categories: [], candidateVisibility: "own" },
-  { id: "m3", name: "Михаил Романов", email: "mikhail@romashka.ru", role: "department_head", status: "active",  avatar: "МР", avatarUrl: undefined, vacancyIds: [], categories: [], candidateVisibility: "categories" },
-  { id: "m4", name: "Ольга Тихонова", email: "olga@romashka.ru",    role: "observer",        status: "invited", avatar: "ОТ", avatarUrl: undefined, vacancyIds: [], categories: [], candidateVisibility: "all" },
+  { id: "m1", name: "Анна Иванова",   email: "anna@romashka.ru",    role: "hr_lead",         status: "active",  avatar: "АИ", avatarUrl: undefined, vacancyIds: [], categories: [], candidateVisibility: "all", customSchedule: null },
+  { id: "m2", name: "Дмитрий Козлов", email: "dmitry@romashka.ru",  role: "hr_manager",      status: "active",  avatar: "ДК", avatarUrl: undefined, vacancyIds: [], categories: [], candidateVisibility: "own", customSchedule: null },
+  { id: "m3", name: "Михаил Романов", email: "mikhail@romashka.ru", role: "department_head", status: "active",  avatar: "МР", avatarUrl: undefined, vacancyIds: [], categories: [], candidateVisibility: "categories", customSchedule: null },
+  { id: "m4", name: "Ольга Тихонова", email: "olga@romashka.ru",    role: "observer",        status: "invited", avatar: "ОТ", avatarUrl: undefined, vacancyIds: [], categories: [], candidateVisibility: "all", customSchedule: null },
 ]
 
 // ─── Компонент ──────────────────────────────────────────────
@@ -394,11 +431,11 @@ export default function TeamPage() {
             <table className="w-full table-fixed">
               <thead>
                 <tr className="bg-muted/50 border-b">
-                  <th className="text-left uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-3">Участник</th>
-                  <th className="text-left uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-3 w-[180px]">Роль</th>
-                  <th className="text-left uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-3 w-[250px]">Email</th>
-                  <th className="text-center uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-3 w-[120px]">Статус</th>
-                  <th className="text-center uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-3 w-[80px]">Действия</th>
+                  <th className="text-left uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-2.5 min-w-[200px]">Участник</th>
+                  <th className="text-left uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-2.5 w-[160px]">Роль</th>
+                  <th className="text-left uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-2.5 w-[220px]">Email</th>
+                  <th className="text-center uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-2.5 w-[100px]">Статус</th>
+                  <th className="text-center uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-2.5 w-[60px]">Действия</th>
                 </tr>
               </thead>
               <tbody>
@@ -407,7 +444,7 @@ export default function TeamPage() {
                   const isActive = member.status === "active"
                   return (
                     <tr key={member.id} className="border-b border-border/50 last:border-0 hover:bg-muted/50 transition-colors">
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-2.5">
                         <div className="flex items-center gap-3">
                           <Avatar className="w-8 h-8 shrink-0">
                             {member.avatarUrl && (
@@ -417,39 +454,47 @@ export default function TeamPage() {
                               {member.avatar}
                             </AvatarFallback>
                           </Avatar>
-                          <span className="text-sm font-medium text-foreground">{member.name}</span>
+                          <span className="text-sm font-medium text-foreground truncate">{member.name}</span>
+                          {member.customSchedule?.enabled && (
+                            <span title="Индивидуальный график"><Clock className="w-3 h-3 text-blue-500 shrink-0" /></span>
+                          )}
                         </div>
                       </td>
-                      <td className="px-4 py-3">
-                        <span className={cn(
-                          "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border-transparent",
-                          roleCfg.color
-                        )}>
-                          {roleCfg.label}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-muted-foreground">{member.email}</td>
-                      <td className="text-center px-4 py-3">
-                        <span className="inline-flex items-center gap-1.5 text-xs">
+                      <td className="px-4 py-2.5">
+                        <div className="flex items-center">
                           <span className={cn(
-                            "w-2 h-2 rounded-full shrink-0",
-                            member.role === "employee" || member.status === "pending"
-                              ? "bg-yellow-500"
-                              : isActive ? "bg-emerald-500" : "bg-gray-400"
-                          )} />
-                          <span className={
-                            member.role === "employee" || member.status === "pending"
-                              ? "text-yellow-600 dark:text-yellow-400"
-                              : isActive ? "text-foreground" : "text-muted-foreground"
-                          }>
-                            {member.role === "employee" || member.status === "pending"
-                              ? "Ожидает настройки"
-                              : isActive ? "Активен" : "Не в сети"}
+                            "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border-transparent whitespace-nowrap",
+                            roleCfg.color
+                          )}>
+                            {roleCfg.label}
                           </span>
-                        </span>
+                        </div>
                       </td>
-                      <td className="text-center px-4 py-3">
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(member)}>
+                      <td className="px-4 py-2.5 text-sm text-muted-foreground truncate">{member.email}</td>
+                      <td className="text-center px-4 py-2.5">
+                        <div className="flex items-center justify-center">
+                          <span className="inline-flex items-center gap-1.5 text-xs">
+                            <span className={cn(
+                              "w-2 h-2 rounded-full shrink-0",
+                              member.role === "employee" || member.status === "pending"
+                                ? "bg-yellow-500"
+                                : isActive ? "bg-emerald-500" : "bg-gray-400"
+                            )} />
+                            <span className={cn(
+                              "whitespace-nowrap",
+                              member.role === "employee" || member.status === "pending"
+                                ? "text-yellow-600 dark:text-yellow-400"
+                                : isActive ? "text-foreground" : "text-muted-foreground"
+                            )}>
+                              {member.role === "employee" || member.status === "pending"
+                                ? "Ожидает"
+                                : isActive ? "Активен" : "Не в сети"}
+                            </span>
+                          </span>
+                        </div>
+                      </td>
+                      <td className="text-center px-4 py-2.5">
+                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(member)}>
                           <Settings className="w-4 h-4" />
                         </Button>
                       </td>
@@ -822,6 +867,87 @@ export default function TeamPage() {
                 </div>
                 {(editMember.role === "director" || editMember.role === "hr_lead") && (
                   <p className="text-xs text-muted-foreground">Для этой роли все права включены по умолчанию</p>
+                )}
+              </div>
+
+              <Separator />
+
+              {/* ── Индивидуальный график ── */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-blue-500" />
+                    Индивидуальный график
+                  </Label>
+                  <Switch
+                    checked={!!editMember.customSchedule?.enabled}
+                    onCheckedChange={(v) => {
+                      if (v) {
+                        updateEdit({ customSchedule: { enabled: true, days: { ...DEFAULT_COMPANY_SCHEDULE } } })
+                      } else {
+                        updateEdit({ customSchedule: null })
+                      }
+                    }}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {editMember.customSchedule?.enabled
+                    ? "Сотрудник работает по индивидуальному графику"
+                    : "Если выключен — используется график компании (Пн–Пт 09:00–18:00)"}
+                </p>
+                {editMember.customSchedule?.enabled && (
+                  <div className="space-y-1">
+                    <div className="border rounded-lg overflow-hidden">
+                      {WEEKDAY_IDS.map((dayId, idx) => {
+                        const day = editMember.customSchedule!.days[dayId] ?? { active: false, start: "09:00", end: "18:00" }
+                        return (
+                          <div key={dayId} className={cn(
+                            "grid grid-cols-[32px_40px_1fr] items-center px-3 py-1 border-b last:border-b-0",
+                            idx % 2 === 0 ? "bg-background" : "bg-muted/10",
+                          )}>
+                            <Switch
+                              checked={day.active}
+                              onCheckedChange={(v) => {
+                                const days = { ...editMember.customSchedule!.days, [dayId]: { ...day, active: v } }
+                                updateEdit({ customSchedule: { ...editMember.customSchedule!, days } })
+                              }}
+                              className="scale-75"
+                            />
+                            <span className={cn("text-xs font-medium", !day.active && "text-muted-foreground")}>{WEEKDAY_LABELS[dayId]}</span>
+                            {day.active ? (
+                              <div className="flex items-center gap-1.5">
+                                <Select value={day.start} onValueChange={(v) => {
+                                  const days = { ...editMember.customSchedule!.days, [dayId]: { ...day, start: v } }
+                                  updateEdit({ customSchedule: { ...editMember.customSchedule!, days } })
+                                }}>
+                                  <SelectTrigger className="w-20 h-7 text-xs bg-[var(--input-bg)]"><SelectValue /></SelectTrigger>
+                                  <SelectContent>{HALF_HOURS.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}</SelectContent>
+                                </Select>
+                                <span className="text-muted-foreground text-[10px]">—</span>
+                                <Select value={day.end} onValueChange={(v) => {
+                                  const days = { ...editMember.customSchedule!.days, [dayId]: { ...day, end: v } }
+                                  updateEdit({ customSchedule: { ...editMember.customSchedule!, days } })
+                                }}>
+                                  <SelectTrigger className="w-20 h-7 text-xs bg-[var(--input-bg)]"><SelectValue /></SelectTrigger>
+                                  <SelectContent>{HALF_HOURS.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}</SelectContent>
+                                </Select>
+                              </div>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">Выходной</span>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-xs h-7 gap-1.5"
+                      onClick={() => updateEdit({ customSchedule: { enabled: true, days: { ...DEFAULT_COMPANY_SCHEDULE } } })}
+                    >
+                      <RotateCcw className="w-3 h-3" />Скопировать из графика компании
+                    </Button>
+                  </div>
                 )}
               </div>
 

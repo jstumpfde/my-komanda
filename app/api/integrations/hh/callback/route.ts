@@ -1,104 +1,74 @@
 import { NextRequest, NextResponse } from "next/server"
-import { requireCompany } from "@/lib/api-helpers"
 import { db } from "@/lib/db"
-import { hhTokens } from "@/lib/db/schema"
+import { hhIntegrations } from "@/lib/db/schema"
 import { eq } from "drizzle-orm"
+import { exchangeCode, getMe } from "@/lib/hh-api"
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const code = searchParams.get("code")
-  const error = searchParams.get("error")
+  const state = searchParams.get("state")
 
-  if (error || !code) {
-    return NextResponse.redirect(
-      `${process.env.NEXTAUTH_URL}/settings/integrations?error=hh_auth_failed`
-    )
+  if (!code || !state) {
+    return NextResponse.redirect(new URL("/hr/integrations?error=missing_params", req.url))
   }
 
-  let user: Awaited<ReturnType<typeof requireCompany>>
+  let companyId: string
+  let userId: string
   try {
-    user = await requireCompany()
+    const parsed = JSON.parse(Buffer.from(state, "base64url").toString())
+    companyId = parsed.companyId
+    userId = parsed.userId
   } catch {
-    return NextResponse.redirect(
-      `${process.env.NEXTAUTH_URL}/login`
-    )
-  }
-
-  const clientId = process.env.HH_CLIENT_ID
-  const clientSecret = process.env.HH_CLIENT_SECRET
-  const redirectUri = process.env.HH_REDIRECT_URI
-
-  if (!clientId || !clientSecret || !redirectUri) {
-    return NextResponse.redirect(
-      `${process.env.NEXTAUTH_URL}/settings/integrations?error=hh_not_configured`
-    )
+    return NextResponse.redirect(new URL("/hr/integrations?error=invalid_state", req.url))
   }
 
   try {
-    // Exchange code for tokens
-    const tokenRes = await fetch("https://hh.ru/oauth/token", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        grant_type: "authorization_code",
-        client_id: clientId,
-        client_secret: clientSecret,
-        code,
-        redirect_uri: redirectUri,
-      }),
-    })
+    const tokens = await exchangeCode(code)
+    const expiresAt = new Date(Date.now() + tokens.expires_in * 1000)
 
-    if (!tokenRes.ok) {
-      throw new Error(`HH token exchange failed: ${tokenRes.status}`)
-    }
+    const me = await getMe(tokens.access_token)
+    const employerId = me.employer?.id ?? me.id
+    const employerName = me.employer?.name ?? null
 
-    const tokenData = await tokenRes.json()
-    const { access_token, refresh_token, expires_in } = tokenData
+    const existing = await db
+      .select({ id: hhIntegrations.id })
+      .from(hhIntegrations)
+      .where(eq(hhIntegrations.companyId, companyId))
+      .limit(1)
 
-    const expiresAt = new Date(Date.now() + (expires_in ?? 1209600) * 1000)
-
-    // Fetch employer info
-    let hhEmployerId: string | null = null
-    try {
-      const meRes = await fetch("https://api.hh.ru/me", {
-        headers: { Authorization: `Bearer ${access_token}` },
-      })
-      if (meRes.ok) {
-        const me = await meRes.json()
-        hhEmployerId = me.employer?.id ?? null
-      }
-    } catch {
-      // non-fatal
-    }
-
-    // Upsert token
-    await db
-      .insert(hhTokens)
-      .values({
-        companyId: user.companyId,
-        accessToken: access_token,
-        refreshToken: refresh_token,
-        expiresAt,
-        hhEmployerId,
-      })
-      .onConflictDoUpdate({
-        target: hhTokens.companyId,
-        set: {
-          accessToken: access_token,
-          refreshToken: refresh_token,
-          expiresAt,
-          hhEmployerId,
+    if (existing.length > 0) {
+      await db
+        .update(hhIntegrations)
+        .set({
+          employerId,
+          employerName,
+          accessToken: tokens.access_token,
+          refreshToken: tokens.refresh_token,
+          tokenExpiresAt: expiresAt,
+          connectedBy: userId,
+          isActive: true,
           updatedAt: new Date(),
-        },
-      })
+        })
+        .where(eq(hhIntegrations.companyId, companyId))
+    } else {
+      await db
+        .insert(hhIntegrations)
+        .values({
+          companyId,
+          employerId,
+          employerName,
+          accessToken: tokens.access_token,
+          refreshToken: tokens.refresh_token,
+          tokenExpiresAt: expiresAt,
+          connectedBy: userId,
+          isActive: true,
+        })
+    }
 
-    return NextResponse.redirect(
-      `${process.env.NEXTAUTH_URL}/settings/integrations?connected=hh`
-    )
+    return NextResponse.redirect(new URL("/hr/integrations?connected=hh", req.url))
   } catch (err) {
-    console.error("[HH callback]", err)
-    return NextResponse.redirect(
-      `${process.env.NEXTAUTH_URL}/settings/integrations?error=hh_token_failed`
-    )
+    console.error("[hh/callback]", err)
+    return NextResponse.redirect(new URL("/hr/integrations?error=auth_failed", req.url))
   }
 }

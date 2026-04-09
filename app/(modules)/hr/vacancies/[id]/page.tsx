@@ -118,6 +118,25 @@ export default function VacancyPage() {
   const [status, setStatus] = useState<VacancyStatus>("draft")
   const [columns, setColumns] = useState<ColumnData[]>(emptyColumns())
 
+  // Load funnel stages from API
+  useEffect(() => {
+    fetch("/api/funnel-stages")
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then((stages: Array<{ slug: string; title: string; color: string; sortOrder: number }>) => {
+        if (stages.length > 0) {
+          setColumns(stages.map(s => ({
+            id: s.slug,
+            title: s.title,
+            count: 0,
+            colorFrom: s.color,
+            colorTo: s.color,
+            candidates: [],
+          })))
+        }
+      })
+      .catch(() => {})
+  }, [])
+
   // Sync vacancy status + custom columns from API
   useEffect(() => {
     if (apiVacancy?.status) {
@@ -212,6 +231,61 @@ export default function VacancyPage() {
   const [hhSalaryFrom, setHhSalaryFrom] = useState("")
   const [hhSalaryTo, setHhSalaryTo] = useState("")
   const [hhSchedule, setHhSchedule] = useState("fullDay")
+
+  // ── Persist status changes to API ──────────────────────
+  const updateVacancyStatus = async (newStatus: VacancyStatus) => {
+    setStatus(newStatus)
+    try {
+      await fetch(`/api/modules/hr/vacancies/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      })
+    } catch { /* status already set optimistically */ }
+  }
+
+  // ── Edit mode state ──────────────────────────────────
+  const [editMode, setEditMode] = useState(false)
+  const [editForm, setEditForm] = useState({ title: "", city: "", salaryMin: "", salaryMax: "", experience: "", employment: "", schedule: "" })
+  const [editSaving, setEditSaving] = useState(false)
+
+  const startEditing = () => {
+    setEditForm({
+      title: apiVacancy?.title ?? "",
+      city: apiVacancy?.city ?? "",
+      salaryMin: apiVacancy?.salaryMin?.toString() ?? "",
+      salaryMax: apiVacancy?.salaryMax?.toString() ?? "",
+      experience: apiVacancy?.experience ?? "",
+      employment: apiVacancy?.employment ?? "",
+      schedule: apiVacancy?.schedule ?? "",
+    })
+    setEditMode(true)
+  }
+
+  const saveEdit = async () => {
+    setEditSaving(true)
+    try {
+      const res = await fetch(`/api/modules/hr/vacancies/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: editForm.title || undefined,
+          city: editForm.city || undefined,
+          salary_min: editForm.salaryMin ? parseInt(editForm.salaryMin) : undefined,
+          salary_max: editForm.salaryMax ? parseInt(editForm.salaryMax) : undefined,
+          experience: editForm.experience || undefined,
+          employment: editForm.employment || undefined,
+          schedule: editForm.schedule || undefined,
+        }),
+      })
+      if (!res.ok) throw new Error()
+      toast.success("Вакансия обновлена")
+      setEditMode(false)
+      // Reload page to get fresh data
+      window.location.reload()
+    } catch { toast.error("Ошибка сохранения") }
+    finally { setEditSaving(false) }
+  }
 
   useEffect(() => {
     // Fetch hh.ru connection status
@@ -585,33 +659,33 @@ export default function VacancyPage() {
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 {status === "draft" && <>
-                  <Button size="sm" className="h-8 gap-1.5 text-xs" onClick={() => { setStatus("active"); toast.success("Вакансия запущена") }}><Play className="size-3.5" />Запустить</Button>
-                  <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs text-muted-foreground" onClick={() => { setStatus("closed_cancelled"); toast("В архив") }}><Archive className="size-3.5" />В архив</Button>
+                  <Button size="sm" className="h-8 gap-1.5 text-xs" onClick={() => { updateVacancyStatus("active"); toast.success("Вакансия запущена") }}><Play className="size-3.5" />Запустить</Button>
+                  <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs text-muted-foreground" onClick={() => { updateVacancyStatus("closed_cancelled"); toast("В архив") }}><Archive className="size-3.5" />В архив</Button>
                 </>}
                 {status === "active" && <>
-                  <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs text-destructive" onClick={() => { setStatus("paused"); toast.warning("Вакансия приостановлена") }}><Pause className="size-3.5" />Остановить</Button>
+                  <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs text-destructive" onClick={() => { updateVacancyStatus("paused"); toast.warning("Вакансия приостановлена") }}><Pause className="size-3.5" />Остановить</Button>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs"><X className="size-3.5" />Закрыть вакансию<ChevronDown className="size-3 ml-0.5 opacity-50" /></Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => { setStatus("closed_success"); toast.success("Вакансия закрыта — кандидат найден") }}><CheckCircle2 className="size-3.5 text-blue-600" />Кандидат найден</DropdownMenuItem>
-                      <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => { setStatus("closed_cancelled"); toast.warning("Вакансия отменена") }}><XCircle className="size-3.5 text-red-600" />Отменить вакансию</DropdownMenuItem>
+                      <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => { updateVacancyStatus("closed_success"); toast.success("Вакансия закрыта — кандидат найден") }}><CheckCircle2 className="size-3.5 text-blue-600" />Кандидат найден</DropdownMenuItem>
+                      <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => { updateVacancyStatus("closed_cancelled"); toast.warning("Вакансия отменена") }}><XCircle className="size-3.5 text-red-600" />Отменить вакансию</DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </>}
                 {status === "paused" && <>
-                  <Button size="sm" className="h-8 gap-1.5 text-xs" onClick={() => { setStatus("active"); toast.success("Вакансия запущена") }}><Play className="size-3.5" />Запустить</Button>
+                  <Button size="sm" className="h-8 gap-1.5 text-xs" onClick={() => { updateVacancyStatus("active"); toast.success("Вакансия запущена") }}><Play className="size-3.5" />Запустить</Button>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs"><X className="size-3.5" />Закрыть вакансию<ChevronDown className="size-3 ml-0.5 opacity-50" /></Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => { setStatus("closed_success"); toast.success("Вакансия закрыта — кандидат найден") }}><CheckCircle2 className="size-3.5 text-blue-600" />Кандидат найден</DropdownMenuItem>
-                      <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => { setStatus("closed_cancelled"); toast.warning("Вакансия отменена") }}><XCircle className="size-3.5 text-red-600" />Отменить вакансию</DropdownMenuItem>
+                      <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => { updateVacancyStatus("closed_success"); toast.success("Вакансия закрыта — кандидат найден") }}><CheckCircle2 className="size-3.5 text-blue-600" />Кандидат найден</DropdownMenuItem>
+                      <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => { updateVacancyStatus("closed_cancelled"); toast.warning("Вакансия отменена") }}><XCircle className="size-3.5 text-red-600" />Отменить вакансию</DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
-                  <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs text-muted-foreground" onClick={() => { setStatus("closed_cancelled"); toast("В архив") }}><Archive className="size-3.5" />В архив</Button>
+                  <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs text-muted-foreground" onClick={() => { updateVacancyStatus("closed_cancelled"); toast("В архив") }}><Archive className="size-3.5" />В архив</Button>
                 </>}
                 {(status === "closed_success" || status === "closed_cancelled") && null}
                 <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs text-muted-foreground" disabled={duplicating} onClick={handleDuplicate}>
@@ -955,6 +1029,78 @@ export default function VacancyPage() {
               </TabsContent>
 
               <TabsContent value="settings">
+                {/* ── Описание вакансии (редактирование) ── */}
+                <Card className="rounded-xl border border-border p-5 mb-6">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-base font-semibold">Описание вакансии</h3>
+                    {!editMode ? (
+                      <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={startEditing}>
+                        <Pencil className="w-3.5 h-3.5" />Редактировать
+                      </Button>
+                    ) : (
+                      <div className="flex gap-2">
+                        <Button size="sm" className="gap-1.5 text-xs" onClick={saveEdit} disabled={editSaving}>
+                          {editSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}Сохранить
+                        </Button>
+                        <Button variant="ghost" size="sm" className="text-xs" onClick={() => setEditMode(false)}>Отмена</Button>
+                      </div>
+                    )}
+                  </div>
+                  {editMode ? (
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1"><Label className="text-xs">Название</Label><Input value={editForm.title} onChange={e => setEditForm(p => ({ ...p, title: e.target.value }))} className="h-10 bg-[var(--input-bg)] border border-border rounded-lg" /></div>
+                      <div className="space-y-1"><Label className="text-xs">Город</Label><Input value={editForm.city} onChange={e => setEditForm(p => ({ ...p, city: e.target.value }))} className="h-10 bg-[var(--input-bg)] border border-border rounded-lg" /></div>
+                      <div className="space-y-1"><Label className="text-xs">Зарплата от</Label><Input type="number" value={editForm.salaryMin} onChange={e => setEditForm(p => ({ ...p, salaryMin: e.target.value }))} className="h-10 bg-[var(--input-bg)] border border-border rounded-lg" placeholder="₽" /></div>
+                      <div className="space-y-1"><Label className="text-xs">Зарплата до</Label><Input type="number" value={editForm.salaryMax} onChange={e => setEditForm(p => ({ ...p, salaryMax: e.target.value }))} className="h-10 bg-[var(--input-bg)] border border-border rounded-lg" placeholder="₽" /></div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Опыт</Label>
+                        <Select value={editForm.experience} onValueChange={v => setEditForm(p => ({ ...p, experience: v }))}>
+                          <SelectTrigger className="h-10 bg-[var(--input-bg)] border border-border rounded-lg"><SelectValue placeholder="Выберите" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="no_experience">Без опыта</SelectItem>
+                            <SelectItem value="1-3">1–3 года</SelectItem>
+                            <SelectItem value="3-6">3–6 лет</SelectItem>
+                            <SelectItem value="6+">6+ лет</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Занятость</Label>
+                        <Select value={editForm.employment} onValueChange={v => setEditForm(p => ({ ...p, employment: v }))}>
+                          <SelectTrigger className="h-10 bg-[var(--input-bg)] border border-border rounded-lg"><SelectValue placeholder="Выберите" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="full">Полная</SelectItem>
+                            <SelectItem value="part">Частичная</SelectItem>
+                            <SelectItem value="project">Проектная</SelectItem>
+                            <SelectItem value="internship">Стажировка</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1 col-span-2">
+                        <Label className="text-xs">График</Label>
+                        <Select value={editForm.schedule} onValueChange={v => setEditForm(p => ({ ...p, schedule: v }))}>
+                          <SelectTrigger className="h-10 bg-[var(--input-bg)] border border-border rounded-lg"><SelectValue placeholder="Выберите" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="5/2">5/2</SelectItem>
+                            <SelectItem value="2/2">2/2</SelectItem>
+                            <SelectItem value="flexible">Гибкий</SelectItem>
+                            <SelectItem value="remote">Удалённый</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div><span className="text-muted-foreground">Название:</span> <span>{apiVacancy?.title ?? "—"}</span></div>
+                      <div><span className="text-muted-foreground">Город:</span> <span>{apiVacancy?.city ?? "—"}</span></div>
+                      <div><span className="text-muted-foreground">Зарплата:</span> <span>{apiVacancy?.salaryMin || apiVacancy?.salaryMax ? `${apiVacancy?.salaryMin?.toLocaleString("ru-RU") ?? "—"} – ${apiVacancy?.salaryMax?.toLocaleString("ru-RU") ?? "—"} ₽` : "Не указана"}</span></div>
+                      <div><span className="text-muted-foreground">Опыт:</span> <span>{apiVacancy?.experience ?? "—"}</span></div>
+                      <div><span className="text-muted-foreground">Занятость:</span> <span>{apiVacancy?.employment ?? "—"}</span></div>
+                      <div><span className="text-muted-foreground">График:</span> <span>{apiVacancy?.schedule ?? "—"}</span></div>
+                    </div>
+                  )}
+                </Card>
+
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   {/* Левая колонка */}
                   <div className="space-y-6">

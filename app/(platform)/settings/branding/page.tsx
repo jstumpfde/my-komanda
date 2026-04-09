@@ -9,11 +9,10 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
-import { Palette, Lock, Globe, Save, Loader2, CheckCircle2, XCircle, RefreshCw, Copy, AlertCircle, Upload, Trash2, RotateCcw, Settings } from "lucide-react"
+import { Palette, Lock, Globe, Save, Loader2, CheckCircle2, XCircle, RefreshCw, Copy, AlertCircle, Upload, Trash2, RotateCcw, Settings, Link2 } from "lucide-react"
 import { saveBrand, canCustomizeBrand, type BrandConfig } from "@/lib/branding"
 import { fetchCompanyApi, updateCompanyApi } from "@/lib/company-storage"
 import { CompanyLogo } from "@/components/company-logo"
-import Link from "next/link"
 
 interface ThemeColors { primary: string; background: string; foreground: string; sidebar: string; accent: string }
 
@@ -25,12 +24,23 @@ const THEME_DEFAULTS: Record<string, { label: string; emoji: string; colors: The
 
 const THEME_KEYS = ["light", "dark", "warm"] as const
 
+function applyThemeColors(colors: ThemeColors) {
+  const root = document.documentElement
+  root.style.setProperty("--primary", colors.primary)
+  root.style.setProperty("--background", colors.background)
+  root.style.setProperty("--foreground", colors.foreground)
+  root.style.setProperty("--sidebar-background", colors.sidebar)
+  root.style.setProperty("--accent", colors.accent)
+}
+
 export default function BrandingPage() {
   const [brandPlan] = useState<BrandConfig["plan"]>("business")
   const canBrand = canCustomizeBrand(brandPlan)
   const [logoPreview, setLogoPreview] = useState<string | null>(null)
   const [uploadingLogo, setUploadingLogo] = useState(false)
   const [shortName, setShortName] = useState("")
+  const [subdomain, setSubdomain] = useState("")
+  const [subdomainSaving, setSubdomainSaving] = useState(false)
   const [customDomain, setCustomDomain] = useState("")
   const [domainStatus, setDomainStatus] = useState<"idle" | "checking" | "verified" | "error">("idle")
   const [verifying, setVerifying] = useState(false)
@@ -49,6 +59,7 @@ export default function BrandingPage() {
         if (!c) return
         if (c.name) setShortName(c.name as string)
         if (c.logoUrl) setLogoPreview(c.logoUrl as string)
+        if (c.subdomain) setSubdomain(c.subdomain as string)
         if (c.customTheme) {
           const saved = c.customTheme as Record<string, { enabled?: boolean; colors?: ThemeColors }>
           setThemeSettings(prev => {
@@ -58,6 +69,12 @@ export default function BrandingPage() {
             }
             return next
           })
+          // Apply saved theme colors on load
+          const activeKey = THEME_KEYS.find(k => saved[k]?.enabled) ?? "light"
+          const activeColors = saved[activeKey]?.colors
+          if (activeColors) {
+            applyThemeColors({ ...THEME_DEFAULTS[activeKey].colors, ...activeColors })
+          }
         }
       })
       .catch(() => {})
@@ -90,12 +107,33 @@ export default function BrandingPage() {
     setVerifying(false)
   }
 
+  const handleApplyTheme = (key: string) => {
+    const colors = themeSettings[key].colors
+    applyThemeColors(colors)
+    setExpandedTheme(null)
+    toast.success("Цвета применены")
+  }
+
+  const handleSaveSubdomain = async () => {
+    const clean = subdomain.trim().toLowerCase().replace(/[^a-z0-9-]/g, "").replace(/^-+|-+$/g, "")
+    if (!clean) { toast.error("Введите поддомен"); return }
+    setSubdomainSaving(true)
+    try {
+      await updateCompanyApi({ subdomain: clean })
+      setSubdomain(clean)
+      toast.success("Поддомен сохранён")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Ошибка сохранения")
+    } finally { setSubdomainSaving(false) }
+  }
+
   const handleSave = async () => {
     setSaving(true)
     try {
-      await updateCompanyApi({ logo_url: logoPreview || undefined, custom_theme: themeSettings })
+      await updateCompanyApi({ logo_url: logoPreview || undefined, custom_theme: themeSettings as Record<string, unknown> })
       const activeTheme = THEME_KEYS.find(k => themeSettings[k].enabled) ?? "light"
       const c = themeSettings[activeTheme].colors
+      applyThemeColors(c)
       saveBrand({ primaryColor: c.primary, bgColor: c.background, textColor: c.foreground, logoUrl: logoPreview, companyName: shortName })
       toast.success("Брендинг сохранён")
     } catch {
@@ -226,7 +264,7 @@ export default function BrandingPage() {
                           <Button variant="outline" size="sm" className="gap-1.5 text-xs h-7" onClick={() => setThemeSettings(prev => ({ ...prev, [key]: { ...prev[key], colors: { ...THEME_DEFAULTS[key].colors } } }))}>
                             <RotateCcw className="w-3 h-3" />Сбросить
                           </Button>
-                          <Button size="sm" className="text-xs h-7" onClick={() => { setExpandedTheme(null); toast.success("Цвета применены") }}>
+                          <Button size="sm" className="text-xs h-7" onClick={() => handleApplyTheme(key)}>
                             Применить
                           </Button>
                         </div>
@@ -236,6 +274,40 @@ export default function BrandingPage() {
                 )
               })}
             </div>
+          </CardContent>
+        </Card>
+
+        {/* ═══ Поддомен ═══ */}
+        <Card>
+          <CardHeader className="pb-2 pt-4 px-5">
+            <CardTitle className="text-base flex items-center gap-2"><Link2 className="w-4 h-4" />Поддомен компании</CardTitle>
+          </CardHeader>
+          <CardContent className="px-5 pb-4 pt-0 space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Ваш поддомен для публичных страниц вакансий и демонстраций. Если не задан — используется автоматический.
+            </p>
+            <div className="flex gap-2 max-w-lg items-center">
+              <div className="flex-1 flex items-center">
+                <Input
+                  value={subdomain}
+                  onChange={e => setSubdomain(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
+                  placeholder="mycompany"
+                  className="h-9 font-mono text-sm rounded-r-none border-r-0"
+                />
+                <span className="h-9 px-3 flex items-center text-sm text-muted-foreground bg-muted border border-l-0 rounded-r-lg shrink-0 font-mono">
+                  .company24.pro
+                </span>
+              </div>
+              <Button variant="outline" size="sm" className="shrink-0 h-9 gap-1.5" onClick={handleSaveSubdomain} disabled={subdomainSaving}>
+                {subdomainSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                Сохранить
+              </Button>
+            </div>
+            {subdomain && (
+              <p className="text-xs text-muted-foreground">
+                Итого: <span className="font-mono text-foreground">{subdomain}.company24.pro</span>
+              </p>
+            )}
           </CardContent>
         </Card>
 
@@ -271,12 +343,6 @@ export default function BrandingPage() {
             )}
           </CardContent>
         </Card>
-
-        {/* ═══ Ссылка на HR брендинг ═══ */}
-        <div className="rounded-lg border border-dashed border-border p-3 flex items-center justify-between">
-          <p className="text-sm text-muted-foreground">Брендинг для кандидатов (цвета, приветствие, превью)</p>
-          <Link href="/hr/hiring-settings"><Button variant="ghost" size="sm" className="text-xs">Настройки найма →</Button></Link>
-        </div>
 
         {/* ═══ Сохранить ═══ */}
         <div className="flex justify-end pb-4">

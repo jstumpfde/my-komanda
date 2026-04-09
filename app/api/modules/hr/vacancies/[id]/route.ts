@@ -58,6 +58,9 @@ export async function PUT(
       salary_max?: number
       status?: string
       description_json?: unknown
+      experience?: string
+      schedule?: string
+      description?: string
     }
 
     const updates: Record<string, unknown> = {
@@ -73,6 +76,9 @@ export async function PUT(
     if (body.salary_max !== undefined) updates.salaryMax = body.salary_max
     if (body.status !== undefined) updates.status = body.status
     if (body.description_json !== undefined) updates.descriptionJson = body.description_json
+    if (body.experience !== undefined) updates.experience = body.experience
+    if (body.schedule !== undefined) updates.schedule = body.schedule
+    if (body.description !== undefined) updates.description = body.description
 
     const [updated] = await db
       .update(vacancies)

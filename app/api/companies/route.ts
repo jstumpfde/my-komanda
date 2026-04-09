@@ -110,6 +110,8 @@ export async function PUT(req: NextRequest) {
       registration_date?: string
       office_address?: string
       postal_address?: string
+      custom_theme?: Record<string, unknown>
+      subdomain?: string
     }
 
     const fieldMap: Record<string, unknown> = {}
@@ -144,6 +146,8 @@ export async function PUT(req: NextRequest) {
     if (body.registration_date !== undefined) fieldMap.registrationDate = body.registration_date
     if (body.office_address !== undefined) fieldMap.officeAddress = body.office_address
     if (body.postal_address !== undefined) fieldMap.postalAddress = body.postal_address
+    if (body.custom_theme !== undefined) fieldMap.customTheme = body.custom_theme
+    if (body.subdomain !== undefined) fieldMap.subdomain = body.subdomain
 
     // Auto-create company if user has no companyId
     if (!user.companyId) {
@@ -179,7 +183,9 @@ export async function PUT(req: NextRequest) {
     return apiSuccess(updated)
   } catch (err) {
     if (err instanceof Response) return err
-    console.error("[companies PUT]", err)
+    console.error("[companies PUT]", err instanceof Error ? err.message : err, err instanceof Error ? err.stack : "")
+    const msg = err instanceof Error ? err.message : String(err)
+    if (msg.includes("subdomain") && msg.includes("unique")) return apiError("Этот поддомен уже занят", 409)
     return apiError("Internal server error", 500)
   }
 }

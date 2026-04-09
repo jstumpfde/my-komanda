@@ -107,6 +107,7 @@ export const companies = pgTable("companies", {
   brandBgColor:       text("brand_bg_color").default("#f0f4ff"),
   brandTextColor:     text("brand_text_color").default("#1e293b"),
   customTheme:        jsonb("custom_theme"),       // { primary, background, foreground, sidebar, accent }
+  subdomain:          text("subdomain").unique(),
   // join link
   joinCode:           text("join_code").unique(),
   joinEnabled:        boolean("join_enabled").default(true),
@@ -130,6 +131,7 @@ export const users = pgTable("users", {
   avatarUrl: text("avatar_url"),
   position: text("position"),                  // реальная должность (не роль в системе)
   permissions: jsonb("permissions").default("{}"), // { manage_company, manage_team, manage_billing, ... }
+  customSchedule: jsonb("custom_schedule"),          // { enabled, days: { mon: { active, start, end }, ... } }
   isActive: boolean("is_active").default(true),
   createdAt: timestamp("created_at").defaultNow(),
 })
@@ -903,31 +905,6 @@ export const subscriptionHistory = pgTable("subscription_history", {
   createdAt:   timestamp("created_at").defaultNow(),
 })
 
-// ─── HH.ru Integration ────────────────────────────────────────────────────────
-
-export const hhTokens = pgTable("hh_tokens", {
-  id:             uuid("id").primaryKey().defaultRandom(),
-  companyId:      uuid("company_id").references(() => companies.id).notNull().unique(),
-  accessToken:    text("access_token").notNull(),
-  refreshToken:   text("refresh_token").notNull(),
-  expiresAt:      timestamp("expires_at", { withTimezone: true }).notNull(),
-  hhEmployerId:   text("hh_employer_id"),
-  createdAt:      timestamp("created_at").defaultNow(),
-  updatedAt:      timestamp("updated_at").defaultNow(),
-})
-
-export const hhVacancies = pgTable("hh_vacancies", {
-  id:           uuid("id").primaryKey().defaultRandom(),
-  vacancyId:    uuid("vacancy_id").references(() => vacancies.id).notNull(),
-  hhVacancyId:  text("hh_vacancy_id").notNull(),
-  hhStatus:     text("hh_status").default("active"),
-  publishedAt:  timestamp("published_at", { withTimezone: true }).defaultNow(),
-  expiresAt:    timestamp("expires_at", { withTimezone: true }),
-  views:        integer("views").default(0),
-  responses:    integer("responses").default(0),
-  updatedAt:    timestamp("updated_at").defaultNow(),
-})
-
 // ─── Vacancy UTM Links ───────────────────────────────────────────────────────
 
 export const vacancyUtmLinks = pgTable("vacancy_utm_links", {
@@ -1172,6 +1149,83 @@ export const demoTemplates = pgTable("demo_templates", {
   createdAt:     timestamp("created_at").defaultNow(),
   updatedAt:     timestamp("updated_at").defaultNow(),
 })
+
+// ─── HH.ru Integration ──────────────────────────────────────────────────────
+
+export const hhIntegrations = pgTable("hh_integrations", {
+  id:              uuid("id").primaryKey().defaultRandom(),
+  companyId:       uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }).unique(),
+  employerId:      text("employer_id").notNull(),
+  employerName:    text("employer_name"),
+  accessToken:     text("access_token").notNull(),
+  refreshToken:    text("refresh_token").notNull(),
+  tokenExpiresAt:  timestamp("token_expires_at").notNull(),
+  connectedBy:     uuid("connected_by").references(() => users.id),
+  lastSyncedAt:    timestamp("last_synced_at"),
+  isActive:        boolean("is_active").notNull().default(true),
+  createdAt:       timestamp("created_at").defaultNow(),
+  updatedAt:       timestamp("updated_at").defaultNow(),
+})
+
+export const hhVacancies = pgTable("hh_vacancies", {
+  id:              uuid("id").primaryKey().defaultRandom(),
+  companyId:       uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  hhVacancyId:     text("hh_vacancy_id").notNull(),
+  title:           text("title").notNull(),
+  areaName:        text("area_name"),
+  salaryFrom:      integer("salary_from"),
+  salaryTo:        integer("salary_to"),
+  salaryCurrency:  text("salary_currency"),
+  status:          text("status").notNull().default("open"),
+  responsesCount:  integer("responses_count").default(0),
+  url:             text("url"),
+  localVacancyId:  uuid("local_vacancy_id").references(() => vacancies.id),
+  rawData:         jsonb("raw_data"),
+  syncedAt:        timestamp("synced_at").defaultNow(),
+  createdAt:       timestamp("created_at").defaultNow(),
+}, (t) => [
+  unique("uq_hh_vacancies_company_hh").on(t.companyId, t.hhVacancyId),
+])
+
+export const hhResponses = pgTable("hh_responses", {
+  id:               uuid("id").primaryKey().defaultRandom(),
+  companyId:        uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  hhVacancyId:      text("hh_vacancy_id").notNull(),
+  hhResponseId:     text("hh_response_id").notNull(),
+  candidateName:    text("candidate_name"),
+  candidatePhone:   text("candidate_phone"),
+  candidateEmail:   text("candidate_email"),
+  resumeTitle:      text("resume_title"),
+  resumeUrl:        text("resume_url"),
+  status:           text("status").notNull().default("new"),
+  rawData:          jsonb("raw_data"),
+  localCandidateId: uuid("local_candidate_id"),
+  syncedAt:         timestamp("synced_at").defaultNow(),
+  createdAt:        timestamp("created_at").defaultNow(),
+}, (t) => [
+  unique("uq_hh_responses_company_response").on(t.companyId, t.hhResponseId),
+])
+
+// Legacy alias — old code references hhTokens
+export const hhTokens = hhIntegrations
+
+// ─── Funnel Stages ──────────────────────────────────────────────────────────
+
+export const funnelStages = pgTable("funnel_stages", {
+  id:         uuid("id").primaryKey().defaultRandom(),
+  companyId:  uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  title:      text("title").notNull(),
+  slug:       text("slug").notNull(),
+  sortOrder:  integer("sort_order").notNull().default(0),
+  color:      text("color").default("#3B82F6"),
+  isTerminal: boolean("is_terminal").default(false),
+  isDefault:  boolean("is_default").default(false),
+  createdAt:  timestamp("created_at").defaultNow(),
+}, (t) => [
+  unique("uq_funnel_stages_company_slug").on(t.companyId, t.slug),
+])
+
+// ─── Vacancy Demos ──────────────────────────────────────────────────────────
 
 export const vacancyDemos = pgTable("vacancy_demos", {
   id:          uuid("id").primaryKey().defaultRandom(),

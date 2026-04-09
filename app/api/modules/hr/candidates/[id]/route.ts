@@ -9,13 +9,14 @@ async function getOwnedCandidate(candidateId: string, companyId: string) {
   const [row] = await db
     .select({
       candidate: candidates,
+      vacancyTitle: vacancies.title,
     })
     .from(candidates)
     .innerJoin(vacancies, eq(candidates.vacancyId, vacancies.id))
     .where(and(eq(candidates.id, candidateId), eq(vacancies.companyId, companyId)))
     .limit(1)
 
-  return row?.candidate ?? null
+  return row ?? null
 }
 
 export async function GET(
@@ -26,12 +27,12 @@ export async function GET(
     const user = await requireCompany()
     const { id } = await params
 
-    const candidate = await getOwnedCandidate(id, user.companyId)
-    if (!candidate) {
+    const row = await getOwnedCandidate(id, user.companyId)
+    if (!row) {
       return apiError("Candidate not found", 404)
     }
 
-    return apiSuccess(candidate)
+    return apiSuccess({ ...row.candidate, vacancyTitle: row.vacancyTitle })
   } catch (err) {
     if (err instanceof Response) return err
     return apiError("Internal server error", 500)
@@ -46,8 +47,8 @@ export async function PUT(
     const user = await requireCompany()
     const { id } = await params
 
-    const existing = await getOwnedCandidate(id, user.companyId)
-    if (!existing) {
+    const existingRow = await getOwnedCandidate(id, user.companyId)
+    if (!existingRow) {
       return apiError("Candidate not found", 404)
     }
 

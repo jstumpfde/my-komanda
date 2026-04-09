@@ -11,6 +11,8 @@ const VALID_STAGES = [
 ] as const
 type Stage = (typeof VALID_STAGES)[number]
 
+export { PUT as PATCH }
+
 export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }

@@ -427,7 +427,37 @@ export default function HiringSettingsPage() {
                   </Card>
 
                   <div className="flex justify-end">
-                    <Button className="gap-2" onClick={() => toast.success("Настройки воронки сохранены")}>
+                    <Button className="gap-2" onClick={async () => {
+                      try {
+                        const stages = FUNNEL_SCENARIOS[selectedScenario].stages
+                        const stagesPayload = stages.map((title, i) => ({
+                          title,
+                          slug: title.toLowerCase().replace(/[^a-zа-яё0-9]/gi, "_").replace(/_+/g, "_"),
+                          sort_order: i,
+                          color: i === stages.length - 1 ? "#22C55E" : i === 0 ? "#3B82F6" : "#8B5CF6",
+                        }))
+                        // Get existing stages to update or create
+                        const res = await fetch("/api/funnel-stages")
+                        if (res.ok) {
+                          const existing = await res.json()
+                          if (Array.isArray(existing) && existing.length > 0) {
+                            const updatePayload = existing.map((s: { id: string }, i: number) => ({
+                              id: s.id,
+                              title: stagesPayload[i]?.title ?? s.id,
+                              slug: stagesPayload[i]?.slug ?? "stage_" + i,
+                              sort_order: i,
+                              color: stagesPayload[i]?.color ?? "#3B82F6",
+                            }))
+                            await fetch("/api/funnel-stages", {
+                              method: "PUT",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify(updatePayload),
+                            })
+                          }
+                        }
+                        toast.success("Настройки воронки сохранены")
+                      } catch { toast.error("Ошибка сохранения") }
+                    }}>
                       <Save className="size-4" />Сохранить
                     </Button>
                   </div>

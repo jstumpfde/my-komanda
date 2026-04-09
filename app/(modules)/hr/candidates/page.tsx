@@ -11,7 +11,13 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select"
-import { Search, Users, ListFilter } from "lucide-react"
+import { Search, Users, ListFilter, MoreHorizontal, UserPlus, Archive, XCircle } from "lucide-react"
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { Button } from "@/components/ui/button"
+import Link from "next/link"
+import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 
 // ─── Types & constants ───────────────────────────────────────────────────────
@@ -240,6 +246,7 @@ export default function CandidatesPage() {
                       <th className="px-4 py-3"><SortableHeader label="Статус" column="status" current={colSort} onToggle={toggleColSort} /></th>
                       <th className="px-4 py-3"><SortableHeader label="Дата отклика" column="date" current={colSort} onToggle={toggleColSort} /></th>
                       <th className="px-4 py-3"><SortableHeader label="Источник" column="source" current={colSort} onToggle={toggleColSort} /></th>
+                      <th className="px-4 py-3 w-[60px] text-xs font-medium text-muted-foreground uppercase tracking-wider">Действия</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -260,7 +267,7 @@ export default function CandidatesPage() {
                               </AvatarFallback>
                             </Avatar>
                             <div>
-                              <p className="text-sm font-medium text-foreground">{c.name}</p>
+                              <Link href={`/hr/candidates/${c.id}`} className="text-sm font-medium text-foreground hover:text-primary hover:underline transition-colors">{c.name}</Link>
                               <p className="text-xs text-muted-foreground">{c.city}</p>
                             </div>
                           </div>
@@ -273,6 +280,26 @@ export default function CandidatesPage() {
                         </td>
                         <td className="px-4 py-3.5 text-sm text-muted-foreground whitespace-nowrap">{formatDate(c.appliedAt)}</td>
                         <td className="px-4 py-3.5 text-sm text-muted-foreground">{SOURCE_LABELS[c.source] ?? c.source}</td>
+                        <td className="px-4 py-3.5" onClick={e => e.stopPropagation()}>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-7 w-7">
+                                <MoreHorizontal className="w-4 h-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem className="gap-2 text-xs" onClick={() => toast.success(`${c.name}: приглашён на интервью`)}>
+                                <UserPlus className="w-3.5 h-3.5" />Пригласить на интервью
+                              </DropdownMenuItem>
+                              <DropdownMenuItem className="gap-2 text-xs" onClick={() => toast.success(`${c.name}: перемещён в резерв`)}>
+                                <Archive className="w-3.5 h-3.5" />В резерв
+                              </DropdownMenuItem>
+                              <DropdownMenuItem className="gap-2 text-xs text-destructive" onClick={() => toast.success(`${c.name}: отказ`)}>
+                                <XCircle className="w-3.5 h-3.5" />Отказать
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
