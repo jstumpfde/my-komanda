@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Separator } from "@/components/ui/separator"
 import { toast } from "sonner"
-import { Loader2, User, Mail, Lock, Shield, Save, Eye, EyeOff, Camera, Trash2 } from "lucide-react"
+import { Loader2, User, Mail, Lock, Shield, Save, Eye, EyeOff, Camera, Trash2, Pencil } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
 
@@ -262,6 +262,14 @@ export default function ProfileSettingsPage() {
                         <p className="text-sm text-muted-foreground flex items-center gap-1.5 mt-0.5">
                           <Mail className="w-3.5 h-3.5" />
                           {displayEmail}
+                          <button
+                            type="button"
+                            onClick={() => setEmailChangeOpen(true)}
+                            className="ml-1 text-muted-foreground hover:text-foreground transition-colors"
+                            title="Изменить email"
+                          >
+                            <Pencil className="w-3 h-3" />
+                          </button>
                         </p>
                         <div className="mt-2">
                           <Badge
@@ -449,30 +457,6 @@ export default function ProfileSettingsPage() {
                 </CardContent>
               </Card>
 
-              {/* ═══ Email ═══════════════════════════════════════ */}
-              <Card>
-                <CardHeader className="pb-2 pt-4 px-5">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Mail className="w-4 h-4" />
-                    Email
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="px-5 pb-4 pt-0 space-y-2">
-                  <div className="space-y-1">
-                    <Label className="text-sm">Адрес электронной почты</Label>
-                    <div className="flex items-center gap-2">
-                      <Input
-                        value={displayEmail}
-                        readOnly
-                        className="bg-muted/50 text-muted-foreground cursor-default select-none flex-1"
-                      />
-                      <Button variant="outline" size="sm" className="text-xs shrink-0" onClick={() => setEmailChangeOpen(true)}>
-                        Запросить изменение
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
             </div>
 
       {/* ═══ Модалка: запрос смены email ═══ */}
