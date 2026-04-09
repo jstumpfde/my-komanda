@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Separator } from "@/components/ui/separator"
 import { toast } from "sonner"
-import { Loader2, User, Mail, Lock, Shield, Save, Eye, EyeOff, Camera, Trash2, Pencil } from "lucide-react"
+import { Loader2, User, Mail, Lock, Shield, Save, Eye, EyeOff, Camera, Trash2 } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
 
@@ -265,10 +265,9 @@ export default function ProfileSettingsPage() {
                           <button
                             type="button"
                             onClick={() => setEmailChangeOpen(true)}
-                            className="ml-1 text-muted-foreground hover:text-foreground transition-colors"
-                            title="Изменить email"
+                            className="ml-2 text-sm text-primary hover:underline cursor-pointer"
                           >
-                            <Pencil className="w-3 h-3" />
+                            Изменить email
                           </button>
                         </p>
                         <div className="mt-2">

@@ -314,8 +314,7 @@ export default function CompanySchedulePage() {
             <CardContent className="p-0 border-t">
               {WEEKDAYS.map((day, i) => (
                 <div key={day.id} className={cn(
-                  "grid grid-cols-[40px_64px_1fr] items-center px-4 py-1.5 border-b last:border-b-0",
-                  i % 2 === 0 ? "bg-background" : "bg-muted/10",
+                  "grid grid-cols-[44px_48px_1fr] items-center px-4 py-2 border-b border-border/50 last:border-b-0",
                 )}>
                   <div><Switch checked={schedule[i].enabled} onCheckedChange={(v) => updateDay(i, { enabled: v })} /></div>
                   <span className={cn("text-sm font-medium", !schedule[i].enabled && "text-muted-foreground")}>{day.short}</span>

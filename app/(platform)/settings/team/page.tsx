@@ -343,7 +343,7 @@ export default function TeamPage() {
           <div className="overflow-x-auto">
             <table className="w-full table-fixed">
               <thead>
-                <tr className="bg-muted/50 border-b">
+                <tr className="bg-muted/50 border-b border-border/50">
                   <th className="text-left uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-2.5 min-w-[200px]">Участник</th>
                   <th className="text-left uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-2.5 w-[160px]">Роль</th>
                   <th className="text-left uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-2.5 w-[220px]">Email</th>
