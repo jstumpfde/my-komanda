@@ -1,5 +1,6 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import {
   BookOpen, CheckCircle2, Clock, AlertTriangle, FileWarning,
@@ -18,13 +19,21 @@ import {
 
 // ─── Mock data ──────────────────────────────────────────────────────────────
 
-const METRICS = [
-  { label: "Всего материалов",       value: "47",  sub: "в библиотеке",         icon: BookOpen,     bg: "bg-blue-500" },
+// First metric (total materials) is fetched; the other four remain mocked
+// until the learning-progress backend lands.
+const MOCK_METRICS = [
   { label: "Изучено сотрудниками",   value: "128", sub: "из 184 назначенных",   icon: CheckCircle2, bg: "bg-green-500" },
   { label: "В процессе изучения",    value: "42",  sub: "активных сейчас",      icon: Clock,        bg: "bg-purple-500" },
   { label: "Отстают",                value: "14",  sub: "не завершили вовремя", icon: AlertTriangle, bg: "bg-orange-500" },
   { label: "Требуют обновления",     value: "7",   sub: "устаревшие материалы", icon: FileWarning,  bg: "bg-red-400" },
 ]
+
+interface RecentItem {
+  name: string
+  type: string
+  author: string
+  date: string
+}
 
 const NENSI_HINTS = [
   {
@@ -87,20 +96,53 @@ const TOP_AUTHORS = [
   { name: "Орлов Д.",    role: "Sales Lead",     created: 3,  updated: 8,  lastActivity: "неделю назад" },
 ]
 
-const RECENT_UPDATES = [
-  { name: "Менеджер по продажам B2B",  type: "Презентация",  author: "Петрова Е.",  date: "10 апр" },
-  { name: "Регламент отпусков",         type: "Статья",       author: "Иванов С.",   date: "9 апр" },
-  { name: "Онбординг IT-специалистов",  type: "Презентация",  author: "Сидоров А.",  date: "9 апр" },
-  { name: "FAQ по CRM",                 type: "Статья",       author: "Козлова М.",  date: "8 апр" },
-  { name: "Политика безопасности",      type: "Статья",       author: "Орлов Д.",    date: "7 апр" },
-  { name: "Линейный сотрудник",         type: "Презентация",  author: "Петрова Е.",  date: "6 апр" },
-  { name: "Скрипт первичного звонка",   type: "Статья",       author: "Орлов Д.",    date: "5 апр" },
-  { name: "Стандарты обслуживания",     type: "Статья",       author: "Козлова М.",  date: "4 апр" },
-]
-
 // ─── Page ───────────────────────────────────────────────────────────────────
 
 export default function KnowledgeDashboardPage() {
+  const [totalCount, setTotalCount] = useState<number | null>(null)
+  const [recent, setRecent] = useState<RecentItem[]>([])
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const [demosRes, articlesRes] = await Promise.all([
+          fetch("/api/demo-templates").then((r) => r.json()).catch(() => ({ data: [] })),
+          fetch("/api/modules/knowledge/articles").then((r) => r.json()).catch(() => ({ data: [] })),
+        ])
+        const demos = (demosRes.data ?? demosRes ?? []) as Array<{
+          id: string; name: string; updatedAt: string
+        }>
+        const articles = (articlesRes.data?.articles ?? articlesRes.articles ?? []) as Array<{
+          id: string; title: string; updatedAt: string
+        }>
+
+        setTotalCount(demos.length + articles.length)
+
+        const merged: (RecentItem & { ts: number })[] = [
+          ...demos.map((d) => ({
+            name: d.name,
+            type: "Презентация",
+            author: "—",
+            date: d.updatedAt ? new Date(d.updatedAt).toLocaleDateString("ru-RU", { day: "numeric", month: "short" }) : "",
+            ts: d.updatedAt ? new Date(d.updatedAt).getTime() : 0,
+          })),
+          ...articles.map((a) => ({
+            name: a.title,
+            type: "Статья",
+            author: "—",
+            date: a.updatedAt ? new Date(a.updatedAt).toLocaleDateString("ru-RU", { day: "numeric", month: "short" }) : "",
+            ts: a.updatedAt ? new Date(a.updatedAt).getTime() : 0,
+          })),
+        ]
+        merged.sort((a, b) => b.ts - a.ts)
+        setRecent(merged.slice(0, 10).map(({ ts: _ts, ...rest }) => rest))
+      } catch {
+        // Silent fall-through — dashboard still renders with zeros/empty table
+      }
+    }
+    load()
+  }, [])
+
   return (
     <SidebarProvider>
       <DashboardSidebar />
@@ -122,7 +164,18 @@ export default function KnowledgeDashboardPage() {
           <div className="space-y-5">
             {/* ═══ Colored metric cards ═══ */}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-              {METRICS.map((m) => (
+              {/* Total materials — real fetch */}
+              <div className="rounded-xl shadow-sm hover:shadow-md transition-shadow p-4 text-white bg-blue-500">
+                <div className="flex items-center gap-1.5 mb-2">
+                  <BookOpen className="w-4 h-4 text-white" />
+                  <span className="text-sm font-semibold text-white">Всего материалов</span>
+                </div>
+                <p className="text-3xl font-bold text-white">{totalCount === null ? "…" : totalCount}</p>
+                <p className="text-sm mt-1 text-white/90">в библиотеке</p>
+              </div>
+
+              {/* Remaining four — mocked for now */}
+              {MOCK_METRICS.map((m) => (
                 <div key={m.label} className={cn("rounded-xl shadow-sm hover:shadow-md transition-shadow p-4 text-white", m.bg)}>
                   <div className="flex items-center gap-1.5 mb-2">
                     <m.icon className="w-4 h-4 text-white" />
@@ -294,14 +347,23 @@ export default function KnowledgeDashboardPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {RECENT_UPDATES.map((r) => (
-                    <tr key={`${r.name}-${r.date}`} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
-                      <td className="py-2.5 text-sm font-medium">{r.name}</td>
-                      <td className="py-2.5 text-xs text-muted-foreground">{r.type}</td>
-                      <td className="py-2.5 text-xs text-muted-foreground">{r.author}</td>
-                      <td className="py-2.5 text-xs text-muted-foreground text-right whitespace-nowrap">{r.date}</td>
+                  {recent.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="py-6 text-center text-xs text-muted-foreground">
+                        Пока нет материалов.{" "}
+                        <Link href="/knowledge-v2/create" className="text-primary hover:underline">Создайте первый</Link>
+                      </td>
                     </tr>
-                  ))}
+                  ) : (
+                    recent.map((r, i) => (
+                      <tr key={`${r.name}-${i}`} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
+                        <td className="py-2.5 text-sm font-medium">{r.name}</td>
+                        <td className="py-2.5 text-xs text-muted-foreground">{r.type}</td>
+                        <td className="py-2.5 text-xs text-muted-foreground">{r.author}</td>
+                        <td className="py-2.5 text-xs text-muted-foreground text-right whitespace-nowrap">{r.date}</td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
