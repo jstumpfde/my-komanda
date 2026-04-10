@@ -32,7 +32,7 @@ interface Material {
 const VIEW_STORAGE_KEY = "knowledge-view-mode"
 
 const TYPE_META: Record<MaterialType, { label: string; badgeClass: string }> = {
-  demo:       { label: "Демонстрация", badgeClass: "bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400" },
+  demo:       { label: "Презентация должности", badgeClass: "bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400" },
   article:    { label: "Статья",       badgeClass: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400" },
   regulation: { label: "Регламент",    badgeClass: "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400" },
   course:     { label: "Курс",         badgeClass: "bg-purple-100 text-purple-700 dark:bg-purple-950/40 dark:text-purple-400" },
@@ -172,7 +172,7 @@ export default function KnowledgeV2Page() {
                 <div className="flex items-center justify-between mb-4">
                   <TabsList>
                     <TabsTrigger value="all">Все ({materials.length})</TabsTrigger>
-                    <TabsTrigger value="demos">Демонстрации ({countsBy("demo")})</TabsTrigger>
+                    <TabsTrigger value="demos">Презентации ({countsBy("demo")})</TabsTrigger>
                     <TabsTrigger value="articles">Статьи ({countsBy("article")})</TabsTrigger>
                     <TabsTrigger value="regulations" className="gap-1.5">
                       Регламенты

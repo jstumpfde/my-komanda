@@ -20,7 +20,6 @@ const DEPARTMENTS = [
   "Клиентский сервис", "HR", "Финансы", "Рабочие специальности", "Другое",
 ]
 
-const MARKET_TYPES = ["B2B", "B2C", "B2G", "Внутренний"]
 
 const LEVELS = ["Линейный", "Старший / ведущий", "Руководитель"]
 
@@ -36,9 +35,9 @@ type LibraryTemplate = {
 }
 
 const PATH_CARDS: { id: Path; emoji: string; title: string; desc: string }[] = [
-  { id: "manual",   emoji: "📝", title: "С нуля",        desc: "Заполнить параметры вручную" },
-  { id: "library",  emoji: "📚", title: "Из библиотеки", desc: "Выбрать готовый шаблон" },
-  { id: "document", emoji: "📄", title: "Из документа",  desc: "Загрузить DOCX, PDF или TXT" },
+  { id: "manual",   emoji: "📝", title: "С чистого листа", desc: "Заполнить параметры вручную" },
+  { id: "library",  emoji: "📚", title: "Из библиотеки",   desc: "Выбрать готовый шаблон" },
+  { id: "document", emoji: "📄", title: "Из документа",    desc: "Загрузить DOCX, PDF или TXT" },
 ]
 
 const DEFAULT_BLOCK_FIELDS = {
@@ -529,9 +528,7 @@ export default function CreateDemoPage() {
   // ── Manual fields ──
   const [demoName, setDemoName] = useState("")
   const [department, setDepartment] = useState<string | null>(null)
-  const [marketType, setMarketType] = useState<string | null>(null)
   const [level, setLevel] = useState<string | null>(null)
-  const [selectedLength, setSelectedLength] = useState<DemoLength>("standard")
 
   // ── Library fields ──
   const [templates, setTemplates] = useState<LibraryTemplate[] | null>(null)
@@ -578,6 +575,22 @@ export default function CreateDemoPage() {
 
   const lengthKeys = Object.keys(LENGTH_LABELS) as DemoLength[]
 
+  // Prefill company-data fields from the current company profile (editable afterwards)
+  useEffect(() => {
+    let cancelled = false
+    fetch("/api/companies")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (cancelled || !data) return
+        const company = (data.data ?? data) as { name?: string; city?: string; director?: string }
+        setDocCompany((prev) => prev || company.name || "")
+        setDocCity((prev) => prev || company.city || "")
+        setDocCeoName((prev) => prev || company.director || "")
+      })
+      .catch(() => { /* autofill is best-effort */ })
+    return () => { cancelled = true }
+  }, [])
+
   // Load templates lazily when entering the library path
   useEffect(() => {
     if (path !== "library" || templates !== null || templatesLoading) return
@@ -617,9 +630,9 @@ export default function CreateDemoPage() {
     const name = demoName.trim()
     if (name.length < 3) return
     const params = new URLSearchParams({
-      length: selectedLength,
+      length: docLength,
       ...(department ? { department } : {}),
-      ...(marketType ? { market: marketType } : {}),
+      ...(docMarket.length > 0 ? { market: docMarket.join(",") } : {}),
       ...(level ? { level } : {}),
       name,
     })
@@ -639,7 +652,7 @@ export default function CreateDemoPage() {
         body: JSON.stringify({
           name: `${tmpl.name} (копия)`.slice(0, 76),
           niche: tmpl.niche,
-          length: tmpl.length,
+          length: docLength,
           sections: tmpl.sections,
         }),
       })
@@ -847,7 +860,7 @@ export default function CreateDemoPage() {
 
               {/* Header */}
               <div>
-                <h1 className="text-xl font-semibold">Новая демонстрация</h1>
+                <h1 className="text-xl font-semibold">Новая презентация должности</h1>
                 <p className="text-sm text-muted-foreground mt-0.5">Выберите способ создания</p>
               </div>
 
@@ -875,7 +888,7 @@ export default function CreateDemoPage() {
                 })}
               </div>
 
-              {/* ═══ Manual path ═══ */}
+              {/* ═══ Path-specific fields ═══ */}
               {path === "manual" && (
                 <div className="space-y-6">
                   <div>
@@ -900,15 +913,6 @@ export default function CreateDemoPage() {
                   </div>
 
                   <div>
-                    <SectionLabel>Тип рынка</SectionLabel>
-                    <div className="flex flex-wrap gap-2">
-                      {MARKET_TYPES.map((m) => (
-                        <Pill key={m} label={m} active={marketType === m} onClick={() => setMarketType(marketType === m ? null : m)} />
-                      ))}
-                    </div>
-                  </div>
-
-                  <div>
                     <SectionLabel>Уровень</SectionLabel>
                     <div className="flex flex-wrap gap-2">
                       {LEVELS.map((l) => (
@@ -916,50 +920,9 @@ export default function CreateDemoPage() {
                       ))}
                     </div>
                   </div>
-
-                  <div>
-                    <SectionLabel>Формат</SectionLabel>
-                    <div className="grid grid-cols-3 gap-3">
-                      {lengthKeys.map((key) => {
-                        const l = LENGTH_LABELS[key]
-                        const active = selectedLength === key
-                        return (
-                          <button
-                            key={key}
-                            type="button"
-                            onClick={() => setSelectedLength(key)}
-                            className={cn(
-                              "rounded-lg p-4 text-left cursor-pointer transition-all duration-200 h-[72px] flex flex-col justify-center",
-                              active
-                                ? "border-2 border-primary bg-primary/5 shadow-sm"
-                                : "border border-border hover:border-primary/50",
-                            )}
-                          >
-                            <div className="flex items-center gap-2 mb-0.5">
-                              <span className="text-base leading-none">{l.emoji}</span>
-                              <span className="text-sm font-semibold">{l.label}</span>
-                            </div>
-                            <p className="text-xs text-muted-foreground">{l.time} · {l.subblocks} блоков</p>
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </div>
-
-                  <div className="flex justify-end pt-2 pb-4">
-                    <Button
-                      onClick={handleCreateManual}
-                      disabled={demoName.trim().length < 3}
-                      className="h-10 px-6 gap-2"
-                    >
-                      <ArrowRight className="w-4 h-4" />
-                      Создать демонстрацию
-                    </Button>
-                  </div>
                 </div>
               )}
 
-              {/* ═══ Library path ═══ */}
               {path === "library" && (
                 <div className="space-y-6">
                   {/* Filters row */}
@@ -1035,154 +998,11 @@ export default function CreateDemoPage() {
                       })}
                     </div>
                   )}
-
-                  <div className="flex justify-end pt-2 pb-4">
-                    <Button
-                      onClick={handleUseTemplate}
-                      disabled={!selectedTemplateId || submitting}
-                      className="h-10 px-6 gap-2"
-                    >
-                      {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
-                      {submitting ? "Создание..." : "Использовать шаблон"}
-                    </Button>
-                  </div>
                 </div>
               )}
 
-              {/* ═══ Document path ═══ */}
               {path === "document" && (
                 <div className="space-y-6">
-                  {/* Format selector */}
-                  <div>
-                    <SectionLabel>Формат</SectionLabel>
-                    <div className="grid grid-cols-3 gap-3">
-                      {lengthKeys.map((key) => {
-                        const l = LENGTH_LABELS[key]
-                        const active = docLength === key
-                        return (
-                          <button
-                            key={key}
-                            type="button"
-                            onClick={() => setDocLength(key)}
-                            className={cn(
-                              "rounded-lg p-4 text-left cursor-pointer transition-all duration-200 h-[72px] flex flex-col justify-center",
-                              active
-                                ? "border-2 border-primary bg-primary/5 shadow-sm"
-                                : "border border-border hover:border-primary/50",
-                            )}
-                          >
-                            <div className="flex items-center gap-2 mb-0.5">
-                              <span className="text-base leading-none">{l.emoji}</span>
-                              <span className="text-sm font-semibold">{l.label}</span>
-                            </div>
-                            <p className="text-xs text-muted-foreground">{l.time} · {l.subblocks} блоков</p>
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Tone selector */}
-                  <div>
-                    <SectionLabel>Тон</SectionLabel>
-                    <div className="flex flex-wrap gap-2">
-                      {(Object.keys(TONE_META) as Tone[]).map((key) => {
-                        const t = TONE_META[key]
-                        return (
-                          <Pill
-                            key={key}
-                            label={`${t.emoji} ${t.label}`}
-                            active={docTone === key}
-                            onClick={() => setDocTone(key)}
-                          />
-                        )
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Market selector */}
-                  <div>
-                    <SectionLabel>Тип рынка</SectionLabel>
-                    <div className="flex flex-wrap gap-2">
-                      {MARKETS.map((m) => (
-                        <Pill
-                          key={m}
-                          label={m}
-                          active={docMarket.includes(m)}
-                          onClick={() => toggleDocMarket(m)}
-                        />
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Work format selector */}
-                  <div>
-                    <SectionLabel>Формат работы</SectionLabel>
-                    <div className="flex flex-wrap gap-2">
-                      {WORK_FORMATS.map((f) => (
-                        <Pill
-                          key={f.key}
-                          label={`${f.emoji} ${f.label}`}
-                          active={docWorkFormat.includes(f.key)}
-                          onClick={() => toggleDocWorkFormat(f.key)}
-                        />
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Company variables card */}
-                  <div>
-                    <SectionLabel>Данные компании</SectionLabel>
-                    <div className="rounded-xl border border-border p-4">
-                      <div className="grid grid-cols-2 gap-3">
-                        {/* Row 1 */}
-                        <Input
-                          value={docCompany}
-                          onChange={(e) => setDocCompany(e.target.value)}
-                          placeholder="Название компании"
-                          className="h-10 bg-[var(--input-bg)]"
-                        />
-                        <Input
-                          value={docPosition}
-                          onChange={(e) => setDocPosition(e.target.value)}
-                          placeholder="Менеджер по продажам"
-                          className="h-10 bg-[var(--input-bg)]"
-                        />
-
-                        {/* Row 2 */}
-                        <Input
-                          value={docCity}
-                          onChange={(e) => setDocCity(e.target.value)}
-                          placeholder="Москва"
-                          className="h-10 bg-[var(--input-bg)]"
-                        />
-                        <Input
-                          value={docSalary}
-                          onChange={(e) => setDocSalary(e.target.value)}
-                          placeholder="от 200 000 ₽"
-                          className="h-10 bg-[var(--input-bg)]"
-                        />
-
-                        {/* Row 3 */}
-                        <Input
-                          value={docHiringManager}
-                          onChange={(e) => setDocHiringManager(e.target.value)}
-                          placeholder="Иван Петров, руководитель отдела продаж"
-                          className="h-10 bg-[var(--input-bg)]"
-                        />
-
-                        {/* Row 4 */}
-                        <Input
-                          value={docCeoName}
-                          onChange={(e) => setDocCeoName(e.target.value)}
-                          placeholder="Основатель / Ген. директор"
-                          className="h-10 bg-[var(--input-bg)]"
-                        />
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-3">Заполненные поля будут подставлены в демонстрацию</p>
-                    </div>
-                  </div>
-
                   {uploadedFile ? (
                     <div className="flex items-center gap-3 p-4 rounded-lg border border-border bg-muted/30">
                       <FileText className="w-7 h-7 text-primary shrink-0" />
@@ -1217,9 +1037,141 @@ export default function CreateDemoPage() {
                       />
                     </div>
                   )}
+                </div>
+              )}
 
+              {/* ═══ Shared fields — shown for all three paths ═══ */}
+              {path && (
+                <div className="space-y-6">
+                  {/* Format */}
+                  <div>
+                    <SectionLabel>Формат</SectionLabel>
+                    <div className="grid grid-cols-3 gap-3">
+                      {lengthKeys.map((key) => {
+                        const l = LENGTH_LABELS[key]
+                        const active = docLength === key
+                        return (
+                          <button
+                            key={key}
+                            type="button"
+                            onClick={() => setDocLength(key)}
+                            className={cn(
+                              "rounded-lg p-4 text-left cursor-pointer transition-all duration-200 h-[72px] flex flex-col justify-center",
+                              active
+                                ? "border-2 border-primary bg-primary/5 shadow-sm"
+                                : "border border-border hover:border-primary/50",
+                            )}
+                          >
+                            <div className="flex items-center gap-2 mb-0.5">
+                              <span className="text-base leading-none">{l.emoji}</span>
+                              <span className="text-sm font-semibold">{l.label}</span>
+                            </div>
+                            <p className="text-xs text-muted-foreground">{l.time} · {l.subblocks} блоков</p>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Tone */}
+                  <div>
+                    <SectionLabel>Тон</SectionLabel>
+                    <div className="flex flex-wrap gap-2">
+                      {(Object.keys(TONE_META) as Tone[]).map((key) => {
+                        const t = TONE_META[key]
+                        return (
+                          <Pill
+                            key={key}
+                            label={`${t.emoji} ${t.label}`}
+                            active={docTone === key}
+                            onClick={() => setDocTone(key)}
+                          />
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Market */}
+                  <div>
+                    <SectionLabel>Тип рынка</SectionLabel>
+                    <div className="flex flex-wrap gap-2">
+                      {MARKETS.map((m) => (
+                        <Pill
+                          key={m}
+                          label={m}
+                          active={docMarket.includes(m)}
+                          onClick={() => toggleDocMarket(m)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Work format */}
+                  <div>
+                    <SectionLabel>Формат работы</SectionLabel>
+                    <div className="flex flex-wrap gap-2">
+                      {WORK_FORMATS.map((f) => (
+                        <Pill
+                          key={f.key}
+                          label={`${f.emoji} ${f.label}`}
+                          active={docWorkFormat.includes(f.key)}
+                          onClick={() => toggleDocWorkFormat(f.key)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Company variables card */}
+                  <div>
+                    <SectionLabel>Данные компании</SectionLabel>
+                    <div className="rounded-xl border border-border p-4">
+                      <div className="grid grid-cols-2 gap-3">
+                        <Input
+                          value={docCompany}
+                          onChange={(e) => setDocCompany(e.target.value)}
+                          placeholder="Название компании"
+                          className="h-10 bg-[var(--input-bg)]"
+                        />
+                        <Input
+                          value={docPosition}
+                          onChange={(e) => setDocPosition(e.target.value)}
+                          placeholder="Менеджер по продажам"
+                          className="h-10 bg-[var(--input-bg)]"
+                        />
+
+                        <Input
+                          value={docCity}
+                          onChange={(e) => setDocCity(e.target.value)}
+                          placeholder="Москва"
+                          className="h-10 bg-[var(--input-bg)]"
+                        />
+                        <Input
+                          value={docSalary}
+                          onChange={(e) => setDocSalary(e.target.value)}
+                          placeholder="от 200 000 ₽"
+                          className="h-10 bg-[var(--input-bg)]"
+                        />
+
+                        <Input
+                          value={docHiringManager}
+                          onChange={(e) => setDocHiringManager(e.target.value)}
+                          placeholder="Иван Петров, руководитель отдела продаж"
+                          className="h-10 bg-[var(--input-bg)]"
+                        />
+                        <Input
+                          value={docCeoName}
+                          onChange={(e) => setDocCeoName(e.target.value)}
+                          placeholder="Основатель / Ген. директор"
+                          className="h-10 bg-[var(--input-bg)]"
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-3">Заполненные поля будут подставлены в демонстрацию</p>
+                    </div>
+                  </div>
+
+                  {/* Per-path create button */}
                   <div className="flex justify-end gap-3 pt-2 pb-4">
-                    {submitting ? (
+                    {path === "document" && submitting ? (
                       <>
                         <Button disabled className="h-10 px-6 gap-2">
                           <Loader2 className="w-4 h-4 animate-spin" />
@@ -1229,6 +1181,24 @@ export default function CreateDemoPage() {
                           Отменить
                         </Button>
                       </>
+                    ) : path === "manual" ? (
+                      <Button
+                        onClick={handleCreateManual}
+                        disabled={demoName.trim().length < 3}
+                        className="h-10 px-6 gap-2"
+                      >
+                        <ArrowRight className="w-4 h-4" />
+                        Создать демонстрацию
+                      </Button>
+                    ) : path === "library" ? (
+                      <Button
+                        onClick={handleUseTemplate}
+                        disabled={!selectedTemplateId || submitting}
+                        className="h-10 px-6 gap-2"
+                      >
+                        {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
+                        {submitting ? "Создание..." : "Использовать шаблон"}
+                      </Button>
                     ) : (
                       <Button
                         onClick={handleCreateFromDocument}

@@ -13,32 +13,59 @@ interface TypeCard {
   href: string | null
 }
 
-const TYPE_CARDS: TypeCard[] = [
+interface Group {
+  label: string
+  cards: TypeCard[]
+}
+
+const GROUPS: Group[] = [
   {
-    emoji: "👋",
-    title: "Демонстрация должности",
-    desc: "Презентация компании и должности для кандидатов",
-    href: "/knowledge-v2/create/demo",
+    label: "Найм и адаптация",
+    cards: [
+      { emoji: "👋", title: "Презентация должности", desc: "Для новых кандидатов",       href: "/knowledge-v2/create/demo" },
+      { emoji: "🚀", title: "Онбординг",             desc: "Адаптация новых сотрудников", href: null },
+      { emoji: "🎓", title: "Обучение",              desc: "Курсы для сотрудников",       href: null },
+    ],
   },
   {
-    emoji: "📚",
-    title: "Статья базы знаний",
-    desc: "Обучающие материалы, инструкции, FAQ",
-    href: "/knowledge-v2/create/article",
+    label: "Документы",
+    cards: [
+      { emoji: "📋", title: "Регламент",         desc: "Правила и процедуры",   href: null },
+      { emoji: "📄", title: "Инструкция",        desc: "Пошаговые гайды",       href: null },
+      { emoji: "📑", title: "Шаблон документа",  desc: "Договоры, акты, формы", href: null },
+    ],
   },
   {
-    emoji: "📋",
-    title: "Регламент",
-    desc: "Правила, процедуры, политики компании",
-    href: null,
-  },
-  {
-    emoji: "🎓",
-    title: "Обучающий курс",
-    desc: "Структурированное обучение с тестами",
-    href: null,
+    label: "Знания и контент",
+    cards: [
+      { emoji: "📚", title: "Статья",  desc: "Обучающие материалы, FAQ",      href: "/knowledge-v2/create/article" },
+      { emoji: "💡", title: "Кейс",    desc: "Истории успеха, разборы",       href: null },
+      { emoji: "📰", title: "Новость", desc: "Внутренние новости компании",   href: null },
+    ],
   },
 ]
+
+function CardContent({ card, disabled }: { card: TypeCard; disabled: boolean }) {
+  return (
+    <div
+      className={cn(
+        "relative h-28 rounded-xl border border-border p-4 flex flex-col items-start gap-1 transition",
+        disabled
+          ? "opacity-50 cursor-not-allowed"
+          : "cursor-pointer hover:border-primary hover:shadow-md",
+      )}
+    >
+      {disabled && (
+        <span className="absolute top-2 right-2 bg-muted text-muted-foreground text-[10px] px-2 py-0.5 rounded-full font-medium">
+          Скоро
+        </span>
+      )}
+      <div className="text-2xl leading-none">{card.emoji}</div>
+      <div className="text-sm font-semibold">{card.title}</div>
+      <div className="text-xs text-muted-foreground">{card.desc}</div>
+    </div>
+  )
+}
 
 export default function KnowledgeV2CreatePage() {
   return (
@@ -48,41 +75,33 @@ export default function KnowledgeV2CreatePage() {
         <DashboardHeader />
         <div className="flex-1 overflow-auto bg-background min-w-0">
           <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
-            <div className="max-w-4xl mx-auto space-y-6">
+            <div className="max-w-4xl mx-auto space-y-8">
               <div>
                 <h1 className="text-xl font-semibold">Создать материал</h1>
                 <p className="text-sm text-muted-foreground mt-0.5">Выберите тип документа</p>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                {TYPE_CARDS.map((card) => {
-                  const disabled = card.href === null
-                  const content = (
-                    <div
-                      className={cn(
-                        "h-40 rounded-xl border border-border p-6 flex flex-col justify-center gap-2 transition-all duration-200 relative",
-                        disabled
-                          ? "opacity-50 cursor-not-allowed"
-                          : "cursor-pointer hover:border-primary/50 hover:shadow-md",
-                      )}
-                    >
-                      {disabled && (
-                        <span className="absolute top-3 right-3 text-[10px] bg-muted text-muted-foreground px-2 py-0.5 rounded-full font-medium">
-                          Скоро
-                        </span>
-                      )}
-                      <div className="text-[32px] leading-none">{card.emoji}</div>
-                      <div className="text-base font-bold">{card.title}</div>
-                      <div className="text-sm text-muted-foreground">{card.desc}</div>
-                    </div>
-                  )
-                  return disabled ? (
-                    <div key={card.title}>{content}</div>
-                  ) : (
-                    <Link key={card.title} href={card.href!}>{content}</Link>
-                  )
-                })}
-              </div>
+              {GROUPS.map((group) => (
+                <section key={group.label}>
+                  <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-3">
+                    {group.label}
+                  </p>
+                  <div className="grid grid-cols-3 gap-3">
+                    {group.cards.map((card) => {
+                      const disabled = card.href === null
+                      return disabled ? (
+                        <div key={card.title}>
+                          <CardContent card={card} disabled />
+                        </div>
+                      ) : (
+                        <Link key={card.title} href={card.href!}>
+                          <CardContent card={card} disabled={false} />
+                        </Link>
+                      )
+                    })}
+                  </div>
+                </section>
+              ))}
             </div>
           </div>
         </div>
