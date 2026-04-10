@@ -1,11 +1,15 @@
 "use client"
 
 import Link from "next/link"
-import { Plus } from "lucide-react"
+import { Plus, Lock } from "lucide-react"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
+import { Button } from "@/components/ui/button"
+import { useAuth } from "@/lib/auth"
 import { cn } from "@/lib/utils"
+
+const CREATE_ROLES = ["platform_admin", "platform_manager", "director", "hr_lead", "hr_manager"]
 
 interface TypePill {
   emoji: string
@@ -91,6 +95,38 @@ function Pill({ item }: { item: TypePill }) {
 }
 
 export default function KnowledgeV2CreatePage() {
+  const { role } = useAuth()
+  const canCreate = CREATE_ROLES.includes(role)
+
+  if (!canCreate) {
+    return (
+      <SidebarProvider defaultOpen={true}>
+        <DashboardSidebar />
+        <SidebarInset>
+          <DashboardHeader />
+          <div className="flex-1 overflow-auto bg-background min-w-0">
+            <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
+              <div className="max-w-xl mx-auto mt-12">
+                <div className="rounded-xl border border-border bg-card p-8 text-center">
+                  <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-muted flex items-center justify-center">
+                    <Lock className="w-5 h-5 text-muted-foreground" />
+                  </div>
+                  <h1 className="text-lg font-semibold mb-2">Недостаточно прав</h1>
+                  <p className="text-sm text-muted-foreground mb-5">
+                    Создавать материалы могут только директор, главный HR и HR-менеджер.
+                  </p>
+                  <Button asChild variant="outline">
+                    <Link href="/knowledge-v2">Вернуться к материалам</Link>
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </SidebarInset>
+      </SidebarProvider>
+    )
+  }
+
   return (
     <SidebarProvider defaultOpen={true}>
       <DashboardSidebar />

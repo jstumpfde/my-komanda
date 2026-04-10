@@ -1,8 +1,9 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
+import { useAuth } from "@/lib/auth"
 import { Plus, Eye, BookOpen, Pencil, Trash2, Loader2, LayoutGrid, List, Search, ChevronUp, ChevronDown, ArrowUpDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -61,7 +62,11 @@ function computeStatus(m: Material): MaterialStatus {
   const now = Date.now()
   if (m.validUntil) {
     const exp = Date.parse(m.validUntil)
-    if (!isNaN(exp) && exp < now) return "expired"
+    if (!isNaN(exp)) {
+      if (exp < now) return "expired"
+      // Within 30 days of expiry → needs review
+      if (exp - now < 30 * DAY_MS) return "needs_review"
+    }
   }
   if (m.reviewCycle && m.reviewCycle !== "none" && REVIEW_CYCLE_DAYS[m.reviewCycle]) {
     const lastCheck = Date.parse(m.updatedAt || "")
@@ -94,8 +99,25 @@ function readStoredView(): ViewMode {
   return stored === "grid" || stored === "table" ? stored : "table"
 }
 
+const EDIT_ROLES = ["platform_admin", "platform_manager", "director", "hr_lead", "hr_manager"] as const
+const DELETE_ROLES = ["platform_admin", "platform_manager", "director", "hr_lead"] as const
+
 export default function KnowledgeV2Page() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center py-20 text-muted-foreground"><Loader2 className="w-5 h-5 animate-spin" /></div>}>
+      <KnowledgeV2PageContent />
+    </Suspense>
+  )
+}
+
+function KnowledgeV2PageContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const { role } = useAuth()
+  const canCreate = (EDIT_ROLES as readonly string[]).includes(role)
+  const canEdit = canCreate
+  const canDelete = (DELETE_ROLES as readonly string[]).includes(role)
+
   const [activeTab, setActiveTab] = useState<TabValue>("all")
   const [viewMode, setViewMode] = useState<ViewMode>("table")
   const [materials, setMaterials] = useState<Material[]>([])
@@ -120,6 +142,12 @@ export default function KnowledgeV2Page() {
 
   // Hydrate view mode from localStorage after mount
   useEffect(() => { setViewMode(readStoredView()) }, [])
+
+  // Apply ?filter=review from URL once on mount
+  useEffect(() => {
+    const filter = searchParams?.get("filter")
+    if (filter === "review") setStatusFilter("needs_review")
+  }, [searchParams])
   useEffect(() => {
     if (typeof window !== "undefined") window.localStorage.setItem(VIEW_STORAGE_KEY, viewMode)
   }, [viewMode])
@@ -250,11 +278,13 @@ export default function KnowledgeV2Page() {
               <h1 className="text-2xl font-bold tracking-tight">Материалы</h1>
               <p className="text-sm text-muted-foreground mt-1">Все материалы компании в одном месте</p>
             </div>
-            <Button asChild>
-              <Link href="/knowledge-v2/create">
-                <Plus className="h-4 w-4 mr-1" />Создать материал
-              </Link>
-            </Button>
+            {canCreate && (
+              <Button asChild>
+                <Link href="/knowledge-v2/create">
+                  <Plus className="h-4 w-4 mr-1" />Создать материал
+                </Link>
+              </Button>
+            )}
           </div>
 
           {loading ? (
@@ -366,6 +396,8 @@ export default function KnowledgeV2Page() {
                   onOpen={handleEditorOpen}
                   onPreview={handlePreview}
                   onDelete={setDeleteTarget}
+                  canEdit={canEdit}
+                  canDelete={canDelete}
                   sortField={sortField}
                   sortDir={sortDir}
                   onSortClick={handleSortHeader}
@@ -373,7 +405,15 @@ export default function KnowledgeV2Page() {
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   {filtered.map((m) => (
-                    <MaterialCard key={`${m.type}-${m.id}`} item={m} onOpen={handleEditorOpen} onPreview={handlePreview} onDelete={setDeleteTarget} />
+                    <MaterialCard
+                      key={`${m.type}-${m.id}`}
+                      item={m}
+                      onOpen={handleEditorOpen}
+                      onPreview={handlePreview}
+                      onDelete={setDeleteTarget}
+                      canEdit={canEdit}
+                      canDelete={canDelete}
+                    />
                   ))}
                 </div>
               )}
@@ -435,11 +475,13 @@ function SortHeader({
   )
 }
 
-function MaterialTable({ items, onOpen, onPreview, onDelete, sortField, sortDir, onSortClick }: {
+function MaterialTable({ items, onOpen, onPreview, onDelete, canEdit, canDelete, sortField, sortDir, onSortClick }: {
   items: Material[]
   onOpen: (m: Material) => void
   onPreview: (e: React.MouseEvent, m: Material) => void
   onDelete: (m: Material) => void
+  canEdit: boolean
+  canDelete: boolean
   sortField: SortField
   sortDir: SortDir
   onSortClick: (f: SortField) => void
@@ -508,15 +550,17 @@ function MaterialTable({ items, onOpen, onPreview, onDelete, sortField, sortDir,
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-1 justify-end">
-                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={(e) => { e.stopPropagation(); onOpen(m) }}>
-                      <Pencil className="h-3.5 w-3.5" />
-                    </Button>
+                    {canEdit && (
+                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={(e) => { e.stopPropagation(); onOpen(m) }}>
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
                     {m.type === "demo" && (
                       <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={(e) => onPreview(e, m)}>
                         <Eye className="h-3.5 w-3.5" />
                       </Button>
                     )}
-                    {!m.isSystem && (
+                    {canDelete && !m.isSystem && (
                       <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive" onClick={(e) => { e.stopPropagation(); onDelete(m) }}>
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
@@ -534,11 +578,13 @@ function MaterialTable({ items, onOpen, onPreview, onDelete, sortField, sortDir,
 
 // ─── Card view ──────────────────────────────────────────────────────────────
 
-function MaterialCard({ item, onOpen, onPreview, onDelete }: {
+function MaterialCard({ item, onOpen, onPreview, onDelete, canEdit, canDelete }: {
   item: Material
   onOpen: (m: Material) => void
   onPreview: (e: React.MouseEvent, m: Material) => void
   onDelete: (m: Material) => void
+  canEdit: boolean
+  canDelete: boolean
 }) {
   const typeMeta = TYPE_META[item.type]
   const lengthInfo = item.length ? LENGTH_LABELS[item.length as keyof typeof LENGTH_LABELS] : null
@@ -578,15 +624,18 @@ function MaterialCard({ item, onOpen, onPreview, onDelete }: {
       {updatedAt && <p className="text-xs text-muted-foreground mb-4">Обновлено {updatedAt}</p>}
 
       <div className="flex items-center gap-2">
-        <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 flex-1" onClick={(e) => { e.stopPropagation(); onOpen(item) }}>
-          <Pencil className="h-3 w-3" />Редактировать
-        </Button>
-        {item.type === "demo" && (
-          <Button size="sm" variant="outline" className="h-8 w-8 p-0" onClick={(e) => onPreview(e, item)}>
-            <Eye className="h-3.5 w-3.5" />
+        {canEdit && (
+          <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 flex-1" onClick={(e) => { e.stopPropagation(); onOpen(item) }}>
+            <Pencil className="h-3 w-3" />Редактировать
           </Button>
         )}
-        {!item.isSystem && (
+        {item.type === "demo" && (
+          <Button size="sm" variant="outline" className={cn("h-8 w-8 p-0", !canEdit && "flex-1 w-auto")} onClick={(e) => onPreview(e, item)}>
+            <Eye className="h-3.5 w-3.5" />
+            {!canEdit && <span className="ml-1 text-xs">Просмотр</span>}
+          </Button>
+        )}
+        {canDelete && !item.isSystem && (
           <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive" onClick={(e) => { e.stopPropagation(); onDelete(item) }}>
             <Trash2 className="h-3.5 w-3.5" />
           </Button>
