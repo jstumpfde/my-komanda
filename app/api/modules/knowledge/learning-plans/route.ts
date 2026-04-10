@@ -69,15 +69,23 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const user = await requireCompany()
-    const body = await req.json() as {
+
+    let body: {
       title?: string
       description?: string
       materials?: PlanMaterial[]
     }
+    try {
+      body = await req.json()
+    } catch (parseErr) {
+      console.error("[learning-plans POST] invalid JSON", parseErr)
+      return apiError("Невалидный JSON в теле запроса", 400)
+    }
 
     const title = (body.title || "").trim()
-    if (!title) return apiError("'title' is required", 400)
+    if (!title) return apiError("Название обязательно", 400)
 
+    // Empty materials is fine — allow creating a plan draft without them.
     const materials = Array.isArray(body.materials)
       ? body.materials
           .filter((m) => m && typeof m.materialId === "string")
@@ -89,21 +97,41 @@ export async function POST(req: NextRequest) {
           }))
       : []
 
-    const [plan] = await db
-      .insert(learningPlans)
-      .values({
-        tenantId: user.companyId,
-        title,
-        description: body.description?.trim() || null,
-        materials,
-        createdBy: user.id,
-      })
-      .returning()
+    let plan
+    try {
+      ;[plan] = await db
+        .insert(learningPlans)
+        .values({
+          tenantId: user.companyId,
+          title,
+          description: body.description?.trim() || null,
+          materials,
+          createdBy: user.id,
+        })
+        .returning()
+    } catch (dbErr) {
+      console.error("[learning-plans POST] db insert failed", dbErr)
+      const msg = dbErr instanceof Error ? dbErr.message : "Ошибка БД"
+      return apiError(`Ошибка при создании плана: ${msg}`, 500)
+    }
 
-    return apiSuccess(plan, 201)
+    if (!plan) {
+      return apiError("План не был создан (пустой ответ БД)", 500)
+    }
+
+    return apiSuccess({
+      data: {
+        id: plan.id,
+        title: plan.title,
+        description: plan.description,
+        materials: plan.materials,
+        createdAt: plan.createdAt,
+      },
+    }, 201)
   } catch (err) {
     if (err instanceof Response) return err
-    console.error("[learning-plans POST]", err)
-    return apiError("Internal server error", 500)
+    console.error("[learning-plans POST] unexpected", err)
+    const msg = err instanceof Error ? err.message : "Internal server error"
+    return apiError(msg, 500)
   }
 }

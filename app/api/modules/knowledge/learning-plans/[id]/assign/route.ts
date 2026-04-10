@@ -41,11 +41,18 @@ export async function POST(
       deadline,
     }))
 
-    const created = await db.insert(learningAssignments).values(rows).returning()
-    return apiSuccess({ assignments: created }, 201)
+    try {
+      const created = await db.insert(learningAssignments).values(rows).returning()
+      return apiSuccess({ data: { assignments: created } }, 201)
+    } catch (dbErr) {
+      console.error("[learning-plans/:id/assign POST] db insert failed", dbErr)
+      const msg = dbErr instanceof Error ? dbErr.message : "Ошибка БД"
+      return apiError(`Ошибка при назначении: ${msg}`, 500)
+    }
   } catch (err) {
     if (err instanceof Response) return err
-    console.error("[learning-plans/:id/assign POST]", err)
-    return apiError("Internal server error", 500)
+    console.error("[learning-plans/:id/assign POST] unexpected", err)
+    const msg = err instanceof Error ? err.message : "Internal server error"
+    return apiError(msg, 500)
   }
 }

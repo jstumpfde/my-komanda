@@ -13,6 +13,7 @@ export async function GET() {
         name: users.name,
         email: users.email,
         role: users.role,
+        position: users.position,
         avatarUrl: users.avatarUrl,
       })
       .from(users)

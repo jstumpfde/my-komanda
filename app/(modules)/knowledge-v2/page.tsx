@@ -20,7 +20,7 @@ import { toast } from "sonner"
 type MaterialType = "demo" | "article" | "regulation" | "course"
 type ViewMode = "table" | "grid"
 type TabValue = "all" | "demos" | "articles" | "regulations" | "courses"
-type SortField = "updatedAt" | "createdAt" | "name"
+type SortField = "updatedAt" | "createdAt" | "name" | "type" | "format" | "status"
 type SortDir = "asc" | "desc"
 type TypeFilter = "all" | MaterialType
 type AudienceKey = "employees" | "candidates" | "clients"
@@ -228,6 +228,14 @@ function KnowledgeV2PageContent() {
     .sort((a, b) => {
       const dir = sortDir === "asc" ? 1 : -1
       if (sortField === "name") return a.name.localeCompare(b.name, "ru") * dir
+      if (sortField === "type") return a.type.localeCompare(b.type) * dir
+      if (sortField === "format") {
+        return (a.length ?? "").localeCompare(b.length ?? "") * dir
+      }
+      if (sortField === "status") {
+        const order: Record<MaterialStatus, number> = { current: 0, needs_review: 1, expired: 2 }
+        return (order[computeStatus(a)] - order[computeStatus(b)]) * dir
+      }
       const aTime = new Date(a[sortField] || 0).getTime()
       const bTime = new Date(b[sortField] || 0).getTime()
       return (aTime - bTime) * dir
@@ -469,7 +477,7 @@ function SortHeader({
     >
       <span className={cn("inline-flex items-center gap-1", align === "center" && "justify-center", align === "right" && "justify-end")}>
         {label}
-        <Icon className={cn("w-3 h-3", active ? "opacity-100" : "opacity-40")} />
+        <Icon className={cn("w-3.5 h-3.5", active ? "text-foreground" : "text-muted-foreground/50")} />
       </span>
     </th>
   )
@@ -491,13 +499,13 @@ function MaterialTable({ items, onOpen, onPreview, onDelete, canEdit, canDelete,
       <table className="w-full">
         <thead className="bg-muted/50 border-b border-border">
           <tr>
-            <SortHeader label="Название" field="name" sortField={sortField} sortDir={sortDir} onClick={onSortClick} />
-            <th className="text-left uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-3">Тип</th>
-            <th className="text-left uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-3">Формат</th>
+            <SortHeader label="Название"  field="name"      sortField={sortField} sortDir={sortDir} onClick={onSortClick} />
+            <SortHeader label="Тип"        field="type"      sortField={sortField} sortDir={sortDir} onClick={onSortClick} />
+            <SortHeader label="Формат"     field="format"    sortField={sortField} sortDir={sortDir} onClick={onSortClick} />
             <th className="text-left uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-3">Аудитория</th>
             <th className="text-center uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-3">Уроков / Страниц</th>
-            <SortHeader label="Обновлено" field="updatedAt" sortField={sortField} sortDir={sortDir} onClick={onSortClick} />
-            <th className="text-left uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-3">Статус</th>
+            <SortHeader label="Обновлено"  field="updatedAt" sortField={sortField} sortDir={sortDir} onClick={onSortClick} />
+            <SortHeader label="Статус"     field="status"    sortField={sortField} sortDir={sortDir} onClick={onSortClick} />
             <th className="text-right uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-3">Действия</th>
           </tr>
         </thead>

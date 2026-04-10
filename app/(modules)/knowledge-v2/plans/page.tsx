@@ -43,6 +43,8 @@ interface TeamMember {
   id: string
   name: string
   email: string
+  position?: string | null
+  role?: string
 }
 
 export default function LearningPlansPage() {
@@ -136,10 +138,6 @@ export default function LearningPlansPage() {
       toast.error("Название — минимум 3 символа")
       return
     }
-    if (selectedMaterials.length === 0) {
-      toast.error("Выберите хотя бы один материал")
-      return
-    }
 
     setSubmitting(true)
     try {
@@ -152,14 +150,21 @@ export default function LearningPlansPage() {
           materials: selectedMaterials,
         }),
       })
-      const plan = await createRes.json()
+      const payload = await createRes.json().catch(() => ({}))
       if (!createRes.ok) {
-        toast.error(plan.error || "Ошибка создания")
+        const msg = payload?.error || `Ошибка ${createRes.status}`
+        toast.error(msg)
+        return
+      }
+
+      const planId: string | undefined = payload?.data?.id ?? payload?.id
+      if (!planId) {
+        toast.error("Сервер не вернул id плана")
         return
       }
 
       if (selectedUsers.length > 0) {
-        await fetch(`/api/modules/knowledge/learning-plans/${plan.id}/assign`, {
+        const assignRes = await fetch(`/api/modules/knowledge/learning-plans/${planId}/assign`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -167,14 +172,18 @@ export default function LearningPlansPage() {
             deadline: deadline || null,
           }),
         })
+        if (!assignRes.ok) {
+          const errPayload = await assignRes.json().catch(() => ({}))
+          toast.error(errPayload?.error || "План создан, но не удалось назначить сотрудников")
+        }
       }
 
       toast.success("План создан")
       setOpen(false)
-      // Reload plans
       const refreshed = await fetch("/api/modules/knowledge/learning-plans").then((r) => r.json())
       setPlans(refreshed.plans ?? [])
-    } catch {
+    } catch (err) {
+      console.error("[create plan]", err)
       toast.error("Ошибка сети")
     } finally {
       setSubmitting(false)
@@ -278,60 +287,76 @@ export default function LearningPlansPage() {
       </SidebarInset>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="sm:max-w-3xl max-h-[90vh] min-h-[600px] flex flex-col p-0 gap-0">
+          <DialogHeader className="px-6 py-4 border-b border-border shrink-0">
             <DialogTitle>Новый план обучения</DialogTitle>
           </DialogHeader>
 
-          <div className="space-y-4">
-            <div>
-              <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-1.5 block">
-                Название *
-              </label>
-              <Input
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="Онбординг менеджера продаж"
-                maxLength={500}
-              />
-            </div>
+          <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
+            {/* ── Название + описание ── */}
+            <section className="space-y-4">
+              <div>
+                <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-1.5 block">
+                  Название *
+                </label>
+                <Input
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="Онбординг менеджера продаж"
+                  maxLength={500}
+                  className="h-10"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-1.5 block">
+                  Описание
+                </label>
+                <Textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Что будут изучать, какие цели"
+                  rows={3}
+                />
+              </div>
+            </section>
 
-            <div>
-              <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-1.5 block">
-                Описание
-              </label>
-              <Textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Что будут изучать, какие цели"
-                rows={3}
-              />
-            </div>
-
-            <div>
-              <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-1.5 block">
-                Материалы ({selectedMaterials.length})
-              </label>
+            {/* ── Материалы ── */}
+            <section className="pt-5 border-t border-border">
+              <div className="flex items-center justify-between mb-2.5">
+                <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  Материалы
+                </label>
+                <span className="text-xs text-muted-foreground">
+                  Выбрано: <b className="text-foreground">{selectedMaterials.length}</b>
+                </span>
+              </div>
               {libraryLoading ? (
-                <div className="flex items-center justify-center h-20 gap-2 text-muted-foreground text-xs">
-                  <Loader2 className="w-4 h-4 animate-spin" />Загрузка...
+                <div className="flex items-center justify-center h-24 gap-2 text-muted-foreground text-xs border border-border rounded-md">
+                  <Loader2 className="w-4 h-4 animate-spin" />Загрузка библиотеки...
                 </div>
               ) : library.length === 0 ? (
-                <p className="text-xs text-muted-foreground">Нет доступных материалов</p>
+                <div className="flex items-center justify-center h-24 text-xs text-muted-foreground border border-dashed border-border rounded-md">
+                  Нет доступных материалов
+                </div>
               ) : (
-                <div className="border border-border rounded-md max-h-48 overflow-y-auto divide-y divide-border">
+                <div className="border border-border rounded-md max-h-64 overflow-y-auto divide-y divide-border">
                   {library.map((m) => {
                     const checked = selectedIds.has(m.id)
                     return (
                       <label
                         key={`${m.type}-${m.id}`}
-                        className="flex items-center gap-2 px-3 py-2 text-sm cursor-pointer hover:bg-muted/40"
+                        className="flex items-center gap-3 px-3 py-2.5 text-sm cursor-pointer hover:bg-muted/40"
                       >
                         <Checkbox checked={checked} onCheckedChange={() => toggleMaterial(m)} />
-                        <span className="text-xs uppercase text-muted-foreground shrink-0">
+                        <span className="flex-1 truncate">{m.title}</span>
+                        <span className={cn(
+                          "text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded border shrink-0",
+                          m.type === "demo"
+                            ? "border-purple-500/40 text-purple-600 bg-purple-500/10 dark:text-purple-300"
+                            : "border-blue-500/40 text-blue-600 bg-blue-500/10 dark:text-blue-300",
+                        )}>
                           {m.type === "demo" ? "Демо" : "Статья"}
                         </span>
-                        <span className="truncate">{m.title}</span>
                       </label>
                     )
                   })}
@@ -340,18 +365,18 @@ export default function LearningPlansPage() {
 
               {selectedMaterials.length > 0 && (
                 <div className="mt-3 space-y-1">
-                  <p className="text-xs text-muted-foreground mb-1">Порядок изучения:</p>
+                  <p className="text-xs text-muted-foreground mb-1.5">Порядок изучения:</p>
                   {selectedMaterials.map((sm, i) => {
                     const lib = library.find((l) => l.id === sm.materialId)
                     return (
-                      <div key={sm.materialId} className="flex items-center gap-2 text-xs px-2 py-1.5 rounded bg-muted/40">
+                      <div key={sm.materialId} className="flex items-center gap-2 text-xs px-2.5 py-2 rounded bg-muted/40">
                         <span className="font-mono text-muted-foreground w-5">{i + 1}.</span>
                         <span className="truncate flex-1">{lib?.title ?? sm.materialId}</span>
                         <button
                           type="button"
                           onClick={() => moveMaterial(i, -1)}
                           disabled={i === 0}
-                          className="text-muted-foreground hover:text-foreground disabled:opacity-30"
+                          className="text-muted-foreground hover:text-foreground disabled:opacity-30 px-1"
                         >
                           ↑
                         </button>
@@ -359,14 +384,14 @@ export default function LearningPlansPage() {
                           type="button"
                           onClick={() => moveMaterial(i, 1)}
                           disabled={i === selectedMaterials.length - 1}
-                          className="text-muted-foreground hover:text-foreground disabled:opacity-30"
+                          className="text-muted-foreground hover:text-foreground disabled:opacity-30 px-1"
                         >
                           ↓
                         </button>
                         <button
                           type="button"
                           onClick={() => toggleMaterial({ id: sm.materialId, title: "", type: sm.materialType })}
-                          className="text-muted-foreground hover:text-destructive"
+                          className="text-muted-foreground hover:text-destructive px-1"
                         >
                           <Trash2 className="w-3 h-3" />
                         </button>
@@ -375,47 +400,68 @@ export default function LearningPlansPage() {
                   })}
                 </div>
               )}
-            </div>
+            </section>
 
-            <div>
-              <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-1.5 block">
-                Назначить сотрудникам ({selectedUsers.length})
-              </label>
+            {/* ── Сотрудники ── */}
+            <section className="pt-5 border-t border-border">
+              <div className="flex items-center justify-between mb-2.5">
+                <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  Назначить сотрудникам
+                </label>
+                <span className="text-xs text-muted-foreground">
+                  Выбрано: <b className="text-foreground">{selectedUsers.length}</b>
+                </span>
+              </div>
               {team.length === 0 ? (
-                <p className="text-xs text-muted-foreground">Нет участников команды</p>
+                <div className="flex items-center justify-center h-20 text-xs text-muted-foreground border border-dashed border-border rounded-md">
+                  Нет участников команды
+                </div>
               ) : (
-                <div className="border border-border rounded-md max-h-36 overflow-y-auto divide-y divide-border">
+                <div className="border border-border rounded-md max-h-56 overflow-y-auto divide-y divide-border">
                   {team.map((u) => (
                     <label
                       key={u.id}
-                      className="flex items-center gap-2 px-3 py-2 text-sm cursor-pointer hover:bg-muted/40"
+                      className="flex items-center gap-3 px-3 py-2.5 text-sm cursor-pointer hover:bg-muted/40"
                     >
                       <Checkbox
                         checked={selectedUsers.includes(u.id)}
                         onCheckedChange={() => toggleUser(u.id)}
                       />
-                      <span className="flex-1 truncate">{u.name}</span>
-                      <span className="text-xs text-muted-foreground truncate">{u.email}</span>
+                      <div className="min-w-0 flex-1">
+                        <div className="font-medium truncate">{u.name}</div>
+                        <div className="text-xs text-muted-foreground truncate">
+                          {u.position || u.email}
+                        </div>
+                      </div>
                     </label>
                   ))}
                 </div>
               )}
-            </div>
+            </section>
 
-            <div>
+            {/* ── Дедлайн ── */}
+            <section className="pt-5 border-t border-border">
               <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-1.5 block">
                 Дедлайн
               </label>
-              <Input type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
-            </div>
+              <Input
+                type="date"
+                value={deadline}
+                onChange={(e) => setDeadline(e.target.value)}
+                className="h-10 max-w-xs"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Необязательно. Будет применён к каждому назначению.
+              </p>
+            </section>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="px-6 py-4 border-t border-border shrink-0 gap-2">
             <Button variant="outline" onClick={() => setOpen(false)} disabled={submitting}>
               Отмена
             </Button>
-            <Button onClick={handleCreate} disabled={submitting}>
-              {submitting && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+            <Button onClick={handleCreate} disabled={submitting} className="gap-2">
+              {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
               Создать план
             </Button>
           </DialogFooter>

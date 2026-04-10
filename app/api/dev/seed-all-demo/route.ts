@@ -19,6 +19,7 @@ import {
   salesCompanies, salesContacts,
 } from "@/lib/db/schema"
 import { generateCandidateToken } from "@/lib/candidate-tokens"
+import { auth } from "@/auth"
 
 const isDevAllowed =
   process.env.NODE_ENV === "development" ||
@@ -68,14 +69,25 @@ function makeName(i: number) {
 // ── main handler ──────────────────────────────────────────────────────────────
 
 export async function POST() {
-  if (!isDevAllowed) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  // Требует auth: спец. endpoint для сидирования, доступен авторизованным
+  // пользователям любой роли, либо в dev-режиме (env-гейт).
+  const session = await auth().catch(() => null)
+  if (!isDevAllowed && !session?.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
   const log: string[] = []
 
   // ── 1. Компания + тариф Pro ─────────────────────────────────────────────────
-  let company = await db.select().from(companies).limit(1).then(r => r[0])
+  // Prefer the authenticated user's tenant; fall back to the first company in
+  // the DB for bootstrap scenarios.
+  let company: typeof companies.$inferSelect | undefined
+  if (session?.user?.companyId) {
+    [company] = await db.select().from(companies).where(eq(companies.id, session.user.companyId)).limit(1)
+  }
+  if (!company) {
+    company = await db.select().from(companies).limit(1).then(r => r[0])
+  }
   if (!company) {
     ;[company] = await db.insert(companies).values({
       name: "Демо Компания", city: "Москва", industry: "IT",
@@ -518,20 +530,20 @@ export async function POST() {
   // ── 8. Расширенный демо-сид: команда, база знаний, планы обучения, AI, CRM ──
   // ═══════════════════════════════════════════════════════════════════════════
 
-  // 8.1. Команда из 12 сотрудников (@komanda.ru)
+  // 8.1. Команда из 12 сотрудников (@demo.company24.pro)
   const TEAM = [
-    { email: "ivanov@komanda.ru",     name: "Иванов Алексей",      position: "Директор",              role: "director" },
-    { email: "petrova@komanda.ru",    name: "Петрова Мария",       position: "Главный HR",            role: "hr_lead" },
-    { email: "sidorov@komanda.ru",    name: "Сидоров Дмитрий",     position: "HR-менеджер",           role: "hr_manager" },
-    { email: "kozlova@komanda.ru",    name: "Козлова Анна",        position: "Менеджер по продажам",  role: "observer" },
-    { email: "novikov@komanda.ru",    name: "Новиков Сергей",      position: "Менеджер по продажам",  role: "observer" },
-    { email: "volkova@komanda.ru",    name: "Волкова Елена",       position: "Маркетолог",            role: "observer" },
-    { email: "morozov@komanda.ru",    name: "Морозов Павел",       position: "Frontend-разработчик",  role: "observer" },
-    { email: "lebedeva@komanda.ru",   name: "Лебедева Ольга",      position: "Backend-разработчик",   role: "observer" },
-    { email: "sokolov@komanda.ru",    name: "Соколов Артём",       position: "Руководитель отдела продаж", role: "department_head" },
-    { email: "fedorova@komanda.ru",   name: "Фёдорова Наталья",    position: "Бухгалтер",             role: "observer" },
-    { email: "grigoriev@komanda.ru",  name: "Григорьев Максим",    position: "Логист",                role: "observer" },
-    { email: "kuznetsova@komanda.ru", name: "Кузнецова Дарья",     position: "Офис-менеджер",         role: "observer" },
+    { email: "alexey.ivanov@demo.company24.pro",    name: "Иванов Алексей",      position: "Директор",                       role: "director" },
+    { email: "maria.petrova@demo.company24.pro",    name: "Петрова Мария",       position: "Главный HR",                     role: "hr_lead" },
+    { email: "dmitry.sidorov@demo.company24.pro",   name: "Сидоров Дмитрий",     position: "HR-менеджер",                    role: "hr_manager" },
+    { email: "anna.kozlova@demo.company24.pro",     name: "Козлова Анна",        position: "Менеджер по продажам",           role: "employee" },
+    { email: "sergey.novikov@demo.company24.pro",   name: "Новиков Сергей",      position: "Менеджер по продажам",           role: "employee" },
+    { email: "elena.volkova@demo.company24.pro",    name: "Волкова Елена",       position: "Маркетолог",                     role: "employee" },
+    { email: "pavel.morozov@demo.company24.pro",    name: "Морозов Павел",       position: "Frontend-разработчик",           role: "employee" },
+    { email: "olga.lebedeva@demo.company24.pro",    name: "Лебедева Ольга",      position: "Backend-разработчик",            role: "employee" },
+    { email: "artem.sokolov@demo.company24.pro",    name: "Соколов Артём",       position: "Руководитель отдела продаж",     role: "department_head" },
+    { email: "natalia.fedorova@demo.company24.pro", name: "Фёдорова Наталья",    position: "Бухгалтер",                      role: "employee" },
+    { email: "maksim.grigoriev@demo.company24.pro", name: "Григорьев Максим",    position: "Логист",                         role: "employee" },
+    { email: "daria.kuznetsova@demo.company24.pro", name: "Кузнецова Дарья",     position: "Офис-менеджер",                  role: "employee" },
   ]
 
   const teamIds: string[] = []
@@ -682,30 +694,57 @@ export async function POST() {
     log.push(`demo-template:"${d.name}":created`)
   }
 
-  // 8.5. Категория + 8 статей базы знаний
-  let instrCatId: string
-  const [exCat] = await db.select({ id: knowledgeCategories.id }).from(knowledgeCategories)
-    .where(and(eq(knowledgeCategories.tenantId, company.id), eq(knowledgeCategories.name, "Инструкции"))).limit(1)
-  if (exCat) {
-    instrCatId = exCat.id
-  } else {
-    const [cr] = await db.insert(knowledgeCategories).values({
-      tenantId: company.id, name: "Инструкции", slug: "instructions",
-      description: "Инструкции и регламенты", icon: "📖",
-    }).returning()
-    instrCatId = cr.id
-    log.push("kb-category:Инструкции:created")
+  // 8.5. Категории + 8 статей базы знаний
+  const KB_CATEGORIES = [
+    { name: "Инструкции",   slug: "instructions",  icon: "📖", description: "Пошаговые инструкции по рабочим процессам" },
+    { name: "Регламенты",   slug: "regulations",   icon: "📋", description: "Внутренние регламенты и правила" },
+    { name: "Продажи",      slug: "sales",         icon: "💼", description: "Материалы для отдела продаж" },
+    { name: "HR",           slug: "hr",            icon: "👥", description: "Материалы для HR и адаптации" },
+    { name: "Для сайта",    slug: "website",       icon: "🌐", description: "Публичные материалы и политики" },
+  ]
+
+  const kbCatIds: Record<string, string> = {}
+  for (const c of KB_CATEGORIES) {
+    const [ex] = await db.select({ id: knowledgeCategories.id }).from(knowledgeCategories)
+      .where(and(eq(knowledgeCategories.tenantId, company.id), eq(knowledgeCategories.name, c.name))).limit(1)
+    if (ex) {
+      kbCatIds[c.name] = ex.id
+    } else {
+      const [cr] = await db.insert(knowledgeCategories).values({
+        tenantId: company.id, name: c.name, slug: c.slug,
+        description: c.description, icon: c.icon,
+      }).returning()
+      kbCatIds[c.name] = cr.id
+      log.push(`kb-category:${c.name}:created`)
+    }
   }
 
+  const CRM_ARTICLE_CONTENT = `<h2>Введение</h2>
+<p>CRM-система — это центральный инструмент работы менеджера. В ней фиксируется каждое взаимодействие с клиентом: звонки, встречи, переписка, статусы сделок. Корректное ведение CRM напрямую влияет на качество прогнозов и скорость закрытия сделок.</p>
+<h2>Первые шаги после логина</h2>
+<p>После входа в систему вы попадаете на главный дашборд. Слева расположено меню с основными разделами: Воронка, Клиенты, Контакты, Задачи, Отчёты. Сверху — строка быстрого поиска и кнопка "Создать". Перед началом работы убедитесь, что в правом верхнем углу выбрана правильная организация и ваша роль соответствует задаче.</p>
+<h2>Создание и ведение клиента</h2>
+<p>Чтобы добавить нового клиента, нажмите "Создать → Компания". Обязательные поля: название, ИНН, отрасль, ответственный менеджер. Заполните максимум данных сразу — это сэкономит время на последующих этапах. Если компания уже есть в базе, система предупредит о дубликате. В карточке компании привяжите контактных лиц и добавьте комментарий с контекстом первого обращения.</p>
+<h2>Работа с воронкой продаж</h2>
+<p>Все сделки движутся по этапам: Новый лид → Квалификация → Потребности → Предложение → Переговоры → Закрыто. Каждый переход должен сопровождаться фиксацией: что сделано, что обсудили, каковы следующие шаги. Задачи ставятся через кнопку "Новая задача" прямо из карточки сделки — система автоматически привяжет их к клиенту.</p>
+<h2>Коммуникации</h2>
+<p>Все звонки должны быть записаны с краткими итогами (3-5 предложений). После встречи обязательно добавляйте резюме: о чём говорили, какие возражения, каковы договорённости. Электронная переписка автоматически подтягивается в карточку клиента при отправке с корпоративного ящика.</p>
+<h2>Отчёты и аналитика</h2>
+<p>Раздел "Отчёты" позволяет в один клик получить статистику: сколько лидов в работе, средний чек, конверсия по этапам, отставание от плана. Руководители отдела проверяют эти показатели еженедельно. Менеджерам рекомендуется самостоятельно смотреть свои метрики каждый понедельник — это помогает видеть свои слабые места и планировать фокус на неделю.</p>
+<h2>Типичные ошибки</h2>
+<p>Главное, чего делать нельзя: оставлять сделки без движения больше 5 дней, не фиксировать итоги встреч, ставить статус "Закрыто" без документа. Если возникают вопросы — обратитесь к своему руководителю или в службу поддержки через кнопку "Помощь" в нижнем левом углу.</p>
+<h2>Заключение</h2>
+<p>CRM — это не отчётность для галочки, а рабочий инструмент, который помогает менеджеру держать всё под контролем и ничего не забывать. Потраченные 5 минут на запись после встречи экономят часы на восстановлении контекста через месяц.</p>`
+
   const KB_ARTICLES = [
-    { title: "Как работать в CRM",            status: "published",     catId: instrCatId, excerpt: "Пошаговая инструкция по работе с CRM-системой компании." },
-    { title: "Регламент работы с клиентами",  status: "published",     catId: instrCatId, excerpt: "Стандарты коммуникации и качества обслуживания." },
-    { title: "Техника безопасности на складе", status: "published",    catId: instrCatId, excerpt: "Обязательные правила безопасности для складских сотрудников." },
-    { title: "Скрипт холодного звонка B2B",   status: "published",     catId: instrCatId, excerpt: "Готовый скрипт первого контакта с корпоративным клиентом." },
-    { title: "Онбординг нового сотрудника",   status: "published",     catId: instrCatId, excerpt: "Программа адаптации на первые 30 дней." },
-    { title: "Политика конфиденциальности",   status: "published",     catId: instrCatId, excerpt: "Обработка персональных данных и коммерческой тайны." },
-    { title: "FAQ по продукту",               status: "draft",         catId: instrCatId, excerpt: "Ответы на частые вопросы клиентов." },
-    { title: "Инструкция по работе с 1С",     status: "review",        catId: instrCatId, excerpt: "Базовые операции в 1С для новых бухгалтеров." },
+    { title: "Как работать в CRM",             status: "published", catName: "Инструкции", excerpt: "Пошаговая инструкция по работе с CRM-системой компании.",           content: CRM_ARTICLE_CONTENT },
+    { title: "Регламент работы с клиентами",   status: "published", catName: "Регламенты", excerpt: "Стандарты коммуникации и качества обслуживания.",                   content: null },
+    { title: "Техника безопасности на складе", status: "published", catName: "Регламенты", excerpt: "Обязательные правила безопасности для складских сотрудников.",      content: null },
+    { title: "Скрипт холодного звонка B2B",    status: "published", catName: "Продажи",    excerpt: "Готовый скрипт первого контакта с корпоративным клиентом.",         content: null },
+    { title: "Онбординг нового сотрудника",    status: "published", catName: "HR",         excerpt: "Программа адаптации на первые 30 дней.",                            content: null },
+    { title: "Политика конфиденциальности",    status: "published", catName: "Для сайта",  excerpt: "Обработка персональных данных и коммерческой тайны.",               content: null },
+    { title: "FAQ по продукту",                status: "draft",     catName: "Продажи",    excerpt: "Ответы на частые вопросы клиентов.",                                content: null },
+    { title: "Инструкция по работе с 1С",      status: "review",    catName: "Инструкции", excerpt: "Базовые операции в 1С для новых бухгалтеров.",                      content: null },
   ]
 
   const articleIds: string[] = []
@@ -731,11 +770,11 @@ export async function POST() {
       .replace(/-{2,}/g, "-").replace(/^-|-$/g, "")
     const [cr] = await db.insert(knowledgeArticles).values({
       tenantId: company.id,
-      categoryId: a.catId,
+      categoryId: kbCatIds[a.catName] ?? null,
       title: a.title,
       slug,
       excerpt: a.excerpt,
-      content: `<p>${a.excerpt}</p><p>Полный текст статьи появится позже.</p>`,
+      content: a.content ?? `<p>${a.excerpt}</p><p>Полный текст статьи появится позже.</p>`,
       authorId: authorPool[i % authorPool.length],
       status: a.status,
       audience: ["employees"],

@@ -56,7 +56,13 @@ export default function TokensPage() {
 
   useEffect(() => {
     fetch("/api/ai/usage")
-      .then((r) => r.json())
+      .then(async (r) => {
+        if (!r.ok) return null
+        const d = await r.json().catch(() => null)
+        // Validate shape — server error payloads look like { error } and would crash the render.
+        if (!d || !d.month || !d.today) return null
+        return d as UsagePayload
+      })
       .then((d) => {
         setData(d)
         setLoading(false)
@@ -64,7 +70,9 @@ export default function TokensPage() {
       .catch(() => setLoading(false))
   }, [])
 
-  const monthPercent = data ? Math.min(100, (data.month.tokens / Math.max(1, data.limit)) * 100) : 0
+  const monthPercent = data?.month
+    ? Math.min(100, (data.month.tokens / Math.max(1, data.limit)) * 100)
+    : 0
 
   return (
     <SidebarProvider defaultOpen={true}>
