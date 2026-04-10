@@ -51,6 +51,143 @@ const DEFAULT_BLOCK_FIELDS = {
   taskTitle: "", taskDescription: "", questions: [],
 }
 
+// ─── Claude client-side helpers ────────────────────────────────────────────
+
+interface ClaudeLesson {
+  name?: string
+  title?: string
+  emoji?: string
+  content?: string
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+}
+
+function contentToHtml(content: string): string {
+  const lines = content.replace(/\r\n/g, "\n").split("\n")
+  const out: string[] = []
+  let inList = false
+  let paragraphBuffer: string[] = []
+
+  const flushParagraph = () => {
+    if (paragraphBuffer.length === 0) return
+    out.push(`<p>${paragraphBuffer.join("<br/>")}</p>`)
+    paragraphBuffer = []
+  }
+  const closeList = () => {
+    if (inList) { out.push("</ul>"); inList = false }
+  }
+  const inlineFormat = (raw: string): string => {
+    let s = escapeHtml(raw)
+    s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    s = s.replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, "<em>$1</em>")
+    return s
+  }
+
+  for (const rawLine of lines) {
+    const trimmed = rawLine.trim()
+    if (!trimmed) {
+      flushParagraph()
+      closeList()
+      continue
+    }
+    const bullet = trimmed.match(/^[•\-\*]\s+(.+)$/)
+    if (bullet) {
+      flushParagraph()
+      if (!inList) { out.push("<ul>"); inList = true }
+      out.push(`<li>${inlineFormat(bullet[1])}</li>`)
+      continue
+    }
+    closeList()
+    paragraphBuffer.push(inlineFormat(trimmed))
+  }
+  flushParagraph()
+  closeList()
+
+  return out.join("") || `<p>${escapeHtml(content)}</p>`
+}
+
+function tryParseJsonArray(raw: string): ClaudeLesson[] | null {
+  const cleaned = raw.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim()
+  try {
+    const parsed = JSON.parse(cleaned)
+    if (Array.isArray(parsed)) return parsed
+  } catch {
+    /* fall through */
+  }
+  const match = cleaned.match(/\[[\s\S]*\]/)
+  if (match) {
+    try {
+      const parsed = JSON.parse(match[0])
+      if (Array.isArray(parsed)) return parsed
+    } catch {
+      return null
+    }
+  }
+  return null
+}
+
+function buildPrompt(text: string): string {
+  return `Ты — эксперт по созданию обучающих демонстраций должности для кандидатов.
+
+Разбей следующий документ на уроки (разделы) для демонстрации должности.
+
+Правила:
+- Каждый логический раздел = отдельный урок
+- Название урока: краткое, 3-5 слов, с подходящим эмодзи в начале
+- Контент урока: сохрани форматирование — абзацы, списки (• ), жирный текст (**текст**)
+- Убери мусор: лишние пробелы, повторы, технические артефакты
+- Если есть упоминание видео/фото — отметь это в контенте
+- Оптимально 8-15 уроков
+
+Верни ТОЛЬКО JSON массив без markdown backticks:
+[
+  {
+    "name": "👋 Приветствие",
+    "emoji": "👋",
+    "content": "Текст урока с форматированием..."
+  }
+]
+
+Документ:
+${text}`
+}
+
+async function callClaudeFromBrowser(text: string, apiKey: string): Promise<ClaudeLesson[]> {
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+      "anthropic-dangerous-direct-browser-access": "true",
+    },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 4096,
+      messages: [{ role: "user", content: buildPrompt(text) }],
+    }),
+  })
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => "")
+    console.error("[claude] error", res.status, body)
+    throw new Error("Claude API вернул ошибку")
+  }
+
+  const data = await res.json() as { content?: { type: string; text?: string }[] }
+  const textContent = data.content?.find((c) => c.type === "text")?.text ?? ""
+  if (!textContent) throw new Error("Пустой ответ от Claude API")
+
+  const lessons = tryParseJsonArray(textContent)
+  if (!lessons || lessons.length === 0) {
+    console.error("[claude] unparseable", textContent.slice(0, 500))
+    throw new Error("Не удалось распарсить ответ Claude")
+  }
+  return lessons
+}
+
 // ─── Pill component ─────────────────────────────────────────────────────────
 
 function Pill({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
@@ -102,6 +239,7 @@ export default function CreateDemoPage() {
 
   // ── Submission state ──
   const [submitting, setSubmitting] = useState(false)
+  const [submitStage, setSubmitStage] = useState("")
 
   const lengthKeys = Object.keys(LENGTH_LABELS) as DemoLength[]
 
@@ -189,29 +327,81 @@ export default function CreateDemoPage() {
     if (!uploadedFile) return
     setSubmitting(true)
     try {
+      // ── Step 1: extract text on the server ──
+      setSubmitStage("Извлекаем текст из документа...")
       const formData = new FormData()
       formData.append("file", uploadedFile)
       const parseRes = await fetch("/api/demo-templates/parse-document", { method: "POST", body: formData })
       const parseData = await parseRes.json()
       if (!parseRes.ok) {
-        toast.error(parseData.error || "Ошибка парсинга")
+        toast.error(parseData.error || "Ошибка извлечения текста")
         setSubmitting(false)
+        setSubmitStage("")
+        return
+      }
+      const extractedText: string = parseData.text
+      if (!extractedText) {
+        toast.error("Документ пустой")
+        setSubmitting(false)
+        setSubmitStage("")
         return
       }
 
-      const baseName = uploadedFile.name.replace(/\.[^.]+$/, "").trim().slice(0, 76) || "Демонстрация"
-      const sections = (parseData.lessons as { emoji: string; title: string; blocks: { type: string; content: string }[] }[]).map((l, i) => ({
-        id: `lesson-${Date.now()}-${i}`,
-        emoji: l.emoji || "📄",
-        title: l.title,
-        blocks: l.blocks.map((b, j) => ({
-          id: `blk-${Date.now()}-${i}-${j}`,
-          type: b.type,
-          content: b.content,
-          ...DEFAULT_BLOCK_FIELDS,
-        })),
-      }))
+      // ── Step 2: fetch API key, call Claude from the browser ──
+      setSubmitStage("Разбиваем документ на уроки...")
+      const keyRes = await fetch("/api/ai/key")
+      const keyData = await keyRes.json()
+      if (!keyRes.ok || !keyData.key) {
+        toast.error(keyData.error || "API ключ недоступен")
+        setSubmitting(false)
+        setSubmitStage("")
+        return
+      }
 
+      let claudeLessons: ClaudeLesson[]
+      try {
+        claudeLessons = await callClaudeFromBrowser(extractedText, keyData.key)
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Ошибка Claude API"
+        toast.error(message)
+        setSubmitting(false)
+        setSubmitStage("")
+        return
+      }
+
+      // ── Step 3: transform Claude output into editor sections ──
+      const sections = claudeLessons
+        .map((lesson, i) => {
+          const rawTitle = (lesson.name || lesson.title || "").trim()
+          const emoji = (lesson.emoji || "").trim() || "📄"
+          const title = rawTitle.replace(/^\p{Extended_Pictographic}+\s*/u, "").trim() || "Раздел"
+          const content = (lesson.content || "").trim()
+          return {
+            id: `lesson-${Date.now()}-${i}`,
+            emoji,
+            title,
+            blocks: content
+              ? [{
+                  id: `blk-${Date.now()}-${i}`,
+                  type: "text",
+                  content: contentToHtml(content),
+                  ...DEFAULT_BLOCK_FIELDS,
+                }]
+              : [],
+          }
+        })
+        .filter((l) => l.title || l.blocks.length > 0)
+
+      if (sections.length === 0) {
+        toast.error("Claude не вернул уроки")
+        setSubmitting(false)
+        setSubmitStage("")
+        return
+      }
+
+      // ── Step 4: persist and redirect to editor ──
+      setSubmitStage("Сохраняем демонстрацию...")
+      const baseName = (parseData.filename || uploadedFile.name).replace(/\.[^.]+$/, "").trim().slice(0, 76) || "Демонстрация"
       const createRes = await fetch("/api/demo-templates", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -226,6 +416,7 @@ export default function CreateDemoPage() {
       if (!createRes.ok) {
         toast.error(created.error || "Ошибка создания")
         setSubmitting(false)
+        setSubmitStage("")
         return
       }
       const id = (created.data ?? created).id
@@ -234,6 +425,7 @@ export default function CreateDemoPage() {
     } catch {
       toast.error("Ошибка сети")
       setSubmitting(false)
+      setSubmitStage("")
     }
   }
 
@@ -512,7 +704,7 @@ export default function CreateDemoPage() {
                       className="h-10 px-6 gap-2"
                     >
                       {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
-                      {submitting ? "Импорт документа..." : "Создать из документа"}
+                      {submitting ? (submitStage || "Импорт документа...") : "Создать из документа"}
                     </Button>
                   </div>
                 </div>
