@@ -77,8 +77,14 @@ export async function POST() {
   }
 
   const log: string[] = []
+  let stage = "init"
+
+  try {
+  console.log("[seed-all-demo] Starting...")
 
   // ── 1. Компания + тариф Pro ─────────────────────────────────────────────────
+  stage = "company + plan"
+  console.log("[seed-all-demo] Seeding company & plan...")
   // Prefer the authenticated user's tenant; fall back to the first company in
   // the DB for bootstrap scenarios.
   let company: typeof companies.$inferSelect | undefined
@@ -120,6 +126,8 @@ export async function POST() {
   }
 
   // ── 2. Пользователи ─────────────────────────────────────────────────────────
+  stage = "users (legacy 6)"
+  console.log("[seed-all-demo] Seeding legacy users...")
   const passwordHash = await bcrypt.hash("demo123", 10)
 
   const DEMO_USERS = [
@@ -133,18 +141,36 @@ export async function POST() {
 
   const uMap: Record<string, string> = {}
   for (const u of DEMO_USERS) {
-    const [ex] = await db.select({ id: users.id }).from(users).where(eq(users.email, u.email)).limit(1)
-    if (ex) {
-      uMap[u.email] = ex.id
-    } else {
+    try {
+      const [ex] = await db.select({ id: users.id }).from(users).where(eq(users.email, u.email)).limit(1)
+      if (ex) {
+        uMap[u.email] = ex.id
+        log.push(`user ${u.email}: exists`)
+        continue
+      }
       const [cr] = await db.insert(users).values({
-        ...u, passwordHash, isActive: true, companyId: company.id,
-      }).returning()
-      uMap[u.email] = cr.id
-      log.push(`user:created ${u.email}`)
+        email: u.email,
+        name: u.name,
+        role: u.role,
+        passwordHash,
+        isActive: true,
+        companyId: company.id,
+      }).returning({ id: users.id })
+      if (cr?.id) {
+        uMap[u.email] = cr.id
+        log.push(`user ${u.email}: created`)
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error(`[seed-all-demo] user ${u.email} INSERT failed:`, msg)
+      log.push(`user ${u.email}: error (${msg.slice(0, 80)})`)
+      // If the insert failed because user already exists (race condition),
+      // try to recover the id so downstream references don't break.
+      const [recover] = await db.select({ id: users.id }).from(users).where(eq(users.email, u.email)).limit(1).catch(() => [])
+      if (recover?.id) uMap[u.email] = recover.id
     }
   }
-  log.push(`users:${Object.keys(uMap).length} demo users ready`)
+  log.push(`users:${Object.keys(uMap).length}/${DEMO_USERS.length} demo users resolved`)
 
   const ivanId   = uMap["ivan@demo.ru"]
   const mariaId  = uMap["maria@demo.ru"]
@@ -153,6 +179,8 @@ export async function POST() {
   const elenaId  = uMap["elena@demo.ru"]
 
   // ── 3. Вакансии ─────────────────────────────────────────────────────────────
+  stage = "vacancies (legacy 3)"
+  console.log("[seed-all-demo] Seeding legacy vacancies...")
   const VACANCY_DEFS = [
     {
       title: "Менеджер по продажам B2B", status: "published",
@@ -190,6 +218,8 @@ export async function POST() {
   }
 
   // ── 4. Кандидаты ────────────────────────────────────────────────────────────
+  stage = "candidates (legacy)"
+  console.log("[seed-all-demo] Seeding legacy candidates...")
   const STAGES  = ["new","demo","scheduled","interviewed","hired","rejected"]
   const STAGE_W = [40, 25, 15, 10, 5, 5]
   const SOURCES  = ["hh","avito","referral","telegram","site"]
@@ -222,6 +252,8 @@ export async function POST() {
   }
 
   // ── 5. Адаптация — планы ────────────────────────────────────────────────────
+  stage = "adaptation plans"
+  console.log("[seed-all-demo] Seeding adaptation plans...")
 
   type StepDef = { dayNumber: number; sortOrder: number; title: string; type: string; durationMin: number }
 
@@ -353,6 +385,8 @@ export async function POST() {
   }
 
   // ── 6. Курсы ────────────────────────────────────────────────────────────────
+  stage = "courses"
+  console.log("[seed-all-demo] Seeding courses...")
   type LessonDef = { title: string; sortOrder: number; type: string; durationMin: number }
   type CourseMeta = { description: string; category: string; difficulty: string; durationMin: number; isRequired: boolean }
 
@@ -446,6 +480,8 @@ export async function POST() {
   }
 
   // ── 7. Навыки + Оценки ──────────────────────────────────────────────────────
+  stage = "skills + assessments"
+  console.log("[seed-all-demo] Seeding skills & assessments...")
   const SYSTEM_SKILLS = [
     { name: "Работа с CRM",          category: "tool"   },
     { name: "Холодные звонки",        category: "hard"   },
@@ -531,6 +567,8 @@ export async function POST() {
   // ═══════════════════════════════════════════════════════════════════════════
 
   // 8.1. Команда из 12 сотрудников (@demo.company24.pro)
+  stage = "team (12)"
+  console.log("[seed-all-demo] Seeding team...")
   const TEAM = [
     { email: "alexey.ivanov@demo.company24.pro",    name: "Иванов Алексей",      position: "Директор",                       role: "director" },
     { email: "maria.petrova@demo.company24.pro",    name: "Петрова Мария",       position: "Главный HR",                     role: "hr_lead" },
@@ -548,23 +586,41 @@ export async function POST() {
 
   const teamIds: string[] = []
   for (const m of TEAM) {
-    const [ex] = await db.select({ id: users.id }).from(users).where(eq(users.email, m.email)).limit(1)
-    if (ex) {
-      teamIds.push(ex.id)
-    } else {
+    try {
+      const [ex] = await db.select({ id: users.id }).from(users).where(eq(users.email, m.email)).limit(1)
+      if (ex) {
+        teamIds.push(ex.id)
+        log.push(`team ${m.email}: exists`)
+        continue
+      }
       const [cr] = await db.insert(users).values({
-        email: m.email, name: m.name, role: m.role, position: m.position,
-        passwordHash, isActive: true, companyId: company.id,
-      }).returning()
-      teamIds.push(cr.id)
-      log.push(`team:created ${m.email}`)
+        email: m.email,
+        name: m.name,
+        role: m.role,
+        position: m.position,
+        passwordHash,
+        isActive: true,
+        companyId: company.id,
+      }).returning({ id: users.id })
+      if (cr?.id) {
+        teamIds.push(cr.id)
+        log.push(`team ${m.email}: created`)
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error(`[seed-all-demo] team ${m.email} INSERT failed:`, msg)
+      log.push(`team ${m.email}: error (${msg.slice(0, 80)})`)
+      const [recover] = await db.select({ id: users.id }).from(users).where(eq(users.email, m.email)).limit(1).catch(() => [])
+      if (recover?.id) teamIds.push(recover.id)
     }
   }
-  log.push(`team:${teamIds.length} members ready`)
+  log.push(`team:${teamIds.length}/${TEAM.length} members resolved`)
 
   const [bossId, hrLeadId, hrMgrId, sales1Id, sales2Id, mktId, frontId, backId, salesHeadId, accountantId, logistId, officeId] = teamIds
 
   // 8.2. Вакансии (добавляем "Бухгалтер", обновляем статусы существующих)
+  stage = "vacancies v2"
+  console.log("[seed-all-demo] Seeding vacancies v2...")
   const VACANCY_DEFS_V2 = [
     {
       slug: "manager-prodazh-b2b-demo", title: "Менеджер по продажам B2B",
@@ -622,6 +678,8 @@ export async function POST() {
   }
 
   // 8.3. 20 кандидатов с конкретными этапами воронки
+  stage = "candidates v2 (20)"
+  console.log("[seed-all-demo] Seeding candidates v2...")
   const CANDIDATE_NAMES = [
     "Антонов Роман",   "Белова Светлана", "Васильев Игорь",  "Гаврилова Юлия",
     "Дмитриев Артём",  "Ермолаева Ксения","Жуков Николай",   "Захарова Вера",
@@ -669,6 +727,8 @@ export async function POST() {
   }
 
   // 8.4. Кастомные демо-шаблоны (2 шт)
+  stage = "demo templates (custom)"
+  console.log("[seed-all-demo] Seeding custom demo templates...")
   const CUSTOM_DEMOS = [
     { name: "ГК Орлинк: менеджер продаж", niche: "sales", length: "standard" },
     { name: "IT-компания: разработчик",   niche: "tech",  length: "standard" },
@@ -695,6 +755,8 @@ export async function POST() {
   }
 
   // 8.5. Категории + 8 статей базы знаний
+  stage = "knowledge articles"
+  console.log("[seed-all-demo] Seeding articles...")
   const KB_CATEGORIES = [
     { name: "Инструкции",   slug: "instructions",  icon: "📖", description: "Пошаговые инструкции по рабочим процессам" },
     { name: "Регламенты",   slug: "regulations",   icon: "📋", description: "Внутренние регламенты и правила" },
@@ -840,6 +902,8 @@ export async function POST() {
   }
 
   // 8.6. Планы обучения (3) + назначения — только статьи, всего 18 assignments (4 + 2 + 12)
+  stage = "learning plans + assignments"
+  console.log("[seed-all-demo] Seeding plans & assignments...")
   const LEARNING_PLANS_DATA = [
     {
       title: "Онбординг менеджера продаж",
@@ -942,6 +1006,8 @@ export async function POST() {
   }
 
   // 8.7. AI usage log — 50 записей за последние 30 дней
+  stage = "ai usage log"
+  console.log("[seed-all-demo] Seeding AI log...")
   const [aiCount] = await db.select({ c: sql<number>`count(*)::int` }).from(aiUsageLog)
     .where(eq(aiUsageLog.tenantId, company.id))
   if ((aiCount?.c ?? 0) < 50) {
@@ -978,6 +1044,8 @@ export async function POST() {
   }
 
   // 8.8. CRM — 5 компаний-клиентов + 10 контактов
+  stage = "crm (companies + contacts)"
+  console.log("[seed-all-demo] Seeding CRM...")
   const SALES_COMPANIES = [
     { name: "ООО \"ТехноПром\"",    industry: "Производство",   city: "Москва",           inn: "7712345678" },
     { name: "АО \"СтройГарант\"",   industry: "Строительство",  city: "Санкт-Петербург",  inn: "7809876543" },
@@ -1047,5 +1115,18 @@ export async function POST() {
     log.push(`sales-contact:${c.firstName} ${c.lastName}:created`)
   }
 
+  console.log("[seed-all-demo] Done.")
   return NextResponse.json({ ok: true, log })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    console.error(`[seed-all-demo] failed at stage "${stage}":`, error)
+    return NextResponse.json(
+      {
+        error: message,
+        stage,
+        log,
+      },
+      { status: 500 },
+    )
+  }
 }
