@@ -10,6 +10,7 @@ import { toast } from "sonner"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
+import { AiAssistantWidget } from "@/components/knowledge/ai-assistant-widget"
 import { LENGTH_LABELS, NICHE_LABELS } from "@/lib/demo-types"
 import type { DemoLength, DemoNiche } from "@/lib/demo-types"
 
@@ -1283,6 +1284,7 @@ export default function CreateDemoPage() {
           </div>
         </div>
       </SidebarInset>
+      <AiAssistantWidget />
     </SidebarProvider>
   )
 }

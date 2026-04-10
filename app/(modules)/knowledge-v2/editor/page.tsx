@@ -13,6 +13,7 @@ import {
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
+import { AiAssistantWidget } from "@/components/knowledge/ai-assistant-widget"
 import { NotionEditor, type NotionEditorHandle } from "@/components/vacancies/notion-editor"
 import { DEFAULT_LESSONS, createDemo as createDemoObject, createBlock } from "@/lib/course-types"
 import type { Demo } from "@/lib/course-types"
@@ -317,6 +318,7 @@ function EditorContent() {
           <p className="text-xs text-muted-foreground">Уроки из документа будут добавлены к существующим</p>
         </DialogContent>
       </Dialog>
+      <AiAssistantWidget />
     </SidebarProvider>
   )
 }

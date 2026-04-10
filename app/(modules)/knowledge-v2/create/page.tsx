@@ -6,6 +6,7 @@ import { Plus, Lock, ChevronRight, ArrowLeft } from "lucide-react"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
+import { AiAssistantWidget } from "@/components/knowledge/ai-assistant-widget"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -580,6 +581,7 @@ export default function KnowledgeV2CreatePage() {
           )}
         </DialogContent>
       </Dialog>
+      <AiAssistantWidget />
     </SidebarProvider>
   )
 }

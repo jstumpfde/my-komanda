@@ -1,128 +1,106 @@
 "use client"
 
-import { useState, useEffect } from "react"
 import Link from "next/link"
-import { BookOpen, CheckCircle2, AlertTriangle, XCircle, Loader2, Plus } from "lucide-react"
+import {
+  BookOpen, CheckCircle2, Clock, AlertTriangle, FileWarning,
+  Sparkles, Users, TrendingUp, Plus,
+} from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
-import { toast } from "sonner"
+import { AiAssistantWidget } from "@/components/knowledge/ai-assistant-widget"
+import {
+  ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid,
+} from "recharts"
 
-type MaterialType = "demo" | "article"
-type MaterialStatus = "current" | "needs_review" | "expired"
+// ─── Mock data ──────────────────────────────────────────────────────────────
 
-interface Material {
-  id: string
-  type: MaterialType
-  name: string
-  updatedAt: string
-  reviewCycle?: string
-  validUntil?: string | null
+const METRICS = [
+  { label: "Всего материалов",       value: "47",  sub: "в библиотеке",         icon: BookOpen,     bg: "bg-blue-500" },
+  { label: "Изучено сотрудниками",   value: "128", sub: "из 184 назначенных",   icon: CheckCircle2, bg: "bg-green-500" },
+  { label: "В процессе изучения",    value: "42",  sub: "активных сейчас",      icon: Clock,        bg: "bg-purple-500" },
+  { label: "Отстают",                value: "14",  sub: "не завершили вовремя", icon: AlertTriangle, bg: "bg-orange-500" },
+  { label: "Требуют обновления",     value: "7",   sub: "устаревшие материалы", icon: FileWarning,  bg: "bg-red-400" },
+]
+
+const NENSI_HINTS = [
+  {
+    emoji: "⏰",
+    title: "3 материала устарели",
+    desc: "Регламент по безопасности не обновлялся 6 мес.",
+  },
+  {
+    emoji: "💤",
+    title: "Новый сотрудник не начал обучение",
+    desc: "Иванов А. — 5 дней без активности",
+  },
+  {
+    emoji: "❓",
+    title: "Популярная тема без материала",
+    desc: "Сотрудники часто спрашивают про CRM",
+  },
+  {
+    emoji: "📝",
+    title: "Шаблон без контента",
+    desc: "IT-специалист: 4 урока пустые",
+  },
+]
+
+type ProgressStatus = "on_track" | "behind" | "not_started"
+
+const EMPLOYEE_PROGRESS: {
+  name: string; position: string; assigned: number; done: number; status: ProgressStatus
+}[] = [
+  { name: "Петров А.",     position: "Менеджер B2B",     assigned: 12, done: 10, status: "on_track" },
+  { name: "Иванова М.",    position: "Frontend",          assigned: 8,  done: 8,  status: "on_track" },
+  { name: "Сидоров К.",    position: "Sales",             assigned: 10, done: 3,  status: "behind" },
+  { name: "Козлов Д.",     position: "Менеджер B2B",     assigned: 12, done: 6,  status: "on_track" },
+  { name: "Новиков П.",    position: "HR-менеджер",       assigned: 15, done: 0,  status: "not_started" },
+  { name: "Орлова Е.",     position: "Клиент-сервис",     assigned: 9,  done: 7,  status: "on_track" },
+  { name: "Белов Р.",      position: "IT-поддержка",      assigned: 6,  done: 1,  status: "behind" },
+]
+
+const STATUS_META: Record<ProgressStatus, { label: string; badgeClass: string }> = {
+  on_track:    { label: "На графике", badgeClass: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400" },
+  behind:      { label: "Отстаёт",    badgeClass: "bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-400" },
+  not_started: { label: "Не начал",   badgeClass: "bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400" },
 }
 
-const REVIEW_CYCLE_DAYS: Record<string, number> = { "1m": 30, "3m": 90, "6m": 180, "1y": 365 }
-const DAY_MS = 24 * 60 * 60 * 1000
+const WEEKLY_ACTIVITY = [
+  { day: "Пн", views: 18 },
+  { day: "Вт", views: 24 },
+  { day: "Ср", views: 32 },
+  { day: "Чт", views: 28 },
+  { day: "Пт", views: 41 },
+  { day: "Сб", views: 9 },
+  { day: "Вс", views: 6 },
+]
 
-function computeStatus(m: Material): MaterialStatus {
-  const now = Date.now()
-  if (m.validUntil) {
-    const exp = Date.parse(m.validUntil)
-    if (!isNaN(exp)) {
-      if (exp < now) return "expired"
-      if (exp - now < 30 * DAY_MS) return "needs_review"
-    }
-  }
-  if (m.reviewCycle && m.reviewCycle !== "none" && REVIEW_CYCLE_DAYS[m.reviewCycle]) {
-    const lastCheck = Date.parse(m.updatedAt || "")
-    if (!isNaN(lastCheck)) {
-      const cycleMs = REVIEW_CYCLE_DAYS[m.reviewCycle] * DAY_MS
-      if (now - lastCheck >= cycleMs) return "needs_review"
-    }
-  }
-  return "current"
-}
+const TOP_AUTHORS = [
+  { name: "Петрова Е.",  role: "HR Lead",        created: 12, updated: 34, lastActivity: "сегодня" },
+  { name: "Иванов С.",   role: "Директор",       created: 8,  updated: 19, lastActivity: "вчера" },
+  { name: "Козлова М.",  role: "HR-менеджер",    created: 6,  updated: 22, lastActivity: "2 дн назад" },
+  { name: "Сидоров А.",  role: "Тимлид IT",      created: 4,  updated: 11, lastActivity: "3 дн назад" },
+  { name: "Орлов Д.",    role: "Sales Lead",     created: 3,  updated: 8,  lastActivity: "неделю назад" },
+]
 
-const TYPE_LABEL: Record<MaterialType, string> = {
-  demo: "Презентация должности",
-  article: "Статья",
-}
+const RECENT_UPDATES = [
+  { name: "Менеджер по продажам B2B",  type: "Презентация",  author: "Петрова Е.",  date: "10 апр" },
+  { name: "Регламент отпусков",         type: "Статья",       author: "Иванов С.",   date: "9 апр" },
+  { name: "Онбординг IT-специалистов",  type: "Презентация",  author: "Сидоров А.",  date: "9 апр" },
+  { name: "FAQ по CRM",                 type: "Статья",       author: "Козлова М.",  date: "8 апр" },
+  { name: "Политика безопасности",      type: "Статья",       author: "Орлов Д.",    date: "7 апр" },
+  { name: "Линейный сотрудник",         type: "Презентация",  author: "Петрова Е.",  date: "6 апр" },
+  { name: "Скрипт первичного звонка",   type: "Статья",       author: "Орлов Д.",    date: "5 апр" },
+  { name: "Стандарты обслуживания",     type: "Статья",       author: "Козлова М.",  date: "4 апр" },
+]
+
+// ─── Page ───────────────────────────────────────────────────────────────────
 
 export default function KnowledgeDashboardPage() {
-  const [materials, setMaterials] = useState<Material[]>([])
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    const load = async () => {
-      setLoading(true)
-      try {
-        const [demosRes, articlesRes] = await Promise.all([
-          fetch("/api/demo-templates").then((r) => r.json()).catch(() => ({ data: [] })),
-          fetch("/api/modules/knowledge/articles").then((r) => r.json()).catch(() => ({ data: [] })),
-        ])
-        const demos = (demosRes.data ?? demosRes ?? []) as Array<{
-          id: string; name: string; updatedAt: string; reviewCycle?: string; validUntil?: string | null
-        }>
-        const articles = (articlesRes.data?.articles ?? articlesRes.articles ?? []) as Array<{
-          id: string; title: string; updatedAt: string; reviewCycle?: string; validUntil?: string | null
-        }>
-
-        const merged: Material[] = [
-          ...demos.map((d) => ({
-            id: d.id,
-            type: "demo" as const,
-            name: d.name,
-            updatedAt: d.updatedAt,
-            reviewCycle: d.reviewCycle,
-            validUntil: d.validUntil,
-          })),
-          ...articles.map((a) => ({
-            id: a.id,
-            type: "article" as const,
-            name: a.title,
-            updatedAt: a.updatedAt,
-            reviewCycle: a.reviewCycle,
-            validUntil: a.validUntil,
-          })),
-        ]
-        setMaterials(merged)
-      } catch {
-        toast.error("Ошибка загрузки")
-      }
-      setLoading(false)
-    }
-    load()
-  }, [])
-
-  const total = materials.length
-  const currentCount = materials.filter((m) => computeStatus(m) === "current").length
-  const reviewCount = materials.filter((m) => computeStatus(m) === "needs_review").length
-  const expiredCount = materials.filter((m) => computeStatus(m) === "expired").length
-
-  const recent = [...materials]
-    .sort((a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime())
-    .slice(0, 10)
-
-  const needsAttention = materials
-    .filter((m) => {
-      const s = computeStatus(m)
-      return s === "expired" || s === "needs_review"
-    })
-    .sort((a, b) => {
-      const sa = computeStatus(a)
-      const sb = computeStatus(b)
-      if (sa === "expired" && sb !== "expired") return -1
-      if (sb === "expired" && sa !== "expired") return 1
-      return 0
-    })
-    .slice(0, 6)
-
-  const materialHref = (m: Material): string =>
-    m.type === "demo"
-      ? `/knowledge-v2/editor?id=${m.id}`
-      : `/knowledge-v2/create/article?id=${m.id}`
-
   return (
     <SidebarProvider>
       <DashboardSidebar />
@@ -132,7 +110,7 @@ export default function KnowledgeDashboardPage() {
           <div className="flex items-center justify-between mb-6">
             <div>
               <h1 className="text-2xl font-bold tracking-tight">Дашборд базы знаний</h1>
-              <p className="text-sm text-muted-foreground mt-1">Состояние материалов и недавние обновления</p>
+              <p className="text-sm text-muted-foreground mt-1">Обучение, материалы и активность сотрудников</p>
             </div>
             <Button asChild>
               <Link href="/knowledge-v2/create">
@@ -141,144 +119,196 @@ export default function KnowledgeDashboardPage() {
             </Button>
           </div>
 
-          {loading ? (
-            <div className="flex items-center justify-center py-20 gap-2 text-muted-foreground">
-              <Loader2 className="w-5 h-5 animate-spin" />Загрузка...
+          <div className="space-y-5">
+            {/* ═══ Colored metric cards ═══ */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+              {METRICS.map((m) => (
+                <div key={m.label} className={cn("rounded-xl shadow-sm hover:shadow-md transition-shadow p-4 text-white", m.bg)}>
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <m.icon className="w-4 h-4 text-white" />
+                    <span className="text-sm font-semibold text-white">{m.label}</span>
+                  </div>
+                  <p className="text-3xl font-bold text-white">{m.value}</p>
+                  <p className="text-sm mt-1 text-white/90">{m.sub}</p>
+                </div>
+              ))}
             </div>
-          ) : (
-            <div className="space-y-6">
-              {/* Metrics row */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <MetricCard
-                  icon={<BookOpen className="w-5 h-5" />}
-                  label="Всего материалов"
-                  value={total}
-                  iconClass="bg-blue-100 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400"
-                />
-                <MetricCard
-                  icon={<CheckCircle2 className="w-5 h-5" />}
-                  label="Актуальные"
-                  value={currentCount}
-                  iconClass="bg-emerald-100 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400"
-                />
-                <MetricCard
-                  icon={<AlertTriangle className="w-5 h-5" />}
-                  label="Требуют проверки"
-                  value={reviewCount}
-                  iconClass="bg-amber-100 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400"
-                  href="/knowledge-v2?filter=review"
-                />
-                <MetricCard
-                  icon={<XCircle className="w-5 h-5" />}
-                  label="Устаревшие"
-                  value={expiredCount}
-                  iconClass="bg-red-100 text-red-600 dark:bg-red-950/40 dark:text-red-400"
-                />
+
+            {/* ═══ Ненси рекомендует ═══ */}
+            <div className="rounded-xl border bg-gradient-to-br from-[#EEEDFE] to-[#E6F1FB] dark:from-[#1a1830] dark:to-[#172030] p-5">
+              <div className="flex items-center gap-2 mb-4">
+                <div className="w-9 h-9 rounded-lg bg-white/70 dark:bg-white/10 flex items-center justify-center">
+                  <Sparkles className="w-5 h-5 text-primary" />
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold">🤖 Ненси рекомендует</h3>
+                  <p className="text-xs text-muted-foreground">Материалы и события, на которые стоит обратить внимание</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                {NENSI_HINTS.map((h) => (
+                  <div key={h.title} className="rounded-lg bg-white/70 dark:bg-card/60 backdrop-blur p-3 border border-white/50 dark:border-border/50">
+                    <div className="text-lg mb-1">{h.emoji}</div>
+                    <div className="text-sm font-semibold mb-0.5">{h.title}</div>
+                    <div className="text-xs text-muted-foreground leading-snug">{h.desc}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* ═══ Employee progress + Weekly activity ═══ */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+              {/* Employee progress */}
+              <div className="rounded-xl border border-border p-5 bg-card">
+                <div className="flex items-center gap-2 mb-4">
+                  <Users className="w-5 h-5 text-muted-foreground" />
+                  <h3 className="text-base font-semibold">Прогресс по сотрудникам</h3>
+                </div>
+                <div className="overflow-hidden">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-border">
+                        <th className="text-left text-[10px] uppercase font-medium text-muted-foreground tracking-wider py-2">Сотрудник</th>
+                        <th className="text-center text-[10px] uppercase font-medium text-muted-foreground tracking-wider py-2">Прогресс</th>
+                        <th className="text-right text-[10px] uppercase font-medium text-muted-foreground tracking-wider py-2">Статус</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {EMPLOYEE_PROGRESS.map((e) => {
+                        const pct = e.assigned > 0 ? Math.round((e.done / e.assigned) * 100) : 0
+                        const meta = STATUS_META[e.status]
+                        return (
+                          <tr key={e.name} className="border-b border-border/50">
+                            <td className="py-2.5">
+                              <div className="text-sm font-medium">{e.name}</div>
+                              <div className="text-xs text-muted-foreground">{e.position}</div>
+                            </td>
+                            <td className="py-2.5 px-3">
+                              <div className="flex items-center gap-2">
+                                <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                                  <div
+                                    className={cn(
+                                      "h-full rounded-full transition-all",
+                                      e.status === "on_track" && "bg-emerald-500",
+                                      e.status === "behind" && "bg-orange-500",
+                                      e.status === "not_started" && "bg-red-400",
+                                    )}
+                                    style={{ width: `${pct}%` }}
+                                  />
+                                </div>
+                                <span className="text-xs text-muted-foreground w-14 text-right whitespace-nowrap">{e.done}/{e.assigned}</span>
+                              </div>
+                            </td>
+                            <td className="py-2.5 text-right">
+                              <Badge variant="secondary" className={cn("text-[10px] font-medium border-0", meta.badgeClass)}>
+                                {meta.label}
+                              </Badge>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
 
-              {/* Needs attention */}
-              {needsAttention.length > 0 && (
-                <section>
-                  <h2 className="text-base font-semibold mb-3">Требуют внимания</h2>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {needsAttention.map((m) => {
-                      const status = computeStatus(m)
-                      const borderClass = status === "expired"
-                        ? "border-red-300 dark:border-red-900/50"
-                        : "border-amber-300 dark:border-amber-900/50"
-                      const badgeClass = status === "expired"
-                        ? "bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400"
-                        : "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400"
-                      const updated = m.updatedAt ? new Date(m.updatedAt).toLocaleDateString("ru-RU") : ""
-                      const validUntil = m.validUntil ? new Date(m.validUntil).toLocaleDateString("ru-RU") : null
-                      return (
-                        <div key={`${m.type}-${m.id}`} className={cn("rounded-xl border-2 p-4 bg-card", borderClass)}>
-                          <div className="flex items-start justify-between gap-2 mb-2">
-                            <p className="text-sm font-medium truncate flex-1">{m.name}</p>
-                            <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium whitespace-nowrap", badgeClass)}>
-                              {status === "expired" ? "Устарело" : "Проверить"}
-                            </span>
-                          </div>
-                          <div className="text-xs text-muted-foreground space-y-0.5 mb-3">
-                            <div>{TYPE_LABEL[m.type]}</div>
-                            {validUntil && <div>Актуально до {validUntil}</div>}
-                            {updated && <div>Обновлено {updated}</div>}
-                          </div>
-                          <Button asChild variant="outline" size="sm" className="h-8 w-full">
-                            <Link href={materialHref(m)}>Обновить</Link>
-                          </Button>
-                        </div>
-                      )
-                    })}
+              {/* Weekly activity */}
+              <div className="rounded-xl border border-border p-5 bg-card">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <TrendingUp className="w-5 h-5 text-muted-foreground" />
+                    <h3 className="text-base font-semibold">Активность за неделю</h3>
                   </div>
-                </section>
-              )}
-
-              {/* Recent updates */}
-              <section>
-                <h2 className="text-base font-semibold mb-3">Последние обновления</h2>
-                {recent.length === 0 ? (
-                  <div className="rounded-xl border border-border bg-card p-8 text-center text-sm text-muted-foreground">
-                    Пока нет материалов.{" "}
-                    <Link href="/knowledge-v2/create" className="text-primary hover:underline">Создайте первый</Link>
-                  </div>
-                ) : (
-                  <div className="rounded-xl border border-border overflow-hidden bg-card">
-                    <table className="w-full">
-                      <thead className="bg-muted/50 border-b border-border">
-                        <tr>
-                          <th className="text-left uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-3">Название</th>
-                          <th className="text-left uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-3">Тип</th>
-                          <th className="text-left uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-3">Обновлено</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {recent.map((m) => {
-                          const updated = m.updatedAt ? new Date(m.updatedAt).toLocaleDateString("ru-RU") : ""
-                          return (
-                            <tr key={`${m.type}-${m.id}`} className="border-b border-border/50 hover:bg-muted/50 transition-colors">
-                              <td className="px-4 py-3 text-sm font-medium">
-                                <Link href={materialHref(m)} className="hover:text-primary transition-colors">
-                                  {m.name}
-                                </Link>
-                              </td>
-                              <td className="px-4 py-3 text-sm text-muted-foreground">{TYPE_LABEL[m.type]}</td>
-                              <td className="px-4 py-3 text-sm text-muted-foreground whitespace-nowrap">{updated}</td>
-                            </tr>
-                          )
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </section>
+                  <span className="text-xs text-muted-foreground">просмотры материалов</span>
+                </div>
+                <div className="h-[240px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={WEEKLY_ACTIVITY} margin={{ top: 5, right: 0, bottom: 0, left: 0 }}>
+                      <defs>
+                        <linearGradient id="activityGradient" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#7F77DD" stopOpacity={0.35} />
+                          <stop offset="100%" stopColor="#7F77DD" stopOpacity={0.02} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" opacity={0.5} />
+                      <XAxis dataKey="day" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} width={28} />
+                      <Tooltip
+                        contentStyle={{
+                          borderRadius: 8,
+                          border: "1px solid hsl(var(--border))",
+                          backgroundColor: "hsl(var(--popover))",
+                          fontSize: 12,
+                        }}
+                        labelStyle={{ color: "hsl(var(--foreground))" }}
+                      />
+                      <Area type="monotone" dataKey="views" stroke="#7F77DD" strokeWidth={2} fill="url(#activityGradient)" />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="flex items-center justify-between text-xs text-muted-foreground mt-1 px-1">
+                  <span>Итого: <b className="text-foreground">158 просмотров</b></span>
+                  <span className="text-emerald-600 dark:text-emerald-400">+18% к прошлой неделе</span>
+                </div>
+              </div>
             </div>
-          )}
+
+            {/* ═══ Top authors ═══ */}
+            <div className="rounded-xl border border-border p-5 bg-card">
+              <h3 className="text-base font-semibold mb-4">Топ авторов</h3>
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-border">
+                    <th className="text-left text-[10px] uppercase font-medium text-muted-foreground tracking-wider py-2">Автор</th>
+                    <th className="text-center text-[10px] uppercase font-medium text-muted-foreground tracking-wider py-2">Создано</th>
+                    <th className="text-center text-[10px] uppercase font-medium text-muted-foreground tracking-wider py-2">Обновлено</th>
+                    <th className="text-right text-[10px] uppercase font-medium text-muted-foreground tracking-wider py-2">Последняя активность</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {TOP_AUTHORS.map((a) => (
+                    <tr key={a.name} className="border-b border-border/50">
+                      <td className="py-2.5">
+                        <div className="text-sm font-medium">{a.name}</div>
+                        <div className="text-xs text-muted-foreground">{a.role}</div>
+                      </td>
+                      <td className="py-2.5 text-center text-sm text-muted-foreground">{a.created}</td>
+                      <td className="py-2.5 text-center text-sm text-muted-foreground">{a.updated}</td>
+                      <td className="py-2.5 text-right text-xs text-muted-foreground whitespace-nowrap">{a.lastActivity}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* ═══ Recent updates ═══ */}
+            <div className="rounded-xl border border-border p-5 bg-card">
+              <h3 className="text-base font-semibold mb-4">Последние обновления</h3>
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-border">
+                    <th className="text-left text-[10px] uppercase font-medium text-muted-foreground tracking-wider py-2">Название</th>
+                    <th className="text-left text-[10px] uppercase font-medium text-muted-foreground tracking-wider py-2">Тип</th>
+                    <th className="text-left text-[10px] uppercase font-medium text-muted-foreground tracking-wider py-2">Автор</th>
+                    <th className="text-right text-[10px] uppercase font-medium text-muted-foreground tracking-wider py-2">Обновлено</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {RECENT_UPDATES.map((r) => (
+                    <tr key={`${r.name}-${r.date}`} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
+                      <td className="py-2.5 text-sm font-medium">{r.name}</td>
+                      <td className="py-2.5 text-xs text-muted-foreground">{r.type}</td>
+                      <td className="py-2.5 text-xs text-muted-foreground">{r.author}</td>
+                      <td className="py-2.5 text-xs text-muted-foreground text-right whitespace-nowrap">{r.date}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       </SidebarInset>
+      <AiAssistantWidget />
     </SidebarProvider>
   )
-}
-
-function MetricCard({
-  icon, label, value, iconClass, href,
-}: {
-  icon: React.ReactNode
-  label: string
-  value: number
-  iconClass: string
-  href?: string
-}) {
-  const body = (
-    <div className="rounded-xl border border-border bg-card p-5 transition-all hover:border-primary/30">
-      <div className="flex items-center justify-between mb-3">
-        <div className={cn("w-9 h-9 rounded-lg flex items-center justify-center", iconClass)}>
-          {icon}
-        </div>
-      </div>
-      <div className="text-3xl font-bold tracking-tight">{value}</div>
-      <div className="text-sm text-muted-foreground mt-1">{label}</div>
-    </div>
-  )
-  return href ? <Link href={href}>{body}</Link> : body
 }

@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
+import { AiAssistantWidget } from "@/components/knowledge/ai-assistant-widget"
 import { cn } from "@/lib/utils"
 
 interface Category {
@@ -339,6 +340,7 @@ function ArticleCreateContent() {
           </div>
         </div>
       </SidebarInset>
+      <AiAssistantWidget />
     </SidebarProvider>
   )
 }
