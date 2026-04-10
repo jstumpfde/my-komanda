@@ -70,6 +70,7 @@ export const MODULE_REGISTRY: Record<ModuleId, ModuleConfig> = {
       { label: 'На проверке',     href: '/knowledge/reviews',    icon: 'ClipboardCheck' },
       { label: 'AI-курсы',        href: '/knowledge/ai-courses', icon: 'Sparkles' },
       { label: 'Новая статья',    href: '/knowledge/new',        icon: 'FilePlus' },
+      { label: 'База знаний v2',  href: '/knowledge-v2',         icon: 'BookOpen' },
     ],
   },
   sales: {

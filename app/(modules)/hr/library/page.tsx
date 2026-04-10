@@ -29,7 +29,14 @@ interface TemplateData {
 
 export default function LibraryPage() {
   const [activeTab, setActiveTab] = useState("my")
-  const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
+  const [viewMode, setViewMode] = useState<"grid" | "list">(() => {
+    if (typeof window === "undefined") return "grid"
+    const stored = window.localStorage.getItem("library-view")
+    return stored === "list" || stored === "grid" ? stored : "grid"
+  })
+  useEffect(() => {
+    if (typeof window !== "undefined") window.localStorage.setItem("library-view", viewMode)
+  }, [viewMode])
   const [templates, setTemplates] = useState<TemplateData[]>([])
   const [loading, setLoading] = useState(true)
   const [deleteId, setDeleteId] = useState<string | null>(null)

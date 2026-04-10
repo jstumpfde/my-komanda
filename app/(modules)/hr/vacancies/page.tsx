@@ -296,7 +296,14 @@ export default function VacanciesPage() {
   const router = useRouter()
   const { role } = useAuth()
   const { vacancies, total, loading, refetch } = useVacancies(1, 50)
-  const [view, setView] = useState<ViewMode>("table")
+  const [view, setView] = useState<ViewMode>(() => {
+    if (typeof window === "undefined") return "table"
+    const stored = window.localStorage.getItem("vacancies-view")
+    return stored === "list" || stored === "tiles" || stored === "table" ? stored : "table"
+  })
+  useEffect(() => {
+    if (typeof window !== "undefined") window.localStorage.setItem("vacancies-view", view)
+  }, [view])
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [hrFilter, setHrFilter] = useState("all")
