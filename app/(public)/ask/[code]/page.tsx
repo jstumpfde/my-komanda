@@ -23,7 +23,7 @@ interface MaterialRef {
 }
 
 const SYSTEM_PROMPT =
-  "Ты — AI-ассистент корпоративной базы знаний компании. " +
+  "Ты — Ненси, AI-ассистент корпоративной базы знаний компании. " +
   "Отвечай на вопросы ТОЛЬКО на основе предоставленных материалов. " +
   "Если ответ есть — дай краткий ответ и укажи название материала в скобках. " +
   "Если не найден — скажи что не нашёл. Отвечай на русском, кратко, 2-4 предложения."
@@ -74,7 +74,7 @@ export default function PublicAskPage() {
         {
           id: "welcome",
           role: "assistant",
-          content: `Здравствуйте! Задайте вопрос — я найду ответ в базе знаний компании ${data.companyName || ""}.`,
+          content: `Здравствуйте! Я Ненси — AI-ассистент базы знаний компании ${data.companyName || ""}. Задайте вопрос!`,
         },
       ])
       setStage("chat")
@@ -173,7 +173,7 @@ export default function PublicAskPage() {
             </div>
             <h1 className="text-xl font-semibold text-center">Доступ к базе знаний</h1>
             <p className="text-sm text-muted-foreground mt-1 text-center">
-              Введите пароль, чтобы задать вопрос AI-ассистенту
+              Введите пароль, чтобы задать вопрос Ненси
             </p>
           </div>
 
@@ -213,7 +213,7 @@ export default function PublicAskPage() {
           <BookOpen className="w-5 h-5" />
         </div>
         <div className="flex-1 min-w-0">
-          <div className="text-sm font-semibold truncate">🤖 AI-ассистент — {companyName}</div>
+          <div className="text-sm font-semibold truncate">🤖 Ненси — {companyName}</div>
           <div className="text-xs text-muted-foreground">База знаний</div>
         </div>
       </div>

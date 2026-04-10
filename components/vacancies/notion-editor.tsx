@@ -863,44 +863,49 @@ function NotionBlock({ block, idx, totalBlocks, isHovered, isDragging, isDragOve
       onSlashTrigger(rect.left - cr.left, yBottom, yTop, upward, "")
     }
     if (e.key === "Enter" && block.type === "text") {
-      e.preventDefault()
       const el = editorRef.current
       if (!el) return
       const sel = window.getSelection()
       if (!sel || sel.rangeCount === 0) return
       const range = sel.getRangeAt(0)
-      range.deleteContents()
-
-      // Detect if cursor is at the very end of the element
-      const endRange = document.createRange()
-      endRange.selectNodeContents(el)
-      endRange.collapse(false)
-      const atEnd = range.compareBoundaryPoints(Range.START_TO_START, endRange) >= 0
 
       if (e.shiftKey) {
-        // Shift+Enter — двойной перенос (новый абзац)
+        // Shift+Enter — paragraph break (double line)
+        e.preventDefault()
+        range.deleteContents()
         const br1 = document.createElement("br")
         const br2 = document.createElement("br")
         range.insertNode(br2)
         range.insertNode(br1)
         range.setStartAfter(br2)
         range.setEndAfter(br2)
-      } else {
-        // Enter — одиночный перенос
-        const br = document.createElement("br")
-        range.insertNode(br)
-        range.setStartAfter(br)
-        range.setEndAfter(br)
-        // At end of block the browser needs something after <br> to render cursor on new line
-        if (atEnd) {
-          const zwsp = document.createTextNode("\u200B")
-          range.insertNode(zwsp)
-          range.setStartAfter(zwsp)
-          range.setEndAfter(zwsp)
-        }
+        sel.removeAllRanges()
+        sel.addRange(range)
+        syncContent()
+        return
       }
-      sel.removeAllRanges()
-      sel.addRange(range)
+
+      // Detect "at end of block" and "on empty trailing line"
+      const endRange = document.createRange()
+      endRange.selectNodeContents(el)
+      endRange.collapse(false)
+      const atEnd = range.compareBoundaryPoints(Range.START_TO_START, endRange) >= 0
+      const html = el.innerHTML
+      const trailingBr = /<br\s*\/?>\s*$/.test(html)
+
+      if (atEnd && trailingBr) {
+        // Second Enter on an empty trailing line → create a new block
+        e.preventDefault()
+        el.innerHTML = html.replace(/(<br\s*\/?>)+\s*$/, "")
+        syncContent()
+        onInsertBelow("text")
+        return
+      }
+
+      // First Enter → insert a line break via execCommand so the browser
+      // handles cursor placement (more reliable than manual range manip).
+      e.preventDefault()
+      document.execCommand("insertHTML", false, "<br>")
       syncContent()
     }
     if (e.key === "Backspace" && block.type === "text" && editorRef.current) {
@@ -2482,7 +2487,7 @@ function InlineBetweenBar({ onAdd }: { onAdd: (type: BlockType) => void }) {
   return (
     <div
       className="relative w-full flex items-center group/between my-2"
-      style={{ minHeight: 8 }}
+      style={{ minHeight: 32 }}
       onMouseEnter={() => setVisible(true)}
       onMouseLeave={() => setVisible(false)}
     >

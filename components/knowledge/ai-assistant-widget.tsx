@@ -24,11 +24,11 @@ interface MaterialRef {
 const WELCOME: Message = {
   id: "welcome",
   role: "assistant",
-  content: "Привет! Я AI-ассистент базы знаний. Задайте вопрос — я найду ответ в материалах компании.",
+  content: "Привет! Я Ненси — Ненси базы знаний. Задайте вопрос — найду ответ в материалах компании.",
 }
 
 const SYSTEM_PROMPT =
-  "Ты — AI-ассистент корпоративной базы знаний компании. " +
+  "Ты — Ненси, Ненси корпоративной базы знаний компании. " +
   "Отвечай на вопросы сотрудников ТОЛЬКО на основе предоставленных материалов. " +
   "Если ответ есть — дай краткий ответ и укажи название материала в скобках. " +
   "Если не найден — скажи что не нашёл и предложи создать материал. " +
@@ -176,7 +176,7 @@ export function AiAssistantWidget() {
         <button
           type="button"
           onClick={() => setOpen(true)}
-          aria-label="Открыть AI-ассистент"
+          aria-label="Открыть Ненси"
           className="fixed bottom-4 right-4 w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center hover:scale-105 transition-transform z-50"
         >
           <MessageCircle className="w-6 h-6" />
@@ -188,11 +188,11 @@ export function AiAssistantWidget() {
         <div
           className="fixed bottom-20 right-4 w-96 h-[500px] rounded-2xl shadow-2xl border border-border bg-background flex flex-col z-50 animate-in slide-in-from-bottom-4 duration-200"
           role="dialog"
-          aria-label="AI-ассистент"
+          aria-label="Ненси"
         >
           {/* Header */}
           <div className="bg-primary text-primary-foreground rounded-t-2xl px-4 py-3 flex items-center justify-between">
-            <span className="font-semibold text-sm">🤖 AI-ассистент</span>
+            <span className="font-semibold text-sm">🤖 Ненси</span>
             <button
               type="button"
               onClick={() => setOpen(false)}
