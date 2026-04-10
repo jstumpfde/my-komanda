@@ -13,7 +13,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
-import { AiAssistantWidget } from "@/components/knowledge/ai-assistant-widget"
 import { LENGTH_LABELS } from "@/lib/demo-types"
 import { toast } from "sonner"
 
@@ -436,8 +435,6 @@ function KnowledgeV2PageContent() {
           </div>
         </DialogContent>
       </Dialog>
-
-      <AiAssistantWidget />
     </SidebarProvider>
   )
 }

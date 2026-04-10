@@ -134,6 +134,7 @@ export const users = pgTable("users", {
   position: text("position"),                  // реальная должность (не роль в системе)
   permissions: jsonb("permissions").default("{}"), // { manage_company, manage_team, manage_billing, ... }
   customSchedule: jsonb("custom_schedule"),          // { enabled, days: { mon: { active, start, end }, ... } }
+  telegramChatId: text("telegram_chat_id"),
   isActive: boolean("is_active").default(true),
   createdAt: timestamp("created_at").defaultNow(),
 })

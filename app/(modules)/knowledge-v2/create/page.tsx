@@ -54,7 +54,7 @@ const GROUPS: Group[] = [
       { emoji: "📚", title: "Статья",     href: "/knowledge-v2/create/article" },
       { emoji: "💡", title: "Кейс",       href: null },
       { emoji: "📰", title: "Новость",    href: null },
-      { emoji: "🎬", title: "Видеоурок",  href: null },
+      { emoji: "🎬", title: "Видеокурс",  href: null },
       { emoji: "❓", title: "FAQ",        href: null },
       { emoji: "📖", title: "Wiki",       href: null },
     ],
@@ -136,7 +136,7 @@ export default function KnowledgeV2CreatePage() {
           <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
             <div className="max-w-5xl mx-auto">
               <div className="mb-6">
-                <h1 className="text-2xl font-semibold">Создать материал</h1>
+                <h1 className="text-2xl font-semibold">Создать корпоративный материал</h1>
                 <p className="text-sm text-muted-foreground mt-1">Выберите тип документа</p>
               </div>
 
