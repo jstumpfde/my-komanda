@@ -118,11 +118,17 @@ function EditorContent() {
   }
 
   const handlePreview = async () => {
+    // Open window synchronously to avoid popup blockers after await
+    const previewWindow = window.open("about:blank", "_blank")
+    if (!previewWindow) {
+      toast.error("Разрешите всплывающие окна для предпросмотра")
+      return
+    }
+
     let id = savedId
-    if (!id) {
-      // Auto-save first
-      setSaving(true)
-      try {
+    try {
+      if (!id) {
+        setSaving(true)
         const res = await fetch("/api/demo-templates", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -134,28 +140,32 @@ function EditorContent() {
           }),
         })
         const data = await res.json()
-        if (!res.ok) { toast.error(data.error || "Ошибка сохранения"); setSaving(false); return }
+        if (!res.ok) {
+          toast.error(data.error || "Ошибка сохранения")
+          previewWindow.close()
+          setSaving(false)
+          return
+        }
         id = (data.data ?? data).id
         setSavedId(id)
         const url = new URL(window.location.href)
         url.searchParams.set("id", id!)
         window.history.replaceState({}, "", url.toString())
         toast.success("Сохранено")
-      } catch {
-        toast.error("Ошибка сети")
         setSaving(false)
-        return
+      } else {
+        await fetch(`/api/demo-templates/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: demoName, sections: demo.lessons }),
+        })
       }
+      previewWindow.location.href = `/hr/library/preview/${id}`
+    } catch {
+      toast.error("Ошибка сети")
+      previewWindow.close()
       setSaving(false)
-    } else {
-      // Save current state before preview
-      await fetch(`/api/demo-templates/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: demoName, sections: demo.lessons }),
-      })
     }
-    window.open(`/hr/library/preview/${id}`, "_blank")
   }
 
   const handleImportFile = async (file: File, mode: "replace" | "append") => {
