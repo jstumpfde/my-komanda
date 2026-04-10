@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { Plus, Eye, BookOpen, Pencil, Trash2, Loader2, LayoutGrid, List } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -176,6 +177,7 @@ export default function LibraryPage() {
 }
 
 function TemplateCard({ template, onDelete }: { template: TemplateData; onDelete?: () => void }) {
+  const router = useRouter()
   const nicheInfo = NICHE_LABELS[template.niche]
   const lengthInfo = LENGTH_LABELS[template.length]
   const lessonsCount = Array.isArray(template.sections) ? template.sections.length : 0
@@ -184,54 +186,66 @@ function TemplateCard({ template, onDelete }: { template: TemplateData; onDelete
     ? (template.sections[0] as { emoji?: string })?.emoji || "📄"
     : "📄"
 
+  const openEditor = () => router.push(`/hr/library/create/editor?id=${template.id}`)
+  const openPreview = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    window.open(`/hr/library/preview/${template.id}`, "_blank")
+  }
+  const handleDeleteClick = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    onDelete?.()
+  }
+
   return (
-    <Link href={`/hr/library/create/editor?id=${template.id}`}>
-      <div className="rounded-xl border border-border p-5 hover:shadow-md hover:border-primary/30 transition-all cursor-pointer group bg-card">
-        {/* Row 1: Emoji + Title */}
-        <div className="flex items-center gap-3 mb-3">
-          <span className="text-2xl shrink-0">{firstEmoji}</span>
-          <p className="text-base font-medium text-foreground group-hover:text-primary transition-colors truncate">{template.name}</p>
-        </div>
-
-        {/* Row 2: Pill badges */}
-        <div className="flex flex-wrap gap-1.5 mb-3">
-          {nicheInfo && (
-            <span className="inline-flex items-center rounded-full bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400 px-2.5 py-0.5 text-xs font-medium">{nicheInfo.label}</span>
-          )}
-          {lengthInfo && (
-            <span className="inline-flex items-center rounded-full bg-purple-100 text-purple-700 dark:bg-purple-950/40 dark:text-purple-400 px-2.5 py-0.5 text-xs font-medium">{lengthInfo.label}</span>
-          )}
-          <span className="inline-flex items-center rounded-full bg-muted text-muted-foreground px-2.5 py-0.5 text-xs font-medium">
-            {lessonsCount} {lessonsCount === 1 ? "урок" : lessonsCount < 5 ? "урока" : "уроков"}
-          </span>
-          {template.isSystem && (
-            <span className="inline-flex items-center rounded-full bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 px-2.5 py-0.5 text-xs font-medium">Системный</span>
-          )}
-        </div>
-
-        {/* Row 3: Date */}
-        {updatedAt && (
-          <p className="text-xs text-muted-foreground mb-4">Обновлено {updatedAt}</p>
-        )}
-
-        {/* Row 4: Actions */}
-        <div className="flex items-center gap-2">
-          <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 flex-1">
-            <Pencil className="h-3 w-3" />Редактировать
-          </Button>
-          <Button size="sm" variant="outline" className="h-8 w-8 p-0" asChild onClick={(e) => e.stopPropagation()}>
-            <Link href={`/hr/library/preview/${template.id}`} target="_blank">
-              <Eye className="h-3.5 w-3.5" />
-            </Link>
-          </Button>
-          {!template.isSystem && onDelete && (
-            <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive" onClick={(e) => { e.preventDefault(); e.stopPropagation(); onDelete() }}>
-              <Trash2 className="h-3.5 w-3.5" />
-            </Button>
-          )}
-        </div>
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={openEditor}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openEditor() } }}
+      className="rounded-xl border border-border p-5 hover:shadow-md hover:border-primary/30 transition-all cursor-pointer group bg-card focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+    >
+      {/* Row 1: Emoji + Title */}
+      <div className="flex items-center gap-3 mb-3">
+        <span className="text-2xl shrink-0">{firstEmoji}</span>
+        <p className="text-base font-medium text-foreground group-hover:text-primary transition-colors truncate">{template.name}</p>
       </div>
-    </Link>
+
+      {/* Row 2: Pill badges */}
+      <div className="flex flex-wrap gap-1.5 mb-3">
+        {nicheInfo && (
+          <span className="inline-flex items-center rounded-full bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400 px-2.5 py-0.5 text-xs font-medium">{nicheInfo.label}</span>
+        )}
+        {lengthInfo && (
+          <span className="inline-flex items-center rounded-full bg-purple-100 text-purple-700 dark:bg-purple-950/40 dark:text-purple-400 px-2.5 py-0.5 text-xs font-medium">{lengthInfo.label}</span>
+        )}
+        <span className="inline-flex items-center rounded-full bg-muted text-muted-foreground px-2.5 py-0.5 text-xs font-medium">
+          {lessonsCount} {lessonsCount === 1 ? "урок" : lessonsCount < 5 ? "урока" : "уроков"}
+        </span>
+        {template.isSystem && (
+          <span className="inline-flex items-center rounded-full bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 px-2.5 py-0.5 text-xs font-medium">Системный</span>
+        )}
+      </div>
+
+      {/* Row 3: Date */}
+      {updatedAt && (
+        <p className="text-xs text-muted-foreground mb-4">Обновлено {updatedAt}</p>
+      )}
+
+      {/* Row 4: Actions */}
+      <div className="flex items-center gap-2">
+        <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 flex-1" onClick={(e) => { e.stopPropagation(); openEditor() }}>
+          <Pencil className="h-3 w-3" />Редактировать
+        </Button>
+        <Button size="sm" variant="outline" className="h-8 w-8 p-0" onClick={openPreview}>
+          <Eye className="h-3.5 w-3.5" />
+        </Button>
+        {!template.isSystem && onDelete && (
+          <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive" onClick={handleDeleteClick}>
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
+        )}
+      </div>
+    </div>
   )
 }
 
