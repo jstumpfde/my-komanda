@@ -110,12 +110,27 @@ function contentToHtml(content: string): string {
 
 function tryParseJsonArray(raw: string): ClaudeLesson[] | null {
   const cleaned = raw.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim()
+
+  // 1. Try parsing as-is
   try {
     const parsed = JSON.parse(cleaned)
     if (Array.isArray(parsed)) return parsed
   } catch {
     /* fall through */
   }
+
+  // 2. Truncated output: close the array after the last complete object
+  const lastBrace = cleaned.lastIndexOf("}")
+  if (lastBrace > 0) {
+    try {
+      const parsed = JSON.parse(cleaned.substring(0, lastBrace + 1) + "]")
+      if (Array.isArray(parsed)) return parsed
+    } catch {
+      /* fall through */
+    }
+  }
+
+  // 3. Regex fallback: grab the first [...] block
   const match = cleaned.match(/\[[\s\S]*\]/)
   if (match) {
     try {
@@ -125,6 +140,7 @@ function tryParseJsonArray(raw: string): ClaudeLesson[] | null {
       return null
     }
   }
+
   return null
 }
 
@@ -150,6 +166,8 @@ function buildPrompt(text: string): string {
   }
 ]
 
+ВАЖНО: Будь краток в контенте каждого урока. Максимум 3-5 предложений на урок. Не копируй текст дословно — перефразируй кратко.
+
 Документ:
 ${text}`
 }
@@ -165,7 +183,7 @@ async function callClaudeFromBrowser(text: string, apiKey: string): Promise<Clau
     },
     body: JSON.stringify({
       model: "claude-sonnet-4-20250514",
-      max_tokens: 4096,
+      max_tokens: 8192,
       messages: [{ role: "user", content: buildPrompt(text) }],
     }),
   })
