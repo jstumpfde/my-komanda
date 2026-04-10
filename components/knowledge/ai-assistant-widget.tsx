@@ -1,4 +1,5 @@
 "use client"
+import Image from "next/image"
 
 import { useState, useRef, useEffect } from "react"
 import { MessageCircle, X, Send, Loader2, Mic, Square } from "lucide-react"
@@ -402,22 +403,22 @@ export function AiAssistantWidget() {
           type="button"
           onClick={() => setOpen(true)}
           aria-label="Открыть Ненси"
-          className="fixed bottom-4 right-4 w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center hover:scale-105 transition-transform z-50"
+          className="fixed bottom-4 right-4 w-16 h-16 rounded-full shadow-lg flex items-center justify-center hover:scale-105 transition-transform z-50 overflow-hidden border-2 border-primary p-0"
         >
-          <MessageCircle className="w-6 h-6" />
+          <Image src="/nancy-avatar.png" alt="Ненси" width={64} height={64} className="w-full h-full object-cover" />
         </button>
       )}
 
       {/* Chat panel */}
       {open && (
         <div
-          className="fixed bottom-20 right-4 w-96 h-[500px] rounded-2xl shadow-2xl border border-border bg-background flex flex-col z-50 animate-in slide-in-from-bottom-4 duration-200"
+          className="fixed bottom-20 right-4 w-96 resize-y overflow-hidden min-h-[300px] max-h-[85vh] h-[500px] rounded-2xl shadow-2xl border border-border bg-background flex flex-col z-50 animate-in slide-in-from-bottom-4 duration-200"
           role="dialog"
           aria-label="Ненси"
         >
           {/* Header */}
           <div className="bg-primary text-primary-foreground rounded-t-2xl px-4 py-3 flex items-center justify-between">
-            <span className="font-semibold text-sm">🤖 Ненси — AI-ассистент</span>
+            <div className="flex items-center gap-2"><Image src="/nancy-avatar.png" alt="Ненси" width={44} height={44} className="rounded-full" /><span className="font-semibold text-sm">Ненси — AI-ассистент</span></div>
             <button
               type="button"
               onClick={() => setOpen(false)}
