@@ -75,9 +75,14 @@ function contentToHtml(content: string): string {
     return s
   }
 
+  // Inline styles survive Tailwind preflight (which resets <p> margins to 0),
+  // so paragraph spacing shows up regardless of the editor's CSS context.
+  const pStyle = 'style="margin:0 0 12px 0;line-height:1.55"'
+  const ulStyle = 'style="margin:0 0 12px 0;padding-left:22px"'
+
   // Split into paragraphs by one or more blank lines.
   const paragraphs = normalized.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean)
-  if (paragraphs.length === 0) return `<p>${escapeHtml(normalized)}</p>`
+  if (paragraphs.length === 0) return `<p ${pStyle}>${escapeHtml(normalized)}</p>`
 
   const out: string[] = []
   for (const paragraph of paragraphs) {
@@ -90,15 +95,15 @@ function contentToHtml(content: string): string {
         .map((l) => l.replace(/^[•\-\*]\s+/, ""))
         .map((l) => `<li>${inlineFormat(l)}</li>`)
         .join("")
-      out.push(`<ul>${items}</ul>`)
+      out.push(`<ul ${ulStyle}>${items}</ul>`)
       continue
     }
 
     // Regular paragraph: single newlines become <br/>.
-    out.push(`<p>${lines.map(inlineFormat).join("<br/>")}</p>`)
+    out.push(`<p ${pStyle}>${lines.map(inlineFormat).join("<br/>")}</p>`)
   }
 
-  return out.join("") || `<p>${escapeHtml(normalized)}</p>`
+  return out.join("") || `<p ${pStyle}>${escapeHtml(normalized)}</p>`
 }
 
 // ─── Marker parsing ([ТЕСТ] / [ЗАДАНИЕ]) ────────────────────────────────────
@@ -311,13 +316,18 @@ const LENGTH_HINT: Record<DemoLength, string> = {
   full:     "полная ~22 урока",
 }
 
-type WorkFormat = "" | "office" | "hybrid" | "remote"
+type WorkFormatKey = "office" | "hybrid" | "remote"
 
-const WORK_FORMAT_LABEL: Record<Exclude<WorkFormat, "">, string> = {
-  office: "Офис",
-  hybrid: "Гибрид",
-  remote: "Удалёнка",
-}
+const WORK_FORMATS: { key: WorkFormatKey; label: string; emoji: string }[] = [
+  { key: "office", label: "Офис",     emoji: "🏢" },
+  { key: "hybrid", label: "Гибрид",   emoji: "🔄" },
+  { key: "remote", label: "Удалёнка", emoji: "🏠" },
+]
+
+const WORK_FORMAT_LABEL: Record<WorkFormatKey, string> = WORK_FORMATS.reduce(
+  (acc, f) => { acc[f.key] = f.label; return acc },
+  {} as Record<WorkFormatKey, string>,
+)
 
 type Market = "B2B" | "B2C" | "B2G"
 
@@ -331,7 +341,7 @@ interface PromptParams {
   position: string
   city: string
   salary: string
-  workFormat: WorkFormat
+  workFormat: WorkFormatKey[]
   hiringManager: string
   ceoName: string
 }
@@ -348,7 +358,9 @@ function buildPrompt(text: string, params: PromptParams): string {
   const position = withVar(params.position, "должность")
   const city = withVar(params.city, "город")
   const salary = params.salary.trim() ? params.salary.trim() : "не указана, используй {{зарплата}}"
-  const workFormat = params.workFormat ? WORK_FORMAT_LABEL[params.workFormat] : "не указан"
+  const workFormat = params.workFormat.length > 0
+    ? params.workFormat.map((k) => WORK_FORMAT_LABEL[k]).join(", ")
+    : "не указан"
   const hiringManager = plain(params.hiringManager)
   const ceoName = plain(params.ceoName)
 
@@ -549,7 +561,13 @@ export default function CreateDemoPage() {
   const [docPosition, setDocPosition] = useState("")
   const [docCity, setDocCity] = useState("")
   const [docSalary, setDocSalary] = useState("")
-  const [docWorkFormat, setDocWorkFormat] = useState<WorkFormat>("")
+  const [docWorkFormat, setDocWorkFormat] = useState<WorkFormatKey[]>([])
+
+  const toggleDocWorkFormat = (k: WorkFormatKey) => {
+    setDocWorkFormat((prev) =>
+      prev.includes(k) ? prev.filter((x) => x !== k) : [...prev, k],
+    )
+  }
   const [docHiringManager, setDocHiringManager] = useState("")
   const [docCeoName, setDocCeoName] = useState("")
   const abortRef = useRef<AbortController | null>(null)
@@ -1097,6 +1115,21 @@ export default function CreateDemoPage() {
                     </div>
                   </div>
 
+                  {/* Work format selector */}
+                  <div>
+                    <SectionLabel>Формат работы</SectionLabel>
+                    <div className="flex flex-wrap gap-2">
+                      {WORK_FORMATS.map((f) => (
+                        <Pill
+                          key={f.key}
+                          label={`${f.emoji} ${f.label}`}
+                          active={docWorkFormat.includes(f.key)}
+                          onClick={() => toggleDocWorkFormat(f.key)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+
                   {/* Company variables card */}
                   <div>
                     <SectionLabel>Данные компании</SectionLabel>
@@ -1123,24 +1156,14 @@ export default function CreateDemoPage() {
                           placeholder="Москва"
                           className="h-10 bg-[var(--input-bg)]"
                         />
-                        <select
-                          value={docWorkFormat}
-                          onChange={(e) => setDocWorkFormat(e.target.value as WorkFormat)}
-                          className="h-10 px-3 rounded-md border border-border bg-[var(--input-bg)] text-sm"
-                        >
-                          <option value="">Формат работы</option>
-                          <option value="office">Офис</option>
-                          <option value="hybrid">Гибрид</option>
-                          <option value="remote">Удалёнка</option>
-                        </select>
-
-                        {/* Row 3 */}
                         <Input
                           value={docSalary}
                           onChange={(e) => setDocSalary(e.target.value)}
                           placeholder="от 200 000 ₽"
                           className="h-10 bg-[var(--input-bg)]"
                         />
+
+                        {/* Row 3 */}
                         <Input
                           value={docHiringManager}
                           onChange={(e) => setDocHiringManager(e.target.value)}
@@ -1152,8 +1175,8 @@ export default function CreateDemoPage() {
                         <Input
                           value={docCeoName}
                           onChange={(e) => setDocCeoName(e.target.value)}
-                          placeholder="Основатель / Ген. директор — имя и должность"
-                          className="h-10 bg-[var(--input-bg)] col-span-2"
+                          placeholder="Основатель / Ген. директор"
+                          className="h-10 bg-[var(--input-bg)]"
                         />
                       </div>
                       <p className="text-xs text-muted-foreground mt-3">Заполненные поля будут подставлены в демонстрацию</p>
