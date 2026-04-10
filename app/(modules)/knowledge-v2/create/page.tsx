@@ -76,6 +76,18 @@ const DEFAULT_GROUPS: Group[] = [
     ],
   },
   {
+    emoji: "🌐",
+    label: "Для сайта",
+    items: [
+      { emoji: "🔒", title: "Политика конфиденциальности", href: null },
+      { emoji: "✉️", title: "Согласие на рассылку",         href: null },
+      { emoji: "🍪", title: "Cookie-политика",               href: null },
+      { emoji: "📜", title: "Пользовательское соглашение",   href: null },
+      { emoji: "📋", title: "Оферта",                        href: null },
+      { emoji: "↩️", title: "Условия возврата",              href: null },
+    ],
+  },
+  {
     emoji: "🤝",
     label: "Для клиентов",
     items: [
