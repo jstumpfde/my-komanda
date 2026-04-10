@@ -187,35 +187,37 @@ export default function CreateDemoPage() {
                 <p className="text-xs text-muted-foreground mt-1">Обязательное поле, минимум 3 символа</p>
               </div>
 
-              {/* ═══ 2. Отдел ═══ */}
-              <div>
-                <SectionLabel>Отдел</SectionLabel>
-                <div className="flex flex-wrap gap-2">
-                  {DEPARTMENTS.map((d) => (
-                    <Pill key={d} label={d} active={department === d} onClick={() => setDepartment(department === d ? null : d)} />
-                  ))}
-                </div>
-              </div>
+              {/* ═══ 2-4. Отдел / Тип рынка / Уровень — скрыты при импорте из документа ═══ */}
+              {selectedTemplate !== "document" && (
+                <>
+                  <div>
+                    <SectionLabel>Отдел</SectionLabel>
+                    <div className="flex flex-wrap gap-2">
+                      {DEPARTMENTS.map((d) => (
+                        <Pill key={d} label={d} active={department === d} onClick={() => setDepartment(department === d ? null : d)} />
+                      ))}
+                    </div>
+                  </div>
 
-              {/* ═══ 3. Тип рынка ═══ */}
-              <div>
-                <SectionLabel>Тип рынка</SectionLabel>
-                <div className="flex flex-wrap gap-2">
-                  {MARKET_TYPES.map((m) => (
-                    <Pill key={m} label={m} active={marketType === m} onClick={() => setMarketType(marketType === m ? null : m)} />
-                  ))}
-                </div>
-              </div>
+                  <div>
+                    <SectionLabel>Тип рынка</SectionLabel>
+                    <div className="flex flex-wrap gap-2">
+                      {MARKET_TYPES.map((m) => (
+                        <Pill key={m} label={m} active={marketType === m} onClick={() => setMarketType(marketType === m ? null : m)} />
+                      ))}
+                    </div>
+                  </div>
 
-              {/* ═══ 4. Уровень ═══ */}
-              <div>
-                <SectionLabel>Уровень</SectionLabel>
-                <div className="flex flex-wrap gap-2">
-                  {LEVELS.map((l) => (
-                    <Pill key={l} label={l} active={level === l} onClick={() => setLevel(level === l ? null : l)} />
-                  ))}
-                </div>
-              </div>
+                  <div>
+                    <SectionLabel>Уровень</SectionLabel>
+                    <div className="flex flex-wrap gap-2">
+                      {LEVELS.map((l) => (
+                        <Pill key={l} label={l} active={level === l} onClick={() => setLevel(level === l ? null : l)} />
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
 
               {/* ═══ 5. Формат ═══ */}
               <div>
