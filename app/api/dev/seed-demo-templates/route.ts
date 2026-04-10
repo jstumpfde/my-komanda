@@ -414,6 +414,7 @@ export async function POST() {
       length: tmpl.length,
       isSystem: true,
       sections: tmpl.sections,
+      audience: ["candidates"],
     })
     results.push({ name: tmpl.name, action: "inserted" })
   }

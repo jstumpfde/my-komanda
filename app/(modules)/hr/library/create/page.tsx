@@ -50,6 +50,12 @@ const DEFAULT_BLOCK_FIELDS = {
   taskTitle: "", taskDescription: "", questions: [],
 }
 
+const AUDIENCE_OPTIONS: { key: string; label: string; emoji: string; hint: string }[] = [
+  { key: "employees",  emoji: "👥", label: "Сотрудники",  hint: "Внутренняя база знаний" },
+  { key: "candidates", emoji: "👋", label: "Кандидаты",   hint: "Презентации и вакансии" },
+  { key: "clients",    emoji: "🤝", label: "Клиенты",     hint: "HelpDesk и портал клиентов" },
+]
+
 // ─── Claude client-side helpers ────────────────────────────────────────────
 
 interface ClaudeLesson {
@@ -567,6 +573,14 @@ export default function CreateDemoPage() {
   }
   const [docHiringManager, setDocHiringManager] = useState("")
   const [docCeoName, setDocCeoName] = useState("")
+  const [docAudience, setDocAudience] = useState<string[]>(["candidates"])
+  const toggleDocAudience = (key: string) => {
+    setDocAudience((prev) =>
+      prev.includes(key) ? prev.filter((x) => x !== key) : [...prev, key],
+    )
+  }
+  const [docReviewCycle, setDocReviewCycle] = useState<string>("none")
+  const [docValidUntil, setDocValidUntil] = useState<string>("")
   const abortRef = useRef<AbortController | null>(null)
 
   // ── Submission state ──
@@ -654,6 +668,9 @@ export default function CreateDemoPage() {
           niche: tmpl.niche,
           length: docLength,
           sections: tmpl.sections,
+          audience: docAudience,
+          reviewCycle: docReviewCycle,
+          validUntil: docValidUntil || null,
         }),
       })
       const data = await res.json()
@@ -801,6 +818,9 @@ export default function CreateDemoPage() {
           niche: "universal",
           length: docLength,
           sections,
+          audience: docAudience,
+          reviewCycle: docReviewCycle,
+          validUntil: docValidUntil || null,
         }),
       })
       const created = await createRes.json()
@@ -860,7 +880,7 @@ export default function CreateDemoPage() {
 
               {/* Header */}
               <div>
-                <h1 className="text-xl font-semibold">Новая демонстрация</h1>
+                <h1 className="text-xl font-semibold">Новая презентация должности</h1>
                 <p className="text-sm text-muted-foreground mt-0.5">Выберите способ создания</p>
               </div>
 
@@ -1118,6 +1138,52 @@ export default function CreateDemoPage() {
                           onClick={() => toggleDocWorkFormat(f.key)}
                         />
                       ))}
+                    </div>
+                  </div>
+
+                  {/* Audience */}
+                  <div>
+                    <SectionLabel>Аудитория</SectionLabel>
+                    <p className="text-xs text-muted-foreground mb-2 -mt-1">Где будет виден материал</p>
+                    <div className="flex flex-wrap gap-2">
+                      {AUDIENCE_OPTIONS.map((a) => (
+                        <Pill
+                          key={a.key}
+                          label={`${a.emoji} ${a.label}`}
+                          active={docAudience.includes(a.key)}
+                          onClick={() => toggleDocAudience(a.key)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Review schedule */}
+                  <div>
+                    <SectionLabel>Актуальность</SectionLabel>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-xs text-muted-foreground mb-1 block">Проверять каждые</label>
+                        <select
+                          value={docReviewCycle}
+                          onChange={(e) => setDocReviewCycle(e.target.value)}
+                          className="h-10 w-full px-3 rounded-md border border-border bg-[var(--input-bg)] text-sm"
+                        >
+                          <option value="none">Не проверять</option>
+                          <option value="1m">1 месяц</option>
+                          <option value="3m">3 месяца</option>
+                          <option value="6m">6 месяцев</option>
+                          <option value="1y">1 год</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-xs text-muted-foreground mb-1 block">Актуально до</label>
+                        <Input
+                          type="date"
+                          value={docValidUntil}
+                          onChange={(e) => setDocValidUntil(e.target.value)}
+                          className="h-10 bg-[var(--input-bg)]"
+                        />
+                      </div>
                     </div>
                   </div>
 

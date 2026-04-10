@@ -962,6 +962,9 @@ export const knowledgeArticles = pgTable("knowledge_articles", {
   status:      text("status").default("published"), // draft | review | review_changes | published | archived
   reviewerId:  uuid("reviewer_id").references(() => users.id, { onDelete: "set null" }),
   tags:        text("tags").array(),
+  audience:    jsonb("audience").default('["employees"]'),
+  reviewCycle: text("review_cycle").default("none"),
+  validUntil:  timestamp("valid_until"),
   createdAt:   timestamp("created_at").defaultNow(),
   updatedAt:   timestamp("updated_at").defaultNow(),
 })
@@ -1153,6 +1156,9 @@ export const demoTemplates = pgTable("demo_templates", {
   isSystem:      boolean("is_system").default(false),
   sections:      jsonb("sections").notNull().default("[]"),
   variablesUsed: jsonb("variables_used").default("[]"),
+  audience:      jsonb("audience").default('["candidates"]'),
+  reviewCycle:   text("review_cycle").default("none"),
+  validUntil:    timestamp("valid_until"),
   createdAt:     timestamp("created_at").defaultNow(),
   updatedAt:     timestamp("updated_at").defaultNow(),
 })

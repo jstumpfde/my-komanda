@@ -47,11 +47,25 @@ export async function PATCH(
       isPinned: boolean
       status: string
       tags: string[]
+      audience: string[]
+      reviewCycle: string
+      validUntil: string | null
     }>
+
+    const { validUntil: rawValidUntil, ...rest } = body
+    const validUntil = rawValidUntil === undefined
+      ? undefined
+      : rawValidUntil && !isNaN(Date.parse(rawValidUntil))
+        ? new Date(rawValidUntil)
+        : null
 
     const [updated] = await db
       .update(knowledgeArticles)
-      .set({ ...body, updatedAt: new Date() })
+      .set({
+        ...rest,
+        ...(validUntil !== undefined && { validUntil }),
+        updatedAt: new Date(),
+      })
       .where(and(eq(knowledgeArticles.id, id), eq(knowledgeArticles.tenantId, user.companyId)))
       .returning()
 

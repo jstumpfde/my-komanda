@@ -71,11 +71,19 @@ export async function POST(req: NextRequest) {
       isPinned?: boolean
       status?: string
       tags?: string[]
+      audience?: string[]
+      reviewCycle?: string
+      validUntil?: string | null
     }
 
     if (!body.title?.trim()) return apiError("'title' is required", 400)
 
     const slug = slugify(body.title)
+    const audience = Array.isArray(body.audience) && body.audience.length > 0
+      ? body.audience.filter((v): v is string => typeof v === "string")
+      : ["employees"]
+    const reviewCycle = typeof body.reviewCycle === "string" && body.reviewCycle ? body.reviewCycle : "none"
+    const validUntil = body.validUntil && !isNaN(Date.parse(body.validUntil)) ? new Date(body.validUntil) : null
 
     const [article] = await db
       .insert(knowledgeArticles)
@@ -90,6 +98,9 @@ export async function POST(req: NextRequest) {
         isPinned: body.isPinned ?? false,
         status: body.status ?? "draft",
         tags: body.tags || null,
+        audience,
+        reviewCycle,
+        validUntil,
       })
       .returning()
 

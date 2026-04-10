@@ -37,10 +37,20 @@ export async function POST(req: NextRequest) {
       niche: string
       length: string
       sections: unknown
+      audience?: string[]
+      reviewCycle?: string
+      validUntil?: string | null
     }
 
     if (!body.name?.trim()) return apiError("Название обязательно", 400)
     const safeName = body.name.trim().substring(0, 76)
+
+    const audience = Array.isArray(body.audience) && body.audience.length > 0
+      ? body.audience.filter((v): v is string => typeof v === "string")
+      : ["candidates"]
+
+    const reviewCycle = typeof body.reviewCycle === "string" && body.reviewCycle ? body.reviewCycle : "none"
+    const validUntil = body.validUntil && !isNaN(Date.parse(body.validUntil)) ? new Date(body.validUntil) : null
 
     const [created] = await db
       .insert(demoTemplates)
@@ -51,6 +61,9 @@ export async function POST(req: NextRequest) {
         length: body.length || "standard",
         isSystem: false,
         sections: body.sections ?? [],
+        audience,
+        reviewCycle,
+        validUntil,
       })
       .returning()
 

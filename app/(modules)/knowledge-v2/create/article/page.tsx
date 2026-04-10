@@ -37,6 +37,12 @@ function ArticleCreateContent() {
   const [categories, setCategories] = useState<Category[]>([])
   const [tags, setTags] = useState<string[]>([])
   const [tagInput, setTagInput] = useState("")
+  const [audience, setAudience] = useState<string[]>(["employees"])
+  const toggleAudience = (key: string) => {
+    setAudience((prev) => (prev.includes(key) ? prev.filter((x) => x !== key) : [...prev, key]))
+  }
+  const [reviewCycle, setReviewCycle] = useState<string>("none")
+  const [validUntil, setValidUntil] = useState<string>("")
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(!!articleId)
   const editorRef = useRef<HTMLDivElement>(null)
@@ -57,6 +63,14 @@ function ArticleCreateContent() {
         setContent(article.content || "")
         setCategoryId(article.categoryId || "")
         setTags(Array.isArray(article.tags) ? article.tags : [])
+        if (Array.isArray(article.audience) && article.audience.length > 0) {
+          setAudience(article.audience)
+        }
+        if (typeof article.reviewCycle === "string") setReviewCycle(article.reviewCycle)
+        if (article.validUntil) {
+          const d = new Date(article.validUntil)
+          if (!isNaN(d.getTime())) setValidUntil(d.toISOString().slice(0, 10))
+        }
         setLoading(false)
       })
       .catch(() => {
@@ -114,6 +128,9 @@ function ArticleCreateContent() {
             content,
             categoryId: categoryId || null,
             tags,
+            audience,
+            reviewCycle,
+            validUntil: validUntil || null,
             status,
           }),
         },
@@ -222,6 +239,66 @@ function ArticleCreateContent() {
                   <Button type="button" variant="outline" size="sm" onClick={handleAddTag} className="h-10 px-3">
                     <Plus className="w-4 h-4" />
                   </Button>
+                </div>
+              </div>
+
+              {/* Audience */}
+              <div>
+                <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-1 block">Аудитория</label>
+                <p className="text-xs text-muted-foreground mb-2">Где будет виден материал</p>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { key: "employees",  emoji: "👥", label: "Сотрудники" },
+                    { key: "candidates", emoji: "👋", label: "Кандидаты" },
+                    { key: "clients",    emoji: "🤝", label: "Клиенты" },
+                  ].map((a) => {
+                    const active = audience.includes(a.key)
+                    return (
+                      <button
+                        key={a.key}
+                        type="button"
+                        onClick={() => toggleAudience(a.key)}
+                        className={cn(
+                          "h-9 px-4 rounded-full text-sm font-medium cursor-pointer transition-all duration-200 whitespace-nowrap",
+                          active
+                            ? "bg-primary text-primary-foreground shadow-sm"
+                            : "bg-background border border-border text-foreground hover:border-primary/50",
+                        )}
+                      >
+                        {a.emoji} {a.label}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Review schedule */}
+              <div>
+                <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-2 block">Актуальность</label>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1 block">Проверять каждые</label>
+                    <select
+                      value={reviewCycle}
+                      onChange={(e) => setReviewCycle(e.target.value)}
+                      className="h-10 w-full px-3 rounded-md border border-border bg-[var(--input-bg)] text-sm"
+                    >
+                      <option value="none">Не проверять</option>
+                      <option value="1m">1 месяц</option>
+                      <option value="3m">3 месяца</option>
+                      <option value="6m">6 месяцев</option>
+                      <option value="1y">1 год</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1 block">Актуально до</label>
+                    <Input
+                      type="date"
+                      value={validUntil}
+                      onChange={(e) => setValidUntil(e.target.value)}
+                      className="h-10 bg-[var(--input-bg)]"
+                    />
+                  </div>
                 </div>
               </div>
 

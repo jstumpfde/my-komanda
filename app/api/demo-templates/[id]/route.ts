@@ -49,6 +49,11 @@ export async function PATCH(
         ...(body.niche !== undefined && { niche: body.niche }),
         ...(body.length !== undefined && { length: body.length }),
         ...(body.sections !== undefined && { sections: body.sections }),
+        ...(Array.isArray(body.audience) && { audience: body.audience }),
+        ...(typeof body.reviewCycle === "string" && { reviewCycle: body.reviewCycle }),
+        ...(body.validUntil !== undefined && {
+          validUntil: body.validUntil && !isNaN(Date.parse(body.validUntil)) ? new Date(body.validUntil) : null,
+        }),
         updatedAt: new Date(),
       })
       .where(
