@@ -24,7 +24,7 @@ const DEPARTMENTS = [
 
 const LEVELS = ["Линейный", "Старший / ведущий", "Руководитель"]
 
-type Path = "manual" | "library" | "document"
+type Path = "manual" | "library" | "document" | "voice"
 
 type LibraryTemplate = {
   id: string

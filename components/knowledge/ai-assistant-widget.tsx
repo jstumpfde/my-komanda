@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
-import { MessageCircle, X, Send, Loader2 } from "lucide-react"
+import { MessageCircle, X, Send, Loader2, Mic, Square } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -69,7 +69,20 @@ export function AiAssistantWidget() {
   const [input, setInput] = useState("")
   const [messages, setMessages] = useState<Message[]>([WELCOME])
   const [loading, setLoading] = useState(false)
+  const [isRecording, setIsRecording] = useState(false)
+  const [hasSpeech, setHasSpeech] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const recognitionRef = useRef<any>(null)
+  const inputRef = useRef(input)
+  inputRef.current = input
+
+  // Detect Web Speech API availability after mount (SSR-safe)
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const supported = "SpeechRecognition" in window || "webkitSpeechRecognition" in window
+    setHasSpeech(supported)
+  }, [])
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -169,6 +182,58 @@ export function AiAssistantWidget() {
     setLoading(false)
   }
 
+  // Toggle voice recognition (Web Speech API)
+  const toggleRecording = () => {
+    if (!hasSpeech || loading) return
+
+    if (isRecording && recognitionRef.current) {
+      try { recognitionRef.current.stop() } catch { /* noop */ }
+      return
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const w = window as any
+    const SpeechRecognition = w.SpeechRecognition || w.webkitSpeechRecognition
+    if (!SpeechRecognition) return
+
+    const recognition = new SpeechRecognition()
+    recognition.lang = "ru-RU"
+    recognition.continuous = false
+    recognition.interimResults = true
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    recognition.onresult = (event: any) => {
+      let transcript = ""
+      for (let i = 0; i < event.results.length; i++) {
+        transcript += event.results[i][0].transcript
+      }
+      setInput(transcript)
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    recognition.onerror = (event: any) => {
+      console.error("[speech]", event.error)
+      setIsRecording(false)
+    }
+
+    recognition.onend = () => {
+      setIsRecording(false)
+      // Auto-send if we captured something
+      if (inputRef.current.trim()) {
+        setTimeout(() => send(), 50)
+      }
+    }
+
+    recognitionRef.current = recognition
+    try {
+      recognition.start()
+      setIsRecording(true)
+    } catch (err) {
+      console.error("[speech] start failed", err)
+      setIsRecording(false)
+    }
+  }
+
   return (
     <>
       {/* Floating button */}
@@ -248,7 +313,7 @@ export function AiAssistantWidget() {
           </div>
 
           {/* Input */}
-          <div className="border-t border-border px-4 py-3 flex gap-2">
+          <div className="border-t border-border px-4 py-3 flex gap-2 items-center">
             <Input
               value={input}
               onChange={(e) => setInput(e.target.value)}
@@ -258,15 +323,32 @@ export function AiAssistantWidget() {
                   send()
                 }
               }}
-              placeholder="Задайте вопрос..."
-              disabled={loading}
+              placeholder={isRecording ? "Говорите..." : "Задайте вопрос..."}
+              disabled={loading || isRecording}
               className="h-9 text-sm"
             />
+            {hasSpeech && (
+              <button
+                type="button"
+                onClick={toggleRecording}
+                disabled={loading}
+                aria-label={isRecording ? "Остановить запись" : "Голосовой ввод"}
+                className={cn(
+                  "w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition-colors",
+                  isRecording
+                    ? "bg-red-500 text-white animate-pulse"
+                    : "bg-muted text-muted-foreground hover:bg-muted/70 hover:text-foreground",
+                  loading && "opacity-50 cursor-not-allowed",
+                )}
+              >
+                {isRecording ? <Square className="w-4 h-4 fill-current" /> : <Mic className="w-4 h-4" />}
+              </button>
+            )}
             <Button
               type="button"
               size="sm"
               onClick={send}
-              disabled={loading || !input.trim()}
+              disabled={loading || !input.trim() || isRecording}
               className="h-9 px-3 shrink-0"
             >
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
