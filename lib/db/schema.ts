@@ -1239,6 +1239,31 @@ export const funnelStages = pgTable("funnel_stages", {
   unique("uq_funnel_stages_company_slug").on(t.companyId, t.slug),
 ])
 
+// ─── Learning Plans ─────────────────────────────────────────────────────────
+
+export const learningPlans = pgTable("learning_plans", {
+  id:          uuid("id").primaryKey().defaultRandom(),
+  tenantId:    uuid("tenant_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  title:       text("title").notNull(),
+  description: text("description"),
+  materials:   jsonb("materials").notNull().default("[]"),
+  createdBy:   uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt:   timestamp("created_at").defaultNow(),
+  updatedAt:   timestamp("updated_at").defaultNow(),
+})
+
+export const learningAssignments = pgTable("learning_assignments", {
+  id:          uuid("id").primaryKey().defaultRandom(),
+  planId:      uuid("plan_id").references(() => learningPlans.id, { onDelete: "cascade" }).notNull(),
+  userId:      uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  tenantId:    uuid("tenant_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  status:      text("status").notNull().default("assigned"),
+  progress:    jsonb("progress").notNull().default("{}"),
+  assignedAt:  timestamp("assigned_at").defaultNow(),
+  deadline:    timestamp("deadline"),
+  completedAt: timestamp("completed_at"),
+})
+
 // ─── Vacancy Demos ──────────────────────────────────────────────────────────
 
 export const vacancyDemos = pgTable("vacancy_demos", {

@@ -5,7 +5,7 @@
  */
 import { NextResponse } from "next/server"
 import bcrypt from "bcryptjs"
-import { eq, and, or, isNull } from "drizzle-orm"
+import { eq, and, or, isNull, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
 import {
   companies, users, plans, planModules, tenantModules,
@@ -14,6 +14,9 @@ import {
   employeePoints, pointsHistory, badges, employeeBadges,
   courses, lessons, courseEnrollments, lessonCompletions, certificates,
   skills, assessments, skillAssessments, assessmentReviewers,
+  knowledgeCategories, knowledgeArticles, demoTemplates,
+  learningPlans, learningAssignments, aiUsageLog,
+  salesCompanies, salesContacts,
 } from "@/lib/db/schema"
 import { generateCandidateToken } from "@/lib/candidate-tokens"
 
@@ -510,6 +513,445 @@ export async function POST() {
   // Skills gap: Елена (self-оценка для данных по gap-анализу)
   await ensureAssessment(elenaId, "self", "completed",
     [2, 2, 3, 3, 4, 2, 3, 4, 4, 3], elenaId)
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ── 8. Расширенный демо-сид: команда, база знаний, планы обучения, AI, CRM ──
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // 8.1. Команда из 12 сотрудников (@komanda.ru)
+  const TEAM = [
+    { email: "ivanov@komanda.ru",     name: "Иванов Алексей",      position: "Директор",              role: "director" },
+    { email: "petrova@komanda.ru",    name: "Петрова Мария",       position: "Главный HR",            role: "hr_lead" },
+    { email: "sidorov@komanda.ru",    name: "Сидоров Дмитрий",     position: "HR-менеджер",           role: "hr_manager" },
+    { email: "kozlova@komanda.ru",    name: "Козлова Анна",        position: "Менеджер по продажам",  role: "observer" },
+    { email: "novikov@komanda.ru",    name: "Новиков Сергей",      position: "Менеджер по продажам",  role: "observer" },
+    { email: "volkova@komanda.ru",    name: "Волкова Елена",       position: "Маркетолог",            role: "observer" },
+    { email: "morozov@komanda.ru",    name: "Морозов Павел",       position: "Frontend-разработчик",  role: "observer" },
+    { email: "lebedeva@komanda.ru",   name: "Лебедева Ольга",      position: "Backend-разработчик",   role: "observer" },
+    { email: "sokolov@komanda.ru",    name: "Соколов Артём",       position: "Руководитель отдела продаж", role: "department_head" },
+    { email: "fedorova@komanda.ru",   name: "Фёдорова Наталья",    position: "Бухгалтер",             role: "observer" },
+    { email: "grigoriev@komanda.ru",  name: "Григорьев Максим",    position: "Логист",                role: "observer" },
+    { email: "kuznetsova@komanda.ru", name: "Кузнецова Дарья",     position: "Офис-менеджер",         role: "observer" },
+  ]
+
+  const teamIds: string[] = []
+  for (const m of TEAM) {
+    const [ex] = await db.select({ id: users.id }).from(users).where(eq(users.email, m.email)).limit(1)
+    if (ex) {
+      teamIds.push(ex.id)
+    } else {
+      const [cr] = await db.insert(users).values({
+        email: m.email, name: m.name, role: m.role, position: m.position,
+        passwordHash, isActive: true, companyId: company.id,
+      }).returning()
+      teamIds.push(cr.id)
+      log.push(`team:created ${m.email}`)
+    }
+  }
+  log.push(`team:${teamIds.length} members ready`)
+
+  const [bossId, hrLeadId, hrMgrId, sales1Id, sales2Id, mktId, frontId, backId, salesHeadId, accountantId, logistId, officeId] = teamIds
+
+  // 8.2. Вакансии (добавляем "Бухгалтер", обновляем статусы существующих)
+  const VACANCY_DEFS_V2 = [
+    {
+      slug: "manager-prodazh-b2b-demo", title: "Менеджер по продажам B2B",
+      city: "Москва", format: "hybrid", salaryMin: 150_000, salaryMax: 250_000,
+      candidateStages: [
+        { stage: "new", count: 2 }, { stage: "demo", count: 1 },
+        { stage: "scheduled", count: 1 }, { stage: "hired", count: 1 },
+      ],
+    },
+    {
+      slug: "frontend-razrabotchik-demo", title: "Frontend-разработчик",
+      city: "Удалённо", format: "remote", salaryMin: 200_000, salaryMax: 350_000,
+      candidateStages: [
+        { stage: "new", count: 2 }, { stage: "demo", count: 1 },
+        { stage: "scheduled", count: 1 }, { stage: "interviewed", count: 1 },
+      ],
+    },
+    {
+      slug: "hr-manager-demo", title: "HR-менеджер",
+      city: "Москва", format: "office", salaryMin: 120_000, salaryMax: 180_000,
+      candidateStages: [
+        { stage: "new", count: 2 }, { stage: "demo", count: 2 },
+        { stage: "scheduled", count: 1 },
+      ],
+    },
+    {
+      slug: "buhgalter-demo", title: "Бухгалтер",
+      city: "Санкт-Петербург", format: "office", salaryMin: 100_000, salaryMax: 140_000,
+      candidateStages: [
+        { stage: "new", count: 2 }, { stage: "demo", count: 1 },
+        { stage: "interviewed", count: 1 }, { stage: "hired", count: 1 },
+      ],
+    },
+  ]
+
+  const vMap2: Record<string, string> = {}
+  for (const v of VACANCY_DEFS_V2) {
+    const [ex] = await db.select({ id: vacancies.id }).from(vacancies).where(eq(vacancies.slug, v.slug)).limit(1)
+    if (ex) {
+      vMap2[v.slug] = ex.id
+      // Ensure published
+      await db.update(vacancies)
+        .set({ status: "published", salaryMin: v.salaryMin, salaryMax: v.salaryMax, city: v.city })
+        .where(eq(vacancies.id, ex.id))
+    } else {
+      const [cr] = await db.insert(vacancies).values({
+        companyId: company.id, createdBy: bossId,
+        title: v.title, status: "published", slug: v.slug,
+        city: v.city, format: v.format, employment: "full",
+        salaryMin: v.salaryMin, salaryMax: v.salaryMax,
+      }).returning()
+      vMap2[v.slug] = cr.id
+      log.push(`vacancy-v2:${v.slug}:created`)
+    }
+  }
+
+  // 8.3. 20 кандидатов с конкретными этапами воронки
+  const CANDIDATE_NAMES = [
+    "Антонов Роман",   "Белова Светлана", "Васильев Игорь",  "Гаврилова Юлия",
+    "Дмитриев Артём",  "Ермолаева Ксения","Жуков Николай",   "Захарова Вера",
+    "Ильина Алиса",    "Кравцов Олег",    "Макарова Лидия",  "Наумов Станислав",
+    "Орехова Тамара",  "Павлов Руслан",   "Романова Алёна",  "Семенов Владимир",
+    "Тихомирова Евгения","Ушаков Антон", "Филатова Карина", "Харитонов Денис",
+  ]
+
+  let candIdx = 0
+  for (const v of VACANCY_DEFS_V2) {
+    const vacId = vMap2[v.slug]
+    if (!vacId) continue
+    // Проверка: уже есть кандидаты c пометкой v2 для этой вакансии?
+    const [existing] = await db
+      .select({ c: sql<number>`count(*)::int` })
+      .from(candidates)
+      .where(and(eq(candidates.vacancyId, vacId), sql`${candidates.email} LIKE '%@demo-v2.ru'`))
+    if ((existing?.c ?? 0) >= 5) {
+      log.push(`candidates-v2:${v.slug}:already_seeded`)
+      candIdx += v.candidateStages.reduce((a, s) => a + s.count, 0)
+      continue
+    }
+    const rows: typeof candidates.$inferInsert[] = []
+    for (const grp of v.candidateStages) {
+      for (let i = 0; i < grp.count; i++) {
+        const name = CANDIDATE_NAMES[candIdx % CANDIDATE_NAMES.length]
+        const emailSlug = name.toLowerCase().replace(/[^a-zа-я]/g, "").slice(0, 15) || `cand${candIdx}`
+        rows.push({
+          vacancyId: vacId, name,
+          phone: phone(),
+          email: `${emailSlug}${candIdx}@demo-v2.ru`,
+          source: weighted(["hh", "avito", "referral", "telegram", "site"], [40, 20, 15, 15, 10]),
+          stage: grp.stage,
+          score: 60 + Math.floor(Math.random() * 40),
+          token: generateCandidateToken(),
+          createdAt: daysAgo(Math.floor(Math.random() * 25) + 1),
+        })
+        candIdx++
+      }
+    }
+    if (rows.length > 0) {
+      await db.insert(candidates).values(rows)
+      log.push(`candidates-v2:${v.slug}:${rows.length}`)
+    }
+  }
+
+  // 8.4. Кастомные демо-шаблоны (2 шт)
+  const CUSTOM_DEMOS = [
+    { name: "ГК Орлинк: менеджер продаж", niche: "sales", length: "standard" },
+    { name: "IT-компания: разработчик",   niche: "tech",  length: "standard" },
+  ]
+  for (const d of CUSTOM_DEMOS) {
+    const [ex] = await db.select({ id: demoTemplates.id }).from(demoTemplates)
+      .where(and(eq(demoTemplates.tenantId, company.id), eq(demoTemplates.name, d.name))).limit(1)
+    if (ex) {
+      log.push(`demo-template:"${d.name}":exists`)
+      continue
+    }
+    await db.insert(demoTemplates).values({
+      tenantId: company.id,
+      name: d.name, niche: d.niche, length: d.length,
+      isSystem: false,
+      sections: [
+        { id: `l-${Date.now()}-1`, emoji: "👋", title: "Приветствие", blocks: [] },
+        { id: `l-${Date.now()}-2`, emoji: "🏢", title: "О компании",  blocks: [] },
+        { id: `l-${Date.now()}-3`, emoji: "🎯", title: "Задачи роли", blocks: [] },
+      ],
+      audience: ["candidates"],
+    })
+    log.push(`demo-template:"${d.name}":created`)
+  }
+
+  // 8.5. Категория + 8 статей базы знаний
+  let instrCatId: string
+  const [exCat] = await db.select({ id: knowledgeCategories.id }).from(knowledgeCategories)
+    .where(and(eq(knowledgeCategories.tenantId, company.id), eq(knowledgeCategories.name, "Инструкции"))).limit(1)
+  if (exCat) {
+    instrCatId = exCat.id
+  } else {
+    const [cr] = await db.insert(knowledgeCategories).values({
+      tenantId: company.id, name: "Инструкции", slug: "instructions",
+      description: "Инструкции и регламенты", icon: "📖",
+    }).returning()
+    instrCatId = cr.id
+    log.push("kb-category:Инструкции:created")
+  }
+
+  const KB_ARTICLES = [
+    { title: "Как работать в CRM",            status: "published",     catId: instrCatId, excerpt: "Пошаговая инструкция по работе с CRM-системой компании." },
+    { title: "Регламент работы с клиентами",  status: "published",     catId: instrCatId, excerpt: "Стандарты коммуникации и качества обслуживания." },
+    { title: "Техника безопасности на складе", status: "published",    catId: instrCatId, excerpt: "Обязательные правила безопасности для складских сотрудников." },
+    { title: "Скрипт холодного звонка B2B",   status: "published",     catId: instrCatId, excerpt: "Готовый скрипт первого контакта с корпоративным клиентом." },
+    { title: "Онбординг нового сотрудника",   status: "published",     catId: instrCatId, excerpt: "Программа адаптации на первые 30 дней." },
+    { title: "Политика конфиденциальности",   status: "published",     catId: instrCatId, excerpt: "Обработка персональных данных и коммерческой тайны." },
+    { title: "FAQ по продукту",               status: "draft",         catId: instrCatId, excerpt: "Ответы на частые вопросы клиентов." },
+    { title: "Инструкция по работе с 1С",     status: "review",        catId: instrCatId, excerpt: "Базовые операции в 1С для новых бухгалтеров." },
+  ]
+
+  const articleIds: string[] = []
+  const authorPool = [hrLeadId, hrMgrId, bossId, salesHeadId]
+  for (let i = 0; i < KB_ARTICLES.length; i++) {
+    const a = KB_ARTICLES[i]
+    const [ex] = await db.select({ id: knowledgeArticles.id }).from(knowledgeArticles)
+      .where(and(eq(knowledgeArticles.tenantId, company.id), eq(knowledgeArticles.title, a.title))).limit(1)
+    if (ex) {
+      articleIds.push(ex.id)
+      continue
+    }
+    const slug = a.title.toLowerCase()
+      .replace(/[а-яё\s]/g, (c) => {
+        const map: Record<string, string> = {
+          а:"a", б:"b", в:"v", г:"g", д:"d", е:"e", ё:"yo", ж:"zh", з:"z",
+          и:"i", й:"y", к:"k", л:"l", м:"m", н:"n", о:"o", п:"p", р:"r",
+          с:"s", т:"t", у:"u", ф:"f", х:"kh", ц:"ts", ч:"ch", ш:"sh",
+          щ:"shch", ъ:"", ы:"y", ь:"", э:"e", ю:"yu", я:"ya", " ": "-",
+        }
+        return map[c] ?? "-"
+      })
+      .replace(/-{2,}/g, "-").replace(/^-|-$/g, "")
+    const [cr] = await db.insert(knowledgeArticles).values({
+      tenantId: company.id,
+      categoryId: a.catId,
+      title: a.title,
+      slug,
+      excerpt: a.excerpt,
+      content: `<p>${a.excerpt}</p><p>Полный текст статьи появится позже.</p>`,
+      authorId: authorPool[i % authorPool.length],
+      status: a.status,
+      audience: ["employees"],
+    }).returning()
+    articleIds.push(cr.id)
+    log.push(`kb-article:"${a.title}":created`)
+  }
+
+  // 8.6. Планы обучения (3) + назначения
+  const demoTemplateList = await db.select({ id: demoTemplates.id }).from(demoTemplates)
+    .where(eq(demoTemplates.tenantId, company.id)).limit(5)
+  const demoIds = demoTemplateList.map((d) => d.id)
+
+  const LEARNING_PLANS_DATA = [
+    {
+      title: "Онбординг менеджера продаж",
+      description: "Базовая программа для нового менеджера B2B за 2 недели",
+      materialRefs: [
+        ...articleIds.slice(0, 3).map((id) => ({ materialId: id, materialType: "article" as const })),
+        ...demoIds.slice(0, 2).map((id) => ({ materialId: id, materialType: "demo" as const })),
+      ],
+      assignees: [sales1Id, sales2Id, salesHeadId].filter(Boolean),
+    },
+    {
+      title: "Базовое обучение IT",
+      description: "Вводный курс для новых разработчиков",
+      materialRefs: [
+        ...articleIds.slice(0, 2).map((id) => ({ materialId: id, materialType: "article" as const })),
+        ...demoIds.slice(0, 2).map((id) => ({ materialId: id, materialType: "demo" as const })),
+      ],
+      assignees: [frontId, backId].filter(Boolean),
+    },
+    {
+      title: "Обязательные регламенты",
+      description: "Техника безопасности, политика конфиденциальности и базовые процедуры",
+      materialRefs: articleIds.slice(0, 3).map((id) => ({ materialId: id, materialType: "article" as const })),
+      assignees: teamIds,
+    },
+  ]
+
+  const statusCycle: Array<"completed" | "in_progress" | "overdue" | "assigned"> = []
+  for (let i = 0; i < 5; i++) statusCycle.push("completed")
+  for (let i = 0; i < 8; i++) statusCycle.push("in_progress")
+  for (let i = 0; i < 3; i++) statusCycle.push("overdue")
+  for (let i = 0; i < 2; i++) statusCycle.push("assigned")
+
+  let statusIdx = 0
+  for (const plan of LEARNING_PLANS_DATA) {
+    const [exPlan] = await db.select({ id: learningPlans.id }).from(learningPlans)
+      .where(and(eq(learningPlans.tenantId, company.id), eq(learningPlans.title, plan.title))).limit(1)
+    let planId: string
+    if (exPlan) {
+      planId = exPlan.id
+      log.push(`learning-plan:"${plan.title}":exists`)
+    } else {
+      const [cr] = await db.insert(learningPlans).values({
+        tenantId: company.id,
+        title: plan.title,
+        description: plan.description,
+        materials: plan.materialRefs.map((m, i) => ({ ...m, order: i, required: true })),
+        createdBy: hrLeadId,
+      }).returning()
+      planId = cr.id
+      log.push(`learning-plan:"${plan.title}":created`)
+    }
+
+    const [assignCount] = await db.select({ c: sql<number>`count(*)::int` }).from(learningAssignments)
+      .where(eq(learningAssignments.planId, planId))
+    if ((assignCount?.c ?? 0) > 0) continue
+
+    const assignRows: typeof learningAssignments.$inferInsert[] = []
+    for (const uid of plan.assignees) {
+      if (!uid) continue
+      const status = statusCycle[statusIdx % statusCycle.length]
+      statusIdx++
+      const assignedAt = daysAgo(Math.floor(Math.random() * 25) + 3)
+      const progress: Record<string, { started_at?: string; completed_at?: string; score?: number }> = {}
+      if (status === "completed") {
+        for (const m of plan.materialRefs) {
+          progress[m.materialId] = {
+            started_at: assignedAt.toISOString(),
+            completed_at: daysAgo(1).toISOString(),
+            score: 80 + Math.floor(Math.random() * 20),
+          }
+        }
+      } else if (status === "in_progress") {
+        const half = Math.max(1, Math.floor(plan.materialRefs.length / 2))
+        for (let i = 0; i < half; i++) {
+          progress[plan.materialRefs[i].materialId] = {
+            started_at: assignedAt.toISOString(),
+            completed_at: daysAgo(2).toISOString(),
+          }
+        }
+      }
+      assignRows.push({
+        planId,
+        userId: uid,
+        tenantId: company.id,
+        status,
+        progress,
+        assignedAt,
+        deadline: status === "overdue" ? daysAgo(2) : null,
+        completedAt: status === "completed" ? daysAgo(1) : null,
+      })
+    }
+    if (assignRows.length > 0) {
+      await db.insert(learningAssignments).values(assignRows)
+      log.push(`learning-assignments:"${plan.title}":${assignRows.length}`)
+    }
+  }
+
+  // 8.7. AI usage log — 50 записей за последние 30 дней
+  const [aiCount] = await db.select({ c: sql<number>`count(*)::int` }).from(aiUsageLog)
+    .where(eq(aiUsageLog.tenantId, company.id))
+  if ((aiCount?.c ?? 0) < 50) {
+    const ACTIONS = [
+      { action: "knowledge_ask",   count: 30 },
+      { action: "document_parse",  count: 10 },
+      { action: "vacancy_generate",count: 10 },
+    ]
+    const userPool = teamIds.slice(0, 6)
+    const aiRows: typeof aiUsageLog.$inferInsert[] = []
+    for (const a of ACTIONS) {
+      for (let i = 0; i < a.count; i++) {
+        const inputTokens = 500 + Math.floor(Math.random() * 4500)
+        const outputTokens = 200 + Math.floor(Math.random() * 1800)
+        const cost = ((inputTokens * 3) / 1_000_000 + (outputTokens * 15) / 1_000_000).toFixed(6)
+        aiRows.push({
+          tenantId: company.id,
+          userId: userPool[i % userPool.length],
+          action: a.action,
+          inputTokens,
+          outputTokens,
+          model: "claude-sonnet-4-20250514",
+          costUsd: cost,
+          createdAt: daysAgo(Math.floor(Math.random() * 30)),
+        })
+      }
+    }
+    for (let i = 0; i < aiRows.length; i += 25) {
+      await db.insert(aiUsageLog).values(aiRows.slice(i, i + 25))
+    }
+    log.push(`ai-usage-log:${aiRows.length} created`)
+  } else {
+    log.push(`ai-usage-log:already has ${aiCount?.c} rows`)
+  }
+
+  // 8.8. CRM — 5 компаний-клиентов + 10 контактов
+  const SALES_COMPANIES = [
+    { name: "ООО \"ТехноПром\"",    industry: "Производство",   city: "Москва",           inn: "7712345678" },
+    { name: "АО \"СтройГарант\"",   industry: "Строительство",  city: "Санкт-Петербург",  inn: "7809876543" },
+    { name: "ООО \"РитейлПлюс\"",   industry: "Ритейл",         city: "Екатеринбург",     inn: "6623456789" },
+    { name: "ООО \"ЛогистикСервис\"",industry: "Логистика",     city: "Новосибирск",      inn: "5434567890" },
+    { name: "ИП \"Смирнов\"",       industry: "Услуги",         city: "Казань",           inn: "166123456789" },
+  ]
+
+  const salesCompIds: string[] = []
+  for (const c of SALES_COMPANIES) {
+    const [ex] = await db.select({ id: salesCompanies.id }).from(salesCompanies)
+      .where(and(eq(salesCompanies.tenantId, company.id), eq(salesCompanies.name, c.name))).limit(1)
+    if (ex) {
+      salesCompIds.push(ex.id)
+      continue
+    }
+    const [cr] = await db.insert(salesCompanies).values({
+      tenantId: company.id,
+      name: c.name,
+      inn: c.inn,
+      industry: c.industry,
+      city: c.city,
+      type: "client",
+      status: "active",
+    }).returning()
+    salesCompIds.push(cr.id)
+    log.push(`sales-company:"${c.name}":created`)
+  }
+
+  const SALES_CONTACTS = [
+    { companyIdx: 0, firstName: "Андрей",   lastName: "Тимофеев",  position: "Генеральный директор" },
+    { companyIdx: 0, firstName: "Ольга",    lastName: "Зайцева",   position: "Главный инженер" },
+    { companyIdx: 1, firstName: "Виктор",   lastName: "Михайлов",  position: "Коммерческий директор" },
+    { companyIdx: 1, firstName: "Ирина",    lastName: "Карпова",   position: "Финансовый директор" },
+    { companyIdx: 2, firstName: "Сергей",   lastName: "Борисов",   position: "Директор по закупкам" },
+    { companyIdx: 2, firstName: "Юлия",     lastName: "Комарова",  position: "Маркетолог" },
+    { companyIdx: 3, firstName: "Николай",  lastName: "Соловьёв",  position: "Руководитель отдела логистики" },
+    { companyIdx: 3, firstName: "Екатерина",lastName: "Яковлева",  position: "Менеджер по клиентам" },
+    { companyIdx: 4, firstName: "Алексей",  lastName: "Смирнов",   position: "Владелец" },
+    { companyIdx: 4, firstName: "Мария",    lastName: "Киселёва",  position: "Ассистент" },
+  ]
+
+  for (let i = 0; i < SALES_CONTACTS.length; i++) {
+    const c = SALES_CONTACTS[i]
+    const email = `${c.lastName.toLowerCase()}.${c.firstName.toLowerCase()}@client-demo.ru`
+      .replace(/[а-яё]/g, (ch) => {
+        const m: Record<string, string> = {
+          а:"a",б:"b",в:"v",г:"g",д:"d",е:"e",ё:"yo",ж:"zh",з:"z",и:"i",й:"y",
+          к:"k",л:"l",м:"m",н:"n",о:"o",п:"p",р:"r",с:"s",т:"t",у:"u",ф:"f",
+          х:"kh",ц:"ts",ч:"ch",ш:"sh",щ:"shch",ъ:"",ы:"y",ь:"",э:"e",ю:"yu",я:"ya",
+        }
+        return m[ch] ?? ""
+      })
+    const [ex] = await db.select({ id: salesContacts.id }).from(salesContacts)
+      .where(and(eq(salesContacts.tenantId, company.id), eq(salesContacts.email, email))).limit(1)
+    if (ex) continue
+    await db.insert(salesContacts).values({
+      tenantId: company.id,
+      companyId: salesCompIds[c.companyIdx] ?? null,
+      firstName: c.firstName,
+      lastName: c.lastName,
+      position: c.position,
+      phone: phone(),
+      email,
+      isPrimary: i % 2 === 0,
+    })
+    log.push(`sales-contact:${c.firstName} ${c.lastName}:created`)
+  }
 
   return NextResponse.json({ ok: true, log })
 }

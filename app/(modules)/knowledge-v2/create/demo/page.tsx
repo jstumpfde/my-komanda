@@ -3,9 +3,10 @@
 import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
-import { ArrowRight, Upload, X, FileText, Loader2, Search } from "lucide-react"
+import { ArrowRight, Upload, X, FileText, Loader2, Search, Mic, Square } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { toast } from "sonner"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
@@ -39,6 +40,7 @@ const PATH_CARDS: { id: Path; emoji: string; title: string; desc: string }[] = [
   { id: "manual",   emoji: "📝", title: "С чистого листа", desc: "Заполнить параметры вручную" },
   { id: "library",  emoji: "📚", title: "Из библиотеки",   desc: "Выбрать готовый шаблон" },
   { id: "document", emoji: "📄", title: "Из документа",    desc: "Загрузить DOCX, PDF или TXT" },
+  { id: "voice",    emoji: "🎙️", title: "Голосом",         desc: "Надиктуйте — AI создаст" },
 ]
 
 const DEFAULT_BLOCK_FIELDS = {
@@ -574,6 +576,68 @@ export default function CreateDemoPage() {
   }
   const [docHiringManager, setDocHiringManager] = useState("")
   const [docCeoName, setDocCeoName] = useState("")
+
+  // ── Voice fields ──
+  const [voiceText, setVoiceText] = useState("")
+  const [isVoiceRecording, setIsVoiceRecording] = useState(false)
+  const [hasSpeechAPI, setHasSpeechAPI] = useState(false)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const recognitionRef = useRef<any>(null)
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const supported = "SpeechRecognition" in window || "webkitSpeechRecognition" in window
+    setHasSpeechAPI(supported)
+  }, [])
+
+  const toggleVoiceRecording = () => {
+    if (!hasSpeechAPI) return
+
+    if (isVoiceRecording && recognitionRef.current) {
+      try { recognitionRef.current.stop() } catch { /* noop */ }
+      return
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const w = window as any
+    const SpeechRecognition = w.SpeechRecognition || w.webkitSpeechRecognition
+    if (!SpeechRecognition) return
+
+    const recognition = new SpeechRecognition()
+    recognition.lang = "ru-RU"
+    recognition.continuous = true
+    recognition.interimResults = true
+
+    const baseText = voiceText.trim()
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    recognition.onresult = (event: any) => {
+      let transcript = ""
+      for (let i = 0; i < event.results.length; i++) {
+        transcript += event.results[i][0].transcript
+      }
+      setVoiceText(baseText ? `${baseText} ${transcript}` : transcript)
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    recognition.onerror = (event: any) => {
+      console.error("[speech]", event.error)
+      setIsVoiceRecording(false)
+    }
+
+    recognition.onend = () => {
+      setIsVoiceRecording(false)
+    }
+
+    recognitionRef.current = recognition
+    try {
+      recognition.start()
+      setIsVoiceRecording(true)
+    } catch (err) {
+      console.error("[speech] start failed", err)
+      setIsVoiceRecording(false)
+    }
+  }
   const [docAudience, setDocAudience] = useState<string[]>(["candidates"])
   const toggleDocAudience = (key: string) => {
     setDocAudience((prev) =>
@@ -845,6 +909,139 @@ export default function CreateDemoPage() {
     }
   }
 
+  const handleCreateFromVoice = async () => {
+    const text = voiceText.trim()
+    if (!text) return
+
+    const controller = new AbortController()
+    abortRef.current = controller
+    const signal = controller.signal
+
+    const isAbort = (err: unknown) =>
+      signal.aborted ||
+      (err instanceof DOMException && err.name === "AbortError") ||
+      (err instanceof Error && err.name === "AbortError")
+
+    setSubmitting(true)
+    try {
+      setSubmitStage("Разбиваем текст на уроки...")
+      const keyRes = await fetch("/api/ai/key", { signal })
+      const keyData = await keyRes.json()
+      if (!keyRes.ok || !keyData.key) {
+        toast.error(keyData.error || "API ключ недоступен")
+        setSubmitting(false)
+        setSubmitStage("")
+        return
+      }
+
+      let claudeResult: ClaudeResult
+      try {
+        claudeResult = await callClaudeFromBrowser(
+          text,
+          keyData.key,
+          {
+            length: docLength,
+            tone: docTone,
+            market: docMarket,
+            company: docCompany,
+            position: docPosition,
+            city: docCity,
+            salary: docSalary,
+            workFormat: docWorkFormat,
+            hiringManager: docHiringManager,
+            ceoName: docCeoName,
+          },
+          signal,
+        )
+      } catch (err) {
+        if (isAbort(err)) return
+        const message = err instanceof Error ? err.message : "Ошибка Claude API"
+        toast.error(message)
+        setSubmitting(false)
+        setSubmitStage("")
+        return
+      }
+      const { lessons: claudeLessons, usage } = claudeResult
+
+      void fetch("/api/ai/log", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "voice_parse",
+          inputTokens: usage.input_tokens,
+          outputTokens: usage.output_tokens,
+          model: CLAUDE_MODEL,
+        }),
+      }).catch((err) => console.error("[ai/log]", err))
+
+      const sections = claudeLessons
+        .map((lesson, i) => {
+          const rawTitle = (lesson.name || lesson.title || "").trim()
+          const emoji = (lesson.emoji || "").trim() || "📄"
+          const title = rawTitle.replace(/^\p{Extended_Pictographic}+\s*/u, "").trim() || "Раздел"
+          const content = (lesson.content || "").trim()
+          const parsedBlocks = content ? parseLessonContent(content) : []
+          return {
+            id: `lesson-${Date.now()}-${i}`,
+            emoji,
+            title,
+            blocks: parsedBlocks.map((b, j) => ({
+              ...DEFAULT_BLOCK_FIELDS,
+              id: `blk-${Date.now()}-${i}-${j}`,
+              type: b.type,
+              content: b.content,
+              taskTitle: b.taskTitle,
+              taskDescription: b.taskDescription,
+              questions: b.questions,
+            })),
+          }
+        })
+        .filter((l) => l.title || l.blocks.length > 0)
+
+      if (sections.length === 0) {
+        toast.error("Claude не вернул уроки")
+        setSubmitting(false)
+        setSubmitStage("")
+        return
+      }
+
+      setSubmitStage("Сохраняем демонстрацию...")
+      const baseName = text.split(/\s+/).slice(0, 8).join(" ").slice(0, 76) || "Демонстрация"
+      const createRes = await fetch("/api/demo-templates", {
+        method: "POST",
+        signal,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: baseName,
+          niche: "universal",
+          length: docLength,
+          sections,
+          audience: docAudience,
+          reviewCycle: docReviewCycle,
+          validUntil: docValidUntil || null,
+        }),
+      })
+      const created = await createRes.json()
+      if (!createRes.ok) {
+        toast.error(created.error || "Ошибка создания")
+        setSubmitting(false)
+        setSubmitStage("")
+        return
+      }
+      const id = (created.data ?? created).id
+      const totalTokens = usage.input_tokens + usage.output_tokens
+      toast.success(`Разбито на ${sections.length} уроков. Использовано: ${totalTokens.toLocaleString("ru-RU")} токенов`)
+      router.push(`/knowledge-v2/editor?id=${id}`)
+    } catch (err) {
+      if (isAbort(err)) return
+      toast.error("Ошибка сети")
+      setSubmitting(false)
+      setSubmitStage("")
+    } finally {
+      if (abortRef.current === controller) abortRef.current = null
+    }
+  }
+
   const handleCancelSubmission = () => {
     abortRef.current?.abort()
     abortRef.current = null
@@ -886,7 +1083,7 @@ export default function CreateDemoPage() {
               </div>
 
               {/* ═══ Path cards ═══ */}
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 {PATH_CARDS.map((card) => {
                   const active = path === card.id
                   return (
@@ -1061,7 +1258,44 @@ export default function CreateDemoPage() {
                 </div>
               )}
 
-              {/* ═══ Shared fields — shown for all three paths ═══ */}
+              {path === "voice" && (
+                <div className="space-y-4">
+                  {hasSpeechAPI && (
+                    <div className="flex flex-col items-center gap-3 py-4">
+                      <button
+                        type="button"
+                        onClick={toggleVoiceRecording}
+                        aria-label={isVoiceRecording ? "Остановить запись" : "Начать запись"}
+                        className={cn(
+                          "w-20 h-20 rounded-full flex items-center justify-center transition-colors cursor-pointer mx-auto",
+                          isVoiceRecording
+                            ? "bg-red-500 animate-pulse"
+                            : "bg-primary hover:bg-primary/90",
+                        )}
+                      >
+                        {isVoiceRecording
+                          ? <Square className="w-8 h-8 text-white fill-current" />
+                          : <Mic className="w-8 h-8 text-white" />}
+                      </button>
+                      <p className="text-sm font-medium text-center">
+                        Нажмите и расскажите что нужно создать
+                      </p>
+                      <p className="text-xs text-muted-foreground text-center">
+                        Например: Создай регламент по технике безопасности
+                      </p>
+                    </div>
+                  )}
+                  <Textarea
+                    value={voiceText}
+                    onChange={(e) => setVoiceText(e.target.value)}
+                    placeholder="Текст появится здесь..."
+                    rows={6}
+                    className="bg-[var(--input-bg)]"
+                  />
+                </div>
+              )}
+
+              {/* ═══ Shared fields — shown for all paths ═══ */}
               {path && (
                 <div className="space-y-6">
                   {/* Format */}
@@ -1238,11 +1472,11 @@ export default function CreateDemoPage() {
 
                   {/* Per-path create button */}
                   <div className="flex justify-end gap-3 pt-2 pb-4">
-                    {path === "document" && submitting ? (
+                    {(path === "document" || path === "voice") && submitting ? (
                       <>
                         <Button disabled className="h-10 px-6 gap-2">
                           <Loader2 className="w-4 h-4 animate-spin" />
-                          {submitStage || "Импорт документа..."}
+                          {submitStage || (path === "voice" ? "Создание..." : "Импорт документа...")}
                         </Button>
                         <Button variant="outline" onClick={handleCancelSubmission} className="h-10 px-6">
                           Отменить
@@ -1265,6 +1499,15 @@ export default function CreateDemoPage() {
                       >
                         {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
                         {submitting ? "Создание..." : "Использовать шаблон"}
+                      </Button>
+                    ) : path === "voice" ? (
+                      <Button
+                        onClick={handleCreateFromVoice}
+                        disabled={!voiceText.trim()}
+                        className="h-10 px-6 gap-2"
+                      >
+                        <ArrowRight className="w-4 h-4" />
+                        Создать из голоса
                       </Button>
                     ) : (
                       <Button

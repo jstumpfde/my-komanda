@@ -17,22 +17,40 @@ import {
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid,
 } from "recharts"
 
-// ─── Mock data ──────────────────────────────────────────────────────────────
-
-// First metric (total materials) is fetched; the other four remain mocked
-// until the learning-progress backend lands.
-const MOCK_METRICS = [
-  { label: "Изучено сотрудниками",   value: "128", sub: "из 184 назначенных",   icon: CheckCircle2, bg: "bg-green-500" },
-  { label: "В процессе изучения",    value: "42",  sub: "активных сейчас",      icon: Clock,        bg: "bg-purple-500" },
-  { label: "Отстают",                value: "14",  sub: "не завершили вовремя", icon: AlertTriangle, bg: "bg-orange-500" },
-  { label: "Требуют обновления",     value: "7",   sub: "устаревшие материалы", icon: FileWarning,  bg: "bg-red-400" },
-]
+// ─── Types ──────────────────────────────────────────────────────────────────
 
 interface RecentItem {
   name: string
   type: string
   author: string
   date: string
+}
+
+interface DashboardStats {
+  metrics: {
+    totalMaterials: number
+    completed: number
+    inProgress: number
+    overdue: number
+    needsUpdate: number
+  }
+  totals: { assignments: number }
+  employeeProgress: {
+    userId: string
+    name: string
+    position: string
+    assigned: number
+    done: number
+    overdue: number
+    status: "on_track" | "behind" | "not_started"
+  }[]
+  topAuthors: {
+    name: string
+    role: string
+    created: number
+    updated: number
+    lastActivity: string | null
+  }[]
 }
 
 const NENSI_HINTS = [
@@ -60,18 +78,6 @@ const NENSI_HINTS = [
 
 type ProgressStatus = "on_track" | "behind" | "not_started"
 
-const EMPLOYEE_PROGRESS: {
-  name: string; position: string; assigned: number; done: number; status: ProgressStatus
-}[] = [
-  { name: "Петров А.",     position: "Менеджер B2B",     assigned: 12, done: 10, status: "on_track" },
-  { name: "Иванова М.",    position: "Frontend",          assigned: 8,  done: 8,  status: "on_track" },
-  { name: "Сидоров К.",    position: "Sales",             assigned: 10, done: 3,  status: "behind" },
-  { name: "Козлов Д.",     position: "Менеджер B2B",     assigned: 12, done: 6,  status: "on_track" },
-  { name: "Новиков П.",    position: "HR-менеджер",       assigned: 15, done: 0,  status: "not_started" },
-  { name: "Орлова Е.",     position: "Клиент-сервис",     assigned: 9,  done: 7,  status: "on_track" },
-  { name: "Белов Р.",      position: "IT-поддержка",      assigned: 6,  done: 1,  status: "behind" },
-]
-
 const STATUS_META: Record<ProgressStatus, { label: string; badgeClass: string }> = {
   on_track:    { label: "На графике", badgeClass: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400" },
   behind:      { label: "Отстаёт",    badgeClass: "bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-400" },
@@ -88,26 +94,31 @@ const WEEKLY_ACTIVITY = [
   { day: "Вс", views: 6 },
 ]
 
-const TOP_AUTHORS = [
-  { name: "Петрова Е.",  role: "HR Lead",        created: 12, updated: 34, lastActivity: "сегодня" },
-  { name: "Иванов С.",   role: "Директор",       created: 8,  updated: 19, lastActivity: "вчера" },
-  { name: "Козлова М.",  role: "HR-менеджер",    created: 6,  updated: 22, lastActivity: "2 дн назад" },
-  { name: "Сидоров А.",  role: "Тимлид IT",      created: 4,  updated: 11, lastActivity: "3 дн назад" },
-  { name: "Орлов Д.",    role: "Sales Lead",     created: 3,  updated: 8,  lastActivity: "неделю назад" },
-]
+function formatRelative(iso: string | null): string {
+  if (!iso) return "—"
+  const d = new Date(iso)
+  const diff = Date.now() - d.getTime()
+  const days = Math.floor(diff / (24 * 60 * 60 * 1000))
+  if (days < 1) return "сегодня"
+  if (days < 2) return "вчера"
+  if (days < 7) return `${days} дн назад`
+  if (days < 30) return `${Math.floor(days / 7)} нед назад`
+  return d.toLocaleDateString("ru-RU", { day: "numeric", month: "short" })
+}
 
 // ─── Page ───────────────────────────────────────────────────────────────────
 
 export default function KnowledgeDashboardPage() {
-  const [totalCount, setTotalCount] = useState<number | null>(null)
   const [recent, setRecent] = useState<RecentItem[]>([])
+  const [stats, setStats] = useState<DashboardStats | null>(null)
 
   useEffect(() => {
     const load = async () => {
       try {
-        const [demosRes, articlesRes] = await Promise.all([
+        const [demosRes, articlesRes, statsRes] = await Promise.all([
           fetch("/api/demo-templates").then((r) => r.json()).catch(() => ({ data: [] })),
           fetch("/api/modules/knowledge/articles").then((r) => r.json()).catch(() => ({ data: [] })),
+          fetch("/api/modules/knowledge/dashboard-stats").then((r) => r.ok ? r.json() : null).catch(() => null),
         ])
         const demos = (demosRes.data ?? demosRes ?? []) as Array<{
           id: string; name: string; updatedAt: string
@@ -116,7 +127,7 @@ export default function KnowledgeDashboardPage() {
           id: string; title: string; updatedAt: string
         }>
 
-        setTotalCount(demos.length + articles.length)
+        if (statsRes && statsRes.metrics) setStats(statsRes as DashboardStats)
 
         const merged: (RecentItem & { ts: number })[] = [
           ...demos.map((d) => ({
@@ -142,6 +153,46 @@ export default function KnowledgeDashboardPage() {
     }
     load()
   }, [])
+
+  const totalCount = stats?.metrics.totalMaterials ?? null
+  const completed = stats?.metrics.completed ?? 0
+  const inProgress = stats?.metrics.inProgress ?? 0
+  const overdue = stats?.metrics.overdue ?? 0
+  const needsUpdate = stats?.metrics.needsUpdate ?? 0
+  const totalAssigned = stats?.totals.assignments ?? 0
+  const employeeProgress = stats?.employeeProgress ?? []
+  const topAuthors = stats?.topAuthors ?? []
+
+  const metricCards = [
+    {
+      label: "Изучено сотрудниками",
+      value: String(completed),
+      sub: `из ${totalAssigned} назначенных`,
+      icon: CheckCircle2,
+      bg: "bg-green-500",
+    },
+    {
+      label: "В процессе изучения",
+      value: String(inProgress),
+      sub: "активных сейчас",
+      icon: Clock,
+      bg: "bg-purple-500",
+    },
+    {
+      label: "Отстают",
+      value: String(overdue),
+      sub: "не завершили вовремя",
+      icon: AlertTriangle,
+      bg: "bg-orange-500",
+    },
+    {
+      label: "Требуют обновления",
+      value: String(needsUpdate),
+      sub: "устаревшие материалы",
+      icon: FileWarning,
+      bg: "bg-red-400",
+    },
+  ]
 
   return (
     <SidebarProvider>
@@ -174,8 +225,7 @@ export default function KnowledgeDashboardPage() {
                 <p className="text-sm mt-1 text-white/90">в библиотеке</p>
               </div>
 
-              {/* Remaining four — mocked for now */}
-              {MOCK_METRICS.map((m) => (
+              {metricCards.map((m) => (
                 <div key={m.label} className={cn("rounded-xl shadow-sm hover:shadow-md transition-shadow p-4 text-white", m.bg)}>
                   <div className="flex items-center gap-1.5 mb-2">
                     <m.icon className="w-4 h-4 text-white" />
@@ -227,11 +277,21 @@ export default function KnowledgeDashboardPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {EMPLOYEE_PROGRESS.map((e) => {
+                      {employeeProgress.length === 0 && (
+                        <tr>
+                          <td colSpan={3} className="py-6 text-center text-xs text-muted-foreground">
+                            Пока нет назначений.{" "}
+                            <Link href="/knowledge-v2/plans" className="text-primary hover:underline">
+                              Создайте план обучения
+                            </Link>
+                          </td>
+                        </tr>
+                      )}
+                      {employeeProgress.map((e) => {
                         const pct = e.assigned > 0 ? Math.round((e.done / e.assigned) * 100) : 0
                         const meta = STATUS_META[e.status]
                         return (
-                          <tr key={e.name} className="border-b border-border/50">
+                          <tr key={e.userId} className="border-b border-border/50">
                             <td className="py-2.5">
                               <div className="text-sm font-medium">{e.name}</div>
                               <div className="text-xs text-muted-foreground">{e.position}</div>
@@ -319,15 +379,24 @@ export default function KnowledgeDashboardPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {TOP_AUTHORS.map((a) => (
-                    <tr key={a.name} className="border-b border-border/50">
+                  {topAuthors.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="py-6 text-center text-xs text-muted-foreground">
+                        Пока нет авторов
+                      </td>
+                    </tr>
+                  )}
+                  {topAuthors.map((a, i) => (
+                    <tr key={`${a.name}-${i}`} className="border-b border-border/50">
                       <td className="py-2.5">
                         <div className="text-sm font-medium">{a.name}</div>
                         <div className="text-xs text-muted-foreground">{a.role}</div>
                       </td>
                       <td className="py-2.5 text-center text-sm text-muted-foreground">{a.created}</td>
                       <td className="py-2.5 text-center text-sm text-muted-foreground">{a.updated}</td>
-                      <td className="py-2.5 text-right text-xs text-muted-foreground whitespace-nowrap">{a.lastActivity}</td>
+                      <td className="py-2.5 text-right text-xs text-muted-foreground whitespace-nowrap">
+                        {formatRelative(a.lastActivity)}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

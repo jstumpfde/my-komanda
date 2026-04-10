@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { and, desc, eq } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { users, demoTemplates, knowledgeArticles } from "@/lib/db/schema"
+import { getClaudeMessagesUrl } from "@/lib/claude-proxy"
 
 // ─── Telegram helpers ───────────────────────────────────────────────────────
 
@@ -123,7 +124,7 @@ async function askClaude(question: string, context: string, materialsList: Mater
   if (!apiKey) return null
 
   try {
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
+    const res = await fetch(getClaudeMessagesUrl(), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

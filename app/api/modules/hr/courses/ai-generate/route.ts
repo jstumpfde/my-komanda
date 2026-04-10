@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { requireCompany } from "@/lib/api-helpers"
+import { getClaudeMessagesUrl } from "@/lib/claude-proxy"
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -267,7 +268,7 @@ ${combinedText.slice(0, 12000)}
 - difficulty одно из: beginner, intermediate, advanced
 - Контент уроков должен быть основан на предоставленных материалах, не выдумывай факты`
 
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
+    const response = await fetch(getClaudeMessagesUrl(), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

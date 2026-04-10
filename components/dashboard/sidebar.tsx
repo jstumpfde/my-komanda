@@ -12,6 +12,7 @@ import {
   ClipboardList, ClipboardCheck, UserCheck2, Trophy, HeartHandshake, BookOpen, Award, Zap,
   AlertTriangle, UserMinus, Brain, Radar, Bot, Store, TrendingDown, Handshake,
   BookMarked, GraduationCap, Target, PieChart, FilePlus, Lock, Library,
+  Sparkles, Plus, Coins,
   type LucideIcon,
 } from "lucide-react"
 import {
@@ -47,6 +48,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   UserCheck2, Trophy, BarChart2, HeartHandshake, BookOpen, Award, Zap, ChevronRight,
   AlertTriangle, UserMinus, Brain, Radar, Bot, Store, TrendingDown, Handshake,
   BookMarked, GraduationCap, Target, PieChart, FilePlus, Library,
+  Sparkles, Plus, Coins,
 }
 function getIcon(name: string): LucideIcon {
   return ICON_MAP[name] ?? Settings

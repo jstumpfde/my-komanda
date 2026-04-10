@@ -3,6 +3,7 @@ import { auth } from "@/auth"
 import { db } from "@/lib/db"
 import { aiChatMessages } from "@/lib/db/schema"
 import { eq, and, desc } from "drizzle-orm"
+import { getClaudeMessagesUrl } from "@/lib/claude-proxy"
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY
 const MODEL = "claude-sonnet-4-20250514"
@@ -80,7 +81,7 @@ export async function POST(req: Request) {
   }))
 
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
+    const response = await fetch(getClaudeMessagesUrl(), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

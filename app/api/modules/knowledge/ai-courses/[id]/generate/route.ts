@@ -3,6 +3,7 @@ import { requireCompany } from "@/lib/api-helpers"
 import { db } from "@/lib/db"
 import { aiCourseProjects, aiUsageLog } from "@/lib/db/schema"
 import { eq, and } from "drizzle-orm"
+import { getClaudeMessagesUrl } from "@/lib/claude-proxy"
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -165,7 +166,7 @@ ${combinedText.slice(0, 12000)}
 
 Язык: русский. Контент основан строго на материалах.`
 
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
+    const response = await fetch(getClaudeMessagesUrl(), {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
       body: JSON.stringify({
