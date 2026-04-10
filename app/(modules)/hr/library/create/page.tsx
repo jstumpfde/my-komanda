@@ -65,19 +65,9 @@ function escapeHtml(s: string): string {
 }
 
 function contentToHtml(content: string): string {
-  const lines = content.replace(/\r\n/g, "\n").split("\n")
-  const out: string[] = []
-  let inList = false
-  let paragraphBuffer: string[] = []
+  const normalized = content.replace(/\r\n/g, "\n").trim()
+  if (!normalized) return ""
 
-  const flushParagraph = () => {
-    if (paragraphBuffer.length === 0) return
-    out.push(`<p>${paragraphBuffer.join("<br/>")}</p>`)
-    paragraphBuffer = []
-  }
-  const closeList = () => {
-    if (inList) { out.push("</ul>"); inList = false }
-  }
   const inlineFormat = (raw: string): string => {
     let s = escapeHtml(raw)
     s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
@@ -85,27 +75,30 @@ function contentToHtml(content: string): string {
     return s
   }
 
-  for (const rawLine of lines) {
-    const trimmed = rawLine.trim()
-    if (!trimmed) {
-      flushParagraph()
-      closeList()
-      continue
-    }
-    const bullet = trimmed.match(/^[•\-\*]\s+(.+)$/)
-    if (bullet) {
-      flushParagraph()
-      if (!inList) { out.push("<ul>"); inList = true }
-      out.push(`<li>${inlineFormat(bullet[1])}</li>`)
-      continue
-    }
-    closeList()
-    paragraphBuffer.push(inlineFormat(trimmed))
-  }
-  flushParagraph()
-  closeList()
+  // Split into paragraphs by one or more blank lines.
+  const paragraphs = normalized.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean)
+  if (paragraphs.length === 0) return `<p>${escapeHtml(normalized)}</p>`
 
-  return out.join("") || `<p>${escapeHtml(content)}</p>`
+  const out: string[] = []
+  for (const paragraph of paragraphs) {
+    const lines = paragraph.split("\n").map((l) => l.trim()).filter(Boolean)
+    if (lines.length === 0) continue
+
+    const allBullets = lines.every((l) => /^[•\-\*]\s+/.test(l))
+    if (allBullets) {
+      const items = lines
+        .map((l) => l.replace(/^[•\-\*]\s+/, ""))
+        .map((l) => `<li>${inlineFormat(l)}</li>`)
+        .join("")
+      out.push(`<ul>${items}</ul>`)
+      continue
+    }
+
+    // Regular paragraph: single newlines become <br/>.
+    out.push(`<p>${lines.map(inlineFormat).join("<br/>")}</p>`)
+  }
+
+  return out.join("") || `<p>${escapeHtml(normalized)}</p>`
 }
 
 // ─── Marker parsing ([ТЕСТ] / [ЗАДАНИЕ]) ────────────────────────────────────
@@ -330,16 +323,10 @@ type Market = "B2B" | "B2C" | "B2G"
 
 const MARKETS: Market[] = ["B2B", "B2C", "B2G"]
 
-const MARKET_DESCRIPTION: Record<Market, string> = {
-  B2B: "корпоративные продажи",
-  B2C: "розница и физлица",
-  B2G: "госзакупки",
-}
-
 interface PromptParams {
   length: DemoLength
   tone: Tone
-  market: Market
+  market: Market[]
   company: string
   position: string
   city: string
@@ -372,7 +359,7 @@ function buildPrompt(text: string, params: PromptParams): string {
 Параметры демонстрации:
 - Формат: ${lengthLabel}
 - Тон: ${tone.label.toLowerCase()} — ${tone.description}
-- Тип рынка: ${params.market} — ${MARKET_DESCRIPTION[params.market]}
+- Тип рынка: ${(params.market.length > 0 ? params.market : ["B2B"]).join(", ")}
 - Компания: ${company}
 - Должность: ${position}
 - Город: ${city}
@@ -547,7 +534,17 @@ export default function CreateDemoPage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [docLength, setDocLength] = useState<DemoLength>("standard")
   const [docTone, setDocTone] = useState<Tone>("friendly")
-  const [docMarket, setDocMarket] = useState<Market>("B2B")
+  const [docMarket, setDocMarket] = useState<Market[]>(["B2B"])
+
+  const toggleDocMarket = (m: Market) => {
+    setDocMarket((prev) => {
+      if (prev.includes(m)) {
+        // Keep at least one market selected
+        return prev.length === 1 ? prev : prev.filter((x) => x !== m)
+      }
+      return [...prev, m]
+    })
+  }
   const [docCompany, setDocCompany] = useState("")
   const [docPosition, setDocPosition] = useState("")
   const [docCity, setDocCity] = useState("")
@@ -1093,8 +1090,8 @@ export default function CreateDemoPage() {
                         <Pill
                           key={m}
                           label={m}
-                          active={docMarket === m}
-                          onClick={() => setDocMarket(m)}
+                          active={docMarket.includes(m)}
+                          onClick={() => toggleDocMarket(m)}
                         />
                       ))}
                     </div>
