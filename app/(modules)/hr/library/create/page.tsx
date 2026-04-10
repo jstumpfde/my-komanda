@@ -144,18 +144,89 @@ function tryParseJsonArray(raw: string): ClaudeLesson[] | null {
   return null
 }
 
-function buildPrompt(text: string): string {
+type Tone = "energetic" | "friendly" | "business" | "direct"
+
+const TONE_META: Record<Tone, { label: string; emoji: string; description: string }> = {
+  energetic: { label: "Энергичный",  emoji: "🔥", description: "вызов и драйв" },
+  friendly:  { label: "Дружелюбный", emoji: "🤝", description: "тёплый и поддерживающий" },
+  business:  { label: "Деловой",     emoji: "💼", description: "факты без эмоций" },
+  direct:    { label: "Прямой",      emoji: "🎯", description: "только суть" },
+}
+
+const LENGTH_HINT: Record<DemoLength, string> = {
+  short:    "короткая ~6 уроков",
+  standard: "стандартная ~15 уроков",
+  full:     "полная ~22 урока",
+}
+
+type WorkFormat = "" | "office" | "hybrid" | "remote"
+
+const WORK_FORMAT_LABEL: Record<Exclude<WorkFormat, "">, string> = {
+  office: "Офис",
+  hybrid: "Гибрид",
+  remote: "Удалёнка",
+}
+
+interface PromptParams {
+  length: DemoLength
+  tone: Tone
+  company: string
+  position: string
+  city: string
+  salary: string
+  workFormat: WorkFormat
+  hiringManager: string
+  ceoName: string
+}
+
+function buildPrompt(text: string, params: PromptParams): string {
+  const tone = TONE_META[params.tone]
+  const lengthLabel = LENGTH_HINT[params.length]
+
+  const withVar = (value: string, variable: string) =>
+    value.trim() ? value.trim() : `не указана, используй {{${variable}}}`
+  const plain = (value: string) => (value.trim() ? value.trim() : "не указан")
+
+  const company = withVar(params.company, "компания")
+  const position = withVar(params.position, "должность")
+  const city = withVar(params.city, "город")
+  const salary = params.salary.trim() ? params.salary.trim() : "не указана, используй {{зарплата}}"
+  const workFormat = params.workFormat ? WORK_FORMAT_LABEL[params.workFormat] : "не указан"
+  const hiringManager = plain(params.hiringManager)
+  const ceoName = plain(params.ceoName)
+
   return `Ты — эксперт по созданию обучающих демонстраций должности для кандидатов.
 
 Разбей следующий документ на уроки (разделы) для демонстрации должности.
 
+Параметры демонстрации:
+- Формат: ${lengthLabel}
+- Тон: ${tone.label.toLowerCase()} — ${tone.description}
+- Компания: ${company}
+- Должность: ${position}
+- Город: ${city}
+- Зарплата: ${salary}
+- Формат работы: ${workFormat}
+- Кто набирает: ${hiringManager}
+- Основатель/Генеральный директор: ${ceoName}
+
+Где данные не указаны — используй переменные в двойных фигурных скобках: {{компания}}, {{должность}}, {{город}}, {{зарплата}}, {{имя}}.
+Где данные указаны — подставь реальные значения.
+{{имя}} всегда оставляй как переменную — она подставится при отправке кандидату.
+
 Правила:
-- Каждый логический раздел = отдельный урок
+- Сохрани ВЕСЬ контент из документа. Ничего не сокращай, не пропускай, не перефразируй.
+- Если текст длинный — это нормально. Лучше длинный полный урок чем короткий обрезанный.
+- Каждый логический раздел документа = отдельный урок
 - Название урока: краткое, 3-5 слов, с подходящим эмодзи в начале
-- Контент урока: сохрани форматирование — абзацы, списки (• ), жирный текст (**текст**)
-- Убери мусор: лишние пробелы, повторы, технические артефакты
-- Если есть упоминание видео/фото — отметь это в контенте
-- Оптимально 8-15 уроков
+- Сохрани форматирование: абзацы (разделяй пустой строкой), списки (• ), жирный (**текст**)
+- Если есть упоминание видео — вставь placeholder: [ВИДЕО: описание]
+- Если указан формат работы, зарплата, кто набирает — используй в соответствующих местах
+- Если указан основатель — в уроке "Видео-обращение" используй его имя
+- Если указан кто набирает — используй в приветствии и финале
+- {{имя}} ВСЕГДА оставляй как переменную
+- Последний урок ОБЯЗАТЕЛЬНО: финал с инструкцией что делать дальше (видео-визитка, следующий шаг)
+- Соблюдай выбранный тон коммуникации ВО ВСЕХ уроках
 
 Верни ТОЛЬКО JSON массив без markdown backticks:
 [
@@ -166,13 +237,23 @@ function buildPrompt(text: string): string {
   }
 ]
 
-ВАЖНО: Будь краток в контенте каждого урока. Максимум 3-5 предложений на урок. Не копируй текст дословно — перефразируй кратко.
-
 Документ:
 ${text}`
 }
 
-async function callClaudeFromBrowser(text: string, apiKey: string): Promise<ClaudeLesson[]> {
+interface ClaudeUsage {
+  input_tokens: number
+  output_tokens: number
+}
+
+interface ClaudeResult {
+  lessons: ClaudeLesson[]
+  usage: ClaudeUsage
+}
+
+const CLAUDE_MODEL = "claude-sonnet-4-20250514"
+
+async function callClaudeFromBrowser(text: string, apiKey: string, params: PromptParams): Promise<ClaudeResult> {
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -182,9 +263,9 @@ async function callClaudeFromBrowser(text: string, apiKey: string): Promise<Clau
       "anthropic-dangerous-direct-browser-access": "true",
     },
     body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 8192,
-      messages: [{ role: "user", content: buildPrompt(text) }],
+      model: CLAUDE_MODEL,
+      max_tokens: 16384,
+      messages: [{ role: "user", content: buildPrompt(text, params) }],
     }),
   })
 
@@ -194,7 +275,10 @@ async function callClaudeFromBrowser(text: string, apiKey: string): Promise<Clau
     throw new Error("Claude API вернул ошибку")
   }
 
-  const data = await res.json() as { content?: { type: string; text?: string }[] }
+  const data = await res.json() as {
+    content?: { type: string; text?: string }[]
+    usage?: { input_tokens?: number; output_tokens?: number }
+  }
   const textContent = data.content?.find((c) => c.type === "text")?.text ?? ""
   if (!textContent) throw new Error("Пустой ответ от Claude API")
 
@@ -203,7 +287,14 @@ async function callClaudeFromBrowser(text: string, apiKey: string): Promise<Clau
     console.error("[claude] unparseable", textContent.slice(0, 500))
     throw new Error("Не удалось распарсить ответ Claude")
   }
-  return lessons
+
+  return {
+    lessons,
+    usage: {
+      input_tokens: data.usage?.input_tokens ?? 0,
+      output_tokens: data.usage?.output_tokens ?? 0,
+    },
+  }
 }
 
 // ─── Pill component ─────────────────────────────────────────────────────────
@@ -254,6 +345,15 @@ export default function CreateDemoPage() {
   // ── Document fields ──
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [docLength, setDocLength] = useState<DemoLength>("standard")
+  const [docTone, setDocTone] = useState<Tone>("friendly")
+  const [docCompany, setDocCompany] = useState("")
+  const [docPosition, setDocPosition] = useState("")
+  const [docCity, setDocCity] = useState("")
+  const [docSalary, setDocSalary] = useState("")
+  const [docWorkFormat, setDocWorkFormat] = useState<WorkFormat>("")
+  const [docHiringManager, setDocHiringManager] = useState("")
+  const [docCeoName, setDocCeoName] = useState("")
 
   // ── Submission state ──
   const [submitting, setSubmitting] = useState(false)
@@ -289,8 +389,8 @@ export default function CreateDemoPage() {
       toast.error("Поддерживаются: DOCX, PDF, TXT, MD")
       return
     }
-    if (file.size > 100 * 1024 * 1024) {
-      toast.error("Файл слишком большой (макс 100МБ)")
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("Файл слишком большой. Максимум 10 МБ")
       return
     }
     setUploadedFile(file)
@@ -376,9 +476,19 @@ export default function CreateDemoPage() {
         return
       }
 
-      let claudeLessons: ClaudeLesson[]
+      let claudeResult: ClaudeResult
       try {
-        claudeLessons = await callClaudeFromBrowser(extractedText, keyData.key)
+        claudeResult = await callClaudeFromBrowser(extractedText, keyData.key, {
+          length: docLength,
+          tone: docTone,
+          company: docCompany,
+          position: docPosition,
+          city: docCity,
+          salary: docSalary,
+          workFormat: docWorkFormat,
+          hiringManager: docHiringManager,
+          ceoName: docCeoName,
+        })
       } catch (err) {
         const message = err instanceof Error ? err.message : "Ошибка Claude API"
         toast.error(message)
@@ -386,6 +496,19 @@ export default function CreateDemoPage() {
         setSubmitStage("")
         return
       }
+      const { lessons: claudeLessons, usage } = claudeResult
+
+      // Fire-and-forget usage log — don't block UX if it fails
+      void fetch("/api/ai/log", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "document_parse",
+          inputTokens: usage.input_tokens,
+          outputTokens: usage.output_tokens,
+          model: CLAUDE_MODEL,
+        }),
+      }).catch((err) => console.error("[ai/log]", err))
 
       // ── Step 3: transform Claude output into editor sections ──
       const sections = claudeLessons
@@ -426,7 +549,7 @@ export default function CreateDemoPage() {
         body: JSON.stringify({
           name: baseName,
           niche: "universal",
-          length: "standard",
+          length: docLength,
           sections,
         }),
       })
@@ -438,7 +561,8 @@ export default function CreateDemoPage() {
         return
       }
       const id = (created.data ?? created).id
-      toast.success("Документ импортирован")
+      const totalTokens = usage.input_tokens + usage.output_tokens
+      toast.success(`Документ разбит на ${sections.length} уроков. Использовано: ${totalTokens.toLocaleString("ru-RU")} токенов`)
       router.push(`/hr/library/create/editor?id=${id}`)
     } catch {
       toast.error("Ошибка сети")
@@ -680,6 +804,117 @@ export default function CreateDemoPage() {
               {/* ═══ Document path ═══ */}
               {path === "document" && (
                 <div className="space-y-6">
+                  {/* Format selector */}
+                  <div>
+                    <SectionLabel>Формат</SectionLabel>
+                    <div className="grid grid-cols-3 gap-3">
+                      {lengthKeys.map((key) => {
+                        const l = LENGTH_LABELS[key]
+                        const active = docLength === key
+                        return (
+                          <button
+                            key={key}
+                            type="button"
+                            onClick={() => setDocLength(key)}
+                            className={cn(
+                              "rounded-lg p-4 text-left cursor-pointer transition-all duration-200 h-[72px] flex flex-col justify-center",
+                              active
+                                ? "border-2 border-primary bg-primary/5 shadow-sm"
+                                : "border border-border hover:border-primary/50",
+                            )}
+                          >
+                            <div className="flex items-center gap-2 mb-0.5">
+                              <span className="text-base leading-none">{l.emoji}</span>
+                              <span className="text-sm font-semibold">{l.label}</span>
+                            </div>
+                            <p className="text-xs text-muted-foreground">{l.time} · {l.subblocks} блоков</p>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Tone selector */}
+                  <div>
+                    <SectionLabel>Тон</SectionLabel>
+                    <div className="flex flex-wrap gap-2">
+                      {(Object.keys(TONE_META) as Tone[]).map((key) => {
+                        const t = TONE_META[key]
+                        return (
+                          <Pill
+                            key={key}
+                            label={`${t.emoji} ${t.label}`}
+                            active={docTone === key}
+                            onClick={() => setDocTone(key)}
+                          />
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Company variables card */}
+                  <div>
+                    <SectionLabel>Данные компании</SectionLabel>
+                    <div className="rounded-xl border border-border p-4">
+                      <div className="grid grid-cols-2 gap-3">
+                        {/* Row 1 */}
+                        <Input
+                          value={docCompany}
+                          onChange={(e) => setDocCompany(e.target.value)}
+                          placeholder="Название компании"
+                          className="h-10 bg-[var(--input-bg)]"
+                        />
+                        <Input
+                          value={docPosition}
+                          onChange={(e) => setDocPosition(e.target.value)}
+                          placeholder="Менеджер по продажам"
+                          className="h-10 bg-[var(--input-bg)]"
+                        />
+
+                        {/* Row 2 */}
+                        <Input
+                          value={docCity}
+                          onChange={(e) => setDocCity(e.target.value)}
+                          placeholder="Москва"
+                          className="h-10 bg-[var(--input-bg)]"
+                        />
+                        <select
+                          value={docWorkFormat}
+                          onChange={(e) => setDocWorkFormat(e.target.value as WorkFormat)}
+                          className="h-10 px-3 rounded-md border border-border bg-[var(--input-bg)] text-sm"
+                        >
+                          <option value="">Формат работы</option>
+                          <option value="office">Офис</option>
+                          <option value="hybrid">Гибрид</option>
+                          <option value="remote">Удалёнка</option>
+                        </select>
+
+                        {/* Row 3 */}
+                        <Input
+                          value={docSalary}
+                          onChange={(e) => setDocSalary(e.target.value)}
+                          placeholder="от 200 000 ₽"
+                          className="h-10 bg-[var(--input-bg)]"
+                        />
+                        <Input
+                          value={docHiringManager}
+                          onChange={(e) => setDocHiringManager(e.target.value)}
+                          placeholder="Иван Петров, руководитель отдела продаж"
+                          className="h-10 bg-[var(--input-bg)]"
+                        />
+
+                        {/* Row 4 */}
+                        <Input
+                          value={docCeoName}
+                          onChange={(e) => setDocCeoName(e.target.value)}
+                          placeholder="Основатель / Ген. директор — имя и должность"
+                          className="h-10 bg-[var(--input-bg)] col-span-2"
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-3">Заполненные поля будут подставлены в демонстрацию</p>
+                    </div>
+                  </div>
+
                   {uploadedFile ? (
                     <div className="flex items-center gap-3 p-4 rounded-lg border border-border bg-muted/30">
                       <FileText className="w-7 h-7 text-primary shrink-0" />
@@ -704,7 +939,7 @@ export default function CreateDemoPage() {
                     >
                       <Upload className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
                       <p className="text-sm font-medium">Перетащите файл или нажмите для выбора</p>
-                      <p className="text-xs text-muted-foreground mt-1">DOCX, PDF, TXT, MD · Макс 100 МБ</p>
+                      <p className="text-xs text-muted-foreground mt-1">Максимум 10 МБ · DOCX, PDF, TXT</p>
                       <input
                         ref={fileInputRef}
                         type="file"
