@@ -108,6 +108,165 @@ function contentToHtml(content: string): string {
   return out.join("") || `<p>${escapeHtml(content)}</p>`
 }
 
+// ─── Marker parsing ([ТЕСТ] / [ЗАДАНИЕ]) ────────────────────────────────────
+
+interface ParsedBlock {
+  type: "text" | "task"
+  content: string
+  taskTitle: string
+  taskDescription: string
+  questions: Array<{
+    id: string
+    text: string
+    answerType: "single" | "long" | "video"
+    options: string[]
+    correctOptions?: number[]
+    required: boolean
+  }>
+}
+
+function randomId(prefix: string): string {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+function parseTestMarker(body: string): ParsedBlock["questions"][number] | null {
+  const lines = body.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
+  let questionText = ""
+  const letters: string[] = []
+  const options: string[] = []
+  let correctLetter = ""
+
+  for (const line of lines) {
+    const q = line.match(/^Вопрос\s*:\s*(.+)$/i)
+    if (q) { questionText = q[1].trim(); continue }
+    const opt = line.match(/^([A-ZА-ЯЁ])[\)\.\s]\s*(.+)$/)
+    if (opt) { letters.push(opt[1].toUpperCase()); options.push(opt[2].trim()); continue }
+    const correct = line.match(/^Правильный\s*:\s*([A-ZА-ЯЁ])/i)
+    if (correct) { correctLetter = correct[1].toUpperCase(); continue }
+  }
+
+  if (!questionText || options.length === 0) return null
+
+  const correctIdx = letters.indexOf(correctLetter)
+  return {
+    id: randomId("q"),
+    text: questionText,
+    answerType: "single",
+    options,
+    correctOptions: correctIdx >= 0 ? [correctIdx] : [],
+    required: false,
+  }
+}
+
+function parseTaskMarker(body: string): { title: string; description: string; taskType: "text" | "video" } {
+  const lines = body.split(/\r?\n/).map((l) => l.trim())
+  let title = ""
+  const descriptionParts: string[] = []
+  let taskType: "text" | "video" = "text"
+  let inDescription = false
+
+  for (const line of lines) {
+    if (!line) { if (inDescription) descriptionParts.push(""); continue }
+    const t = line.match(/^Название\s*:\s*(.+)$/i)
+    if (t) { title = t[1].trim(); inDescription = false; continue }
+    const d = line.match(/^Описание\s*:\s*(.+)$/i)
+    if (d) { descriptionParts.push(d[1].trim()); inDescription = true; continue }
+    const k = line.match(/^Тип\s*:\s*(.+)$/i)
+    if (k) {
+      const value = k[1].trim().toLowerCase()
+      taskType = value.includes("видео") || value.includes("video") ? "video" : "text"
+      inDescription = false
+      continue
+    }
+    if (inDescription) descriptionParts.push(line)
+  }
+
+  return {
+    title,
+    description: descriptionParts.join("\n").trim(),
+    taskType,
+  }
+}
+
+function parseLessonContent(content: string): ParsedBlock[] {
+  const blocks: ParsedBlock[] = []
+  const markerRegex = /\[(ТЕСТ|ЗАДАНИЕ)\]([\s\S]*?)\[\/\1\]/g
+  let lastIdx = 0
+  let match: RegExpExecArray | null
+
+  const pushText = (raw: string) => {
+    const trimmed = raw.trim()
+    if (!trimmed) return
+    blocks.push({
+      type: "text",
+      content: contentToHtml(trimmed),
+      taskTitle: "",
+      taskDescription: "",
+      questions: [],
+    })
+  }
+
+  while ((match = markerRegex.exec(content)) !== null) {
+    pushText(content.substring(lastIdx, match.index))
+
+    const markerType = match[1]
+    const body = match[2]
+
+    if (markerType === "ТЕСТ") {
+      const question = parseTestMarker(body)
+      if (question) {
+        blocks.push({
+          type: "task",
+          content: "",
+          taskTitle: "Проверка понимания",
+          taskDescription: "",
+          questions: [question],
+        })
+      } else {
+        // Malformed test — keep the raw text so nothing is silently lost.
+        pushText(body)
+      }
+    } else {
+      const parsed = parseTaskMarker(body)
+      if (parsed.title || parsed.description) {
+        blocks.push({
+          type: "task",
+          content: "",
+          taskTitle: parsed.title || "Задание",
+          taskDescription: "",
+          questions: [{
+            id: randomId("q"),
+            text: parsed.description,
+            answerType: parsed.taskType === "video" ? "video" : "long",
+            options: [],
+            required: false,
+          }],
+        })
+      } else {
+        pushText(body)
+      }
+    }
+
+    lastIdx = match.index + match[0].length
+  }
+
+  pushText(content.substring(lastIdx))
+
+  // An empty lesson still needs at least one empty text block so the editor
+  // shows a placeholder instead of collapsing the lesson entirely.
+  if (blocks.length === 0) {
+    blocks.push({
+      type: "text",
+      content: "",
+      taskTitle: "",
+      taskDescription: "",
+      questions: [],
+    })
+  }
+
+  return blocks
+}
+
 function tryParseJsonArray(raw: string): ClaudeLesson[] | null {
   const cleaned = raw.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim()
 
@@ -239,6 +398,29 @@ function buildPrompt(text: string, params: PromptParams): string {
 - {{имя}} ВСЕГДА оставляй как переменную
 - Последний урок ОБЯЗАТЕЛЬНО: финал с инструкцией что делать дальше (видео-визитка, следующий шаг)
 - Соблюдай выбранный тон коммуникации ВО ВСЕХ уроках
+- АБЗАЦЫ: Разделяй текст на абзацы пустой строкой (\\n\\n) каждые 2-3 предложения. Никогда не пиши стену текста.
+- ТЕСТЫ: В уроках "Проверка понимания" создавай тестовые вопросы. Формат теста в content:
+  [ТЕСТ]
+  Вопрос: текст вопроса?
+  A) вариант 1
+  B) вариант 2
+  C) вариант 3
+  Правильный: B
+  [/ТЕСТ]
+  Создай 3-5 вопросов на понимание роли и компании на основе материала демонстрации.
+- ЗАДАНИЯ: В уроках где кандидат должен ответить или записать видео, используй формат:
+  [ЗАДАНИЕ]
+  Название: Опыт в продажах
+  Описание: Опиши конкретно: в каких ролях работал, с какими продуктами, сколько лет в продажах.
+  Тип: текст
+  [/ЗАДАНИЕ]
+  Создай 2-3 задания для самопрезентации кандидата.
+- ВИДЕО-ВИЗИТКА: Последний или предпоследний урок. Кандидат записывает видео 1-2 минуты. Формат:
+  [ЗАДАНИЕ]
+  Название: Видео-визитка
+  Описание: Запиши видео 1-2 минуты. Расскажи почему хочешь работать в {{компания}}, свои сильные стороны для этой роли и почему подходишь лучше других.
+  Тип: видео
+  [/ЗАДАНИЕ]
 
 Верни ТОЛЬКО JSON массив без markdown backticks:
 [
@@ -554,18 +736,20 @@ export default function CreateDemoPage() {
           const emoji = (lesson.emoji || "").trim() || "📄"
           const title = rawTitle.replace(/^\p{Extended_Pictographic}+\s*/u, "").trim() || "Раздел"
           const content = (lesson.content || "").trim()
+          const parsedBlocks = content ? parseLessonContent(content) : []
           return {
             id: `lesson-${Date.now()}-${i}`,
             emoji,
             title,
-            blocks: content
-              ? [{
-                  id: `blk-${Date.now()}-${i}`,
-                  type: "text",
-                  content: contentToHtml(content),
-                  ...DEFAULT_BLOCK_FIELDS,
-                }]
-              : [],
+            blocks: parsedBlocks.map((b, j) => ({
+              ...DEFAULT_BLOCK_FIELDS,
+              id: `blk-${Date.now()}-${i}-${j}`,
+              type: b.type,
+              content: b.content,
+              taskTitle: b.taskTitle,
+              taskDescription: b.taskDescription,
+              questions: b.questions,
+            })),
           }
         })
         .filter((l) => l.title || l.blocks.length > 0)
