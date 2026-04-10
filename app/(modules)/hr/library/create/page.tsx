@@ -167,9 +167,20 @@ const WORK_FORMAT_LABEL: Record<Exclude<WorkFormat, "">, string> = {
   remote: "Удалёнка",
 }
 
+type Market = "B2B" | "B2C" | "B2G"
+
+const MARKETS: Market[] = ["B2B", "B2C", "B2G"]
+
+const MARKET_DESCRIPTION: Record<Market, string> = {
+  B2B: "корпоративные продажи",
+  B2C: "розница и физлица",
+  B2G: "госзакупки",
+}
+
 interface PromptParams {
   length: DemoLength
   tone: Tone
+  market: Market
   company: string
   position: string
   city: string
@@ -202,6 +213,7 @@ function buildPrompt(text: string, params: PromptParams): string {
 Параметры демонстрации:
 - Формат: ${lengthLabel}
 - Тон: ${tone.label.toLowerCase()} — ${tone.description}
+- Тип рынка: ${params.market} — ${MARKET_DESCRIPTION[params.market]}
 - Компания: ${company}
 - Должность: ${position}
 - Город: ${city}
@@ -253,9 +265,15 @@ interface ClaudeResult {
 
 const CLAUDE_MODEL = "claude-sonnet-4-20250514"
 
-async function callClaudeFromBrowser(text: string, apiKey: string, params: PromptParams): Promise<ClaudeResult> {
+async function callClaudeFromBrowser(
+  text: string,
+  apiKey: string,
+  params: PromptParams,
+  signal?: AbortSignal,
+): Promise<ClaudeResult> {
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
+    signal,
     headers: {
       "Content-Type": "application/json",
       "x-api-key": apiKey,
@@ -347,6 +365,7 @@ export default function CreateDemoPage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [docLength, setDocLength] = useState<DemoLength>("standard")
   const [docTone, setDocTone] = useState<Tone>("friendly")
+  const [docMarket, setDocMarket] = useState<Market>("B2B")
   const [docCompany, setDocCompany] = useState("")
   const [docPosition, setDocPosition] = useState("")
   const [docCity, setDocCity] = useState("")
@@ -354,6 +373,7 @@ export default function CreateDemoPage() {
   const [docWorkFormat, setDocWorkFormat] = useState<WorkFormat>("")
   const [docHiringManager, setDocHiringManager] = useState("")
   const [docCeoName, setDocCeoName] = useState("")
+  const abortRef = useRef<AbortController | null>(null)
 
   // ── Submission state ──
   const [submitting, setSubmitting] = useState(false)
@@ -443,13 +463,23 @@ export default function CreateDemoPage() {
 
   const handleCreateFromDocument = async () => {
     if (!uploadedFile) return
+
+    const controller = new AbortController()
+    abortRef.current = controller
+    const signal = controller.signal
+
+    const isAbort = (err: unknown) =>
+      signal.aborted ||
+      (err instanceof DOMException && err.name === "AbortError") ||
+      (err instanceof Error && err.name === "AbortError")
+
     setSubmitting(true)
     try {
       // ── Step 1: extract text on the server ──
       setSubmitStage("Извлекаем текст из документа...")
       const formData = new FormData()
       formData.append("file", uploadedFile)
-      const parseRes = await fetch("/api/demo-templates/parse-document", { method: "POST", body: formData })
+      const parseRes = await fetch("/api/demo-templates/parse-document", { method: "POST", body: formData, signal })
       const parseData = await parseRes.json()
       if (!parseRes.ok) {
         toast.error(parseData.error || "Ошибка извлечения текста")
@@ -467,7 +497,7 @@ export default function CreateDemoPage() {
 
       // ── Step 2: fetch API key, call Claude from the browser ──
       setSubmitStage("Разбиваем документ на уроки...")
-      const keyRes = await fetch("/api/ai/key")
+      const keyRes = await fetch("/api/ai/key", { signal })
       const keyData = await keyRes.json()
       if (!keyRes.ok || !keyData.key) {
         toast.error(keyData.error || "API ключ недоступен")
@@ -478,18 +508,25 @@ export default function CreateDemoPage() {
 
       let claudeResult: ClaudeResult
       try {
-        claudeResult = await callClaudeFromBrowser(extractedText, keyData.key, {
-          length: docLength,
-          tone: docTone,
-          company: docCompany,
-          position: docPosition,
-          city: docCity,
-          salary: docSalary,
-          workFormat: docWorkFormat,
-          hiringManager: docHiringManager,
-          ceoName: docCeoName,
-        })
+        claudeResult = await callClaudeFromBrowser(
+          extractedText,
+          keyData.key,
+          {
+            length: docLength,
+            tone: docTone,
+            market: docMarket,
+            company: docCompany,
+            position: docPosition,
+            city: docCity,
+            salary: docSalary,
+            workFormat: docWorkFormat,
+            hiringManager: docHiringManager,
+            ceoName: docCeoName,
+          },
+          signal,
+        )
       } catch (err) {
+        if (isAbort(err)) return
         const message = err instanceof Error ? err.message : "Ошибка Claude API"
         toast.error(message)
         setSubmitting(false)
@@ -545,6 +582,7 @@ export default function CreateDemoPage() {
       const baseName = (parseData.filename || uploadedFile.name).replace(/\.[^.]+$/, "").trim().slice(0, 76) || "Демонстрация"
       const createRes = await fetch("/api/demo-templates", {
         method: "POST",
+        signal,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: baseName,
@@ -564,11 +602,22 @@ export default function CreateDemoPage() {
       const totalTokens = usage.input_tokens + usage.output_tokens
       toast.success(`Документ разбит на ${sections.length} уроков. Использовано: ${totalTokens.toLocaleString("ru-RU")} токенов`)
       router.push(`/hr/library/create/editor?id=${id}`)
-    } catch {
+    } catch (err) {
+      if (isAbort(err)) return
       toast.error("Ошибка сети")
       setSubmitting(false)
       setSubmitStage("")
+    } finally {
+      if (abortRef.current === controller) abortRef.current = null
     }
+  }
+
+  const handleCancelSubmission = () => {
+    abortRef.current?.abort()
+    abortRef.current = null
+    setSubmitStage("")
+    setSubmitting(false)
+    toast.info("Создание отменено")
   }
 
   // ─── Filtered library list ───────────────────────────────────────────────
@@ -852,6 +901,21 @@ export default function CreateDemoPage() {
                     </div>
                   </div>
 
+                  {/* Market selector */}
+                  <div>
+                    <SectionLabel>Тип рынка</SectionLabel>
+                    <div className="flex flex-wrap gap-2">
+                      {MARKETS.map((m) => (
+                        <Pill
+                          key={m}
+                          label={m}
+                          active={docMarket === m}
+                          onClick={() => setDocMarket(m)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+
                   {/* Company variables card */}
                   <div>
                     <SectionLabel>Данные компании</SectionLabel>
@@ -950,15 +1014,27 @@ export default function CreateDemoPage() {
                     </div>
                   )}
 
-                  <div className="flex justify-end pt-2 pb-4">
-                    <Button
-                      onClick={handleCreateFromDocument}
-                      disabled={!uploadedFile || submitting}
-                      className="h-10 px-6 gap-2"
-                    >
-                      {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
-                      {submitting ? (submitStage || "Импорт документа...") : "Создать из документа"}
-                    </Button>
+                  <div className="flex justify-end gap-3 pt-2 pb-4">
+                    {submitting ? (
+                      <>
+                        <Button disabled className="h-10 px-6 gap-2">
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          {submitStage || "Импорт документа..."}
+                        </Button>
+                        <Button variant="outline" onClick={handleCancelSubmission} className="h-10 px-6">
+                          Отменить
+                        </Button>
+                      </>
+                    ) : (
+                      <Button
+                        onClick={handleCreateFromDocument}
+                        disabled={!uploadedFile}
+                        className="h-10 px-6 gap-2"
+                      >
+                        <ArrowRight className="w-4 h-4" />
+                        Создать из документа
+                      </Button>
+                    )}
                   </div>
                 </div>
               )}
