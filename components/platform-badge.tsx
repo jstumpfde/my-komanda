@@ -18,7 +18,7 @@ export function PlatformBadge({ hidden, className }: PlatformBadgeProps) {
         className="flex items-center gap-1 text-[10px] text-sidebar-foreground/30 hover:text-sidebar-foreground/50 transition-colors"
       >
         <span>Powered by</span>
-        <span className="font-medium">my-komanda</span>
+        <span className="font-medium">Company24.pro</span>
       </Link>
     </div>
   )

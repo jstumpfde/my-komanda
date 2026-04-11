@@ -58,6 +58,20 @@ export const MODULE_REGISTRY: Record<ModuleId, ModuleConfig> = {
       { label: 'Рефералы',      href: '/referrals',      icon: 'Share2' },
     ],
   },
+  learning: {
+    id: 'learning',
+    name: 'Обучение',
+    description: 'Курсы, тренировки, планы и рейтинг обучения',
+    icon: 'GraduationCap',
+    basePath: '/learning',
+    menuItems: [
+      { label: 'Дашборд',        href: '/learning/dashboard',    icon: 'LayoutDashboard' },
+      { label: 'AI-курсы',       href: '/learning/courses',      icon: 'Sparkles' },
+      { label: 'Тренировки',     href: '/learning/training',     icon: 'Target' },
+      { label: 'Планы обучения', href: '/learning/plans',        icon: 'GraduationCap' },
+      { label: 'Рейтинг',        href: '/learning/achievements', icon: 'Trophy' },
+    ],
+  },
   knowledge: {
     id: 'knowledge',
     name: 'База знаний',
@@ -71,20 +85,6 @@ export const MODULE_REGISTRY: Record<ModuleId, ModuleConfig> = {
       { label: 'На проверке',    href: '/knowledge-v2/review',        icon: 'ClipboardCheck' },
       { label: 'AI-токены',      href: '/knowledge-v2/tokens',        icon: 'Coins' },
       { label: 'Настройки БЗ',   href: '/knowledge-v2/settings',      icon: 'Settings' },
-    ],
-  },
-  learning: {
-    id: 'learning',
-    name: 'Обучение',
-    description: 'Курсы, тренировки, планы и рейтинг обучения',
-    icon: 'GraduationCap',
-    basePath: '/learning',
-    menuItems: [
-      { label: 'Дашборд',        href: '/learning/dashboard',    icon: 'LayoutDashboard' },
-      { label: 'AI-курсы',       href: '/learning/courses',      icon: 'Sparkles' },
-      { label: 'Тренировки',     href: '/learning/training',     icon: 'Target' },
-      { label: 'Планы обучения', href: '/learning/plans',        icon: 'GraduationCap' },
-      { label: 'Рейтинг',        href: '/learning/achievements', icon: 'Trophy' },
     ],
   },
   sales: {
