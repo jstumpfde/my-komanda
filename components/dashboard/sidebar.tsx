@@ -149,14 +149,16 @@ export function DashboardSidebar() {
   // fullName (юр. название) в sidebar не показываем.
   const [companyLogo, setCompanyLogo] = useState<string | null>(null)
   const [companyName, setCompanyName] = useState<string | null>(null)
+  const [companySlogan, setCompanySlogan] = useState<string | null>(null)
   useEffect(() => {
     const loadCompany = () => {
       fetch('/api/companies').then(r => r.ok ? r.json() : null)
-        .then((d: { logoUrl?: string; name?: string; brandName?: string } | null) => {
+        .then((d: { logoUrl?: string; name?: string; brandName?: string; brandSlogan?: string } | null) => {
           if (d) {
             setCompanyLogo(d.logoUrl ?? null)
             const display = d.brandName?.trim() || d.name?.trim() || null
             setCompanyName(display)
+            setCompanySlogan(d.brandSlogan?.trim() || null)
           }
         }).catch(() => {})
     }
@@ -365,27 +367,32 @@ export function DashboardSidebar() {
       <SidebarHeader className="p-4 border-b border-sidebar-border">
         <div className="flex items-center gap-3">
           {companyLogo ? (
-            <div className="h-9 w-9 rounded-lg bg-white dark:bg-white/10 shrink-0 flex items-center justify-center overflow-hidden">
+            <div className="h-9 max-w-[160px] shrink-0 flex items-center justify-center overflow-hidden group-data-[collapsible=icon]:max-w-9 group-data-[collapsible=icon]:w-9">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={companyLogo}
                 alt=""
-                className="max-h-9 max-w-9 object-contain"
+                className="max-h-8 max-w-[140px] w-auto h-auto object-contain group-data-[collapsible=icon]:max-w-9"
               />
             </div>
           ) : companyName ? (
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground shrink-0 text-base font-semibold">
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-sidebar-primary text-sidebar-primary-foreground shrink-0 text-base font-semibold">
               {companyName.trim().charAt(0).toUpperCase()}
             </div>
           ) : (
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground shrink-0">
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-sidebar-primary text-sidebar-primary-foreground shrink-0">
               <Briefcase className="size-5" />
             </div>
           )}
-          <div className="overflow-hidden group-data-[collapsible=icon]:hidden min-w-0">
-            <span className="font-semibold text-sidebar-foreground text-sm tracking-tight leading-snug line-clamp-2 block">
+          <div className="overflow-hidden group-data-[collapsible=icon]:hidden min-w-0 flex-1">
+            <span className="font-semibold text-sidebar-foreground text-sm tracking-tight leading-tight line-clamp-1 block">
               {companyName || "Company24.Pro"}
             </span>
+            {companySlogan && (
+              <span className="text-xs text-sidebar-foreground/60 line-clamp-1 block mt-0.5">
+                {companySlogan}
+              </span>
+            )}
           </div>
         </div>
       </SidebarHeader>

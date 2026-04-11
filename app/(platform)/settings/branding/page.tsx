@@ -57,17 +57,25 @@ export default function BrandingPage() {
       const data = await fetchCompanyApi()
       const c = data as Record<string, unknown>
       if (!c) return
-      if (c.brandName) setBrandName(c.brandName as string)
+      // Принимаем оба варианта именования — camelCase (из drizzle) и
+      // snake_case (на случай если API внезапно сменит конвенцию).
+      const brandNameVal = (c.brandName ?? c.brand_name) as string | undefined
+      const brandSloganVal = (c.brandSlogan ?? c.brand_slogan) as string | undefined
+      const logoUrlVal = (c.logoUrl ?? c.logo_url) as string | undefined
+      const customThemeVal = (c.customTheme ?? c.custom_theme) as
+        | Record<string, { enabled?: boolean }>
+        | undefined
+
+      if (brandNameVal) setBrandName(brandNameVal)
       else if (c.name) setBrandName(c.name as string)
-      if (c.brandSlogan) setBrandSlogan(c.brandSlogan as string)
-      if (c.logoUrl) setLogoPreview(c.logoUrl as string)
+      if (brandSloganVal) setBrandSlogan(brandSloganVal)
+      if (logoUrlVal) setLogoPreview(logoUrlVal)
       if (c.subdomain) setSubdomain(c.subdomain as string)
-      if (c.customTheme) {
-        const saved = c.customTheme as Record<string, { enabled?: boolean }>
+      if (customThemeVal) {
         setThemeEnabled(prev => {
           const next = { ...prev }
           for (const k of THEME_KEYS) {
-            if (saved[k]?.enabled !== undefined) next[k] = saved[k].enabled!
+            if (customThemeVal[k]?.enabled !== undefined) next[k] = customThemeVal[k].enabled!
           }
           return next
         })
