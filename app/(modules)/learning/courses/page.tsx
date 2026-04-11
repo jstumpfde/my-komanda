@@ -13,6 +13,7 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
+import { WorkshopLauncher } from "@/components/core/workshop-launcher"
 
 // ─── Project shape (API) ────────────────────────────────────────────────────
 
@@ -129,10 +130,16 @@ export default function AiCoursesListPage() {
                 <Sparkles className="size-5 text-violet-500" />
                 <h1 className="text-xl font-semibold">AI-курсы</h1>
               </div>
-              <Button className="gap-1.5" onClick={handleCreate} disabled={creating}>
-                {creating ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
-                Новый AI-курс
-              </Button>
+              <div className="flex items-center gap-2">
+                <WorkshopLauncher
+                  moduleContext="learning"
+                  buttonVariant="outline"
+                />
+                <Button className="gap-1.5" onClick={handleCreate} disabled={creating}>
+                  {creating ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
+                  Новый AI-курс
+                </Button>
+              </div>
             </div>
 
             {loading ? (

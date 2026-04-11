@@ -14,6 +14,7 @@ import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { AiAssistantWidget } from "@/components/knowledge/ai-assistant-widget"
+import { WorkshopLauncher } from "@/components/core/workshop-launcher"
 import { LENGTH_LABELS } from "@/lib/demo-types"
 import { toast } from "sonner"
 
@@ -287,11 +288,17 @@ function KnowledgeV2PageContent() {
               <p className="text-sm text-muted-foreground mt-1">Все материалы компании в одном месте</p>
             </div>
             {canCreate && (
-              <Button asChild>
-                <Link href="/knowledge-v2/create">
-                  <Plus className="h-4 w-4 mr-1" />Создать материал
-                </Link>
-              </Button>
+              <div className="flex items-center gap-2">
+                <WorkshopLauncher
+                  moduleContext="knowledge"
+                  buttonVariant="outline"
+                />
+                <Button asChild>
+                  <Link href="/knowledge-v2/create">
+                    <Plus className="h-4 w-4 mr-1" />Создать материал
+                  </Link>
+                </Button>
+              </div>
             )}
           </div>
 
