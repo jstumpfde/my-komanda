@@ -1,11 +1,11 @@
 "use client"
 
-import React, { useState, useCallback, forwardRef } from "react"
+import React, { useCallback, forwardRef } from "react"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Plus, GraduationCap, Loader2, Check, AlertCircle } from "lucide-react"
-import { toast } from "sonner"
-import { type Demo, DEFAULT_LESSONS } from "@/lib/course-types"
+import { type Demo } from "@/lib/course-types"
 import { NotionEditor, type NotionEditorHandle } from "./notion-editor"
 import { useDemo } from "@/hooks/use-demo"
 
@@ -17,9 +17,9 @@ interface CourseTabProps {
 }
 
 export const CourseTab = forwardRef<NotionEditorHandle, CourseTabProps>(
-  function CourseTab({ vacancyId, vacancyTitle, editorRef, onSaveStatusChange }, _ref) {
-    const { demo, loading, error, saveStatus, createDemo, updateDemo } = useDemo(vacancyId)
-    const [creating, setCreating] = useState(false)
+  function CourseTab({ vacancyId, editorRef, onSaveStatusChange }, _ref) {
+    const { demo, loading, error, saveStatus, updateDemo } = useDemo(vacancyId)
+    const router = useRouter()
 
     // Sync save status to parent
     React.useEffect(() => {
@@ -28,16 +28,8 @@ export const CourseTab = forwardRef<NotionEditorHandle, CourseTabProps>(
       else if (saveStatus === "saved") onSaveStatusChange("saved")
     }, [saveStatus, onSaveStatusChange])
 
-    const handleCreateDemo = async () => {
-      const title = vacancyTitle || "Демонстрация"
-      setCreating(true)
-      const created = await createDemo(title, DEFAULT_LESSONS)
-      setCreating(false)
-      if (created) {
-        toast.success(`Демонстрация «${created.title}» создана`)
-      } else {
-        toast.error("Не удалось создать демонстрацию")
-      }
+    const handleCreateDemo = () => {
+      router.push("/knowledge-v2/create/demo")
     }
 
     const handleUpdateDemo = useCallback((updated: Demo) => {
@@ -112,8 +104,8 @@ export const CourseTab = forwardRef<NotionEditorHandle, CourseTabProps>(
             <p className="text-sm text-muted-foreground mb-4 max-w-md mx-auto">
               Кандидаты пройдут интерактивный обзор компании, роли и дохода перед интервью
             </p>
-            <Button size="sm" className="gap-1.5" onClick={handleCreateDemo} disabled={creating}>
-              {creating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+            <Button size="sm" className="gap-1.5" onClick={handleCreateDemo}>
+              <Plus className="w-3.5 h-3.5" />
               Создать демонстрацию
             </Button>
           </CardContent>

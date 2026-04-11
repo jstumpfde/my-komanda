@@ -749,11 +749,8 @@ export default function VacancyPage() {
                         {courseEditorSaveStatus === "saving" ? "Сохранение..." : "✓ Сохранено"}
                       </span>
                     </div>
-                    <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8">
+                    <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8" onClick={() => router.push("/hr/library")}>
                       <BookOpen className="w-3.5 h-3.5" />Библиотека
-                    </Button>
-                    <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8">
-                      <Sparkles className="w-3.5 h-3.5" />AI
                     </Button>
                     <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8" onClick={() => courseEditorRef.current?.openPreview()}>
                       <Eye className="w-3.5 h-3.5" />Превью
