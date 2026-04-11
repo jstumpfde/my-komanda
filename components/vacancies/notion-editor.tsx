@@ -891,21 +891,32 @@ function NotionBlock({ block, idx, totalBlocks, isHovered, isDragging, isDragOve
       endRange.collapse(false)
       const atEnd = range.compareBoundaryPoints(Range.START_TO_START, endRange) >= 0
       const html = el.innerHTML
-      const trailingBr = /<br\s*\/?>\s*$/.test(html)
+      const trailingBr = /<br\s*\/?>\s*(?:\u200B\s*)?$/.test(html)
 
       if (atEnd && trailingBr) {
         // Second Enter on an empty trailing line → create a new block
         e.preventDefault()
-        el.innerHTML = html.replace(/(<br\s*\/?>)+\s*$/, "")
+        el.innerHTML = html.replace(/(<br\s*\/?>)+\s*(?:\u200B\s*)?$/, "")
         syncContent()
         onInsertBelow("text")
         return
       }
 
-      // First Enter → insert a line break via execCommand so the browser
-      // handles cursor placement (more reliable than manual range manip).
+      // First Enter → insert a <br> via the Range API and park the cursor
+      // INSIDE a zero-width space text node (offset 1). Without the anchor
+      // node Chrome refuses to render the cursor on the new line, making the
+      // first Enter "eat" the keystroke. execCommand("insertHTML") is
+      // unreliable in current browsers.
       e.preventDefault()
-      document.execCommand("insertHTML", false, "<br>")
+      range.deleteContents()
+      const br = document.createElement("br")
+      range.insertNode(br)
+      const textNode = document.createTextNode("\u200B")
+      br.after(textNode)
+      range.setStart(textNode, 1)
+      range.setEnd(textNode, 1)
+      sel.removeAllRanges()
+      sel.addRange(range)
       syncContent()
     }
     if (e.key === "Backspace" && block.type === "text" && editorRef.current) {
@@ -2487,7 +2498,7 @@ function InlineBetweenBar({ onAdd }: { onAdd: (type: BlockType) => void }) {
   return (
     <div
       className="relative w-full flex items-center group/between my-2"
-      style={{ minHeight: 32 }}
+      style={{ minHeight: 20 }}
       onMouseEnter={() => setVisible(true)}
       onMouseLeave={() => setVisible(false)}
     >
@@ -2513,7 +2524,7 @@ function InlineBetweenBar({ onAdd }: { onAdd: (type: BlockType) => void }) {
               key={item.type}
               title={item.label}
               onClick={() => onAdd(item.type)}
-              className="w-8 h-8 rounded-md flex items-center justify-center"
+              className="w-7 h-7 rounded-md flex items-center justify-center"
               style={{
                 backgroundColor: colors.bg,
                 border: `0.5px solid ${isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)"}`,
