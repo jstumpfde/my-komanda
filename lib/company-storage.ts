@@ -209,7 +209,8 @@ export interface ApiCompanyUpdatePayload {
   brand_primary_color?: string
   brand_bg_color?: string
   brand_text_color?: string
-  custom_theme?: Record<string, string>
+  brand_name?: string
+  brand_slogan?: string
   ogrn?: string
   full_name?: string
   director?: string

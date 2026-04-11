@@ -52,29 +52,34 @@ export default function BrandingPage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  useEffect(() => {
-    fetchCompanyApi()
-      .then((data: unknown) => {
-        const c = data as Record<string, unknown>
-        if (!c) return
-        if (c.brandName) setBrandName(c.brandName as string)
-        else if (c.name) setBrandName(c.name as string)
-        if (c.brandSlogan) setBrandSlogan(c.brandSlogan as string)
-        if (c.logoUrl) setLogoPreview(c.logoUrl as string)
-        if (c.subdomain) setSubdomain(c.subdomain as string)
-        if (c.customTheme) {
-          const saved = c.customTheme as Record<string, { enabled?: boolean }>
-          setThemeEnabled(prev => {
-            const next = { ...prev }
-            for (const k of THEME_KEYS) {
-              if (saved[k]?.enabled !== undefined) next[k] = saved[k].enabled!
-            }
-            return next
-          })
-        }
-      })
-      .catch(() => {})
+  const loadCompany = useCallback(async () => {
+    try {
+      const data = await fetchCompanyApi()
+      const c = data as Record<string, unknown>
+      if (!c) return
+      if (c.brandName) setBrandName(c.brandName as string)
+      else if (c.name) setBrandName(c.name as string)
+      if (c.brandSlogan) setBrandSlogan(c.brandSlogan as string)
+      if (c.logoUrl) setLogoPreview(c.logoUrl as string)
+      if (c.subdomain) setSubdomain(c.subdomain as string)
+      if (c.customTheme) {
+        const saved = c.customTheme as Record<string, { enabled?: boolean }>
+        setThemeEnabled(prev => {
+          const next = { ...prev }
+          for (const k of THEME_KEYS) {
+            if (saved[k]?.enabled !== undefined) next[k] = saved[k].enabled!
+          }
+          return next
+        })
+      }
+    } catch {
+      // ignore
+    }
   }, [])
+
+  useEffect(() => {
+    void loadCompany()
+  }, [loadCompany])
 
   // Debounced subdomain check
   const checkSubdomain = useCallback((value: string) => {
@@ -160,6 +165,12 @@ export default function BrandingPage() {
       })
       saveBrand({ logoUrl: logoPreview, companyName: brandName })
       toast.success("Брендинг сохранён")
+      // Перечитать данные чтобы форма отразила то что реально в БД
+      await loadCompany()
+      // Уведомить sidebar (и другие компоненты) о смене данных компании
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("company-updated"))
+      }
     } catch {
       toast.success("Брендинг сохранён локально")
     } finally { setSaving(false) }

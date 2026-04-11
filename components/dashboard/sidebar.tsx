@@ -150,12 +150,23 @@ export function DashboardSidebar() {
   const [companyLogo, setCompanyLogo] = useState<string | null>(null)
   const [companyName, setCompanyName] = useState<string | null>(null)
   useEffect(() => {
-    fetch('/api/companies').then(r => r.ok ? r.json() : null)
-      .then((d: { logoUrl?: string; name?: string; brandName?: string } | null) => {
-        if (d?.logoUrl) setCompanyLogo(d.logoUrl)
-        const display = d?.brandName?.trim() || d?.name?.trim() || null
-        if (display) setCompanyName(display)
-      }).catch(() => {})
+    const loadCompany = () => {
+      fetch('/api/companies').then(r => r.ok ? r.json() : null)
+        .then((d: { logoUrl?: string; name?: string; brandName?: string } | null) => {
+          if (d) {
+            setCompanyLogo(d.logoUrl ?? null)
+            const display = d.brandName?.trim() || d.name?.trim() || null
+            setCompanyName(display)
+          }
+        }).catch(() => {})
+    }
+    loadCompany()
+
+    // Слушаем событие `company-updated` — branding-страница диспатчит его
+    // после successful save, чтобы sidebar обновил имя/лого без перезагрузки.
+    const handleUpdate = () => loadCompany()
+    window.addEventListener('company-updated', handleUpdate)
+    return () => window.removeEventListener('company-updated', handleUpdate)
   }, [])
 
   // Knowledge: review-count badge (статьи со status=review/expired)
