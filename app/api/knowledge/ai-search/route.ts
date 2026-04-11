@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from "next/server"
-import { and, desc, eq } from "drizzle-orm"
+import { and, count, desc, eq, or } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { demoTemplates, knowledgeArticles } from "@/lib/db/schema"
+import {
+  companies,
+  demoTemplates,
+  knowledgeArticles,
+  knowledgeQuestionLogs,
+  notifications,
+  users,
+} from "@/lib/db/schema"
 import { requireCompany } from "@/lib/api-helpers"
 
 interface MaterialRef {
@@ -15,6 +22,34 @@ const EXCERPT_LEN = 300
 
 function stripHtml(s: string): string {
   return s.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()
+}
+
+function normalizeQuestion(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 100)
+}
+
+const UNANSWERED_THRESHOLD = 3
+
+async function sendTelegramBasic(token: string, chatId: string, text: string) {
+  try {
+    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text,
+        parse_mode: "Markdown",
+        disable_web_page_preview: true,
+      }),
+    })
+  } catch (err) {
+    console.error("[ai-search] telegram send failed", err)
+  }
 }
 
 function demoExcerpt(sections: unknown): string {
@@ -40,9 +75,14 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    // Body is optional — we don't actually need the question server-side,
-    // but parsing it validates the shape and keeps logs meaningful.
-    try { await req.json() } catch { /* ignore malformed body */ }
+    // Parse question from body — now used for logging.
+    let questionText = ""
+    let source = "web"
+    try {
+      const body = await req.json() as { question?: string; source?: string }
+      questionText = typeof body.question === "string" ? body.question.trim() : ""
+      if (typeof body.source === "string" && body.source) source = body.source
+    } catch { /* ignore malformed body */ }
 
     // Select only the columns we actually need. Audience / review_cycle /
     // valid_until are intentionally excluded — the DB may be out of sync
@@ -105,6 +145,114 @@ export async function POST(req: NextRequest) {
     const context = parts.length > 0
       ? parts.join("\n\n")
       : "В базе знаний пока нет материалов."
+
+    // ── Log question для агента аудита пробелов ──────────────────────────
+    if (questionText) {
+      const questionKey = normalizeQuestion(questionText)
+      const answered = materialsList.length > 0
+      try {
+        await db.insert(knowledgeQuestionLogs).values({
+          tenantId: user.companyId,
+          userId: user.id,
+          question: questionText,
+          questionKey,
+          answered,
+          source,
+          notified: false,
+        })
+
+        // Мгновенная реакция: если этот вопрос задан 3+ раз без ответа
+        // и ещё не было уведомления — уведомляем.
+        if (!answered && questionKey) {
+          const [{ value: unansweredCount } = { value: 0 }] = await db
+            .select({ value: count() })
+            .from(knowledgeQuestionLogs)
+            .where(
+              and(
+                eq(knowledgeQuestionLogs.tenantId, user.companyId),
+                eq(knowledgeQuestionLogs.questionKey, questionKey),
+                eq(knowledgeQuestionLogs.answered, false),
+              ),
+            )
+
+          if (unansweredCount >= UNANSWERED_THRESHOLD) {
+            const [{ value: notifiedCount } = { value: 0 }] = await db
+              .select({ value: count() })
+              .from(knowledgeQuestionLogs)
+              .where(
+                and(
+                  eq(knowledgeQuestionLogs.tenantId, user.companyId),
+                  eq(knowledgeQuestionLogs.questionKey, questionKey),
+                  eq(knowledgeQuestionLogs.notified, true),
+                ),
+              )
+
+            if (notifiedCount === 0) {
+              // Помечаем все логи этого ключа как notified, чтобы не спамить.
+              await db
+                .update(knowledgeQuestionLogs)
+                .set({ notified: true })
+                .where(
+                  and(
+                    eq(knowledgeQuestionLogs.tenantId, user.companyId),
+                    eq(knowledgeQuestionLogs.questionKey, questionKey),
+                  ),
+                )
+
+              // DB notifications для director + hr_lead
+              const recipients = await db
+                .select({ id: users.id, telegramChatId: users.telegramChatId })
+                .from(users)
+                .where(
+                  and(
+                    eq(users.companyId, user.companyId),
+                    or(eq(users.role, "director"), eq(users.role, "hr_lead")),
+                  ),
+                )
+
+              const title = "Вопрос без ответа — пора дополнить базу знаний"
+              const body = `Сотрудники уже ${unansweredCount} раз спросили: «${questionText.slice(0, 120)}». В базе нет подходящего материала.`
+
+              for (const r of recipients) {
+                await db.insert(notifications).values({
+                  tenantId: user.companyId,
+                  userId: r.id,
+                  type: "knowledge_gap",
+                  title,
+                  body,
+                  severity: "warning",
+                  sourceType: "knowledge_question_log",
+                  href: "/knowledge-v2/settings",
+                })
+              }
+
+              // Telegram — если у компании подключён бот
+              const [company] = await db
+                .select({ token: companies.telegramBotToken })
+                .from(companies)
+                .where(eq(companies.id, user.companyId))
+                .limit(1)
+
+              if (company?.token) {
+                const tgText =
+                  `🚨 *${title}*\n\n` +
+                  `Запросов: *${unansweredCount}*\n\n` +
+                  `«${questionText.slice(0, 200)}»\n\n` +
+                  `_Создайте материал в базе знаний, чтобы закрыть этот пробел._`
+                for (const r of recipients) {
+                  if (r.telegramChatId) {
+                    await sendTelegramBasic(company.token, r.telegramChatId, tgText)
+                  }
+                }
+              }
+            }
+          }
+        }
+      } catch (logErr) {
+        // Логирование не должно ломать основной запрос.
+        console.error("[ai-search] log insert failed", logErr)
+      }
+    }
 
     return NextResponse.json({ context, materialsList })
   } catch (err) {

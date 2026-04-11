@@ -119,6 +119,10 @@ export const companies = pgTable("companies", {
   trialEndsAt:        timestamp("trial_ends_at"),
   subscriptionStatus: text("subscription_status").default("trial"), // 'trial'|'active'|'paused'|'cancelled'|'expired'
   currentPlanId:      uuid("current_plan_id").references(() => plans.id),
+  // Telegram bot (multitenant knowledge base assistant)
+  telegramBotToken:    text("telegram_bot_token"),
+  telegramBotUsername: text("telegram_bot_username"),
+  telegramWebhookSet:  boolean("telegram_webhook_set").default(false),
   createdAt:          timestamp("created_at").defaultNow(),
   updatedAt:          timestamp("updated_at").defaultNow(),
 })
@@ -1001,6 +1005,19 @@ export const aiUsageLog = pgTable("ai_usage_log", {
   model:        text("model"),
   costUsd:      text("cost_usd").default("0"),
   createdAt:    timestamp("created_at").defaultNow(),
+})
+
+// Question logs: для агента аудита пробелов базы знаний
+export const knowledgeQuestionLogs = pgTable("knowledge_question_logs", {
+  id:          uuid("id").primaryKey().defaultRandom(),
+  tenantId:    uuid("tenant_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  userId:      uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+  question:    text("question").notNull(),
+  questionKey: text("question_key"),                      // нормализованный ключ для группировки
+  answered:    boolean("answered").default(false),
+  source:      text("source").default("web"),             // web | telegram | api
+  notified:    boolean("notified").default(false),        // для мгновенных уведомлений 3+
+  createdAt:   timestamp("created_at", { withTimezone: true }).defaultNow(),
 })
 
 // Reviews / comments on knowledge articles

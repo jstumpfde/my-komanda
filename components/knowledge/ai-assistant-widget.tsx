@@ -2,7 +2,7 @@
 import Image from "next/image"
 
 import { useState, useRef, useEffect } from "react"
-import { MessageCircle, X, Send, Loader2, Mic, Square } from "lucide-react"
+import { MessageCircle, X, Send, Loader2, Mic, Square, Maximize2, Minimize2, BookmarkPlus, Check } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -14,6 +14,7 @@ interface Message {
   role: Role
   content: string
   cited?: MaterialRef[]
+  saved?: boolean
 }
 
 interface MaterialRef {
@@ -225,11 +226,26 @@ function buildClaudeMessages(history: Message[], question: string, context: stri
   ]
 }
 
+// Extract a short title from assistant message content (first line or first N chars)
+function extractTitle(content: string): string {
+  // Try first markdown heading
+  const headingMatch = content.match(/^#+\s+(.+)/m)
+  if (headingMatch) return headingMatch[1].slice(0, 100)
+  // Try first bold text
+  const boldMatch = content.match(/\*\*(.+?)\*\*/)
+  if (boldMatch) return boldMatch[1].slice(0, 100)
+  // Fall back to first line, trimmed
+  const firstLine = content.split("\n").find((l) => l.trim().length > 5)?.trim() || content.trim()
+  return firstLine.slice(0, 100)
+}
+
 export function AiAssistantWidget() {
   const [open, setOpen] = useState(false)
+  const [expanded, setExpanded] = useState(false)
   const [input, setInput] = useState("")
   const [messages, setMessages] = useState<Message[]>([WELCOME])
   const [loading, setLoading] = useState(false)
+  const [savingId, setSavingId] = useState<string | null>(null)
   const [isRecording, setIsRecording] = useState(false)
   const [hasSpeech, setHasSpeech] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -251,6 +267,37 @@ export function AiAssistantWidget() {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
   }, [messages, loading, open])
+
+  // Save assistant message to knowledge base
+  const saveToKnowledge = async (msg: Message) => {
+    if (savingId || msg.saved) return
+    setSavingId(msg.id)
+    try {
+      const title = extractTitle(msg.content)
+      const res = await fetch("/api/modules/knowledge/articles", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title,
+          content: msg.content,
+          status: "draft",
+          audience: ["employees"],
+        }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error || "Ошибка сохранения")
+      }
+      // Mark as saved
+      setMessages((prev) =>
+        prev.map((m) => (m.id === msg.id ? { ...m, saved: true } : m))
+      )
+    } catch (err) {
+      console.error("[save-to-knowledge]", err)
+      alert("Не удалось сохранить. Попробуйте ещё раз.")
+    }
+    setSavingId(null)
+  }
 
   const send = async () => {
     const question = input.trim()
@@ -412,21 +459,39 @@ export function AiAssistantWidget() {
       {/* Chat panel */}
       {open && (
         <div
-          className="fixed bottom-20 right-4 w-96 resize-y overflow-hidden min-h-[300px] max-h-[85vh] h-[500px] rounded-2xl shadow-2xl border border-border bg-background flex flex-col z-50 animate-in slide-in-from-bottom-4 duration-200"
+          className={cn(
+            "fixed z-50 flex flex-col bg-background border border-border shadow-2xl animate-in slide-in-from-bottom-4 duration-200",
+            expanded
+              ? "inset-4 rounded-2xl"
+              : "bottom-20 right-4 w-96 rounded-2xl resize-y overflow-hidden min-h-[300px] max-h-[85vh] h-[500px]"
+          )}
           role="dialog"
           aria-label="Ненси"
         >
           {/* Header */}
-          <div className="bg-primary text-primary-foreground rounded-t-2xl px-4 py-3 flex items-center justify-between">
-            <div className="flex items-center gap-2"><Image src="/nancy-avatar.png" alt="Ненси" width={44} height={44} className="rounded-full" /><span className="font-semibold text-sm">Ненси — AI-ассистент</span></div>
-            <button
-              type="button"
-              onClick={() => setOpen(false)}
-              aria-label="Закрыть"
-              className="hover:opacity-80 transition-opacity"
-            >
-              <X className="w-4 h-4" />
-            </button>
+          <div className="bg-primary text-primary-foreground rounded-t-2xl px-4 py-3 flex items-center justify-between shrink-0">
+            <div className="flex items-center gap-2">
+              <Image src="/nancy-avatar.png" alt="Ненси" width={44} height={44} className="rounded-full" />
+              <span className="font-semibold text-sm">Ненси — AI-ассистент</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setExpanded((v) => !v)}
+                aria-label={expanded ? "Свернуть" : "На весь экран"}
+                className="hover:opacity-80 transition-opacity p-1 rounded"
+              >
+                {expanded ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setOpen(false); setExpanded(false) }}
+                aria-label="Закрыть"
+                className="hover:opacity-80 transition-opacity p-1 rounded"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
           </div>
 
           {/* Messages */}
@@ -435,13 +500,16 @@ export function AiAssistantWidget() {
               <div key={m.id} className={cn("flex", m.role === "user" ? "justify-end" : "justify-start")}>
                 <div
                   className={cn(
-                    "rounded-2xl p-3 text-sm max-w-[85%]",
+                    "rounded-2xl p-3 text-sm",
+                    expanded ? "max-w-[70%]" : "max-w-[85%]",
                     m.role === "user"
                       ? "bg-primary/10 rounded-br-sm ml-8"
                       : "bg-muted rounded-bl-sm mr-8",
                   )}
                 >
                   <p className="whitespace-pre-wrap leading-relaxed">{m.content}</p>
+
+                  {/* Cited sources */}
                   {m.cited && m.cited.length > 0 && (
                     <div className="mt-2 pt-2 border-t border-border/50 space-y-1">
                       <p className="text-xs text-muted-foreground mb-1">📎 Источники:</p>
@@ -456,6 +524,32 @@ export function AiAssistantWidget() {
                           {c.name}
                         </a>
                       ))}
+                    </div>
+                  )}
+
+                  {/* Save to knowledge base button — only for non-welcome assistant messages */}
+                  {m.role === "assistant" && m.id !== "welcome" && !m.id.startsWith("err-") && (
+                    <div className="mt-2 pt-2 border-t border-border/50">
+                      <button
+                        type="button"
+                        onClick={() => saveToKnowledge(m)}
+                        disabled={!!savingId || m.saved}
+                        className={cn(
+                          "inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg transition-colors",
+                          m.saved
+                            ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
+                            : "bg-primary/5 text-primary hover:bg-primary/10",
+                          (!!savingId && savingId !== m.id) && "opacity-50 cursor-not-allowed"
+                        )}
+                      >
+                        {savingId === m.id ? (
+                          <><Loader2 className="w-3 h-3 animate-spin" /> Сохраняю...</>
+                        ) : m.saved ? (
+                          <><Check className="w-3 h-3" /> Сохранено в базу</>
+                        ) : (
+                          <><BookmarkPlus className="w-3 h-3" /> Сохранить в базу</>
+                        )}
+                      </button>
                     </div>
                   )}
                 </div>
@@ -475,7 +569,7 @@ export function AiAssistantWidget() {
           </div>
 
           {/* Input */}
-          <div className="border-t border-border px-4 py-3 flex gap-2 items-center">
+          <div className="border-t border-border px-4 py-3 flex gap-2 items-center shrink-0">
             <Input
               value={input}
               onChange={(e) => setInput(e.target.value)}

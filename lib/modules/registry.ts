@@ -72,6 +72,7 @@ export const MODULE_REGISTRY: Record<ModuleId, ModuleConfig> = {
       { label: 'AI-курсы',       href: '/knowledge/ai-courses',       icon: 'Sparkles' },
       { label: 'На проверке',    href: '/knowledge-v2?filter=review', icon: 'ClipboardCheck' },
       { label: 'AI-токены',      href: '/knowledge-v2/tokens',        icon: 'Coins' },
+      { label: 'Настройки БЗ',   href: '/knowledge-v2/settings',      icon: 'Settings' },
     ],
   },
   sales: {
