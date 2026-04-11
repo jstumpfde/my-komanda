@@ -38,6 +38,7 @@ export async function GET(
         assignedAt: learningAssignments.assignedAt,
         deadline: learningAssignments.deadline,
         completedAt: learningAssignments.completedAt,
+        certificateUrl: learningAssignments.certificateUrl,
       })
       .from(learningAssignments)
       .leftJoin(users, eq(users.id, learningAssignments.userId))

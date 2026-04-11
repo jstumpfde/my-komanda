@@ -2,7 +2,7 @@
 
 import { useState, useEffect, use } from "react"
 import Link from "next/link"
-import { ArrowLeft, Loader2, BookOpen, FileText, Users, Calendar, CheckCircle2, Clock, AlertTriangle } from "lucide-react"
+import { ArrowLeft, Loader2, BookOpen, FileText, Users, Calendar, CheckCircle2, Clock, AlertTriangle, Award } from "lucide-react"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
@@ -33,6 +33,7 @@ interface Assignment {
   assignedAt: string
   deadline: string | null
   completedAt: string | null
+  certificateUrl?: string | null
 }
 
 const STATUS_META: Record<Assignment["status"], { label: string; icon: typeof Clock; className: string }> = {
@@ -211,6 +212,7 @@ export default function LearningPlanDetailPage({
                           <th className="px-4 py-3">Статус</th>
                           <th className="px-4 py-3">Дедлайн</th>
                           <th className="px-4 py-3">Назначено</th>
+                          <th className="px-4 py-3 text-right">Сертификат</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border">
@@ -239,6 +241,20 @@ export default function LearningPlanDetailPage({
                               </td>
                               <td className="px-4 py-3 text-xs text-muted-foreground">
                                 {new Date(a.assignedAt).toLocaleDateString("ru-RU")}
+                              </td>
+                              <td className="px-4 py-3 text-right">
+                                {a.status === "completed" && a.certificateUrl ? (
+                                  <Link
+                                    href={a.certificateUrl}
+                                    target="_blank"
+                                    className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline font-medium"
+                                  >
+                                    <Award className="w-3.5 h-3.5" />
+                                    Скачать сертификат
+                                  </Link>
+                                ) : (
+                                  <span className="text-xs text-muted-foreground">—</span>
+                                )}
                               </td>
                             </tr>
                           )

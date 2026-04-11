@@ -2,16 +2,26 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
-import { Plus, Lock, ChevronRight, ArrowLeft } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { Plus, Lock, ChevronRight, ArrowLeft, Loader2, Sparkles, ExternalLink } from "lucide-react"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { AiAssistantWidget } from "@/components/knowledge/ai-assistant-widget"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { useAuth } from "@/lib/auth"
 import { cn } from "@/lib/utils"
+import { toast } from "sonner"
+
+type WebsiteDocType =
+  | "privacy_policy"
+  | "offer"
+  | "cookie_policy"
+  | "consent"
+  | "user_agreement"
 
 const CREATE_ROLES = ["platform_admin", "platform_manager", "director", "hr_lead", "hr_manager"]
 
@@ -32,6 +42,7 @@ interface TypePill {
   emoji: string
   title: string
   href: string | null
+  generateType?: WebsiteDocType
 }
 
 interface Group {
@@ -79,12 +90,11 @@ const DEFAULT_GROUPS: Group[] = [
     emoji: "🌐",
     label: "Для сайта",
     items: [
-      { emoji: "🔒", title: "Политика конфиденциальности", href: null },
-      { emoji: "✉️", title: "Согласие на рассылку",         href: null },
-      { emoji: "🍪", title: "Cookie-политика",               href: null },
-      { emoji: "📜", title: "Пользовательское соглашение",   href: null },
-      { emoji: "📋", title: "Оферта",                        href: null },
-      { emoji: "↩️", title: "Условия возврата",              href: null },
+      { emoji: "🔒", title: "Политика конфиденциальности", href: null, generateType: "privacy_policy" },
+      { emoji: "📋", title: "Оферта",                        href: null, generateType: "offer" },
+      { emoji: "🍪", title: "Cookie-политика",               href: null, generateType: "cookie_policy" },
+      { emoji: "✍️", title: "Согласие на обработку ПД",      href: null, generateType: "consent" },
+      { emoji: "📜", title: "Пользовательское соглашение",   href: null, generateType: "user_agreement" },
     ],
   },
   {
@@ -201,8 +211,11 @@ function BlockTypesRow() {
 
 // ─── Pill ─────────────────────────────────────────────────────────────────
 
-function Pill({ item }: { item: TypePill }) {
-  const disabled = item.href === null
+function Pill({ item, onGenerate }: { item: TypePill; onGenerate?: (t: TypePill) => void }) {
+  const generatable = !!item.generateType
+  const hasLink = !!item.href
+  const disabled = !hasLink && !generatable
+
   const body = (
     <div
       className={cn(
@@ -214,6 +227,12 @@ function Pill({ item }: { item: TypePill }) {
     >
       <span className="text-xl leading-none">{item.emoji}</span>
       <span className="text-sm font-medium">{item.title}</span>
+      {generatable && (
+        <span className="ml-1 bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400 text-[10px] px-1.5 py-0.5 rounded-full font-medium inline-flex items-center gap-1">
+          <Sparkles className="size-2.5" />
+          AI
+        </span>
+      )}
       {disabled && (
         <span className="ml-1 bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400 text-[10px] px-1.5 py-0.5 rounded-full font-medium">
           Скоро
@@ -221,18 +240,89 @@ function Pill({ item }: { item: TypePill }) {
       )}
     </div>
   )
-  return disabled ? body : <Link href={item.href!}>{body}</Link>
+
+  if (hasLink) return <Link href={item.href!}>{body}</Link>
+  if (generatable) {
+    return (
+      <button type="button" onClick={() => onGenerate?.(item)}>
+        {body}
+      </button>
+    )
+  }
+  return body
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────
 
 export default function KnowledgeV2CreatePage() {
   const { role } = useAuth()
+  const router = useRouter()
   const canCreate = CREATE_ROLES.includes(role)
 
   // Local editable groups so custom types added via the modal show up on this
   // page until reload. Persistence is a follow-up task.
   const [groups, setGroups] = useState<Group[]>(DEFAULT_GROUPS)
+
+  // ── Website doc generation modal ───────────────────────────────────────
+  const [websiteDoc, setWebsiteDoc] = useState<TypePill | null>(null)
+  const [companyInn, setCompanyInn] = useState("")
+  const [contactEmail, setContactEmail] = useState("")
+  const [siteDomain, setSiteDomain] = useState("")
+  const [generating, setGenerating] = useState(false)
+  const [generated, setGenerated] = useState<{ articleId: string; title: string } | null>(null)
+
+  // Prefill company data
+  useEffect(() => {
+    fetch("/api/companies")
+      .then((r) => r.ok ? r.json() : null)
+      .then((d: { inn?: string | null; email?: string | null; website?: string | null } | null) => {
+        if (!d) return
+        if (d.inn) setCompanyInn(d.inn)
+        if (d.email) setContactEmail(d.email)
+        if (d.website) setSiteDomain(d.website)
+      })
+      .catch(() => {})
+  }, [])
+
+  function openWebsiteDoc(item: TypePill) {
+    setWebsiteDoc(item)
+    setGenerated(null)
+  }
+
+  function closeWebsiteDoc() {
+    setWebsiteDoc(null)
+    setGenerated(null)
+  }
+
+  async function handleGenerateWebsiteDoc() {
+    if (!websiteDoc?.generateType) return
+    setGenerating(true)
+    try {
+      const res = await fetch("/api/modules/knowledge/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: websiteDoc.generateType,
+          topic: `${websiteDoc.title} для ${siteDomain || "сайта компании"}`,
+          companyInn: companyInn.trim() || undefined,
+          contactEmail: contactEmail.trim() || undefined,
+          siteDomain: siteDomain.trim() || undefined,
+          websiteDoc: true,
+        }),
+      })
+      const data = await res.json() as { ok?: true; articleId?: string; title?: string; error?: string }
+      if (!res.ok || !data.articleId) {
+        toast.error(data.error || "Не удалось сгенерировать документ")
+        return
+      }
+      setGenerated({ articleId: data.articleId, title: data.title || websiteDoc.title })
+      toast.success("Черновик создан")
+    } catch {
+      toast.error("Ошибка сети")
+    } finally {
+      setGenerating(false)
+    }
+  }
 
   // Custom-type modal state
   const [customOpen, setCustomOpen] = useState(false)
@@ -356,7 +446,7 @@ export default function KnowledgeV2CreatePage() {
                     </div>
                     <div className="flex flex-wrap gap-3">
                       {group.items.map((item) => (
-                        <Pill key={`${group.label}-${item.title}`} item={item} />
+                        <Pill key={`${group.label}-${item.title}`} item={item} onGenerate={openWebsiteDoc} />
                       ))}
                       <button
                         type="button"
@@ -383,6 +473,100 @@ export default function KnowledgeV2CreatePage() {
           </div>
         </div>
       </SidebarInset>
+
+      {/* Website doc generation dialog */}
+      <Dialog open={!!websiteDoc} onOpenChange={(open) => { if (!open) closeWebsiteDoc() }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <span className="text-xl">{websiteDoc?.emoji}</span>
+              {websiteDoc?.title}
+            </DialogTitle>
+          </DialogHeader>
+
+          {!generated ? (
+            <div className="space-y-4">
+              <p className="text-xs text-muted-foreground">
+                Документ генерируется AI по мастер-шаблону. После создания — проверьте и отредактируйте в редакторе.
+                Рекомендуем показать юристу перед публикацией.
+              </p>
+
+              <div className="space-y-2">
+                <Label htmlFor="doc-inn" className="text-sm">ИНН компании</Label>
+                <Input
+                  id="doc-inn"
+                  value={companyInn}
+                  onChange={(e) => setCompanyInn(e.target.value)}
+                  placeholder="7700000000"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="doc-email" className="text-sm">Email для обращений</Label>
+                <Input
+                  id="doc-email"
+                  type="email"
+                  value={contactEmail}
+                  onChange={(e) => setContactEmail(e.target.value)}
+                  placeholder="privacy@example.ru"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="doc-domain" className="text-sm">Домен сайта</Label>
+                <Input
+                  id="doc-domain"
+                  value={siteDomain}
+                  onChange={(e) => setSiteDomain(e.target.value)}
+                  placeholder="example.ru"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <Button variant="outline" onClick={closeWebsiteDoc} disabled={generating}>
+                  Отмена
+                </Button>
+                <Button onClick={handleGenerateWebsiteDoc} disabled={generating}>
+                  {generating ? (
+                    <Loader2 className="size-4 mr-2 animate-spin" />
+                  ) : (
+                    <Sparkles className="size-4 mr-2" />
+                  )}
+                  Сгенерировать
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 dark:border-emerald-900/50 dark:bg-emerald-900/20 p-4">
+                <p className="text-sm font-medium text-emerald-800 dark:text-emerald-300">
+                  Черновик создан
+                </p>
+                <p className="text-xs text-emerald-700 dark:text-emerald-400 mt-1 mb-2">
+                  {generated.title}
+                </p>
+                <p className="text-[11px] text-amber-700 dark:text-amber-400 italic">
+                  ⚠️ Сгенерировано AI. Рекомендуем проверку юристом.
+                </p>
+              </div>
+
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={closeWebsiteDoc}>
+                  Закрыть
+                </Button>
+                <Button
+                  onClick={() => {
+                    router.push(`/knowledge-v2/editor?id=${generated.articleId}&type=article`)
+                  }}
+                >
+                  <ExternalLink className="size-4 mr-2" />
+                  Открыть в редакторе
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Custom type dialog */}
       <Dialog

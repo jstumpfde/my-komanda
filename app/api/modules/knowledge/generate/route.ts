@@ -20,12 +20,20 @@ export type DocType =
   | "privacy_policy"
   | "offer"
   | "cookie_policy"
+  | "consent"
+  | "user_agreement"
 
 interface GenerateRequest {
   type: DocType
   topic: string
   department?: string
   audience?: string
+  // Для документов «Для сайта» — реквизиты компании, подставляются в шаблон
+  companyInn?: string
+  contactEmail?: string
+  siteDomain?: string
+  // Если true → материал сохраняется с тегом "website" в дополнение к типу
+  websiteDoc?: boolean
 }
 
 const CLAUDE_MODEL = "claude-sonnet-4-20250514"
@@ -154,6 +162,35 @@ const DOC_TEMPLATES: Record<DocType, { label: string; prompt: string }> = {
 
 ⚠️ В конец добавь дисклеймер: «Документ сгенерирован AI. Рекомендуем проверку юристом перед публикацией.»`,
   },
+  consent: {
+    label: "Согласие на обработку ПД",
+    prompt: `Создай форму согласия на обработку персональных данных по ФЗ-152. Структура:
+1. Субъект персональных данных (ФИО, паспортные данные, место прописки)
+2. Оператор (наименование компании, ИНН, юридический адрес, контакты)
+3. Перечень персональных данных, обрабатываемых с согласия
+4. Цели обработки (конкретный перечень)
+5. Перечень действий с персональными данными (сбор, хранение, передача и т.п.)
+6. Срок действия согласия и условия его отзыва
+7. Способ отзыва согласия (письмо на email/почтовый адрес)
+8. Подпись и дата
+
+⚠️ В конец добавь дисклеймер: «Документ сгенерирован AI. Рекомендуем проверку юристом перед публикацией.»`,
+  },
+  user_agreement: {
+    label: "Пользовательское соглашение",
+    prompt: `Создай пользовательское соглашение для сайта / сервиса. Структура:
+1. Термины и определения
+2. Предмет соглашения
+3. Права и обязанности сторон
+4. Условия использования сервиса (правила, запреты)
+5. Ответственность сторон
+6. Интеллектуальная собственность
+7. Изменение условий соглашения
+8. Порядок разрешения споров
+9. Реквизиты и контакты оператора
+
+⚠️ В конец добавь дисклеймер: «Документ сгенерирован AI. Рекомендуем проверку юристом перед публикацией.»`,
+  },
 }
 
 const BASE_SYSTEM =
@@ -214,6 +251,9 @@ export async function POST(req: NextRequest) {
     const contextBits: string[] = [`Тема: ${topic}`]
     if (body.department) contextBits.push(`Отдел: ${body.department}`)
     if (body.audience) contextBits.push(`Целевая аудитория: ${body.audience}`)
+    if (body.companyInn) contextBits.push(`ИНН компании: ${body.companyInn}`)
+    if (body.contactEmail) contextBits.push(`Email для обращений: ${body.contactEmail}`)
+    if (body.siteDomain) contextBits.push(`Домен сайта: ${body.siteDomain}`)
 
     const userMessage = `${template.prompt}\n\n${contextBits.join("\n")}`
 
@@ -250,6 +290,18 @@ export async function POST(req: NextRequest) {
     const title = extractTitle(content, `${template.label}: ${topic}`)
     const excerpt = content.replace(/[#*`>_-]/g, "").trim().slice(0, 300)
 
+    // Для документов «Для сайта» — тег website в дополнение к типу.
+    // Авто-детект по type если websiteDoc явно не передан.
+    const WEBSITE_TYPES = new Set<DocType>([
+      "privacy_policy",
+      "offer",
+      "cookie_policy",
+      "consent",
+      "user_agreement",
+    ])
+    const isWebsiteDoc = body.websiteDoc === true || WEBSITE_TYPES.has(type)
+    const tags = isWebsiteDoc ? [type, "website"] : [type]
+
     const [article] = await db
       .insert(knowledgeArticles)
       .values({
@@ -261,7 +313,7 @@ export async function POST(req: NextRequest) {
         authorId: user.id,
         status: "draft",
         audience: body.audience ? [body.audience] : ["employees"],
-        tags: [type],
+        tags,
         reviewCycle: "none",
       })
       .returning({ id: knowledgeArticles.id, title: knowledgeArticles.title })

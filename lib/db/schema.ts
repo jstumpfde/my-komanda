@@ -1328,6 +1328,8 @@ export const learningAssignments = pgTable("learning_assignments", {
   assignedAt:  timestamp("assigned_at").defaultNow(),
   deadline:    timestamp("deadline"),
   completedAt: timestamp("completed_at"),
+  // URL публичной страницы сертификата (см. app/certificate/[assignmentId])
+  certificateUrl: text("certificate_url"),
 })
 
 // ─── Vacancy Demos ──────────────────────────────────────────────────────────
