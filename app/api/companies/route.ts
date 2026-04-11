@@ -134,12 +134,14 @@ export async function PUT(req: NextRequest) {
     if (body.trainer !== undefined) fieldMap.trainer = body.trainer
     if (body.sales_manager_type !== undefined) fieldMap.salesManagerType = body.sales_manager_type
     if (body.is_multi_product !== undefined) fieldMap.isMultiProduct = body.is_multi_product
-    if (body.logo_url !== undefined) fieldMap.logoUrl = body.logo_url
+    // Пустая строка → null (nullable колонки). Клиент отправляет ""
+    // для очистки, undefined — чтобы поле не трогалось вообще.
+    if (body.logo_url !== undefined) fieldMap.logoUrl = body.logo_url === "" ? null : body.logo_url
     if (body.brand_primary_color !== undefined) fieldMap.brandPrimaryColor = body.brand_primary_color
     if (body.brand_bg_color !== undefined) fieldMap.brandBgColor = body.brand_bg_color
     if (body.brand_text_color !== undefined) fieldMap.brandTextColor = body.brand_text_color
-    if (body.brand_name !== undefined) fieldMap.brandName = body.brand_name
-    if (body.brand_slogan !== undefined) fieldMap.brandSlogan = body.brand_slogan
+    if (body.brand_name !== undefined) fieldMap.brandName = body.brand_name === "" ? null : body.brand_name
+    if (body.brand_slogan !== undefined) fieldMap.brandSlogan = body.brand_slogan === "" ? null : body.brand_slogan
     if (body.ogrn !== undefined) fieldMap.ogrn = body.ogrn
     if (body.full_name !== undefined) fieldMap.fullName = body.full_name
     if (body.director !== undefined) fieldMap.director = body.director

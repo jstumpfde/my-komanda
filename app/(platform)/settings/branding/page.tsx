@@ -59,16 +59,17 @@ export default function BrandingPage() {
       if (!c) return
       // Принимаем оба варианта именования — camelCase (из drizzle) и
       // snake_case (на случай если API внезапно сменит конвенцию).
-      const brandNameVal = (c.brandName ?? c.brand_name) as string | undefined
-      const brandSloganVal = (c.brandSlogan ?? c.brand_slogan) as string | undefined
+      const brandNameVal = (c.brandName ?? c.brand_name ?? "") as string
+      const brandSloganVal = (c.brandSlogan ?? c.brand_slogan ?? "") as string
       const logoUrlVal = (c.logoUrl ?? c.logo_url) as string | undefined
       const customThemeVal = (c.customTheme ?? c.custom_theme) as
         | Record<string, { enabled?: boolean }>
         | undefined
 
-      if (brandNameVal) setBrandName(brandNameVal)
-      else if (c.name) setBrandName(c.name as string)
-      if (brandSloganVal) setBrandSlogan(brandSloganVal)
+      // ТОЛЬКО brand_name / brand_slogan, без fallback на company.name/fullName.
+      // Пусто — значит пусто, пользователь должен ввести явно.
+      setBrandName(brandNameVal)
+      setBrandSlogan(brandSloganVal)
       if (logoUrlVal) setLogoPreview(logoUrlVal)
       if (c.subdomain) setSubdomain(c.subdomain as string)
       if (customThemeVal) {
@@ -123,19 +124,44 @@ export default function BrandingPage() {
     if (file.size > 2 * 1024 * 1024) { toast.error("Максимум 2 МБ"); return }
     const ext = file.name.split(".").pop()?.toLowerCase() ?? ""
     if (!["png", "jpg", "jpeg", "svg", "webp"].includes(ext)) { toast.error("PNG, SVG, JPG или WebP"); return }
+
+    // Оптимистичный предпросмотр (base64) — чтобы показать картинку сразу
     const reader = new FileReader()
     reader.onload = () => setLogoPreview(reader.result as string)
     reader.readAsDataURL(file)
+
     setUploadingLogo(true)
     try {
-      const fd = new FormData(); fd.append("file", file)
+      const fd = new FormData()
+      fd.append("file", file)
       const res = await fetch("/api/upload/logo", { method: "POST", body: fd })
-      if (!res.ok) throw new Error("Ошибка загрузки")
-      const { logoUrl } = await res.json()
-      setLogoPreview(logoUrl)
+      const data = await res.json().catch(() => ({})) as { logoUrl?: string; error?: string }
+
+      if (!res.ok) {
+        // Показываем точную ошибку с сервера, а не общую
+        const msg = data.error || `HTTP ${res.status}`
+        console.error("[uploadLogoFile] server error", res.status, data)
+        toast.error(msg)
+        return
+      }
+      if (!data.logoUrl) {
+        toast.error("Сервер не вернул URL логотипа")
+        return
+      }
+
+      setLogoPreview(data.logoUrl)
       toast.success("Логотип загружен")
-    } catch (e) { toast.error(e instanceof Error ? e.message : "Ошибка") }
-    finally { setUploadingLogo(false) }
+
+      // Сервер уже обновил БД — дёрнем sidebar чтобы подхватил новый лого
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("company-updated"))
+      }
+    } catch (e) {
+      console.error("[uploadLogoFile] network error", e)
+      toast.error(e instanceof Error ? e.message : "Ошибка сети")
+    } finally {
+      setUploadingLogo(false)
+    }
   }
 
   const verifyDomain = async () => {
@@ -158,14 +184,15 @@ export default function BrandingPage() {
   }
 
   // Отдельный save для блока «Логотип + Название + Слоган» — не трогает
-  // темы и поддомен, только брендинг-поля.
+  // темы и поддомен, только брендинг-поля. Пустые строки отправляем как "",
+  // чтобы очистка поля работала (а не игнорировалась на сервере).
   const handleBrandBlockSave = async () => {
     setSaving(true)
     try {
       await updateCompanyApi({
-        logo_url: logoPreview || undefined,
-        brand_name: brandName || undefined,
-        brand_slogan: brandSlogan || undefined,
+        logo_url: logoPreview ?? "",
+        brand_name: brandName,
+        brand_slogan: brandSlogan,
       })
       saveBrand({ logoUrl: logoPreview, companyName: brandName })
       toast.success("Сохранено")
@@ -188,9 +215,9 @@ export default function BrandingPage() {
         THEME_KEYS.map(k => [k, { enabled: themeEnabled[k], colors: THEME_PRESETS[k].colors }])
       )
       await updateCompanyApi({
-        logo_url: logoPreview || undefined,
-        brand_name: brandName || undefined,
-        brand_slogan: brandSlogan || undefined,
+        logo_url: logoPreview ?? "",
+        brand_name: brandName,
+        brand_slogan: brandSlogan,
         subdomain: clean || undefined,
         custom_theme: customTheme as Record<string, unknown>,
       })

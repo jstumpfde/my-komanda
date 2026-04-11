@@ -3,39 +3,93 @@ import { auth } from "@/auth"
 import { db } from "@/lib/db"
 import { companies } from "@/lib/db/schema"
 import { eq } from "drizzle-orm"
-import { writeFile, mkdir } from "fs/promises"
+import { writeFile } from "fs/promises"
+import { mkdirSync, existsSync } from "fs"
 import path from "path"
 
 export async function POST(req: NextRequest) {
-  const session = await auth()
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  if (!session.user.companyId) return NextResponse.json({ error: "No company" }, { status: 403 })
+  try {
+    const session = await auth()
+    if (!session?.user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+    if (!session.user.companyId) {
+      return NextResponse.json({ error: "No company" }, { status: 403 })
+    }
 
-  const formData = await req.formData()
-  const file = formData.get("file") as File | null
-  if (!file) return NextResponse.json({ error: "Файл не найден" }, { status: 400 })
-  if (file.size > 2 * 1024 * 1024) return NextResponse.json({ error: "Файл слишком большой (макс 2МБ)" }, { status: 400 })
+    // Parse multipart — если content-type не multipart, .formData() кинет
+    // внятную ошибку, её ловим в общем catch ниже
+    const formData = await req.formData()
+    const file = formData.get("file")
+    if (!(file instanceof Blob)) {
+      console.error("[upload/logo] no file in form data")
+      return NextResponse.json({ error: "Файл не найден в поле 'file'" }, { status: 400 })
+    }
 
-  const ext = file.name.split(".").pop()?.toLowerCase() ?? "png"
-  const allowedExts = ["png", "jpg", "jpeg", "svg", "webp"]
-  if (!allowedExts.includes(ext)) return NextResponse.json({ error: "Формат не поддерживается" }, { status: 400 })
+    const filename0 = (file as File).name ?? "logo"
+    if (file.size > 2 * 1024 * 1024) {
+      return NextResponse.json({ error: "Файл слишком большой (макс 2МБ)" }, { status: 400 })
+    }
 
-  const bytes = await file.arrayBuffer()
-  const buffer = Buffer.from(bytes)
+    const ext = filename0.split(".").pop()?.toLowerCase() ?? "png"
+    const allowedExts = ["png", "jpg", "jpeg", "svg", "webp"]
+    if (!allowedExts.includes(ext)) {
+      return NextResponse.json({ error: `Формат .${ext} не поддерживается. Разрешены: ${allowedExts.join(", ")}` }, { status: 400 })
+    }
 
-  const dir = path.join(process.cwd(), "public", "uploads", "logos")
-  await mkdir(dir, { recursive: true })
+    const bytes = await file.arrayBuffer()
+    const buffer = Buffer.from(bytes)
 
-  const filename = `${session.user.companyId}.${ext}`
-  const filepath = path.join(dir, filename)
-  await writeFile(filepath, buffer)
+    // Директория — на проде (standalone build) public не writable. Используем
+    // cwd/public/uploads/logos и создаём рекурсивно. На проде Timeweb это
+    // путь к смонтированному тому.
+    const dir = path.join(process.cwd(), "public", "uploads", "logos")
+    try {
+      if (!existsSync(dir)) {
+        mkdirSync(dir, { recursive: true })
+      }
+    } catch (mkErr) {
+      console.error("[upload/logo] mkdir failed", { dir, error: mkErr })
+      return NextResponse.json(
+        { error: `Не удалось создать папку для загрузки: ${(mkErr as Error).message}` },
+        { status: 500 },
+      )
+    }
 
-  const logoUrl = `/uploads/logos/${filename}`
+    const safeFilename = `${session.user.companyId}.${ext}`
+    const filepath = path.join(dir, safeFilename)
 
-  await db
-    .update(companies)
-    .set({ logoUrl, updatedAt: new Date() })
-    .where(eq(companies.id, session.user.companyId))
+    try {
+      await writeFile(filepath, buffer)
+    } catch (writeErr) {
+      console.error("[upload/logo] writeFile failed", { filepath, error: writeErr })
+      return NextResponse.json(
+        { error: `Не удалось записать файл: ${(writeErr as Error).message}` },
+        { status: 500 },
+      )
+    }
 
-  return NextResponse.json({ logoUrl })
+    // Cache-buster в URL, чтобы браузер не показывал старую версию
+    const logoUrl = `/uploads/logos/${safeFilename}?v=${Date.now()}`
+
+    try {
+      await db
+        .update(companies)
+        .set({ logoUrl, updatedAt: new Date() })
+        .where(eq(companies.id, session.user.companyId))
+    } catch (dbErr) {
+      console.error("[upload/logo] DB update failed", dbErr)
+      return NextResponse.json(
+        { error: "Файл сохранён, но не удалось обновить БД" },
+        { status: 500 },
+      )
+    }
+
+    console.log("[upload/logo] success", { companyId: session.user.companyId, logoUrl, size: file.size })
+    return NextResponse.json({ logoUrl })
+  } catch (err) {
+    console.error("[upload/logo] unexpected error", err)
+    const message = err instanceof Error ? err.message : "Unknown error"
+    return NextResponse.json({ error: `Ошибка загрузки: ${message}` }, { status: 500 })
+  }
 }
