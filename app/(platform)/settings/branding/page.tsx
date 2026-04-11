@@ -157,6 +157,29 @@ export default function BrandingPage() {
     setThemeEnabled(prev => ({ ...prev, [key]: enabled }))
   }
 
+  // Отдельный save для блока «Логотип + Название + Слоган» — не трогает
+  // темы и поддомен, только брендинг-поля.
+  const handleBrandBlockSave = async () => {
+    setSaving(true)
+    try {
+      await updateCompanyApi({
+        logo_url: logoPreview || undefined,
+        brand_name: brandName || undefined,
+        brand_slogan: brandSlogan || undefined,
+      })
+      saveBrand({ logoUrl: logoPreview, companyName: brandName })
+      toast.success("Сохранено")
+      await loadCompany()
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("company-updated"))
+      }
+    } catch {
+      toast.error("Не удалось сохранить")
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const handleSave = async () => {
     setSaving(true)
     try {
@@ -193,102 +216,102 @@ export default function BrandingPage() {
 
       <div className="space-y-4">
 
-        {/* ═══ Логотип ═══ */}
-        <Card>
-          <CardHeader className="pb-2 pt-4 px-5">
-            <CardTitle className="text-base flex items-center gap-2"><Upload className="w-4 h-4" />Логотип</CardTitle>
-          </CardHeader>
-          <CardContent className="px-5 pb-4 pt-0">
-            <div className="flex items-start gap-6">
-              {/* Upload area */}
-              <div
-                onDragOver={(e) => { e.preventDefault(); setIsDragging(true) }}
-                onDragLeave={() => setIsDragging(false)}
-                onDrop={(e) => { e.preventDefault(); setIsDragging(false); const f = e.dataTransfer.files?.[0]; if (f) uploadLogoFile(f) }}
-                onClick={() => canBrand && fileInputRef.current?.click()}
-                className={cn(
-                  "flex flex-col items-center justify-center gap-2 p-4 rounded-xl border-2 border-dashed transition-all w-40 h-32 shrink-0",
-                  canBrand ? "cursor-pointer hover:border-primary/40 hover:bg-muted/20" : "cursor-not-allowed opacity-60",
-                  isDragging && "border-primary bg-primary/5",
-                )}
-              >
-                <input ref={fileInputRef} type="file" accept=".png,.svg,.jpg,.jpeg,.webp" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadLogoFile(f) }} disabled={!canBrand} />
-                {uploadingLogo ? <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-                  : <Upload className="w-5 h-5 text-muted-foreground" />}
-                <p className="text-xs text-center text-muted-foreground">PNG, SVG, до 2 МБ</p>
-              </div>
+        {/* ═══ Логотип + Название + Слоган (объединённый блок) ═══ */}
+        <div className="rounded-xl border bg-card p-6 space-y-5">
+          <div className="flex items-center gap-2">
+            <Upload className="w-4 h-4 text-muted-foreground" />
+            <h3 className="text-base font-semibold">Логотип, название и слоган</h3>
+          </div>
 
-              {/* Preview area */}
-              <div className="flex items-center gap-4 flex-1 min-h-[128px]">
-                {logoPreview ? (
-                  <>
-                    <div className="flex items-start gap-4">
-                      <div className="flex flex-col items-center gap-1">
-                        <div className="w-10 h-10 rounded-lg border bg-muted/20 flex items-center justify-center overflow-hidden">
-                          <CompanyLogo logoUrl={logoPreview} companyName={brandName} size="md" rounded="md" />
-                        </div>
-                        <span className="text-[10px] text-muted-foreground">Sidebar</span>
+          {/* Логотип */}
+          <div className="flex items-start gap-6">
+            <div
+              onDragOver={(e) => { e.preventDefault(); setIsDragging(true) }}
+              onDragLeave={() => setIsDragging(false)}
+              onDrop={(e) => { e.preventDefault(); setIsDragging(false); const f = e.dataTransfer.files?.[0]; if (f) uploadLogoFile(f) }}
+              onClick={() => canBrand && fileInputRef.current?.click()}
+              className={cn(
+                "flex flex-col items-center justify-center gap-2 p-4 rounded-xl border-2 border-dashed transition-all w-40 h-32 shrink-0",
+                canBrand ? "cursor-pointer hover:border-primary/40 hover:bg-muted/20" : "cursor-not-allowed opacity-60",
+                isDragging && "border-primary bg-primary/5",
+              )}
+            >
+              <input ref={fileInputRef} type="file" accept=".png,.svg,.jpg,.jpeg,.webp" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadLogoFile(f) }} disabled={!canBrand} />
+              {uploadingLogo ? <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                : <Upload className="w-5 h-5 text-muted-foreground" />}
+              <p className="text-xs text-center text-muted-foreground">PNG, SVG, до 2 МБ</p>
+            </div>
+
+            <div className="flex items-center gap-4 flex-1 min-h-[128px]">
+              {logoPreview ? (
+                <>
+                  <div className="flex items-start gap-4">
+                    <div className="flex flex-col items-center gap-1">
+                      <div className="w-10 h-10 rounded-lg border bg-muted/20 flex items-center justify-center overflow-hidden">
+                        <CompanyLogo logoUrl={logoPreview} companyName={brandName} size="md" rounded="md" />
                       </div>
-                      <div className="flex flex-col items-center gap-1">
-                        <div className="w-[80px] h-[80px] rounded-xl border bg-muted/20 flex items-center justify-center overflow-hidden">
-                          <CompanyLogo logoUrl={logoPreview} companyName={brandName} size="lg" rounded="md" className="!w-[60px] !h-[60px]" />
-                        </div>
-                        <span className="text-[10px] text-muted-foreground">Вакансия</span>
-                      </div>
-                      <div className="flex flex-col items-center gap-1">
-                        <div className="w-8 h-8 rounded-md border bg-muted/20 flex items-center justify-center overflow-hidden">
-                          <CompanyLogo logoUrl={logoPreview} companyName={brandName} size="sm" rounded="sm" />
-                        </div>
-                        <span className="text-[10px] text-muted-foreground">Мобильный</span>
-                      </div>
+                      <span className="text-[10px] text-muted-foreground">Sidebar</span>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="gap-1.5 text-destructive h-7 text-xs self-start"
-                      onClick={() => { setLogoPreview(null); if (fileInputRef.current) fileInputRef.current.value = "" }}
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />Удалить
-                    </Button>
-                  </>
-                ) : (
-                  <p className="text-sm text-muted-foreground">Логотип не загружен</p>
-                )}
-              </div>
+                    <div className="flex flex-col items-center gap-1">
+                      <div className="w-[80px] h-[80px] rounded-xl border bg-muted/20 flex items-center justify-center overflow-hidden">
+                        <CompanyLogo logoUrl={logoPreview} companyName={brandName} size="lg" rounded="md" className="!w-[60px] !h-[60px]" />
+                      </div>
+                      <span className="text-[10px] text-muted-foreground">Вакансия</span>
+                    </div>
+                    <div className="flex flex-col items-center gap-1">
+                      <div className="w-8 h-8 rounded-md border bg-muted/20 flex items-center justify-center overflow-hidden">
+                        <CompanyLogo logoUrl={logoPreview} companyName={brandName} size="sm" rounded="sm" />
+                      </div>
+                      <span className="text-[10px] text-muted-foreground">Мобильный</span>
+                    </div>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="gap-1.5 text-destructive h-7 text-xs self-start"
+                    onClick={() => { setLogoPreview(null); if (fileInputRef.current) fileInputRef.current.value = "" }}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />Удалить
+                  </Button>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">Логотип не загружен</p>
+              )}
             </div>
-          </CardContent>
-        </Card>
+          </div>
 
-        {/* ═══ Название и слоган ═══ */}
-        <Card>
-          <CardHeader className="pb-2 pt-4 px-5">
-            <CardTitle className="text-base">Название и слоган</CardTitle>
-          </CardHeader>
-          <CardContent className="px-5 pb-4 pt-0 space-y-3">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label className="text-sm">Название бренда</Label>
-                <Input
-                  value={brandName}
-                  onChange={e => setBrandName(e.target.value)}
-                  placeholder="Ромашка"
-                  className="h-9 text-sm"
-                />
-                <p className="text-xs text-muted-foreground">Отображается на публичных страницах</p>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-sm">Слоган</Label>
-                <Input
-                  value={brandSlogan}
-                  onChange={e => setBrandSlogan(e.target.value)}
-                  placeholder="Нанимаем лучших"
-                  className="h-9 text-sm"
-                />
-                <p className="text-xs text-muted-foreground">Короткая фраза под логотипом</p>
-              </div>
+          {/* Название + Слоган в одну строку */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label className="text-sm">Название бренда</Label>
+              <Input
+                value={brandName}
+                onChange={e => setBrandName(e.target.value)}
+                placeholder="Ромашка"
+                className="h-9 text-sm"
+              />
+              <p className="text-xs text-muted-foreground">Отображается на публичных страницах</p>
             </div>
-          </CardContent>
-        </Card>
+            <div className="space-y-1.5">
+              <Label className="text-sm">Слоган</Label>
+              <Input
+                value={brandSlogan}
+                onChange={e => setBrandSlogan(e.target.value)}
+                placeholder="Нанимаем лучших"
+                className="h-9 text-sm"
+              />
+              <p className="text-xs text-muted-foreground">Короткая фраза под логотипом</p>
+            </div>
+          </div>
+
+          {/* Сохранить внутри блока */}
+          <div className="flex justify-end pt-1 border-t border-border/40 -mx-6 px-6 -mb-6 pb-4 pt-4 mt-2">
+            <Button size="sm" onClick={handleBrandBlockSave} disabled={saving} className="gap-1.5">
+              {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+              Сохранить
+            </Button>
+          </div>
+        </div>
 
         {/* ═══ Темы платформы ═══ */}
         <Card>
@@ -427,11 +450,11 @@ export default function BrandingPage() {
           </CardContent>
         </Card>
 
-        {/* ═══ Сохранить ═══ */}
+        {/* ═══ Сохранить темы и домен ═══ */}
         <div className="flex justify-end pb-4">
-          <Button className="gap-2" onClick={handleSave} disabled={saving}>
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-            {saving ? "Сохранение..." : "Сохранить брендинг"}
+          <Button size="sm" className="gap-2" onClick={handleSave} disabled={saving}>
+            {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+            {saving ? "Сохранение..." : "Сохранить темы и домен"}
           </Button>
         </div>
       </div>

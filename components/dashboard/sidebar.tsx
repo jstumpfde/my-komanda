@@ -67,6 +67,7 @@ const SLUG_TO_MODULE_ID: Partial<Record<string, ModuleId>> = {
 const MODULE_SHORT: Record<ModuleId, string> = {
   hr:        'HR',
   knowledge: 'БЗ',
+  learning:  'ОБУ',
   tasks:     'ЗДЧ',
   marketing: 'МКТ',
   sales:     'ПРД',
@@ -79,6 +80,7 @@ const MODULE_SHORT: Record<ModuleId, string> = {
 const MODULE_COLORS: Record<ModuleId, string> = {
   hr:        'text-blue-500',
   knowledge: 'text-amber-500',
+  learning:  'text-violet-500',
   tasks:     'text-sky-500',
   marketing: 'text-purple-500',
   sales:     'text-emerald-500',
@@ -90,6 +92,7 @@ const MODULE_COLORS: Record<ModuleId, string> = {
 const MODULE_BG_COLORS: Record<ModuleId, string> = {
   hr:        'bg-blue-500/10',
   knowledge: 'bg-amber-500/10',
+  learning:  'bg-violet-500/10',
   tasks:     'bg-sky-500/10',
   marketing: 'bg-purple-500/10',
   sales:     'bg-emerald-500/10',
@@ -101,6 +104,7 @@ const MODULE_BG_COLORS: Record<ModuleId, string> = {
 const MODULE_BORDER_COLORS: Record<ModuleId, string> = {
   hr:        '#3b82f6',
   knowledge: '#f59e0b',
+  learning:  '#8b5cf6',
   tasks:     '#0ea5e9',
   marketing: '#a855f7',
   sales:     '#10b981',
@@ -183,7 +187,7 @@ export function DashboardSidebar() {
   }, [pathname])
 
   // Active modules fetched from API
-  const [activeModules, setActiveModules] = useState<ModuleId[]>(['hr', 'knowledge', 'tasks', 'sales'])
+  const [activeModules, setActiveModules] = useState<ModuleId[]>(['hr', 'knowledge', 'learning', 'tasks', 'sales'])
   useEffect(() => {
     fetch('/api/tenant/modules')
       .then(r => r.json())
@@ -196,7 +200,7 @@ export function DashboardSidebar() {
             .map(m => SLUG_TO_MODULE_ID[m.slug])
             .filter((id): id is ModuleId => !!id)
         ))
-        if (ids.length > 0) setActiveModules([...ids, ...(['knowledge', 'sales'] as ModuleId[]).filter(k => !ids.includes(k))])
+        if (ids.length > 0) setActiveModules([...ids, ...(['knowledge', 'learning', 'sales'] as ModuleId[]).filter(k => !ids.includes(k))])
       })
       .catch(() => { /* keep default */ })
   }, [])
