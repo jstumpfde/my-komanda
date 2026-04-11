@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/dialog"
 import {
   Target, Loader2, Phone, Headphones, UserCheck, ChevronRight, Plus, X,
+  MessageCircle, Volume2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
@@ -294,10 +295,21 @@ export default function TrainingListPage() {
 
                       <h3 className="font-semibold text-sm mb-1 line-clamp-2">{s.title}</h3>
                       {s.description && (
-                        <p className="text-xs text-muted-foreground line-clamp-3 mb-4 flex-1">
+                        <p className="text-xs text-muted-foreground line-clamp-3 mb-3 flex-1">
                           {s.description}
                         </p>
                       )}
+
+                      <div className="flex items-center gap-1.5 mb-3 flex-wrap">
+                        <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground bg-muted rounded-full px-2 py-0.5">
+                          <MessageCircle className="size-3" />
+                          Чат
+                        </span>
+                        <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground bg-muted rounded-full px-2 py-0.5">
+                          <Volume2 className="size-3" />
+                          Голос
+                        </span>
+                      </div>
 
                       <Link href={`/knowledge-v2/training/${s.id}`}>
                         <Button className="w-full gap-1.5" size="sm">
@@ -445,6 +457,17 @@ export default function TrainingListPage() {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+
+            {/* Info: режимы тренировки */}
+            <div className="bg-muted rounded-lg p-3 flex items-start gap-2.5">
+              <div className="flex items-center gap-1 shrink-0 mt-0.5">
+                <MessageCircle className="size-4 text-muted-foreground" />
+                <Volume2 className="size-4 text-muted-foreground" />
+              </div>
+              <p className="text-xs text-muted-foreground leading-snug">
+                После создания сценария вы сможете тренироваться в текстовом чате или в голосовом режиме — как настоящий звонок.
+              </p>
             </div>
 
             <div className="flex justify-end gap-2 pt-2">

@@ -2,7 +2,7 @@
 import Image from "next/image"
 
 import { useState, useRef, useEffect } from "react"
-import { MessageCircle, X, Send, Loader2, Mic, Square, Maximize2, Minimize2, BookmarkPlus, Check } from "lucide-react"
+import { MessageCircle, X, Send, Loader2, Mic, Square, Maximize2, Minimize2, BookmarkPlus, Check, Volume2, VolumeX } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -248,6 +248,71 @@ export function AiAssistantWidget() {
   const [savingId, setSavingId] = useState<string | null>(null)
   const [isRecording, setIsRecording] = useState(false)
   const [hasSpeech, setHasSpeech] = useState(false)
+
+  // ── TTS (озвучка ответов Ненси) ─────────────────────────────────────────
+  const [ttsEnabled, setTtsEnabled] = useState(false)
+  const [isSpeaking, setIsSpeaking] = useState(false)
+  const ruVoiceRef = useRef<SpeechSynthesisVoice | null>(null)
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return
+    const pickVoice = () => {
+      const voices = window.speechSynthesis.getVoices()
+      const ru = voices.filter((v) => v.lang && v.lang.toLowerCase().startsWith("ru"))
+      const female =
+        ru.find((v) => /milena|irina|katya|alena|anna|женск|female/i.test(v.name)) ??
+        ru[0] ??
+        null
+      ruVoiceRef.current = female
+    }
+    pickVoice()
+    window.speechSynthesis.addEventListener("voiceschanged", pickVoice)
+    return () => {
+      window.speechSynthesis.removeEventListener("voiceschanged", pickVoice)
+      window.speechSynthesis.cancel()
+    }
+  }, [])
+
+  const speakText = (text: string) => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return
+    try {
+      window.speechSynthesis.cancel()
+      // Убираем markdown чтобы озвучка не читала звёздочки и решётки
+      const clean = text
+        .replace(/\*\*([^*]+)\*\*/g, "$1")
+        .replace(/\*([^*]+)\*/g, "$1")
+        .replace(/^#+\s+/gm, "")
+        .replace(/`([^`]+)`/g, "$1")
+        .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+      const utter = new SpeechSynthesisUtterance(clean)
+      utter.lang = "ru-RU"
+      utter.rate = 1.0
+      utter.pitch = 1.0
+      if (ruVoiceRef.current) utter.voice = ruVoiceRef.current
+      utter.onstart = () => setIsSpeaking(true)
+      utter.onend = () => setIsSpeaking(false)
+      utter.onerror = () => setIsSpeaking(false)
+      window.speechSynthesis.speak(utter)
+    } catch (err) {
+      console.error("[ai-assistant] tts failed", err)
+      setIsSpeaking(false)
+    }
+  }
+
+  const stopSpeaking = () => {
+    if (typeof window === "undefined") return
+    window.speechSynthesis.cancel()
+    setIsSpeaking(false)
+  }
+
+  const toggleTts = () => {
+    if (ttsEnabled) {
+      stopSpeaking()
+      setTtsEnabled(false)
+    } else {
+      setTtsEnabled(true)
+    }
+  }
   const scrollRef = useRef<HTMLDivElement>(null)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null)
@@ -366,6 +431,11 @@ export function AiAssistantWidget() {
         { id: `a-${Date.now()}`, role: "assistant", content: answer, cited },
       ])
 
+      // Озвучка если включено
+      if (ttsEnabled) {
+        speakText(answer)
+      }
+
       // 5. Log usage (fire-and-forget)
       if (data.usage) {
         void fetch("/api/ai/log", {
@@ -475,6 +545,30 @@ export function AiAssistantWidget() {
               <span className="font-semibold text-sm">Ненси — AI-ассистент</span>
             </div>
             <div className="flex items-center gap-1">
+              {isSpeaking && (
+                <button
+                  type="button"
+                  onClick={stopSpeaking}
+                  aria-label="Остановить озвучку"
+                  className="hover:opacity-80 transition-opacity p-1 rounded"
+                  title="Остановить озвучку"
+                >
+                  <Square className="w-4 h-4 fill-current" />
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={toggleTts}
+                aria-label={ttsEnabled ? "Выключить озвучку" : "Включить озвучку"}
+                title={ttsEnabled ? "Выключить озвучку" : "Включить озвучку"}
+                className={cn(
+                  "hover:opacity-80 transition-opacity p-1 rounded",
+                  ttsEnabled && "bg-white/15",
+                  isSpeaking && "animate-pulse",
+                )}
+              >
+                {ttsEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+              </button>
               <button
                 type="button"
                 onClick={() => setExpanded((v) => !v)}
@@ -485,7 +579,7 @@ export function AiAssistantWidget() {
               </button>
               <button
                 type="button"
-                onClick={() => { setOpen(false); setExpanded(false) }}
+                onClick={() => { setOpen(false); setExpanded(false); stopSpeaking() }}
                 aria-label="Закрыть"
                 className="hover:opacity-80 transition-opacity p-1 rounded"
               >

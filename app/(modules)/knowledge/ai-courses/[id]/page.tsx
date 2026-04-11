@@ -26,6 +26,7 @@ import {
   Type, Upload, Loader2, Save, RefreshCw, ExternalLink, Search, Trash2,
   CheckCircle2, FolderOpen, Coins, AlertCircle, Lock as LockIcon, Play, HardDrive,
   Cloud, Link as LinkIcon, HelpCircle,
+  FileSearch, ListTree, BookOpenCheck, ClipboardCheck, PartyPopper,
 } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
@@ -91,13 +92,22 @@ const TONE_OPTIONS = [
   { value: "casual",    label: "Разговорный" },
 ]
 
-const PROGRESS_STAGES = [
-  "Анализ материалов...",
-  "Создание структуры...",
-  "Генерация уроков...",
-  "Создание тестов...",
-  "Финализация...",
+interface GenerationStage {
+  label: string
+  icon: React.ComponentType<{ className?: string }>
+  durationMs: number
+}
+
+const PROGRESS_STAGE_DATA: GenerationStage[] = [
+  { label: "Анализирую источники...",   icon: FileSearch,     durationMs: 1500 },
+  { label: "Создаю структуру курса...", icon: ListTree,       durationMs: 2500 },
+  { label: "Генерирую уроки...",        icon: BookOpenCheck,  durationMs: 4000 },
+  { label: "Создаю тесты...",           icon: ClipboardCheck, durationMs: 2500 },
+  { label: "Финализирую...",            icon: Sparkles,       durationMs: 1000 },
 ]
+
+// Legacy alias — use the new data shape
+const PROGRESS_STAGES = PROGRESS_STAGE_DATA.map((s) => s.label)
 
 // Mock articles for picker
 const MOCK_ARTICLES: KnowledgeArticle[] = [
@@ -1007,29 +1017,127 @@ export default function AiCourseProjectPage() {
                 </div>
               )}
 
-              {/* STATE 2: Generating */}
+              {/* Keyframes — always mounted so STATE 3 popIn works after generating unmounts */}
+              <style dangerouslySetInnerHTML={{
+                __html: `
+                  @keyframes stageFadeIn {
+                    from { opacity: 0; transform: translateY(6px); }
+                    to   { opacity: 1; transform: translateY(0); }
+                  }
+                  @keyframes popIn {
+                    0%   { transform: scale(0.5); opacity: 0; }
+                    60%  { transform: scale(1.15); opacity: 1; }
+                    100% { transform: scale(1); opacity: 1; }
+                  }
+                `,
+              }} />
+
+              {/* STATE 2: Generating — staged animation */}
               {generating && (
                 <div className="p-6 flex flex-col items-center justify-center min-h-[400px] space-y-6">
                   <div className="text-center space-y-2">
-                    <Sparkles className="size-12 text-violet-500 mx-auto animate-pulse" />
+                    <div className="relative inline-block">
+                      <Sparkles className="size-12 text-violet-500 mx-auto animate-pulse" />
+                      <div className="absolute inset-0 size-12 rounded-full bg-violet-500/20 animate-ping" />
+                    </div>
                     <p className="font-semibold text-lg">AI генерирует курс</p>
-                    <p className="text-sm text-muted-foreground">{PROGRESS_STAGES[genStage]}</p>
                   </div>
-                  <div className="w-full max-w-sm">
-                    <div className="h-2.5 rounded-full bg-violet-100 overflow-hidden">
+
+                  {/* Staged checklist */}
+                  <div className="w-full max-w-md space-y-2">
+                    {PROGRESS_STAGE_DATA.map((stage, i) => {
+                      const StageIcon = stage.icon
+                      const isDone = i < genStage
+                      const isActive = i === genStage
+                      const isPending = i > genStage
+                      return (
+                        <div
+                          key={stage.label}
+                          className={cn(
+                            "flex items-center gap-3 rounded-lg border px-3 py-2.5 transition-all",
+                            isDone && "border-emerald-300 bg-emerald-50 dark:border-emerald-900/50 dark:bg-emerald-900/10",
+                            isActive && "border-violet-300 bg-violet-50 dark:border-violet-900/50 dark:bg-violet-900/10",
+                            isPending && "border-border bg-muted/20 opacity-50",
+                          )}
+                          style={
+                            isActive
+                              ? { animation: "stageFadeIn 400ms ease-out both" }
+                              : undefined
+                          }
+                        >
+                          <div
+                            className={cn(
+                              "shrink-0 size-8 rounded-full flex items-center justify-center",
+                              isDone && "bg-emerald-500 text-white",
+                              isActive && "bg-violet-500 text-white",
+                              isPending && "bg-muted text-muted-foreground",
+                            )}
+                          >
+                            {isDone ? (
+                              <CheckCircle2 className="size-4" />
+                            ) : isActive ? (
+                              <Loader2 className="size-4 animate-spin" />
+                            ) : (
+                              <StageIcon className="size-4" />
+                            )}
+                          </div>
+                          <span
+                            className={cn(
+                              "text-sm flex-1",
+                              isDone && "text-emerald-800 dark:text-emerald-300",
+                              isActive && "font-semibold text-foreground",
+                              isPending && "text-muted-foreground",
+                            )}
+                          >
+                            {stage.label}
+                          </span>
+                        </div>
+                      )
+                    })}
+                  </div>
+
+                  <div className="w-full max-w-md">
+                    <div className="h-2 rounded-full bg-violet-100 dark:bg-violet-900/30 overflow-hidden">
                       <div
                         className="h-full rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 transition-all duration-1000 ease-out"
                         style={{ width: `${genProgress}%` }}
                       />
                     </div>
-                    <p className="text-xs text-muted-foreground text-center mt-2">Это займёт 15-30 секунд</p>
+                    <p className="text-xs text-muted-foreground text-center mt-2">
+                      Это займёт 15-30 секунд
+                    </p>
                   </div>
                 </div>
+              )}
+
+              {/* STATE 2b: Just finished — success celebration flash */}
+              {!generating && result && !genError && (
+                <div
+                  className="hidden"
+                  aria-hidden
+                  // Используется как marker; реальная success-ячейка ниже в STATE 3
+                />
               )}
 
               {/* STATE 3: Result */}
               {!generating && result && (
                 <div className="p-6 space-y-5">
+                  <div
+                    className="rounded-xl border border-emerald-300 bg-gradient-to-br from-emerald-50 to-emerald-100/50 dark:from-emerald-900/20 dark:to-emerald-900/10 dark:border-emerald-900/50 p-5 text-center"
+                    style={{ animation: "popIn 500ms ease-out both" }}
+                  >
+                    <div className="inline-flex size-12 rounded-full bg-emerald-500 text-white items-center justify-center mb-2">
+                      <CheckCircle2 className="size-7" />
+                    </div>
+                    <p className="text-lg font-semibold text-emerald-900 dark:text-emerald-200 inline-flex items-center gap-2 justify-center">
+                      <PartyPopper className="size-5" />
+                      Курс готов!
+                    </p>
+                    <p className="text-xs text-emerald-700 dark:text-emerald-400 mt-1">
+                      Проверьте результат и опубликуйте в раздел «Обучение»
+                    </p>
+                  </div>
+
                   <div className="flex items-center justify-between">
                     <h2 className="text-sm font-semibold flex items-center gap-2">
                       <CheckCircle2 className="size-4 text-emerald-500" />

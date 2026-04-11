@@ -99,6 +99,42 @@ function formatRelative(iso: string | null): string {
   return d.toLocaleDateString("ru-RU", { day: "numeric", month: "short" })
 }
 
+// ─── CountUp animation ───────────────────────────────────────────────────────
+// Простой requestAnimationFrame-based счётчик без сторонних библиотек.
+// При смене `value` плавно анимирует от текущего отображаемого к новому.
+
+function useCountUp(target: number | null, durationMs: number = 1500): number {
+  const [display, setDisplay] = useState(0)
+  useEffect(() => {
+    if (target === null || target === undefined) return
+    const start = display
+    const delta = target - start
+    if (delta === 0) return
+    const startTime = performance.now()
+
+    let rafId = 0
+    const tick = (now: number) => {
+      const elapsed = now - startTime
+      const t = Math.min(1, elapsed / durationMs)
+      // ease-out cubic
+      const eased = 1 - Math.pow(1 - t, 3)
+      const current = Math.round(start + delta * eased)
+      setDisplay(current)
+      if (t < 1) rafId = requestAnimationFrame(tick)
+    }
+    rafId = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(rafId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target, durationMs])
+  return display
+}
+
+function CountUp({ value }: { value: number | null }) {
+  const display = useCountUp(value)
+  if (value === null) return <>…</>
+  return <>{display}</>
+}
+
 // ─── Page ───────────────────────────────────────────────────────────────────
 
 export default function KnowledgeDashboardPage() {
@@ -133,31 +169,37 @@ export default function KnowledgeDashboardPage() {
   const recent = stats?.recentUpdates ?? []
   const leaderboard = stats?.leaderboard ?? []
 
-  const metricCards = [
+  const metricCards: {
+    label: string
+    numericValue: number | null
+    sub: string
+    icon: typeof CheckCircle2
+    bg: string
+  }[] = [
     {
       label: "Изучено сотрудниками",
-      value: String(completed),
+      numericValue: stats ? completed : null,
       sub: `из ${totalAssigned} назначенных`,
       icon: CheckCircle2,
       bg: "bg-emerald-500",
     },
     {
       label: "В процессе изучения",
-      value: String(inProgress),
+      numericValue: stats ? inProgress : null,
       sub: "активных сейчас",
       icon: Clock,
       bg: "bg-purple-500",
     },
     {
       label: "Отстают",
-      value: String(overdue),
+      numericValue: stats ? overdue : null,
       sub: "не завершили вовремя",
       icon: AlertTriangle,
       bg: "bg-orange-500",
     },
     {
       label: "Требуют обновления",
-      value: String(needsUpdate),
+      numericValue: stats ? needsUpdate : null,
       sub: "устаревшие материалы",
       icon: FileWarning,
       bg: "bg-red-500",
@@ -191,7 +233,9 @@ export default function KnowledgeDashboardPage() {
                   <BookOpen className="w-4 h-4 text-white" />
                   <span className="text-sm font-semibold text-white">Всего материалов</span>
                 </div>
-                <p className="text-3xl font-bold text-white">{totalCount === null ? "…" : totalCount}</p>
+                <p className="text-3xl font-bold text-white tabular-nums">
+                  <CountUp value={totalCount} />
+                </p>
                 <p className="text-sm mt-1 text-white/90">в библиотеке</p>
               </div>
 
@@ -201,7 +245,9 @@ export default function KnowledgeDashboardPage() {
                     <m.icon className="w-4 h-4 text-white" />
                     <span className="text-sm font-semibold text-white">{m.label}</span>
                   </div>
-                  <p className="text-3xl font-bold text-white">{m.value}</p>
+                  <p className="text-3xl font-bold text-white tabular-nums">
+                    <CountUp value={m.numericValue} />
+                  </p>
                   <p className="text-sm mt-1 text-white/90">{m.sub}</p>
                 </div>
               ))}

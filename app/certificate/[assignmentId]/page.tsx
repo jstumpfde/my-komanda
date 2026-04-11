@@ -8,6 +8,7 @@ import {
   users,
 } from "@/lib/db/schema"
 import { auth } from "@/auth"
+import { Confetti } from "./confetti"
 
 // Public (tenant-gated) сертификат в HTML с @media print стилями.
 // Пользователь жмёт Ctrl/Cmd+P → «Сохранить как PDF». Никаких клиентских
@@ -71,6 +72,8 @@ export default async function CertificatePage({ params }: PageProps) {
 
   return (
     <div className="min-h-screen bg-slate-100 py-8 print:bg-white print:py-0">
+      <Confetti count={40} />
+
       {/* Print button (hidden on print) */}
       <div className="max-w-[900px] mx-auto mb-4 flex justify-end gap-2 print:hidden">
         <button
