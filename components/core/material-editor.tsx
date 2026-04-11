@@ -24,7 +24,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { AiAssistantWidget } from "@/components/knowledge/ai-assistant-widget"
 import {
   NotionEditor,
   type NotionEditorHandle,
@@ -44,8 +43,6 @@ import {
 export interface MaterialEditorProps {
   /** Back-link destination (used by header chevron and NotionEditor back) */
   backUrl: string
-  /** Render the "Ненси" AiAssistantWidget in the page corner */
-  showNancy?: boolean
   /** Render AI / File / OCR buttons in the top toolbar */
   showAiTools?: boolean
   /** Render the "Импорт" button + dialog (legacy parser) */
@@ -152,7 +149,6 @@ function markdownToLessons(md: string): Lesson[] {
 
 export function MaterialEditor({
   backUrl,
-  showNancy = false,
   showAiTools = false,
   showImport = true,
   showPreview = true,
@@ -768,7 +764,6 @@ export function MaterialEditor({
         </Dialog>
       )}
 
-      {showNancy && <AiAssistantWidget />}
     </>
   )
 }

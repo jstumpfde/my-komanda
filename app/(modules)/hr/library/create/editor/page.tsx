@@ -21,7 +21,6 @@ export default function EditorPage() {
           <DashboardHeader />
           <MaterialEditor
             backUrl="/hr/library"
-            showNancy={false}
             showAiTools={true}
           />
         </SidebarInset>

@@ -21,7 +21,6 @@ export default function EditorPage() {
           <DashboardHeader />
           <MaterialEditor
             backUrl="/knowledge-v2"
-            showNancy={true}
             showAiTools={true}
           />
         </SidebarInset>

@@ -30,7 +30,6 @@ function WorkshopContent() {
   return (
     <MaterialEditor
       backUrl={backUrlFor(from)}
-      showNancy={true}
       showAiTools={true}
     />
   )
