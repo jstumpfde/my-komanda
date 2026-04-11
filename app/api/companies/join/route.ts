@@ -3,6 +3,7 @@ import { eq, and } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { companies, users } from "@/lib/db/schema"
 import { auth } from "@/auth"
+import { triggerOnboarding } from "@/lib/knowledge/onboarding"
 
 // GET /api/companies/join?code=xxx — validate join code
 export async function GET(req: NextRequest) {
@@ -46,6 +47,13 @@ export async function POST(req: NextRequest) {
     .update(users)
     .set({ companyId: company.id, role: "employee" })
     .where(eq(users.id, session.user.id))
+
+  // After-insert hook: автоподбор плана обучения + приветствие в Telegram
+  try {
+    await triggerOnboarding(company.id, session.user.id)
+  } catch (err) {
+    console.error("[companies/join] onboarding trigger failed", err)
+  }
 
   return NextResponse.json({ ok: true, companyName: company.name })
 }

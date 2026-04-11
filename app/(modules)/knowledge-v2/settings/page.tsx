@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef, type DragEvent } from "react"
 import Link from "next/link"
 import {
   Loader2,
@@ -14,6 +14,13 @@ import {
   Search,
   Sparkles,
   HelpCircle,
+  GraduationCap,
+  Bell,
+  Camera,
+  Upload,
+  Copy as CopyIcon,
+  Save as SaveIcon,
+  X as XIcon,
 } from "lucide-react"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
@@ -21,6 +28,7 @@ import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 import {
   Select,
   SelectContent,
@@ -65,6 +73,26 @@ interface GapsResponse {
   items: GapItem[]
   total: number
   uniqueQuestions: number
+}
+
+interface ProgressRow {
+  assignmentId: string
+  userId: string
+  userName: string
+  userEmail: string
+  planId: string
+  planTitle: string
+  progress: number
+  deadline: string | null
+  status: "on_track" | "behind" | "overdue" | "completed"
+}
+
+interface ProgressResponse {
+  items: ProgressRow[]
+  total: number
+  behind: number
+  overdue: number
+  completed: number
 }
 
 type DocType =
@@ -122,6 +150,23 @@ export default function KnowledgeSettingsPage() {
   const [genResult, setGenResult] = useState<{ articleId: string; title: string } | null>(null)
   const [genOpen, setGenOpen] = useState(false)
 
+  // Progress (контроль обучения)
+  const [progressData, setProgressData] = useState<ProgressResponse | null>(null)
+  const [progressLoading, setProgressLoading] = useState(true)
+  const [progressSending, setProgressSending] = useState(false)
+  const [progressOpen, setProgressOpen] = useState(false)
+
+  // OCR
+  const [ocrOpen, setOcrOpen] = useState(false)
+  const [ocrRunning, setOcrRunning] = useState(false)
+  const [ocrSaving, setOcrSaving] = useState(false)
+  const [ocrText, setOcrText] = useState("")
+  const [ocrTitle, setOcrTitle] = useState("")
+  const [ocrFileName, setOcrFileName] = useState<string | null>(null)
+  const [ocrDragActive, setOcrDragActive] = useState(false)
+  const [ocrSaved, setOcrSaved] = useState<{ articleId: string; title: string } | null>(null)
+  const ocrInputRef = useRef<HTMLInputElement>(null)
+
   async function loadTelegram() {
     try {
       const res = await fetch("/api/modules/knowledge/telegram")
@@ -158,15 +203,29 @@ export default function KnowledgeSettingsPage() {
     }
   }
 
+  async function loadProgressData() {
+    try {
+      const res = await fetch("/api/modules/knowledge/progress")
+      if (res.ok) {
+        const data = await res.json() as ProgressResponse
+        setProgressData(data)
+      }
+    } catch {
+      // ignore
+    }
+  }
+
   useEffect(() => {
     void (async () => {
       setLoading(true)
       setFreshnessLoading(true)
       setGapsLoading(true)
-      await Promise.all([loadTelegram(), loadFreshness(), loadGaps()])
+      setProgressLoading(true)
+      await Promise.all([loadTelegram(), loadFreshness(), loadGaps(), loadProgressData()])
       setLoading(false)
       setFreshnessLoading(false)
       setGapsLoading(false)
+      setProgressLoading(false)
     })()
   }, [])
 
@@ -216,6 +275,124 @@ export default function KnowledgeSettingsPage() {
       toast.error("Ошибка сети")
     } finally {
       setDisconnecting(false)
+    }
+  }
+
+  async function runOcr(file: File) {
+    const ALLOWED = ["image/jpeg", "image/jpg", "image/png", "image/webp", "application/pdf"]
+    if (!ALLOWED.includes(file.type)) {
+      toast.error("Формат не поддерживается. Разрешены JPEG, PNG, WebP, PDF")
+      return
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("Файл слишком большой (максимум 10MB)")
+      return
+    }
+    setOcrRunning(true)
+    setOcrText("")
+    setOcrTitle("")
+    setOcrFileName(file.name)
+    setOcrSaved(null)
+    try {
+      const form = new FormData()
+      form.append("file", file)
+      const res = await fetch("/api/modules/knowledge/ocr", {
+        method: "POST",
+        body: form,
+      })
+      const data = await res.json() as { ok?: true; text?: string; title?: string; error?: string }
+      if (!res.ok || !data.text) {
+        toast.error(data.error || "Не удалось распознать файл")
+        setOcrFileName(null)
+        return
+      }
+      setOcrText(data.text)
+      setOcrTitle(data.title || "Распознанный документ")
+      toast.success("Текст распознан")
+    } catch {
+      toast.error("Ошибка сети")
+    } finally {
+      setOcrRunning(false)
+    }
+  }
+
+  function handleOcrFileInput(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (file) void runOcr(file)
+    e.target.value = ""
+  }
+
+  function handleOcrDrop(e: DragEvent<HTMLDivElement>) {
+    e.preventDefault()
+    setOcrDragActive(false)
+    const file = e.dataTransfer.files?.[0]
+    if (file) void runOcr(file)
+  }
+
+  async function handleOcrSave() {
+    if (!ocrText.trim()) {
+      toast.error("Нет текста для сохранения")
+      return
+    }
+    setOcrSaving(true)
+    try {
+      const res = await fetch("/api/modules/knowledge/ocr", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: ocrText,
+          title: ocrTitle.trim() || undefined,
+          saveToKnowledge: true,
+        }),
+      })
+      const data = await res.json() as { ok?: true; articleId?: string; title?: string; error?: string }
+      if (!res.ok || !data.articleId) {
+        toast.error(data.error || "Не удалось сохранить")
+        return
+      }
+      setOcrSaved({ articleId: data.articleId, title: data.title || "Черновик" })
+      toast.success("Сохранено в базу знаний")
+    } catch {
+      toast.error("Ошибка сети")
+    } finally {
+      setOcrSaving(false)
+    }
+  }
+
+  async function handleOcrCopy() {
+    if (!ocrText) return
+    try {
+      await navigator.clipboard.writeText(ocrText)
+      toast.success("Скопировано")
+    } catch {
+      toast.error("Не удалось скопировать")
+    }
+  }
+
+  function resetOcr() {
+    setOcrText("")
+    setOcrTitle("")
+    setOcrFileName(null)
+    setOcrSaved(null)
+  }
+
+  async function handleSendReminders() {
+    setProgressSending(true)
+    try {
+      const res = await fetch("/api/modules/knowledge/progress", { method: "POST" })
+      if (!res.ok) {
+        toast.error("Не удалось отправить напоминания")
+        return
+      }
+      const data = await res.json() as ProgressResponse & { ok: true; sent: number }
+      setProgressData(data)
+      toast.success(
+        data.sent > 0 ? `Отправлено ${data.sent} напоминаний` : "Нет отстающих — все в графике",
+      )
+    } catch {
+      toast.error("Ошибка сети")
+    } finally {
+      setProgressSending(false)
     }
   }
 
@@ -724,6 +901,297 @@ export default function KnowledgeSettingsPage() {
                       </div>
                     )}
                   </div>
+
+                  {/* ── Accordion: Контроль обучения ─────────────────────── */}
+                  <div className="rounded-xl shadow-sm border border-border bg-card overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => setProgressOpen((v) => !v)}
+                      className="w-full flex items-center justify-between gap-4 p-6 text-left hover:bg-muted/40 transition-colors"
+                      aria-expanded={progressOpen}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="rounded-lg bg-muted p-2 shrink-0">
+                          <GraduationCap className="w-5 h-5 text-foreground" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-base font-medium truncate">Контроль обучения</p>
+                          {progressData && progressData.total > 0 && (
+                            <p className="text-xs text-muted-foreground truncate mt-0.5">
+                              Завершили: {progressData.completed}, отстают: {progressData.behind}, просрочили: {progressData.overdue}
+                            </p>
+                          )}
+                        </div>
+                        <span
+                          className={cn(
+                            "ml-2 inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium shrink-0",
+                            progressLoading
+                              ? "bg-muted text-muted-foreground"
+                              : progressData && (progressData.behind > 0 || progressData.overdue > 0)
+                                ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+                                : "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400",
+                          )}
+                        >
+                          {progressLoading
+                            ? "Загрузка…"
+                            : progressData && (progressData.behind + progressData.overdue) > 0
+                              ? `${progressData.behind + progressData.overdue} ${plural(progressData.behind + progressData.overdue, "отстаёт", "отстают", "отстают")}`
+                              : "Все в графике"}
+                        </span>
+                      </div>
+                      <ChevronDown
+                        className={cn(
+                          "w-5 h-5 text-muted-foreground shrink-0 transition-transform",
+                          progressOpen && "rotate-180",
+                        )}
+                      />
+                    </button>
+
+                    {progressOpen && (
+                      <div className="border-t border-border p-6 space-y-4">
+                        <div className="flex items-center justify-between gap-4">
+                          <p className="text-sm text-muted-foreground">
+                            Активные назначения сотрудников. «Отстают» — прогресс меньше 50% при дедлайне ближе 7 дней.
+                          </p>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={handleSendReminders}
+                            disabled={progressSending}
+                            className="shrink-0"
+                          >
+                            {progressSending ? (
+                              <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                            ) : (
+                              <Bell className="w-3.5 h-3.5 mr-1.5" />
+                            )}
+                            Отправить напоминания
+                          </Button>
+                        </div>
+
+                        {progressData && progressData.items.length > 0 ? (
+                          <div className="rounded-lg border border-border overflow-hidden">
+                            <table className="w-full text-sm">
+                              <thead className="bg-muted/40 text-xs text-muted-foreground">
+                                <tr>
+                                  <th className="text-left font-medium px-3 py-2">Сотрудник</th>
+                                  <th className="text-left font-medium px-3 py-2">План</th>
+                                  <th className="text-left font-medium px-3 py-2 w-24">Прогресс</th>
+                                  <th className="text-left font-medium px-3 py-2 w-28">Дедлайн</th>
+                                  <th className="text-left font-medium px-3 py-2 w-28">Статус</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-border">
+                                {progressData.items.map((row) => {
+                                  const deadlineRu = row.deadline
+                                    ? new Date(row.deadline).toLocaleDateString("ru-RU", { day: "2-digit", month: "short" })
+                                    : "—"
+                                  const statusMeta = getStatusMeta(row.status)
+                                  return (
+                                    <tr key={row.assignmentId}>
+                                      <td className="px-3 py-2 truncate">{row.userName}</td>
+                                      <td className="px-3 py-2 truncate text-muted-foreground">{row.planTitle}</td>
+                                      <td className="px-3 py-2">
+                                        <div className="flex items-center gap-2">
+                                          <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
+                                            <div
+                                              className={cn(
+                                                "h-full",
+                                                row.progress >= 100
+                                                  ? "bg-emerald-500"
+                                                  : row.progress >= 50
+                                                    ? "bg-primary"
+                                                    : "bg-amber-500",
+                                              )}
+                                              style={{ width: `${row.progress}%` }}
+                                            />
+                                          </div>
+                                          <span className="text-xs text-muted-foreground tabular-nums">{row.progress}%</span>
+                                        </div>
+                                      </td>
+                                      <td className="px-3 py-2 text-muted-foreground">{deadlineRu}</td>
+                                      <td className="px-3 py-2">
+                                        <span
+                                          className={cn(
+                                            "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
+                                            statusMeta.className,
+                                          )}
+                                        >
+                                          {statusMeta.label}
+                                        </span>
+                                      </td>
+                                    </tr>
+                                  )
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        ) : (
+                          <div className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
+                            Нет активных назначений
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* ── Accordion: OCR распознавание документов ─────────── */}
+                  <div className="rounded-xl shadow-sm border border-border bg-card overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => setOcrOpen((v) => !v)}
+                      className="w-full flex items-center justify-between gap-4 p-6 text-left hover:bg-muted/40 transition-colors"
+                      aria-expanded={ocrOpen}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="rounded-lg bg-muted p-2 shrink-0">
+                          <Camera className="w-5 h-5 text-foreground" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-base font-medium truncate">OCR — распознавание документов</p>
+                          <p className="text-xs text-muted-foreground truncate mt-0.5">
+                            Загрузите фото документа для извлечения текста
+                          </p>
+                        </div>
+                      </div>
+                      <ChevronDown
+                        className={cn(
+                          "w-5 h-5 text-muted-foreground shrink-0 transition-transform",
+                          ocrOpen && "rotate-180",
+                        )}
+                      />
+                    </button>
+
+                    {ocrOpen && (
+                      <div className="border-t border-border p-6 space-y-4">
+                        <input
+                          ref={ocrInputRef}
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp,application/pdf"
+                          onChange={handleOcrFileInput}
+                          className="hidden"
+                        />
+
+                        {!ocrText && !ocrRunning && (
+                          <div
+                            onDragOver={(e) => {
+                              e.preventDefault()
+                              setOcrDragActive(true)
+                            }}
+                            onDragLeave={() => setOcrDragActive(false)}
+                            onDrop={handleOcrDrop}
+                            onClick={() => ocrInputRef.current?.click()}
+                            className={cn(
+                              "rounded-lg border-2 border-dashed p-8 text-center cursor-pointer transition-colors",
+                              ocrDragActive
+                                ? "border-primary bg-primary/5"
+                                : "border-border hover:border-primary/40 hover:bg-muted/40",
+                            )}
+                          >
+                            <Upload className="w-8 h-8 mx-auto mb-3 text-muted-foreground" />
+                            <p className="text-sm font-medium">Перетащите файл сюда или нажмите для выбора</p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              JPEG, PNG, WebP, PDF — до 10MB
+                            </p>
+                          </div>
+                        )}
+
+                        {ocrRunning && (
+                          <div className="rounded-lg border border-border p-8 text-center">
+                            <Loader2 className="w-6 h-6 mx-auto mb-3 animate-spin text-primary" />
+                            <p className="text-sm font-medium">Распознаю…</p>
+                            {ocrFileName && (
+                              <p className="text-xs text-muted-foreground mt-1 truncate">{ocrFileName}</p>
+                            )}
+                          </div>
+                        )}
+
+                        {ocrText && !ocrRunning && (
+                          <>
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="text-xs text-muted-foreground truncate">
+                                {ocrFileName && <>Файл: <span className="font-medium">{ocrFileName}</span></>}
+                              </p>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={resetOcr}
+                                className="h-7 px-2 text-xs"
+                              >
+                                <XIcon className="w-3 h-3 mr-1" />
+                                Сбросить
+                              </Button>
+                            </div>
+
+                            <div className="space-y-2">
+                              <Label htmlFor="ocr-title" className="text-sm font-medium">
+                                Название
+                              </Label>
+                              <Input
+                                id="ocr-title"
+                                value={ocrTitle}
+                                onChange={(e) => setOcrTitle(e.target.value)}
+                                placeholder="Название документа"
+                              />
+                            </div>
+
+                            <div className="space-y-2">
+                              <Label htmlFor="ocr-text" className="text-sm font-medium">
+                                Извлечённый текст
+                              </Label>
+                              <Textarea
+                                id="ocr-text"
+                                value={ocrText}
+                                onChange={(e) => setOcrText(e.target.value)}
+                                rows={12}
+                                className="font-mono text-xs"
+                              />
+                            </div>
+
+                            <div className="flex flex-wrap justify-end gap-2">
+                              <Button
+                                variant="outline"
+                                onClick={handleOcrCopy}
+                                disabled={!ocrText}
+                              >
+                                <CopyIcon className="w-4 h-4 mr-2" />
+                                Копировать текст
+                              </Button>
+                              <Button
+                                onClick={handleOcrSave}
+                                disabled={ocrSaving || !ocrText.trim()}
+                              >
+                                {ocrSaving ? (
+                                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                ) : (
+                                  <SaveIcon className="w-4 h-4 mr-2" />
+                                )}
+                                Сохранить в базу знаний
+                              </Button>
+                            </div>
+
+                            {ocrSaved && (
+                              <div className="rounded-lg border border-emerald-200 bg-emerald-50 dark:border-emerald-900/50 dark:bg-emerald-900/20 p-4">
+                                <p className="text-sm font-medium text-emerald-800 dark:text-emerald-300">
+                                  Сохранено
+                                </p>
+                                <p className="text-xs text-emerald-700 dark:text-emerald-400 mt-1 mb-2">
+                                  {ocrSaved.title}
+                                </p>
+                                <Link
+                                  href={`/knowledge-v2/editor?id=${ocrSaved.articleId}&type=article`}
+                                  className="text-sm text-primary hover:underline inline-flex items-center gap-1"
+                                >
+                                  Открыть в редакторе
+                                  <ExternalLink className="w-3 h-3" />
+                                </Link>
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </>
               )}
             </div>
@@ -740,4 +1208,29 @@ function plural(n: number, one: string, few: string, many: string): string {
   if (mod10 === 1 && mod100 !== 11) return one
   if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few
   return many
+}
+
+function getStatusMeta(status: ProgressRow["status"]): { label: string; className: string } {
+  switch (status) {
+    case "completed":
+      return {
+        label: "Завершён",
+        className: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400",
+      }
+    case "overdue":
+      return {
+        label: "Просрочен",
+        className: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
+      }
+    case "behind":
+      return {
+        label: "Отстаёт",
+        className: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
+      }
+    default:
+      return {
+        label: "В графике",
+        className: "bg-muted text-muted-foreground",
+      }
+  }
 }

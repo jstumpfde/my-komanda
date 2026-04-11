@@ -3,6 +3,7 @@ import { auth } from "@/auth"
 import { db } from "@/lib/db"
 import { inviteLinks, users } from "@/lib/db/schema"
 import { eq, and, or, isNull, gt, sql } from "drizzle-orm"
+import { triggerOnboarding } from "@/lib/knowledge/onboarding"
 
 // POST /api/invites/accept — принять приглашение (нужна авторизация)
 export async function POST(req: NextRequest) {
@@ -55,6 +56,13 @@ export async function POST(req: NextRequest) {
       isActive: shouldDeactivate ? false : link.isActive,
     })
     .where(eq(inviteLinks.id, link.id))
+
+  // After-insert hook: автоподбор плана обучения + приветствие в Telegram
+  try {
+    await triggerOnboarding(link.companyId, session.user.id)
+  } catch (err) {
+    console.error("[invites/accept] onboarding trigger failed", err)
+  }
 
   return NextResponse.json({ ok: true, companyId: link.companyId, role: link.role })
 }
