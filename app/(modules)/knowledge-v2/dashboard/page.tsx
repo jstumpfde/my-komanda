@@ -139,6 +139,16 @@ function CountUp({ value }: { value: number | null }) {
 
 export default function KnowledgeDashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null)
+  // Прогресс-бары сотрудников: flip с 0% на реальные значения после mount
+  const [progressAnimated, setProgressAnimated] = useState(false)
+
+  useEffect(() => {
+    if (stats && !progressAnimated) {
+      // Отложенный флип — даёт карточкам появиться раньше
+      const t = setTimeout(() => setProgressAnimated(true), 400)
+      return () => clearTimeout(t)
+    }
+  }, [stats, progressAnimated])
 
   useEffect(() => {
     const load = async () => {
@@ -211,6 +221,43 @@ export default function KnowledgeDashboardPage() {
       <DashboardSidebar />
       <SidebarInset>
         <DashboardHeader />
+        <style dangerouslySetInnerHTML={{ __html: `
+          @keyframes slideUpFadeIn {
+            from { opacity: 0; transform: translateY(16px); }
+            to   { opacity: 1; transform: translateY(0); }
+          }
+          @keyframes gradientShift {
+            0%   { background-position: 0% 50%; }
+            50%  { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+          }
+          @keyframes medalBounce {
+            0%   { opacity: 0; transform: scale(0.3) translateY(-10px); }
+            50%  { opacity: 1; transform: scale(1.15) translateY(4px); }
+            75%  { transform: scale(0.95) translateY(-2px); }
+            100% { transform: scale(1) translateY(0); }
+          }
+          @keyframes rowFadeIn {
+            from { opacity: 0; transform: translateX(-8px); }
+            to   { opacity: 1; transform: translateX(0); }
+          }
+          .dash-card-enter {
+            opacity: 0;
+            animation: slideUpFadeIn 500ms ease-out forwards;
+          }
+          .dash-row-enter {
+            opacity: 0;
+            animation: rowFadeIn 400ms ease-out forwards;
+          }
+          .dash-medal-enter {
+            opacity: 0;
+            animation: medalBounce 700ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+          }
+          .dash-gradient-shift {
+            background-size: 200% 200%;
+            animation: gradientShift 12s ease infinite;
+          }
+        ` }} />
         <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
           <div className="flex items-center justify-between mb-6">
             <div>
@@ -228,7 +275,10 @@ export default function KnowledgeDashboardPage() {
             {/* ═══ Colored metric cards ═══ */}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
               {/* Total materials — real fetch */}
-              <div className="rounded-xl shadow-sm hover:shadow-md transition-shadow p-4 text-white bg-blue-500">
+              <div
+                className="dash-card-enter rounded-xl shadow-sm p-4 text-white bg-blue-500 hover:scale-[1.02] hover:shadow-lg transition-all duration-200 cursor-default"
+                style={{ animationDelay: "0ms" }}
+              >
                 <div className="flex items-center gap-1.5 mb-2">
                   <BookOpen className="w-4 h-4 text-white" />
                   <span className="text-sm font-semibold text-white">Всего материалов</span>
@@ -239,22 +289,33 @@ export default function KnowledgeDashboardPage() {
                 <p className="text-sm mt-1 text-white/90">в библиотеке</p>
               </div>
 
-              {metricCards.map((m) => (
-                <div key={m.label} className={cn("rounded-xl shadow-sm hover:shadow-md transition-shadow p-4 text-white", m.bg)}>
-                  <div className="flex items-center gap-1.5 mb-2">
-                    <m.icon className="w-4 h-4 text-white" />
-                    <span className="text-sm font-semibold text-white">{m.label}</span>
+              {metricCards.map((m, i) => {
+                const isPulsingRed = m.label === "Требуют обновления" && (m.numericValue ?? 0) > 0
+                return (
+                  <div
+                    key={m.label}
+                    className={cn(
+                      "dash-card-enter rounded-xl shadow-sm p-4 text-white hover:scale-[1.02] hover:shadow-lg transition-all duration-200 cursor-default",
+                      m.bg,
+                      isPulsingRed && "ring-2 ring-red-300/60 animate-pulse",
+                    )}
+                    style={{ animationDelay: `${(i + 1) * 150}ms` }}
+                  >
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <m.icon className="w-4 h-4 text-white" />
+                      <span className="text-sm font-semibold text-white">{m.label}</span>
+                    </div>
+                    <p className="text-3xl font-bold text-white tabular-nums">
+                      <CountUp value={m.numericValue} />
+                    </p>
+                    <p className="text-sm mt-1 text-white/90">{m.sub}</p>
                   </div>
-                  <p className="text-3xl font-bold text-white tabular-nums">
-                    <CountUp value={m.numericValue} />
-                  </p>
-                  <p className="text-sm mt-1 text-white/90">{m.sub}</p>
-                </div>
-              ))}
+                )
+              })}
             </div>
 
             {/* ═══ Ненси рекомендует ═══ */}
-            <div className="rounded-xl border bg-gradient-to-br from-[#EEEDFE] to-[#E6F1FB] dark:from-[#1a1830] dark:to-[#172030] p-5">
+            <div className="dash-gradient-shift dash-card-enter rounded-xl border bg-gradient-to-br from-[#EEEDFE] via-[#E6F1FB] to-[#F3E8FF] dark:from-[#1a1830] dark:via-[#172030] dark:to-[#1f1530] p-5 hover:shadow-lg transition-shadow duration-200" style={{ animationDelay: "900ms" }}>
               <div className="flex items-center gap-2 mb-4">
                 <div className="w-9 h-9 rounded-lg bg-white/70 dark:bg-white/10 flex items-center justify-center">
                   <Sparkles className="w-5 h-5 text-primary" />
@@ -284,7 +345,10 @@ export default function KnowledgeDashboardPage() {
             {/* ═══ Employee progress + Weekly activity ═══ */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
               {/* Employee progress */}
-              <div className="rounded-xl border border-border p-5 bg-card">
+              <div
+                className="dash-card-enter rounded-xl border border-border p-5 bg-card hover:scale-[1.01] hover:shadow-lg transition-all duration-200"
+                style={{ animationDelay: "1050ms" }}
+              >
                 <div className="flex items-center gap-2 mb-4">
                   <Users className="w-5 h-5 text-muted-foreground" />
                   <h3 className="text-base font-semibold">Прогресс по сотрудникам</h3>
@@ -323,12 +387,12 @@ export default function KnowledgeDashboardPage() {
                                 <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
                                   <div
                                     className={cn(
-                                      "h-full rounded-full transition-all",
+                                      "h-full rounded-full transition-all duration-1000 ease-out",
                                       e.status === "on_track" && "bg-emerald-500",
                                       e.status === "behind" && "bg-orange-500",
                                       e.status === "not_started" && "bg-red-400",
                                     )}
-                                    style={{ width: `${pct}%` }}
+                                    style={{ width: progressAnimated ? `${pct}%` : "0%" }}
                                   />
                                 </div>
                                 <span className="text-xs text-muted-foreground w-14 text-right whitespace-nowrap">{e.done}/{e.assigned}</span>
@@ -348,7 +412,10 @@ export default function KnowledgeDashboardPage() {
               </div>
 
               {/* Weekly activity */}
-              <div className="rounded-xl border border-border p-5 bg-card">
+              <div
+                className="dash-card-enter rounded-xl border border-border p-5 bg-card hover:scale-[1.01] hover:shadow-lg transition-all duration-200"
+                style={{ animationDelay: "1200ms" }}
+              >
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
                     <TrendingUp className="w-5 h-5 text-muted-foreground" />
@@ -388,7 +455,10 @@ export default function KnowledgeDashboardPage() {
             </div>
 
             {/* ═══ Leaderboard (геймификация) ═══ */}
-            <div className="rounded-xl border border-border p-5 bg-card">
+            <div
+              className="dash-card-enter rounded-xl border border-border p-5 bg-card hover:shadow-lg transition-shadow duration-200"
+              style={{ animationDelay: "1350ms" }}
+            >
               <div className="flex items-center gap-2 mb-4">
                 <Trophy className="w-5 h-5 text-amber-500" />
                 <h3 className="text-base font-semibold">Рейтинг обучения</h3>
@@ -405,9 +475,13 @@ export default function KnowledgeDashboardPage() {
                     return (
                       <div
                         key={l.userId}
-                        className="flex items-center gap-3 rounded-lg border border-border/60 bg-muted/30 px-3 py-2.5"
+                        className="dash-row-enter flex items-center gap-3 rounded-lg border border-border/60 bg-muted/30 px-3 py-2.5 hover:bg-muted/60 hover:border-amber-300/60 transition-colors duration-200"
+                        style={{ animationDelay: `${1500 + i * 120}ms` }}
                       >
-                        <div className="w-7 h-7 rounded-full bg-background border flex items-center justify-center text-xs font-semibold shrink-0">
+                        <div
+                          className="dash-medal-enter w-7 h-7 rounded-full bg-background border flex items-center justify-center text-xs font-semibold shrink-0"
+                          style={{ animationDelay: `${1700 + i * 150}ms` }}
+                        >
                           {medal ?? i + 1}
                         </div>
                         <div className="flex-1 min-w-0">
@@ -436,7 +510,10 @@ export default function KnowledgeDashboardPage() {
             </div>
 
             {/* ═══ Top authors ═══ */}
-            <div className="rounded-xl border border-border p-5 bg-card">
+            <div
+              className="dash-card-enter rounded-xl border border-border p-5 bg-card hover:shadow-lg transition-shadow duration-200"
+              style={{ animationDelay: "1500ms" }}
+            >
               <h3 className="text-base font-semibold mb-4">Топ авторов</h3>
               <table className="w-full">
                 <thead>
@@ -473,7 +550,10 @@ export default function KnowledgeDashboardPage() {
             </div>
 
             {/* ═══ Recent updates ═══ */}
-            <div className="rounded-xl border border-border p-5 bg-card">
+            <div
+              className="dash-card-enter rounded-xl border border-border p-5 bg-card hover:shadow-lg transition-shadow duration-200"
+              style={{ animationDelay: "1650ms" }}
+            >
               <h3 className="text-base font-semibold mb-4">Последние обновления</h3>
               <table className="w-full">
                 <thead>
@@ -494,7 +574,11 @@ export default function KnowledgeDashboardPage() {
                     </tr>
                   ) : (
                     recent.map((r, i) => (
-                      <tr key={r.id ?? `${r.name}-${i}`} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
+                      <tr
+                        key={r.id ?? `${r.name}-${i}`}
+                        className="dash-row-enter border-b border-border/50 hover:bg-muted/30 transition-colors"
+                        style={{ animationDelay: `${1800 + i * 100}ms` }}
+                      >
                         <td className="py-2.5 text-sm font-medium">{r.name}</td>
                         <td className="py-2.5 text-xs text-muted-foreground">{r.type}</td>
                         <td className="py-2.5 text-xs text-muted-foreground">{r.author}</td>
