@@ -3,6 +3,7 @@ import { eq, and, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { knowledgeArticles } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
+import { reindexArticleById } from "@/lib/knowledge/embeddings"
 
 export async function GET(
   _req: NextRequest,
@@ -70,6 +71,12 @@ export async function PATCH(
       .returning()
 
     if (!updated) return apiError("Not found", 404)
+
+    // RAG: переиндексация только если менялось содержимое
+    if (body.title !== undefined || body.content !== undefined) {
+      void reindexArticleById(updated.id)
+    }
+
     return apiSuccess(updated)
   } catch (err) {
     if (err instanceof Response) return err

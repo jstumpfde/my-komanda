@@ -10,6 +10,12 @@ import {
   users,
 } from "@/lib/db/schema"
 import { requireCompany } from "@/lib/api-helpers"
+import {
+  asVector,
+  cosineSimilarity,
+  generateEmbedding,
+  isEmbeddingsEnabled,
+} from "@/lib/knowledge/embeddings"
 
 interface MaterialRef {
   id: string
@@ -19,6 +25,11 @@ interface MaterialRef {
 
 const MAX_PER_TYPE = 20
 const EXCERPT_LEN = 300
+
+// RAG: сколько материалов брать в контекст при семантическом поиске
+const SEMANTIC_TOP_K = 8
+// Сколько брать для рассмотрения (cap всего тенанта, чтобы не раздувать память)
+const SEMANTIC_CANDIDATES = 500
 
 function stripHtml(s: string): string {
   return s.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()
@@ -84,44 +95,114 @@ export async function POST(req: NextRequest) {
       if (typeof body.source === "string" && body.source) source = body.source
     } catch { /* ignore malformed body */ }
 
-    // Select only the columns we actually need. Audience / review_cycle /
-    // valid_until are intentionally excluded — the DB may be out of sync
-    // with the schema for those columns.
+    // ── RAG: семантический поиск если embeddings настроены ─────────────
+    // Стратегия: если у вопроса есть эмбеддинг и у материалов тоже — ранжируем
+    // по cosine similarity и берём топ-K. Иначе fallback на текстовый режим
+    // (последние N материалов по updatedAt, как раньше).
+    let semanticUsed = false
     let demos: Array<{ id: string; name: string; sections: unknown }> = []
-    try {
-      demos = await db
-        .select({
-          id: demoTemplates.id,
-          name: demoTemplates.name,
-          sections: demoTemplates.sections,
-        })
-        .from(demoTemplates)
-        .where(eq(demoTemplates.tenantId, user.companyId))
-        .orderBy(desc(demoTemplates.updatedAt))
-        .limit(MAX_PER_TYPE)
-    } catch (err) {
-      console.error("[ai-search] demo_templates query failed", err)
-      // Continue with empty list rather than 500 — the context just gets smaller.
+    let articles: Array<{ id: string; title: string; content: string | null }> = []
+
+    if (questionText && isEmbeddingsEnabled()) {
+      const questionVec = await generateEmbedding(questionText)
+      if (questionVec) {
+        try {
+          // Забираем все материалы тенанта вместе с embedding
+          const [rawDemos, rawArticles] = await Promise.all([
+            db
+              .select({
+                id: demoTemplates.id,
+                name: demoTemplates.name,
+                sections: demoTemplates.sections,
+                embedding: demoTemplates.embedding,
+              })
+              .from(demoTemplates)
+              .where(eq(demoTemplates.tenantId, user.companyId))
+              .orderBy(desc(demoTemplates.updatedAt))
+              .limit(SEMANTIC_CANDIDATES),
+            db
+              .select({
+                id: knowledgeArticles.id,
+                title: knowledgeArticles.title,
+                content: knowledgeArticles.content,
+                embedding: knowledgeArticles.embedding,
+              })
+              .from(knowledgeArticles)
+              .where(and(
+                eq(knowledgeArticles.tenantId, user.companyId),
+                eq(knowledgeArticles.status, "published"),
+              ))
+              .orderBy(desc(knowledgeArticles.updatedAt))
+              .limit(SEMANTIC_CANDIDATES),
+          ])
+
+          type Scored =
+            | { score: number; kind: "demo"; row: typeof rawDemos[number] }
+            | { score: number; kind: "article"; row: typeof rawArticles[number] }
+
+          const scored: Scored[] = []
+          for (const d of rawDemos) {
+            const vec = asVector(d.embedding)
+            if (!vec) continue
+            scored.push({ score: cosineSimilarity(questionVec, vec), kind: "demo", row: d })
+          }
+          for (const a of rawArticles) {
+            const vec = asVector(a.embedding)
+            if (!vec) continue
+            scored.push({ score: cosineSimilarity(questionVec, vec), kind: "article", row: a })
+          }
+
+          if (scored.length > 0) {
+            scored.sort((x, y) => y.score - x.score)
+            const top = scored.slice(0, SEMANTIC_TOP_K)
+            demos = top
+              .filter((s): s is Extract<Scored, { kind: "demo" }> => s.kind === "demo")
+              .map((s) => ({ id: s.row.id, name: s.row.name, sections: s.row.sections }))
+            articles = top
+              .filter((s): s is Extract<Scored, { kind: "article" }> => s.kind === "article")
+              .map((s) => ({ id: s.row.id, title: s.row.title, content: s.row.content }))
+            semanticUsed = true
+          }
+        } catch (err) {
+          console.error("[ai-search] semantic search failed", err)
+        }
+      }
     }
 
-    let articles: Array<{ id: string; title: string; content: string | null }> = []
-    try {
-      articles = await db
-        .select({
-          id: knowledgeArticles.id,
-          title: knowledgeArticles.title,
-          content: knowledgeArticles.content,
-        })
-        .from(knowledgeArticles)
-        .where(and(
-          eq(knowledgeArticles.tenantId, user.companyId),
-          eq(knowledgeArticles.status, "published"),
-        ))
-        .orderBy(desc(knowledgeArticles.updatedAt))
-        .limit(MAX_PER_TYPE)
-    } catch (err) {
-      console.error("[ai-search] knowledge_articles query failed", err)
-      // Continue with empty list.
+    // ── Fallback: текстовый режим по recency ─────────────────────────────
+    if (!semanticUsed) {
+      try {
+        demos = await db
+          .select({
+            id: demoTemplates.id,
+            name: demoTemplates.name,
+            sections: demoTemplates.sections,
+          })
+          .from(demoTemplates)
+          .where(eq(demoTemplates.tenantId, user.companyId))
+          .orderBy(desc(demoTemplates.updatedAt))
+          .limit(MAX_PER_TYPE)
+      } catch (err) {
+        console.error("[ai-search] demo_templates query failed", err)
+      }
+
+      try {
+        articles = await db
+          .select({
+            id: knowledgeArticles.id,
+            title: knowledgeArticles.title,
+            content: knowledgeArticles.content,
+          })
+          .from(knowledgeArticles)
+          .where(and(
+            eq(knowledgeArticles.tenantId, user.companyId),
+            eq(knowledgeArticles.status, "published"),
+          ))
+          .orderBy(desc(knowledgeArticles.updatedAt))
+          .limit(MAX_PER_TYPE)
+      } catch (err) {
+        console.error("[ai-search] knowledge_articles query failed", err)
+      }
     }
 
     const materialsList: MaterialRef[] = []
@@ -254,7 +335,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ context, materialsList })
+    return NextResponse.json({ context, materialsList, semanticUsed })
   } catch (err) {
     console.error("[ai-search] unexpected error", err)
     const message = err instanceof Error ? err.message : "Internal server error"

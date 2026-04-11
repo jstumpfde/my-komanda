@@ -970,6 +970,9 @@ export const knowledgeArticles = pgTable("knowledge_articles", {
   audience:    jsonb("audience").default('["employees"]'),
   reviewCycle: text("review_cycle").default("none"),
   validUntil:  timestamp("valid_until"),
+  // RAG: embedding vector. Stored as jsonb (float array) пока pgvector не
+  // поднят. После CREATE EXTENSION vector мигрировать на vector(1536).
+  embedding:   jsonb("embedding"),
   createdAt:   timestamp("created_at").defaultNow(),
   updatedAt:   timestamp("updated_at").defaultNow(),
 })
@@ -1177,6 +1180,8 @@ export const demoTemplates = pgTable("demo_templates", {
   audience:      jsonb("audience").default('["candidates"]'),
   reviewCycle:   text("review_cycle").default("none"),
   validUntil:    timestamp("valid_until"),
+  // RAG: см. knowledgeArticles.embedding
+  embedding:     jsonb("embedding"),
   createdAt:     timestamp("created_at").defaultNow(),
   updatedAt:     timestamp("updated_at").defaultNow(),
 })

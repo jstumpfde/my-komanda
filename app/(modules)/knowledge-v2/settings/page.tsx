@@ -21,6 +21,7 @@ import {
   Copy as CopyIcon,
   Save as SaveIcon,
   X as XIcon,
+  Brain,
 } from "lucide-react"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
@@ -156,6 +157,16 @@ export default function KnowledgeSettingsPage() {
   const [progressSending, setProgressSending] = useState(false)
   const [progressOpen, setProgressOpen] = useState(false)
 
+  // Embeddings / RAG
+  const [embOpen, setEmbOpen] = useState(false)
+  const [embStatus, setEmbStatus] = useState<{
+    enabled: boolean
+    total: number
+    indexed: number
+  } | null>(null)
+  const [embLoading, setEmbLoading] = useState(true)
+  const [embRunning, setEmbRunning] = useState(false)
+
   // OCR
   const [ocrOpen, setOcrOpen] = useState(false)
   const [ocrRunning, setOcrRunning] = useState(false)
@@ -215,17 +226,55 @@ export default function KnowledgeSettingsPage() {
     }
   }
 
+  async function loadEmbeddings() {
+    try {
+      const res = await fetch("/api/modules/knowledge/embeddings")
+      if (res.ok) {
+        const data = await res.json() as { enabled: boolean; total: number; indexed: number }
+        setEmbStatus(data)
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  async function handleReindex() {
+    setEmbRunning(true)
+    try {
+      const res = await fetch("/api/modules/knowledge/embeddings", { method: "POST" })
+      const data = await res.json() as { ok?: true; processed?: number; error?: string }
+      if (!res.ok) {
+        toast.error(data.error || "Не удалось проиндексировать")
+        return
+      }
+      toast.success(`Проиндексировано: ${data.processed ?? 0}`)
+      await loadEmbeddings()
+    } catch {
+      toast.error("Ошибка сети")
+    } finally {
+      setEmbRunning(false)
+    }
+  }
+
   useEffect(() => {
     void (async () => {
       setLoading(true)
       setFreshnessLoading(true)
       setGapsLoading(true)
       setProgressLoading(true)
-      await Promise.all([loadTelegram(), loadFreshness(), loadGaps(), loadProgressData()])
+      setEmbLoading(true)
+      await Promise.all([
+        loadTelegram(),
+        loadFreshness(),
+        loadGaps(),
+        loadProgressData(),
+        loadEmbeddings(),
+      ])
       setLoading(false)
       setFreshnessLoading(false)
       setGapsLoading(false)
       setProgressLoading(false)
+      setEmbLoading(false)
     })()
   }, [])
 
@@ -1189,6 +1238,109 @@ export default function KnowledgeSettingsPage() {
                             )}
                           </>
                         )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* ── Accordion: Семантический поиск (RAG) ─────────────── */}
+                  <div className="rounded-xl shadow-sm border border-border bg-card overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => setEmbOpen((v) => !v)}
+                      className="w-full flex items-center justify-between gap-4 p-6 text-left hover:bg-muted/40 transition-colors"
+                      aria-expanded={embOpen}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="rounded-lg bg-muted p-2 shrink-0">
+                          <Brain className="w-5 h-5 text-foreground" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-base font-medium truncate">Семантический поиск (RAG)</p>
+                          {embStatus && embStatus.enabled && embStatus.total > 0 && (
+                            <p className="text-xs text-muted-foreground truncate mt-0.5">
+                              Индексация: {embStatus.indexed} из {embStatus.total}
+                            </p>
+                          )}
+                        </div>
+                        <span
+                          className={cn(
+                            "ml-2 inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium shrink-0",
+                            embLoading
+                              ? "bg-muted text-muted-foreground"
+                              : embStatus && embStatus.enabled && embStatus.indexed > 0
+                                ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
+                                : "bg-muted text-muted-foreground",
+                          )}
+                        >
+                          {embLoading
+                            ? "Загрузка…"
+                            : !embStatus?.enabled
+                              ? "Не настроен"
+                              : embStatus.indexed > 0
+                                ? `${embStatus.indexed} ${plural(embStatus.indexed, "материал", "материала", "материалов")} проиндексировано`
+                                : "Не проиндексирован"}
+                        </span>
+                      </div>
+                      <ChevronDown
+                        className={cn(
+                          "w-5 h-5 text-muted-foreground shrink-0 transition-transform",
+                          embOpen && "rotate-180",
+                        )}
+                      />
+                    </button>
+
+                    {embOpen && (
+                      <div className="border-t border-border p-6 space-y-4">
+                        <p className="text-sm text-muted-foreground">
+                          Ненси ищет материалы по смыслу, а не по ключевым словам. Работает через embeddings и cosine similarity.
+                          {" "}Требуется <code className="px-1 py-0.5 rounded bg-muted text-xs">OPENAI_API_KEY</code> для индексации.
+                        </p>
+
+                        {embStatus && !embStatus.enabled && (
+                          <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-900/50 dark:bg-amber-900/20 p-4">
+                            <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
+                              OPENAI_API_KEY не настроен
+                            </p>
+                            <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">
+                              Работает текстовый поиск по названию и содержимому материалов. Добавьте ключ OpenAI в окружение сервера, чтобы включить семантический поиск.
+                            </p>
+                          </div>
+                        )}
+
+                        {embStatus && embStatus.total > 0 && (
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between text-xs text-muted-foreground">
+                              <span>Прогресс индексации</span>
+                              <span className="tabular-nums">
+                                {embStatus.indexed} / {embStatus.total}
+                              </span>
+                            </div>
+                            <div className="h-2 rounded-full bg-muted overflow-hidden">
+                              <div
+                                className="h-full bg-primary transition-all"
+                                style={{
+                                  width: `${Math.round(
+                                    (embStatus.indexed / Math.max(1, embStatus.total)) * 100,
+                                  )}%`,
+                                }}
+                              />
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="flex justify-end">
+                          <Button
+                            onClick={handleReindex}
+                            disabled={embRunning || !embStatus?.enabled}
+                          >
+                            {embRunning ? (
+                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            ) : (
+                              <Brain className="w-4 h-4 mr-2" />
+                            )}
+                            Проиндексировать все материалы
+                          </Button>
+                        </div>
                       </div>
                     )}
                   </div>

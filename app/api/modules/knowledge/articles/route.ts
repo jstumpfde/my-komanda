@@ -3,6 +3,7 @@ import { eq, and, ilike, sql, count } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { knowledgeArticles } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
+import { reindexArticleById } from "@/lib/knowledge/embeddings"
 
 function slugify(text: string): string {
   const map: Record<string, string> = {
@@ -103,6 +104,9 @@ export async function POST(req: NextRequest) {
         validUntil,
       })
       .returning()
+
+    // RAG: fire-and-forget переиндексация
+    void reindexArticleById(article.id)
 
     return apiSuccess(article, 201)
   } catch (err) {
