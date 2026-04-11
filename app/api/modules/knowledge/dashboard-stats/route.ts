@@ -1,10 +1,12 @@
-import { eq, and, sql, or, lt, desc, isNotNull, ne } from "drizzle-orm"
+import { eq, and, sql, or, lt, gte, desc, isNotNull, ne } from "drizzle-orm"
 import { db } from "@/lib/db"
 import {
-  learningAssignments, learningPlans, users,
+  learningAssignments, users,
   knowledgeArticles, demoTemplates,
+  knowledgeQuestionLogs,
 } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
+import { getLeaderboard } from "@/lib/knowledge/achievements"
 
 const REVIEW_DAYS: Record<string, number> = {
   "1m": 30,
@@ -213,6 +215,124 @@ export async function GET() {
       lastActivity: r.lastActivity ? new Date(r.lastActivity).toISOString() : null,
     }))
 
+    // ── Ненси рекомендует: топ-5 неотвеченных вопросов за 7 дней ──
+    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+    const unansweredRows = await db
+      .select({
+        questionKey: knowledgeQuestionLogs.questionKey,
+        sample: sql<string>`max(${knowledgeQuestionLogs.question})`,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(knowledgeQuestionLogs)
+      .where(
+        and(
+          eq(knowledgeQuestionLogs.tenantId, tenantId),
+          eq(knowledgeQuestionLogs.answered, false),
+          gte(knowledgeQuestionLogs.createdAt, weekAgo),
+        ),
+      )
+      .groupBy(knowledgeQuestionLogs.questionKey)
+      .orderBy(desc(sql`count(*)`))
+      .limit(5)
+
+    const nensiHints = unansweredRows
+      .filter((r) => r.sample && r.sample.trim().length > 0)
+      .map((r) => ({
+        emoji: r.count >= 3 ? "🔴" : "❓",
+        title: r.count >= 3 ? `${r.count} запросов без ответа` : "Вопрос без ответа",
+        desc: r.sample ?? "",
+      }))
+
+    // ── Активность за неделю: 7 дней, группировка по дате ──
+    const dayMs = 24 * 60 * 60 * 1000
+    const weeklyBuckets: { date: Date; key: string; label: string }[] = []
+    const dayLabels = ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"]
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now.getTime() - i * dayMs)
+      d.setHours(0, 0, 0, 0)
+      const yyyy = d.getFullYear()
+      const mm = String(d.getMonth() + 1).padStart(2, "0")
+      const dd = String(d.getDate()).padStart(2, "0")
+      weeklyBuckets.push({
+        date: d,
+        key: `${yyyy}-${mm}-${dd}`,
+        label: dayLabels[d.getDay()],
+      })
+    }
+
+    const activityRows = await db
+      .select({
+        day: sql<string>`to_char(${knowledgeQuestionLogs.createdAt}, 'YYYY-MM-DD')`,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(knowledgeQuestionLogs)
+      .where(
+        and(
+          eq(knowledgeQuestionLogs.tenantId, tenantId),
+          gte(knowledgeQuestionLogs.createdAt, weeklyBuckets[0].date),
+        ),
+      )
+      .groupBy(sql`to_char(${knowledgeQuestionLogs.createdAt}, 'YYYY-MM-DD')`)
+
+    const activityMap = new Map(activityRows.map((r) => [r.day, r.count]))
+    const weeklyActivity = weeklyBuckets.map((b) => ({
+      day: b.label,
+      views: activityMap.get(b.key) ?? 0,
+    }))
+    const weeklyTotal = weeklyActivity.reduce((s, d) => s + d.views, 0)
+
+    // ── Последние обновления: топ 10 из articles+demos по updatedAt ──
+    const [recentArticles, recentDemos] = await Promise.all([
+      db
+        .select({
+          id: knowledgeArticles.id,
+          name: knowledgeArticles.title,
+          updatedAt: knowledgeArticles.updatedAt,
+          author: users.name,
+        })
+        .from(knowledgeArticles)
+        .leftJoin(users, eq(users.id, knowledgeArticles.authorId))
+        .where(eq(knowledgeArticles.tenantId, tenantId))
+        .orderBy(desc(knowledgeArticles.updatedAt))
+        .limit(10),
+      db
+        .select({
+          id: demoTemplates.id,
+          name: demoTemplates.name,
+          updatedAt: demoTemplates.updatedAt,
+        })
+        .from(demoTemplates)
+        .where(eq(demoTemplates.tenantId, tenantId))
+        .orderBy(desc(demoTemplates.updatedAt))
+        .limit(10),
+    ])
+
+    const recentUpdates = [
+      ...recentArticles.map((a) => ({
+        id: a.id,
+        name: a.name,
+        type: "Статья",
+        author: a.author ?? "—",
+        updatedAt: a.updatedAt ? new Date(a.updatedAt).toISOString() : null,
+      })),
+      ...recentDemos.map((d) => ({
+        id: d.id,
+        name: d.name,
+        type: "Презентация",
+        author: "—",
+        updatedAt: d.updatedAt ? new Date(d.updatedAt).toISOString() : null,
+      })),
+    ]
+      .sort((a, b) => {
+        const ta = a.updatedAt ? new Date(a.updatedAt).getTime() : 0
+        const tb = b.updatedAt ? new Date(b.updatedAt).getTime() : 0
+        return tb - ta
+      })
+      .slice(0, 10)
+
+    // ── Leaderboard (геймификация): топ-5 по очкам ──
+    const leaderboard = await getLeaderboard(tenantId, 5)
+
     return apiSuccess({
       metrics: {
         totalMaterials,
@@ -227,6 +347,11 @@ export async function GET() {
       },
       employeeProgress,
       topAuthors,
+      nensiHints,
+      weeklyActivity,
+      weeklyTotal,
+      recentUpdates,
+      leaderboard,
     })
   } catch (err) {
     if (err instanceof Response) return err

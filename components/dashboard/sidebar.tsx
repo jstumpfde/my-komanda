@@ -156,6 +156,17 @@ export function DashboardSidebar() {
       }).catch(() => {})
   }, [])
 
+  // Knowledge: review-count badge (статьи со status=review/expired)
+  const [reviewCount, setReviewCount] = useState<number>(0)
+  useEffect(() => {
+    fetch('/api/modules/knowledge/review-count')
+      .then(r => r.ok ? r.json() : null)
+      .then((d: { count?: number } | null) => {
+        if (typeof d?.count === 'number') setReviewCount(d.count)
+      })
+      .catch(() => {})
+  }, [pathname])
+
   // Active modules fetched from API
   const [activeModules, setActiveModules] = useState<ModuleId[]>(['hr', 'knowledge', 'tasks', 'sales'])
   useEffect(() => {
@@ -517,6 +528,7 @@ export function DashboardSidebar() {
                               }
                               const ItemIcon = getIcon(item.icon)
                               const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
+                              const itemBadge = item.href === '/knowledge-v2/review' && reviewCount > 0 ? reviewCount : null
                               return (
                                 <SidebarMenuItem key={item.href}>
                                   <SidebarMenuButton
@@ -530,7 +542,12 @@ export function DashboardSidebar() {
                                     )}
                                   >
                                     <ItemIcon className="size-4" />
-                                    <span className="text-sm">{item.label}</span>
+                                    <span className="flex-1 text-sm">{item.label}</span>
+                                    {itemBadge !== null && (
+                                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-400">
+                                        {itemBadge}
+                                      </span>
+                                    )}
                                   </SidebarMenuButton>
                                 </SidebarMenuItem>
                               )
@@ -589,6 +606,7 @@ export function DashboardSidebar() {
                                 }
                                 const ItemIcon = getIcon(item.icon)
                                 const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
+                                const itemBadge = item.href === '/knowledge-v2/review' && reviewCount > 0 ? reviewCount : null
                                 return (
                                   <SidebarMenuItem key={item.href}>
                                     <SidebarMenuButton
@@ -602,7 +620,12 @@ export function DashboardSidebar() {
                                       )}
                                     >
                                       <ItemIcon className="size-4" />
-                                      <span className="text-sm">{item.label}</span>
+                                      <span className="flex-1 text-sm">{item.label}</span>
+                                      {itemBadge !== null && (
+                                        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-400">
+                                          {itemBadge}
+                                        </span>
+                                      )}
                                     </SidebarMenuButton>
                                   </SidebarMenuItem>
                                 )

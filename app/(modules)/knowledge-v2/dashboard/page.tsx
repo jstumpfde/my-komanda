@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import Link from "next/link"
 import {
   BookOpen, CheckCircle2, Clock, AlertTriangle, FileWarning,
-  Sparkles, Users, TrendingUp, Plus,
+  Sparkles, Users, TrendingUp, Plus, Trophy,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -20,10 +20,22 @@ import {
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 interface RecentItem {
+  id?: string
   name: string
   type: string
   author: string
-  date: string
+  updatedAt: string | null
+}
+
+interface NensiHint {
+  emoji: string
+  title: string
+  desc: string
+}
+
+interface DayActivity {
+  day: string
+  views: number
 }
 
 interface DashboardStats {
@@ -51,30 +63,21 @@ interface DashboardStats {
     updated: number
     lastActivity: string | null
   }[]
+  nensiHints: NensiHint[]
+  weeklyActivity: DayActivity[]
+  weeklyTotal: number
+  recentUpdates: RecentItem[]
+  leaderboard: {
+    userId: string
+    name: string
+    position: string | null
+    totalPoints: number
+    lessons: number
+    courses: number
+    tests: number
+    trainings: number
+  }[]
 }
-
-const NENSI_HINTS = [
-  {
-    emoji: "⏰",
-    title: "3 материала устарели",
-    desc: "Регламент по безопасности не обновлялся 6 мес.",
-  },
-  {
-    emoji: "💤",
-    title: "Новый сотрудник не начал обучение",
-    desc: "Иванов А. — 5 дней без активности",
-  },
-  {
-    emoji: "❓",
-    title: "Популярная тема без материала",
-    desc: "Сотрудники часто спрашивают про CRM",
-  },
-  {
-    emoji: "📝",
-    title: "Шаблон без контента",
-    desc: "IT-специалист: 4 урока пустые",
-  },
-]
 
 type ProgressStatus = "on_track" | "behind" | "not_started"
 
@@ -83,16 +86,6 @@ const STATUS_META: Record<ProgressStatus, { label: string; badgeClass: string }>
   behind:      { label: "Отстаёт",    badgeClass: "bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-400" },
   not_started: { label: "Не начал",   badgeClass: "bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400" },
 }
-
-const WEEKLY_ACTIVITY = [
-  { day: "Пн", views: 18 },
-  { day: "Вт", views: 24 },
-  { day: "Ср", views: 32 },
-  { day: "Чт", views: 28 },
-  { day: "Пт", views: 41 },
-  { day: "Сб", views: 9 },
-  { day: "Вс", views: 6 },
-]
 
 function formatRelative(iso: string | null): string {
   if (!iso) return "—"
@@ -109,46 +102,18 @@ function formatRelative(iso: string | null): string {
 // ─── Page ───────────────────────────────────────────────────────────────────
 
 export default function KnowledgeDashboardPage() {
-  const [recent, setRecent] = useState<RecentItem[]>([])
   const [stats, setStats] = useState<DashboardStats | null>(null)
 
   useEffect(() => {
     const load = async () => {
       try {
-        const [demosRes, articlesRes, statsRes] = await Promise.all([
-          fetch("/api/demo-templates").then((r) => r.json()).catch(() => ({ data: [] })),
-          fetch("/api/modules/knowledge/articles").then((r) => r.json()).catch(() => ({ data: [] })),
-          fetch("/api/modules/knowledge/dashboard-stats").then((r) => r.ok ? r.json() : null).catch(() => null),
-        ])
-        const demos = (demosRes.data ?? demosRes ?? []) as Array<{
-          id: string; name: string; updatedAt: string
-        }>
-        const articles = (articlesRes.data?.articles ?? articlesRes.articles ?? []) as Array<{
-          id: string; title: string; updatedAt: string
-        }>
-
-        if (statsRes && statsRes.metrics) setStats(statsRes as DashboardStats)
-
-        const merged: (RecentItem & { ts: number })[] = [
-          ...demos.map((d) => ({
-            name: d.name,
-            type: "Презентация",
-            author: "—",
-            date: d.updatedAt ? new Date(d.updatedAt).toLocaleDateString("ru-RU", { day: "numeric", month: "short" }) : "",
-            ts: d.updatedAt ? new Date(d.updatedAt).getTime() : 0,
-          })),
-          ...articles.map((a) => ({
-            name: a.title,
-            type: "Статья",
-            author: "—",
-            date: a.updatedAt ? new Date(a.updatedAt).toLocaleDateString("ru-RU", { day: "numeric", month: "short" }) : "",
-            ts: a.updatedAt ? new Date(a.updatedAt).getTime() : 0,
-          })),
-        ]
-        merged.sort((a, b) => b.ts - a.ts)
-        setRecent(merged.slice(0, 10).map(({ ts: _ts, ...rest }) => rest))
+        const res = await fetch("/api/modules/knowledge/dashboard-stats")
+        if (res.ok) {
+          const data = (await res.json()) as DashboardStats
+          setStats(data)
+        }
       } catch {
-        // Silent fall-through — dashboard still renders with zeros/empty table
+        // Silent fall-through — dashboard still renders with zeros/empty tables
       }
     }
     load()
@@ -162,6 +127,11 @@ export default function KnowledgeDashboardPage() {
   const totalAssigned = stats?.totals.assignments ?? 0
   const employeeProgress = stats?.employeeProgress ?? []
   const topAuthors = stats?.topAuthors ?? []
+  const nensiHints = stats?.nensiHints ?? []
+  const weeklyActivity = stats?.weeklyActivity ?? []
+  const weeklyTotal = stats?.weeklyTotal ?? 0
+  const recent = stats?.recentUpdates ?? []
+  const leaderboard = stats?.leaderboard ?? []
 
   const metricCards = [
     {
@@ -169,7 +139,7 @@ export default function KnowledgeDashboardPage() {
       value: String(completed),
       sub: `из ${totalAssigned} назначенных`,
       icon: CheckCircle2,
-      bg: "bg-green-500",
+      bg: "bg-emerald-500",
     },
     {
       label: "В процессе изучения",
@@ -190,7 +160,7 @@ export default function KnowledgeDashboardPage() {
       value: String(needsUpdate),
       sub: "устаревшие материалы",
       icon: FileWarning,
-      bg: "bg-red-400",
+      bg: "bg-red-500",
     },
   ]
 
@@ -248,15 +218,21 @@ export default function KnowledgeDashboardPage() {
                   <p className="text-xs text-muted-foreground">Материалы и события, на которые стоит обратить внимание</p>
                 </div>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                {NENSI_HINTS.map((h) => (
-                  <div key={h.title} className="rounded-lg bg-white/70 dark:bg-card/60 backdrop-blur p-3 border border-white/50 dark:border-border/50">
-                    <div className="text-lg mb-1">{h.emoji}</div>
-                    <div className="text-sm font-semibold mb-0.5">{h.title}</div>
-                    <div className="text-xs text-muted-foreground leading-snug">{h.desc}</div>
-                  </div>
-                ))}
-              </div>
+              {nensiHints.length === 0 ? (
+                <div className="text-xs text-muted-foreground py-2">
+                  Пока нечего рекомендовать — Ненси не видит неотвеченных вопросов за последние 7 дней.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  {nensiHints.map((h, i) => (
+                    <div key={`${h.title}-${i}`} className="rounded-lg bg-white/70 dark:bg-card/60 backdrop-blur p-3 border border-white/50 dark:border-border/50">
+                      <div className="text-lg mb-1">{h.emoji}</div>
+                      <div className="text-sm font-semibold mb-0.5 line-clamp-1">{h.title}</div>
+                      <div className="text-xs text-muted-foreground leading-snug line-clamp-2">{h.desc}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* ═══ Employee progress + Weekly activity ═══ */}
@@ -332,11 +308,11 @@ export default function KnowledgeDashboardPage() {
                     <TrendingUp className="w-5 h-5 text-muted-foreground" />
                     <h3 className="text-base font-semibold">Активность за неделю</h3>
                   </div>
-                  <span className="text-xs text-muted-foreground">просмотры материалов</span>
+                  <span className="text-xs text-muted-foreground">вопросы к Ненси</span>
                 </div>
                 <div className="h-[240px]">
                   <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={WEEKLY_ACTIVITY} margin={{ top: 5, right: 0, bottom: 0, left: 0 }}>
+                    <AreaChart data={weeklyActivity} margin={{ top: 5, right: 0, bottom: 0, left: 0 }}>
                       <defs>
                         <linearGradient id="activityGradient" x1="0" y1="0" x2="0" y2="1">
                           <stop offset="0%" stopColor="#7F77DD" stopOpacity={0.35} />
@@ -345,7 +321,7 @@ export default function KnowledgeDashboardPage() {
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" opacity={0.5} />
                       <XAxis dataKey="day" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
-                      <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} width={28} />
+                      <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} width={28} allowDecimals={false} />
                       <Tooltip
                         contentStyle={{
                           borderRadius: 8,
@@ -360,10 +336,57 @@ export default function KnowledgeDashboardPage() {
                   </ResponsiveContainer>
                 </div>
                 <div className="flex items-center justify-between text-xs text-muted-foreground mt-1 px-1">
-                  <span>Итого: <b className="text-foreground">158 просмотров</b></span>
-                  <span className="text-emerald-600 dark:text-emerald-400">+18% к прошлой неделе</span>
+                  <span>Итого: <b className="text-foreground">{weeklyTotal}</b> {weeklyTotal === 1 ? "запрос" : "запросов"}</span>
                 </div>
               </div>
+            </div>
+
+            {/* ═══ Leaderboard (геймификация) ═══ */}
+            <div className="rounded-xl border border-border p-5 bg-card">
+              <div className="flex items-center gap-2 mb-4">
+                <Trophy className="w-5 h-5 text-amber-500" />
+                <h3 className="text-base font-semibold">Рейтинг обучения</h3>
+                <span className="text-xs text-muted-foreground ml-1">топ-5 сотрудников</span>
+              </div>
+              {leaderboard.length === 0 ? (
+                <div className="py-6 text-center text-xs text-muted-foreground">
+                  Пока нет начислений. Баллы появятся после первой завершённой тренировки или урока.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {leaderboard.map((l, i) => {
+                    const medal = ["🥇", "🥈", "🥉"][i] ?? null
+                    return (
+                      <div
+                        key={l.userId}
+                        className="flex items-center gap-3 rounded-lg border border-border/60 bg-muted/30 px-3 py-2.5"
+                      >
+                        <div className="w-7 h-7 rounded-full bg-background border flex items-center justify-center text-xs font-semibold shrink-0">
+                          {medal ?? i + 1}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium truncate">{l.name}</div>
+                          {l.position && (
+                            <div className="text-xs text-muted-foreground truncate">{l.position}</div>
+                          )}
+                        </div>
+                        <div className="hidden sm:flex items-center gap-3 text-[10px] text-muted-foreground">
+                          {l.trainings > 0 && <span>🎯 {l.trainings}</span>}
+                          {l.courses > 0 && <span>📚 {l.courses}</span>}
+                          {l.lessons > 0 && <span>✅ {l.lessons}</span>}
+                          {l.tests > 0 && <span>💯 {l.tests}</span>}
+                        </div>
+                        <div className="text-right shrink-0">
+                          <div className="text-lg font-bold tabular-nums text-amber-600 dark:text-amber-400">
+                            {l.totalPoints}
+                          </div>
+                          <div className="text-[10px] text-muted-foreground -mt-0.5">баллов</div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </div>
 
             {/* ═══ Top authors ═══ */}
@@ -425,11 +448,13 @@ export default function KnowledgeDashboardPage() {
                     </tr>
                   ) : (
                     recent.map((r, i) => (
-                      <tr key={`${r.name}-${i}`} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
+                      <tr key={r.id ?? `${r.name}-${i}`} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
                         <td className="py-2.5 text-sm font-medium">{r.name}</td>
                         <td className="py-2.5 text-xs text-muted-foreground">{r.type}</td>
                         <td className="py-2.5 text-xs text-muted-foreground">{r.author}</td>
-                        <td className="py-2.5 text-xs text-muted-foreground text-right whitespace-nowrap">{r.date}</td>
+                        <td className="py-2.5 text-xs text-muted-foreground text-right whitespace-nowrap">
+                          {formatRelative(r.updatedAt)}
+                        </td>
                       </tr>
                     ))
                   )}

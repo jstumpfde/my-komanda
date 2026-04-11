@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useCallback } from "react"
+import { useState, useRef, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
 import Link from "next/link"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
@@ -24,7 +24,8 @@ import {
 import {
   ChevronRight, ChevronDown, Plus, X, Sparkles, BookOpen, Youtube, FileText,
   Type, Upload, Loader2, Save, RefreshCw, ExternalLink, Search, Trash2,
-  CheckCircle2, FolderOpen, Coins, AlertCircle,
+  CheckCircle2, FolderOpen, Coins, AlertCircle, Lock as LockIcon, Play, HardDrive,
+  Cloud, Link as LinkIcon, HelpCircle,
 } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
@@ -143,7 +144,23 @@ const SOURCE_ICONS: Record<string, { icon: React.ReactNode; bg: string }> = {
   text:    { icon: <Type className="size-4 text-emerald-600" />, bg: "bg-emerald-50 border-emerald-200" },
 }
 
-// ─── Mock initial data for existing projects ─────────────────────────────────
+// ─── URL platform meta (auto-detect icons) ──────────────────────────────────
+
+const URL_PLATFORM_META: Record<
+  "youtube" | "rutube" | "vk" | "google_drive" | "yandex_disk" | "direct" | "unknown",
+  { icon: React.ReactNode; label: string }
+> = {
+  youtube:      { icon: <Youtube className="size-3.5 text-red-500" />,     label: "YouTube" },
+  rutube:       { icon: <Play className="size-3.5 text-[#01afe8]" />,      label: "Rutube" },
+  vk:           { icon: <Play className="size-3.5 text-[#0077ff]" />,      label: "VK" },
+  google_drive: { icon: <HardDrive className="size-3.5 text-[#0f9d58]" />, label: "G.Drive" },
+  yandex_disk:  { icon: <Cloud className="size-3.5 text-[#fc3f1d]" />,     label: "Я.Диск" },
+  direct:       { icon: <LinkIcon className="size-3.5 text-blue-500" />,   label: "Link" },
+  unknown:      { icon: <HelpCircle className="size-3.5 text-muted-foreground" />, label: "" },
+}
+
+// ─── Mock initial data kept as fallback if API returns nothing ────────────────
+// Used only as a safety net — real data comes from GET /api/modules/knowledge/ai-courses/[id]
 
 const MOCK_PROJECT_DATA: Record<string, {
   title: string; description: string; status: string;
@@ -232,43 +249,122 @@ export default function AiCourseProjectPage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const isNew = id === "new"
-
-  // Load mock data or blank
-  const initial = !isNew && MOCK_PROJECT_DATA[id] ? MOCK_PROJECT_DATA[id] : null
 
   // Sources
-  const [sources, setSources] = useState<Source[]>(initial?.sources ?? [])
+  const [sources, setSources] = useState<Source[]>([])
   const [showArticlePicker, setShowArticlePicker] = useState(false)
   const [articleSearch, setArticleSearch] = useState("")
   const [selectedArticleIds, setSelectedArticleIds] = useState<string[]>([])
-  const [youtubeUrl, setYoutubeUrl] = useState("")
-  const [ytLoading, setYtLoading] = useState(false)
   const [showTextDialog, setShowTextDialog] = useState(false)
   const [pasteText, setPasteText] = useState("")
 
+  // Multi-URL rows (draft inputs, каждый можно fetch'ить отдельно)
+  interface UrlRow {
+    id: string
+    url: string
+    username: string
+    password: string
+    showAuth: boolean
+    loading: boolean
+  }
+  const [urlRows, setUrlRows] = useState<UrlRow[]>([
+    { id: `r-${Date.now()}`, url: "", username: "", password: "", showAuth: false, loading: false },
+  ])
+
+  // Drag-drop state for files
+  const [fileDragActive, setFileDragActive] = useState(false)
+  const [fileUploading, setFileUploading] = useState(false)
+
   // Settings
-  const [title, setTitle] = useState(initial?.title ?? "")
-  const [description, setDescription] = useState(initial?.description ?? "")
+  const [title, setTitle] = useState("")
+  const [description, setDescription] = useState("")
   const [audience, setAudience] = useState("new_employees")
   const [format, setFormat] = useState("standard")
   const [tone, setTone] = useState("friendly")
   const [withTests, setWithTests] = useState(true)
   const [withSummary, setWithSummary] = useState(true)
 
+  // Loading (initial fetch)
+  const [loadingProject, setLoadingProject] = useState(true)
+
   // Generation
   const [generating, setGenerating] = useState(false)
   const [genStage, setGenStage] = useState(0)
   const [genProgress, setGenProgress] = useState(0)
-  const [result, setResult] = useState<GeneratedResult | null>(initial?.result ?? null)
-  const [tokensInput, setTokensInput] = useState(initial?.tokensInput ?? 0)
-  const [tokensOutput, setTokensOutput] = useState(initial?.tokensOutput ?? 0)
-  const [costUsd, setCostUsd] = useState(initial?.costUsd ?? "0")
+  const [result, setResult] = useState<GeneratedResult | null>(null)
+  const [tokensInput, setTokensInput] = useState(0)
+  const [tokensOutput, setTokensOutput] = useState(0)
+  const [costUsd, setCostUsd] = useState("0")
   const [genError, setGenError] = useState<string | null>(null)
 
   // Publishing
   const [publishing, setPublishing] = useState(false)
   const [saving, setSaving] = useState(false)
+
+  // ─── Load project from API ─────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (!id || id === "new") {
+      setLoadingProject(false)
+      return
+    }
+    void (async () => {
+      setLoadingProject(true)
+      try {
+        const res = await fetch(`/api/modules/knowledge/ai-courses/${id}`)
+        if (!res.ok) {
+          // Fallback to mock data if the project is one of the legacy mocked ids
+          if (MOCK_PROJECT_DATA[id]) {
+            const mock = MOCK_PROJECT_DATA[id]
+            setTitle(mock.title)
+            setDescription(mock.description)
+            setSources(mock.sources)
+            setResult(mock.result)
+            setTokensInput(mock.tokensInput)
+            setTokensOutput(mock.tokensOutput)
+            setCostUsd(mock.costUsd)
+          } else {
+            toast.error("Проект не найден")
+          }
+          return
+        }
+        const project = (await res.json()) as {
+          title: string
+          description: string | null
+          sources: Source[] | null
+          params: {
+            audience?: string
+            format?: string
+            tone?: string
+            withTests?: boolean
+            withSummary?: boolean
+          } | null
+          result: GeneratedResult | null
+          tokensInput: number | null
+          tokensOutput: number | null
+          costUsd: string | null
+        }
+        setTitle(project.title ?? "")
+        setDescription(project.description ?? "")
+        setSources(Array.isArray(project.sources) ? project.sources : [])
+        if (project.params) {
+          if (project.params.audience) setAudience(project.params.audience)
+          if (project.params.format) setFormat(project.params.format)
+          if (project.params.tone) setTone(project.params.tone)
+          if (project.params.withTests !== undefined) setWithTests(project.params.withTests)
+          if (project.params.withSummary !== undefined) setWithSummary(project.params.withSummary)
+        }
+        setResult(project.result ?? null)
+        setTokensInput(project.tokensInput ?? 0)
+        setTokensOutput(project.tokensOutput ?? 0)
+        setCostUsd(project.costUsd ?? "0")
+      } catch {
+        toast.error("Ошибка загрузки")
+      } finally {
+        setLoadingProject(false)
+      }
+    })()
+  }, [id])
 
   // ─── Token estimation ──────────────────────────────────────────────────────
 
@@ -293,48 +389,150 @@ export default function AiCourseProjectPage() {
     setSelectedArticleIds([])
   }
 
-  const handleAddYoutube = async () => {
-    const url = youtubeUrl.trim()
-    if (!url) return
-    setYtLoading(true)
+  // ─── Multi-URL handling ────────────────────────────────────────────────────
+
+  type UrlPlatform = "youtube" | "rutube" | "vk" | "google_drive" | "yandex_disk" | "direct" | "unknown"
+
+  function detectPlatform(url: string): UrlPlatform {
+    if (!url.trim()) return "unknown"
     try {
-      const res = await fetch(`/api/modules/knowledge/ai-courses/youtube-transcript?url=${encodeURIComponent(url)}`)
-      const data = await res.json()
-      if (res.ok) {
-        setSources((prev) => [...prev, {
-          type: "video", title: data.title || `YouTube видео`, content: data.transcript || "", url, wordCount: data.wordCount ?? 0,
-        }])
-      } else {
-        // Add with empty content
-        setSources((prev) => [...prev, { type: "video", title: `YouTube видео`, content: "", url, wordCount: 0 }])
-        toast.error(data.error || "Субтитры недоступны, видео добавлено без текста")
-      }
+      const u = new URL(url.trim())
+      const host = u.hostname.toLowerCase().replace(/^www\./, "")
+      if (host.includes("youtube.com") || host.includes("youtu.be")) return "youtube"
+      if (host.includes("rutube.ru")) return "rutube"
+      if (host.includes("vk.com") || host.includes("vkvideo.ru")) return "vk"
+      if (host.includes("drive.google.com") || host.includes("docs.google.com")) return "google_drive"
+      if (host.includes("disk.yandex") || host.includes("yadi.sk")) return "yandex_disk"
+      return "direct"
     } catch {
-      setSources((prev) => [...prev, { type: "video", title: `YouTube видео`, content: "", url, wordCount: 0 }])
+      return "unknown"
     }
-    setYoutubeUrl("")
-    setYtLoading(false)
   }
 
-  const handleFiles = (files: FileList | null) => {
-    if (!files) return
-    Array.from(files).forEach((file) => {
-      const reader = new FileReader()
-      reader.onload = (e) => {
-        const text = e.target?.result as string || ""
-        setSources((prev) => [...prev, {
-          type: "file", title: file.name, content: text, wordCount: wordCount(text),
-        }])
-      }
-      if (file.name.endsWith(".txt") || file.name.endsWith(".md")) {
-        reader.readAsText(file)
+  const addUrlRow = () => {
+    setUrlRows((prev) => [
+      ...prev,
+      { id: `r-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, url: "", username: "", password: "", showAuth: false, loading: false },
+    ])
+  }
+
+  const updateUrlRow = (rowId: string, patch: Partial<UrlRow>) => {
+    setUrlRows((prev) => prev.map((r) => (r.id === rowId ? { ...r, ...patch } : r)))
+  }
+
+  const removeUrlRow = (rowId: string) => {
+    setUrlRows((prev) => (prev.length === 1 ? prev : prev.filter((r) => r.id !== rowId)))
+  }
+
+  const fetchUrlRow = async (rowId: string) => {
+    const row = urlRows.find((r) => r.id === rowId)
+    if (!row || !row.url.trim()) return
+    const url = row.url.trim()
+    const platform = detectPlatform(url)
+
+    updateUrlRow(rowId, { loading: true })
+    try {
+      // YouTube по-прежнему идёт через старый endpoint (работает и без креденшлов)
+      if (platform === "youtube") {
+        const res = await fetch(`/api/modules/knowledge/ai-courses/youtube-transcript?url=${encodeURIComponent(url)}`)
+        const data = await res.json()
+        if (res.ok) {
+          setSources((prev) => [...prev, {
+            type: "video",
+            title: data.title || "YouTube видео",
+            content: data.transcript || "",
+            url,
+            wordCount: data.wordCount ?? 0,
+          }])
+          toast.success(data.title || "YouTube добавлен")
+        } else {
+          setSources((prev) => [...prev, { type: "video", title: "YouTube видео", content: "", url, wordCount: 0 }])
+          toast.error(data.error || "Субтитры недоступны")
+        }
       } else {
-        // For PDF/DOCX just add filename, content will be parsed server-side
+        const res = await fetch("/api/modules/knowledge/ai-courses/fetch-url", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            url,
+            username: row.username || undefined,
+            password: row.password || undefined,
+          }),
+        })
+        const data = await res.json()
+        if (!res.ok) {
+          toast.error(data.error || "Не удалось загрузить")
+          return
+        }
+        const srcType: Source["type"] =
+          platform === "rutube" || platform === "vk" ? "video" : "file"
         setSources((prev) => [...prev, {
-          type: "file", title: file.name, content: `[Файл: ${file.name}, ${(file.size / 1024).toFixed(0)} КБ]`, wordCount: 0,
+          type: srcType,
+          title: data.title || url,
+          content: data.text || "",
+          url,
+          wordCount: data.wordCount ?? 0,
         }])
+        toast.success(data.title || "Источник добавлен")
       }
-    })
+      // очищаем поле
+      updateUrlRow(rowId, { url: "", username: "", password: "", showAuth: false })
+    } catch {
+      toast.error("Ошибка сети")
+    } finally {
+      updateUrlRow(rowId, { loading: false })
+    }
+  }
+
+  const handleFiles = async (files: FileList | null) => {
+    if (!files || files.length === 0) return
+    setFileUploading(true)
+    try {
+      for (const file of Array.from(files)) {
+        const name = file.name.toLowerCase()
+        // .txt/.md читаем клиентом напрямую
+        if (name.endsWith(".txt") || name.endsWith(".md")) {
+          const text = await file.text()
+          setSources((prev) => [...prev, {
+            type: "file",
+            title: file.name,
+            content: text,
+            wordCount: wordCount(text),
+          }])
+          toast.success(file.name)
+          continue
+        }
+        // PDF/DOCX парсим на сервере
+        if (name.endsWith(".pdf") || name.endsWith(".docx") || name.endsWith(".doc")) {
+          const form = new FormData()
+          form.append("file", file)
+          try {
+            const res = await fetch("/api/modules/knowledge/ai-courses/parse-file", {
+              method: "POST",
+              body: form,
+            })
+            const data = await res.json()
+            if (!res.ok) {
+              toast.error(`${file.name}: ${data.error || "ошибка парсинга"}`)
+              continue
+            }
+            setSources((prev) => [...prev, {
+              type: "file",
+              title: data.title || file.name,
+              content: data.text || "",
+              wordCount: data.wordCount ?? 0,
+            }])
+            toast.success(file.name)
+          } catch {
+            toast.error(`${file.name}: ошибка сети`)
+          }
+          continue
+        }
+        toast.error(`${file.name}: неподдерживаемый формат`)
+      }
+    } finally {
+      setFileUploading(false)
+    }
   }
 
   const handleAddText = () => {
@@ -348,12 +546,61 @@ export default function AiCourseProjectPage() {
 
   // ─── Save draft ────────────────────────────────────────────────────────────
 
+  const saveProject = async (): Promise<string | null> => {
+    if (!title.trim()) {
+      toast.error("Введите название")
+      return null
+    }
+    const params = { audience, format, tone, withTests, withSummary }
+    try {
+      if (id === "new") {
+        // Create project via POST then PATCH sources/params
+        const createRes = await fetch("/api/modules/knowledge/ai-courses", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title: title.trim(), description: description.trim() }),
+        })
+        const created = await createRes.json()
+        if (!createRes.ok) {
+          toast.error(created.error || "Не удалось создать")
+          return null
+        }
+        await fetch(`/api/modules/knowledge/ai-courses/${created.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sources, params }),
+        })
+        router.replace(`/knowledge/ai-courses/${created.id}`)
+        return created.id as string
+      } else {
+        const patchRes = await fetch(`/api/modules/knowledge/ai-courses/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: title.trim(),
+            description: description.trim(),
+            sources,
+            params,
+          }),
+        })
+        if (!patchRes.ok) {
+          const data = await patchRes.json().catch(() => ({}))
+          toast.error(data.error || "Не удалось сохранить")
+          return null
+        }
+        return id
+      }
+    } catch {
+      toast.error("Ошибка сети")
+      return null
+    }
+  }
+
   const handleSave = async () => {
-    if (!title.trim()) { toast.error("Введите название"); return }
     setSaving(true)
     try {
-      // In real app — POST/PATCH to API
-      toast.success("Черновик сохранён")
+      const savedId = await saveProject()
+      if (savedId) toast.success("Черновик сохранён")
     } finally {
       setSaving(false)
     }
@@ -363,6 +610,13 @@ export default function AiCourseProjectPage() {
 
   const handleGenerate = async () => {
     if (sources.length === 0) return
+
+    // Ensure project exists (save first if new / unsaved)
+    setSaving(true)
+    const projectId = await saveProject()
+    setSaving(false)
+    if (!projectId) return
+
     setGenerating(true)
     setGenError(null)
     setResult(null)
@@ -370,42 +624,46 @@ export default function AiCourseProjectPage() {
     setGenProgress(0)
 
     const interval = setInterval(() => {
-      setGenProgress((p) => p >= 95 ? 95 : p + Math.random() * 8)
-      setGenStage((p) => p + 1 < PROGRESS_STAGES.length ? p + 1 : p)
+      setGenProgress((p) => (p >= 95 ? 95 : p + Math.random() * 8))
+      setGenStage((p) => (p + 1 < PROGRESS_STAGES.length ? p + 1 : p))
     }, 2500)
 
     try {
-      // Simulate API call — in real app this would be a fetch to the generate endpoint
-      await new Promise((r) => setTimeout(r, 3000))
+      const res = await fetch(`/api/modules/knowledge/ai-courses/${projectId}/generate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      })
       clearInterval(interval)
-      setGenProgress(100)
 
-      // Mock result
-      const mockResult: GeneratedResult = {
-        title: title || "AI-сгенерированный курс",
-        description: `Курс создан на основе ${sources.length} источников для ${AUDIENCE_OPTIONS.find((o) => o.value === audience)?.label.toLowerCase() ?? "сотрудников"}.`,
-        modules: [{
-          title: "Основной модуль", description: "Основное содержание курса",
-          lessons: sources.slice(0, Math.min(sources.length * 2, 8)).map((s, i) => ({
-            title: `Урок ${i + 1}: ${s.title.slice(0, 40)}`,
-            content_markdown: `## ${s.title}\n\nСодержание урока на основе источника «${s.title}».\n\n### Ключевые тезисы\n- Тезис 1\n- Тезис 2\n- Тезис 3`,
-            duration_minutes: 10 + Math.floor(Math.random() * 10),
-            test: withTests ? { questions: [{ question: `Что является ключевым в «${s.title}»?`, options: ["Вариант А", "Вариант Б (верный)", "Вариант В", "Вариант Г"], correct_index: 1 }] } : undefined,
-          })),
-        }],
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        setGenError(data.error || "Ошибка генерации")
+        setGenerating(false)
+        return
       }
 
-      const inpTok = estimatedTokens
-      const outTok = Math.ceil(inpTok * 0.8)
-      const cost = ((inpTok * 3 + outTok * 15) / 1_000_000).toFixed(4)
+      const generated = (await res.json()) as GeneratedResult
+      setResult(generated)
+      setGenProgress(100)
 
-      setResult(mockResult)
-      setTokensInput(inpTok)
-      setTokensOutput(outTok)
-      setCostUsd(cost)
-      if (mockResult.title && !title) setTitle(mockResult.title)
+      // Re-fetch project to get updated token counts persisted by the backend
+      try {
+        const pRes = await fetch(`/api/modules/knowledge/ai-courses/${projectId}`)
+        if (pRes.ok) {
+          const project = (await pRes.json()) as {
+            tokensInput: number | null
+            tokensOutput: number | null
+            costUsd: string | null
+          }
+          setTokensInput(project.tokensInput ?? 0)
+          setTokensOutput(project.tokensOutput ?? 0)
+          setCostUsd(project.costUsd ?? "0")
+        }
+      } catch {
+        // ignore, токены остаются как были
+      }
     } catch {
-      setGenError("Ошибка генерации. Попробуйте ещё раз.")
+      setGenError("Ошибка сети. Попробуйте ещё раз.")
     } finally {
       clearInterval(interval)
       setGenerating(false)
@@ -415,13 +673,24 @@ export default function AiCourseProjectPage() {
   // ─── Publish ───────────────────────────────────────────────────────────────
 
   const handlePublish = async () => {
-    if (!result) return
+    if (!result || id === "new") {
+      toast.error("Сначала сохраните и сгенерируйте курс")
+      return
+    }
     setPublishing(true)
     try {
-      // In real app — POST to publish endpoint
-      await new Promise((r) => setTimeout(r, 1000))
+      const res = await fetch(`/api/modules/knowledge/ai-courses/${id}/publish`, {
+        method: "POST",
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        toast.error(data.error || "Не удалось опубликовать")
+        return
+      }
       toast.success("Курс опубликован в раздел «Обучение»")
       router.push("/knowledge/ai-courses")
+    } catch {
+      toast.error("Ошибка сети")
     } finally {
       setPublishing(false)
     }
@@ -448,7 +717,7 @@ export default function AiCourseProjectPage() {
               <ChevronRight className="size-3.5" />
               <Link href="/knowledge/ai-courses" className="hover:text-foreground transition-colors">AI-курсы</Link>
               <ChevronRight className="size-3.5" />
-              <span className="text-foreground font-medium">{isNew ? "Новый проект" : title || "Проект"}</span>
+              <span className="text-foreground font-medium">{id === "new" ? "Новый проект" : title || "Проект"}</span>
             </div>
             <div className="flex items-center gap-2">
               <Sparkles className="size-5 text-violet-500" />
@@ -470,8 +739,8 @@ export default function AiCourseProjectPage() {
                 <h2 className="text-sm font-semibold">Источники <span className="text-muted-foreground font-normal">({sources.length})</span></h2>
               </div>
 
-              <div className="p-5 space-y-3">
-                {/* Add buttons */}
+              <div className="p-5 space-y-4">
+                {/* ── Quick buttons: КБ / Текст ───────────────────────── */}
                 <div className="grid grid-cols-2 gap-2">
                   <Button variant="outline" size="sm" className="gap-1.5 justify-start h-9 text-xs" onClick={() => { setSelectedArticleIds([]); setShowArticlePicker(true) }}>
                     <BookOpen className="size-3.5 text-violet-500" />
@@ -481,27 +750,144 @@ export default function AiCourseProjectPage() {
                     <Type className="size-3.5 text-emerald-500" />
                     Текст
                   </Button>
-                  <div className="col-span-2 flex gap-2">
-                    <div className="relative flex-1">
-                      <Youtube className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-red-500" />
-                      <Input
-                        placeholder="YouTube URL..."
-                        value={youtubeUrl}
-                        onChange={(e) => setYoutubeUrl(e.target.value)}
-                        onKeyDown={(e) => e.key === "Enter" && handleAddYoutube()}
-                        className="h-9 pl-8 text-xs"
-                      />
-                    </div>
-                    <Button size="sm" variant="outline" className="h-9" onClick={handleAddYoutube} disabled={!youtubeUrl.trim() || ytLoading}>
-                      {ytLoading ? <Loader2 className="size-3.5 animate-spin" /> : <Plus className="size-3.5" />}
-                    </Button>
-                  </div>
-                  <Button variant="outline" size="sm" className="gap-1.5 justify-start h-9 text-xs col-span-2" onClick={() => fileInputRef.current?.click()}>
-                    <Upload className="size-3.5 text-blue-500" />
-                    Загрузить файл
-                  </Button>
-                  <input ref={fileInputRef} type="file" accept=".pdf,.docx,.txt,.md" multiple onChange={(e) => { handleFiles(e.target.files); e.target.value = "" }} className="hidden" />
                 </div>
+
+                {/* ── Multi-URL input ─────────────────────────────────── */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-medium text-muted-foreground">Ссылки</Label>
+                    <span className="text-[10px] text-muted-foreground">
+                      YouTube · Rutube · VK · Google Drive · Я.Диск · прямые
+                    </span>
+                  </div>
+                  {urlRows.map((row) => {
+                    const platform = detectPlatform(row.url)
+                    const meta = URL_PLATFORM_META[platform]
+                    const disabled = !row.url.trim() || row.loading
+                    return (
+                      <div key={row.id} className="space-y-1.5">
+                        <div className="flex gap-1.5">
+                          <div className="relative flex-1">
+                            <div className="absolute left-2.5 top-1/2 -translate-y-1/2">
+                              {meta.icon}
+                            </div>
+                            <Input
+                              placeholder="https://..."
+                              value={row.url}
+                              onChange={(e) => updateUrlRow(row.id, { url: e.target.value })}
+                              onKeyDown={(e) => e.key === "Enter" && !disabled && fetchUrlRow(row.id)}
+                              className="h-9 pl-8 pr-16 text-xs"
+                            />
+                            {row.url.trim() && (
+                              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground uppercase">
+                                {meta.label}
+                              </span>
+                            )}
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-9 w-9 p-0"
+                            onClick={() => updateUrlRow(row.id, { showAuth: !row.showAuth })}
+                            title="Логин/пароль для закрытых ресурсов"
+                          >
+                            <LockIcon className="size-3.5 text-muted-foreground" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-9"
+                            onClick={() => fetchUrlRow(row.id)}
+                            disabled={disabled}
+                          >
+                            {row.loading ? <Loader2 className="size-3.5 animate-spin" /> : <Plus className="size-3.5" />}
+                          </Button>
+                          {urlRows.length > 1 && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-9 w-9 p-0 text-muted-foreground hover:text-destructive"
+                              onClick={() => removeUrlRow(row.id)}
+                            >
+                              <X className="size-3.5" />
+                            </Button>
+                          )}
+                        </div>
+
+                        {row.showAuth && (
+                          <div className="grid grid-cols-2 gap-1.5 pl-1">
+                            <Input
+                              placeholder="Логин"
+                              value={row.username}
+                              onChange={(e) => updateUrlRow(row.id, { username: e.target.value })}
+                              className="h-8 text-xs"
+                              autoComplete="off"
+                            />
+                            <Input
+                              type="password"
+                              placeholder="Пароль"
+                              value={row.password}
+                              onChange={(e) => updateUrlRow(row.id, { password: e.target.value })}
+                              className="h-8 text-xs"
+                              autoComplete="off"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={addUrlRow}
+                    className="h-8 text-xs text-muted-foreground hover:text-foreground gap-1"
+                  >
+                    <Plus className="size-3" />
+                    Добавить ещё ссылку
+                  </Button>
+                </div>
+
+                {/* ── File drag-and-drop zone ─────────────────────────── */}
+                <div
+                  onDragOver={(e) => {
+                    e.preventDefault()
+                    setFileDragActive(true)
+                  }}
+                  onDragLeave={() => setFileDragActive(false)}
+                  onDrop={(e) => {
+                    e.preventDefault()
+                    setFileDragActive(false)
+                    void handleFiles(e.dataTransfer.files)
+                  }}
+                  onClick={() => fileInputRef.current?.click()}
+                  className={cn(
+                    "rounded-lg border-2 border-dashed p-4 text-center cursor-pointer transition-colors",
+                    fileDragActive
+                      ? "border-primary bg-primary/5"
+                      : "border-border hover:border-primary/40 hover:bg-muted/40",
+                  )}
+                >
+                  {fileUploading ? (
+                    <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
+                      <Loader2 className="size-4 animate-spin" />
+                      Парсинг файла…
+                    </div>
+                  ) : (
+                    <>
+                      <Upload className="size-5 mx-auto mb-1.5 text-muted-foreground" />
+                      <p className="text-xs font-medium">Перетащите файлы или нажмите для выбора</p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">PDF, DOCX, TXT, MD — до 15MB</p>
+                    </>
+                  )}
+                </div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf,.docx,.doc,.txt,.md"
+                  multiple
+                  onChange={(e) => { void handleFiles(e.target.files); e.target.value = "" }}
+                  className="hidden"
+                />
 
                 {/* Source list */}
                 {sources.length > 0 && (

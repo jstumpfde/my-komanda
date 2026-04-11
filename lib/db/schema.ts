@@ -1186,6 +1186,50 @@ export const demoTemplates = pgTable("demo_templates", {
   updatedAt:     timestamp("updated_at").defaultNow(),
 })
 
+// ─── Training: AI ролевые сценарии ───────────────────────────────────────────
+
+export const trainingScenarios = pgTable("training_scenarios", {
+  id:           uuid("id").primaryKey().defaultRandom(),
+  tenantId:     uuid("tenant_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  title:        text("title").notNull(),
+  description:  text("description"),
+  type:         text("type").notNull(),           // cold_call | inbound_support | interview | custom
+  difficulty:   text("difficulty").default("medium"), // easy | medium | hard
+  systemPrompt: text("system_prompt").notNull(),  // роль AI в сценарии
+  criteria:     jsonb("criteria").default("[]"),  // массив критериев оценки
+  relatedArticleId: uuid("related_article_id").references(() => knowledgeArticles.id, { onDelete: "set null" }),
+  isPreset:     boolean("is_preset").default(false), // встроенные сценарии
+  createdBy:    uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt:    timestamp("created_at").defaultNow(),
+  updatedAt:    timestamp("updated_at").defaultNow(),
+})
+
+export const trainingSessions = pgTable("training_sessions", {
+  id:           uuid("id").primaryKey().defaultRandom(),
+  tenantId:     uuid("tenant_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  scenarioId:   uuid("scenario_id").references(() => trainingScenarios.id, { onDelete: "cascade" }).notNull(),
+  userId:       uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+  messages:     jsonb("messages").notNull().default("[]"),  // [{role, content, createdAt}]
+  status:       text("status").default("active"), // active | completed | abandoned
+  score:        integer("score"),                   // 0-100
+  evaluation:   jsonb("evaluation"),                // {criteria: [{name, pass, note}], recommendations: []}
+  startedAt:    timestamp("started_at").defaultNow(),
+  completedAt:  timestamp("completed_at"),
+})
+
+// ─── Gamification: user achievements ─────────────────────────────────────────
+
+export const userAchievements = pgTable("user_achievements", {
+  id:         uuid("id").primaryKey().defaultRandom(),
+  tenantId:   uuid("tenant_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  userId:     uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  type:       text("type").notNull(),       // lesson | course | test_perfect | training
+  points:     integer("points").notNull(),  // +10 | +50 | +30 | +20
+  sourceId:   text("source_id"),            // id урока/курса/тренировки
+  note:       text("note"),                 // описание (опционально)
+  earnedAt:   timestamp("earned_at").defaultNow(),
+})
+
 // ─── HH.ru Integration ──────────────────────────────────────────────────────
 
 export const hhIntegrations = pgTable("hh_integrations", {

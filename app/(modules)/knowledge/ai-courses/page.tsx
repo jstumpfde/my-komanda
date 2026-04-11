@@ -1,57 +1,38 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import {
-  ChevronRight, Plus, Sparkles, BookOpen, FileText, Coins,
+  ChevronRight, Plus, Sparkles, BookOpen, FileText, Coins, Loader2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { toast } from "sonner"
 
-// ─── Mock data ───────────────────────────────────────────────────────────────
+// ─── Project shape (API) ────────────────────────────────────────────────────
 
-const MOCK_PROJECTS = [
-  {
-    id: "proj-1",
-    title: "Онбординг менеджеров",
-    description: "Курс по адаптации новых менеджеров: процессы, инструменты, культура",
-    status: "ready",
-    sourcesCount: 4,
-    lessonsCount: 8,
-    tokensInput: 12450,
-    tokensOutput: 3200,
-    costUsd: "0.0535",
-    createdAt: "2026-04-01T10:00:00Z",
-  },
-  {
-    id: "proj-2",
-    title: "Продуктовое обучение",
-    description: "Знакомство с продуктом для новых сотрудников отдела продаж",
-    status: "draft",
-    sourcesCount: 2,
-    lessonsCount: 0,
-    tokensInput: 0,
-    tokensOutput: 0,
-    costUsd: "0",
-    createdAt: "2026-04-03T14:30:00Z",
-  },
-  {
-    id: "proj-3",
-    title: "Безопасность на производстве",
-    description: "Обязательный курс по ТБ: правила, инструкции, тесты",
-    status: "published",
-    sourcesCount: 6,
-    lessonsCount: 12,
-    tokensInput: 22800,
-    tokensOutput: 5600,
-    costUsd: "0.1524",
-    createdAt: "2026-03-25T09:00:00Z",
-  },
-]
+interface SourceLike { type?: string }
+interface ResultLike {
+  modules?: { lessons?: unknown[] }[]
+}
+
+interface AiCourseProject {
+  id: string
+  title: string
+  description: string | null
+  status: string
+  sources: SourceLike[] | null
+  result: ResultLike | null
+  tokensInput: number | null
+  tokensOutput: number | null
+  costUsd: string | null
+  createdAt: string
+}
 
 const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
   draft:      { label: "Черновик",   className: "bg-muted text-muted-foreground" },
@@ -73,7 +54,59 @@ function formatDate(d: string): string {
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 export default function AiCoursesListPage() {
-  const [projects] = useState(MOCK_PROJECTS)
+  const router = useRouter()
+  const [projects, setProjects] = useState<AiCourseProject[]>([])
+  const [loading, setLoading] = useState(true)
+  const [creating, setCreating] = useState(false)
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const res = await fetch("/api/modules/knowledge/ai-courses")
+        if (res.ok) {
+          const data = (await res.json()) as AiCourseProject[]
+          setProjects(Array.isArray(data) ? data : [])
+        }
+      } catch {
+        // ignore
+      } finally {
+        setLoading(false)
+      }
+    })()
+  }, [])
+
+  async function handleCreate() {
+    setCreating(true)
+    try {
+      const res = await fetch("/api/modules/knowledge/ai-courses", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: "Новый AI-курс" }),
+      })
+      const data = (await res.json()) as AiCourseProject & { error?: string }
+      if (!res.ok) {
+        toast.error(data.error || "Не удалось создать")
+        return
+      }
+      router.push(`/knowledge/ai-courses/${data.id}`)
+    } catch {
+      toast.error("Ошибка сети")
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  function sourcesCount(p: AiCourseProject): number {
+    return Array.isArray(p.sources) ? p.sources.length : 0
+  }
+
+  function lessonsCount(p: AiCourseProject): number {
+    if (!p.result?.modules) return 0
+    return p.result.modules.reduce(
+      (sum, m) => sum + (Array.isArray(m.lessons) ? m.lessons.length : 0),
+      0,
+    )
+  }
 
   return (
     <SidebarProvider defaultOpen={true}>
@@ -96,63 +129,82 @@ export default function AiCoursesListPage() {
                 <Sparkles className="size-5 text-violet-500" />
                 <h1 className="text-xl font-semibold">AI-курсы</h1>
               </div>
-              <Link href="/knowledge/ai-courses/new">
-                <Button className="gap-1.5">
-                  <Plus className="size-4" />
-                  Новый AI-курс
+              <Button className="gap-1.5" onClick={handleCreate} disabled={creating}>
+                {creating ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
+                Новый AI-курс
+              </Button>
+            </div>
+
+            {loading ? (
+              <div className="flex items-center justify-center h-48 gap-2 text-muted-foreground">
+                <Loader2 className="size-5 animate-spin" />
+                Загрузка...
+              </div>
+            ) : projects.length === 0 ? (
+              <div className="rounded-xl border border-dashed p-10 text-center">
+                <Sparkles className="size-8 mx-auto mb-3 text-muted-foreground" />
+                <p className="text-sm font-medium mb-1">Пока нет AI-курсов</p>
+                <p className="text-xs text-muted-foreground mb-4">
+                  Создайте первый — добавьте YouTube видео, статьи или файлы, и AI соберёт структурированный курс с тестами.
+                </p>
+                <Button onClick={handleCreate} disabled={creating} className="gap-1.5">
+                  {creating ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
+                  Создать AI-курс
                 </Button>
-              </Link>
-            </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                {projects.map((p) => {
+                  const st = STATUS_CONFIG[p.status] ?? STATUS_CONFIG.draft
+                  const srcCnt = sourcesCount(p)
+                  const lsnCnt = lessonsCount(p)
+                  const tokensTotal = (p.tokensInput ?? 0) + (p.tokensOutput ?? 0)
+                  return (
+                    <Link
+                      key={p.id}
+                      href={`/knowledge/ai-courses/${p.id}`}
+                      className="group block border rounded-xl p-5 bg-card transition-all hover:border-primary/40"
+                    >
+                      <div className="flex items-start justify-between mb-3">
+                        <h3 className="font-semibold text-sm group-hover:text-primary transition-colors line-clamp-1">
+                          {p.title}
+                        </h3>
+                        <Badge variant="secondary" className={cn("text-[10px] shrink-0 ml-2", st.className)}>
+                          {st.label}
+                        </Badge>
+                      </div>
 
-            {/* Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-              {projects.map((p) => {
-                const st = STATUS_CONFIG[p.status] ?? STATUS_CONFIG.draft
-                return (
-                  <Link
-                    key={p.id}
-                    href={`/knowledge/ai-courses/${p.id}`}
-                    className="group block border rounded-xl p-5 bg-card transition-all"
-                  >
-                    <div className="flex items-start justify-between mb-3">
-                      <h3 className="font-semibold text-sm group-hover:text-primary transition-colors line-clamp-1">
-                        {p.title}
-                      </h3>
-                      <Badge variant="secondary" className={cn("text-[10px] shrink-0 ml-2", st.className)}>
-                        {st.label}
-                      </Badge>
-                    </div>
-
-                    {p.description && (
-                      <p className="text-xs text-muted-foreground line-clamp-1 mb-4">{p.description}</p>
-                    )}
-
-                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                      <span className="flex items-center gap-1">
-                        <FileText className="size-3" />
-                        {p.sourcesCount} источн.
-                      </span>
-                      {p.lessonsCount > 0 && (
-                        <span className="flex items-center gap-1">
-                          <BookOpen className="size-3" />
-                          {p.lessonsCount} уроков
-                        </span>
+                      {p.description && (
+                        <p className="text-xs text-muted-foreground line-clamp-1 mb-4">{p.description}</p>
                       )}
-                      {Number(p.costUsd) > 0 && (
-                        <span className="flex items-center gap-1">
-                          <Coins className="size-3" />
-                          {formatTokens(p.tokensInput + p.tokensOutput)} токенов · ${p.costUsd}
-                        </span>
-                      )}
-                    </div>
 
-                    <div className="mt-3 pt-3 border-t text-[10px] text-muted-foreground">
-                      {formatDate(p.createdAt)}
-                    </div>
-                  </Link>
-                )
-              })}
-            </div>
+                      <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
+                        <span className="flex items-center gap-1">
+                          <FileText className="size-3" />
+                          {srcCnt} источн.
+                        </span>
+                        {lsnCnt > 0 && (
+                          <span className="flex items-center gap-1">
+                            <BookOpen className="size-3" />
+                            {lsnCnt} уроков
+                          </span>
+                        )}
+                        {Number(p.costUsd) > 0 && (
+                          <span className="flex items-center gap-1">
+                            <Coins className="size-3" />
+                            {formatTokens(tokensTotal)} токенов · ${p.costUsd}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="mt-3 pt-3 border-t text-[10px] text-muted-foreground">
+                        {formatDate(p.createdAt)}
+                      </div>
+                    </Link>
+                  )
+                })}
+              </div>
+            )}
 
           </div>
         </div>
