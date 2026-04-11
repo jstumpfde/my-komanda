@@ -14,6 +14,7 @@ import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { toast } from "sonner"
+import { cn } from "@/lib/utils"
 
 interface PlanMaterialRef {
   materialId: string

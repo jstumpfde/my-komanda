@@ -258,7 +258,7 @@ export default function CompanySchedulePage() {
     : `${individualSchedules.length} ${individualSchedules.length === 1 ? "сотрудник" : individualSchedules.length < 5 ? "сотрудника" : "сотрудников"} с индивидуальным графиком`
 
   return (
-    <>
+    <div className="max-w-4xl">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-5">
         <div>
           <h1 className="text-xl font-semibold text-foreground mb-0.5">Расписание компании</h1>
@@ -640,6 +640,6 @@ export default function CompanySchedulePage() {
           </div>
         </DialogContent>
       </Dialog>
-    </>
+    </div>
   )
 }

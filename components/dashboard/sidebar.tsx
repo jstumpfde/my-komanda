@@ -145,14 +145,16 @@ export function DashboardSidebar() {
   const vis = getVisibleSections(role) ?? { main: true, hiring: false, tools: false, settings: false, admin: false }
   const visSettings = getVisibleSettings(role) ?? ['profile']
 
-  // Company branding
+  // Company branding — предпочитаем brandName (короткий бренд), fallback на name.
+  // fullName (юр. название) в sidebar не показываем.
   const [companyLogo, setCompanyLogo] = useState<string | null>(null)
   const [companyName, setCompanyName] = useState<string | null>(null)
   useEffect(() => {
     fetch('/api/companies').then(r => r.ok ? r.json() : null)
-      .then((d: { logoUrl?: string; name?: string } | null) => {
+      .then((d: { logoUrl?: string; name?: string; brandName?: string } | null) => {
         if (d?.logoUrl) setCompanyLogo(d.logoUrl)
-        if (d?.name) setCompanyName(d.name)
+        const display = d?.brandName?.trim() || d?.name?.trim() || null
+        if (display) setCompanyName(display)
       }).catch(() => {})
   }, [])
 
@@ -352,15 +354,27 @@ export function DashboardSidebar() {
       <SidebarHeader className="p-4 border-b border-sidebar-border">
         <div className="flex items-center gap-3">
           {companyLogo ? (
-            <img src={companyLogo} alt="" className="h-9 w-9 rounded-lg object-contain shrink-0" />
+            <div className="h-9 w-9 rounded-lg bg-white dark:bg-white/10 shrink-0 flex items-center justify-center overflow-hidden">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={companyLogo}
+                alt=""
+                className="max-h-9 max-w-9 object-contain"
+              />
+            </div>
+          ) : companyName ? (
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground shrink-0 text-base font-semibold">
+              {companyName.trim().charAt(0).toUpperCase()}
+            </div>
           ) : (
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground shrink-0">
               <Briefcase className="size-5" />
             </div>
           )}
-          <div className="overflow-hidden group-data-[collapsible=icon]:hidden">
-            <span className="font-semibold text-sidebar-foreground text-base tracking-tight">{companyName || "Company24.Pro"}</span>
-            <p className="text-xs text-sidebar-foreground/70 tracking-wide truncate">{companyName ? "Платформа управления" : "AI Business System"}</p>
+          <div className="overflow-hidden group-data-[collapsible=icon]:hidden min-w-0">
+            <span className="font-semibold text-sidebar-foreground text-sm tracking-tight leading-snug line-clamp-2 block">
+              {companyName || "Company24.Pro"}
+            </span>
           </div>
         </div>
       </SidebarHeader>
