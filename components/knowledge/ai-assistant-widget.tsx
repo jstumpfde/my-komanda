@@ -7,6 +7,7 @@ import { MessageCircle, X, Send, Loader2, Mic, Square, Maximize2, Minimize2, Boo
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { useAuth, ROLE_LABELS, type UserRole } from "@/lib/auth"
 
 type Role = "user" | "assistant"
 
@@ -360,8 +361,26 @@ const MODULE_PROMPTS: Record<ModuleContext, string> = {
   platform: PLATFORM_PROMPT,
 }
 
-function getSystemPrompt(module: ModuleContext): string {
-  return BASE_PROMPT + "\n" + MODULE_PROMPTS[module]
+// ─── User profile block (injected into every prompt) ────────────────────
+
+function buildUserContext(role: UserRole): string {
+  return `
+═══════════════════════════════════════
+ПРОФИЛЬ ПОЛЬЗОВАТЕЛЯ
+═══════════════════════════════════════
+Роль в системе: ${ROLE_LABELS[role]}
+Должность: не указана
+Отдел: не указан
+
+Подстраивай тон, уровень детализации и предложения под роль пользователя:
+- Руководителям (Директор, Главный HR, HR-менеджер, Администратор платформы) — предлагай СОЗДАВАТЬ материалы, УПРАВЛЯТЬ процессами, АНАЛИЗИРОВАТЬ метрики. Формулируй как партнёр по бизнесу.
+- Исполнителям (Сотрудник, Наблюдатель) — предлагай НАЙТИ нужную информацию, ЗАДАТЬ вопрос, ПРОЙТИ обучение. Формулируй как помощник.
+- Руководитель отдела — промежуточный случай: может и создавать в пределах отдела, и искать для своей команды. Адаптируйся по контексту вопроса.
+`
+}
+
+function getSystemPrompt(module: ModuleContext, role: UserRole): string {
+  return BASE_PROMPT + "\n" + buildUserContext(role) + "\n" + MODULE_PROMPTS[module]
 }
 
 const CLAUDE_MODEL = "claude-sonnet-4-20250514"
@@ -410,6 +429,7 @@ function extractTitle(content: string): string {
 export function AiAssistantWidget() {
   const pathname = usePathname() || "/"
   const moduleContext = detectModule(pathname)
+  const { role } = useAuth()
 
   const [open, setOpen] = useState(false)
   const [expanded, setExpanded] = useState(false)
@@ -592,7 +612,7 @@ export function AiAssistantWidget() {
         body: JSON.stringify({
           model: CLAUDE_MODEL,
           max_tokens: 2048,
-          system: getSystemPrompt(moduleContext),
+          system: getSystemPrompt(moduleContext, role),
           messages: buildClaudeMessages(messages, question, context),
         }),
       })
