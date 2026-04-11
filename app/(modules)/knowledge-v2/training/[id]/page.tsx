@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import {
   Target, Loader2, Send, ChevronLeft, RotateCcw, CheckCircle2, XCircle,
-  Trophy, Lightbulb, Play,
+  Trophy, Lightbulb, Play, Mic, MicOff, Volume2, VolumeX,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
@@ -54,6 +54,37 @@ const CLAUDE_MODEL = "claude-sonnet-4-20250514"
 const MIN_TURNS_FOR_EVAL = 5
 const MAX_TURNS_BEFORE_AUTO_EVAL = 10
 
+// ── Web Speech API minimal types (not in DOM lib by default) ─────────────
+interface SpeechRecognitionAlt {
+  transcript: string
+}
+interface SpeechRecognitionResultLike {
+  readonly length: number
+  [index: number]: SpeechRecognitionAlt
+}
+interface SpeechRecognitionResultList {
+  readonly length: number
+  [index: number]: SpeechRecognitionResultLike
+}
+interface SpeechRecognitionEventLike {
+  results: SpeechRecognitionResultList
+}
+interface SpeechRecognitionErrorEventLike {
+  error: string
+}
+interface SpeechRecognitionLike {
+  lang: string
+  interimResults: boolean
+  continuous: boolean
+  maxAlternatives: number
+  onresult: ((e: SpeechRecognitionEventLike) => void) | null
+  onerror: ((e: SpeechRecognitionErrorEventLike) => void) | null
+  onend: (() => void) | null
+  start(): void
+  stop(): void
+}
+type SpeechRecognitionCtor = new () => SpeechRecognitionLike
+
 export default function TrainingSessionPage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
@@ -67,6 +98,43 @@ export default function TrainingSessionPage() {
   const [evaluation, setEvaluation] = useState<Evaluation | null>(null)
   const [apiKey, setApiKey] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
+
+  // ── Voice mode state ────────────────────────────────────────────────────
+  const [voiceMode, setVoiceMode] = useState(false)
+  const [voiceSupported, setVoiceSupported] = useState(false)
+  const [isListening, setIsListening] = useState(false)
+  const [isSpeaking, setIsSpeaking] = useState(false)
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null)
+  const ruVoiceRef = useRef<SpeechSynthesisVoice | null>(null)
+
+  // Detect support + load Russian (preferably female) voice
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const SR =
+      (window as unknown as { SpeechRecognition?: SpeechRecognitionCtor }).SpeechRecognition ||
+      (window as unknown as { webkitSpeechRecognition?: SpeechRecognitionCtor }).webkitSpeechRecognition
+    const hasTts = "speechSynthesis" in window
+    setVoiceSupported(Boolean(SR && hasTts))
+
+    if (!hasTts) return
+
+    const pickVoice = () => {
+      const voices = window.speechSynthesis.getVoices()
+      const ru = voices.filter((v) => v.lang && v.lang.toLowerCase().startsWith("ru"))
+      // Предпочитаем женские голоса по имени
+      const female =
+        ru.find((v) => /milena|irina|katya|alena|anna|женск|female/i.test(v.name)) ??
+        ru[0] ??
+        null
+      ruVoiceRef.current = female
+    }
+    pickVoice()
+    window.speechSynthesis.addEventListener("voiceschanged", pickVoice)
+    return () => {
+      window.speechSynthesis.removeEventListener("voiceschanged", pickVoice)
+      window.speechSynthesis.cancel()
+    }
+  }, [])
 
   // ─── Load scenario + active session + api key ─────────────────────────────
 
@@ -221,6 +289,111 @@ export default function TrainingSessionPage() {
 
   // ─── Send a turn ───────────────────────────────────────────────────────────
 
+  // ── Voice helpers ──────────────────────────────────────────────────────
+
+  function speakText(text: string) {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return
+    try {
+      window.speechSynthesis.cancel()
+      const utter = new SpeechSynthesisUtterance(text)
+      utter.lang = "ru-RU"
+      utter.rate = 1.0
+      utter.pitch = 1.0
+      if (ruVoiceRef.current) utter.voice = ruVoiceRef.current
+      utter.onstart = () => setIsSpeaking(true)
+      utter.onend = () => setIsSpeaking(false)
+      utter.onerror = () => setIsSpeaking(false)
+      window.speechSynthesis.speak(utter)
+    } catch (err) {
+      console.error("[training] tts failed", err)
+      setIsSpeaking(false)
+    }
+  }
+
+  function stopSpeaking() {
+    if (typeof window === "undefined") return
+    window.speechSynthesis.cancel()
+    setIsSpeaking(false)
+  }
+
+  function startListening() {
+    if (typeof window === "undefined") return
+    const SR =
+      (window as unknown as { SpeechRecognition?: SpeechRecognitionCtor }).SpeechRecognition ||
+      (window as unknown as { webkitSpeechRecognition?: SpeechRecognitionCtor }).webkitSpeechRecognition
+    if (!SR) {
+      toast.error("Распознавание речи не поддерживается в этом браузере")
+      return
+    }
+    // Остановить озвучку чтобы не записать собственный голос AI
+    stopSpeaking()
+
+    const rec = new SR()
+    rec.lang = "ru-RU"
+    rec.interimResults = false
+    rec.continuous = false
+    rec.maxAlternatives = 1
+
+    rec.onresult = (event: SpeechRecognitionEventLike) => {
+      const parts: string[] = []
+      for (let i = 0; i < event.results.length; i++) {
+        const res = event.results[i]
+        if (res && res.length > 0 && res[0]) parts.push(res[0].transcript ?? "")
+      }
+      const transcript = parts.join(" ").trim()
+      if (transcript) {
+        setInput(transcript)
+        // Немедленно отправляем
+        setTimeout(() => {
+          const send = handleSendRef.current
+          if (send) void send()
+        }, 100)
+      }
+    }
+    rec.onerror = (e: SpeechRecognitionErrorEventLike) => {
+      console.error("[training] recognition error", e.error)
+      setIsListening(false)
+    }
+    rec.onend = () => {
+      setIsListening(false)
+    }
+
+    try {
+      rec.start()
+      setIsListening(true)
+      recognitionRef.current = rec
+    } catch (err) {
+      console.error("[training] recognition start failed", err)
+      setIsListening(false)
+    }
+  }
+
+  function stopListening() {
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop() } catch { /* ignore */ }
+    }
+    setIsListening(false)
+  }
+
+  function toggleVoiceMode() {
+    if (voiceMode) {
+      // Отключаем голос — гасим всё
+      stopListening()
+      stopSpeaking()
+      setVoiceMode(false)
+    } else {
+      if (!voiceSupported) {
+        toast.error("Голосовой режим не поддерживается в этом браузере")
+        return
+      }
+      setVoiceMode(true)
+      toast.success("Голосовой режим включён")
+    }
+  }
+
+  // Ref на handleSend чтобы вызвать его из onresult без замыкания на устаревший state
+  const handleSendRef = useRef<(() => void) | null>(null)
+
   async function handleSend() {
     const text = input.trim()
     if (!text || !scenario || !session || sending) return
@@ -277,12 +450,22 @@ export default function TrainingSessionPage() {
 
     setSending(false)
 
+    // Озвучка реплики AI в голосовом режиме
+    if (voiceMode) {
+      speakText(reply)
+    }
+
     // Auto-evaluate after 10 turns
     const userTurns = updated.messages.filter((m) => m.role === "user").length
     if (userTurns >= MAX_TURNS_BEFORE_AUTO_EVAL) {
       void handleEvaluate(updated)
     }
   }
+
+  // Keep handleSendRef current so SpeechRecognition callback can fire latest version
+  useEffect(() => {
+    handleSendRef.current = () => { void handleSend() }
+  })
 
   // ─── Evaluate ──────────────────────────────────────────────────────────────
 
@@ -334,6 +517,14 @@ export default function TrainingSessionPage() {
 
   return (
     <SidebarProvider defaultOpen={true}>
+      <style dangerouslySetInnerHTML={{
+        __html: `
+          @keyframes wave {
+            0%, 100% { transform: scaleY(0.4); }
+            50%      { transform: scaleY(1.4); }
+          }
+        `,
+      }} />
       <DashboardSidebar />
       <SidebarInset>
         <DashboardHeader />
@@ -510,23 +701,107 @@ export default function TrainingSessionPage() {
 
                     {/* Input */}
                     {!evaluation && (
-                      <div className="border-t py-4">
-                        <div className="flex gap-2">
-                          <Input
-                            placeholder="Ваша реплика..."
-                            value={input}
-                            onChange={(e) => setInput(e.target.value)}
-                            onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
-                            disabled={sending || evaluating || !apiKey}
-                            className="flex-1"
-                          />
-                          <Button
-                            onClick={handleSend}
-                            disabled={!input.trim() || sending || evaluating || !apiKey}
+                      <div className="border-t py-4 space-y-3">
+                        {/* Voice mode active: listening / speaking indicator */}
+                        {voiceMode && (isListening || isSpeaking) && (
+                          <div
+                            className={cn(
+                              "rounded-lg border px-4 py-3 flex items-center gap-3",
+                              isListening
+                                ? "border-red-500/40 bg-red-500/5"
+                                : "border-violet-500/40 bg-violet-500/5",
+                            )}
                           >
-                            {sending ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+                            {isListening ? (
+                              <Mic className="size-4 text-red-500 animate-pulse shrink-0" />
+                            ) : (
+                              <Volume2 className="size-4 text-violet-500 shrink-0" />
+                            )}
+                            <span className="text-sm font-medium flex-1">
+                              {isListening ? "Слушаю…" : "AI говорит…"}
+                            </span>
+                            {/* Wave animation */}
+                            <div className="flex items-center gap-0.5">
+                              {[0, 1, 2, 3, 4].map((i) => (
+                                <span
+                                  key={i}
+                                  className={cn(
+                                    "w-1 rounded-full",
+                                    isListening ? "bg-red-500" : "bg-violet-500",
+                                  )}
+                                  style={{
+                                    height: `${8 + (i % 3) * 6}px`,
+                                    animation: `wave 1s ease-in-out ${i * 0.1}s infinite`,
+                                  }}
+                                />
+                              ))}
+                            </div>
+                            {isSpeaking && (
+                              <Button size="sm" variant="ghost" className="h-7 ml-1" onClick={stopSpeaking}>
+                                <VolumeX className="size-3.5" />
+                              </Button>
+                            )}
+                          </div>
+                        )}
+
+                        <div className="flex gap-2">
+                          <Button
+                            type="button"
+                            variant={voiceMode ? "default" : "outline"}
+                            size="icon"
+                            onClick={toggleVoiceMode}
+                            disabled={!voiceSupported || sending || evaluating}
+                            title={voiceSupported ? "Голосовой режим" : "Не поддерживается"}
+                            className="shrink-0"
+                          >
+                            {voiceMode ? <Volume2 className="size-4" /> : <VolumeX className="size-4" />}
                           </Button>
+
+                          {voiceMode ? (
+                            <Button
+                              type="button"
+                              variant={isListening ? "destructive" : "outline"}
+                              onClick={isListening ? stopListening : startListening}
+                              disabled={sending || evaluating || isSpeaking || !apiKey}
+                              className="flex-1 gap-2"
+                            >
+                              {isListening ? (
+                                <>
+                                  <MicOff className="size-4" />
+                                  Остановить
+                                </>
+                              ) : (
+                                <>
+                                  <Mic className="size-4" />
+                                  Нажмите и говорите
+                                </>
+                              )}
+                            </Button>
+                          ) : (
+                            <>
+                              <Input
+                                placeholder="Ваша реплика..."
+                                value={input}
+                                onChange={(e) => setInput(e.target.value)}
+                                onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
+                                disabled={sending || evaluating || !apiKey}
+                                className="flex-1"
+                              />
+                              <Button
+                                onClick={handleSend}
+                                disabled={!input.trim() || sending || evaluating || !apiKey}
+                              >
+                                {sending ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+                              </Button>
+                            </>
+                          )}
                         </div>
+
+                        {!voiceSupported && (
+                          <p className="text-[10px] text-muted-foreground">
+                            Голосовой режим недоступен в этом браузере (нужен Chrome/Edge/Safari)
+                          </p>
+                        )}
                       </div>
                     )}
                   </>
