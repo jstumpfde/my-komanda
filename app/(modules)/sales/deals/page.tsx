@@ -1,18 +1,18 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   Handshake, Plus, Search, GripVertical,
-  TrendingUp, DollarSign, Trophy, Percent, Circle,
+  TrendingUp, DollarSign, Trophy, Percent,
+  PackageOpen,
 } from "lucide-react"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
@@ -44,6 +44,44 @@ export interface DealItem {
   assignedToAvatar: string | null
 }
 
+// ─── CountUp ──────────────────────────────────────────────────────────────────
+
+function useCountUp(target: number | null, durationMs = 1000): number {
+  const [display, setDisplay] = useState(0)
+  useEffect(() => {
+    if (target === null || target === undefined) return
+    const start = display
+    const delta = target - start
+    if (delta === 0) return
+    const startTime = performance.now()
+    let rafId = 0
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - startTime) / durationMs)
+      const eased = 1 - Math.pow(1 - t, 3)
+      setDisplay(Math.round(start + delta * eased))
+      if (t < 1) rafId = requestAnimationFrame(tick)
+    }
+    rafId = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(rafId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target, durationMs])
+  return display
+}
+
+function CountUp({ value }: { value: number | null }) {
+  const d = useCountUp(value)
+  if (value === null) return <>…</>
+  return <>{d}</>
+}
+
+function CountUpAmount({ value }: { value: number | null }) {
+  const d = useCountUp(value)
+  if (value === null) return <>…</>
+  if (d >= 100_000_00) return <>{(d / 100_000_00).toFixed(1).replace(/\.0$/, "")} млн ₽</>
+  if (d >= 1_000_00) return <>{Math.round(d / 1_000_00)} тыс ₽</>
+  return <>{new Intl.NumberFormat("ru-RU").format(d / 100)} ₽</>
+}
+
 // ─── Mock Data ────────────────────────────────────────────────────────────────
 
 const MOCK_DEALS: DealItem[] = [
@@ -68,10 +106,10 @@ function formatAmount(amount: number | null, currency?: string) {
   }).format(amount / 100)
 }
 
-function formatShort(amount: number) {
-  if (amount >= 100_000_00) return `${(amount / 100_000_00).toFixed(1).replace(/\.0$/, "")} млн ₽`
-  if (amount >= 1_000_00) return `${Math.round(amount / 1_000_00)} тыс ₽`
-  return formatAmount(amount)
+const PRIORITY_BORDER: Record<string, string> = {
+  high: "#EF4444",
+  medium: "#F59E0B",
+  low: "#6B7280",
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
@@ -182,86 +220,81 @@ export default function DealsPage() {
     router.push(`/sales/deals/${newDeal.id}`)
   }
 
+  const summaryCards = [
+    { label: "Всего сделок", value: totalDeals, isAmount: false, bg: "bg-blue-500", Icon: TrendingUp },
+    { label: "В работе", value: activeAmount, isAmount: true, bg: "bg-purple-500", Icon: DollarSign },
+    { label: "Выиграно", value: wonAmount, isAmount: true, bg: "bg-emerald-500", Icon: Trophy },
+    { label: "Конверсия", value: conversion, isAmount: false, suffix: "%", bg: "bg-orange-500", Icon: Percent },
+  ]
+
   return (
     <SidebarProvider defaultOpen={true}>
       <DashboardSidebar />
       <SidebarInset>
         <DashboardHeader />
+        {/* Animations */}
+        <style dangerouslySetInnerHTML={{ __html: `
+          @keyframes slideUpFadeIn {
+            from { opacity: 0; transform: translateY(16px); }
+            to   { opacity: 1; transform: translateY(0); }
+          }
+          @keyframes cardStagger {
+            from { opacity: 0; transform: translateY(8px); }
+            to   { opacity: 1; transform: translateY(0); }
+          }
+          .dash-card-enter {
+            opacity: 0;
+            animation: slideUpFadeIn 500ms ease-out forwards;
+          }
+          .deal-card-enter {
+            opacity: 0;
+            animation: cardStagger 350ms ease-out forwards;
+          }
+        ` }} />
         <main className="flex-1 overflow-auto bg-background">
           <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
             {/* Header */}
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-                  <Handshake className="w-5 h-5 text-primary" />
-                </div>
-                <div>
-                  <h1 className="text-2xl font-semibold">Сделки</h1>
-                  <p className="text-sm text-muted-foreground">Воронка продаж</p>
-                </div>
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h1 className="text-2xl font-bold tracking-tight">Сделки</h1>
+                <p className="text-sm text-muted-foreground mt-1">Воронка продаж и управление сделками</p>
               </div>
-              <Button className="gap-1.5" onClick={() => setModalOpen(true)}>
+              <Button className="rounded-xl shadow-sm hover:shadow-md gap-1.5" onClick={() => setModalOpen(true)}>
                 <Plus className="w-4 h-4" />
                 Новая сделка
               </Button>
             </div>
 
-            {/* Summary */}
-            <div className="grid grid-cols-4 gap-4 mb-6">
-              <Card>
-                <CardContent className="p-4 flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center">
-                    <TrendingUp className="w-5 h-5 text-blue-500" />
+            {/* ═══ Summary Cards — colored ═══ */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+              {summaryCards.map((card, i) => (
+                <div
+                  key={card.label}
+                  className={`dash-card-enter rounded-xl shadow-sm p-5 text-white ${card.bg} hover:scale-[1.02] hover:shadow-lg transition-all duration-300 cursor-default`}
+                  style={{ animationDelay: `${i * 150}ms` }}
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-sm font-semibold text-white/90">{card.label}</span>
+                    <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
+                      <card.Icon className="w-5 h-5 text-white" />
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Всего сделок</p>
-                    <p className="text-2xl font-bold">{totalDeals}</p>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="p-4 flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-purple-500/10 flex items-center justify-center">
-                    <DollarSign className="w-5 h-5 text-purple-500" />
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">В работе</p>
-                    <p className="text-2xl font-bold">{formatShort(activeAmount)}</p>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="p-4 flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-green-500/10 flex items-center justify-center">
-                    <Trophy className="w-5 h-5 text-green-500" />
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Выиграно</p>
-                    <p className="text-2xl font-bold">{formatShort(wonAmount)}</p>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="p-4 flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-amber-500/10 flex items-center justify-center">
-                    <Percent className="w-5 h-5 text-amber-500" />
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Конверсия</p>
-                    <p className="text-2xl font-bold">{conversion}%</p>
-                  </div>
-                </CardContent>
-              </Card>
+                  <p className="text-3xl font-bold text-white tabular-nums">
+                    {card.isAmount ? <CountUpAmount value={card.value} /> : <CountUp value={card.value} />}
+                    {card.suffix ?? ""}
+                  </p>
+                </div>
+              ))}
             </div>
 
-            {/* Filters */}
-            <div className="flex items-center gap-2 mb-4">
+            {/* ═══ Filters ═══ */}
+            <div className="flex items-center gap-3 mb-5">
               <div className="relative flex-1 max-w-sm">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input className="pl-9 h-9" placeholder="Поиск по названию, компании..." value={search} onChange={(e) => setSearch(e.target.value)} />
+                <Input className="pl-9 h-10 rounded-xl" placeholder="Поиск по названию, компании..." value={search} onChange={(e) => setSearch(e.target.value)} />
               </div>
               <Select value={filterPriority} onValueChange={setFilterPriority}>
-                <SelectTrigger className="w-[170px] h-9"><SelectValue placeholder="Приоритет" /></SelectTrigger>
+                <SelectTrigger className="w-[170px] h-10 rounded-xl"><SelectValue placeholder="Приоритет" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Все приоритеты</SelectItem>
                   {DEAL_PRIORITIES.map((p) => (
@@ -271,8 +304,8 @@ export default function DealsPage() {
               </Select>
             </div>
 
-            {/* Kanban */}
-            <div className="flex gap-3 overflow-x-auto pb-4" style={{ minHeight: 500 }}>
+            {/* ═══ Kanban Board ═══ */}
+            <div className="flex gap-3 overflow-x-auto pb-4">
               {DEAL_STAGES.map((stage) => {
                 const cards = grouped[stage.id] || []
                 const colAmount = cards.reduce((s, d) => s + (d.amount || 0), 0)
@@ -281,62 +314,77 @@ export default function DealsPage() {
                 return (
                   <div
                     key={stage.id}
-                    className={`flex-shrink-0 w-[280px] rounded-xl border transition-colors ${isOver ? "border-primary bg-primary/5" : "border-border bg-muted/30"}`}
+                    className={`flex-shrink-0 w-[280px] rounded-xl transition-all duration-200 ${isOver ? "ring-2 ring-primary/50 bg-primary/5" : "bg-muted/30"}`}
+                    style={{ borderTop: `3px solid ${stage.color}` }}
                     onDragOver={(e) => handleDragOver(e, stage.id)}
                     onDragLeave={() => setDragOverStage(null)}
                     onDrop={(e) => handleDrop(e, stage.id)}
                   >
                     {/* Column header */}
-                    <div className="p-3 border-b border-border">
+                    <div className="p-3">
                       <div className="flex items-center justify-between mb-1">
                         <div className="flex items-center gap-2">
-                          <span className="w-3 h-3 rounded-full" style={{ backgroundColor: stage.color }} />
-                          <span className="font-medium text-sm">{stage.label}</span>
+                          <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: stage.color }} />
+                          <span className="font-semibold text-sm">{stage.label}</span>
                         </div>
-                        <Badge variant="secondary" className="text-xs">{cards.length}</Badge>
+                        <Badge variant="secondary" className="text-xs font-semibold">{cards.length}</Badge>
                       </div>
-                      {colAmount > 0 && (
-                        <p className="text-xs text-muted-foreground ml-5">{formatAmount(colAmount)}</p>
-                      )}
+                      <p className="text-sm text-muted-foreground ml-[18px]">
+                        {colAmount > 0 ? formatAmount(colAmount) : "0 ₽"}
+                      </p>
                     </div>
 
                     {/* Cards */}
-                    <div className="p-2 space-y-2 min-h-[100px]">
-                      {cards.map((deal) => {
+                    <div className="px-2 pb-2 space-y-2 min-h-[300px]">
+                      {cards.map((deal, cardIdx) => {
                         const pr = DEAL_PRIORITIES.find((p) => p.id === deal.priority)
+                        const borderColor = PRIORITY_BORDER[deal.priority] || "#6B7280"
                         return (
                           <div
                             key={deal.id}
                             draggable
                             onDragStart={(e) => handleDragStart(e, deal.id)}
                             onClick={() => router.push(`/sales/deals/${deal.id}`)}
-                            className={`group cursor-pointer rounded-lg border bg-card p-3 shadow-sm hover:shadow-md transition-all ${dragDealId === deal.id ? "opacity-40" : ""}`}
+                            className={`deal-card-enter group cursor-pointer rounded-xl bg-[var(--card)] border border-border/60 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 overflow-hidden ${dragDealId === deal.id ? "opacity-40 scale-95" : ""}`}
+                            style={{
+                              animationDelay: `${cardIdx * 50}ms`,
+                              borderLeft: `3px solid ${borderColor}`,
+                            }}
                           >
-                            <div className="flex items-start justify-between mb-1.5">
-                              <h3 className="text-sm font-medium leading-tight line-clamp-2 flex-1">{deal.title}</h3>
-                              <GripVertical className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 flex-shrink-0 ml-1" />
-                            </div>
-                            {deal.amount != null && (
-                              <p className="text-sm font-semibold mb-2">{formatAmount(deal.amount, deal.currency)}</p>
-                            )}
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                                <Circle className="w-2 h-2 fill-current" style={{ color: pr?.color }} />
-                                {deal.companyName && <span className="truncate max-w-[130px]">{deal.companyName}</span>}
+                            <div className="p-3">
+                              <div className="flex items-start justify-between mb-1.5">
+                                <h3 className="text-sm font-semibold leading-tight line-clamp-2 flex-1">{deal.title}</h3>
+                                <GripVertical className="w-4 h-4 text-muted-foreground/40 opacity-0 group-hover:opacity-100 flex-shrink-0 ml-1 transition-opacity" />
                               </div>
-                              {deal.assignedToName && (
-                                <Avatar className="w-5 h-5">
-                                  <AvatarFallback className="text-[10px] bg-primary/10 text-primary">
-                                    {deal.assignedToName.split(" ").map((n) => n[0]).join("").slice(0, 2)}
-                                  </AvatarFallback>
-                                </Avatar>
+                              {deal.amount != null && (
+                                <p className="text-base font-bold mb-2">{formatAmount(deal.amount, deal.currency)}</p>
                               )}
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: pr?.color }} />
+                                  {deal.companyName && <span className="truncate max-w-[130px]">{deal.companyName}</span>}
+                                </div>
+                                {deal.assignedToName && (
+                                  <Avatar className="w-7 h-7">
+                                    <AvatarFallback className="text-xs bg-primary/10 text-primary font-medium">
+                                      {deal.assignedToName.split(" ").map((n) => n[0]).join("").slice(0, 2)}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                )}
+                              </div>
                             </div>
                           </div>
                         )
                       })}
+
+                      {/* Empty state */}
                       {cards.length === 0 && (
-                        <p className="text-xs text-muted-foreground text-center py-8">Нет сделок</p>
+                        <div className="flex flex-col items-center justify-center py-12 px-4">
+                          <div className="w-12 h-12 rounded-xl border-2 border-dashed border-muted-foreground/30 flex items-center justify-center mb-2 opacity-50">
+                            <PackageOpen className="w-5 h-5 text-muted-foreground/50" />
+                          </div>
+                          <p className="text-xs text-muted-foreground/50 text-center">Перетащите сделку сюда</p>
+                        </div>
                       )}
                     </div>
                   </div>
