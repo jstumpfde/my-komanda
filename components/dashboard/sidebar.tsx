@@ -191,7 +191,11 @@ export function DashboardSidebar() {
   }, [pathname])
 
   // Active modules fetched from API
-  const [activeModules, setActiveModules] = useState<ModuleId[]>(['hr', 'knowledge', 'learning', 'tasks', 'sales'])
+  // TODO: включить обратно когда настроим биллинг
+  // Временно все модули активны для демо
+  const ALL_MODULES: ModuleId[] = ['hr', 'knowledge', 'learning', 'tasks', 'sales', 'marketing', 'logistics', 'booking', 'b2b', 'ecommerce']
+  const [activeModules, setActiveModules] = useState<ModuleId[]>(ALL_MODULES)
+  /*
   useEffect(() => {
     fetch('/api/tenant/modules')
       .then(r => r.json())
@@ -206,8 +210,9 @@ export function DashboardSidebar() {
         ))
         if (ids.length > 0) setActiveModules([...ids, ...(['knowledge', 'learning', 'sales'] as ModuleId[]).filter(k => !ids.includes(k))])
       })
-      .catch(() => { /* keep default */ })
+      .catch(() => {})
   }, [])
+  */
 
   // ── Hydration-safe mounted flag ──
   const [mounted, setMounted] = useState(false)

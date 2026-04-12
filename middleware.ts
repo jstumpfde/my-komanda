@@ -39,6 +39,7 @@ const MODULE_PATH_MAP: { prefix: string; slugs: string[]; moduleParam: string }[
   { prefix: "/logistics/", slugs: ["logistics"],   moduleParam: "logistics" },
   { prefix: "/knowledge/", slugs: ["knowledge"],   moduleParam: "knowledge" },
   { prefix: "/tasks/",     slugs: ["tasks"],       moduleParam: "tasks" },
+  { prefix: "/booking/",   slugs: ["booking"],     moduleParam: "booking" },
 ]
 
 export default auth(async (req) => {
@@ -66,23 +67,25 @@ export default auth(async (req) => {
   }
 
   // ── Проверка доступа к модулям ──────────────────────────────────────────────
-  // DEV_SKIP_MODULE_CHECK=true — пропускаем проверку модулей полностью
-  if (process.env.DEV_SKIP_MODULE_CHECK === "true") return
-
-  // Пропускаем /upgrade (иначе бесконечный редирект) и маршруты без companyId
-  if (!session.user.companyId || pathname.startsWith("/upgrade")) return
-
-  for (const { prefix, slugs, moduleParam } of MODULE_PATH_MAP) {
-    if (pathname.startsWith(prefix)) {
-      const hasAccess = await hasAnyModule(session.user.companyId, slugs)
-      if (!hasAccess) {
-        return Response.redirect(
-          new URL(`/upgrade?module=${moduleParam}`, req.url)
-        )
+  // TODO: включить обратно когда настроим биллинг
+  // Временно все модули доступны — блок ниже отключён
+  /*
+  if (process.env.DEV_SKIP_MODULE_CHECK !== "true") {
+    if (session.user.companyId && !pathname.startsWith("/upgrade")) {
+      for (const { prefix, slugs, moduleParam } of MODULE_PATH_MAP) {
+        if (pathname.startsWith(prefix)) {
+          const hasAccess = await hasAnyModule(session.user.companyId, slugs)
+          if (!hasAccess) {
+            return Response.redirect(
+              new URL(`/upgrade?module=${moduleParam}`, req.url)
+            )
+          }
+          break
+        }
       }
-      break // matched — no need to check further
     }
   }
+  */
 })
 
 export const config = {
