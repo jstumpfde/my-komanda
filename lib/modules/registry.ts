@@ -189,11 +189,18 @@ export const MODULE_REGISTRY: Record<ModuleId, ModuleConfig> = {
   },
   logistics: {
     id: 'logistics',
-    name: 'Грузоперевозки',
-    description: 'Управление грузоперевозками и доставкой',
+    name: 'Логистика',
+    description: 'Грузоперевозки, трекинг, перевозчики, расчёты ставок',
     icon: 'Truck',
     basePath: '/logistics',
-    menuItems: [],
+    menuItems: [
+      { label: 'Дашборд',     href: '/logistics/dashboard',  icon: 'LayoutDashboard' },
+      { label: 'Запросы',     href: '/logistics/requests',   icon: 'Inbox' },
+      { label: 'Расчёты',     href: '/logistics/quotes',     icon: 'Calculator' },
+      { label: 'Перевозки',   href: '/logistics/shipments',  icon: 'Ship' },
+      { label: 'Перевозчики', href: '/logistics/carriers',   icon: 'Building2' },
+      { label: 'Настройки',   href: '/logistics/settings',   icon: 'Settings' },
+    ],
   },
   dialer: {
     id: 'dialer',

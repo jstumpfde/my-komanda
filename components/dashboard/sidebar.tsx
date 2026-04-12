@@ -206,7 +206,7 @@ export function DashboardSidebar() {
   // Active modules fetched from API
   // TODO: включить обратно когда настроим биллинг
   // Временно все модули активны для демо
-  const ALL_MODULES: ModuleId[] = ['hr', 'knowledge', 'learning', 'tasks', 'sales', 'marketing', 'warehouse', 'booking', 'dialer', 'qc', 'b2b', 'ecommerce']
+  const ALL_MODULES: ModuleId[] = ['hr', 'knowledge', 'learning', 'tasks', 'sales', 'marketing', 'warehouse', 'logistics', 'booking', 'dialer', 'qc', 'b2b', 'ecommerce']
   const [activeModules, setActiveModules] = useState<ModuleId[]>(ALL_MODULES)
   /*
   useEffect(() => {

@@ -15,6 +15,11 @@ const MODULE_GROUP_DEFS: Partial<Record<ModuleId, { label: string; hrefs: string
     { label: 'Продвижение', hrefs: ['/marketing/seo', '/marketing/campaigns', '/marketing/social', '/marketing/email'] },
     { label: 'Аналитика',  hrefs: ['/marketing/reviews', '/marketing/analytics', '/marketing/budget'] },
   ],
+  logistics: [
+    { label: 'Операции',      hrefs: ['/logistics/dashboard', '/logistics/requests', '/logistics/quotes'] },
+    { label: 'Исполнение',    hrefs: ['/logistics/shipments', '/logistics/carriers'] },
+    { label: 'Конфигурация',  hrefs: ['/logistics/settings'] },
+  ],
   warehouse: [
     { label: 'Склад',       hrefs: ['/warehouse/dashboard', '/warehouse/inventory', '/warehouse/warehouses'] },
     { label: 'Заказы',      hrefs: ['/warehouse/orders', '/warehouse/shipments', '/warehouse/returns'] },
