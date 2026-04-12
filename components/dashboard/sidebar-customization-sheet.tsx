@@ -5,6 +5,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Separator } from "@/components/ui/separator"
+import { ChevronDown } from "lucide-react"
 import { MODULE_REGISTRY } from "@/lib/modules/registry"
 import type { ModuleId } from "@/lib/modules/types"
 import type { SidebarVisibility } from "@/lib/hooks/use-sidebar-visibility"
@@ -28,12 +29,15 @@ interface Props {
 }
 
 export function SidebarCustomizationSheet({ open, onOpenChange, visibility, onSave, onReset }: Props) {
-  // Local draft state
   const [draft, setDraft] = useState<SidebarVisibility>(visibility)
   const [activePreset, setActivePreset] = useState<string | null>(null)
+  const [expandedModules, setExpandedModules] = useState<Set<string>>(new Set())
 
   useEffect(() => {
-    if (open) setDraft(visibility)
+    if (open) {
+      setDraft(visibility)
+      setExpandedModules(new Set())
+    }
   }, [open, visibility])
 
   const isModuleOn = (id: string) => draft.modules[id] !== false
@@ -54,6 +58,14 @@ export function SidebarCustomizationSheet({ open, onOpenChange, visibility, onSa
       items: { ...prev.items, [key]: !isItemOn(moduleId, href) },
     }))
     setActivePreset(null)
+  }
+
+  const toggleExpanded = (id: string) => {
+    setExpandedModules((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
   }
 
   const applyPreset = (preset: typeof INDUSTRY_PRESETS[number]) => {
@@ -92,7 +104,7 @@ export function SidebarCustomizationSheet({ open, onOpenChange, visibility, onSa
           <p className="text-sm text-muted-foreground">Выберите модули и пункты для отображения</p>
         </SheetHeader>
 
-        <div className="mt-6 space-y-6">
+        <div className="mt-6 space-y-6 px-1">
           {/* Presets */}
           <div>
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Быстрая настройка по отрасли</p>
@@ -116,26 +128,46 @@ export function SidebarCustomizationSheet({ open, onOpenChange, visibility, onSa
           <Separator />
 
           {/* Modules */}
-          <div className="space-y-3">
+          <div className="space-y-1 pl-1">
             {ALL_MODULE_IDS.map((id) => {
               const mod = MODULE_REGISTRY[id]
               if (!mod) return null
               const ModIcon = getIcon(mod.icon)
               const moduleOn = isModuleOn(id)
+              const hasItems = mod.menuItems.length > 0
+              const isExpanded = expandedModules.has(id)
 
               return (
-                <div key={id}>
-                  <label className="flex items-center gap-2.5 cursor-pointer py-1">
+                <div key={id} className="rounded-lg border border-transparent hover:border-border/50 transition-colors">
+                  {/* Module row */}
+                  <div className="flex items-center gap-1 py-1.5 px-2">
                     <Checkbox
                       checked={moduleOn}
                       onCheckedChange={() => toggleModule(id)}
                     />
-                    <ModIcon className="w-4 h-4 text-muted-foreground" />
-                    <span className="font-medium text-sm">{mod.name}</span>
-                  </label>
+                    <button
+                      className="flex items-center gap-2 flex-1 min-w-0 ml-1"
+                      onClick={() => hasItems && moduleOn && toggleExpanded(id)}
+                    >
+                      <ModIcon className="w-4 h-4 text-muted-foreground shrink-0" />
+                      <span className="font-medium text-sm truncate">{mod.name}</span>
+                    </button>
+                    {hasItems && moduleOn && (
+                      <button
+                        onClick={() => toggleExpanded(id)}
+                        className="shrink-0 p-0.5 rounded hover:bg-muted transition-colors"
+                      >
+                        <ChevronDown className={cn("w-4 h-4 text-muted-foreground transition-transform duration-200", isExpanded && "rotate-180")} />
+                      </button>
+                    )}
+                    {hasItems && moduleOn && (
+                      <span className="text-[10px] text-muted-foreground/50 shrink-0 tabular-nums">{mod.menuItems.length}</span>
+                    )}
+                  </div>
 
-                  {moduleOn && mod.menuItems.length > 0 && (
-                    <div className="pl-9 mt-1 space-y-0.5">
+                  {/* Subitems (collapsible) */}
+                  {moduleOn && hasItems && isExpanded && (
+                    <div className="pl-10 pr-2 pb-2 space-y-0.5">
                       {mod.menuItems.map((item) => (
                         <label key={item.href} className="flex items-center gap-2 cursor-pointer py-0.5">
                           <Checkbox
