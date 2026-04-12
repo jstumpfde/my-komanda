@@ -191,6 +191,28 @@ export const salesContacts = pgTable("sales_contacts", {
   updatedAt:  timestamp("updated_at").defaultNow(),
 })
 
+// ─── Sales: CRM Сделки ──────────────────────────────────────────────────────
+
+export const salesDeals = pgTable("sales_deals", {
+  id:                uuid("id").primaryKey().defaultRandom(),
+  tenantId:          uuid("tenant_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  title:             text("title").notNull(),
+  amount:            integer("amount"),                        // сумма в копейках (для точности)
+  currency:          text("currency").default("RUB"),          // RUB/USD/EUR
+  stage:             text("stage").default("new").notNull(),   // этап воронки
+  priority:          text("priority").default("medium"),       // low/medium/high
+  probability:       integer("probability").default(0),        // вероятность закрытия %
+  companyId:         uuid("company_id").references(() => salesCompanies.id, { onDelete: "set null" }),
+  contactId:         uuid("contact_id").references(() => salesContacts.id, { onDelete: "set null" }),
+  assignedToId:      uuid("assigned_to_id").references(() => users.id, { onDelete: "set null" }),
+  description:       text("description"),
+  source:            text("source"),                           // сайт, звонок, реферал, hh.ru
+  expectedCloseDate: timestamp("expected_close_date"),
+  closedAt:          timestamp("closed_at"),
+  createdAt:         timestamp("created_at").defaultNow(),
+  updatedAt:         timestamp("updated_at").defaultNow(),
+})
+
 // ─── Vacancies ────────────────────────────────────────────────────────────────
 
 export const vacancies = pgTable("vacancies", {

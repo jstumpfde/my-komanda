@@ -94,6 +94,7 @@ export const MODULE_REGISTRY: Record<ModuleId, ModuleConfig> = {
     icon: 'Briefcase',
     basePath: '/sales',
     menuItems: [
+      { label: 'Сделки',    href: '/sales/deals',      icon: 'Handshake' },
       { label: 'Компании',  href: '/sales/clients',    icon: 'Building2' },
       { label: 'Контакты',  href: '/sales/contacts',   icon: 'Users' },
       { label: 'Заявки',    href: '/sales/requests',   icon: 'Inbox' },

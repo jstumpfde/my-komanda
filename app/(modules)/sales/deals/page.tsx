@@ -5,129 +5,181 @@ import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Briefcase, Plus, Clock, Circle } from "lucide-react"
-import { cn } from "@/lib/utils"
+import {
+  Handshake, Plus, Search, GripVertical,
+  TrendingUp, DollarSign, Trophy, Percent, Circle,
+} from "lucide-react"
 import { toast } from "sonner"
+import { useRouter } from "next/navigation"
+import { DEAL_STAGES, DEAL_PRIORITIES } from "@/lib/crm/deal-stages"
+import { DealCreateModal } from "@/components/sales/deal-create-modal"
 
-type Priority = "high" | "medium" | "low"
-type Stage = "new" | "talks" | "proposal" | "approval" | "closed"
+// ─── Types ────────────────────────────────────────────────────────────────────
 
-interface Deal {
+export interface DealItem {
   id: string
-  company: string
-  contact: string
-  amount: number
-  manager: string
-  managerInitials: string
-  daysInStage: number
-  priority: Priority
-  stage: Stage
+  title: string
+  amount: number | null
+  currency: string
+  stage: string
+  priority: string
+  probability: number | null
+  companyId: string | null
+  contactId: string | null
+  assignedToId: string | null
+  description: string | null
+  source: string | null
+  expectedCloseDate: string | null
+  closedAt: string | null
+  createdAt: string
+  companyName: string | null
+  contactFirstName: string | null
+  contactLastName: string | null
+  assignedToName: string | null
+  assignedToAvatar: string | null
 }
 
-const STAGES: { key: Stage; label: string; color: string; headerColor: string }[] = [
-  { key: "new", label: "Новая", color: "border-t-slate-400", headerColor: "bg-slate-100 dark:bg-slate-800/50" },
-  { key: "talks", label: "Переговоры", color: "border-t-blue-500", headerColor: "bg-blue-50 dark:bg-blue-900/20" },
-  { key: "proposal", label: "КП отправлено", color: "border-t-amber-500", headerColor: "bg-amber-50 dark:bg-amber-900/20" },
-  { key: "approval", label: "Согласование", color: "border-t-purple-500", headerColor: "bg-purple-50 dark:bg-purple-900/20" },
-  { key: "closed", label: "Закрыта", color: "border-t-emerald-500", headerColor: "bg-emerald-50 dark:bg-emerald-900/20" },
+// ─── Mock Data ────────────────────────────────────────────────────────────────
+
+const MOCK_DEALS: DealItem[] = [
+  { id: "1", title: "Поставка серверов для Ромашка", amount: 250000000, currency: "RUB", stage: "new", priority: "high", probability: 10, companyId: "1", contactId: "1", assignedToId: null, description: null, source: "Сайт", expectedCloseDate: "2026-05-15", closedAt: null, createdAt: "2026-04-01", companyName: 'ООО "Ромашка"', contactFirstName: "Иван", contactLastName: "Петров", assignedToName: "Алексей Иванов", assignedToAvatar: null },
+  { id: "2", title: "Внедрение CRM Альфа Групп", amount: 500000000, currency: "RUB", stage: "qualifying", priority: "high", probability: 20, companyId: "2", contactId: "4", assignedToId: null, description: null, source: "Реферал", expectedCloseDate: "2026-06-01", closedAt: null, createdAt: "2026-03-20", companyName: 'ЗАО "Альфа Групп"', contactFirstName: "Елена", contactLastName: "Волкова", assignedToName: "Мария Петрова", assignedToAvatar: null },
+  { id: "3", title: "Обучение сотрудников ТехноПлюс", amount: 80000000, currency: "RUB", stage: "proposal", priority: "medium", probability: 40, companyId: "4", contactId: "7", assignedToId: null, description: null, source: "Звонок", expectedCloseDate: "2026-05-20", closedAt: null, createdAt: "2026-03-15", companyName: 'ООО "ТехноПлюс"', contactFirstName: "Ольга", contactLastName: "Смирнова", assignedToName: null, assignedToAvatar: null },
+  { id: "4", title: "Аутсорс поддержки ИП Петров", amount: 35000000, currency: "RUB", stage: "negotiation", priority: "low", probability: 60, companyId: "3", contactId: "6", assignedToId: null, description: null, source: "Email", expectedCloseDate: "2026-04-30", closedAt: null, createdAt: "2026-03-10", companyName: "ИП Петров", contactFirstName: "Сергей", contactLastName: "Петров", assignedToName: "Дмитрий Козлов", assignedToAvatar: null },
+  { id: "5", title: "Лицензии 1С для СтройМастер", amount: 120000000, currency: "RUB", stage: "won", priority: "medium", probability: 100, companyId: "5", contactId: null, assignedToId: null, description: null, source: "Выставка", expectedCloseDate: "2026-04-10", closedAt: "2026-04-10", createdAt: "2026-02-20", companyName: 'ООО "СтройМастер"', contactFirstName: null, contactLastName: null, assignedToName: "Алексей Иванов", assignedToAvatar: null },
+  { id: "6", title: "Консалтинг ИП Петров", amount: 15000000, currency: "RUB", stage: "lost", priority: "low", probability: 0, companyId: "3", contactId: "6", assignedToId: null, description: null, source: "Звонок", expectedCloseDate: "2026-03-15", closedAt: "2026-03-20", createdAt: "2026-02-01", companyName: "ИП Петров", contactFirstName: "Сергей", contactLastName: "Петров", assignedToName: "Сергей Новиков", assignedToAvatar: null },
+  { id: "7", title: "Интеграция API Альфа Групп", amount: 320000000, currency: "RUB", stage: "new", priority: "medium", probability: 10, companyId: "2", contactId: "5", assignedToId: null, description: null, source: "Реферал", expectedCloseDate: "2026-07-01", closedAt: null, createdAt: "2026-04-10", companyName: 'ЗАО "Альфа Групп"', contactFirstName: "Дмитрий", contactLastName: "Новиков", assignedToName: null, assignedToAvatar: null },
+  { id: "8", title: "Настройка телефонии ГК Вектор", amount: 45000000, currency: "RUB", stage: "qualifying", priority: "medium", probability: 20, companyId: null, contactId: null, assignedToId: null, description: null, source: "Звонок", expectedCloseDate: "2026-05-30", closedAt: null, createdAt: "2026-04-05", companyName: "ГК Вектор", contactFirstName: null, contactLastName: null, assignedToName: "Мария Петрова", assignedToAvatar: null },
 ]
 
-const PRIORITY_COLORS: Record<Priority, string> = {
-  high: "text-red-500",
-  medium: "text-amber-500",
-  low: "text-slate-400",
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function formatAmount(amount: number | null, currency?: string) {
+  if (!amount) return "—"
+  return new Intl.NumberFormat("ru-RU", {
+    style: "currency",
+    currency: currency || "RUB",
+    maximumFractionDigits: 0,
+  }).format(amount / 100)
 }
 
-const INITIAL_DEALS: Deal[] = [
-  { id: "1", company: "ООО Техностар", contact: "Иван Смирнов", amount: 850_000, manager: "Алексей Иванов", managerInitials: "АИ", daysInStage: 2, priority: "high", stage: "new" },
-  { id: "2", company: "ЗАО Прогресс", contact: "Анна Кузнецова", amount: 420_000, manager: "Мария Петрова", managerInitials: "МП", daysInStage: 5, priority: "medium", stage: "new" },
-  { id: "3", company: "ИП Соколов А.В.", contact: "Алексей Соколов", amount: 180_000, manager: "Сергей Новиков", managerInitials: "СН", daysInStage: 1, priority: "low", stage: "new" },
-  { id: "4", company: "ГК Вектор", contact: "Павел Орлов", amount: 1_200_000, manager: "Алексей Иванов", managerInitials: "АИ", daysInStage: 8, priority: "high", stage: "talks" },
-  { id: "5", company: "ООО Горизонт", contact: "Светлана Морозова", amount: 650_000, manager: "Дмитрий Козлов", managerInitials: "ДК", daysInStage: 3, priority: "medium", stage: "talks" },
-  { id: "6", company: "АО Альфа Ресурс", contact: "Михаил Волков", amount: 980_000, manager: "Мария Петрова", managerInitials: "МП", daysInStage: 12, priority: "high", stage: "proposal" },
-  { id: "7", company: "ООО СтройГрупп", contact: "Елена Тихонова", amount: 340_000, manager: "Сергей Новиков", managerInitials: "СН", daysInStage: 6, priority: "low", stage: "proposal" },
-  { id: "8", company: "ЗАО Капитал", contact: "Роман Федоров", amount: 2_100_000, manager: "Алексей Иванов", managerInitials: "АИ", daysInStage: 4, priority: "high", stage: "approval" },
-  { id: "9", company: "ООО Медиасфера", contact: "Ольга Данилова", amount: 560_000, manager: "Дмитрий Козлов", managerInitials: "ДК", daysInStage: 9, priority: "medium", stage: "approval" },
-  { id: "10", company: "ИТ Решения ООО", contact: "Кирилл Зайцев", amount: 890_000, manager: "Мария Петрова", managerInitials: "МП", daysInStage: 0, priority: "high", stage: "closed" },
-]
-
-function formatMoney(n: number) {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}М ₽`
-  if (n >= 1_000) return `${Math.round(n / 1_000)}К ₽`
-  return `${n} ₽`
+function formatShort(amount: number) {
+  if (amount >= 100_000_00) return `${(amount / 100_000_00).toFixed(1).replace(/\.0$/, "")} млн ₽`
+  if (amount >= 1_000_00) return `${Math.round(amount / 1_000_00)} тыс ₽`
+  return formatAmount(amount)
 }
 
-function DealCard({ deal }: { deal: Deal }) {
-  return (
-    <div className="bg-card border rounded-lg p-3 cursor-pointer space-y-2.5">
-      <div className="flex items-start justify-between gap-1">
-        <div className="flex items-center gap-1.5">
-          <Circle className={cn("w-2 h-2 fill-current shrink-0", PRIORITY_COLORS[deal.priority])} />
-          <span className="text-sm font-medium text-foreground leading-tight">{deal.company}</span>
-        </div>
-      </div>
-      <p className="text-xs text-muted-foreground">{deal.contact}</p>
-      <p className="text-base font-bold text-foreground">{formatMoney(deal.amount)}</p>
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1.5">
-          <Avatar className="w-5 h-5">
-            <AvatarFallback className="text-[9px] bg-primary/10 text-primary">{deal.managerInitials}</AvatarFallback>
-          </Avatar>
-          <span className="text-[10px] text-muted-foreground">{deal.manager.split(" ")[0]}</span>
-        </div>
-        <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
-          <Clock className="w-3 h-3" />
-          {deal.daysInStage}д
-        </div>
-      </div>
-    </div>
-  )
-}
+// ─── Page ─────────────────────────────────────────────────────────────────────
 
-export default function SalesDealsPage() {
-  const [deals, setDeals] = useState<Deal[]>(INITIAL_DEALS)
-  const [sheetOpen, setSheetOpen] = useState(false)
-  const [filterManager, setFilterManager] = useState("all")
+export default function DealsPage() {
+  const router = useRouter()
+  const [deals, setDeals] = useState<DealItem[]>(MOCK_DEALS)
+  const [search, setSearch] = useState("")
+  const [filterPriority, setFilterPriority] = useState("all")
+  const [modalOpen, setModalOpen] = useState(false)
+  const [dragDealId, setDragDealId] = useState<string | null>(null)
+  const [dragOverStage, setDragOverStage] = useState<string | null>(null)
 
-  const [form, setForm] = useState({
-    company: "", contact: "", amount: "", manager: "Алексей Иванов",
-    source: "сайт", closeDate: "",
+  // фильтрация
+  const filtered = deals.filter((d) => {
+    if (search) {
+      const q = search.toLowerCase()
+      if (!d.title.toLowerCase().includes(q) && !(d.companyName || "").toLowerCase().includes(q)) return false
+    }
+    if (filterPriority !== "all" && d.priority !== filterPriority) return false
+    return true
   })
 
-  const managers = ["Алексей Иванов", "Мария Петрова", "Дмитрий Козлов", "Сергей Новиков"]
+  // группировка по stage
+  const grouped: Record<string, DealItem[]> = {}
+  for (const s of DEAL_STAGES) grouped[s.id] = []
+  for (const d of filtered) {
+    const key = d.stage || "new"
+    if (grouped[key]) grouped[key].push(d)
+  }
 
-  const filtered = filterManager === "all" ? deals : deals.filter(d => d.manager === filterManager)
+  // summary
+  const totalDeals = deals.length
+  const activeAmount = deals
+    .filter((d) => d.stage !== "won" && d.stage !== "lost")
+    .reduce((s, d) => s + (d.amount || 0), 0)
+  const wonDeals = deals.filter((d) => d.stage === "won")
+  const wonAmount = wonDeals.reduce((s, d) => s + (d.amount || 0), 0)
+  const lostCount = deals.filter((d) => d.stage === "lost").length
+  const conversion = wonDeals.length + lostCount > 0
+    ? Math.round((wonDeals.length / (wonDeals.length + lostCount)) * 100)
+    : 0
 
-  const stageDeals = (stage: Stage) => filtered.filter(d => d.stage === stage)
-  const stageTotal = (stage: Stage) => stageDeals(stage).reduce((s, d) => s + d.amount, 0)
+  // ─── DnD ────────────────────────────────────────────────────────────────────
 
-  const handleCreate = () => {
-    if (!form.company || !form.amount) {
-      toast.error("Заполните компанию и сумму")
-      return
-    }
-    const initials = form.manager.split(" ").map(w => w[0]).join("").slice(0, 2)
-    const newDeal: Deal = {
+  const handleDragStart = (e: React.DragEvent, dealId: string) => {
+    setDragDealId(dealId)
+    e.dataTransfer.effectAllowed = "move"
+    e.dataTransfer.setData("text/plain", dealId)
+  }
+
+  const handleDragOver = (e: React.DragEvent, stageId: string) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = "move"
+    setDragOverStage(stageId)
+  }
+
+  const handleDrop = (e: React.DragEvent, stageId: string) => {
+    e.preventDefault()
+    setDragOverStage(null)
+    const dealId = e.dataTransfer.getData("text/plain")
+    if (!dealId) return
+
+    const stageInfo = DEAL_STAGES.find((s) => s.id === stageId)
+    setDeals((prev) =>
+      prev.map((d) =>
+        d.id === dealId
+          ? {
+              ...d,
+              stage: stageId,
+              probability: stageInfo?.probability ?? d.probability,
+              closedAt: stageId === "won" || stageId === "lost" ? new Date().toISOString() : d.closedAt,
+            }
+          : d,
+      ),
+    )
+    setDragDealId(null)
+    toast.success(`Сделка перемещена → ${stageInfo?.label}`)
+  }
+
+  const handleCreate = (data: Record<string, unknown>) => {
+    const stageInfo = DEAL_STAGES.find((s) => s.id === ((data.stage as string) || "new"))
+    const newDeal: DealItem = {
       id: String(Date.now()),
-      company: form.company,
-      contact: form.contact || "—",
-      amount: Number(form.amount.replace(/\s/g, "")),
-      manager: form.manager,
-      managerInitials: initials,
-      daysInStage: 0,
+      title: data.title as string,
+      amount: data.amount ? Number(data.amount) * 100 : null,
+      currency: "RUB",
+      stage: (data.stage as string) || "new",
       priority: "medium",
-      stage: "new",
+      probability: stageInfo?.probability ?? 10,
+      companyId: null,
+      contactId: null,
+      assignedToId: null,
+      description: null,
+      source: (data.source as string) || null,
+      expectedCloseDate: (data.expectedCloseDate as string) || null,
+      closedAt: null,
+      createdAt: new Date().toISOString(),
+      companyName: null,
+      contactFirstName: null,
+      contactLastName: null,
+      assignedToName: null,
+      assignedToAvatar: null,
     }
-    setDeals(prev => [newDeal, ...prev])
-    setSheetOpen(false)
-    setForm({ company: "", contact: "", amount: "", manager: "Алексей Иванов", source: "сайт", closeDate: "" })
+    setDeals((prev) => [newDeal, ...prev])
+    setModalOpen(false)
     toast.success("Сделка создана")
+    router.push(`/sales/deals/${newDeal.id}`)
   }
 
   return (
@@ -141,52 +193,150 @@ export default function SalesDealsPage() {
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-                  <Briefcase className="w-5 h-5 text-primary" />
+                  <Handshake className="w-5 h-5 text-primary" />
                 </div>
                 <div>
                   <h1 className="text-2xl font-semibold">Сделки</h1>
-                  <p className="text-sm text-muted-foreground">Канбан-доска CRM</p>
+                  <p className="text-sm text-muted-foreground">Воронка продаж</p>
                 </div>
               </div>
-              <Button className="gap-1.5" onClick={() => setSheetOpen(true)}>
+              <Button className="gap-1.5" onClick={() => setModalOpen(true)}>
                 <Plus className="w-4 h-4" />
                 Новая сделка
               </Button>
             </div>
 
-            {/* Filter bar */}
+            {/* Summary */}
+            <div className="grid grid-cols-4 gap-4 mb-6">
+              <Card>
+                <CardContent className="p-4 flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center">
+                    <TrendingUp className="w-5 h-5 text-blue-500" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Всего сделок</p>
+                    <p className="text-2xl font-bold">{totalDeals}</p>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4 flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-purple-500/10 flex items-center justify-center">
+                    <DollarSign className="w-5 h-5 text-purple-500" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">В работе</p>
+                    <p className="text-2xl font-bold">{formatShort(activeAmount)}</p>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4 flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-green-500/10 flex items-center justify-center">
+                    <Trophy className="w-5 h-5 text-green-500" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Выиграно</p>
+                    <p className="text-2xl font-bold">{formatShort(wonAmount)}</p>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4 flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-amber-500/10 flex items-center justify-center">
+                    <Percent className="w-5 h-5 text-amber-500" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Конверсия</p>
+                    <p className="text-2xl font-bold">{conversion}%</p>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Filters */}
             <div className="flex items-center gap-2 mb-4">
-              <Select value={filterManager} onValueChange={setFilterManager}>
-                <SelectTrigger className="w-[200px] h-9">
-                  <SelectValue placeholder="Все менеджеры" />
-                </SelectTrigger>
+              <div className="relative flex-1 max-w-sm">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input className="pl-9 h-9" placeholder="Поиск по названию, компании..." value={search} onChange={(e) => setSearch(e.target.value)} />
+              </div>
+              <Select value={filterPriority} onValueChange={setFilterPriority}>
+                <SelectTrigger className="w-[170px] h-9"><SelectValue placeholder="Приоритет" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Все менеджеры</SelectItem>
-                  {managers.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                  <SelectItem value="all">Все приоритеты</SelectItem>
+                  {DEAL_PRIORITIES.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>{p.label}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
 
             {/* Kanban */}
-            <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-5 gap-4 items-start">
-              {STAGES.map((stage) => {
-                const stageDealsList = stageDeals(stage.key)
-                const total = stageTotal(stage.key)
+            <div className="flex gap-3 overflow-x-auto pb-4" style={{ minHeight: 500 }}>
+              {DEAL_STAGES.map((stage) => {
+                const cards = grouped[stage.id] || []
+                const colAmount = cards.reduce((s, d) => s + (d.amount || 0), 0)
+                const isOver = dragOverStage === stage.id
+
                 return (
-                  <div key={stage.key} className={cn("rounded-xl border-t-4 bg-background", stage.color)}>
-                    <div className={cn("rounded-b-none rounded-t-lg px-3 py-2.5", stage.headerColor)}>
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-semibold text-foreground">{stage.label}</span>
-                        <Badge variant="secondary" className="text-xs">{stageDealsList.length}</Badge>
+                  <div
+                    key={stage.id}
+                    className={`flex-shrink-0 w-[280px] rounded-xl border transition-colors ${isOver ? "border-primary bg-primary/5" : "border-border bg-muted/30"}`}
+                    onDragOver={(e) => handleDragOver(e, stage.id)}
+                    onDragLeave={() => setDragOverStage(null)}
+                    onDrop={(e) => handleDrop(e, stage.id)}
+                  >
+                    {/* Column header */}
+                    <div className="p-3 border-b border-border">
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center gap-2">
+                          <span className="w-3 h-3 rounded-full" style={{ backgroundColor: stage.color }} />
+                          <span className="font-medium text-sm">{stage.label}</span>
+                        </div>
+                        <Badge variant="secondary" className="text-xs">{cards.length}</Badge>
                       </div>
-                      <p className="text-xs text-muted-foreground mt-0.5">{formatMoney(total)}</p>
+                      {colAmount > 0 && (
+                        <p className="text-xs text-muted-foreground ml-5">{formatAmount(colAmount)}</p>
+                      )}
                     </div>
-                    <div className="p-2 space-y-2 min-h-[120px]">
-                      {stageDealsList.map(deal => (
-                        <DealCard key={deal.id} deal={deal} />
-                      ))}
-                      {stageDealsList.length === 0 && (
-                        <p className="text-xs text-muted-foreground text-center py-6">Нет сделок</p>
+
+                    {/* Cards */}
+                    <div className="p-2 space-y-2 min-h-[100px]">
+                      {cards.map((deal) => {
+                        const pr = DEAL_PRIORITIES.find((p) => p.id === deal.priority)
+                        return (
+                          <div
+                            key={deal.id}
+                            draggable
+                            onDragStart={(e) => handleDragStart(e, deal.id)}
+                            onClick={() => router.push(`/sales/deals/${deal.id}`)}
+                            className={`group cursor-pointer rounded-lg border bg-card p-3 shadow-sm hover:shadow-md transition-all ${dragDealId === deal.id ? "opacity-40" : ""}`}
+                          >
+                            <div className="flex items-start justify-between mb-1.5">
+                              <h3 className="text-sm font-medium leading-tight line-clamp-2 flex-1">{deal.title}</h3>
+                              <GripVertical className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 flex-shrink-0 ml-1" />
+                            </div>
+                            {deal.amount != null && (
+                              <p className="text-sm font-semibold mb-2">{formatAmount(deal.amount, deal.currency)}</p>
+                            )}
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                <Circle className="w-2 h-2 fill-current" style={{ color: pr?.color }} />
+                                {deal.companyName && <span className="truncate max-w-[130px]">{deal.companyName}</span>}
+                              </div>
+                              {deal.assignedToName && (
+                                <Avatar className="w-5 h-5">
+                                  <AvatarFallback className="text-[10px] bg-primary/10 text-primary">
+                                    {deal.assignedToName.split(" ").map((n) => n[0]).join("").slice(0, 2)}
+                                  </AvatarFallback>
+                                </Avatar>
+                              )}
+                            </div>
+                          </div>
+                        )
+                      })}
+                      {cards.length === 0 && (
+                        <p className="text-xs text-muted-foreground text-center py-8">Нет сделок</p>
                       )}
                     </div>
                   </div>
@@ -197,59 +347,7 @@ export default function SalesDealsPage() {
         </main>
       </SidebarInset>
 
-      {/* New Deal Sheet */}
-      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-        <SheetContent className="sm:max-w-md overflow-y-auto">
-          <SheetHeader>
-            <SheetTitle className="flex items-center gap-2">
-              <Briefcase className="w-5 h-5" />
-              Новая сделка
-            </SheetTitle>
-          </SheetHeader>
-          <div className="space-y-4 mt-6">
-            <div className="space-y-1.5">
-              <Label>Компания / Клиент *</Label>
-              <Input placeholder="ООО Ромашка" value={form.company} onChange={e => setForm(p => ({ ...p, company: e.target.value }))} />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Контактное лицо</Label>
-              <Input placeholder="Иван Иванов" value={form.contact} onChange={e => setForm(p => ({ ...p, contact: e.target.value }))} />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Сумма сделки (₽) *</Label>
-              <Input placeholder="500 000" value={form.amount} onChange={e => setForm(p => ({ ...p, amount: e.target.value }))} />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Ответственный менеджер</Label>
-              <Select value={form.manager} onValueChange={v => setForm(p => ({ ...p, manager: v }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {managers.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label>Источник</Label>
-              <Select value={form.source} onValueChange={v => setForm(p => ({ ...p, source: v }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {["сайт", "звонок", "реклама", "реферал", "партнёр", "другое"].map(s => (
-                    <SelectItem key={s} value={s}>{s}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label>Планируемая дата закрытия</Label>
-              <Input type="date" value={form.closeDate} onChange={e => setForm(p => ({ ...p, closeDate: e.target.value }))} />
-            </div>
-            <div className="flex gap-2 pt-2">
-              <Button variant="outline" className="flex-1" onClick={() => setSheetOpen(false)}>Отмена</Button>
-              <Button className="flex-1" onClick={handleCreate}>Создать</Button>
-            </div>
-          </div>
-        </SheetContent>
-      </Sheet>
+      <DealCreateModal open={modalOpen} onOpenChange={setModalOpen} onSubmit={handleCreate} />
     </SidebarProvider>
   )
 }
