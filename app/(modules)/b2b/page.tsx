@@ -104,18 +104,18 @@ export default function B2BDashboardPage() {
               <h3 className="text-base font-semibold mb-4">Воронка B2B</h3>
               <div className="space-y-3">
                 {B2B_FUNNEL.map((step, i) => {
-                  const maxValue = B2B_FUNNEL[0].value
-                  const widthPct = Math.max(20, Math.round((step.value / maxValue) * 100))
+                  const maxValue = Math.max(...B2B_FUNNEL.map((s) => s.value))
+                  const widthPct = Math.max(25, Math.round((step.value / maxValue) * 100))
                   return (
                     <div key={step.stage} className="flex items-center gap-4">
                       <span className="text-sm font-medium w-28 shrink-0">{step.stage}</span>
-                      <div className="flex-1">
+                      <div className="flex-1 min-w-0 overflow-hidden">
                         <div
-                          className="funnel-bar h-10 rounded-lg flex items-center px-4 justify-between"
+                          className="funnel-bar h-10 rounded-lg flex items-center px-4 justify-between max-w-full"
                           style={{ width: `${widthPct}%`, backgroundColor: step.color, animationDelay: `${700 + i * 150}ms` }}
                         >
-                          <span className="text-white text-sm font-semibold">{step.count} сделок</span>
-                          <span className="text-white/80 text-sm">{formatValueShort(step.value)}</span>
+                          <span className="text-white text-sm font-semibold whitespace-nowrap">{step.count} сделок</span>
+                          <span className="text-white/80 text-sm whitespace-nowrap">{formatValueShort(step.value)}</span>
                         </div>
                       </div>
                     </div>
