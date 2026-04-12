@@ -12,7 +12,7 @@ import {
   ClipboardList, ClipboardCheck, UserCheck2, Trophy, HeartHandshake, BookOpen, Award, Zap,
   AlertTriangle, UserMinus, Brain, Radar, Bot, Store, TrendingDown, Handshake,
   BookMarked, GraduationCap, Target, PieChart, FilePlus, Lock, Library,
-  Sparkles, Plus, Coins,
+  Sparkles, Plus, Coins, SlidersHorizontal,
   type LucideIcon,
 } from "lucide-react"
 import {
@@ -38,6 +38,8 @@ import { MODULE_REGISTRY } from "@/lib/modules/registry"
 import type { ModuleId } from "@/lib/modules/types"
 import { getModuleGroups } from "@/lib/sidebar/module-menus"
 import { SETTINGS_MENU, ADMIN_MENU } from "@/lib/sidebar/config"
+import { useSidebarVisibility } from "@/lib/hooks/use-sidebar-visibility"
+import { SidebarCustomizationSheet } from "@/components/dashboard/sidebar-customization-sheet"
 
 // ── Icon resolver ──────────────────────────────────────────────────────────
 const ICON_MAP: Record<string, LucideIcon> = {
@@ -208,6 +210,13 @@ export function DashboardSidebar() {
   // Временно все модули активны для демо
   const ALL_MODULES: ModuleId[] = ['hr', 'knowledge', 'learning', 'tasks', 'sales', 'marketing', 'warehouse', 'logistics', 'booking', 'dialer', 'qc', 'b2b', 'ecommerce']
   const [activeModules, setActiveModules] = useState<ModuleId[]>(ALL_MODULES)
+
+  // ── Sidebar visibility customization ──
+  const { visibility: sidebarVis, setVisibility: setSidebarVis, isModuleVisible, isItemVisible, resetToDefault: resetSidebarVis } = useSidebarVisibility()
+  const [customizeOpen, setCustomizeOpen] = useState(false)
+
+  // Filtered modules: active AND visible
+  const visibleModules = activeModules.filter((id) => isModuleVisible(id))
   /*
   useEffect(() => {
     fetch('/api/tenant/modules')
@@ -431,7 +440,7 @@ export function DashboardSidebar() {
         <div className="hidden group-data-[collapsible=icon]:flex flex-col gap-0.5 items-center">
           {/* Module switcher icons */}
           {(Object.keys(MODULE_REGISTRY) as ModuleId[])
-            .filter((id) => id !== 'hr' || vis.hiring)
+            .filter((id) => (id !== 'hr' || vis.hiring) && isModuleVisible(id))
             .map((id) => {
             const mod = MODULE_REGISTRY[id]
             const Icon = getIcon(mod.icon)
@@ -487,7 +496,7 @@ export function DashboardSidebar() {
            ══════════════════════════════════════════════════════════════════ */}
         <div className="group-data-[collapsible=icon]:hidden space-y-1">
           {(Object.keys(MODULE_REGISTRY) as ModuleId[])
-            .filter((id) => id !== 'hr' || vis.hiring)
+            .filter((id) => (id !== 'hr' || vis.hiring) && isModuleVisible(id))
             .map((id) => {
             const isModuleEnabled = activeModules.includes(id)
             const mod = MODULE_REGISTRY[id]
@@ -576,7 +585,7 @@ export function DashboardSidebar() {
                       if (!group.label) {
                         return (
                           <SidebarMenu key="__root" className="gap-0.5 mt-1">
-                            {group.items.map((item) => {
+                            {group.items.filter((item) => isItemVisible(id, item.href)).map((item) => {
                               if (item.divider) {
                                 return (
                                   <div key={item.href} className="px-4 py-1.5 text-[10px] text-sidebar-foreground/30 font-medium tracking-wide select-none">
@@ -654,7 +663,7 @@ export function DashboardSidebar() {
 
                           <CollapsibleContent forceMount className="data-[state=closed]:hidden">
                             <SidebarMenu className="gap-0.5 mt-1">
-                              {group.items.map((item) => {
+                              {group.items.filter((item) => isItemVisible(id, item.href)).map((item) => {
                                 if (item.divider) {
                                   return (
                                     <div key={item.href} className="px-6 py-1.5 text-[10px] text-sidebar-foreground/30 font-medium tracking-wide select-none">
@@ -808,6 +817,23 @@ export function DashboardSidebar() {
           </div>,
           document.body
         )}
+
+        {/* Customize menu button */}
+        <button
+          onClick={() => setCustomizeOpen(true)}
+          className="group-data-[collapsible=icon]:hidden flex items-center gap-2 px-2 py-1.5 rounded-md text-xs text-sidebar-foreground/40 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-colors w-full"
+        >
+          <SlidersHorizontal className="w-3.5 h-3.5" />
+          Настроить меню
+        </button>
+
+        <SidebarCustomizationSheet
+          open={customizeOpen}
+          onOpenChange={setCustomizeOpen}
+          visibility={sidebarVis}
+          onSave={setSidebarVis}
+          onReset={resetSidebarVis}
+        />
 
         {/* Profile */}
         <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-sidebar-accent transition-colors group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-1">
