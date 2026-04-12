@@ -1,140 +1,53 @@
 "use client"
 
-import { useState } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { DashboardSidebar } from "@/components/dashboard/sidebar"
+import { DashboardHeader } from "@/components/dashboard/header"
+import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
+import { BarChart3, Calculator, FlaskConical, GitFork, Funnel } from "lucide-react"
 
-const funnelSteps = [
-  { label: "Охват", value: 156000, display: "156K", pct: 100, convFromPrev: null },
-  { label: "Переходы", value: 12400, display: "12.4K", pct: 8.0, convFromPrev: "8%" },
-  { label: "Заявки", value: 892, display: "892", pct: 0.57, convFromPrev: "7.2%" },
-  { label: "Клиенты", value: 284, display: "284", pct: 0.18, convFromPrev: "31.8%" },
-]
-
-const maxFunnel = 156000
-
-const channelData = [
-  { channel: "SEO", reach: "72K", leads: 89, conv: "1.2%", cpl: "₽0" },
-  { channel: "Соцсети", reach: "34K", leads: 67, conv: "2.0%", cpl: "₽448" },
-  { channel: "Контекст", reach: "18K", leads: 54, conv: "3.0%", cpl: "₽926" },
-  { channel: "Email", reach: "4.8K", leads: 43, conv: "9.0%", cpl: "₽116" },
-  { channel: "Реферал", reach: "27K", leads: 31, conv: "1.1%", cpl: "₽0" },
-]
-
-const barColors = [
-  "bg-blue-500",
-  "bg-purple-500",
-  "bg-green-500",
-  "bg-orange-500",
-  "bg-sky-500",
+const FEATURES = [
+  { icon: Calculator, label: "ROI-калькулятор", desc: "Автоматический расчёт окупаемости каждого канала" },
+  { icon: FlaskConical, label: "A/B тесты", desc: "Сравнение креативов, аудиторий и посадочных страниц" },
+  { icon: GitFork, label: "Атрибуция", desc: "Мультиканальная атрибуция: first-touch, last-touch, linear" },
+  { icon: Funnel, label: "Воронка", desc: "Визуализация конверсий от охвата до клиента" },
 ]
 
 export default function MarketingAnalyticsPage() {
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Аналитика маркетинга</h1>
-      </div>
+    <SidebarProvider defaultOpen={true}>
+      <DashboardSidebar />
+      <SidebarInset>
+        <DashboardHeader />
+        <main className="flex-1 overflow-auto bg-background">
+          <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <div className="w-20 h-20 rounded-2xl bg-purple-500/10 flex items-center justify-center mb-6">
+                <BarChart3 className="w-10 h-10 text-purple-500" />
+              </div>
+              <h1 className="text-2xl font-bold mb-2">Детальная аналитика</h1>
+              <p className="text-muted-foreground max-w-md mb-8">
+                AI-анализ эффективности каналов, прогноз бюджета, автоматические отчёты
+              </p>
 
-      <Tabs defaultValue="week">
-        <TabsList>
-          <TabsTrigger value="week">Эта неделя</TabsTrigger>
-          <TabsTrigger value="month">Месяц</TabsTrigger>
-          <TabsTrigger value="quarter">Квартал</TabsTrigger>
-        </TabsList>
-
-        {["week", "month", "quarter"].map((period) => (
-          <TabsContent key={period} value={period} className="mt-4 space-y-6">
-            {/* Funnel */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Маркетинговая воронка</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {funnelSteps.map((step, i) => (
-                  <div key={step.label} className="space-y-1">
-                    <div className="flex items-center justify-between text-sm">
-                      <div className="flex items-center gap-3">
-                        <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center">
-                          {i + 1}
-                        </span>
-                        <span className="font-medium">{step.label}</span>
-                        {step.convFromPrev && (
-                          <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
-                            конв. {step.convFromPrev}
-                          </span>
-                        )}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-2xl w-full">
+                {FEATURES.map((f) => (
+                  <div key={f.label} className="rounded-xl border border-border/60 bg-card p-5 text-left hover:shadow-md transition-shadow">
+                    <div className="flex items-center gap-3 mb-2">
+                      <div className="w-10 h-10 rounded-lg bg-purple-500/10 flex items-center justify-center">
+                        <f.icon className="w-5 h-5 text-purple-500" />
                       </div>
-                      <span className="font-bold">{step.display}</span>
+                      <span className="font-semibold">{f.label}</span>
                     </div>
-                    <div className="h-8 bg-gray-100 rounded-lg overflow-hidden">
-                      <div
-                        className={`h-full rounded-lg flex items-center px-3 ${
-                          i === 0 ? "bg-blue-500" :
-                          i === 1 ? "bg-purple-500" :
-                          i === 2 ? "bg-green-500" :
-                          "bg-orange-500"
-                        }`}
-                        style={{ width: `${(step.value / maxFunnel) * 100}%`, minWidth: "60px" }}
-                      >
-                        <span className="text-white text-xs font-medium">{step.display}</span>
-                      </div>
-                    </div>
+                    <p className="text-sm text-muted-foreground">{f.desc}</p>
                   </div>
                 ))}
-              </CardContent>
-            </Card>
+              </div>
 
-            {/* Channel Comparison */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Сравнение каналов</CardTitle>
-              </CardHeader>
-              <CardContent className="p-0">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b bg-muted/50">
-                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Канал</th>
-                        <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Охват</th>
-                        <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Лиды</th>
-                        <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Конверсия</th>
-                        <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Стоимость лида</th>
-                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Доля лидов</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {channelData.map((row, i) => {
-                        const pct = Math.round((row.leads / channelData.reduce((s, r) => s + r.leads, 0)) * 100)
-                        return (
-                          <tr key={row.channel} className="border-b last:border-0 hover:bg-muted/30">
-                            <td className="py-3 px-4 font-medium">{row.channel}</td>
-                            <td className="py-3 px-4 text-right text-muted-foreground">{row.reach}</td>
-                            <td className="py-3 px-4 text-right font-semibold">{row.leads}</td>
-                            <td className="py-3 px-4 text-right text-green-600 font-medium">{row.conv}</td>
-                            <td className="py-3 px-4 text-right text-muted-foreground">{row.cpl}</td>
-                            <td className="py-3 px-4 w-36">
-                              <div className="flex items-center gap-2">
-                                <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
-                                  <div
-                                    className={`h-full ${barColors[i]} rounded-full`}
-                                    style={{ width: `${pct}%` }}
-                                  />
-                                </div>
-                                <span className="text-xs text-muted-foreground w-8 text-right">{pct}%</span>
-                              </div>
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        ))}
-      </Tabs>
-    </div>
+              <p className="text-sm text-muted-foreground mt-8">Будет доступно в следующем обновлении</p>
+            </div>
+          </div>
+        </main>
+      </SidebarInset>
+    </SidebarProvider>
   )
 }

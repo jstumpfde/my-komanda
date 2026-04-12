@@ -130,6 +130,7 @@ export const MODULE_REGISTRY: Record<ModuleId, ModuleConfig> = {
       { label: 'Отзывы',          href: '/marketing/reviews',     icon: 'MessageSquare' },
       { label: 'Аналитика',       href: '/marketing/analytics',   icon: 'TrendingUp' },
       { label: 'Бюджет',          href: '/marketing/budget',      icon: 'CreditCard' },
+      { label: 'Настройки',       href: '/marketing/settings',    icon: 'Settings' },
     ],
   },
   b2b: {
