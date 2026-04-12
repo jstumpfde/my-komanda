@@ -61,7 +61,8 @@ const SLUG_TO_MODULE_ID: Partial<Record<string, ModuleId>> = {
   'talent-pool': 'hr',
   'marketing':   'marketing',
   'sales':       'sales',
-  'logistics':   'logistics',
+  'logistics':   'warehouse',
+  'warehouse':   'warehouse',
 }
 
 const MODULE_SHORT: Record<ModuleId, string> = {
@@ -73,6 +74,7 @@ const MODULE_SHORT: Record<ModuleId, string> = {
   sales:     'ПРД',
   b2b:       'B2B',
   ecommerce: 'ECM',
+  warehouse: 'СКЛ',
   logistics: 'ЛГС',
   booking:   'БРН',
   dialer:    'ЗВН',
@@ -89,6 +91,7 @@ const MODULE_COLORS: Record<ModuleId, string> = {
   sales:     'text-emerald-500',
   b2b:       'text-cyan-500',
   ecommerce: 'text-rose-500',
+  warehouse: 'text-orange-500',
   logistics: 'text-orange-500',
   booking:   'text-teal-500',
   dialer:    'text-red-500',
@@ -104,6 +107,7 @@ const MODULE_BG_COLORS: Record<ModuleId, string> = {
   sales:     'bg-emerald-500/10',
   b2b:       'bg-cyan-500/10',
   ecommerce: 'bg-rose-500/10',
+  warehouse: 'bg-orange-500/10',
   logistics: 'bg-orange-500/10',
   booking:   'bg-teal-500/10',
   dialer:    'bg-red-500/10',
@@ -119,6 +123,7 @@ const MODULE_BORDER_COLORS: Record<ModuleId, string> = {
   sales:     '#10b981',
   b2b:       '#06b6d4',
   ecommerce: '#f43f5e',
+  warehouse: '#f97316',
   logistics: '#f97316',
   booking:   '#14b8a6',
   dialer:    '#ef4444',
@@ -201,7 +206,7 @@ export function DashboardSidebar() {
   // Active modules fetched from API
   // TODO: включить обратно когда настроим биллинг
   // Временно все модули активны для демо
-  const ALL_MODULES: ModuleId[] = ['hr', 'knowledge', 'learning', 'tasks', 'sales', 'marketing', 'logistics', 'booking', 'dialer', 'qc', 'b2b', 'ecommerce']
+  const ALL_MODULES: ModuleId[] = ['hr', 'knowledge', 'learning', 'tasks', 'sales', 'marketing', 'warehouse', 'booking', 'dialer', 'qc', 'b2b', 'ecommerce']
   const [activeModules, setActiveModules] = useState<ModuleId[]>(ALL_MODULES)
   /*
   useEffect(() => {

@@ -36,7 +36,7 @@ const MODULE_PATH_MAP: { prefix: string; slugs: string[]; moduleParam: string }[
   { prefix: "/hr/",        slugs: HR_MODULE_SLUGS, moduleParam: "recruiting" },
   { prefix: "/marketing/", slugs: ["marketing"],   moduleParam: "marketing" },
   { prefix: "/sales/",     slugs: ["sales"],       moduleParam: "sales" },
-  { prefix: "/logistics/", slugs: ["logistics"],   moduleParam: "logistics" },
+  { prefix: "/warehouse/", slugs: ["warehouse"],   moduleParam: "warehouse" },
   { prefix: "/knowledge/", slugs: ["knowledge"],   moduleParam: "knowledge" },
   { prefix: "/tasks/",     slugs: ["tasks"],       moduleParam: "tasks" },
   { prefix: "/booking/",   slugs: ["booking"],     moduleParam: "booking" },
