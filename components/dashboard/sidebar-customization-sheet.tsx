@@ -136,7 +136,7 @@ export function SidebarCustomizationSheet({ open, onOpenChange, visibility, onSa
 
                   {moduleOn && mod.menuItems.length > 0 && (
                     <div className="pl-9 mt-1 space-y-0.5">
-                      {mod.menuItems.slice(0, 10).map((item) => (
+                      {mod.menuItems.map((item) => (
                         <label key={item.href} className="flex items-center gap-2 cursor-pointer py-0.5">
                           <Checkbox
                             checked={isItemOn(id, item.href)}
@@ -145,9 +145,6 @@ export function SidebarCustomizationSheet({ open, onOpenChange, visibility, onSa
                           <span className="text-sm text-muted-foreground">{item.label}</span>
                         </label>
                       ))}
-                      {mod.menuItems.length > 10 && (
-                        <p className="text-[10px] text-muted-foreground/50 pl-6">+{mod.menuItems.length - 10} пунктов</p>
-                      )}
                     </div>
                   )}
                 </div>
