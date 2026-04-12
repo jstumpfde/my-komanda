@@ -76,6 +76,7 @@ const MODULE_SHORT: Record<ModuleId, string> = {
   logistics: 'ЛГС',
   booking:   'БРН',
   dialer:    'ЗВН',
+  qc:        'ОКК',
 }
 
 // Module accent colors for visual distinction
@@ -91,6 +92,7 @@ const MODULE_COLORS: Record<ModuleId, string> = {
   logistics: 'text-orange-500',
   booking:   'text-teal-500',
   dialer:    'text-red-500',
+  qc:        'text-indigo-500',
 }
 
 const MODULE_BG_COLORS: Record<ModuleId, string> = {
@@ -105,6 +107,7 @@ const MODULE_BG_COLORS: Record<ModuleId, string> = {
   logistics: 'bg-orange-500/10',
   booking:   'bg-teal-500/10',
   dialer:    'bg-red-500/10',
+  qc:        'bg-indigo-500/10',
 }
 
 const MODULE_BORDER_COLORS: Record<ModuleId, string> = {
@@ -119,6 +122,7 @@ const MODULE_BORDER_COLORS: Record<ModuleId, string> = {
   logistics: '#f97316',
   booking:   '#14b8a6',
   dialer:    '#ef4444',
+  qc:        '#6366f1',
 }
 
 // Group colors for style C (colored icons + badge)
@@ -197,7 +201,7 @@ export function DashboardSidebar() {
   // Active modules fetched from API
   // TODO: включить обратно когда настроим биллинг
   // Временно все модули активны для демо
-  const ALL_MODULES: ModuleId[] = ['hr', 'knowledge', 'learning', 'tasks', 'sales', 'marketing', 'logistics', 'booking', 'dialer', 'b2b', 'ecommerce']
+  const ALL_MODULES: ModuleId[] = ['hr', 'knowledge', 'learning', 'tasks', 'sales', 'marketing', 'logistics', 'booking', 'dialer', 'qc', 'b2b', 'ecommerce']
   const [activeModules, setActiveModules] = useState<ModuleId[]>(ALL_MODULES)
   /*
   useEffect(() => {

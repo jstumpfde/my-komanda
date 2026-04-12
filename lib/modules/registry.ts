@@ -194,4 +194,16 @@ export const MODULE_REGISTRY: Record<ModuleId, ModuleConfig> = {
       { label: 'Настройки',  href: '/dialer/settings',  icon: 'Settings' },
     ],
   },
+  qc: {
+    id: 'qc',
+    name: 'ОКК',
+    description: 'AI-анализ записей звонков менеджеров',
+    icon: 'Headphones',
+    basePath: '/qc',
+    menuItems: [
+      { label: 'Дашборд',    href: '/qc',             icon: 'LayoutDashboard' },
+      { label: 'Чек-листы',  href: '/qc/checklists',  icon: 'ClipboardCheck' },
+      { label: 'Настройки',  href: '/qc/settings',    icon: 'Settings' },
+    ],
+  },
 }
