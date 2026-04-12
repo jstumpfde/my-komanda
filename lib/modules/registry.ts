@@ -181,4 +181,17 @@ export const MODULE_REGISTRY: Record<ModuleId, ModuleConfig> = {
       { label: 'Отчёты',       href: '/logistics/reports',    icon: 'FileText' },
     ],
   },
+  dialer: {
+    id: 'dialer',
+    name: 'Бот-звонарь',
+    description: 'AI-агент для исходящих звонков по скриптам',
+    icon: 'PhoneOutgoing',
+    basePath: '/dialer',
+    menuItems: [
+      { label: 'Дашборд',    href: '/dialer',           icon: 'LayoutDashboard' },
+      { label: 'Скрипты',    href: '/dialer/scripts',   icon: 'FileText' },
+      { label: 'История',    href: '/dialer/history',   icon: 'ClipboardList' },
+      { label: 'Настройки',  href: '/dialer/settings',  icon: 'Settings' },
+    ],
+  },
 }
