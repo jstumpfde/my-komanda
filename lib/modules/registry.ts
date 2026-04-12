@@ -137,9 +137,15 @@ export const MODULE_REGISTRY: Record<ModuleId, ModuleConfig> = {
     id: 'b2b',
     name: 'Торговля B2B',
     description: 'Оптовые продажи, дилерская сеть и договоры',
-    icon: 'Handshake',
+    icon: 'Briefcase',
     basePath: '/b2b',
-    menuItems: [],
+    menuItems: [
+      { label: 'Дашборд',    href: '/b2b',             icon: 'LayoutDashboard' },
+      { label: 'Аккаунты',   href: '/b2b/accounts',    icon: 'Building2' },
+      { label: 'Тендеры',    href: '/b2b/tenders',     icon: 'ClipboardList' },
+      { label: 'Аналитика',  href: '/b2b/analytics',   icon: 'BarChart3' },
+      { label: 'Настройки',  href: '/b2b/settings',    icon: 'Settings' },
+    ],
   },
   ecommerce: {
     id: 'ecommerce',
