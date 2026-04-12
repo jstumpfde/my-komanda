@@ -148,6 +148,19 @@ export const MODULE_REGISTRY: Record<ModuleId, ModuleConfig> = {
     basePath: '/ecommerce',
     menuItems: [],
   },
+  booking: {
+    id: 'booking',
+    name: 'Бронирование',
+    description: 'Запись клиентов на услуги и управление расписанием',
+    icon: 'CalendarCheck',
+    basePath: '/booking',
+    menuItems: [
+      { label: 'Календарь',  href: '/booking',           icon: 'Calendar' },
+      { label: 'Услуги',     href: '/booking/services',  icon: 'ListChecks' },
+      { label: 'Ресурсы',    href: '/booking/resources', icon: 'Users' },
+      { label: 'Настройки',  href: '/booking/settings',  icon: 'Settings' },
+    ],
+  },
   logistics: {
     id: 'logistics',
     name: 'Логистика и склад',

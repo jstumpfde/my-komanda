@@ -1354,6 +1354,61 @@ export const learningAssignments = pgTable("learning_assignments", {
   certificateUrl: text("certificate_url"),
 })
 
+// ─── Booking: Услуги ─────────────────────────────────────────────────────────
+
+export const bookingServices = pgTable("booking_services", {
+  id:          uuid("id").primaryKey().defaultRandom(),
+  tenantId:    uuid("tenant_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  name:        text("name").notNull(),
+  description: text("description"),
+  duration:    integer("duration").notNull().default(60),  // минуты
+  price:       integer("price"),                           // копейки
+  currency:    text("currency").default("RUB"),
+  color:       text("color").default("#3B82F6"),
+  isActive:    boolean("is_active").default(true),
+  sortOrder:   integer("sort_order").default(0),
+  createdAt:   timestamp("created_at").defaultNow(),
+  updatedAt:   timestamp("updated_at").defaultNow(),
+})
+
+// ─── Booking: Ресурсы/Специалисты ───────────────────────────────────────────
+
+export const bookingResources = pgTable("booking_resources", {
+  id:          uuid("id").primaryKey().defaultRandom(),
+  tenantId:    uuid("tenant_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  name:        text("name").notNull(),
+  type:        text("type").default("specialist"),  // specialist / room / equipment
+  description: text("description"),
+  avatar:      text("avatar"),
+  isActive:    boolean("is_active").default(true),
+  schedule:    jsonb("schedule"),   // { mon: {start,end,active}, ... }
+  breaks:      jsonb("breaks"),     // [{start,end}]
+  createdAt:   timestamp("created_at").defaultNow(),
+  updatedAt:   timestamp("updated_at").defaultNow(),
+})
+
+// ─── Booking: Записи ─────────────────────────────────────────────────────────
+
+export const bookings = pgTable("bookings", {
+  id:          uuid("id").primaryKey().defaultRandom(),
+  tenantId:    uuid("tenant_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  serviceId:   uuid("service_id").references(() => bookingServices.id, { onDelete: "cascade" }).notNull(),
+  resourceId:  uuid("resource_id").references(() => bookingResources.id, { onDelete: "set null" }),
+  contactId:   uuid("contact_id").references(() => salesContacts.id, { onDelete: "set null" }),
+  clientName:  text("client_name").notNull(),
+  clientPhone: text("client_phone"),
+  clientEmail: text("client_email"),
+  date:        date("date").notNull(),
+  startTime:   text("start_time").notNull(),   // "10:00"
+  endTime:     text("end_time").notNull(),     // "11:00"
+  status:      text("status").default("confirmed").notNull(),  // confirmed/completed/cancelled/no_show
+  notes:       text("notes"),
+  price:       integer("price"),               // копейки
+  isPaid:      boolean("is_paid").default(false),
+  createdAt:   timestamp("created_at").defaultNow(),
+  updatedAt:   timestamp("updated_at").defaultNow(),
+})
+
 // ─── Vacancy Demos ──────────────────────────────────────────────────────────
 
 export const vacancyDemos = pgTable("vacancy_demos", {

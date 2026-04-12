@@ -74,6 +74,7 @@ const MODULE_SHORT: Record<ModuleId, string> = {
   b2b:       'B2B',
   ecommerce: 'ECM',
   logistics: 'ЛГС',
+  booking:   'БРН',
 }
 
 // Module accent colors for visual distinction
@@ -87,6 +88,7 @@ const MODULE_COLORS: Record<ModuleId, string> = {
   b2b:       'text-cyan-500',
   ecommerce: 'text-rose-500',
   logistics: 'text-orange-500',
+  booking:   'text-teal-500',
 }
 
 const MODULE_BG_COLORS: Record<ModuleId, string> = {
@@ -99,6 +101,7 @@ const MODULE_BG_COLORS: Record<ModuleId, string> = {
   b2b:       'bg-cyan-500/10',
   ecommerce: 'bg-rose-500/10',
   logistics: 'bg-orange-500/10',
+  booking:   'bg-teal-500/10',
 }
 
 const MODULE_BORDER_COLORS: Record<ModuleId, string> = {
@@ -111,6 +114,7 @@ const MODULE_BORDER_COLORS: Record<ModuleId, string> = {
   b2b:       '#06b6d4',
   ecommerce: '#f43f5e',
   logistics: '#f97316',
+  booking:   '#14b8a6',
 }
 
 // Group colors for style C (colored icons + badge)
