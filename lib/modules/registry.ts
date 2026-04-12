@@ -115,7 +115,7 @@ export const MODULE_REGISTRY: Record<ModuleId, ModuleConfig> = {
   },
   marketing: {
     id: 'marketing',
-    name: 'Маркетинг и продвижение',
+    name: 'Маркетинг',
     description: 'Контент, SEO, реклама и маркетинговая аналитика',
     icon: 'Megaphone',
     basePath: '/marketing',

@@ -631,7 +631,7 @@ export function DashboardSidebar() {
                           onOpenChange={() => toggleGroup(groupKey)}
                         >
                           <CollapsibleTrigger className={cn(
-                            "flex items-center gap-2 w-full px-3 py-2 rounded-md text-xs font-semibold uppercase tracking-wider transition-colors",
+                            "flex items-center gap-2 w-full px-3 py-2 rounded-md text-xs font-semibold tracking-wide transition-colors",
                             group.legacy
                               ? hasActiveItem
                                 ? "text-sidebar-foreground/50 bg-sidebar-accent/20"
