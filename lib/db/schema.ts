@@ -1422,3 +1422,31 @@ export const vacancyDemos = pgTable("vacancy_demos", {
   createdAt:   timestamp("created_at").defaultNow(),
   updatedAt:   timestamp("updated_at").defaultNow(),
 })
+
+// ─── Departments ─────────────────────────────────────────────────────────────
+
+export const departments = pgTable("departments", {
+  id:          uuid("id").primaryKey().defaultRandom(),
+  tenantId:    uuid("tenant_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  name:        text("name").notNull(),
+  description: text("description"),
+  parentId:    uuid("parent_id"),  // self-reference handled at DB level
+  headUserId:  uuid("head_user_id").references(() => users.id, { onDelete: "set null" }),
+  createdAt:   timestamp("created_at").defaultNow(),
+  updatedAt:   timestamp("updated_at").defaultNow(),
+})
+
+// ─── Positions ───────────────────────────────────────────────────────────────
+
+export const positions = pgTable("positions", {
+  id:           uuid("id").primaryKey().defaultRandom(),
+  tenantId:     uuid("tenant_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  departmentId: uuid("department_id").references(() => departments.id, { onDelete: "set null" }),
+  name:         text("name").notNull(),
+  description:  text("description"),
+  grade:        text("grade"),
+  salaryMin:    integer("salary_min"),
+  salaryMax:    integer("salary_max"),
+  createdAt:    timestamp("created_at").defaultNow(),
+  updatedAt:    timestamp("updated_at").defaultNow(),
+})
