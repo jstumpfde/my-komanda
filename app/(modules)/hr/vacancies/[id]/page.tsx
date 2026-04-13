@@ -18,6 +18,7 @@ import { AddCandidateDialog } from "@/components/dashboard/add-candidate-dialog"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { Textarea } from "@/components/ui/textarea"
+import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -682,6 +683,31 @@ export default function VacancyPage() {
     refetchCandidates()
   }
 
+  // ── Health check ──
+  const [healthScore, setHealthScore] = useState<number | null>(null)
+  const [healthIssues, setHealthIssues] = useState<{ type: string; severity: string; message: string; action: string; tab?: string }[]>([])
+  const [healthNextStep, setHealthNextStep] = useState("")
+  const healthLoadedRef = useRef(false)
+
+  useEffect(() => {
+    if (!id || healthLoadedRef.current) return
+    healthLoadedRef.current = true
+    fetch("/api/ai/vacancy-health-check", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ vacancyId: id }),
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then((data: { score: number; issues: typeof healthIssues; nextStep: string } | null) => {
+        if (data) {
+          setHealthScore(data.score)
+          setHealthIssues(data.issues)
+          setHealthNextStep(data.nextStep)
+        }
+      })
+      .catch(() => {})
+  }, [id])
+
   // ── AI tools handlers ──
   const anketa = ((apiVacancy?.descriptionJson as Record<string, unknown>)?.anketa as Record<string, unknown>) || {}
 
@@ -896,6 +922,45 @@ export default function VacancyPage() {
                 </Button>
               </div>
             </div>
+
+            {/* ═══ Health check ══════════════════════════════ */}
+            {healthScore !== null && (
+              <div className="mb-4 rounded-lg border p-3">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-xs font-medium">Готовность вакансии</span>
+                      <span className={cn(
+                        "text-xs font-bold",
+                        healthScore >= 80 ? "text-emerald-600" : healthScore >= 50 ? "text-amber-600" : "text-red-600"
+                      )}>{healthScore}%</span>
+                    </div>
+                    <Progress value={healthScore} className={cn("h-1.5", healthScore >= 80 ? "[&>div]:bg-emerald-500" : healthScore >= 50 ? "[&>div]:bg-amber-500" : "[&>div]:bg-red-500")} />
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {healthIssues.filter(i => i.severity !== "ok").map(i => (
+                    <button key={i.type} type="button"
+                      className={cn(
+                        "inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border",
+                        i.severity === "critical" ? "bg-red-50 text-red-700 border-red-200 dark:bg-red-950/20 dark:text-red-400 dark:border-red-800" : "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/20 dark:text-amber-400 dark:border-amber-800"
+                      )}
+                      onClick={() => { if (i.tab) setActiveTab(i.tab) }}
+                    >
+                      {i.severity === "critical" ? "●" : "○"} {i.message}
+                    </button>
+                  ))}
+                  {healthIssues.filter(i => i.severity === "ok").length > 0 && (
+                    <span className="text-[11px] text-emerald-600 px-2 py-0.5">
+                      ✓ {healthIssues.filter(i => i.severity === "ok").length} готово
+                    </span>
+                  )}
+                </div>
+                {healthNextStep && healthScore < 100 && (
+                  <p className="text-[11px] text-muted-foreground mt-1.5">Следующий шаг: {healthNextStep}</p>
+                )}
+              </div>
+            )}
 
             {/* ═══ ТАБЫ + ВИД в одной строке ══════════════════ */}
             <Tabs value={activeTab} onValueChange={setActiveTab}>
