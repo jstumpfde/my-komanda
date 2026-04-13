@@ -4,13 +4,14 @@ import Anthropic from "@anthropic-ai/sdk"
 import { db } from "@/lib/db"
 import { vacancies } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
+import { DEMO_TEMPLATES, type DemoTemplateId, type DemoTemplateBlock } from "@/lib/hr/demo-templates"
 
 const client = new Anthropic()
 
 export async function POST(req: NextRequest) {
   try {
     const user = await requireCompany()
-    const body = await req.json() as { vacancyId: string }
+    const body = await req.json() as { vacancyId: string; template?: DemoTemplateId }
 
     if (!body.vacancyId) {
       return apiError("vacancyId is required", 400)
@@ -36,68 +37,113 @@ export async function POST(req: NextRequest) {
 
     // Extract anketa data
     const dj = (vacancy.descriptionJson as Record<string, unknown>) || {}
-    const anketa = (dj.anketa as Record<string, string>) || {}
-    const companyName = anketa.companyName || anketa.company || "Компания"
-    const position = vacancy.title || anketa.position || "Должность"
-    const product = anketa.product || anketa.about || ""
-    const tasks = anketa.tasks || anketa.responsibilities || ""
-    const conditions = anketa.conditions || anketa.benefits || ""
+    const anketa = (dj.anketa as Record<string, unknown>) || {}
+    const companyName = String(anketa.companyName || anketa.company || "Компания")
+    const position = vacancy.title || String(anketa.position || "Должность")
+    const industry = String(anketa.industry || "")
+    const responsibilities = String(anketa.responsibilities || "")
+    const requirements = String(anketa.requirements || "")
+    const conditions = Array.isArray(anketa.conditions) ? (anketa.conditions as string[]).join(", ") : String(anketa.conditions || "")
+    const conditionsCustom = Array.isArray(anketa.conditionsCustom) ? (anketa.conditionsCustom as string[]).join(", ") : ""
+    const allConditions = [conditions, conditionsCustom].filter(Boolean).join(", ")
+    const bonus = String(anketa.bonus || "")
     const salary = vacancy.salaryMin && vacancy.salaryMax
       ? `${vacancy.salaryMin.toLocaleString("ru-RU")} – ${vacancy.salaryMax.toLocaleString("ru-RU")} ₽`
-      : anketa.salary || ""
-    const city = vacancy.city || anketa.city || "Москва"
+      : String(anketa.salary || "")
+    const city = vacancy.city || String(anketa.positionCity || "")
+    const workFormats = Array.isArray(anketa.workFormats) ? (anketa.workFormats as string[]).join(", ") : ""
+    const requiredSkills = Array.isArray(anketa.requiredSkills) ? (anketa.requiredSkills as string[]).join(", ") : ""
 
-    const prompt = `Сгенерируй демонстрацию должности из 10 блоков для вакансии "${position}" в компании "${companyName}".
+    // Select template
+    const templateId = body.template || "medium"
+    const template = DEMO_TEMPLATES.find(t => t.id === templateId) || DEMO_TEMPLATES[1]
+
+    // Build block descriptions for AI
+    const aiBlocks = template.blocks.filter(b => b.type === "text" && b.ai)
+    const blockList = aiBlocks.map((b, i) => `${i + 1}. "${b.title}" — ${b.description}`).join("\n")
+
+    const prompt = `Сгенерируй контент для демонстрации должности "${position}" в компании "${companyName}".
 
 Данные о вакансии:
-- Компания: ${companyName}
+- Компания: ${companyName}${industry ? ` (${industry})` : ""}
 - Должность: ${position}
-- Город: ${city}
+- Город: ${city || "не указан"}
+- Формат: ${workFormats || "не указан"}
 - Зарплата: ${salary || "не указана"}
-- Продукт/Услуга: ${product || "не указано"}
-- Задачи: ${tasks || "не указаны"}
-- Условия: ${conditions || "не указаны"}
+- Бонусы: ${bonus || "не указаны"}
+- Обязанности: ${responsibilities || "не указаны"}
+- Требования: ${requirements || "не указаны"}
+- Навыки: ${requiredSkills || "не указаны"}
+- Условия: ${allConditions || "не указаны"}
 
-Структура 10 блоков:
-1. Приветствие — тёплое обращение к кандидату, представление компании
-2. О компании — чем занимается, масштаб, достижения
-3. О продукте/услуге — что делает компания, для кого
-4. Задачи и обязанности — что будет делать кандидат каждый день
-5. Условия работы — график, офис/удалёнка, бонусы, зарплата
-6. План дохода — как формируется доход, рост, KPI
-7. Типичный день — как выглядит рабочий день на этой позиции
-8. Вопрос про опыт — открытый вопрос кандидату (textarea)
-9. Вопрос про мотивацию — открытый вопрос кандидату (textarea)
-10. Что дальше — объяснение следующих шагов процесса найма
+Нужно сгенерировать контент для ${aiBlocks.length} блоков:
+${blockList}
 
-Верни ТОЛЬКО валидный JSON массив (без markdown, без комментариев):
+ПРАВИЛА:
+- Пиши живым деловым русским языком, от лица компании.
+- Используй HTML для форматирования: <b>, <br>, <ul><li>.
+- Каждый блок — 2-5 абзацев. Конкретика из данных вакансии.
+- НЕ придумывай информацию которой нет в данных. Если данных нет — напиши общую формулировку.
+- Для блока "Следующий шаг" — используй переменную {{имя}} для обращения к кандидату.
+- Без clickbait, без "лучшая компания мира", без пустых обещаний.
+
+Верни ТОЛЬКО валидный JSON массив (без markdown):
 [
-  {"type": "text", "title": "Заголовок блока", "content": "HTML-текст блока с <b>, <br>, <ul><li>"},
-  {"type": "question", "title": "Заголовок вопроса", "content": "Текст вопроса", "questionType": "textarea"}
+  {"id": "block_id", "content": "HTML-текст блока"}
 ]
 
-type может быть: "text" (информационный блок) или "question" (вопрос кандидату с questionType: "textarea" или "radio").
-Текст пиши на русском, живым деловым языком. Используй HTML-форматирование для структуры.`
+Используй id из списка блоков: ${aiBlocks.map(b => b.id).join(", ")}`
 
-    const message = await client.messages.create({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 4000,
-      messages: [{ role: "user", content: prompt }],
-    })
+    const apiKey = process.env.ANTHROPIC_API_KEY
+    let aiContents: Record<string, string> = {}
 
-    const text = message.content[0].type === "text" ? message.content[0].text : ""
+    if (apiKey) {
+      const message = await client.messages.create({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 6000,
+        messages: [{ role: "user", content: prompt }],
+      })
 
-    // Parse JSON from response (handle potential markdown wrapping)
-    let blocks: Array<{ type: string; title: string; content: string; questionType?: string }>
-    try {
-      const jsonMatch = text.match(/\[[\s\S]*\]/)
-      if (!jsonMatch) throw new Error("No JSON array found")
-      blocks = JSON.parse(jsonMatch[0])
-    } catch {
-      return apiError("Failed to parse AI response", 500)
+      const text = message.content[0].type === "text" ? message.content[0].text : ""
+
+      try {
+        const jsonMatch = text.match(/\[[\s\S]*\]/)
+        if (!jsonMatch) throw new Error("No JSON array found")
+        const parsed = JSON.parse(jsonMatch[0]) as Array<{ id: string; content: string }>
+        for (const item of parsed) {
+          aiContents[item.id] = item.content
+        }
+      } catch {
+        // Fallback: use empty contents
+      }
     }
 
-    return apiSuccess(blocks)
+    // Build final blocks array
+    const resultBlocks = template.blocks.map(b => {
+      if (b.type === "text" && b.ai) {
+        return {
+          type: "text" as const,
+          title: b.title,
+          content: aiContents[b.id] || `<p>${b.description}</p>`,
+        }
+      }
+      if (b.type === "question") {
+        return {
+          type: "question" as const,
+          title: b.title,
+          content: b.description,
+          questionType: b.questionType || "long",
+        }
+      }
+      // Placeholder
+      return {
+        type: "text" as const,
+        title: b.title,
+        content: `<p style="color: #999"><i>${b.description}</i></p>`,
+      }
+    })
+
+    return apiSuccess(resultBlocks)
   } catch (err) {
     if (err instanceof Response) return err
     console.error("POST /api/modules/hr/demo/generate", err)

@@ -112,7 +112,7 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
       const res = await fetch("/api/modules/hr/demo/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ vacancyId }),
+        body: JSON.stringify({ vacancyId, template: "medium" }),
       })
       if (!res.ok) throw new Error()
       const blocks = await res.json() as Array<{ type: string; title: string; content: string; questionType?: string }>
@@ -122,10 +122,16 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
         const block = createBlock(b.type === "question" ? "task" : "text")
         block.content = b.content
         if (b.type === "question") {
-          block.answerType = b.questionType === "radio" ? "choice" : "long"
+          block.taskTitle = b.title
+          block.taskDescription = b.content
+          if (block.questions.length > 0) {
+            block.questions[0].text = b.content
+            block.questions[0].answerType = b.questionType === "short" ? "short" : "long"
+          }
         }
         return {
           id: `lesson-ai-${Date.now()}-${i}`,
+          emoji: b.type === "question" ? "✅" : "📄",
           title: b.title,
           blocks: [block],
         }

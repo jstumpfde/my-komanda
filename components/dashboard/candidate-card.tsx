@@ -25,6 +25,8 @@ export interface Candidate {
   demoTotal?: number
   demoTimeMin?: number
   aiSummary?: string
+  aiScore?: number
+  aiVerdict?: string
   interviewDate?: Date
   interviewTime?: string
   utmSource?: string
@@ -147,6 +149,23 @@ export function CandidateCard({ candidate, settings, columnId, isLastColumn, onO
         }
         return age != null ? <p className="text-xs text-muted-foreground mt-1">Возраст: {age} лет</p> : null
       })()}
+
+      {/* AI screening badge */}
+      {candidate.aiScore != null && (
+        <div className="flex items-center gap-1.5 mt-1.5">
+          <span className={cn(
+            "inline-flex items-center gap-1 rounded-md px-1.5 h-5 text-[10px] font-semibold",
+            candidate.aiScore >= 70 ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400"
+            : candidate.aiScore >= 40 ? "bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400"
+            : "bg-red-100 text-red-700 dark:bg-red-950/30 dark:text-red-400"
+          )}>
+            AI {candidate.aiScore}
+          </span>
+          {candidate.aiVerdict && (
+            <span className="text-[10px] text-muted-foreground">{candidate.aiVerdict}</span>
+          )}
+        </div>
+      )}
 
       {/* AI summary (decision columns) */}
       {isDecisionColumn && candidate.aiSummary && (

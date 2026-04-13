@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import {
   MessageSquare, Clock, Zap, Phone, Brain, Send, GripVertical,
   ChevronDown, ChevronUp, Pencil, Check, X, Pause, GitBranch,
@@ -296,6 +297,17 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
     setPipelinePreset("custom")
   }
 
+  // 6. Авто-действия
+  const [autoInvite, setAutoInvite] = useState<boolean>((initialAutomation.autoInvite as boolean) ?? false)
+  const [autoReject, setAutoReject] = useState<boolean>((initialAutomation.autoReject as boolean) ?? false)
+  const [notifyManager, setNotifyManager] = useState<boolean>((initialAutomation.notifyManager as boolean) ?? false)
+  const [rejectTemplate, setRejectTemplate] = useState<string>(
+    (initialAutomation.rejectTemplate as string) || "Здравствуйте, {имя}! Благодарим за интерес к позиции {должность}. К сожалению, на данный момент мы остановились на других кандидатах. Желаем удачи в поиске!"
+  )
+  const [inviteTemplate, setInviteTemplate] = useState<string>(
+    (initialAutomation.inviteTemplate as string) || "Здравствуйте, {имя}! Мы рассмотрели ваш отклик на позицию {должность} и хотели бы пригласить вас на следующий этап. {ссылка_на_демонстрацию}"
+  )
+
   // Sync if descriptionJson changes externally
   useEffect(() => {
     if (descriptionJson && typeof descriptionJson === "object" && descriptionJson !== null) {
@@ -359,6 +371,11 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
         followUpPreset,
         stopOnNo,
         stopOnClose,
+        autoInvite,
+        autoReject,
+        notifyManager,
+        rejectTemplate,
+        inviteTemplate,
       }
 
       const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}`, {
@@ -384,7 +401,7 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
     } finally {
       setSaving(false)
     }
-  }, [vacancyId, scenarioType, descriptionJson, tone, firstMessageText, firstMessageDelay, workingHoursEnabled, workingHoursFrom, workingHoursTo, includeWeekends, responseReaction, followUpEnabled, followUpPreset, stopOnNo, stopOnClose, pipelinePreset, pipelineStages])
+  }, [vacancyId, scenarioType, descriptionJson, tone, firstMessageText, firstMessageDelay, workingHoursEnabled, workingHoursFrom, workingHoursTo, includeWeekends, responseReaction, followUpEnabled, followUpPreset, stopOnNo, stopOnClose, pipelinePreset, pipelineStages, autoInvite, autoReject, notifyManager, rejectTemplate, inviteTemplate])
 
   return (
     <div className="space-y-6">
@@ -794,6 +811,63 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
               <Button variant="outline" size="sm" className="h-8 text-xs gap-1 shrink-0" onClick={addCustomStage} disabled={!newStageName.trim()}>
                 <Plus className="w-3 h-3" /> Добавить
               </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ═══ 6. Автоматические действия ═══════════════════════ */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Zap className="w-4 h-4" />
+            Автоматические действия
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-3">
+            <div className="flex items-center justify-between py-2">
+              <div>
+                <p className="text-sm font-medium">Авто-приглашение подходящих</p>
+                <p className="text-xs text-muted-foreground">AI-скор &ge; 70 — автоматическое приглашение на следующий этап</p>
+              </div>
+              <Switch checked={autoInvite} onCheckedChange={setAutoInvite} />
+            </div>
+            {autoInvite && (
+              <div className="ml-4 space-y-1.5">
+                <Label className="text-xs">Шаблон приглашения</Label>
+                <Textarea value={inviteTemplate} onChange={e => setInviteTemplate(e.target.value)}
+                  rows={3} className="text-sm resize-none bg-[var(--input-bg)] border border-input" />
+                <p className="text-[11px] text-muted-foreground">Переменные: {"{имя}"}, {"{должность}"}, {"{ссылка_на_демонстрацию}"}</p>
+              </div>
+            )}
+
+            <Separator />
+
+            <div className="flex items-center justify-between py-2">
+              <div>
+                <p className="text-sm font-medium">Авто-отказ неподходящим</p>
+                <p className="text-xs text-muted-foreground">AI-скор &lt; 40 — автоматический вежливый отказ</p>
+              </div>
+              <Switch checked={autoReject} onCheckedChange={setAutoReject} />
+            </div>
+            {autoReject && (
+              <div className="ml-4 space-y-1.5">
+                <Label className="text-xs">Шаблон отказа</Label>
+                <Textarea value={rejectTemplate} onChange={e => setRejectTemplate(e.target.value)}
+                  rows={3} className="text-sm resize-none bg-[var(--input-bg)] border border-input" />
+                <p className="text-[11px] text-muted-foreground">Переменные: {"{имя}"}, {"{должность}"}</p>
+              </div>
+            )}
+
+            <Separator />
+
+            <div className="flex items-center justify-between py-2">
+              <div>
+                <p className="text-sm font-medium">Уведомлять менеджера</p>
+                <p className="text-xs text-muted-foreground">Получать уведомление при каждом авто-действии</p>
+              </div>
+              <Switch checked={notifyManager} onCheckedChange={setNotifyManager} />
             </div>
           </div>
         </CardContent>

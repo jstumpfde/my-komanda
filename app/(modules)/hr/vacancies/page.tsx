@@ -32,7 +32,7 @@ import {
   Plus, Briefcase, MapPin, List, LayoutGrid, Table2, Calendar, Banknote,
   Search, MoreHorizontal, Pencil, Copy, Archive, Trash2, ListFilter,
   RotateCcw, X, Upload, FileText, Loader2, CheckCircle2, Sparkles,
-  ClipboardPaste, Globe, PenLine, ArrowLeft,
+  ClipboardPaste, Globe, PenLine, ArrowLeft, Mic, MicOff, MessageCircle, Send,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
@@ -318,7 +318,7 @@ export default function VacanciesPage() {
   const [permanentDeleteTarget, setPermanentDeleteTarget] = useState<ApiVacancy | null>(null)
   // Create vacancy wizard
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
-  const [createMode, setCreateMode] = useState<"choose" | "file" | "text" | "url" | "manual">("choose")
+  const [createMode, setCreateMode] = useState<"choose" | "file" | "text" | "url" | "manual" | "voice" | "chat">("choose")
   const [newVacancyTitle, setNewVacancyTitle] = useState("")
   const [creating, setCreating] = useState(false)
   const [importUrl, setImportUrl] = useState("")
@@ -328,6 +328,17 @@ export default function VacanciesPage() {
   const [dragOver, setDragOver] = useState(false)
   const [aiProgress, setAiProgress] = useState("")
   const fileInputRef = useRef<HTMLInputElement>(null)
+  // Voice input
+  const [recording, setRecording] = useState(false)
+  const [voiceText, setVoiceText] = useState("")
+  const [voiceSupported, setVoiceSupported] = useState(true)
+  const recognitionRef = useRef<unknown>(null)
+  // Chat with Nancy
+  const [chatMessages, setChatMessages] = useState<{ role: "nancy" | "user"; text: string }[]>([])
+  const [chatInput, setChatInput] = useState("")
+  const [chatStep, setChatStep] = useState(0)
+  const [chatLoading, setChatLoading] = useState(false)
+  const chatCollected = useRef<Record<string, string>>({})
 
   const resetCreateDialog = useCallback(() => {
     setCreateMode("choose")
@@ -336,6 +347,12 @@ export default function VacanciesPage() {
     setUploadedFile(null)
     setAiText("")
     setAiProgress("")
+    setVoiceText("")
+    setRecording(false)
+    setChatMessages([])
+    setChatInput("")
+    setChatStep(0)
+    chatCollected.current = {}
   }, [])
 
   const handleFileUpload = useCallback(async (file: File) => {
@@ -476,6 +493,12 @@ export default function VacanciesPage() {
       return
     }
 
+    if (createMode === "voice") {
+      if (!voiceText.trim()) { toast.error("Надиктуйте описание вакансии"); return }
+      await createWithAiText(voiceText.trim(), newVacancyTitle)
+      return
+    }
+
     if (createMode === "url") {
       if (!importUrl.trim()) { toast.error("Введите ссылку"); return }
       setCreating(true)
@@ -500,6 +523,100 @@ export default function VacanciesPage() {
       }
     }
   }, [createMode, newVacancyTitle, uploadedFile, aiText, importUrl, router, resetCreateDialog, createWithAiText])
+
+  // ── Voice recording ──
+  const startRecording = useCallback(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+    if (!SR) { setVoiceSupported(false); return }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const recognition = new SR() as any
+    recognition.lang = "ru-RU"
+    recognition.continuous = true
+    recognition.interimResults = true
+    let finalText = voiceText
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    recognition.onresult = (event: any) => {
+      let interim = ""
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        if (event.results[i].isFinal) {
+          finalText += event.results[i][0].transcript + " "
+        } else {
+          interim += event.results[i][0].transcript
+        }
+      }
+      setVoiceText(finalText + interim)
+    }
+    recognition.onerror = () => { setRecording(false) }
+    recognition.onend = () => { setRecording(false) }
+    recognition.start()
+    recognitionRef.current = recognition
+    setRecording(true)
+  }, [voiceText])
+
+  const stopRecording = useCallback(() => {
+    if (recognitionRef.current) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (recognitionRef.current as any).stop()
+    }
+    setRecording(false)
+  }, [])
+
+  // ── Chat with Nancy ──
+  const CHAT_QUESTIONS = [
+    "Как называется должность?",
+    "Что будет делать сотрудник? Опишите основные обязанности.",
+    "Какой опыт и навыки нужны?",
+    "В каком городе и формате работы? (офис/удалённо/гибрид)",
+    "Какая зарплатная вилка? (например: 80 000 – 150 000)",
+    "Какие условия предлагаете? (ДМС, обучение, бонусы и т.д.)",
+  ]
+  const CHAT_KEYS = ["title", "responsibilities", "requirements", "cityFormat", "salary", "conditions"]
+
+  const initChat = useCallback(() => {
+    setChatMessages([{ role: "nancy", text: `Привет! Давайте создадим вакансию. ${CHAT_QUESTIONS[0]}` }])
+    setChatStep(0)
+    chatCollected.current = {}
+  }, [])
+
+  const sendChatMessage = useCallback(async () => {
+    const msg = chatInput.trim()
+    if (!msg) return
+    setChatInput("")
+
+    // Save user answer
+    const key = CHAT_KEYS[chatStep]
+    chatCollected.current[key] = msg
+    setChatMessages(prev => [...prev, { role: "user", text: msg }])
+
+    const nextStep = chatStep + 1
+    if (nextStep < CHAT_QUESTIONS.length) {
+      // Ask next question
+      setChatStep(nextStep)
+      setTimeout(() => {
+        setChatMessages(prev => [...prev, { role: "nancy", text: CHAT_QUESTIONS[nextStep] }])
+      }, 500)
+    } else {
+      // All questions asked — build text and create
+      setChatLoading(true)
+      const d = chatCollected.current
+      const text = [
+        d.title && `Должность: ${d.title}`,
+        d.responsibilities && `Обязанности: ${d.responsibilities}`,
+        d.requirements && `Требования: ${d.requirements}`,
+        d.cityFormat && `Город/формат: ${d.cityFormat}`,
+        d.salary && `Зарплата: ${d.salary}`,
+        d.conditions && `Условия: ${d.conditions}`,
+      ].filter(Boolean).join("\n")
+
+      setTimeout(() => {
+        setChatMessages(prev => [...prev, { role: "nancy", text: "Отлично! Создаю вакансию с AI-заполнением..." }])
+      }, 500)
+
+      await createWithAiText(text, d.title || "")
+      setChatLoading(false)
+    }
+  }, [chatInput, chatStep, createWithAiText])
 
   const hrManagerTrashEnabled = typeof window !== "undefined" && localStorage.getItem(TRASH_ACCESS_KEY) === "true"
   const canSeeTrash = TRASH_ROLES_ALWAYS.includes(role) || (role === TRASH_ROLE_OPTIONAL && hrManagerTrashEnabled)
@@ -912,6 +1029,8 @@ export default function VacanciesPage() {
               {createMode === "text" && "Вставить текст"}
               {createMode === "url" && "Импорт по ссылке"}
               {createMode === "manual" && "Создать вручную"}
+              {createMode === "voice" && "Надиктовать"}
+              {createMode === "chat" && "Чат с Ненси"}
             </DialogTitle>
           </DialogHeader>
 
@@ -951,8 +1070,30 @@ export default function VacanciesPage() {
                 </div>
               </button>
 
-              <button type="button" onClick={() => setCreateMode("manual")}
+              <button type="button" onClick={() => { setCreateMode("voice"); setVoiceText("") }}
                 className="flex flex-col items-center gap-2.5 p-5 rounded-xl border-2 border-muted hover:border-primary/50 hover:bg-primary/5 transition-all text-center group">
+                <div className="flex items-center justify-center size-11 rounded-lg bg-rose-50 dark:bg-rose-950/30 text-rose-600 group-hover:scale-110 transition-transform">
+                  <Mic className="size-5" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium">Надиктовать</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Расскажите голосом — AI заполнит анкету</p>
+                </div>
+              </button>
+
+              <button type="button" onClick={() => { setCreateMode("chat"); initChat() }}
+                className="flex flex-col items-center gap-2.5 p-5 rounded-xl border-2 border-muted hover:border-primary/50 hover:bg-primary/5 transition-all text-center group">
+                <div className="flex items-center justify-center size-11 rounded-lg bg-pink-50 dark:bg-pink-950/30 text-pink-600 group-hover:scale-110 transition-transform">
+                  <MessageCircle className="size-5" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium">Чат с Ненси</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Ненси задаст вопросы и заполнит анкету</p>
+                </div>
+              </button>
+
+              <button type="button" onClick={() => setCreateMode("manual")}
+                className="flex flex-col items-center gap-2.5 p-5 rounded-xl border-2 border-muted hover:border-primary/50 hover:bg-primary/5 transition-all text-center group col-span-2">
                 <div className="flex items-center justify-center size-11 rounded-lg bg-amber-50 dark:bg-amber-950/30 text-amber-600 group-hover:scale-110 transition-transform">
                   <PenLine className="size-5" />
                 </div>
@@ -1044,6 +1185,96 @@ export default function VacanciesPage() {
                 {creating ? <Loader2 className="size-4 mr-1.5 animate-spin" /> : <Globe className="size-4 mr-1.5" />}
                 Загрузить и создать
               </Button>
+            </div>
+          )}
+
+          {/* ── Mode: Voice ── */}
+          {createMode === "voice" && (
+            <div className="space-y-4 py-2">
+              {!voiceSupported ? (
+                <div className="text-center py-6">
+                  <MicOff className="size-8 text-muted-foreground mx-auto mb-2" />
+                  <p className="text-sm text-muted-foreground">Ваш браузер не поддерживает голосовой ввод.</p>
+                  <Button variant="link" size="sm" className="mt-2" onClick={() => setCreateMode("text")}>Используйте текстовый режим</Button>
+                </div>
+              ) : (
+                <>
+                  <div className="flex justify-center">
+                    <button type="button" onClick={recording ? stopRecording : startRecording}
+                      className={cn(
+                        "size-20 rounded-full flex items-center justify-center transition-all",
+                        recording
+                          ? "bg-red-500 text-white animate-pulse shadow-lg shadow-red-500/30"
+                          : "bg-primary/10 text-primary hover:bg-primary/20"
+                      )}>
+                      {recording ? <MicOff className="size-8" /> : <Mic className="size-8" />}
+                    </button>
+                  </div>
+                  <p className="text-xs text-center text-muted-foreground">
+                    {recording ? "Говорите... Нажмите чтобы остановить" : "Нажмите чтобы начать запись"}
+                  </p>
+                  <Textarea value={voiceText} onChange={e => setVoiceText(e.target.value)}
+                    placeholder="Здесь появится текст..." rows={5}
+                    className="text-sm bg-[var(--input-bg)] border border-input resize-none"
+                    readOnly={recording} />
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">Название вакансии <span className="text-muted-foreground font-normal">(необязательно)</span></Label>
+                    <Input value={newVacancyTitle} onChange={(e) => setNewVacancyTitle(e.target.value)} placeholder="Менеджер по продажам" className="h-10 border border-input" maxLength={50} />
+                  </div>
+                  <Button className="w-full h-10" onClick={handleCreateVacancy} disabled={creating || !voiceText.trim() || recording}>
+                    {creating ? <Loader2 className="size-4 mr-1.5 animate-spin" /> : <Sparkles className="size-4 mr-1.5" />}
+                    Создать с AI-заполнением
+                  </Button>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* ── Mode: Chat with Nancy ── */}
+          {createMode === "chat" && (
+            <div className="flex flex-col" style={{ height: 420 }}>
+              {/* Messages */}
+              <div className="flex-1 overflow-y-auto space-y-3 py-2 pr-1">
+                {chatMessages.map((m, i) => (
+                  <div key={i} className={cn("flex gap-2", m.role === "user" ? "justify-end" : "justify-start")}>
+                    {m.role === "nancy" && (
+                      <div className="size-7 rounded-full bg-pink-100 dark:bg-pink-950/30 flex items-center justify-center shrink-0 text-xs">
+                        🤖
+                      </div>
+                    )}
+                    <div className={cn(
+                      "max-w-[80%] rounded-xl px-3 py-2 text-sm",
+                      m.role === "user"
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted"
+                    )}>
+                      {m.text}
+                    </div>
+                  </div>
+                ))}
+                {chatLoading && (
+                  <div className="flex gap-2 justify-start">
+                    <div className="size-7 rounded-full bg-pink-100 dark:bg-pink-950/30 flex items-center justify-center shrink-0 text-xs">🤖</div>
+                    <div className="bg-muted rounded-xl px-3 py-2"><Loader2 className="size-4 animate-spin" /></div>
+                  </div>
+                )}
+              </div>
+
+              {/* Progress */}
+              <div className="text-xs text-muted-foreground text-center py-1">
+                Шаг {Math.min(chatStep + 1, CHAT_QUESTIONS.length)} из {CHAT_QUESTIONS.length}
+              </div>
+
+              {/* Input */}
+              <div className="flex gap-2 pt-2 border-t">
+                <Input value={chatInput} onChange={e => setChatInput(e.target.value)}
+                  placeholder="Ваш ответ..." className="h-10 flex-1"
+                  onKeyDown={e => { if (e.key === "Enter" && !chatLoading) sendChatMessage() }}
+                  disabled={chatLoading || creating} autoFocus />
+                <Button size="icon" className="size-10 shrink-0" onClick={sendChatMessage} disabled={chatLoading || creating || !chatInput.trim()}>
+                  <Send className="size-4" />
+                </Button>
+              </div>
             </div>
           )}
 

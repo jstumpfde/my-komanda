@@ -103,6 +103,9 @@ function apiCandidateToCard(c: ApiCandidate, columnId: string): Candidate {
     addedAt: c.createdAt ? new Date(c.createdAt) : new Date(),
     lastSeen: c.updatedAt ? new Date(c.updatedAt) : new Date(),
     workFormat: "office" as const,
+    aiScore: c.aiScore ?? undefined,
+    aiSummary: c.aiSummary ?? undefined,
+    aiVerdict: c.aiScore != null ? (c.aiScore >= 70 ? "подходит" : c.aiScore >= 40 ? "возможно" : "не подходит") : undefined,
   }
 }
 
@@ -113,7 +116,7 @@ export default function VacancyPage() {
 
   // ── Real API data ──────────────────────────────────────────
   const { vacancy: apiVacancy, loading: vacancyLoading, error: vacancyError } = useVacancy(id)
-  const { candidates: apiCandidates, updateStage } = useCandidates(id)
+  const { candidates: apiCandidates, updateStage, refetch: refetchCandidates } = useCandidates(id)
 
   const [status, setStatus] = useState<VacancyStatus>("draft")
   const [columns, setColumns] = useState<ColumnData[]>(emptyColumns())
@@ -569,6 +572,73 @@ export default function VacancyPage() {
 
   const statusCfg = STATUS_CONFIG[status]
 
+  // ── AI Screening ──
+  const [screeningIds, setScreeningIds] = useState<Set<string>>(new Set())
+  const [bulkScreening, setBulkScreening] = useState(false)
+
+  const screenCandidate = async (candidateId: string) => {
+    const candidate = apiCandidates.find(c => c.id === candidateId)
+    if (!candidate) return
+    const anketa = ((apiVacancy?.descriptionJson as Record<string, unknown>)?.anketa as Record<string, unknown>) || {}
+
+    setScreeningIds(prev => new Set(prev).add(candidateId))
+    try {
+      const res = await fetch("/api/ai/screen-candidate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          candidateData: {
+            name: candidate.name,
+            experience: candidate.experience,
+            skills: candidate.skills,
+            city: candidate.city,
+            salary: candidate.salaryMin ? `${candidate.salaryMin}-${candidate.salaryMax}` : undefined,
+          },
+          vacancyAnketa: {
+            vacancyTitle: apiVacancy?.title,
+            requirements: anketa.requirements,
+            responsibilities: anketa.responsibilities,
+            requiredSkills: anketa.requiredSkills,
+            desiredSkills: anketa.desiredSkills,
+            experienceMin: anketa.experienceMin,
+            positionCity: anketa.positionCity,
+          },
+        }),
+      })
+      if (!res.ok) throw new Error()
+      const result = (await res.json()) as { score: number; verdict: string; recommendation: string; strengths: string[]; weaknesses: string[] }
+
+      // Save to DB
+      await fetch(`/api/modules/hr/candidates/${candidateId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ai_score: result.score,
+          ai_summary: result.recommendation,
+          ai_details: [
+            ...result.strengths.map(s => ({ question: "Сильная сторона", score: 1, comment: s })),
+            ...result.weaknesses.map(w => ({ question: "Слабая сторона", score: 0, comment: w })),
+          ],
+        }),
+      })
+      refetchCandidates()
+    } catch { /* silent */ }
+    finally {
+      setScreeningIds(prev => { const n = new Set(prev); n.delete(candidateId); return n })
+    }
+  }
+
+  const screenAllNew = async () => {
+    const newCandidates = apiCandidates.filter(c => c.stage === "new" && c.aiScore == null)
+    if (newCandidates.length === 0) { toast.info("Нет новых кандидатов для скрининга"); return }
+    setBulkScreening(true)
+    for (const c of newCandidates) {
+      await screenCandidate(c.id)
+    }
+    setBulkScreening(false)
+    toast.success(`AI-скрининг завершён: ${newCandidates.length} кандидатов`)
+  }
+
   const vacancyTitle = apiVacancy?.title ?? "Вакансия"
   const vacancySlugOrId = apiVacancy?.slug || id
   const companySlugDisplay = brandCompanySlug || brandCompanyName.toLowerCase()
@@ -778,6 +848,14 @@ export default function VacancyPage() {
               </TabsContent>
 
               <TabsContent value="candidates">
+                {/* AI Screening toolbar */}
+                <div className="flex items-center gap-2 mb-3">
+                  <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs" onClick={screenAllNew} disabled={bulkScreening}>
+                    {bulkScreening ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                    {bulkScreening ? "Скрининг..." : "Разобрать все новые"}
+                  </Button>
+                  {bulkScreening && <span className="text-xs text-muted-foreground">AI анализирует кандидатов...</span>}
+                </div>
                 <KanbanBoard
                   settings={cardSettings}
                   viewMode={viewMode}

@@ -1450,3 +1450,39 @@ export const positions = pgTable("positions", {
   createdAt:    timestamp("created_at").defaultNow(),
   updatedAt:    timestamp("updated_at").defaultNow(),
 })
+
+// ─── Vacancy Intake (заявки от заказчиков) ───────────────────────────────────
+
+export const vacancyIntakeLinks = pgTable("vacancy_intake_links", {
+  id:        uuid("id").primaryKey().defaultRandom(),
+  tenantId:  uuid("tenant_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  token:     text("token").unique().notNull(),
+  createdBy: uuid("created_by").references(() => users.id),
+  expiresAt: timestamp("expires_at"),
+  password:  text("password"),
+  status:    text("status").default("active"), // 'active' | 'used' | 'expired'
+  reusable:  boolean("reusable").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+})
+
+export const vacancyGuestLinks = pgTable("vacancy_guest_links", {
+  id:          uuid("id").primaryKey().defaultRandom(),
+  vacancyId:   uuid("vacancy_id").references(() => vacancies.id, { onDelete: "cascade" }).notNull(),
+  tenantId:    uuid("tenant_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  token:       text("token").unique().notNull(),
+  password:    text("password"),
+  permissions: jsonb("permissions").default('{"view": true}'),
+  expiresAt:   timestamp("expires_at"),
+  createdAt:   timestamp("created_at").defaultNow(),
+})
+
+export const vacancyIntakes = pgTable("vacancy_intakes", {
+  id:        uuid("id").primaryKey().defaultRandom(),
+  tenantId:  uuid("tenant_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  linkId:    uuid("link_id").references(() => vacancyIntakeLinks.id, { onDelete: "set null" }),
+  data:      jsonb("data").notNull(), // form fields
+  files:     jsonb("files").default("[]"), // uploaded file references
+  status:    text("status").default("new"), // 'new' | 'processed' | 'rejected'
+  vacancyId: uuid("vacancy_id").references(() => vacancies.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow(),
+})
