@@ -19,12 +19,12 @@ export async function GET(req: NextRequest) {
     const activeRows = await db
       .select({
         hhVacancyId: hhVacancies.hhVacancyId,
-        vacancyId: hhVacancies.vacancyId,
+        vacancyId: hhVacancies.localVacancyId,
         companyId: vacancies.companyId,
       })
       .from(hhVacancies)
-      .innerJoin(vacancies, eq(hhVacancies.vacancyId, vacancies.id))
-      .where(eq(hhVacancies.hhStatus, "active"))
+      .innerJoin(vacancies, eq(hhVacancies.localVacancyId, vacancies.id))
+      .where(eq(hhVacancies.status, "active"))
 
     let processed = 0
     let totalImported = 0

@@ -58,7 +58,7 @@ export async function POST(
     const existingHhVac = await db
       .select()
       .from(hhVacancies)
-      .where(eq(hhVacancies.vacancyId, vacancyId))
+      .where(eq(hhVacancies.localVacancyId, vacancyId))
       .limit(1)
 
     // Check if token exists
@@ -86,7 +86,7 @@ export async function POST(
           ? JSON.stringify(vacancy.descriptionJson)
           : vacancy.title,
         area: { id: areaId },
-        employer: { id: tokenRow.hhEmployerId ?? "" },
+        employer: { id: tokenRow.employerId ?? "" },
         schedule: { id: schedule },
         ...(salaryFrom || salaryTo
           ? {
@@ -111,17 +111,17 @@ export async function POST(
         .update(hhVacancies)
         .set({
           hhVacancyId,
-          hhStatus: status,
-          publishedAt: new Date(),
-          updatedAt: new Date(),
+          status,
+          syncedAt: new Date(),
         })
-        .where(eq(hhVacancies.vacancyId, vacancyId))
+        .where(eq(hhVacancies.localVacancyId, vacancyId))
     } else {
       await db.insert(hhVacancies).values({
-        vacancyId,
+        companyId: user.companyId,
+        localVacancyId: vacancyId,
         hhVacancyId,
-        hhStatus: status,
-        publishedAt: new Date(),
+        title: vacancy.title,
+        status,
       })
     }
 

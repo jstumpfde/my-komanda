@@ -52,7 +52,7 @@ export class HHClient {
     if (!tokenRow) throw new Error("hh.ru не подключён")
 
     // Refresh if expired (buffer 60 seconds)
-    if (new Date(tokenRow.expiresAt).getTime() < Date.now() + 60_000) {
+    if (new Date(tokenRow.tokenExpiresAt).getTime() < Date.now() + 60_000) {
       return this.refreshToken(tokenRow.refreshToken)
     }
 
@@ -86,8 +86,7 @@ export class HHClient {
       .set({
         accessToken: data.access_token,
         refreshToken: data.refresh_token,
-        expiresAt,
-        updatedAt: new Date(),
+        tokenExpiresAt: expiresAt,
       })
       .where(eq(hhTokens.companyId, this.companyId))
 
@@ -124,7 +123,7 @@ export class HHClient {
       .where(eq(hhTokens.companyId, this.companyId))
       .limit(1)
 
-    const employerId = tokenRows[0]?.hhEmployerId
+    const employerId = tokenRows[0]?.employerId
     if (!employerId) return []
 
     const data = await this.apiGet<{ items: HHVacancy[] }>(
@@ -153,7 +152,7 @@ export class HHClient {
     const hhVacRow = await db
       .select()
       .from(hhVacancies)
-      .where(eq(hhVacancies.vacancyId, vacancyId))
+      .where(eq(hhVacancies.localVacancyId, vacancyId))
       .limit(1)
 
     if (!hhVacRow[0]) return { imported: 0 }
