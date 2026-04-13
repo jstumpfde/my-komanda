@@ -184,6 +184,18 @@ export default function HiringSettingsPage() {
     toast.success("Настройки обратной связи сохранены")
   }
 
+  // ── Data retention ──
+  const [dataRetention, setDataRetention] = useState("6months")
+  useEffect(() => {
+    const saved = localStorage.getItem("mk_hr_data_retention")
+    if (saved) setDataRetention(saved)
+  }, [])
+  const saveDataRetention = (val: string) => {
+    setDataRetention(val)
+    localStorage.setItem("mk_hr_data_retention", val)
+    toast.success("Настройки хранения данных сохранены")
+  }
+
   // ── Funnel state ──
   const [selectedScenario, setSelectedScenario] = useState("standard")
   const [autoDemo, setAutoDemo] = useState(true)
@@ -349,6 +361,28 @@ export default function HiringSettingsPage() {
                     </label>
                   </div>
                 )}
+              </CardContent>
+            </Card>
+
+            {/* Data retention */}
+            <Card className="mb-5 max-w-3xl">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-medium">Хранение данных кандидатов</CardTitle>
+                <CardDescription>В соответствии с ФЗ-152 персональные данные отказанных кандидатов будут автоматически удалены</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Select value={dataRetention} onValueChange={saveDataRetention}>
+                  <SelectTrigger className="w-[280px] h-9"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="immediate">Сразу после отказа</SelectItem>
+                    <SelectItem value="7days">7 дней</SelectItem>
+                    <SelectItem value="30days">30 дней</SelectItem>
+                    <SelectItem value="3months">3 месяца</SelectItem>
+                    <SelectItem value="6months">6 месяцев</SelectItem>
+                    <SelectItem value="12months">12 месяцев</SelectItem>
+                    <SelectItem value="never">Не удалять</SelectItem>
+                  </SelectContent>
+                </Select>
               </CardContent>
             </Card>
 

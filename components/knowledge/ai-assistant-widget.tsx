@@ -753,18 +753,51 @@ export function AiAssistantWidget() {
     }
   }
 
+  // ── Proactive tips ──
+  const [proactiveTip, setProactiveTip] = useState<string | null>(null)
+  useEffect(() => {
+    if (open) { setProactiveTip(null); return }
+    try {
+      const shownTips = JSON.parse(localStorage.getItem("nancy_shown_tips") || "[]") as string[]
+      const tipKey = `tip:${pathname}`
+      if (shownTips.includes(tipKey)) return
+
+      // Check for proactive tips based on page
+      if (pathname.startsWith("/hr/vacancies") && !pathname.includes("/")) {
+        setProactiveTip("У вас есть кандидаты без AI-скрининга? Нажмите чтобы запустить!")
+      } else if (pathname === "/hr/dashboard" || pathname === "/overview") {
+        setProactiveTip("Хотите увидеть отчёт за неделю?")
+      }
+
+      if (proactiveTip) {
+        localStorage.setItem("nancy_shown_tips", JSON.stringify([...shownTips, tipKey]))
+      }
+    } catch {}
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname, open])
+
   return (
     <>
-      {/* Floating button */}
+      {/* Floating button + proactive tip */}
       {!open && (
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          aria-label="Открыть Ненси"
-          className="fixed bottom-4 right-4 w-16 h-16 rounded-full shadow-lg flex items-center justify-center hover:scale-105 transition-transform z-50 overflow-hidden border-2 border-primary p-0"
-        >
-          <Image src="/nancy-avatar.png" alt="Ненси" width={64} height={64} className="w-full h-full object-cover" />
-        </button>
+        <div className="fixed bottom-4 right-4 z-50 flex items-end gap-2">
+          {proactiveTip && (
+            <div className="max-w-[220px] bg-white dark:bg-gray-900 border shadow-lg rounded-xl rounded-br-sm px-3 py-2 text-xs text-foreground animate-in slide-in-from-right-2">
+              <button type="button" className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground" onClick={() => setProactiveTip(null)}>
+                <X className="w-2.5 h-2.5" />
+              </button>
+              <p>{proactiveTip}</p>
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            aria-label="Открыть Ненси"
+            className="w-16 h-16 rounded-full shadow-lg flex items-center justify-center hover:scale-105 transition-transform overflow-hidden border-2 border-primary p-0 shrink-0"
+          >
+            <Image src="/nancy-avatar.png" alt="Ненси" width={64} height={64} className="w-full h-full object-cover" />
+          </button>
+        </div>
       )}
 
       {/* Chat panel */}

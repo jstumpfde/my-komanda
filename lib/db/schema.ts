@@ -268,6 +268,7 @@ export const candidates = pgTable("candidates", {
   aiScore: integer("ai_score"),
   aiSummary: text("ai_summary"),
   aiDetails: jsonb("ai_details"), // [{question, score, comment}]
+  stageHistory: jsonb("stage_history").default("[]"), // [{stage, date, note}]
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 })

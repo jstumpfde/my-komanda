@@ -708,6 +708,47 @@ export default function VacancyPage() {
       .catch(() => {})
   }, [id])
 
+  // ── Auto-setup ──
+  const [autoSetupOpen, setAutoSetupOpen] = useState(false)
+  const [autoSetupRunning, setAutoSetupRunning] = useState(false)
+  const [autoSetupStep, setAutoSetupStep] = useState("")
+  const [autoSetupDone, setAutoSetupDone] = useState(false)
+
+  const handleAutoSetup = async () => {
+    setAutoSetupRunning(true)
+    try {
+      setAutoSetupStep("Генерирую описание для hh.ru...")
+      await fetch("/api/ai/generate-hh-description", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ anketa }),
+      }).catch(() => {})
+
+      setAutoSetupStep("Создаю демонстрацию должности...")
+      await fetch("/api/modules/hr/demo/generate", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ vacancyId: id, template: "medium" }),
+      }).catch(() => {})
+
+      setAutoSetupStep("Настраиваю воронку...")
+      const salary = apiVacancy?.salaryMax || apiVacancy?.salaryMin || 0
+      const preset = salary < 100000 ? "fast" : salary >= 500000 ? "deep" : "standard"
+      const existing = (apiVacancy?.descriptionJson as Record<string, unknown>) || {}
+      await fetch(`/api/modules/hr/vacancies/${id}`, {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ description_json: { ...existing, pipeline: { preset, stages: [] } } }),
+      }).catch(() => {})
+
+      setAutoSetupStep("Готово!")
+      setAutoSetupDone(true)
+      toast.success("Вакансия настроена автоматически")
+      healthLoadedRef.current = false // Re-check health
+    } catch {
+      toast.error("Не удалось завершить настройку")
+    } finally {
+      setAutoSetupRunning(false)
+    }
+  }
+
   // ── AI tools handlers ──
   const anketa = ((apiVacancy?.descriptionJson as Record<string, unknown>)?.anketa as Record<string, unknown>) || {}
 
@@ -957,7 +998,14 @@ export default function VacancyPage() {
                   )}
                 </div>
                 {healthNextStep && healthScore < 100 && (
-                  <p className="text-[11px] text-muted-foreground mt-1.5">Следующий шаг: {healthNextStep}</p>
+                  <div className="flex items-center justify-between mt-1.5">
+                    <p className="text-[11px] text-muted-foreground">Следующий шаг: {healthNextStep}</p>
+                    {healthScore < 70 && !autoSetupDone && (
+                      <Button variant="outline" size="sm" className="h-6 text-[10px] gap-1 shrink-0" onClick={handleAutoSetup} disabled={autoSetupRunning}>
+                        {autoSetupRunning ? <><Loader2 className="w-3 h-3 animate-spin" />{autoSetupStep}</> : <><Sparkles className="w-3 h-3" />Настроить автоматически</>}
+                      </Button>
+                    )}
+                  </div>
                 )}
               </div>
             )}
@@ -1075,6 +1123,27 @@ export default function VacancyPage() {
                   </Button>
                   <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs" onClick={handleCompare}>
                     <BarChart3 className="w-3.5 h-3.5" />Сравнить топ
+                  </Button>
+                  <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs" onClick={async () => {
+                    const XLSX = (await import("xlsx")).default
+                    const data = apiCandidates.map(c => ({
+                      "Имя": c.name,
+                      "Email": c.email || "",
+                      "Телефон": c.phone || "",
+                      "Город": c.city || "",
+                      "Источник": c.source || "",
+                      "Этап": c.stage || "",
+                      "AI-скор": c.aiScore ?? "",
+                      "Вердикт": c.aiScore != null ? (c.aiScore >= 70 ? "подходит" : c.aiScore >= 40 ? "возможно" : "не подходит") : "",
+                      "Дата": c.createdAt ? new Date(c.createdAt).toLocaleDateString("ru-RU") : "",
+                    }))
+                    const ws = XLSX.utils.json_to_sheet(data)
+                    const wb = XLSX.utils.book_new()
+                    XLSX.utils.book_append_sheet(wb, ws, "Кандидаты")
+                    XLSX.writeFile(wb, `кандидаты-${vacancyTitle}.xlsx`)
+                    toast.success("Экспорт готов")
+                  }}>
+                    <Download className="w-3.5 h-3.5" />Экспорт Excel
                   </Button>
                   {bulkScreening && <span className="text-xs text-muted-foreground">AI анализирует кандидатов...</span>}
                 </div>
