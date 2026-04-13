@@ -1465,6 +1465,19 @@ export const vacancyIntakeLinks = pgTable("vacancy_intake_links", {
   createdAt: timestamp("created_at").defaultNow(),
 })
 
+// ─── AI Audit Log ────────────────────────────────────────────────────────────
+
+export const aiAuditLog = pgTable("ai_audit_log", {
+  id:             uuid("id").primaryKey().defaultRandom(),
+  tenantId:       uuid("tenant_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  action:         text("action").notNull(), // 'screen_candidate' | 'auto_invite' | 'auto_reject' | 'generate_offer' | 'compare_candidates'
+  vacancyId:      uuid("vacancy_id").references(() => vacancies.id, { onDelete: "set null" }),
+  candidateId:    uuid("candidate_id"),
+  inputSummary:   text("input_summary"),
+  outputSummary:  text("output_summary"),
+  createdAt:      timestamp("created_at").defaultNow(),
+})
+
 // ─── Support Requests ────────────────────────────────────────────────────────
 
 export const supportRequests = pgTable("support_requests", {

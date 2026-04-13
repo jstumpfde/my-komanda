@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { eq } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { vacancyIntakeLinks, vacancyIntakes, companies } from "@/lib/db/schema"
+import { checkRateLimit } from "@/lib/rate-limit"
+import { sanitizeHtml, isValidEmail, truncate } from "@/lib/sanitize"
 
 // GET — validate token and return company info
 export async function GET(
@@ -9,6 +11,10 @@ export async function GET(
   { params }: { params: Promise<{ token: string }> }
 ) {
   try {
+    const ip = _req.headers.get("x-forwarded-for") || "unknown"
+    if (!checkRateLimit(`intake:${ip}`, 10, 60000)) {
+      return NextResponse.json({ error: "Слишком много запросов" }, { status: 429 })
+    }
     const { token } = await params
 
     const [link] = await db
@@ -60,8 +66,27 @@ export async function POST(
   { params }: { params: Promise<{ token: string }> }
 ) {
   try {
+    const ip = req.headers.get("x-forwarded-for") || "unknown"
+    if (!checkRateLimit(`intake-post:${ip}`, 5, 60000)) {
+      return NextResponse.json({ error: "Слишком много запросов" }, { status: 429 })
+    }
     const { token } = await params
-    const body = (await req.json()) as { password?: string; data: Record<string, unknown>; files?: unknown[] }
+    const body = (await req.json()) as { password?: string; data: Record<string, unknown>; files?: unknown[]; _hp?: string }
+
+    // Honeypot check
+    if (body._hp) {
+      return NextResponse.json({ success: true, id: "ok" }, { status: 201 })
+    }
+
+    // Validate & sanitize fields
+    const d = body.data || {}
+    if (d.title && typeof d.title === "string") d.title = truncate(sanitizeHtml(d.title), 100)
+    if (d.description && typeof d.description === "string") d.description = truncate(sanitizeHtml(d.description), 5000)
+    if (d.requirements && typeof d.requirements === "string") d.requirements = truncate(sanitizeHtml(d.requirements), 5000)
+    if (d.contactName && typeof d.contactName === "string") d.contactName = truncate(sanitizeHtml(d.contactName), 100)
+    if (d.contactEmail && typeof d.contactEmail === "string" && !isValidEmail(d.contactEmail)) {
+      return NextResponse.json({ error: "Некорректный email" }, { status: 400 })
+    }
 
     const [link] = await db
       .select()

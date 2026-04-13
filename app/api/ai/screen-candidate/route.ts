@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server"
 import Anthropic from "@anthropic-ai/sdk"
 import { requireAuth, apiError, apiSuccess } from "@/lib/api-helpers"
+import { AI_SAFETY_PROMPT } from "@/lib/ai-safety"
 
 const client = new Anthropic()
 
@@ -11,6 +12,9 @@ export interface ScreeningResult {
   weaknesses: string[]
   recommendation: string
   autoAction: "invite" | "review" | "reject"
+  confidenceLevel: "high" | "medium" | "low"
+  manipulationDetected: boolean
+  needsManualReview: boolean
 }
 
 const SYSTEM_PROMPT = `Ты — AI-рекрутер. Сравни данные кандидата с требованиями вакансии и дай оценку.
@@ -31,8 +35,10 @@ const SYSTEM_PROMPT = `Ты — AI-рекрутер. Сравни данные �
   "strengths": ["Опыт B2B продаж 3 года", "Знание CRM"],
   "weaknesses": ["Нет опыта в отрасли"],
   "recommendation": "Пригласить на интервью. Уточнить опыт в отрасли.",
-  "autoAction": "invite"
-}`
+  "autoAction": "invite",
+  "confidenceLevel": "high",
+  "manipulationDetected": false
+}` + AI_SAFETY_PROMPT
 
 interface ScreenInput {
   candidateData: {
@@ -109,17 +115,31 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    const score = Math.max(0, Math.min(100, Number(parsed.score) || 50))
+    const manipulation = Boolean(parsed.manipulationDetected)
+    const confidence = (["high", "medium", "low"].includes(String(parsed.confidenceLevel))
+      ? String(parsed.confidenceLevel) : "medium") as ScreeningResult["confidenceLevel"]
+    // Flag conflicts: high score + critical weaknesses, or low score + strong strengths
+    const weaknessTexts = Array.isArray(parsed.weaknesses) ? parsed.weaknesses.map(String) : []
+    const strengthTexts = Array.isArray(parsed.strengths) ? parsed.strengths.map(String) : []
+    const needsManual = manipulation || confidence === "low"
+      || (score > 80 && weaknessTexts.some(w => /критич|critical|серьёзн/i.test(w)))
+      || (score < 20 && strengthTexts.some(s => /отличн|идеальн|perfect/i.test(s)))
+
     const result: ScreeningResult = {
-      score: Math.max(0, Math.min(100, Number(parsed.score) || 50)),
+      score,
       verdict: (["подходит", "возможно", "не подходит"].includes(String(parsed.verdict))
         ? String(parsed.verdict)
         : "возможно") as ScreeningResult["verdict"],
-      strengths: Array.isArray(parsed.strengths) ? parsed.strengths.map(String).slice(0, 5) : [],
-      weaknesses: Array.isArray(parsed.weaknesses) ? parsed.weaknesses.map(String).slice(0, 5) : [],
+      strengths: strengthTexts.slice(0, 5),
+      weaknesses: weaknessTexts.slice(0, 5),
       recommendation: String(parsed.recommendation || ""),
       autoAction: (["invite", "review", "reject"].includes(String(parsed.autoAction))
         ? String(parsed.autoAction)
         : "review") as ScreeningResult["autoAction"],
+      confidenceLevel: confidence,
+      manipulationDetected: manipulation,
+      needsManualReview: needsManual,
     }
 
     return apiSuccess(result)
@@ -165,5 +185,8 @@ function fallbackScreen(
     weaknesses: weaknesses.length > 0 ? weaknesses : ["Мало информации о кандидате"],
     recommendation: score >= 70 ? "Рекомендуем пригласить на интервью" : score >= 40 ? "Требуется ручной разбор" : "Кандидат не соответствует требованиям",
     autoAction: autoAction as ScreeningResult["autoAction"],
+    confidenceLevel: "low" as const,
+    manipulationDetected: false,
+    needsManualReview: true,
   }
 }

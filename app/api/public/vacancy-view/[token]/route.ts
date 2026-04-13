@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { eq } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { vacancyGuestLinks, vacancies, companies, candidates } from "@/lib/db/schema"
+import { checkRateLimit, checkPasswordAttempts } from "@/lib/rate-limit"
 
 // GET — public vacancy view data
 export async function GET(
@@ -9,6 +10,10 @@ export async function GET(
   { params }: { params: Promise<{ token: string }> }
 ) {
   try {
+    const ip = req.headers.get("x-forwarded-for") || "unknown"
+    if (!checkRateLimit(`guestview:${ip}`, 10, 60000)) {
+      return NextResponse.json({ error: "Слишком много запросов" }, { status: 429 })
+    }
     const { token } = await params
     const passwordHeader = req.headers.get("x-guest-password") || ""
 
@@ -27,12 +32,17 @@ export async function GET(
       return NextResponse.json({ error: "Ссылка истекла" }, { status: 410 })
     }
 
-    // Check password
-    if (link.password && passwordHeader !== link.password) {
-      return NextResponse.json({
-        needPassword: true,
-        companyName: "",
-      }, { status: 200 })
+    // Check password (required, with attempt limiting)
+    if (link.password) {
+      if (!passwordHeader) {
+        return NextResponse.json({ needPassword: true, companyName: "" }, { status: 200 })
+      }
+      if (!checkPasswordAttempts(`guestpwd:${token}:${ip}`)) {
+        return NextResponse.json({ error: "Слишком много попыток. Попробуйте через 15 минут." }, { status: 429 })
+      }
+      if (passwordHeader !== link.password) {
+        return NextResponse.json({ needPassword: true, companyName: "", error: "Неверный пароль" }, { status: 200 })
+      }
     }
 
     // Get vacancy
