@@ -75,7 +75,6 @@ const MODULE_SHORT: Record<ModuleId, string> = {
   marketing: 'МКТ',
   sales:     'ПРД',
   b2b:       'B2B',
-  ecommerce: 'ECM',
   warehouse: 'СКЛ',
   logistics: 'ЛГС',
   booking:   'БРН',
@@ -92,7 +91,6 @@ const MODULE_COLORS: Record<ModuleId, string> = {
   marketing: 'text-purple-500',
   sales:     'text-emerald-500',
   b2b:       'text-cyan-500',
-  ecommerce: 'text-rose-500',
   warehouse: 'text-orange-500',
   logistics: 'text-orange-500',
   booking:   'text-teal-500',
@@ -108,7 +106,6 @@ const MODULE_BG_COLORS: Record<ModuleId, string> = {
   marketing: 'bg-purple-500/10',
   sales:     'bg-emerald-500/10',
   b2b:       'bg-cyan-500/10',
-  ecommerce: 'bg-rose-500/10',
   warehouse: 'bg-orange-500/10',
   logistics: 'bg-orange-500/10',
   booking:   'bg-teal-500/10',
@@ -124,7 +121,6 @@ const MODULE_BORDER_COLORS: Record<ModuleId, string> = {
   marketing: '#a855f7',
   sales:     '#10b981',
   b2b:       '#06b6d4',
-  ecommerce: '#f43f5e',
   warehouse: '#f97316',
   logistics: '#f97316',
   booking:   '#14b8a6',
@@ -208,7 +204,8 @@ export function DashboardSidebar() {
   // Active modules fetched from API
   // TODO: включить обратно когда настроим биллинг
   // Временно все модули активны для демо
-  const ALL_MODULES: ModuleId[] = ['hr', 'knowledge', 'learning', 'tasks', 'sales', 'marketing', 'warehouse', 'logistics', 'booking', 'dialer', 'qc', 'b2b', 'ecommerce']
+  // E-commerce: убран из меню, планируется позже
+  const ALL_MODULES: ModuleId[] = ['hr', 'knowledge', 'learning', 'tasks', 'sales', 'marketing', 'warehouse', 'logistics', 'booking', 'dialer', 'qc', 'b2b']
   const [activeModules, setActiveModules] = useState<ModuleId[]>(ALL_MODULES)
 
   // ── Sidebar visibility customization ──

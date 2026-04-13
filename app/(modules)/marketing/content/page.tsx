@@ -1,6 +1,9 @@
 "use client"
 
 import { useState } from "react"
+import { DashboardSidebar } from "@/components/dashboard/sidebar"
+import { DashboardHeader } from "@/components/dashboard/header"
+import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -38,7 +41,12 @@ export default function ContentPage() {
   })
 
   return (
-    <div className="p-6 space-y-6">
+    <SidebarProvider defaultOpen={true}>
+      <DashboardSidebar />
+      <SidebarInset>
+        <DashboardHeader />
+        <main className="flex-1 overflow-auto bg-background">
+          <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Контент-фабрика</h1>
         <div className="flex gap-2">
@@ -130,6 +138,9 @@ export default function ContentPage() {
           <p>По выбранным фильтрам ничего не найдено</p>
         </div>
       )}
-    </div>
+          </div>
+        </main>
+      </SidebarInset>
+    </SidebarProvider>
   )
 }

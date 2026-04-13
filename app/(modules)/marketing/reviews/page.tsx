@@ -1,6 +1,9 @@
 "use client"
 
 import { useState } from "react"
+import { DashboardSidebar } from "@/components/dashboard/sidebar"
+import { DashboardHeader } from "@/components/dashboard/header"
+import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -142,7 +145,12 @@ export default function ReviewsPage() {
   const bySource = (source: string) => reviews.filter((r) => r.source === source)
 
   return (
-    <div className="p-6 space-y-6">
+    <SidebarProvider defaultOpen={true}>
+      <DashboardSidebar />
+      <SidebarInset>
+        <DashboardHeader />
+        <main className="flex-1 overflow-auto bg-background">
+          <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Отзывы</h1>
       </div>
@@ -197,6 +205,9 @@ export default function ReviewsPage() {
           </div>
         </TabsContent>
       </Tabs>
-    </div>
+          </div>
+        </main>
+      </SidebarInset>
+    </SidebarProvider>
   )
 }

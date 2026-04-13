@@ -147,14 +147,15 @@ export const MODULE_REGISTRY: Record<ModuleId, ModuleConfig> = {
       { label: 'Настройки',  href: '/b2b/settings',    icon: 'Settings' },
     ],
   },
-  ecommerce: {
-    id: 'ecommerce',
-    name: 'E-commerce',
-    description: 'Интернет-магазин, заказы и интеграции с маркетплейсами',
-    icon: 'Store',
-    basePath: '/ecommerce',
-    menuItems: [],
-  },
+  // E-commerce: убран из меню, планируется позже
+  // ecommerce: {
+  //   id: 'ecommerce',
+  //   name: 'E-commerce',
+  //   description: 'Интернет-магазин, заказы и интеграции с маркетплейсами',
+  //   icon: 'Store',
+  //   basePath: '/ecommerce',
+  //   menuItems: [],
+  // },
   booking: {
     id: 'booking',
     name: 'Бронирование',

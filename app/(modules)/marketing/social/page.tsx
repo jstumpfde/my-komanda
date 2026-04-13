@@ -1,5 +1,8 @@
 "use client"
 
+import { DashboardSidebar } from "@/components/dashboard/sidebar"
+import { DashboardHeader } from "@/components/dashboard/header"
+import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -48,7 +51,12 @@ const weekPosts = [
 
 export default function SocialPage() {
   return (
-    <div className="p-6 space-y-6">
+    <SidebarProvider defaultOpen={true}>
+      <DashboardSidebar />
+      <SidebarInset>
+        <DashboardHeader />
+        <main className="flex-1 overflow-auto bg-background">
+          <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Социальные сети</h1>
         <Button>
@@ -153,6 +161,9 @@ export default function SocialPage() {
           </div>
         </CardContent>
       </Card>
-    </div>
+          </div>
+        </main>
+      </SidebarInset>
+    </SidebarProvider>
   )
 }
