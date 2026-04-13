@@ -45,7 +45,7 @@ export function AnketaWizard({ open, onOpenChange, onComplete, initialTitle }: A
   const [loading, setLoading] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
-  const handleFile = (files: FileList | null) => {
+  const handleFile = async (files: FileList | null) => {
     if (!files || files.length === 0) return
     const file = files[0]
     const ext = file.name.split(".").pop()?.toLowerCase()
@@ -60,8 +60,31 @@ export function AnketaWizard({ open, onOpenChange, onComplete, initialTitle }: A
         }
       }
       reader.readAsText(file)
+    } else if (ext === "pdf" || ext === "docx") {
+      setLoading(true)
+      try {
+        const fd = new FormData()
+        fd.append("file", file)
+        const parseRes = await fetch("/api/core/parse-file", { method: "POST", body: fd })
+        if (!parseRes.ok) {
+          const err = await parseRes.json().catch(() => ({})) as { error?: string }
+          throw new Error(err.error || `HTTP ${parseRes.status}`)
+        }
+        const { text: extracted } = await parseRes.json() as { text: string }
+        if (!extracted?.trim()) {
+          toast.error("Не удалось извлечь текст из файла")
+          return
+        }
+        setText(prev => prev ? prev + "\n\n" + extracted : extracted)
+        toast.success(`Текст из «${file.name}» извлечён`)
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Ошибка"
+        toast.error(`Ошибка извлечения текста: ${msg}`)
+      } finally {
+        setLoading(false)
+      }
     } else {
-      toast.info("Извлечение текста из PDF/DOCX — в разработке. Вставьте текст вручную.")
+      toast.error("Поддерживаются форматы: PDF, DOCX, TXT")
     }
   }
 
