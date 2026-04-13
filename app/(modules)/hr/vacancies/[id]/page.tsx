@@ -1021,7 +1021,7 @@ export default function VacancyPage() {
               </TabsContent>
 
               <TabsContent value="automation">
-                <AutomationSettings vacancyId={id} descriptionJson={apiVacancy?.descriptionJson} />
+                <AutomationSettings vacancyId={id} descriptionJson={apiVacancy?.descriptionJson} vacancyTitle={apiVacancy?.title} salaryFrom={apiVacancy?.salaryMin} salaryTo={apiVacancy?.salaryMax} />
                 <PostDemoSettings />
               </TabsContent>
 

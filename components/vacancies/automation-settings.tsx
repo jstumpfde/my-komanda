@@ -16,7 +16,7 @@ import {
   MessageSquare, Clock, Zap, Phone, Brain, Send, GripVertical,
   ChevronDown, ChevronUp, Pencil, Check, X, Pause, GitBranch,
   FileText, BarChart3, Video, ClipboardList, Award, UserX,
-  Bot, Sparkles, Truck, Users, ChevronRight, Loader2,
+  Bot, Sparkles, Truck, Users, ChevronRight, Loader2, Plus,
 } from "lucide-react"
 
 // ─── Типы ────────────────────────────────────────────────────
@@ -37,6 +37,68 @@ interface TouchPoint {
 export type ScenarioType = "demo-call" | "call-demo" | "call-only" | "fast-hire" | "ai-smart"
 
 type StepType = "message" | "demo" | "questionnaire" | "scoring" | "call" | "interview" | "pause" | "condition" | "offer" | "reject"
+
+// ─── Pipeline presets ───────────────────────────────────────
+
+type PipelinePreset = "fast" | "standard" | "deep" | "custom"
+
+interface PipelineStage {
+  id: string
+  name: string
+  ai?: boolean
+}
+
+const PIPELINE_PRESETS: Record<Exclude<PipelinePreset, "custom">, {
+  label: string
+  desc: string
+  time: string
+  icon: string
+  color: string
+  stages: PipelineStage[]
+}> = {
+  fast: {
+    label: "Быстрый найм",
+    desc: "Массовый найм, линейный персонал",
+    time: "5-7 дней",
+    icon: "rocket",
+    color: "text-amber-600",
+    stages: [
+      { id: "response", name: "Отклик" },
+      { id: "auto-invite", name: "Авто-приглашение на демо", ai: true },
+      { id: "assessment", name: "Оценка", ai: true },
+      { id: "offer", name: "Оффер / Отказ" },
+    ],
+  },
+  standard: {
+    label: "Стандартный",
+    desc: "Специалисты и менеджеры",
+    time: "10-14 дней",
+    icon: "zap",
+    color: "text-blue-600",
+    stages: [
+      { id: "response", name: "Отклик" },
+      { id: "screening", name: "Скрининг", ai: true },
+      { id: "invite", name: "Приглашение" },
+      { id: "interview", name: "Собеседование" },
+      { id: "offer", name: "Оффер / Отказ" },
+    ],
+  },
+  deep: {
+    label: "Глубокий отбор",
+    desc: "Руководители, редкие специалисты",
+    time: "21-30 дней",
+    icon: "search",
+    color: "text-violet-600",
+    stages: [
+      { id: "response", name: "Отклик" },
+      { id: "screening", name: "Скрининг", ai: true },
+      { id: "phone", name: "Телефонное интервью" },
+      { id: "test", name: "Тестовое задание" },
+      { id: "interview", name: "Собеседование" },
+      { id: "offer", name: "Оффер / Отказ" },
+    ],
+  },
+}
 
 // ─── Данные по-умолчанию ─────────────────────────────────────
 
@@ -124,9 +186,12 @@ const SCENARIO_PRESETS: Record<ScenarioType, { steps: StepType[]; icon: typeof V
 interface AutomationSettingsProps {
   vacancyId: string
   descriptionJson?: unknown
+  vacancyTitle?: string
+  salaryFrom?: number | null
+  salaryTo?: number | null
 }
 
-export function AutomationSettings({ vacancyId, descriptionJson }: AutomationSettingsProps) {
+export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, salaryFrom, salaryTo }: AutomationSettingsProps) {
   // Parse initial scenario from descriptionJson
   const initialScenario = (() => {
     if (descriptionJson && typeof descriptionJson === "object" && descriptionJson !== null) {
@@ -182,6 +247,54 @@ export function AutomationSettings({ vacancyId, descriptionJson }: AutomationSet
   // 4. Сценарий
   const [scenarioType, setScenarioType] = useState<ScenarioType>(initialScenario)
   const [saving, setSaving] = useState(false)
+
+  // 5. Воронка найма (pipeline)
+  const initialPipeline = (() => {
+    if (descriptionJson && typeof descriptionJson === "object" && descriptionJson !== null) {
+      const dj = descriptionJson as Record<string, unknown>
+      const p = dj.pipeline as { preset?: string; stages?: PipelineStage[] } | undefined
+      if (p?.preset && (p.preset in PIPELINE_PRESETS || p.preset === "custom")) {
+        return { preset: p.preset as PipelinePreset, stages: p.stages || PIPELINE_PRESETS.standard.stages }
+      }
+    }
+    return { preset: "standard" as PipelinePreset, stages: PIPELINE_PRESETS.standard.stages }
+  })()
+  const [pipelinePreset, setPipelinePreset] = useState<PipelinePreset>(initialPipeline.preset)
+  const [pipelineStages, setPipelineStages] = useState<PipelineStage[]>(initialPipeline.stages)
+  const [newStageName, setNewStageName] = useState("")
+
+  // AI recommendation based on salary
+  const recommendedPipeline = (() => {
+    const salary = salaryTo || salaryFrom || 0
+    if (salary > 0 && salary < 100000) return "fast" as const
+    if (salary >= 500000) return "deep" as const
+    return "standard" as const
+  })()
+
+  const handlePipelineChange = (preset: PipelinePreset) => {
+    setPipelinePreset(preset)
+    if (preset !== "custom") {
+      setPipelineStages(PIPELINE_PRESETS[preset].stages.map(s => ({ ...s })))
+    }
+  }
+
+  const addCustomStage = () => {
+    if (!newStageName.trim()) return
+    setPipelineStages(prev => [...prev.slice(0, -1), { id: `custom-${Date.now()}`, name: newStageName.trim() }, prev[prev.length - 1]])
+    setNewStageName("")
+    setPipelinePreset("custom")
+  }
+
+  const removeStage = (id: string) => {
+    if (pipelineStages.length <= 2) return
+    setPipelineStages(prev => prev.filter(s => s.id !== id))
+    setPipelinePreset("custom")
+  }
+
+  const renameStage = (id: string, name: string) => {
+    setPipelineStages(prev => prev.map(s => s.id === id ? { ...s, name } : s))
+    setPipelinePreset("custom")
+  }
 
   // Sync if descriptionJson changes externally
   useEffect(() => {
@@ -256,6 +369,10 @@ export function AutomationSettings({ vacancyId, descriptionJson }: AutomationSet
             ...currentJson,
             scenario: scenarioType,
             automation: automationData,
+            pipeline: {
+              preset: pipelinePreset,
+              stages: pipelineStages,
+            },
           },
         }),
       })
@@ -267,7 +384,7 @@ export function AutomationSettings({ vacancyId, descriptionJson }: AutomationSet
     } finally {
       setSaving(false)
     }
-  }, [vacancyId, scenarioType, descriptionJson, tone, firstMessageText, firstMessageDelay, workingHoursEnabled, workingHoursFrom, workingHoursTo, includeWeekends, responseReaction, followUpEnabled, followUpPreset, stopOnNo, stopOnClose])
+  }, [vacancyId, scenarioType, descriptionJson, tone, firstMessageText, firstMessageDelay, workingHoursEnabled, workingHoursFrom, workingHoursTo, includeWeekends, responseReaction, followUpEnabled, followUpPreset, stopOnNo, stopOnClose, pipelinePreset, pipelineStages])
 
   return (
     <div className="space-y-6">
@@ -564,6 +681,121 @@ export function AutomationSettings({ vacancyId, descriptionJson }: AutomationSet
           )}
           </>
           )}
+        </CardContent>
+      </Card>
+
+      {/* ═══ 5. Воронка найма ═══════════════════════════════════ */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Users className="w-4 h-4" />
+            Сценарий обработки кандидатов
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* AI recommendation */}
+          {(salaryFrom || salaryTo) && (
+            <div className="flex items-start gap-2 p-3 rounded-lg bg-primary/5 border border-primary/20 text-xs">
+              <Sparkles className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" />
+              <span>
+                Рекомендуем: <strong>{PIPELINE_PRESETS[recommendedPipeline].label}</strong> — для позиции{" "}
+                {vacancyTitle || "вакансии"} с ЗП {salaryFrom ? `от ${salaryFrom.toLocaleString("ru")}` : ""}{salaryTo ? ` до ${salaryTo.toLocaleString("ru")}` : ""} ₽
+              </span>
+            </div>
+          )}
+
+          {/* Preset cards */}
+          <div className="space-y-3">
+            {(Object.entries(PIPELINE_PRESETS) as [Exclude<PipelinePreset, "custom">, typeof PIPELINE_PRESETS[Exclude<PipelinePreset, "custom">]][]).map(([key, preset]) => {
+              const isSelected = pipelinePreset === key
+              const isRecommended = key === recommendedPipeline
+              return (
+                <button
+                  key={key}
+                  className={cn(
+                    "w-full text-left rounded-xl border p-4 transition-all",
+                    isSelected
+                      ? "border-primary bg-primary/5 ring-2 ring-primary/20"
+                      : "border-border hover:border-primary/30"
+                  )}
+                  onClick={() => handlePipelineChange(key)}
+                >
+                  <div className="flex items-start gap-3">
+                    <div className={cn(
+                      "w-4 h-4 rounded-full border-2 mt-0.5 shrink-0 flex items-center justify-center",
+                      isSelected ? "border-primary" : "border-muted-foreground/40"
+                    )}>
+                      {isSelected && <div className="w-2 h-2 rounded-full bg-primary" />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium">{preset.label}</p>
+                        {isRecommended && <Badge variant="secondary" className="text-[10px] h-4 px-1.5">Рекомендуем</Badge>}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">{preset.desc}. Среднее время: {preset.time}</p>
+
+                      {/* Stage chain */}
+                      <div className="flex flex-wrap items-center gap-1 mt-2.5">
+                        {preset.stages.map((stage, idx) => (
+                          <div key={stage.id} className="flex items-center gap-1">
+                            <div className={cn(
+                              "inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-xs",
+                              isSelected ? "bg-primary/10 border-primary/30 text-primary" : "bg-muted border-border text-muted-foreground"
+                            )}>
+                              {stage.name}
+                              {stage.ai && <Bot className="w-3 h-3 shrink-0" />}
+                            </div>
+                            {idx < preset.stages.length - 1 && (
+                              <ChevronRight className="w-3 h-3 text-muted-foreground/40 shrink-0" />
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+
+          <Separator />
+
+          {/* Custom stages editor */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-medium">Этапы воронки{pipelinePreset === "custom" && <span className="text-primary ml-1">(свой сценарий)</span>}</Label>
+            </div>
+            <div className="space-y-1.5">
+              {pipelineStages.map((stage, idx) => (
+                <div key={stage.id} className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground w-5 text-right shrink-0">{idx + 1}.</span>
+                  <Input
+                    value={stage.name}
+                    onChange={e => renameStage(stage.id, e.target.value)}
+                    className="h-8 text-sm flex-1 bg-[var(--input-bg)] border border-input"
+                  />
+                  {stage.ai && <Badge variant="outline" className="text-[10px] h-5 px-1 shrink-0"><Bot className="w-3 h-3 mr-0.5" />AI</Badge>}
+                  {pipelineStages.length > 2 && (
+                    <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive" onClick={() => removeStage(stage.id)}>
+                      <X className="w-3.5 h-3.5" />
+                    </Button>
+                  )}
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <Input
+                value={newStageName}
+                onChange={e => setNewStageName(e.target.value)}
+                placeholder="Новый этап..."
+                className="h-8 text-sm flex-1 bg-[var(--input-bg)] border border-input"
+                onKeyDown={e => { if (e.key === "Enter") addCustomStage() }}
+              />
+              <Button variant="outline" size="sm" className="h-8 text-xs gap-1 shrink-0" onClick={addCustomStage} disabled={!newStageName.trim()}>
+                <Plus className="w-3 h-3" /> Добавить
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
 

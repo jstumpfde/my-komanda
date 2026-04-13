@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
-import { ChevronDown, ChevronUp, Plus, X, Save, Loader2, Trash2, GripVertical, Eye, Copy, FileDown, Sparkles } from "lucide-react"
+import { ChevronDown, ChevronUp, Plus, X, Save, Loader2, Trash2, GripVertical, Eye, Copy, FileDown, Sparkles, RefreshCw, Check, PenLine, Upload, File, FileSpreadsheet, FileImage } from "lucide-react"
 import { toast } from "sonner"
 import { POSITION_CATEGORIES } from "@/lib/position-classifier"
 import { type Question, type QuestionAnswerType, defaultQuestion } from "@/lib/course-types"
@@ -79,6 +79,14 @@ interface DesiredParam {
   enabled: boolean
   weight: number
   custom?: boolean
+}
+
+interface Attachment {
+  name: string
+  url: string
+  size: number
+  type: string
+  uploadedAt: string
 }
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -987,6 +995,128 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
     }
   }, [data.responsibilities, data.requirements, data.conditions, data.conditionsCustom, handleWizardComplete])
 
+  // ── HH Description Generation ──
+  const [hhGenerating, setHhGenerating] = useState(false)
+  const [hhPreview, setHhPreview] = useState<string | null>(null)
+  const [hhEditing, setHhEditing] = useState(false)
+  const [hhEditText, setHhEditText] = useState("")
+
+  const handleGenerateHh = useCallback(async () => {
+    if (!data.responsibilities && !data.requirements) {
+      toast.error("Заполните обязанности и требования для генерации")
+      return
+    }
+    setHhGenerating(true)
+    try {
+      const res = await fetch("/api/ai/generate-hh-description", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          anketa: {
+            vacancyTitle: data.vacancyTitle,
+            companyName: data.companyName,
+            industry: data.industry,
+            positionCity: data.positionCity,
+            workFormats: data.workFormats,
+            employment: data.employment,
+            salaryFrom: data.salaryFrom,
+            salaryTo: data.salaryTo,
+            bonus: data.bonus,
+            responsibilities: data.responsibilities,
+            requirements: data.requirements,
+            requiredSkills: data.requiredSkills,
+            desiredSkills: data.desiredSkills,
+            conditions: data.conditions,
+            conditionsCustom: data.conditionsCustom,
+            experienceMin: data.experienceMin,
+          },
+        }),
+      })
+      if (!res.ok) {
+        const err = (await res.json().catch(() => ({}))) as { error?: string }
+        throw new Error(err.error || "Ошибка генерации")
+      }
+      const result = (await res.json()) as { html: string }
+      setHhPreview(result.html)
+      setHhEditing(false)
+      toast.success("Описание сгенерировано")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Не удалось сгенерировать описание")
+    } finally {
+      setHhGenerating(false)
+    }
+  }, [data])
+
+  const handleAcceptHh = useCallback(() => {
+    if (hhPreview) {
+      set("hhDescription", hhPreview)
+      setHhPreview(null)
+      setHhEditing(false)
+      toast.success("Описание принято")
+    }
+  }, [hhPreview, set])
+
+  // ── Attachments ──
+  const [attachments, setAttachments] = useState<Attachment[]>(() => {
+    if (descriptionJson && typeof descriptionJson === "object" && descriptionJson !== null) {
+      const dj = descriptionJson as Record<string, unknown>
+      return Array.isArray(dj.attachments) ? (dj.attachments as Attachment[]) : []
+    }
+    return []
+  })
+  const [attachUploading, setAttachUploading] = useState(false)
+  const [attachDragOver, setAttachDragOver] = useState(false)
+  const attachInputRef = useRef<HTMLInputElement>(null)
+
+  const handleAttachUpload = useCallback(async (files: FileList | File[]) => {
+    const fileArr = Array.from(files)
+    if (fileArr.length === 0) return
+    setAttachUploading(true)
+    const newAttachments: Attachment[] = []
+    for (const file of fileArr) {
+      if (file.size > 20 * 1024 * 1024) {
+        toast.error(`${file.name}: слишком большой (макс 20 МБ)`)
+        continue
+      }
+      try {
+        const formData = new FormData()
+        formData.append("file", file)
+        const res = await fetch("/api/upload/vacancy-attachment", { method: "POST", body: formData })
+        const data = (await res.json()) as Attachment & { error?: string }
+        if (!res.ok) throw new Error(data.error || "Ошибка загрузки")
+        newAttachments.push({ name: data.name, url: data.url, size: data.size, type: data.type, uploadedAt: data.uploadedAt })
+      } catch (err) {
+        toast.error(`${file.name}: ${err instanceof Error ? err.message : "ошибка"}`)
+      }
+    }
+    if (newAttachments.length > 0) {
+      setAttachments(prev => [...prev, ...newAttachments])
+      toast.success(`Загружено файлов: ${newAttachments.length}`)
+    }
+    setAttachUploading(false)
+  }, [])
+
+  const removeAttachment = useCallback((url: string) => {
+    setAttachments(prev => prev.filter(a => a.url !== url))
+  }, [])
+
+  // Save attachments with autosave
+  useEffect(() => {
+    const existing = (descriptionJson as Record<string, unknown>) ?? {}
+    const currentAttachments = Array.isArray(existing.attachments) ? existing.attachments as Attachment[] : []
+    if (JSON.stringify(currentAttachments) === JSON.stringify(attachments)) return
+    const timer = setTimeout(async () => {
+      try {
+        await fetch(`/api/modules/hr/vacancies/${vacancyId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ description_json: { ...existing, attachments } }),
+        })
+      } catch {}
+    }, 1500)
+    return () => clearTimeout(timer)
+  }, [attachments, descriptionJson, vacancyId])
+
   // ── Autosave ──
   const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const scheduleAutosave = useCallback(() => {
@@ -1332,77 +1462,183 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
         <TagInput tags={[]} onChange={tags => { if (tags.length > 0) set("conditionsCustom", [...data.conditionsCustom, ...tags]) }} placeholder="Добавить своё условие..." customType="condition" />
       </Section>
 
+      {/* ── Документы и файлы ── */}
+      <Section title={`Документы${attachments.length > 0 ? ` (${attachments.length})` : ""}`} number={0} filled={attachments.length > 0}>
+        <input ref={attachInputRef} type="file" multiple accept=".pdf,.doc,.docx,.xlsx,.xls,.txt,.jpg,.jpeg,.png,.webp" className="hidden"
+          onChange={e => { if (e.target.files?.length) handleAttachUpload(e.target.files); e.target.value = "" }} />
+
+        {attachments.length > 0 && (
+          <div className="space-y-1.5">
+            {attachments.map(a => {
+              const ext = a.name.split(".").pop()?.toLowerCase() || ""
+              const isImage = ["jpg", "jpeg", "png", "webp"].includes(ext)
+              const isSpreadsheet = ["xlsx", "xls"].includes(ext)
+              const IconComp = isImage ? FileImage : isSpreadsheet ? FileSpreadsheet : File
+              const sizeStr = a.size < 1024 ? `${a.size} Б` : a.size < 1024 * 1024 ? `${(a.size / 1024).toFixed(0)} КБ` : `${(a.size / (1024 * 1024)).toFixed(1)} МБ`
+              return (
+                <div key={a.url} className="flex items-center gap-2 px-3 py-2 rounded-lg border bg-muted/30">
+                  <IconComp className="w-4 h-4 text-muted-foreground shrink-0" />
+                  <span className="text-sm flex-1 truncate">{a.name}</span>
+                  <span className="text-xs text-muted-foreground shrink-0">{sizeStr}</span>
+                  <a href={a.url} download={a.name} className="text-muted-foreground hover:text-foreground shrink-0">
+                    <FileDown className="w-3.5 h-3.5" />
+                  </a>
+                  <button type="button" onClick={() => removeAttachment(a.url)} className="text-muted-foreground hover:text-destructive shrink-0">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        <button type="button"
+          className={cn(
+            "w-full h-16 rounded-lg border-2 border-dashed flex items-center justify-center gap-2 transition-colors text-sm",
+            attachDragOver ? "border-primary bg-primary/5 text-primary" : "border-muted-foreground/25 text-muted-foreground hover:border-primary/40 hover:text-primary",
+            attachUploading && "pointer-events-none opacity-60",
+          )}
+          onClick={() => attachInputRef.current?.click()}
+          onDragOver={e => { e.preventDefault(); setAttachDragOver(true) }}
+          onDragLeave={() => setAttachDragOver(false)}
+          onDrop={e => { e.preventDefault(); setAttachDragOver(false); if (e.dataTransfer.files.length) handleAttachUpload(e.dataTransfer.files) }}
+        >
+          {attachUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+          {attachUploading ? "Загрузка..." : "Прикрепить файл (PDF, DOCX, XLSX, JPG, PNG)"}
+        </button>
+        <p className="text-[11px] text-muted-foreground">Внутренние документы — не видны кандидатам. До 20 МБ на файл.</p>
+      </Section>
+
       {/* ── 7. AI-генерация ── */}
-      {(data.screeningQuestions.length > 0 || data.hhDescription) && (
-        <Section title="AI-генерация" number={7} filled={true}>
-          {/* Screening questions */}
-          {data.screeningQuestions.length > 0 && (
-            <div className="space-y-2">
-              <Label className="text-xs font-medium">Вопросы для скрининга</Label>
-              <div className="space-y-1.5">
-                {data.screeningQuestions.map((q, i) => (
-                  <div key={i} className="flex items-start gap-2">
-                    <span className="text-xs text-muted-foreground font-medium mt-2 w-5 shrink-0">{i + 1}.</span>
-                    <Input
-                      value={q}
-                      onChange={e => {
-                        const updated = [...data.screeningQuestions]
-                        updated[i] = e.target.value
-                        set("screeningQuestions", updated)
-                      }}
-                      className="h-8 text-sm bg-[var(--input-bg)] border border-input flex-1"
-                    />
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
-                      onClick={() => set("screeningQuestions", data.screeningQuestions.filter((_, j) => j !== i))}
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </Button>
-                  </div>
-                ))}
-              </div>
+      <Section title="AI-генерация" number={7} filled={data.screeningQuestions.length > 0 || !!data.hhDescription}>
+        {/* Screening questions */}
+        {data.screeningQuestions.length > 0 && (
+          <div className="space-y-2">
+            <Label className="text-xs font-medium">Вопросы для скрининга</Label>
+            <div className="space-y-1.5">
+              {data.screeningQuestions.map((q, i) => (
+                <div key={i} className="flex items-start gap-2">
+                  <span className="text-xs text-muted-foreground font-medium mt-2 w-5 shrink-0">{i + 1}.</span>
+                  <Input
+                    value={q}
+                    onChange={e => {
+                      const updated = [...data.screeningQuestions]
+                      updated[i] = e.target.value
+                      set("screeningQuestions", updated)
+                    }}
+                    className="h-8 text-sm bg-[var(--input-bg)] border border-input flex-1"
+                  />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
+                    onClick={() => set("screeningQuestions", data.screeningQuestions.filter((_, j) => j !== i))}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs gap-1"
+              onClick={() => set("screeningQuestions", [...data.screeningQuestions, ""])}
+            >
+              <Plus className="w-3 h-3" /> Добавить вопрос
+            </Button>
+          </div>
+        )}
+
+        {/* hh.ru description — generate / preview / edit */}
+        <div className="space-y-3 mt-4">
+          <div className="flex items-center justify-between">
+            <Label className="text-xs font-medium">Описание для hh.ru</Label>
+            <div className="flex gap-1.5">
+              {data.hhDescription && (
+                <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={async () => {
+                  await navigator.clipboard.writeText(data.hhDescription)
+                  toast.success("Скопировано")
+                }}>
+                  <Copy className="w-3 h-3" /> Скопировать
+                </Button>
+              )}
               <Button
                 variant="outline"
                 size="sm"
-                className="h-7 text-xs gap-1"
-                onClick={() => set("screeningQuestions", [...data.screeningQuestions, ""])}
+                className="h-7 text-xs gap-1.5"
+                onClick={handleGenerateHh}
+                disabled={hhGenerating}
               >
-                <Plus className="w-3 h-3" /> Добавить вопрос
+                {hhGenerating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                {data.hhDescription ? "Перегенерировать" : "Сгенерировать"}
               </Button>
             </div>
-          )}
+          </div>
 
-          {/* hh.ru description */}
-          {data.hhDescription && (
-            <div className="space-y-2 mt-4">
+          {/* AI preview */}
+          {hhPreview && (
+            <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 space-y-3">
               <div className="flex items-center justify-between">
-                <Label className="text-xs font-medium">Описание для hh.ru</Label>
-                <div className="flex gap-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 text-xs gap-1"
-                    onClick={async () => {
-                      await navigator.clipboard.writeText(data.hhDescription)
-                      toast.success("Скопировано")
-                    }}
-                  >
-                    <Copy className="w-3 h-3" /> Скопировать
+                <span className="text-xs font-medium text-primary">Превью от AI</span>
+                <div className="flex gap-1.5">
+                  <Button size="sm" className="h-7 text-xs gap-1" onClick={handleAcceptHh}>
+                    <Check className="w-3 h-3" /> Принять
+                  </Button>
+                  <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={handleGenerateHh} disabled={hhGenerating}>
+                    <RefreshCw className="w-3 h-3" /> Заново
+                  </Button>
+                  <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => { setHhEditing(true); setHhEditText(hhPreview) }}>
+                    <PenLine className="w-3 h-3" /> Редактировать
+                  </Button>
+                  <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setHhPreview(null)}>
+                    <X className="w-3 h-3" />
                   </Button>
                 </div>
               </div>
-              <Textarea
-                value={data.hhDescription}
-                onChange={e => set("hhDescription", e.target.value)}
-                rows={10}
-                className="text-sm bg-[var(--input-bg)] border border-input font-mono text-xs"
-              />
+              {hhEditing ? (
+                <div className="space-y-2">
+                  <Textarea
+                    value={hhEditText}
+                    onChange={e => setHhEditText(e.target.value)}
+                    rows={12}
+                    className="text-sm bg-white dark:bg-gray-950 border border-input font-mono text-xs"
+                  />
+                  <Button size="sm" className="h-7 text-xs gap-1" onClick={() => { setHhPreview(hhEditText); setHhEditing(false) }}>
+                    <Check className="w-3 h-3" /> Сохранить правки
+                  </Button>
+                </div>
+              ) : (
+                <div
+                  className="prose prose-sm max-w-none text-sm [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:mt-3 [&_h3]:mb-1 [&_ul]:mt-1 [&_li]:text-sm"
+                  dangerouslySetInnerHTML={{ __html: hhPreview }}
+                />
+              )}
             </div>
           )}
-        </Section>
-      )}
+
+          {/* Saved description */}
+          {data.hhDescription && !hhPreview && (
+            <Textarea
+              value={data.hhDescription}
+              onChange={e => set("hhDescription", e.target.value)}
+              rows={10}
+              className="text-sm bg-[var(--input-bg)] border border-input font-mono text-xs"
+            />
+          )}
+
+          {!data.hhDescription && !hhPreview && !hhGenerating && (
+            <p className="text-xs text-muted-foreground">Заполните обязанности и требования, затем нажмите «Сгенерировать»</p>
+          )}
+
+          {hhGenerating && !hhPreview && (
+            <div className="flex items-center gap-2 py-6 justify-center">
+              <Loader2 className="w-5 h-5 text-primary animate-spin" />
+              <span className="text-sm text-muted-foreground">AI генерирует описание...</span>
+            </div>
+          )}
+        </div>
+      </Section>
 
       {/* Actions */}
       <div className="flex items-center gap-3 justify-end mt-4">
