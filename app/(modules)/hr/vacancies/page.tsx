@@ -397,9 +397,16 @@ export default function VacanciesPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text }),
       })
-      if (!aiRes.ok) throw new Error("AI-парсинг не удался")
-      const aiData = (await aiRes.json()) as { data: Record<string, unknown> }
-      const parsed = aiData.data
+      let parsed: Record<string, unknown> = {}
+      let aiParsed = false
+      if (!aiRes.ok) {
+        console.warn("[createWithAiText] AI parse failed, status:", aiRes.status)
+        // Fallback: create vacancy without AI parsing
+      } else {
+        const aiData = (await aiRes.json()) as { data: Record<string, unknown> }
+        parsed = aiData.data || {}
+        aiParsed = true
+      }
 
       // Step 2: Build description_json
       setAiProgress("Создаю вакансию...")
@@ -428,6 +435,11 @@ export default function VacanciesPage() {
         ...(importedFrom ? { importedFrom } : {}),
       }
 
+      // If AI failed, save text for anketa-tab to retry
+      if (!aiParsed && text) {
+        try { sessionStorage.setItem("vacancy_ai_text", text) } catch {}
+      }
+
       // Step 3: Create vacancy
       const res = await fetch("/api/modules/hr/vacancies", {
         method: "POST",
@@ -441,7 +453,7 @@ export default function VacanciesPage() {
       const data = await res.json() as { id: string }
       setCreateDialogOpen(false)
       resetCreateDialog()
-      toast.success("Вакансия создана — проверьте анкету")
+      toast.success(aiParsed ? "Вакансия создана — AI заполнил анкету" : "Вакансия создана — заполните анкету вручную")
       router.push(`/hr/vacancies/${data.id}`)
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Неизвестная ошибка"

@@ -61,18 +61,6 @@ export default auth(async (req) => {
     return Response.redirect(loginUrl)
   }
 
-  // ── CSRF protection for mutating API requests ──
-  if (pathname.startsWith("/api/") && !pathname.startsWith("/api/auth") && !pathname.startsWith("/api/public/")) {
-    const method = req.method
-    if (method === "POST" || method === "PATCH" || method === "PUT" || method === "DELETE") {
-      const origin = req.headers.get("origin")
-      const allowedOrigin = process.env.NEXTAUTH_URL || ""
-      if (origin && origin !== allowedOrigin && !origin.includes("localhost") && !origin.includes("127.0.0.1")) {
-        return new Response("Forbidden", { status: 403 })
-      }
-    }
-  }
-
   // API-маршруты пропускаем без редиректа —
   // иначе POST-запросы получают 307 → HTML → res.json() кидает исключение
   if (pathname.startsWith("/api/")) return
