@@ -754,7 +754,7 @@ export function AiAssistantWidget() {
   }
 
   // ── Proactive tips ──
-  const [proactiveTip, setProactiveTip] = useState<string | null>(null)
+  const [proactiveTip, setProactiveTip] = useState<{ text: string; action: () => void } | null>(null)
   useEffect(() => {
     if (open) { setProactiveTip(null); return }
     try {
@@ -764,12 +764,16 @@ export function AiAssistantWidget() {
 
       // Check for proactive tips based on page
       if (pathname.startsWith("/hr/vacancies") && !pathname.includes("/")) {
-        setProactiveTip("У вас есть кандидаты без AI-скрининга? Нажмите чтобы запустить!")
+        setProactiveTip({
+          text: "У вас есть кандидаты без AI-скрининга? Нажмите чтобы запустить!",
+          action: () => { window.location.href = "/hr/vacancies" },
+        })
+        localStorage.setItem("nancy_shown_tips", JSON.stringify([...shownTips, tipKey]))
       } else if (pathname === "/hr/dashboard" || pathname === "/overview") {
-        setProactiveTip("Хотите увидеть отчёт за неделю?")
-      }
-
-      if (proactiveTip) {
+        setProactiveTip({
+          text: "Хотите увидеть отчёт за неделю?",
+          action: () => { setOpen(true); setInput("Покажи отчёт за неделю"); setTimeout(() => send(), 100) },
+        })
         localStorage.setItem("nancy_shown_tips", JSON.stringify([...shownTips, tipKey]))
       }
     } catch {}
@@ -782,11 +786,14 @@ export function AiAssistantWidget() {
       {!open && (
         <div className="fixed bottom-4 right-4 z-50 flex items-end gap-2">
           {proactiveTip && (
-            <div className="max-w-[220px] bg-white dark:bg-gray-900 border shadow-lg rounded-xl rounded-br-sm px-3 py-2 text-xs text-foreground animate-in slide-in-from-right-2">
-              <button type="button" className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground" onClick={() => setProactiveTip(null)}>
+            <div
+              className="max-w-[220px] bg-white dark:bg-gray-900 border shadow-lg rounded-xl rounded-br-sm px-3 py-2 text-xs text-foreground animate-in slide-in-from-right-2 cursor-pointer hover:bg-muted/50 transition-colors relative"
+              onClick={() => { proactiveTip.action(); setProactiveTip(null) }}
+            >
+              <button type="button" className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground z-10" onClick={e => { e.stopPropagation(); setProactiveTip(null) }}>
                 <X className="w-2.5 h-2.5" />
               </button>
-              <p>{proactiveTip}</p>
+              <p>{proactiveTip.text}</p>
             </div>
           )}
           <button

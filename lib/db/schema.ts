@@ -1433,6 +1433,7 @@ export const departments = pgTable("departments", {
   description: text("description"),
   parentId:    uuid("parent_id"),  // self-reference handled at DB level
   headUserId:  uuid("head_user_id").references(() => users.id, { onDelete: "set null" }),
+  modules:     jsonb("modules").default("[]"), // ["hr", "crm", "learning"]
   createdAt:   timestamp("created_at").defaultNow(),
   updatedAt:   timestamp("updated_at").defaultNow(),
 })
@@ -1451,6 +1452,17 @@ export const positions = pgTable("positions", {
   createdAt:    timestamp("created_at").defaultNow(),
   updatedAt:    timestamp("updated_at").defaultNow(),
 })
+
+// ─── User Module Roles ───────────────────────────────────────────────────────
+
+export const userModuleRoles = pgTable("user_module_roles", {
+  id:        uuid("id").primaryKey().defaultRandom(),
+  tenantId:  uuid("tenant_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  userId:    uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  moduleId:  text("module_id").notNull(), // 'hr' | 'crm' | 'logistics' | 'marketing' | etc.
+  role:      text("role").notNull().default("none"), // 'admin' | 'manager' | 'viewer' | 'none'
+  createdAt: timestamp("created_at").defaultNow(),
+}, (t) => [unique().on(t.tenantId, t.userId, t.moduleId)])
 
 // ─── Vacancy Intake (заявки от заказчиков) ───────────────────────────────────
 
