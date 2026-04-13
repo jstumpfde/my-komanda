@@ -1465,6 +1465,18 @@ export const vacancyIntakeLinks = pgTable("vacancy_intake_links", {
   createdAt: timestamp("created_at").defaultNow(),
 })
 
+// ─── Support Requests ────────────────────────────────────────────────────────
+
+export const supportRequests = pgTable("support_requests", {
+  id:        uuid("id").primaryKey().defaultRandom(),
+  tenantId:  uuid("tenant_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  userId:    uuid("user_id").references(() => users.id).notNull(),
+  type:      text("type").notNull(), // 'email_change' | 'other'
+  data:      jsonb("data").notNull(), // { newEmail, reason, ... }
+  status:    text("status").default("new"), // 'new' | 'processing' | 'done' | 'rejected'
+  createdAt: timestamp("created_at").defaultNow(),
+})
+
 export const vacancyGuestLinks = pgTable("vacancy_guest_links", {
   id:          uuid("id").primaryKey().defaultRandom(),
   vacancyId:   uuid("vacancy_id").references(() => vacancies.id, { onDelete: "cascade" }).notNull(),

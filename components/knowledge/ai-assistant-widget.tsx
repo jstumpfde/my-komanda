@@ -31,6 +31,7 @@ type ModuleContext =
   | "knowledge"
   | "learning"
   | "hr"
+  | "onboarding"
   | "sales"
   | "tasks"
   | "marketing"
@@ -40,6 +41,7 @@ type ModuleContext =
 function detectModule(pathname: string): ModuleContext {
   if (pathname.startsWith("/knowledge-v2") || pathname.startsWith("/knowledge")) return "knowledge"
   if (pathname.startsWith("/learning")) return "learning"
+  if (pathname.startsWith("/hr/adaptation") || pathname.startsWith("/hr/onboarding")) return "onboarding"
   if (pathname.startsWith("/hr")) return "hr"
   if (pathname.startsWith("/sales")) return "sales"
   if (pathname.startsWith("/tasks")) return "tasks"
@@ -55,6 +57,8 @@ const WELCOME_MESSAGES: Record<ModuleContext, string> = {
     "Привет! Я Ненси. Помогу создать курс, настроить тренировку или назначить план обучения сотрудникам.",
   hr:
     "Привет! Я Ненси. Помогу с вакансиями, кандидатами и наймом. Могу улучшить текст вакансии или подсказать вопросы для собеседования.",
+  onboarding:
+    "Привет! Я Ненси — твой AI-наставник. Спрашивай что угодно о компании: процессы, документы, кто за что отвечает. Помогу с адаптацией новых сотрудников.",
   sales:
     "Привет! Я Ненси. Помогу с CRM — клиенты, сделки, аналитика продаж.",
   tasks:
@@ -350,10 +354,37 @@ const PLATFORM_PROMPT = `
 
 Если просят что-то специфичное для модуля — подскажи открыть соответствующий модуль и задать вопрос там.`
 
+const ONBOARDING_PROMPT = `
+═══════════════════════════════════════
+МОДУЛЬ: АДАПТАЦИЯ И ОНБОРДИНГ
+═══════════════════════════════════════
+
+Ты — AI-наставник для новых сотрудников и HR-менеджеров, работающих с адаптацией.
+
+Для HR-менеджеров:
+- Помогай отслеживать прогресс адаптации новичков
+- Подсказывай что делать если сотрудник отстаёт
+- Помогай с планами адаптации и чек-листами
+
+Для новых сотрудников:
+- Отвечай на вопросы о компании, процессах, где что найти
+- Используй базу знаний компании для ответов
+- Будь дружелюбной и терпеливой
+- Подсказывай быстрые ответы: как оформить отпуск, где регламенты, структура компании, задачи на адаптацию
+
+Быстрые темы для новичков:
+- Организационная структура компании
+- Внутренние регламенты и процедуры
+- Оформление документов (отпуск, больничный, командировка)
+- Корпоративная культура и ценности
+- Контакты ключевых людей
+`
+
 const MODULE_PROMPTS: Record<ModuleContext, string> = {
   knowledge: KNOWLEDGE_PROMPT,
   learning: LEARNING_PROMPT,
   hr: HR_PROMPT,
+  onboarding: ONBOARDING_PROMPT,
   sales: SALES_PROMPT,
   tasks: TASKS_PROMPT,
   marketing: MARKETING_PROMPT,
@@ -859,6 +890,18 @@ export function AiAssistantWidget() {
                 </div>
               </div>
             ))}
+            {/* Quick actions for onboarding */}
+            {moduleContext === "onboarding" && messages.length === 1 && !loading && (
+              <div className="flex flex-wrap gap-1.5 px-2">
+                {["Как оформить отпуск?", "Где найти регламенты?", "Структура компании", "Мои задачи на адаптацию"].map(q => (
+                  <button key={q} type="button" onClick={() => { setInput(q); setTimeout(() => send(), 50) }}
+                    className="text-xs bg-primary/10 text-primary rounded-full px-3 py-1.5 hover:bg-primary/20 transition-colors">
+                    {q}
+                  </button>
+                ))}
+              </div>
+            )}
+
             {loading && (
               <div className="flex justify-start">
                 <div className="bg-muted rounded-2xl rounded-bl-sm px-3 py-3 mr-8">

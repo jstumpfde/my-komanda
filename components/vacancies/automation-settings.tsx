@@ -308,14 +308,26 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
     (initialAutomation.inviteTemplate as string) || "Здравствуйте, {имя}! Мы рассмотрели ваш отклик на позицию {должность} и хотели бы пригласить вас на следующий этап. {ссылка_на_демонстрацию}"
   )
 
-  // 7. Шаблоны сообщений
-  const defaultTemplates: Record<string, string> = {
+  // 8. Бот-звонарь
+  const initialDialer = (initialAutomation.dialer as { enabled?: boolean; scriptId?: string; trigger?: string }) || {}
+  const [dialerEnabled, setDialerEnabled] = useState(initialDialer.enabled ?? false)
+  const [dialerScriptId, setDialerScriptId] = useState(initialDialer.scriptId || "")
+  const [dialerTrigger, setDialerTrigger] = useState(initialDialer.trigger || "after_screening")
+
+  // 7. Шаблоны сообщений (inherit from global)
+  const hardcodedDefaults: Record<string, string> = {
     salary: "Здравствуйте, {имя}! Зарплата на позиции {должность} составляет {зп_от} — {зп_до} ₽. Подробнее об условиях — в презентации должности: {ссылка_на_демонстрацию}",
     demo_invite: "Здравствуйте, {имя}! Благодарим за интерес к позиции {должность}. Пожалуйста, ознакомьтесь с презентацией должности: {ссылка_на_демонстрацию}. После просмотра мы свяжемся с вами.",
     soft_reject: "Здравствуйте, {имя}! Благодарим за интерес к позиции {должность}. К сожалению, на данный момент мы остановились на других кандидатах. Желаем успехов!",
     info_request: "Здравствуйте, {имя}! Нам интересна ваша кандидатура на позицию {должность}. Не могли бы вы дополнительно рассказать о вашем опыте?",
     interview_invite: "Здравствуйте, {имя}! Мы хотели бы пригласить вас на собеседование на позицию {должность}. Удобное время: {дата_время}. Формат: онлайн.",
   }
+  const globalTemplates = (() => {
+    try {
+      const saved = typeof window !== "undefined" ? localStorage.getItem("mk_hr_message_templates") : null
+      return saved ? { ...hardcodedDefaults, ...JSON.parse(saved) } : hardcodedDefaults
+    } catch { return hardcodedDefaults }
+  })()
   const templateLabels: Record<string, string> = {
     salary: "Вопрос о зарплате",
     demo_invite: "Приглашение на демонстрацию",
@@ -325,7 +337,7 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
   }
   const [messageTemplates, setMessageTemplates] = useState<Record<string, string>>(() => {
     const saved = (initialAutomation.messageTemplates as Record<string, string>) || {}
-    return { ...defaultTemplates, ...saved }
+    return { ...globalTemplates, ...saved }
   })
 
   // Sync if descriptionJson changes externally
@@ -397,6 +409,7 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
         rejectTemplate,
         inviteTemplate,
         messageTemplates,
+        dialer: { enabled: dialerEnabled, scriptId: dialerScriptId, trigger: dialerTrigger },
       }
 
       const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}`, {
@@ -422,7 +435,7 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
     } finally {
       setSaving(false)
     }
-  }, [vacancyId, scenarioType, descriptionJson, tone, firstMessageText, firstMessageDelay, workingHoursEnabled, workingHoursFrom, workingHoursTo, includeWeekends, responseReaction, followUpEnabled, followUpPreset, stopOnNo, stopOnClose, pipelinePreset, pipelineStages, autoInvite, autoReject, notifyManager, rejectTemplate, inviteTemplate, messageTemplates])
+  }, [vacancyId, scenarioType, descriptionJson, tone, firstMessageText, firstMessageDelay, workingHoursEnabled, workingHoursFrom, workingHoursTo, includeWeekends, responseReaction, followUpEnabled, followUpPreset, stopOnNo, stopOnClose, pipelinePreset, pipelineStages, autoInvite, autoReject, notifyManager, rejectTemplate, inviteTemplate, messageTemplates, dialerEnabled, dialerScriptId, dialerTrigger])
 
   return (
     <div className="space-y-6">
@@ -922,9 +935,55 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
               />
             </div>
           ))}
-          <p className="text-[11px] text-muted-foreground">
-            Переменные: {"{имя}"}, {"{должность}"}, {"{зп_от}"}, {"{зп_до}"}, {"{ссылка_на_демонстрацию}"}, {"{дата_время}"}
-          </p>
+          <div className="flex items-center justify-between">
+            <p className="text-[11px] text-muted-foreground">
+              Переменные: {"{имя}"}, {"{должность}"}, {"{зп_от}"}, {"{зп_до}"}, {"{ссылка_на_демонстрацию}"}, {"{дата_время}"}
+            </p>
+            <Button variant="ghost" size="sm" className="h-6 text-[10px]" onClick={() => { setMessageTemplates({ ...globalTemplates }); toast.success("Сброшено к шаблонам компании") }}>
+              Сбросить к шаблонам компании
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ═══ 8. Бот-звонарь ══════════════════════════════════ */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Phone className="w-4 h-4" />
+            Звонки кандидатам
+            <Badge variant="outline" className="text-[10px] ml-1">Бот-звонарь</Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium">Подключить бот-звонарь</p>
+              <p className="text-xs text-muted-foreground">Бот автоматически позвонит кандидатам по выбранному сценарию</p>
+            </div>
+            <Switch checked={dialerEnabled} onCheckedChange={setDialerEnabled} />
+          </div>
+          {dialerEnabled && (
+            <div className="space-y-3 pl-4 border-l-2 border-primary/20">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Когда звонить</Label>
+                <Select value={dialerTrigger} onValueChange={setDialerTrigger}>
+                  <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="after_response">После отклика</SelectItem>
+                    <SelectItem value="after_screening">После AI-скрининга</SelectItem>
+                    <SelectItem value="manual">Вручную</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">ID скрипта звонка</Label>
+                <Input value={dialerScriptId} onChange={e => setDialerScriptId(e.target.value)}
+                  placeholder="Выберите скрипт в модуле Бот-звонарь" className="h-9 text-sm bg-[var(--input-bg)] border border-input" />
+              </div>
+              <a href="/dialer" className="text-xs text-primary hover:underline">Настроить скрипты в модуле Бот-звонарь →</a>
+            </div>
+          )}
         </CardContent>
       </Card>
 

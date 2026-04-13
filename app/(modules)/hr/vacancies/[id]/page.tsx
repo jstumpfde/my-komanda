@@ -29,7 +29,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Checkbox } from "@/components/ui/checkbox"
 import { Slider } from "@/components/ui/slider"
 import { Input } from "@/components/ui/input"
-import { Plus, Clock, Pause, Play, Archive, RotateCcw, Trash2, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, Zap, Globe, AlertTriangle, TrendingUp, Calendar, MapPin, DollarSign, Filter, X, Link2, Copy, Save, Sparkles, Eye, Check, Loader2, Download, ExternalLink, ClipboardList, ChevronLeft, ChevronRight, ChevronDown, CheckCircle2, XCircle } from "lucide-react"
+import { Plus, Clock, Pause, Play, Archive, RotateCcw, Trash2, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, Zap, Globe, AlertTriangle, TrendingUp, Calendar, MapPin, DollarSign, Filter, X, Link2, Copy, Save, Sparkles, Eye, Check, Loader2, Download, ExternalLink, ClipboardList, ChevronLeft, ChevronRight, ChevronDown, CheckCircle2, XCircle, Users, Phone } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Label } from "@/components/ui/label"
@@ -224,6 +224,22 @@ export default function VacancyPage() {
   // Talent pool suggestion
   const [talentPoolDialogOpen, setTalentPoolDialogOpen] = useState(false)
   const [talentPoolCandidate, setTalentPoolCandidate] = useState<Candidate | null>(null)
+
+  // AI tools modals
+  const [compareOpen, setCompareOpen] = useState(false)
+  const [compareResult, setCompareResult] = useState<{ table: { candidateName: string; pros: string[]; cons: string[]; fitScore: number }[]; recommendation: string; summary: string } | null>(null)
+  const [compareLoading, setCompareLoading] = useState(false)
+  const [questionsOpen, setQuestionsOpen] = useState(false)
+  const [questionsResult, setQuestionsResult] = useState<{ question: string; type: string; purpose: string }[]>([])
+  const [questionsLoading, setQuestionsLoading] = useState(false)
+  const [questionsCandidate, setQuestionsCandidate] = useState<string>("")
+  const [refCheckOpen, setRefCheckOpen] = useState(false)
+  const [refCheckResult, setRefCheckResult] = useState<{ intro: string; questions: string[]; redFlags: string[] } | null>(null)
+  const [refCheckLoading, setRefCheckLoading] = useState(false)
+  const [offerOpen, setOfferOpen] = useState(false)
+  const [offerHtml, setOfferHtml] = useState("")
+  const [offerLoading, setOfferLoading] = useState(false)
+  const [offerEditing, setOfferEditing] = useState(false)
 
   // Course editor toolbar state
   const courseEditorRef = useRef<NotionEditorHandle>(null)
@@ -643,6 +659,119 @@ export default function VacancyPage() {
     toast.success(`AI-скрининг завершён: ${newCandidates.length} кандидатов`)
   }
 
+  // ── Talent Pool Radar ──
+  const [talentMatches, setTalentMatches] = useState<{ id: string; name: string; matchPercent: number; aiScore: number | null; city: string | null }[]>([])
+  const [talentRadarHidden, setTalentRadarHidden] = useState(false)
+  const [talentRadarLoaded, setTalentRadarLoaded] = useState(false)
+
+  useEffect(() => {
+    if (!id || apiCandidates.length > 0 || talentRadarLoaded) return
+    setTalentRadarLoaded(true)
+    fetch(`/api/modules/hr/talent-pool/match?vacancy_id=${id}`)
+      .then(r => r.ok ? r.json() : null)
+      .then((data: { id: string; name: string; matchPercent: number; aiScore: number | null; city: string | null }[] | null) => {
+        if (data && data.length > 0) setTalentMatches(data)
+      })
+      .catch(() => {})
+  }, [id, apiCandidates.length, talentRadarLoaded])
+
+  const inviteFromPool = async (candidateId: string) => {
+    await updateStage(candidateId, "new")
+    setTalentMatches(prev => prev.filter(c => c.id !== candidateId))
+    toast.success("Кандидат приглашён из Talent Pool")
+    refetchCandidates()
+  }
+
+  // ── AI tools handlers ──
+  const anketa = ((apiVacancy?.descriptionJson as Record<string, unknown>)?.anketa as Record<string, unknown>) || {}
+
+  const handleCompare = async () => {
+    const top = apiCandidates
+      .filter(c => c.aiScore != null)
+      .sort((a, b) => (b.aiScore ?? 0) - (a.aiScore ?? 0))
+      .slice(0, 3)
+    if (top.length < 2) { toast.error("Нужно минимум 2 кандидата с AI-скором"); return }
+    setCompareOpen(true)
+    setCompareLoading(true)
+    try {
+      const res = await fetch("/api/ai/compare-candidates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          candidates: top.map(c => ({ name: c.name, skills: c.skills, experience: c.experience, aiScore: c.aiScore })),
+          vacancyRequirements: String(anketa.requirements || ""),
+        }),
+      })
+      if (!res.ok) throw new Error()
+      setCompareResult(await res.json())
+    } catch { toast.error("Ошибка сравнения") }
+    finally { setCompareLoading(false) }
+  }
+
+  const handleQuestions = async (candidateId: string) => {
+    const c = apiCandidates.find(x => x.id === candidateId)
+    if (!c) return
+    setQuestionsCandidate(c.name)
+    setQuestionsOpen(true)
+    setQuestionsLoading(true)
+    try {
+      const res = await fetch("/api/ai/interview-questions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          candidateData: { name: c.name, experience: c.experience, skills: c.skills, aiScore: c.aiScore },
+          vacancyAnketa: { vacancyTitle: apiVacancy?.title, responsibilities: anketa.responsibilities, requirements: anketa.requirements },
+        }),
+      })
+      if (!res.ok) throw new Error()
+      setQuestionsResult(await res.json())
+    } catch { toast.error("Ошибка генерации вопросов") }
+    finally { setQuestionsLoading(false) }
+  }
+
+  const handleRefCheck = async (candidateId: string) => {
+    const c = apiCandidates.find(x => x.id === candidateId)
+    if (!c) return
+    setRefCheckOpen(true)
+    setRefCheckLoading(true)
+    try {
+      const res = await fetch("/api/ai/reference-check-questions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ candidateName: c.name, position: apiVacancy?.title, responsibilities: anketa.responsibilities, candidateExperience: c.experience }),
+      })
+      if (!res.ok) throw new Error()
+      setRefCheckResult(await res.json())
+    } catch { toast.error("Ошибка генерации") }
+    finally { setRefCheckLoading(false) }
+  }
+
+  const handleGenerateOffer = async (candidateId: string) => {
+    const c = apiCandidates.find(x => x.id === candidateId)
+    if (!c) return
+    setOfferOpen(true)
+    setOfferLoading(true)
+    setOfferEditing(false)
+    try {
+      const conditions = Array.isArray(anketa.conditions) ? (anketa.conditions as string[]).join(", ") : ""
+      const res = await fetch("/api/ai/generate-offer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          candidateName: c.name,
+          position: apiVacancy?.title,
+          salary: apiVacancy?.salaryMin && apiVacancy?.salaryMax ? `${apiVacancy.salaryMin.toLocaleString("ru")} — ${apiVacancy.salaryMax.toLocaleString("ru")} ₽` : "",
+          conditions,
+          companyName: String(anketa.companyName || ""),
+        }),
+      })
+      if (!res.ok) throw new Error()
+      const data = (await res.json()) as { html: string }
+      setOfferHtml(data.html)
+    } catch { toast.error("Ошибка генерации оффера") }
+    finally { setOfferLoading(false) }
+  }
+
   const vacancyTitle = apiVacancy?.title ?? "Вакансия"
   const vacancySlugOrId = apiVacancy?.slug || id
   const companySlugDisplay = brandCompanySlug || brandCompanyName.toLowerCase()
@@ -852,11 +981,35 @@ export default function VacancyPage() {
               </TabsContent>
 
               <TabsContent value="candidates">
+                {/* Talent Pool radar */}
+                {talentMatches.length > 0 && !talentRadarHidden && (
+                  <div className="mb-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-sm font-medium flex items-center gap-1.5"><Users className="w-4 h-4 text-primary" />В Talent Pool найдено {talentMatches.length} подходящих кандидатов</p>
+                      <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => setTalentRadarHidden(true)}><X className="w-3 h-3" /></Button>
+                    </div>
+                    <div className="space-y-1.5">
+                      {talentMatches.map(c => (
+                        <div key={c.id} className="flex items-center gap-3 bg-white dark:bg-gray-950 rounded-md px-3 py-2 border">
+                          <span className="text-sm font-medium flex-1">{c.name}</span>
+                          {c.city && <span className="text-xs text-muted-foreground">{c.city}</span>}
+                          <Badge variant="secondary" className="text-xs">{c.matchPercent}% совпадение</Badge>
+                          {c.aiScore != null && <Badge variant="outline" className="text-xs">AI {c.aiScore}</Badge>}
+                          <Button size="sm" className="h-7 text-xs gap-1" onClick={() => inviteFromPool(c.id)}>Пригласить</Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* AI Screening toolbar */}
                 <div className="flex items-center gap-2 mb-3">
                   <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs" onClick={screenAllNew} disabled={bulkScreening}>
                     {bulkScreening ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
                     {bulkScreening ? "Скрининг..." : "Разобрать все новые"}
+                  </Button>
+                  <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs" onClick={handleCompare}>
+                    <BarChart3 className="w-3.5 h-3.5" />Сравнить топ
                   </Button>
                   {bulkScreening && <span className="text-xs text-muted-foreground">AI анализирует кандидатов...</span>}
                 </div>
@@ -1644,6 +1797,146 @@ export default function VacancyPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* ── Compare candidates modal ── */}
+      <Dialog open={compareOpen} onOpenChange={setCompareOpen}>
+        <DialogContent className="sm:max-w-3xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Сравнение кандидатов</DialogTitle></DialogHeader>
+          {compareLoading ? (
+            <div className="flex items-center justify-center py-12"><Loader2 className="w-6 h-6 animate-spin" /></div>
+          ) : compareResult ? (
+            <div className="space-y-4">
+              <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${compareResult.table.length}, 1fr)` }}>
+                {compareResult.table.map(c => (
+                  <div key={c.candidateName} className="rounded-lg border p-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-semibold">{c.candidateName}</p>
+                      <Badge variant="secondary" className={cn("text-xs", c.fitScore >= 70 ? "bg-emerald-100 text-emerald-700" : c.fitScore >= 40 ? "bg-amber-100 text-amber-700" : "bg-red-100 text-red-700")}>{c.fitScore}</Badge>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-medium text-emerald-600 mb-1">Сильные стороны</p>
+                      {c.pros.map((p, i) => <p key={i} className="text-xs text-muted-foreground">+ {p}</p>)}
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-medium text-red-600 mb-1">Слабые стороны</p>
+                      {c.cons.map((p, i) => <p key={i} className="text-xs text-muted-foreground">- {p}</p>)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="rounded-lg bg-primary/5 border border-primary/20 p-3">
+                <p className="text-xs font-medium text-primary mb-1">Рекомендация AI</p>
+                <p className="text-sm">{compareResult.recommendation}</p>
+                <p className="text-xs text-muted-foreground mt-1">{compareResult.summary}</p>
+              </div>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Interview questions modal ── */}
+      <Dialog open={questionsOpen} onOpenChange={setQuestionsOpen}>
+        <DialogContent className="sm:max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Вопросы для собеседования — {questionsCandidate}</DialogTitle>
+          </DialogHeader>
+          {questionsLoading ? (
+            <div className="flex items-center justify-center py-12"><Loader2 className="w-6 h-6 animate-spin" /></div>
+          ) : (
+            <div className="space-y-3">
+              {questionsResult.map((q, i) => {
+                const typeColors: Record<string, string> = { behavioral: "bg-blue-100 text-blue-700", technical: "bg-violet-100 text-violet-700", situational: "bg-amber-100 text-amber-700", personal: "bg-rose-100 text-rose-700" }
+                const typeLabels: Record<string, string> = { behavioral: "Поведенческий", technical: "Технический", situational: "Ситуационный", personal: "Персональный" }
+                return (
+                  <div key={i} className="space-y-1">
+                    <div className="flex items-start gap-2">
+                      <span className="text-xs text-muted-foreground w-5 shrink-0 mt-0.5">{i + 1}.</span>
+                      <div className="flex-1">
+                        <p className="text-sm">{q.question}</p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <Badge variant="secondary" className={cn("text-[10px] h-4", typeColors[q.type] || "bg-gray-100")}>{typeLabels[q.type] || q.type}</Badge>
+                          <span className="text-[10px] text-muted-foreground">Проверяем: {q.purpose}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+              {questionsResult.length > 0 && (
+                <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={async () => {
+                  await navigator.clipboard.writeText(questionsResult.map((q, i) => `${i + 1}. ${q.question}`).join("\n"))
+                  toast.success("Скопировано")
+                }}>
+                  <Copy className="w-3 h-3" />Копировать все
+                </Button>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Reference check modal ── */}
+      <Dialog open={refCheckOpen} onOpenChange={setRefCheckOpen}>
+        <DialogContent className="sm:max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Проверка рекомендаций</DialogTitle></DialogHeader>
+          {refCheckLoading ? (
+            <div className="flex items-center justify-center py-12"><Loader2 className="w-6 h-6 animate-spin" /></div>
+          ) : refCheckResult ? (
+            <div className="space-y-4">
+              <div className="rounded-lg bg-muted p-3">
+                <p className="text-xs font-medium mb-1">Вступительная фраза</p>
+                <p className="text-sm italic">{refCheckResult.intro}</p>
+              </div>
+              <div className="space-y-2">
+                {refCheckResult.questions.map((q, i) => (
+                  <p key={i} className="text-sm"><span className="text-muted-foreground mr-2">{i + 1}.</span>{q}</p>
+                ))}
+              </div>
+              <div className="rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 p-3">
+                <p className="text-xs font-medium text-red-700 dark:text-red-400 mb-1">На что обратить внимание</p>
+                {refCheckResult.redFlags.map((f, i) => <p key={i} className="text-xs text-red-600 dark:text-red-400">• {f}</p>)}
+              </div>
+              <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={async () => {
+                const text = `${refCheckResult.intro}\n\n${refCheckResult.questions.map((q, i) => `${i + 1}. ${q}`).join("\n")}\n\nНа что обратить внимание:\n${refCheckResult.redFlags.map(f => `• ${f}`).join("\n")}`
+                await navigator.clipboard.writeText(text)
+                toast.success("Скопировано")
+              }}>
+                <Copy className="w-3 h-3" />Копировать всё
+              </Button>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Offer modal ── */}
+      <Dialog open={offerOpen} onOpenChange={setOfferOpen}>
+        <DialogContent className="sm:max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Оффер кандидату</DialogTitle></DialogHeader>
+          {offerLoading ? (
+            <div className="flex items-center justify-center py-12"><Loader2 className="w-6 h-6 animate-spin" /></div>
+          ) : offerEditing ? (
+            <div className="space-y-3">
+              <Textarea value={offerHtml} onChange={e => setOfferHtml(e.target.value)} rows={15} className="font-mono text-xs" />
+              <Button size="sm" className="text-xs" onClick={() => setOfferEditing(false)}>Превью</Button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="prose prose-sm max-w-none border rounded-lg p-4 [&_h2]:text-base [&_h3]:text-sm" dangerouslySetInnerHTML={{ __html: offerHtml }} />
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" className="gap-1 text-xs" onClick={() => setOfferEditing(true)}>
+                  <Pencil className="w-3 h-3" />Редактировать
+                </Button>
+                <Button variant="outline" size="sm" className="gap-1 text-xs" onClick={async () => {
+                  await navigator.clipboard.writeText(offerHtml.replace(/<[^>]+>/g, "\n").replace(/\n{3,}/g, "\n\n").trim())
+                  toast.success("Скопировано")
+                }}>
+                  <Copy className="w-3 h-3" />Копировать
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Candidate Drawer — opens with real API data when "Открыть профиль" is clicked */}
       <CandidateDrawer

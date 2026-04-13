@@ -120,6 +120,31 @@ export default function AdaptationAssignmentsPage() {
               </Button>
             </div>
 
+            {/* AI Alerts — employees needing attention */}
+            {(() => {
+              const alerts = assignments.filter(a => a.status === "active" && a.completionPct < 50 && a.currentDay > 7)
+              if (alerts.length === 0) return null
+              return (
+                <Card className="mb-4 border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20">
+                  <CardContent className="py-3">
+                    <p className="text-sm font-medium text-amber-800 dark:text-amber-400 mb-2">Требуют внимания ({alerts.length})</p>
+                    <div className="space-y-2">
+                      {alerts.slice(0, 3).map(a => (
+                        <div key={a.id} className="flex items-center justify-between text-sm">
+                          <span className="text-muted-foreground">
+                            Сотрудник #{a.employeeId?.slice(0, 8)} — {a.planTitle || "план адаптации"}: прогресс {a.completionPct}% на {a.currentDay}-й день
+                          </span>
+                          <Link href={`/hr/adaptation/assignments/${a.id}`} className="text-xs text-primary hover:underline shrink-0">
+                            Подробнее
+                          </Link>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )
+            })()}
+
             {/* Filters */}
             <div className="flex flex-wrap gap-2 mb-4">
               <Select value={filterStatus} onValueChange={setFilterStatus}>

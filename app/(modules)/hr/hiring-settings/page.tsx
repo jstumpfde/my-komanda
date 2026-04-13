@@ -130,6 +130,60 @@ export default function HiringSettingsPage() {
     toast.success(checked ? "Выбор компании включён в анкете" : "Секция «Компания» скрыта")
   }
 
+  // ── Global message templates ──
+  const GLOBAL_TEMPLATE_DEFAULTS: Record<string, string> = {
+    salary: "Здравствуйте, {имя}! Зарплата на позиции {должность} составляет {зп_от} — {зп_до} ₽. Подробнее об условиях — в презентации должности: {ссылка_на_демонстрацию}",
+    demo_invite: "Здравствуйте, {имя}! Благодарим за интерес к позиции {должность}. Пожалуйста, ознакомьтесь с презентацией должности: {ссылка_на_демонстрацию}. После просмотра мы свяжемся с вами.",
+    soft_reject: "Здравствуйте, {имя}! Благодарим за интерес к позиции {должность}. К сожалению, на данный момент мы остановились на других кандидатах. Желаем успехов!",
+    info_request: "Здравствуйте, {имя}! Нам интересна ваша кандидатура на позицию {должность}. Не могли бы вы дополнительно рассказать о вашем опыте?",
+    interview_invite: "Здравствуйте, {имя}! Мы хотели бы пригласить вас на собеседование на позицию {должность}. Удобное время: {дата_время}. Формат: онлайн.",
+  }
+  const GLOBAL_TEMPLATE_LABELS: Record<string, string> = {
+    salary: "Вопрос о зарплате",
+    demo_invite: "Приглашение на демонстрацию",
+    soft_reject: "Мягкий отказ",
+    info_request: "Запрос доп. информации",
+    interview_invite: "Приглашение на собеседование",
+  }
+  const [globalTemplates, setGlobalTemplates] = useState<Record<string, string>>(GLOBAL_TEMPLATE_DEFAULTS)
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("mk_hr_message_templates")
+      if (saved) setGlobalTemplates(prev => ({ ...prev, ...JSON.parse(saved) }))
+    } catch {}
+  }, [])
+  const saveGlobalTemplates = () => {
+    localStorage.setItem("mk_hr_message_templates", JSON.stringify(globalTemplates))
+    toast.success("Шаблоны сообщений сохранены")
+  }
+
+  // ── Feedback schedule ──
+  const [feedbackEnabled, setFeedbackEnabled] = useState(false)
+  const [feedback30, setFeedback30] = useState(true)
+  const [feedback60, setFeedback60] = useState(true)
+  const [feedback90, setFeedback90] = useState(true)
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("mk_hr_feedback_schedule")
+      if (saved) {
+        const p = JSON.parse(saved) as { enabled?: boolean; d30?: boolean; d60?: boolean; d90?: boolean }
+        setFeedbackEnabled(p.enabled ?? false)
+        setFeedback30(p.d30 ?? true)
+        setFeedback60(p.d60 ?? true)
+        setFeedback90(p.d90 ?? true)
+      }
+    } catch {}
+  }, [])
+  const saveFeedbackSchedule = (patch: Partial<{ enabled: boolean; d30: boolean; d60: boolean; d90: boolean }>) => {
+    const next = { enabled: patch.enabled ?? feedbackEnabled, d30: patch.d30 ?? feedback30, d60: patch.d60 ?? feedback60, d90: patch.d90 ?? feedback90 }
+    if ("enabled" in patch) setFeedbackEnabled(next.enabled)
+    if ("d30" in patch) setFeedback30(next.d30)
+    if ("d60" in patch) setFeedback60(next.d60)
+    if ("d90" in patch) setFeedback90(next.d90)
+    localStorage.setItem("mk_hr_feedback_schedule", JSON.stringify(next))
+    toast.success("Настройки обратной связи сохранены")
+  }
+
   // ── Funnel state ──
   const [selectedScenario, setSelectedScenario] = useState("standard")
   const [autoDemo, setAutoDemo] = useState(true)
@@ -238,6 +292,63 @@ export default function HiringSettingsPage() {
                   </div>
                   <Switch checked={showCompanySelector} onCheckedChange={toggleCompanySelector} />
                 </div>
+              </CardContent>
+            </Card>
+
+            {/* Global message templates */}
+            <Card className="mb-5 max-w-3xl">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-medium">Шаблоны сообщений компании</CardTitle>
+                <CardDescription>Шаблоны по умолчанию для всех вакансий. Можно переопределить в настройках каждой вакансии.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {Object.entries(GLOBAL_TEMPLATE_LABELS).map(([key, label]) => (
+                  <div key={key} className="space-y-1">
+                    <Label className="text-xs font-medium">{label}</Label>
+                    <Textarea
+                      value={globalTemplates[key] || ""}
+                      onChange={e => setGlobalTemplates(prev => ({ ...prev, [key]: e.target.value }))}
+                      rows={2}
+                      className="text-xs resize-none"
+                    />
+                  </div>
+                ))}
+                <p className="text-[11px] text-muted-foreground">
+                  Переменные: {"{имя}"}, {"{должность}"}, {"{зп_от}"}, {"{зп_до}"}, {"{ссылка_на_демонстрацию}"}, {"{дата_время}"}
+                </p>
+                <Button size="sm" className="h-8 text-xs gap-1.5" onClick={saveGlobalTemplates}>
+                  <Save className="w-3.5 h-3.5" />Сохранить шаблоны
+                </Button>
+              </CardContent>
+            </Card>
+
+            {/* Feedback schedule */}
+            <Card className="mb-5 max-w-3xl">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-medium">Автоматический сбор обратной связи</CardTitle>
+                <CardDescription>Опросы новых сотрудников на контрольных точках адаптации</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm">Включить автоматические опросы</p>
+                  <Switch checked={feedbackEnabled} onCheckedChange={v => saveFeedbackSchedule({ enabled: v })} />
+                </div>
+                {feedbackEnabled && (
+                  <div className="space-y-2 pl-4 border-l-2 border-primary/20">
+                    <label className="flex items-center gap-2 text-sm">
+                      <input type="checkbox" checked={feedback30} onChange={e => saveFeedbackSchedule({ d30: e.target.checked })} className="rounded" />
+                      30 дней — «Как проходит адаптация?»
+                    </label>
+                    <label className="flex items-center gap-2 text-sm">
+                      <input type="checkbox" checked={feedback60} onChange={e => saveFeedbackSchedule({ d60: e.target.checked })} className="rounded" />
+                      60 дней — «Чувствуете ли уверенность?»
+                    </label>
+                    <label className="flex items-center gap-2 text-sm">
+                      <input type="checkbox" checked={feedback90} onChange={e => saveFeedbackSchedule({ d90: e.target.checked })} className="rounded" />
+                      90 дней — «Оправдались ли ожидания?»
+                    </label>
+                  </div>
+                )}
               </CardContent>
             </Card>
 

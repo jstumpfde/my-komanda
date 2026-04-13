@@ -190,10 +190,10 @@ export default function ProfileSettingsPage() {
     if (!newEmail.trim()) { toast.error("Введите новый email"); return }
     setEmailSubmitting(true)
     try {
-      const res = await fetch("/api/access-requests", {
+      const res = await fetch("/api/support/requests", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ requestType: "email_change", newValue: newEmail.trim(), message: emailReason.trim() || undefined }),
+        body: JSON.stringify({ type: "email_change", data: { newEmail: newEmail.trim(), reason: emailReason.trim() || undefined, currentEmail: displayEmail } }),
       })
       if (!res.ok) throw new Error()
       toast.success("Запрос отправлен")
@@ -266,9 +266,13 @@ export default function ProfileSettingsPage() {
                           <Mail className="w-3.5 h-3.5" />
                           {displayEmail}
                           {isOwner ? (
-                            <span className="ml-2 text-xs text-muted-foreground">
-                              Для смены email владельца обратитесь в поддержку
-                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setEmailChangeOpen(true)}
+                              className="ml-2 text-xs text-primary hover:underline cursor-pointer"
+                            >
+                              Запросить смену email
+                            </button>
                           ) : (
                             <button
                               type="button"
