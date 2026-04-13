@@ -13,6 +13,7 @@ import { toast } from "sonner"
 import { Loader2, User, Mail, Lock, Shield, Save, Eye, EyeOff, Camera, Trash2 } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
+import { useAuth } from "@/lib/auth"
 
 // ─── Helpers ──────────────────────────────────────────────────
 
@@ -43,6 +44,8 @@ interface UserProfile {
 
 export default function ProfileSettingsPage() {
   const { data: session, update: updateSession } = useSession()
+  const { role } = useAuth()
+  const isOwner = role === "director"
 
   // Profile state
   const [profile, setProfile] = useState<UserProfile | null>(null)
@@ -262,13 +265,19 @@ export default function ProfileSettingsPage() {
                         <p className="text-sm text-muted-foreground flex items-center gap-1.5 mt-0.5">
                           <Mail className="w-3.5 h-3.5" />
                           {displayEmail}
-                          <button
-                            type="button"
-                            onClick={() => setEmailChangeOpen(true)}
-                            className="ml-2 text-sm text-primary hover:underline cursor-pointer"
-                          >
-                            Изменить email
-                          </button>
+                          {isOwner ? (
+                            <span className="ml-2 text-xs text-muted-foreground">
+                              Для смены email владельца обратитесь в поддержку
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setEmailChangeOpen(true)}
+                              className="ml-2 text-sm text-primary hover:underline cursor-pointer"
+                            >
+                              Изменить email
+                            </button>
+                          )}
                         </p>
                         <div className="mt-2">
                           <Badge
