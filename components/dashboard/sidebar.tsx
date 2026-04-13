@@ -399,12 +399,12 @@ export function DashboardSidebar() {
       <SidebarHeader className="p-4 border-b border-sidebar-border">
         <div className="flex items-center gap-3">
           {companyLogo ? (
-            <div className="h-9 w-9 shrink-0 flex items-center justify-center rounded-lg bg-background border border-border/30 p-1 overflow-hidden">
+            <div className="h-9 w-9 shrink-0 flex items-center justify-center overflow-hidden">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={companyLogo}
                 alt=""
-                className="max-h-7 max-w-7 w-auto h-auto object-contain"
+                className="h-9 w-9 object-contain rounded-lg"
               />
             </div>
           ) : companyName ? (

@@ -1230,9 +1230,10 @@ export default function VacanciesPage() {
                     className="text-sm bg-[var(--input-bg)] border border-input resize-none"
                     readOnly={recording} />
                   <div className="space-y-1.5">
-                    <Label className="text-xs font-medium">Название вакансии <span className="text-muted-foreground font-normal">(необязательно)</span></Label>
-                    <Input value={newVacancyTitle} onChange={(e) => setNewVacancyTitle(e.target.value)} placeholder="Менеджер по продажам" className="h-10 border border-input" maxLength={50} />
+                    <Label className="text-xs font-medium">Название вакансии <span className="text-muted-foreground font-normal">(необязательно — AI определит из речи)</span></Label>
+                    <Input value={newVacancyTitle} onChange={(e) => setNewVacancyTitle(e.target.value)} placeholder="AI определит автоматически" className="h-10 border border-input" maxLength={50} />
                   </div>
+                  <p className="text-[11px] text-muted-foreground">Весь надиктованный текст пойдёт на AI-анализ. Название вакансии будет определено автоматически.</p>
                   <Button className="w-full h-10" onClick={handleCreateVacancy} disabled={creating || !voiceText.trim() || recording}>
                     {creating ? <Loader2 className="size-4 mr-1.5 animate-spin" /> : <Sparkles className="size-4 mr-1.5" />}
                     Создать с AI-заполнением
