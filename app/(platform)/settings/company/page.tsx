@@ -94,6 +94,84 @@ function pluralYears(n: number): string {
   return `${n} лет`
 }
 
+// ─── Validation helpers ─────────────────────────────────────
+
+function validatePhone(v: string): string {
+  if (!v) return ""
+  const digits = v.replace(/\D/g, "")
+  if (digits.length < 10) return "Минимум 10 цифр"
+  if (/[a-zA-Zа-яА-ЯёЁ]/.test(v)) return "Телефон не может содержать буквы"
+  if (!/^[0-9+() \-]+$/.test(v)) return "Допустимы только цифры, +, (, ), пробел, дефис"
+  return ""
+}
+
+function validateWebsite(v: string): string {
+  if (!v) return ""
+  // Allow Cyrillic for .рф domains
+  if (!/^[a-zA-Z0-9.\-/:а-яА-ЯёЁ]+$/.test(v)) return "Только латиница, цифры, точки, дефисы, слэши"
+  const normalized = v.replace(/^https?:\/\//, "")
+  if (!/\.[a-zA-Zа-яА-ЯёЁ]{2,}/.test(normalized)) return "Укажите домен с корректным окончанием (например .ru, .com)"
+  return ""
+}
+
+function validateEmail(v: string): string {
+  if (!v) return ""
+  if (!/^[a-zA-Z0-9._\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/.test(v)) return "Некорректный email (пример: info@company.ru)"
+  return ""
+}
+
+function validateInn(v: string): string {
+  if (!v) return ""
+  if (v.length !== 10 && v.length !== 12) return "ИНН должен содержать 10 или 12 цифр"
+  return ""
+}
+
+function validateKpp(v: string): string {
+  if (!v) return ""
+  if (v.length !== 9) return "КПП должен содержать ровно 9 цифр"
+  return ""
+}
+
+function validateOgrn(v: string): string {
+  if (!v) return ""
+  if (v.length !== 13 && v.length !== 15) return "ОГРН должен содержать 13 или 15 цифр"
+  return ""
+}
+
+function validatePostalIndex(v: string): string {
+  if (!v) return ""
+  if (v.length !== 6) return "Почтовый индекс должен содержать 6 цифр"
+  return ""
+}
+
+function validateRs(v: string): string {
+  if (!v) return ""
+  if (!/^\d*$/.test(v)) return "Только цифры"
+  if (v.length !== 20) return "Расчётный счёт — 20 цифр"
+  return ""
+}
+
+function validateKs(v: string): string {
+  if (!v) return ""
+  if (!/^\d*$/.test(v)) return "Только цифры"
+  if (v.length !== 20) return "Корр. счёт — 20 цифр"
+  return ""
+}
+
+function normalizeWebsite(v: string): string {
+  if (!v) return v
+  const trimmed = v.trim()
+  if (trimmed && !/^https?:\/\//i.test(trimmed)) return `https://${trimmed}`
+  return trimmed
+}
+
+// ─── FieldError component ───────────────────────────────────
+
+function FieldError({ error }: { error: string }) {
+  if (!error) return null
+  return <p className="text-xs text-red-500 mt-0.5">{error}</p>
+}
+
 // ─── Component ───────────────────────────────────────────────
 let _nextId = 2
 
@@ -109,6 +187,26 @@ export default function CompanyProfilePage() {
   const [description, setDescription] = useState(""); const [registrationDate, setRegistrationDate] = useState(""); const [employeeCount, setEmployeeCount] = useState("")
   const [industry, setIndustry] = useState(""); const [officeAddress, setOfficeAddress] = useState(""); const [weekSchedule, setWeekSchedule] = useState<DaySchedule[]>(DEFAULT_SCHEDULE); const [scheduleExpanded, setScheduleExpanded] = useState(false)
   const [saving, setSaving] = useState(false)
+
+  // ─── Validation errors (computed) ───────────────────────────
+  const errors = {
+    inn: validateInn(inn),
+    kpp: validateKpp(kpp),
+    ogrn: validateOgrn(ogrn),
+    phone: validatePhone(phone),
+    email: validateEmail(email),
+    website: validateWebsite(website),
+    postalIndex: validatePostalIndex(postalIndex),
+    accounts: accounts.map(a => ({
+      rs: validateRs(a.rs),
+      ks: validateKs(a.ks),
+    })),
+  }
+
+  const hasErrors = errors.inn !== "" || errors.kpp !== "" || errors.ogrn !== "" ||
+    errors.phone !== "" || errors.email !== "" || errors.website !== "" ||
+    errors.postalIndex !== "" ||
+    errors.accounts.some(a => a.rs !== "" || a.ks !== "")
 
   const saveFn = useCallback(async (payload: Record<string, unknown>) => {
     await patchCompanyApi(payload)
@@ -245,14 +343,15 @@ export default function CompanyProfilePage() {
               <div className="space-y-1">
                 <Label className="text-sm">ИНН</Label>
                 <div className="relative">
-                  <Input value={inn} onChange={e => setInn(e.target.value.replace(/\D/g, "").slice(0, 12))} onPaste={e => { e.preventDefault(); setInn(e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 12)) }} placeholder="Введите ИНН и нажмите Enter для автозаполнения" className={cn("font-mono pr-9", ph)} onKeyDown={e => { if (e.key === "Enter") handleSearch() }} />
+                  <Input value={inn} onChange={e => setInn(e.target.value.replace(/\D/g, "").slice(0, 12))} onPaste={e => { e.preventDefault(); setInn(e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 12)) }} placeholder="Введите ИНН и нажмите Enter для автозаполнения" className={cn("font-mono pr-9", ph, errors.inn && "border-red-400 focus-visible:ring-red-400")} onKeyDown={e => { if (e.key === "Enter") handleSearch() }} />
                   {searching
                     ? <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-muted-foreground" />
                     : <button type="button" onClick={handleSearch} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"><Search className="w-4 h-4" /></button>
                   }
                 </div>
+                <FieldError error={errors.inn} />
               </div>
-              <div className="space-y-1"><Label className="text-sm">КПП</Label><Input value={kpp} {...field("kpp", setKpp)} placeholder="770701001" className={cn("font-mono", ph)} /></div>
+              <div className="space-y-1"><Label className="text-sm">КПП</Label><Input value={kpp} onChange={e => { const v = e.target.value.replace(/\D/g, "").slice(0, 9); setKpp(v); autoSave("kpp", v) }} onBlur={() => saveNow("kpp", kpp)} placeholder="770701001" className={cn("font-mono", ph, errors.kpp && "border-red-400 focus-visible:ring-red-400")} maxLength={9} /><FieldError error={errors.kpp} /></div>
               <div className="space-y-1 relative" ref={nameContainerRef}>
                 <Label className="text-sm">Краткое название</Label>
                 <Input value={shortName} onChange={e => handleShortNameChange(e.target.value)} placeholder='ООО «Ромашка»' autoComplete="off" className={ph} />
@@ -263,7 +362,7 @@ export default function CompanyProfilePage() {
                 )}
               </div>
               <div className="space-y-1"><Label className="text-sm">Полное название</Label><Input value={fullName} {...field("full_name", setFullName)} placeholder='ООО «РОМАШКА»' className={ph} /></div>
-              <div className="space-y-1"><Label className="text-sm">ОГРН</Label><Input value={ogrn} {...field("ogrn", setOgrn)} placeholder="1037707049388" className={cn("font-mono", ph)} /></div>
+              <div className="space-y-1"><Label className="text-sm">ОГРН</Label><Input value={ogrn} onChange={e => { const v = e.target.value.replace(/\D/g, "").slice(0, 15); setOgrn(v); autoSave("ogrn", v) }} onBlur={() => saveNow("ogrn", ogrn)} placeholder="1037707049388" className={cn("font-mono", ph, errors.ogrn && "border-red-400 focus-visible:ring-red-400")} maxLength={15} /><FieldError error={errors.ogrn} /></div>
               <div className="space-y-1"><Label className="text-sm">Руководитель</Label><Input value={director} {...field("director", setDirector)} placeholder="Иванов А.С." className={ph} /></div>
               <div className="space-y-1 sm:col-span-2"><Label className="text-sm">Юридический адрес</Label><Input value={legalAddress} {...field("legal_address", setLegalAddress)} placeholder="125009, г. Москва, ул. Тверская, д. 1" className={ph} /></div>
               <div className="space-y-1 sm:col-span-2">
@@ -274,11 +373,11 @@ export default function CompanyProfilePage() {
                 </div>
                 <Input value={postalSameAsLegal ? legalAddress : postalAddress} onChange={e => !postalSameAsLegal && setPostalAddress(e.target.value)} readOnly={postalSameAsLegal} className={cn(postalSameAsLegal && "bg-muted/50 text-muted-foreground cursor-default select-none", ph)} placeholder="125009, г. Москва, ул. Тверская, д. 1" />
               </div>
-              <div className="space-y-1"><Label className="text-sm">Почтовый индекс</Label><Input value={postalIndex} onChange={e => { const v = e.target.value.replace(/\D/g, "").slice(0, 6); setPostalIndex(v); autoSave("postal_code", v) }} onBlur={() => saveNow("postal_code", postalIndex)} placeholder="125009" className={cn("font-mono", ph)} maxLength={6} /></div>
+              <div className="space-y-1"><Label className="text-sm">Почтовый индекс</Label><Input value={postalIndex} onChange={e => { const v = e.target.value.replace(/\D/g, "").slice(0, 6); setPostalIndex(v); autoSave("postal_code", v) }} onBlur={() => saveNow("postal_code", postalIndex)} placeholder="125009" className={cn("font-mono", ph, errors.postalIndex && "border-red-400 focus-visible:ring-red-400")} maxLength={6} /><FieldError error={errors.postalIndex} /></div>
               <div className="space-y-1"><Label className="text-sm flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5 text-muted-foreground" /> Город</Label><Input value={postalCity} {...field("city", setPostalCity)} placeholder="Москва" className={ph} /></div>
-              <div className="space-y-1"><Label className="text-sm flex items-center gap-1.5"><Mail className="w-3.5 h-3.5 text-muted-foreground" /> Email</Label><Input type="email" value={email} {...field("email", setEmail)} placeholder="hr@romashka.ru" className={ph} /></div>
-              <div className="space-y-1"><Label className="text-sm flex items-center gap-1.5"><Phone className="w-3.5 h-3.5 text-muted-foreground" /> Телефон</Label><Input value={phone} {...field("phone", setPhone)} placeholder="+7 (495) 123-45-67" className={ph} /></div>
-              <div className="space-y-1"><Label className="text-sm flex items-center gap-1.5"><Globe className="w-3.5 h-3.5 text-muted-foreground" /> Сайт</Label><Input value={website} {...field("website", setWebsite)} placeholder="https://romashka.ru" className={ph} /></div>
+              <div className="space-y-1"><Label className="text-sm flex items-center gap-1.5"><Mail className="w-3.5 h-3.5 text-muted-foreground" /> Email</Label><Input type="email" value={email} {...field("email", setEmail)} placeholder="info@company.ru" className={cn(ph, errors.email && "border-red-400 focus-visible:ring-red-400")} /><FieldError error={errors.email} /></div>
+              <div className="space-y-1"><Label className="text-sm flex items-center gap-1.5"><Phone className="w-3.5 h-3.5 text-muted-foreground" /> Телефон</Label><Input value={phone} {...field("phone", setPhone)} placeholder="+7 (999) 123-45-67" className={cn(ph, errors.phone && "border-red-400 focus-visible:ring-red-400")} /><FieldError error={errors.phone} /></div>
+              <div className="space-y-1"><Label className="text-sm flex items-center gap-1.5"><Globe className="w-3.5 h-3.5 text-muted-foreground" /> Сайт</Label><Input value={website} onChange={e => { setWebsite(e.target.value); autoSave("website", e.target.value) }} onBlur={() => { const normalized = normalizeWebsite(website); setWebsite(normalized); saveNow("website", normalized) }} placeholder="company24.pro" className={cn(ph, errors.website && "border-red-400 focus-visible:ring-red-400")} /><FieldError error={errors.website} /></div>
             </div>
           </CardContent>
         </Card>
@@ -324,12 +423,14 @@ export default function CompanyProfilePage() {
                   {/* Корр. счёт */}
                   <div className="space-y-1">
                     <Label className="text-xs text-muted-foreground">Корр. счёт</Label>
-                    <Input value={account.ks} onChange={e => updateAccount({ ...account, ks: e.target.value })} placeholder="30101810400000000225" className={cn("h-9 text-sm font-mono", ph)} />
+                    <Input value={account.ks} onChange={e => updateAccount({ ...account, ks: e.target.value.replace(/\D/g, "").slice(0, 20) })} placeholder="30101810400000000225" className={cn("h-9 text-sm font-mono", ph, errors.accounts[accounts.indexOf(account)]?.ks && "border-red-400 focus-visible:ring-red-400")} maxLength={20} />
+                    <FieldError error={errors.accounts[accounts.indexOf(account)]?.ks ?? ""} />
                   </div>
                   {/* Расчётный счёт */}
                   <div className="space-y-1">
                     <Label className="text-xs text-muted-foreground">Расчётный счёт</Label>
-                    <Input value={account.rs} onChange={e => updateAccount({ ...account, rs: e.target.value })} placeholder="40702810100000012345" className={cn("h-9 text-sm font-mono", ph)} />
+                    <Input value={account.rs} onChange={e => updateAccount({ ...account, rs: e.target.value.replace(/\D/g, "").slice(0, 20) })} placeholder="40702810100000012345" className={cn("h-9 text-sm font-mono", ph, errors.accounts[accounts.indexOf(account)]?.rs && "border-red-400 focus-visible:ring-red-400")} maxLength={20} />
+                    <FieldError error={errors.accounts[accounts.indexOf(account)]?.rs ?? ""} />
                   </div>
                 </div>
               </div>
@@ -342,7 +443,7 @@ export default function CompanyProfilePage() {
 
         {/* ═══ Сохранить ══════════════════════════════════ */}
         <div className="flex justify-end pb-4">
-          <Button size="lg" className="gap-2" onClick={handleSave} disabled={saving}>
+          <Button size="lg" className="gap-2" onClick={handleSave} disabled={saving || hasErrors}>
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
             {saving ? "Сохранение..." : "Сохранить профиль"}
           </Button>
