@@ -1479,6 +1479,18 @@ export const aiAuditLog = pgTable("ai_audit_log", {
   createdAt:      timestamp("created_at").defaultNow(),
 })
 
+// ─── Comparison Links ─────────────────────────────────────────────────────────
+
+export const comparisonLinks = pgTable("comparison_links", {
+  id:        uuid("id").primaryKey().defaultRandom(),
+  tenantId:  uuid("tenant_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  token:     text("token").unique().notNull(),
+  password:  text("password").notNull(),
+  data:      jsonb("data").notNull(), // comparison result JSON
+  expiresAt: timestamp("expires_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+})
+
 // ─── Support Requests ────────────────────────────────────────────────────────
 
 export const supportRequests = pgTable("support_requests", {

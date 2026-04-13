@@ -196,6 +196,34 @@ export default function HiringSettingsPage() {
     toast.success("Настройки хранения данных сохранены")
   }
 
+  // ── Webhooks ──
+  const [webhookUrl, setWebhookUrl] = useState("")
+  const [webhookEvents, setWebhookEvents] = useState<Record<string, boolean>>({ new_candidate: false, ai_screening: false, stage_change: false, offer: false, reject: false })
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("mk_hr_webhooks")
+      if (saved) { const p = JSON.parse(saved); setWebhookUrl(p.url || ""); setWebhookEvents(p.events || {}) }
+    } catch {}
+  }, [])
+  const saveWebhooks = () => {
+    localStorage.setItem("mk_hr_webhooks", JSON.stringify({ url: webhookUrl, events: webhookEvents }))
+    toast.success("Настройки webhook сохранены")
+  }
+
+  // ── Bitrix24 ──
+  const [bitrixUrl, setBitrixUrl] = useState("")
+  const [bitrixTrigger, setBitrixTrigger] = useState("offer")
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("mk_hr_bitrix_integration")
+      if (saved) { const p = JSON.parse(saved); setBitrixUrl(p.url || ""); setBitrixTrigger(p.trigger || "offer") }
+    } catch {}
+  }, [])
+  const saveBitrix = () => {
+    localStorage.setItem("mk_hr_bitrix_integration", JSON.stringify({ url: bitrixUrl, trigger: bitrixTrigger }))
+    toast.success("Интеграция с Битрикс24 сохранена")
+  }
+
   // ── Funnel state ──
   const [selectedScenario, setSelectedScenario] = useState("standard")
   const [autoDemo, setAutoDemo] = useState(true)
@@ -383,6 +411,59 @@ export default function HiringSettingsPage() {
                     <SelectItem value="never">Не удалять</SelectItem>
                   </SelectContent>
                 </Select>
+              </CardContent>
+            </Card>
+
+            {/* Webhooks */}
+            <Card className="mb-5 max-w-3xl">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-medium">Webhooks</CardTitle>
+                <CardDescription>Отправлять события в внешние системы</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">URL для отправки</Label>
+                  <Input value={webhookUrl} onChange={e => setWebhookUrl(e.target.value)} placeholder="https://example.com/webhook" className="h-9 text-sm" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">События</Label>
+                  <div className="flex flex-wrap gap-x-4 gap-y-1">
+                    {[["new_candidate", "Новый кандидат"], ["ai_screening", "AI-скрининг"], ["stage_change", "Смена этапа"], ["offer", "Оффер"], ["reject", "Отказ"]].map(([key, label]) => (
+                      <label key={key} className="flex items-center gap-1.5 text-sm">
+                        <input type="checkbox" checked={webhookEvents[key] || false}
+                          onChange={e => setWebhookEvents(prev => ({ ...prev, [key]: e.target.checked }))} className="rounded" />
+                        {label}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <Button size="sm" className="h-8 text-xs" onClick={saveWebhooks}>Сохранить</Button>
+              </CardContent>
+            </Card>
+
+            {/* Bitrix24 */}
+            <Card className="mb-5 max-w-3xl">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-medium">Интеграция с Битрикс24</CardTitle>
+                <CardDescription>Отправлять кандидатов в CRM Битрикс24</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Webhook URL Битрикс24</Label>
+                  <Input value={bitrixUrl} onChange={e => setBitrixUrl(e.target.value)} placeholder="https://your-domain.bitrix24.ru/rest/1/..." className="h-9 text-sm" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Когда отправлять</Label>
+                  <Select value={bitrixTrigger} onValueChange={setBitrixTrigger}>
+                    <SelectTrigger className="w-[250px] h-9"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Все кандидаты</SelectItem>
+                      <SelectItem value="qualified">Только подходящие (AI 70+)</SelectItem>
+                      <SelectItem value="offer">Только на этапе оффера</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button size="sm" className="h-8 text-xs" onClick={saveBitrix}>Сохранить</Button>
               </CardContent>
             </Card>
 
