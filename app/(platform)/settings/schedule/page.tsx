@@ -258,13 +258,13 @@ export default function CompanySchedulePage() {
     : `${individualSchedules.length} ${individualSchedules.length === 1 ? "сотрудник" : individualSchedules.length < 5 ? "сотрудника" : "сотрудников"} с индивидуальным графиком`
 
   return (
-    <div className="max-w-4xl">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-5">
+    <div className="max-w-3xl">
+      <div className="flex flex-col gap-4 mb-5">
         <div>
           <h1 className="text-xl font-semibold text-foreground mb-0.5">Расписание компании</h1>
           <p className="text-sm text-muted-foreground">График работы, перерывы, выходные и отпуска</p>
         </div>
-        <div className="flex items-center gap-3 shrink-0">
+        <div className="flex flex-wrap items-center gap-3">
           <Select value={country} onValueChange={(v) => setCountry(v as CountryCode)}>
             <SelectTrigger className="w-44 h-9 text-sm bg-[var(--input-bg)]"><SelectValue /></SelectTrigger>
             <SelectContent>
@@ -274,9 +274,9 @@ export default function CompanySchedulePage() {
             </SelectContent>
           </Select>
           <div className="flex items-center gap-2">
-            <Globe className="size-4 text-muted-foreground" />
+            <Globe className="size-4 text-muted-foreground shrink-0" />
             <Select value={timezone} onValueChange={setTimezone}>
-              <SelectTrigger className="w-64 h-9 text-sm bg-[var(--input-bg)]"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-56 h-9 text-sm bg-[var(--input-bg)]"><SelectValue /></SelectTrigger>
               <SelectContent>{TIMEZONES.map((tz) => <SelectItem key={tz.value} value={tz.value}>{tz.label}</SelectItem>)}</SelectContent>
             </Select>
           </div>

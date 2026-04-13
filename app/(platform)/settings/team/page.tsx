@@ -338,17 +338,16 @@ export default function TeamPage() {
       </Card>
 
       {/* Таблица участников */}
-      <Card className="mb-8">
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full table-fixed">
+      <div className="rounded-xl border border-border shadow-sm bg-card mb-8">
+        <div className="overflow-x-auto">
+            <table className="w-full">
               <thead>
                 <tr className="bg-muted/50 border-b border-border/50">
-                  <th className="text-left uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-3 min-w-[200px]">Участник</th>
-                  <th className="text-left uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-3 w-[160px]">Роль</th>
-                  <th className="text-left uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-3 w-[220px]">Email</th>
-                  <th className="text-center uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-3 w-[100px]">Статус</th>
-                  <th className="text-center uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-3 w-[60px]"></th>
+                  <th className="text-left text-[10px] uppercase font-medium text-muted-foreground tracking-wider px-5 py-3">Участник</th>
+                  <th className="text-left text-[10px] uppercase font-medium text-muted-foreground tracking-wider px-3 py-3 w-[140px]">Роль</th>
+                  <th className="text-left text-[10px] uppercase font-medium text-muted-foreground tracking-wider px-3 py-3">Email</th>
+                  <th className="text-center text-[10px] uppercase font-medium text-muted-foreground tracking-wider px-3 py-3 w-[100px]">Статус</th>
+                  <th className="text-center text-[10px] uppercase font-medium text-muted-foreground tracking-wider px-3 py-3 w-[50px]"></th>
                 </tr>
               </thead>
               <tbody>
@@ -379,9 +378,8 @@ export default function TeamPage() {
                 })}
               </tbody>
             </table>
-          </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       {/* ═══ Диалог ссылок-приглашений ══════════════════════════════ */}
       <Dialog open={linkDialogOpen} onOpenChange={setLinkDialogOpen}>
@@ -693,7 +691,7 @@ function MemberRow({
         )}
         onClick={onToggle}
       >
-        <td className="px-4 py-2.5">
+        <td className="px-5 py-3">
           <div className="flex items-center gap-3">
             <Avatar className="w-8 h-8 shrink-0">
               {member.avatarUrl && (
@@ -706,7 +704,7 @@ function MemberRow({
             <span className="text-sm font-medium text-foreground truncate">{member.name}</span>
           </div>
         </td>
-        <td className="px-4 py-2.5">
+        <td className="px-3 py-3">
           <span className={cn(
             "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border-transparent whitespace-nowrap",
             roleCfg.color
@@ -714,8 +712,8 @@ function MemberRow({
             {roleCfg.label}
           </span>
         </td>
-        <td className="px-4 py-2.5 text-sm text-muted-foreground truncate">{member.email}</td>
-        <td className="text-center px-4 py-2.5">
+        <td className="px-3 py-3 text-sm text-muted-foreground truncate">{member.email}</td>
+        <td className="text-center px-3 py-3">
           <span className="inline-flex items-center gap-1.5 text-xs">
             <span className={cn(
               "w-2 h-2 rounded-full shrink-0",
@@ -741,7 +739,7 @@ function MemberRow({
             </span>
           </span>
         </td>
-        <td className="text-center px-4 py-2.5">
+        <td className="text-center px-3 py-3">
           <Button
             variant="ghost"
             size="icon"

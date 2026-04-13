@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -12,35 +13,24 @@ import { Globe, Save, Loader2, CheckCircle2, XCircle, RefreshCw, Copy, AlertCirc
 import { saveBrand, canCustomizeBrand, type BrandConfig } from "@/lib/branding"
 import { fetchCompanyApi, updateCompanyApi } from "@/lib/company-storage"
 import { CompanyLogo } from "@/components/company-logo"
+import { useTheme } from "next-themes"
 
-interface ThemeColors { primary: string; background: string; foreground: string; sidebar: string; accent: string }
-
-const THEME_PRESETS: Record<string, { label: string; emoji: string; colors: ThemeColors }> = {
-  light: { label: "Светлая", emoji: "☀️", colors: { primary: "#6366f1", background: "#ffffff", foreground: "#0f172a", sidebar: "#1e1b4b", accent: "#818cf8" } },
-  dark:  { label: "Тёмная",  emoji: "🌙", colors: { primary: "#818cf8", background: "#0f172a", foreground: "#f8fafc", sidebar: "#1e1b4b", accent: "#6366f1" } },
-  warm:  { label: "Тёплая",  emoji: "🎨", colors: { primary: "#d97706", background: "#fffbeb", foreground: "#1c1917", sidebar: "#292524", accent: "#f59e0b" } },
+const THEME_PRESETS: Record<string, { label: string; emoji: string }> = {
+  light: { label: "Светлая", emoji: "☀️" },
+  dark:  { label: "Тёмная",  emoji: "🌙" },
+  warm:  { label: "Тёплая",  emoji: "🎨" },
 }
 
 const THEME_KEYS = ["light", "dark", "warm"] as const
 
-function applyThemeColors(colors: ThemeColors) {
-  const root = document.documentElement
-  root.style.setProperty("--primary", colors.primary)
-  root.style.setProperty("--background", colors.background)
-  root.style.setProperty("--foreground", colors.foreground)
-  root.style.setProperty("--sidebar-background", colors.sidebar)
-  root.style.setProperty("--accent", colors.accent)
-}
-
 export default function BrandingPage() {
+  const { setTheme: applyTheme, theme: currentTheme } = useTheme()
   const [brandPlan] = useState<BrandConfig["plan"]>("business")
   const canBrand = canCustomizeBrand(brandPlan)
   const [logoPreview, setLogoPreview] = useState<string | null>(null)
   const [uploadingLogo, setUploadingLogo] = useState(false)
   const [brandName, setBrandName] = useState("")
   const [brandSlogan, setBrandSlogan] = useState("")
-  const [subdomain, setSubdomain] = useState("")
-  const [subdomainStatus, setSubdomainStatus] = useState<"idle" | "checking" | "available" | "taken" | "invalid">("idle")
   const [customDomain, setCustomDomain] = useState("")
   const [domainStatus, setDomainStatus] = useState<"idle" | "checking" | "verified" | "error">("idle")
   const [verifying, setVerifying] = useState(false)
@@ -50,7 +40,6 @@ export default function BrandingPage() {
     Object.fromEntries(THEME_KEYS.map(k => [k, true]))
   )
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const loadCompany = useCallback(async () => {
     try {
@@ -71,7 +60,7 @@ export default function BrandingPage() {
       setBrandName(brandNameVal)
       setBrandSlogan(brandSloganVal)
       if (logoUrlVal) setLogoPreview(logoUrlVal)
-      if (c.subdomain) setSubdomain(c.subdomain as string)
+      // subdomain: пока не используется (планируется позже)
       if (customThemeVal) {
         setThemeEnabled(prev => {
           const next = { ...prev }
@@ -89,36 +78,6 @@ export default function BrandingPage() {
   useEffect(() => {
     void loadCompany()
   }, [loadCompany])
-
-  // Debounced subdomain check
-  const checkSubdomain = useCallback((value: string) => {
-    if (debounceRef.current) clearTimeout(debounceRef.current)
-    const clean = value.trim().toLowerCase().replace(/[^a-z0-9-]/g, "")
-    if (clean.length < 3) {
-      setSubdomainStatus(clean.length > 0 ? "invalid" : "idle")
-      return
-    }
-    setSubdomainStatus("checking")
-    debounceRef.current = setTimeout(async () => {
-      try {
-        const res = await fetch(`/api/branding/check-subdomain?subdomain=${encodeURIComponent(clean)}`)
-        const data = await res.json()
-        if (data.error) {
-          setSubdomainStatus("invalid")
-        } else {
-          setSubdomainStatus(data.available ? "available" : "taken")
-        }
-      } catch {
-        setSubdomainStatus("idle")
-      }
-    }, 500)
-  }, [])
-
-  const handleSubdomainChange = (value: string) => {
-    const clean = value.toLowerCase().replace(/[^a-z0-9-]/g, "")
-    setSubdomain(clean)
-    checkSubdomain(clean)
-  }
 
   const uploadLogoFile = async (file: File) => {
     if (file.size > 2 * 1024 * 1024) { toast.error("Максимум 2 МБ"); return }
@@ -173,7 +132,7 @@ export default function BrandingPage() {
   }
 
   const selectTheme = (key: string) => {
-    applyThemeColors(THEME_PRESETS[key].colors)
+    applyTheme(key)
     toast.success(`Тема «${THEME_PRESETS[key].label}» применена`)
   }
 
@@ -210,15 +169,13 @@ export default function BrandingPage() {
   const handleSave = async () => {
     setSaving(true)
     try {
-      const clean = subdomain.trim().toLowerCase().replace(/[^a-z0-9-]/g, "").replace(/^-+|-+$/g, "")
       const customTheme = Object.fromEntries(
-        THEME_KEYS.map(k => [k, { enabled: themeEnabled[k], colors: THEME_PRESETS[k].colors }])
+        THEME_KEYS.map(k => [k, { enabled: themeEnabled[k] }])
       )
       await updateCompanyApi({
         logo_url: logoPreview ?? "",
         brand_name: brandName,
         brand_slogan: brandSlogan,
-        subdomain: clean || undefined,
         custom_theme: customTheme as Record<string, unknown>,
       })
       saveBrand({ logoUrl: logoPreview, companyName: brandName })
@@ -363,19 +320,48 @@ export default function BrandingPage() {
                     {/* Mini preview */}
                     <button
                       type="button"
-                      className="w-full rounded-lg overflow-hidden flex h-[80px] mb-3 border cursor-pointer hover:ring-2 hover:ring-primary/30 transition-all"
+                      className={cn(
+                        "w-full rounded-lg overflow-hidden flex h-[80px] mb-3 border cursor-pointer hover:ring-2 hover:ring-primary/30 transition-all",
+                        currentTheme === key && "ring-2 ring-primary"
+                      )}
                       onClick={() => enabled && selectTheme(key)}
                       disabled={!enabled}
                     >
-                      <div className="w-8 shrink-0 flex flex-col items-center gap-1 py-2" style={{ background: preset.colors.sidebar }}>
-                        {[1,2,3].map(i => <div key={i} className="w-5 h-5 rounded" style={{ background: i === 1 ? preset.colors.accent : preset.colors.accent + "30" }} />)}
+                      <div className={cn("w-8 shrink-0 flex flex-col items-center gap-1 py-2", {
+                        "bg-[#1a1647]": key === "light",
+                        "bg-[#1a1040]": key === "dark",
+                        "bg-[#292524]": key === "warm",
+                      })}>
+                        {[1,2,3].map(i => <div key={i} className={cn("w-5 h-5 rounded", {
+                          "bg-[#818cf8]": key === "light" && i === 1, "bg-[#818cf830]": key === "light" && i !== 1,
+                          "bg-[#6366f1]": key === "dark" && i === 1,  "bg-[#6366f130]": key === "dark" && i !== 1,
+                          "bg-[#f59e0b]": key === "warm" && i === 1,  "bg-[#f59e0b30]": key === "warm" && i !== 1,
+                        })} />)}
                       </div>
-                      <div className="flex-1 p-2 space-y-1" style={{ background: preset.colors.background }}>
-                        <div className="h-2.5 rounded w-12" style={{ background: preset.colors.foreground + "20" }} />
-                        <div className="h-2 rounded w-16" style={{ background: preset.colors.foreground + "10" }} />
+                      <div className={cn("flex-1 p-2 space-y-1", {
+                        "bg-white": key === "light",
+                        "bg-[#0f172a]": key === "dark",
+                        "bg-[#fffbeb]": key === "warm",
+                      })}>
+                        <div className={cn("h-2.5 rounded w-12", {
+                          "bg-gray-200": key === "light",
+                          "bg-slate-700": key === "dark",
+                          "bg-amber-200": key === "warm",
+                        })} />
+                        <div className={cn("h-2 rounded w-16", {
+                          "bg-gray-100": key === "light",
+                          "bg-slate-800": key === "dark",
+                          "bg-amber-100": key === "warm",
+                        })} />
                         <div className="flex gap-1 mt-1">
-                          <div className="h-4 w-10 rounded" style={{ background: preset.colors.primary }} />
-                          <div className="h-4 w-8 rounded border" style={{ borderColor: preset.colors.primary + "50" }} />
+                          <div className={cn("h-4 w-10 rounded", {
+                            "bg-[#6366f1]": key === "light" || key === "dark",
+                            "bg-[#d97706]": key === "warm",
+                          })} />
+                          <div className={cn("h-4 w-8 rounded border", {
+                            "border-[#6366f180]": key === "light" || key === "dark",
+                            "border-[#d9770680]": key === "warm",
+                          })} />
                         </div>
                       </div>
                     </button>
@@ -398,9 +384,13 @@ export default function BrandingPage() {
         </Card>
 
         {/* ═══ Поддомен ═══ */}
-        <Card>
+        <Card className="opacity-70">
           <CardHeader className="pb-2 pt-4 px-5">
-            <CardTitle className="text-base flex items-center gap-2"><Link2 className="w-4 h-4" />Поддомен компании</CardTitle>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Link2 className="w-4 h-4" />
+              Поддомен компании
+              <Badge variant="secondary" className="text-[10px] ml-1">Скоро</Badge>
+            </CardTitle>
           </CardHeader>
           <CardContent className="px-5 pb-4 pt-0 space-y-3">
             <p className="text-sm text-muted-foreground">
@@ -409,38 +399,16 @@ export default function BrandingPage() {
             <div className="flex gap-2 items-center">
               <div className="flex-1 flex items-center max-w-lg">
                 <Input
-                  value={subdomain}
-                  onChange={e => handleSubdomainChange(e.target.value)}
+                  disabled
                   placeholder="mycompany"
-                  className={cn(
-                    "h-9 font-mono text-sm rounded-r-none border-r-0",
-                    subdomainStatus === "available" && "border-emerald-500 focus-visible:ring-emerald-500",
-                    subdomainStatus === "taken" && "border-destructive focus-visible:ring-destructive",
-                    subdomainStatus === "invalid" && "border-orange-500 focus-visible:ring-orange-500",
-                  )}
+                  className="h-9 font-mono text-sm rounded-r-none border-r-0"
                 />
                 <span className="h-9 px-3 flex items-center text-sm text-muted-foreground bg-muted border border-l-0 rounded-r-lg shrink-0 font-mono">
                   .company24.pro
                 </span>
               </div>
-              {subdomainStatus === "checking" && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
-              {subdomainStatus === "available" && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
-              {subdomainStatus === "taken" && <XCircle className="w-4 h-4 text-destructive" />}
             </div>
-            {subdomainStatus === "available" && (
-              <p className="text-xs text-emerald-600">Поддомен свободен</p>
-            )}
-            {subdomainStatus === "taken" && (
-              <p className="text-xs text-destructive">Поддомен уже занят</p>
-            )}
-            {subdomainStatus === "invalid" && (
-              <p className="text-xs text-orange-600">Минимум 3 символа, только латиница, цифры и дефис</p>
-            )}
-            {subdomain && subdomainStatus !== "invalid" && (
-              <p className="text-xs text-muted-foreground">
-                Итого: <span className="font-mono text-foreground">{subdomain}.company24.pro</span>
-              </p>
-            )}
+            <p className="text-xs text-muted-foreground">Функция находится в разработке</p>
           </CardContent>
         </Card>
 
