@@ -81,12 +81,25 @@ interface DesiredParam {
   custom?: boolean
 }
 
+interface AttachmentAnalysis {
+  type: string
+  relevance: "high" | "medium" | "low"
+  summary: string
+  extractedData: {
+    responsibilities: string
+    requirements: string
+    conditions: string[]
+  }
+}
+
 interface Attachment {
   name: string
   url: string
   size: number
   type: string
   uploadedAt: string
+  analysis?: AttachmentAnalysis
+  analyzing?: boolean
 }
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -1068,11 +1081,42 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
   const [attachDragOver, setAttachDragOver] = useState(false)
   const attachInputRef = useRef<HTMLInputElement>(null)
 
+  // Analyze a single attachment via AI
+  const analyzeAttachment = useCallback(async (attachment: Attachment, originalFile: File) => {
+    // Mark as analyzing
+    setAttachments(prev => prev.map(a => a.url === attachment.url ? { ...a, analyzing: true } : a))
+
+    try {
+      // Parse file text
+      const parseForm = new FormData()
+      parseForm.append("file", originalFile)
+      const parseRes = await fetch("/api/core/parse-file", { method: "POST", body: parseForm })
+      if (!parseRes.ok) return // silently skip analysis for unsupported files
+
+      const parseData = (await parseRes.json()) as { text?: string }
+      const text = parseData.text?.trim()
+      if (!text || text.length < 30) return
+
+      // AI analyze
+      const aiRes = await fetch("/api/ai/analyze-attachment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: text.slice(0, 3000), vacancyTitle: data.vacancyTitle }),
+      })
+      if (!aiRes.ok) return
+
+      const analysis = (await aiRes.json()) as AttachmentAnalysis
+      setAttachments(prev => prev.map(a => a.url === attachment.url ? { ...a, analysis, analyzing: false } : a))
+    } catch {
+      setAttachments(prev => prev.map(a => a.url === attachment.url ? { ...a, analyzing: false } : a))
+    }
+  }, [data.vacancyTitle])
+
   const handleAttachUpload = useCallback(async (files: FileList | File[]) => {
     const fileArr = Array.from(files)
     if (fileArr.length === 0) return
     setAttachUploading(true)
-    const newAttachments: Attachment[] = []
+    const uploaded: { attachment: Attachment; file: File }[] = []
     for (const file of fileArr) {
       if (file.size > 20 * 1024 * 1024) {
         toast.error(`${file.name}: слишком большой (макс 20 МБ)`)
@@ -1082,22 +1126,55 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
         const formData = new FormData()
         formData.append("file", file)
         const res = await fetch("/api/upload/vacancy-attachment", { method: "POST", body: formData })
-        const data = (await res.json()) as Attachment & { error?: string }
-        if (!res.ok) throw new Error(data.error || "Ошибка загрузки")
-        newAttachments.push({ name: data.name, url: data.url, size: data.size, type: data.type, uploadedAt: data.uploadedAt })
+        const resData = (await res.json()) as Attachment & { error?: string }
+        if (!res.ok) throw new Error(resData.error || "Ошибка загрузки")
+        const attachment: Attachment = { name: resData.name, url: resData.url, size: resData.size, type: resData.type, uploadedAt: resData.uploadedAt, analyzing: true }
+        uploaded.push({ attachment, file })
       } catch (err) {
         toast.error(`${file.name}: ${err instanceof Error ? err.message : "ошибка"}`)
       }
     }
-    if (newAttachments.length > 0) {
-      setAttachments(prev => [...prev, ...newAttachments])
-      toast.success(`Загружено файлов: ${newAttachments.length}`)
+    if (uploaded.length > 0) {
+      setAttachments(prev => [...prev, ...uploaded.map(u => u.attachment)])
+      toast.success(`Загружено файлов: ${uploaded.length}`)
+      // Trigger AI analysis for parseable files (not images)
+      for (const { attachment, file } of uploaded) {
+        const ext = file.name.split(".").pop()?.toLowerCase() || ""
+        if (["pdf", "doc", "docx", "txt"].includes(ext)) {
+          analyzeAttachment(attachment, file)
+        } else {
+          setAttachments(prev => prev.map(a => a.url === attachment.url ? { ...a, analyzing: false } : a))
+        }
+      }
     }
     setAttachUploading(false)
-  }, [])
+  }, [analyzeAttachment])
 
   const removeAttachment = useCallback((url: string) => {
     setAttachments(prev => prev.filter(a => a.url !== url))
+  }, [])
+
+  const applyExtractedData = useCallback((analysis: AttachmentAnalysis) => {
+    setData(prev => {
+      const next = { ...prev }
+      if (analysis.extractedData.responsibilities) {
+        next.responsibilities = prev.responsibilities
+          ? `${prev.responsibilities}\n${analysis.extractedData.responsibilities}`
+          : analysis.extractedData.responsibilities
+      }
+      if (analysis.extractedData.requirements) {
+        next.requirements = prev.requirements
+          ? `${prev.requirements}\n${analysis.extractedData.requirements}`
+          : analysis.extractedData.requirements
+      }
+      if (analysis.extractedData.conditions.length > 0) {
+        const existing = new Set([...prev.conditions, ...prev.conditionsCustom])
+        const newConds = analysis.extractedData.conditions.filter(c => !existing.has(c))
+        next.conditionsCustom = [...prev.conditionsCustom, ...newConds]
+      }
+      return next
+    })
+    toast.success("Данные из документа добавлены в анкету")
   }, [])
 
   // Save attachments with autosave
@@ -1468,24 +1545,44 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
           onChange={e => { if (e.target.files?.length) handleAttachUpload(e.target.files); e.target.value = "" }} />
 
         {attachments.length > 0 && (
-          <div className="space-y-1.5">
+          <div className="space-y-2">
             {attachments.map(a => {
               const ext = a.name.split(".").pop()?.toLowerCase() || ""
               const isImage = ["jpg", "jpeg", "png", "webp"].includes(ext)
               const isSpreadsheet = ["xlsx", "xls"].includes(ext)
               const IconComp = isImage ? FileImage : isSpreadsheet ? FileSpreadsheet : File
               const sizeStr = a.size < 1024 ? `${a.size} Б` : a.size < 1024 * 1024 ? `${(a.size / 1024).toFixed(0)} КБ` : `${(a.size / (1024 * 1024)).toFixed(1)} МБ`
+              const hasData = a.analysis?.extractedData && (a.analysis.extractedData.responsibilities || a.analysis.extractedData.requirements || a.analysis.extractedData.conditions.length > 0)
+              const relevanceColor = a.analysis?.relevance === "high" ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400" : a.analysis?.relevance === "low" ? "bg-red-100 text-red-700 dark:bg-red-950/30 dark:text-red-400" : "bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400"
               return (
-                <div key={a.url} className="flex items-center gap-2 px-3 py-2 rounded-lg border bg-muted/30">
-                  <IconComp className="w-4 h-4 text-muted-foreground shrink-0" />
-                  <span className="text-sm flex-1 truncate">{a.name}</span>
-                  <span className="text-xs text-muted-foreground shrink-0">{sizeStr}</span>
-                  <a href={a.url} download={a.name} className="text-muted-foreground hover:text-foreground shrink-0">
-                    <FileDown className="w-3.5 h-3.5" />
-                  </a>
-                  <button type="button" onClick={() => removeAttachment(a.url)} className="text-muted-foreground hover:text-destructive shrink-0">
-                    <X className="w-3.5 h-3.5" />
-                  </button>
+                <div key={a.url} className="rounded-lg border bg-muted/30 overflow-hidden">
+                  <div className="flex items-center gap-2 px-3 py-2">
+                    <IconComp className="w-4 h-4 text-muted-foreground shrink-0" />
+                    <span className="text-sm flex-1 truncate">{a.name}</span>
+                    {a.analyzing && <Loader2 className="w-3.5 h-3.5 animate-spin text-primary shrink-0" />}
+                    {a.analysis && <Badge variant="secondary" className={cn("text-[10px] h-4 px-1.5 shrink-0", relevanceColor)}>{a.analysis.type}</Badge>}
+                    <span className="text-xs text-muted-foreground shrink-0">{sizeStr}</span>
+                    <a href={a.url} download={a.name} className="text-muted-foreground hover:text-foreground shrink-0"><FileDown className="w-3.5 h-3.5" /></a>
+                    <button type="button" onClick={() => removeAttachment(a.url)} className="text-muted-foreground hover:text-destructive shrink-0"><X className="w-3.5 h-3.5" /></button>
+                  </div>
+                  {a.analyzing && (
+                    <div className="px-3 pb-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <Sparkles className="w-3 h-3 text-primary" /> AI анализирует...
+                    </div>
+                  )}
+                  {a.analysis && !a.analyzing && (
+                    <div className="px-3 pb-2 space-y-1.5">
+                      <p className="text-xs text-muted-foreground">{a.analysis.summary}</p>
+                      {a.analysis.relevance === "low" && (
+                        <p className="text-xs text-red-600 dark:text-red-400">Документ не похож на описание должности</p>
+                      )}
+                      {hasData && (
+                        <Button variant="outline" size="sm" className="h-6 text-[11px] gap-1 px-2" onClick={() => applyExtractedData(a.analysis!)}>
+                          <Plus className="w-3 h-3" /> Дополнить анкету
+                        </Button>
+                      )}
+                    </div>
+                  )}
                 </div>
               )
             })}
