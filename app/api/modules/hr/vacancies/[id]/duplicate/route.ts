@@ -40,7 +40,7 @@ export async function POST(
       return apiError("Vacancy not found", 404)
     }
 
-    const newTitle = `Копия: ${original.title}`
+    const newTitle = `${original.title} (копия)`
     const slug = `${transliterate(newTitle)}-${nanoid(6)}`
 
     const [duplicate] = await db
@@ -58,6 +58,8 @@ export async function POST(
         sidebarSection: original.sidebarSection,
         salaryMin: original.salaryMin,
         salaryMax: original.salaryMax,
+        clientCompanyId: original.clientCompanyId,
+        clientContactId: original.clientContactId,
         status: "draft" as const,
         slug,
       })

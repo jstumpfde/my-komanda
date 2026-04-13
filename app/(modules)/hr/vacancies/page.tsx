@@ -31,10 +31,10 @@ import { useVacancies, type ApiVacancy } from "@/hooks/use-vacancies"
 import {
   Plus, Briefcase, MapPin, List, LayoutGrid, Table2, Calendar, Banknote,
   Search, MoreHorizontal, Pencil, Copy, Archive, Trash2, ListFilter,
-  RotateCcw, X, Upload, Link2, FileText, Loader2, CheckCircle2, Sparkles,
+  RotateCcw, X, Upload, FileText, Loader2, CheckCircle2, Sparkles,
+  ClipboardPaste, Globe, PenLine, ArrowLeft,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { parseVacancyText } from "@/lib/parse-vacancy-text"
 import { toast } from "sonner"
 import { Textarea } from "@/components/ui/textarea"
 import { useAuth } from "@/lib/auth"
@@ -316,25 +316,26 @@ export default function VacanciesPage() {
   const [trashItems, setTrashItems] = useState<ApiVacancy[]>([])
   const [trashLoading, setTrashLoading] = useState(false)
   const [permanentDeleteTarget, setPermanentDeleteTarget] = useState<ApiVacancy | null>(null)
-  // Create vacancy dialog
+  // Create vacancy wizard
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
+  const [createMode, setCreateMode] = useState<"choose" | "file" | "text" | "url" | "manual">("choose")
   const [newVacancyTitle, setNewVacancyTitle] = useState("")
   const [creating, setCreating] = useState(false)
   const [importUrl, setImportUrl] = useState("")
   const [uploadedFile, setUploadedFile] = useState<{ name: string; text: string } | null>(null)
   const [uploading, setUploading] = useState(false)
-  const [importing, setImporting] = useState(false)
-  const [importedText, setImportedText] = useState("")
   const [aiText, setAiText] = useState("")
   const [dragOver, setDragOver] = useState(false)
+  const [aiProgress, setAiProgress] = useState("")
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const resetCreateDialog = useCallback(() => {
+    setCreateMode("choose")
     setNewVacancyTitle("")
     setImportUrl("")
     setUploadedFile(null)
-    setImportedText("")
     setAiText("")
+    setAiProgress("")
   }, [])
 
   const handleFileUpload = useCallback(async (file: File) => {
@@ -355,7 +356,6 @@ export default function VacanciesPage() {
       const data = await res.json() as { text?: string; fileName?: string; error?: string }
       if (!res.ok) throw new Error(data.error ?? "Ошибка")
       setUploadedFile({ name: file.name, text: data.text ?? "" })
-      // Auto-fill title from file name if empty or very short
       const titleFromFile = file.name.replace(/\.(docx?|pdf|txt)$/i, "").trim()
       if (titleFromFile && newVacancyTitle.trim().length < 3) {
         setNewVacancyTitle(titleFromFile)
@@ -368,92 +368,138 @@ export default function VacanciesPage() {
     }
   }, [newVacancyTitle])
 
-  const handleImportUrl = useCallback(async () => {
-    if (!importUrl.trim()) return
-    setImporting(true)
-    try {
-      toast("Импорт из ссылки будет доступен в ближайшем обновлении")
-    } finally {
-      setImporting(false)
-    }
-  }, [importUrl])
-
-  const handleCreateVacancy = useCallback(async () => {
-    console.log("[CREATE] clicked, title:", newVacancyTitle, "aiText length:", aiText.length, "creating:", creating)
-    if (!newVacancyTitle.trim()) { toast.error("Введите название вакансии"); return }
+  // Create vacancy with AI text → parse → create in DB → redirect
+  const createWithAiText = useCallback(async (text: string, title: string, importedFrom?: Record<string, unknown>) => {
     setCreating(true)
+    setAiProgress("AI анализирует текст...")
     try {
-      // Build description_json with parsed file text if available
-      const descriptionJson: Record<string, unknown> = {}
-      const fileText = uploadedFile?.text || importedText
-      if (fileText) {
-        const parsed = parseVacancyText(fileText)
-        descriptionJson.anketa = {
-          vacancyTitle: newVacancyTitle.trim(),
-          // 2. Должность
-          positionCategory: parsed.positionCategory,
-          workFormats: parsed.workFormats,
-          employment: parsed.employment,
-          positionCity: parsed.positionCity,
-          // 3. Мотивация
-          salaryFrom: parsed.salaryFrom,
-          salaryTo: parsed.salaryTo,
-          bonus: parsed.bonus,
-          // 4. Обязанности
-          responsibilities: parsed.responsibilities,
-          requirements: parsed.requirements,
-          // 5. Портрет
-          requiredSkills: parsed.requiredSkills,
-          experienceMin: parsed.experienceMin,
-          // 6. Условия
-          conditions: parsed.conditions,
-          conditionsCustom: parsed.conditionsCustom,
-        }
-        descriptionJson.importedFrom = uploadedFile ? { type: "file", fileName: uploadedFile.name } : { type: "url", url: importUrl }
-        if (parsed.companyDescription) {
-          descriptionJson.companyDescription = parsed.companyDescription
-        }
-        // Store stop factors & desired params for anketa migration
-        if (Object.keys(parsed.stopFactors).length > 0) {
-          (descriptionJson.anketa as Record<string, unknown>).parsedStopFactors = parsed.stopFactors
-        }
-        if (parsed.desiredParams.length > 0) {
-          (descriptionJson.anketa as Record<string, unknown>).parsedDesiredParams = parsed.desiredParams
-        }
+      // Step 1: AI parse
+      setAiProgress("Извлекаю обязанности и требования...")
+      const aiRes = await fetch("/api/ai/parse-vacancy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      })
+      if (!aiRes.ok) throw new Error("AI-парсинг не удался")
+      const aiData = (await aiRes.json()) as { data: Record<string, unknown> }
+      const parsed = aiData.data
+
+      // Step 2: Build description_json
+      setAiProgress("Создаю вакансию...")
+      const finalTitle = title.trim() || String(parsed.positionTitle || "Новая вакансия")
+      const descriptionJson: Record<string, unknown> = {
+        anketa: {
+          vacancyTitle: finalTitle,
+          positionCategory: parsed.positionCategory || "",
+          workFormats: parsed.workFormats || [],
+          employment: parsed.employment || [],
+          positionCity: parsed.positionCity || "",
+          salaryFrom: parsed.salaryFrom || "",
+          salaryTo: parsed.salaryTo || "",
+          bonus: parsed.bonus || "",
+          responsibilities: parsed.responsibilities || "",
+          requirements: parsed.requirements || "",
+          requiredSkills: parsed.requiredSkills || [],
+          desiredSkills: parsed.desiredSkills || [],
+          unacceptableSkills: parsed.unacceptableSkills || [],
+          experienceMin: parsed.experienceMin || "",
+          experienceIdeal: parsed.experienceIdeal || "",
+          conditions: parsed.conditions || [],
+          screeningQuestions: parsed.screeningQuestions || [],
+          hhDescription: parsed.hhDescription || "",
+        },
+        ...(importedFrom ? { importedFrom } : {}),
       }
 
-      // Save AI text for anketa-tab to auto-parse after navigation
-      if (aiText.trim()) {
-        try { sessionStorage.setItem("vacancy_ai_text", aiText.trim()) } catch {}
-      }
-
+      // Step 3: Create vacancy
       const res = await fetch("/api/modules/hr/vacancies", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: newVacancyTitle.trim(),
-          ...(Object.keys(descriptionJson).length > 0 ? { description_json: descriptionJson } : {}),
-        }),
+        body: JSON.stringify({ title: finalTitle, description_json: descriptionJson }),
       })
-      console.log("[CREATE] POST response status:", res.status)
       if (!res.ok) {
         const errBody = await res.json().catch(() => ({})) as { error?: string }
-        console.error("[CREATE] server error:", res.status, errBody)
         throw new Error(errBody.error || `HTTP ${res.status}`)
       }
       const data = await res.json() as { id: string }
-      console.log("[CREATE] vacancy created, id:", data.id)
       setCreateDialogOpen(false)
       resetCreateDialog()
+      toast.success("Вакансия создана — проверьте анкету")
       router.push(`/hr/vacancies/${data.id}`)
     } catch (err) {
-      console.error("[CREATE] error:", err)
       const msg = err instanceof Error ? err.message : "Неизвестная ошибка"
       toast.error(`Не удалось создать вакансию: ${msg}`)
     } finally {
       setCreating(false)
+      setAiProgress("")
     }
-  }, [newVacancyTitle, uploadedFile, importedText, importUrl, aiText, router, resetCreateDialog])
+  }, [router, resetCreateDialog])
+
+  // Handle create depending on mode
+  const handleCreateVacancy = useCallback(async () => {
+    if (createMode === "manual") {
+      if (!newVacancyTitle.trim()) { toast.error("Введите название вакансии"); return }
+      setCreating(true)
+      try {
+        const res = await fetch("/api/modules/hr/vacancies", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title: newVacancyTitle.trim() }),
+        })
+        if (!res.ok) {
+          const errBody = await res.json().catch(() => ({})) as { error?: string }
+          throw new Error(errBody.error || `HTTP ${res.status}`)
+        }
+        const data = await res.json() as { id: string }
+        setCreateDialogOpen(false)
+        resetCreateDialog()
+        toast.success("Вакансия создана — заполните анкету")
+        router.push(`/hr/vacancies/${data.id}`)
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Неизвестная ошибка"
+        toast.error(`Не удалось создать вакансию: ${msg}`)
+      } finally {
+        setCreating(false)
+      }
+      return
+    }
+
+    if (createMode === "file") {
+      if (!uploadedFile?.text) { toast.error("Загрузите файл"); return }
+      await createWithAiText(uploadedFile.text, newVacancyTitle, { type: "file", fileName: uploadedFile.name })
+      return
+    }
+
+    if (createMode === "text") {
+      if (!aiText.trim()) { toast.error("Вставьте текст вакансии"); return }
+      await createWithAiText(aiText.trim(), newVacancyTitle)
+      return
+    }
+
+    if (createMode === "url") {
+      if (!importUrl.trim()) { toast.error("Введите ссылку"); return }
+      setCreating(true)
+      setAiProgress("Загружаю страницу...")
+      try {
+        const urlRes = await fetch("/api/core/fetch-url", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url: importUrl.trim() }),
+        })
+        if (!urlRes.ok) {
+          const errBody = await urlRes.json().catch(() => ({})) as { error?: string }
+          throw new Error(errBody.error || "Не удалось загрузить страницу")
+        }
+        const urlData = (await urlRes.json()) as { text: string }
+        await createWithAiText(urlData.text, newVacancyTitle, { type: "url", url: importUrl.trim() })
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Неизвестная ошибка"
+        toast.error(msg)
+        setCreating(false)
+        setAiProgress("")
+      }
+    }
+  }, [createMode, newVacancyTitle, uploadedFile, aiText, importUrl, router, resetCreateDialog, createWithAiText])
 
   const hrManagerTrashEnabled = typeof window !== "undefined" && localStorage.getItem(TRASH_ACCESS_KEY) === "true"
   const canSeeTrash = TRASH_ROLES_ALWAYS.includes(role) || (role === TRASH_ROLE_OPTIONAL && hrManagerTrashEnabled)
@@ -844,38 +890,85 @@ export default function VacanciesPage() {
       {/* ── Create vacancy dialog ── */}
       <Dialog open={createDialogOpen} onOpenChange={(open) => { setCreateDialogOpen(open); if (!open) resetCreateDialog() }}>
         <DialogContent className="sm:max-w-xl">
-          <DialogHeader>
-            <DialogTitle>Создать вакансию</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            {/* Title input — required */}
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium">Название вакансии</Label>
-              <Input
-                value={newVacancyTitle}
-                onChange={(e) => setNewVacancyTitle(e.target.value)}
-                placeholder="Менеджер по продажам"
-                className="h-10 border border-input"
-                maxLength={50}
-                onKeyDown={(e) => { if (e.key === "Enter" && newVacancyTitle.trim()) handleCreateVacancy() }}
-                autoFocus
-              />
-            </div>
-
-            {/* Upload */}
-            <div className="rounded-lg border p-4 space-y-3">
-              <div className="flex items-center gap-2 text-sm">
-                <Upload className="size-4 text-primary" />
-                <span className="font-medium">Загрузить описание</span>
-                <span className="text-xs text-muted-foreground">(необязательно)</span>
+          {/* AI progress overlay */}
+          {creating && aiProgress && (
+            <div className="absolute inset-0 bg-white/90 dark:bg-gray-950/90 backdrop-blur-sm z-50 flex items-center justify-center rounded-lg">
+              <div className="flex flex-col items-center gap-3">
+                <Loader2 className="size-8 text-primary animate-spin" />
+                <p className="text-sm font-medium">{aiProgress}</p>
               </div>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".docx,.doc,.pdf,.txt"
-                className="hidden"
-                onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileUpload(f); e.target.value = "" }}
-              />
+            </div>
+          )}
+
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {createMode !== "choose" && (
+                <button type="button" onClick={() => { setCreateMode("choose"); setUploadedFile(null); setAiText(""); setImportUrl("") }} className="text-muted-foreground hover:text-foreground transition-colors">
+                  <ArrowLeft className="size-4" />
+                </button>
+              )}
+              {createMode === "choose" && "Как создать вакансию?"}
+              {createMode === "file" && "Загрузить файл"}
+              {createMode === "text" && "Вставить текст"}
+              {createMode === "url" && "Импорт по ссылке"}
+              {createMode === "manual" && "Создать вручную"}
+            </DialogTitle>
+          </DialogHeader>
+
+          {/* ── Step 1: Choose mode ── */}
+          {createMode === "choose" && (
+            <div className="grid grid-cols-2 gap-3 py-2">
+              <button type="button" onClick={() => setCreateMode("file")}
+                className="flex flex-col items-center gap-2.5 p-5 rounded-xl border-2 border-muted hover:border-primary/50 hover:bg-primary/5 transition-all text-center group">
+                <div className="flex items-center justify-center size-11 rounded-lg bg-blue-50 dark:bg-blue-950/30 text-blue-600 group-hover:scale-110 transition-transform">
+                  <FileText className="size-5" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium">Загрузить файл</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">DOCX, PDF или TXT — AI заполнит анкету</p>
+                </div>
+              </button>
+
+              <button type="button" onClick={() => setCreateMode("text")}
+                className="flex flex-col items-center gap-2.5 p-5 rounded-xl border-2 border-muted hover:border-primary/50 hover:bg-primary/5 transition-all text-center group">
+                <div className="flex items-center justify-center size-11 rounded-lg bg-violet-50 dark:bg-violet-950/30 text-violet-600 group-hover:scale-110 transition-transform">
+                  <ClipboardPaste className="size-5" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium">Вставить текст</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Скопируйте описание вакансии или должности</p>
+                </div>
+              </button>
+
+              <button type="button" onClick={() => setCreateMode("url")}
+                className="flex flex-col items-center gap-2.5 p-5 rounded-xl border-2 border-muted hover:border-primary/50 hover:bg-primary/5 transition-all text-center group">
+                <div className="flex items-center justify-center size-11 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 group-hover:scale-110 transition-transform">
+                  <Globe className="size-5" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium">Вставить ссылку</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Ссылка на hh.ru или другой сайт</p>
+                </div>
+              </button>
+
+              <button type="button" onClick={() => setCreateMode("manual")}
+                className="flex flex-col items-center gap-2.5 p-5 rounded-xl border-2 border-muted hover:border-primary/50 hover:bg-primary/5 transition-all text-center group">
+                <div className="flex items-center justify-center size-11 rounded-lg bg-amber-50 dark:bg-amber-950/30 text-amber-600 group-hover:scale-110 transition-transform">
+                  <PenLine className="size-5" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium">Заполнить вручную</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Создать пустую анкету</p>
+                </div>
+              </button>
+            </div>
+          )}
+
+          {/* ── Mode: File upload ── */}
+          {createMode === "file" && (
+            <div className="space-y-4 py-2">
+              <input ref={fileInputRef} type="file" accept=".docx,.doc,.pdf,.txt" className="hidden"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileUpload(f); e.target.value = "" }} />
               {uploadedFile ? (
                 <div className="flex items-center gap-2 p-3 rounded-lg border bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800">
                   <CheckCircle2 className="size-4 text-emerald-600 shrink-0" />
@@ -885,58 +978,90 @@ export default function VacanciesPage() {
                   </button>
                 </div>
               ) : (
-                <button
-                  type="button"
+                <button type="button"
                   className={cn(
-                    "w-full h-20 rounded-lg border-2 border-dashed flex flex-col items-center justify-center gap-1 transition-colors",
-                    dragOver
-                      ? "border-primary bg-primary/5 text-primary"
-                      : "border-muted-foreground/30 text-muted-foreground hover:border-primary/50 hover:text-primary",
+                    "w-full h-28 rounded-lg border-2 border-dashed flex flex-col items-center justify-center gap-2 transition-colors",
+                    dragOver ? "border-primary bg-primary/5 text-primary" : "border-muted-foreground/30 text-muted-foreground hover:border-primary/50 hover:text-primary",
                     uploading && "pointer-events-none opacity-60",
                   )}
                   onClick={() => fileInputRef.current?.click()}
                   onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
                   onDragLeave={() => setDragOver(false)}
-                  onDrop={(e) => {
-                    e.preventDefault()
-                    setDragOver(false)
-                    const f = e.dataTransfer.files[0]
-                    if (f) handleFileUpload(f)
-                  }}
+                  onDrop={(e) => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files[0]; if (f) handleFileUpload(f) }}
                 >
-                  {uploading ? (
-                    <Loader2 className="size-5 animate-spin" />
-                  ) : (
+                  {uploading ? <Loader2 className="size-6 animate-spin" /> : (
                     <>
-                      <FileText className="size-5" />
-                      <span className="text-xs">Перетащите файл или нажмите • DOCX, PDF, TXT</span>
+                      <Upload className="size-6" />
+                      <span className="text-sm">Перетащите файл или нажмите</span>
+                      <span className="text-xs opacity-60">DOCX, PDF, TXT (до 50 МБ)</span>
                     </>
                   )}
                 </button>
               )}
-            </div>
-
-            {/* AI text input */}
-            <div className="rounded-lg border p-3 space-y-2">
-              <div className="flex items-center gap-2 text-sm font-medium">
-                <Sparkles className="w-4 h-4 text-primary" />
-                AI-заполнение
-                <span className="text-xs text-muted-foreground font-normal">(необязательно)</span>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium">Название вакансии <span className="text-muted-foreground font-normal">(необязательно — AI определит из файла)</span></Label>
+                <Input value={newVacancyTitle} onChange={(e) => setNewVacancyTitle(e.target.value)} placeholder="Менеджер по продажам" className="h-10 border border-input" maxLength={50} />
               </div>
-              <Textarea
-                value={aiText}
-                onChange={(e) => setAiText(e.target.value)}
-                placeholder="Вставьте описание вакансии или должностные обязанности — AI заполнит анкету автоматически..."
-                className="h-32 bg-[var(--input-bg)] border border-input resize-none text-sm"
-              />
+              <Button className="w-full h-10" onClick={handleCreateVacancy} disabled={creating || !uploadedFile}>
+                {creating ? <Loader2 className="size-4 mr-1.5 animate-spin" /> : <Sparkles className="size-4 mr-1.5" />}
+                Создать с AI-заполнением
+              </Button>
             </div>
+          )}
 
-            {/* Create button */}
-            <Button className="w-full h-10" onClick={handleCreateVacancy} disabled={creating || !newVacancyTitle.trim()}>
-              {creating ? <Loader2 className="size-4 mr-1.5 animate-spin" /> : <Plus className="size-4 mr-1.5" />}
-              Создать вакансию
-            </Button>
-          </div>
+          {/* ── Mode: Paste text ── */}
+          {createMode === "text" && (
+            <div className="space-y-4 py-2">
+              <Textarea value={aiText} onChange={(e) => setAiText(e.target.value)}
+                placeholder="Вставьте описание вакансии, должностные обязанности или любой текст о позиции..."
+                className="h-40 bg-[var(--input-bg)] border border-input resize-none text-sm" autoFocus />
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium">Название вакансии <span className="text-muted-foreground font-normal">(необязательно — AI определит из текста)</span></Label>
+                <Input value={newVacancyTitle} onChange={(e) => setNewVacancyTitle(e.target.value)} placeholder="Менеджер по продажам" className="h-10 border border-input" maxLength={50} />
+              </div>
+              <Button className="w-full h-10" onClick={handleCreateVacancy} disabled={creating || !aiText.trim()}>
+                {creating ? <Loader2 className="size-4 mr-1.5 animate-spin" /> : <Sparkles className="size-4 mr-1.5" />}
+                Создать с AI-заполнением
+              </Button>
+            </div>
+          )}
+
+          {/* ── Mode: URL import ── */}
+          {createMode === "url" && (
+            <div className="space-y-4 py-2">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium">Ссылка на вакансию</Label>
+                <Input value={importUrl} onChange={(e) => setImportUrl(e.target.value)}
+                  placeholder="https://hh.ru/vacancy/12345678" className="h-10 border border-input" autoFocus
+                  onKeyDown={(e) => { if (e.key === "Enter" && importUrl.trim()) handleCreateVacancy() }} />
+                <p className="text-xs text-muted-foreground">hh.ru, SuperJob, Habr Career или любой сайт с вакансией</p>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium">Название вакансии <span className="text-muted-foreground font-normal">(необязательно — AI определит со страницы)</span></Label>
+                <Input value={newVacancyTitle} onChange={(e) => setNewVacancyTitle(e.target.value)} placeholder="Менеджер по продажам" className="h-10 border border-input" maxLength={50} />
+              </div>
+              <Button className="w-full h-10" onClick={handleCreateVacancy} disabled={creating || !importUrl.trim()}>
+                {creating ? <Loader2 className="size-4 mr-1.5 animate-spin" /> : <Globe className="size-4 mr-1.5" />}
+                Загрузить и создать
+              </Button>
+            </div>
+          )}
+
+          {/* ── Mode: Manual ── */}
+          {createMode === "manual" && (
+            <div className="space-y-4 py-2">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium">Название вакансии</Label>
+                <Input value={newVacancyTitle} onChange={(e) => setNewVacancyTitle(e.target.value)}
+                  placeholder="Менеджер по продажам" className="h-10 border border-input" maxLength={50} autoFocus
+                  onKeyDown={(e) => { if (e.key === "Enter" && newVacancyTitle.trim()) handleCreateVacancy() }} />
+              </div>
+              <Button className="w-full h-10" onClick={handleCreateVacancy} disabled={creating || !newVacancyTitle.trim()}>
+                {creating ? <Loader2 className="size-4 mr-1.5 animate-spin" /> : <Plus className="size-4 mr-1.5" />}
+                Создать вакансию
+              </Button>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </SidebarProvider>

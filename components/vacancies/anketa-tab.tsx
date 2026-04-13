@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
-import { ChevronDown, ChevronUp, Plus, X, Save, Loader2, Trash2, GripVertical, Eye, Copy, FileDown } from "lucide-react"
+import { ChevronDown, ChevronUp, Plus, X, Save, Loader2, Trash2, GripVertical, Eye, Copy, FileDown, Sparkles } from "lucide-react"
 import { toast } from "sonner"
 import { POSITION_CATEGORIES } from "@/lib/position-classifier"
 import { type Question, type QuestionAnswerType, defaultQuestion } from "@/lib/course-types"
@@ -849,6 +849,10 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
   const [previewOpen, setPreviewOpen] = useState(false)
   const [aiLoading, setAiLoading] = useState(false)
   const [aiLoadingStep, setAiLoadingStep] = useState(0)
+  const [showCompanySection, setShowCompanySection] = useState(false)
+  useEffect(() => {
+    setShowCompanySection(localStorage.getItem("mk_hr_show_company_selector") === "true")
+  }, [])
 
   const handleWizardComplete = useCallback((result: ParsedVacancy) => {
     // Find closest positionCategory
@@ -956,6 +960,33 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
     }
   }, [data, descriptionJson, vacancyId])
 
+  // ── AI Refill ──
+  const handleAiRefill = useCallback(async () => {
+    const text = [data.responsibilities, data.requirements, data.conditions.join(", "), data.conditionsCustom.join(", ")].filter(Boolean).join("\n\n")
+    if (!text.trim()) {
+      toast.error("Заполните обязанности, требования или условия для AI-анализа")
+      return
+    }
+    if (!confirm("AI переформулирует анкету на основе текущих данных. Продолжить?")) return
+
+    setAiLoading(true)
+    setAiLoadingStep(0)
+    try {
+      const res = await fetch("/api/ai/parse-vacancy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      })
+      if (!res.ok) throw new Error("AI parse failed")
+      const json = (await res.json()) as { data: ParsedVacancy }
+      handleWizardComplete(json.data)
+    } catch {
+      toast.error("Не удалось переформулировать анкету")
+    } finally {
+      setAiLoading(false)
+    }
+  }, [data.responsibilities, data.requirements, data.conditions, data.conditionsCustom, handleWizardComplete])
+
   // ── Autosave ──
   const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const scheduleAutosave = useCallback(() => {
@@ -1025,16 +1056,23 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
       </div>
 
       {/* ── 1. Компания ── */}
-      <Section title="Компания" number={1} filled={sectionFilled(1)}>
-        <CompanySelector
-          mode={data.companyMode}
-          clientCompanyId={data.clientCompanyId}
-          clientContactId={data.clientContactId}
-          onModeChange={v => set("companyMode", v)}
-          onCompanyChange={v => set("clientCompanyId", v)}
-          onContactChange={v => set("clientContactId", v)}
-        />
-      </Section>
+      {showCompanySection ? (
+        <Section title="Компания" number={1} filled={sectionFilled(1)}>
+          <CompanySelector
+            mode={data.companyMode}
+            clientCompanyId={data.clientCompanyId}
+            clientContactId={data.clientContactId}
+            onModeChange={v => set("companyMode", v)}
+            onCompanyChange={v => set("clientCompanyId", v)}
+            onContactChange={v => set("clientContactId", v)}
+          />
+        </Section>
+      ) : (
+        <p className="text-xs text-muted-foreground">
+          Нанимаете для клиента?{" "}
+          <a href="/hr/hiring-settings" className="text-primary hover:underline">Включите в настройках найма</a>
+        </p>
+      )}
 
       {/* ── 2. Должность ── */}
       <Section title="Должность" number={2} filled={sectionFilled(2)}>
@@ -1368,6 +1406,10 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
 
       {/* Actions */}
       <div className="flex items-center gap-3 justify-end mt-4">
+        <Button variant="outline" size="sm" className="gap-1.5 h-9 text-xs" onClick={handleAiRefill} disabled={aiLoading}>
+          {aiLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+          Перезаполнить через AI
+        </Button>
         <Button variant="outline" size="sm" className="gap-1.5 h-9 text-xs" onClick={() => setPreviewOpen(true)}>
           <Eye className="w-3.5 h-3.5" />
           Предпросмотр вакансии

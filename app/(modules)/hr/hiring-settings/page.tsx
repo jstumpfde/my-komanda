@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
@@ -119,6 +119,17 @@ export default function HiringSettingsPage() {
   const [remind24h, setRemind24h] = useState(true)
   const [remind2h, setRemind2h] = useState(true)
 
+  // ── General: company selector toggle ──
+  const [showCompanySelector, setShowCompanySelector] = useState(false)
+  useEffect(() => {
+    setShowCompanySelector(localStorage.getItem("mk_hr_show_company_selector") === "true")
+  }, [])
+  const toggleCompanySelector = (checked: boolean) => {
+    setShowCompanySelector(checked)
+    localStorage.setItem("mk_hr_show_company_selector", String(checked))
+    toast.success(checked ? "Выбор компании включён в анкете" : "Секция «Компания» скрыта")
+  }
+
   // ── Funnel state ──
   const [selectedScenario, setSelectedScenario] = useState("standard")
   const [autoDemo, setAutoDemo] = useState(true)
@@ -216,6 +227,19 @@ export default function HiringSettingsPage() {
               </div>
               <p className="text-sm text-muted-foreground">Общие настройки для всех вакансий</p>
             </div>
+
+            {/* General toggles */}
+            <Card className="mb-5 max-w-3xl">
+              <CardContent className="py-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium">Выбор компании в анкете вакансии</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Показывать секцию «Компания» для найма под клиентов (аутсорсинг/рекрутинг)</p>
+                  </div>
+                  <Switch checked={showCompanySelector} onCheckedChange={toggleCompanySelector} />
+                </div>
+              </CardContent>
+            </Card>
 
             <Tabs defaultValue="schedule">
               <TabsList className="mb-4">
