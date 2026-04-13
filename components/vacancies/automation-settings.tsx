@@ -308,6 +308,26 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
     (initialAutomation.inviteTemplate as string) || "Здравствуйте, {имя}! Мы рассмотрели ваш отклик на позицию {должность} и хотели бы пригласить вас на следующий этап. {ссылка_на_демонстрацию}"
   )
 
+  // 7. Шаблоны сообщений
+  const defaultTemplates: Record<string, string> = {
+    salary: "Здравствуйте, {имя}! Зарплата на позиции {должность} составляет {зп_от} — {зп_до} ₽. Подробнее об условиях — в презентации должности: {ссылка_на_демонстрацию}",
+    demo_invite: "Здравствуйте, {имя}! Благодарим за интерес к позиции {должность}. Пожалуйста, ознакомьтесь с презентацией должности: {ссылка_на_демонстрацию}. После просмотра мы свяжемся с вами.",
+    soft_reject: "Здравствуйте, {имя}! Благодарим за интерес к позиции {должность}. К сожалению, на данный момент мы остановились на других кандидатах. Желаем успехов!",
+    info_request: "Здравствуйте, {имя}! Нам интересна ваша кандидатура на позицию {должность}. Не могли бы вы дополнительно рассказать о вашем опыте?",
+    interview_invite: "Здравствуйте, {имя}! Мы хотели бы пригласить вас на собеседование на позицию {должность}. Удобное время: {дата_время}. Формат: онлайн.",
+  }
+  const templateLabels: Record<string, string> = {
+    salary: "Вопрос о зарплате",
+    demo_invite: "Приглашение на демонстрацию",
+    soft_reject: "Мягкий отказ",
+    info_request: "Запрос доп. информации",
+    interview_invite: "Приглашение на собеседование",
+  }
+  const [messageTemplates, setMessageTemplates] = useState<Record<string, string>>(() => {
+    const saved = (initialAutomation.messageTemplates as Record<string, string>) || {}
+    return { ...defaultTemplates, ...saved }
+  })
+
   // Sync if descriptionJson changes externally
   useEffect(() => {
     if (descriptionJson && typeof descriptionJson === "object" && descriptionJson !== null) {
@@ -376,6 +396,7 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
         notifyManager,
         rejectTemplate,
         inviteTemplate,
+        messageTemplates,
       }
 
       const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}`, {
@@ -401,7 +422,7 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
     } finally {
       setSaving(false)
     }
-  }, [vacancyId, scenarioType, descriptionJson, tone, firstMessageText, firstMessageDelay, workingHoursEnabled, workingHoursFrom, workingHoursTo, includeWeekends, responseReaction, followUpEnabled, followUpPreset, stopOnNo, stopOnClose, pipelinePreset, pipelineStages, autoInvite, autoReject, notifyManager, rejectTemplate, inviteTemplate])
+  }, [vacancyId, scenarioType, descriptionJson, tone, firstMessageText, firstMessageDelay, workingHoursEnabled, workingHoursFrom, workingHoursTo, includeWeekends, responseReaction, followUpEnabled, followUpPreset, stopOnNo, stopOnClose, pipelinePreset, pipelineStages, autoInvite, autoReject, notifyManager, rejectTemplate, inviteTemplate, messageTemplates])
 
   return (
     <div className="space-y-6">
@@ -870,6 +891,40 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
               <Switch checked={notifyManager} onCheckedChange={setNotifyManager} />
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* ═══ 7. Шаблоны сообщений ════════════════════════════ */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <MessageSquare className="w-4 h-4" />
+            Шаблоны сообщений
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {Object.entries(templateLabels).map(([key, label]) => (
+            <div key={key} className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-medium">{label}</Label>
+                <Button variant="ghost" size="sm" className="h-6 text-[10px] gap-1 px-2" onClick={async () => {
+                  await navigator.clipboard.writeText(messageTemplates[key] || "")
+                  toast.success("Скопировано")
+                }}>
+                  Копировать
+                </Button>
+              </div>
+              <Textarea
+                value={messageTemplates[key] || ""}
+                onChange={e => setMessageTemplates(prev => ({ ...prev, [key]: e.target.value }))}
+                rows={2}
+                className="text-xs resize-none bg-[var(--input-bg)] border border-input"
+              />
+            </div>
+          ))}
+          <p className="text-[11px] text-muted-foreground">
+            Переменные: {"{имя}"}, {"{должность}"}, {"{зп_от}"}, {"{зп_до}"}, {"{ссылка_на_демонстрацию}"}, {"{дата_время}"}
+          </p>
         </CardContent>
       </Card>
 

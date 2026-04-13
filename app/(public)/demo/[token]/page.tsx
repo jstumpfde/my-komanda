@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef, useCallback } from "react"
 import { useParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Progress } from "@/components/ui/progress"
 import { Textarea } from "@/components/ui/textarea"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
@@ -362,25 +363,114 @@ export default function DemoPage() {
 
   const brandColor = data.brandPrimaryColor || "#6366f1"
 
-  // ─── Final screen ──────────────────────────────────────────────────────────
+  // ─── Final screen: form + thank you ────────────────────────────────────────
+
+  const [formSubmitted, setFormSubmitted] = useState(false)
+  const [formSubmitting, setFormSubmitting] = useState(false)
+  const [formFirst, setFormFirst] = useState(data?.candidateName?.split(" ")[0] || "")
+  const [formLast, setFormLast] = useState(data?.candidateName?.split(" ").slice(1).join(" ") || "")
+  const [formEmail, setFormEmail] = useState("")
+  const [formPhone, setFormPhone] = useState("")
+  const [formBirth, setFormBirth] = useState("")
+  const [formCity, setFormCity] = useState(data?.city || "")
+
+  const handleFormSubmit = async () => {
+    if (!formFirst.trim() || !formLast.trim() || !formEmail.trim() || !formPhone.trim()) return
+    setFormSubmitting(true)
+    try {
+      await fetch(`/api/public/demo/${token}/apply`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          firstName: formFirst.trim(),
+          lastName: formLast.trim(),
+          email: formEmail.trim(),
+          phone: formPhone.trim(),
+          birthDate: formBirth || undefined,
+          city: formCity.trim() || undefined,
+        }),
+      })
+      setFormSubmitted(true)
+    } catch {
+      setFormSubmitted(true)
+    } finally {
+      setFormSubmitting(false)
+    }
+  }
 
   if (finished) {
-    return (
-      <div className="flex min-h-screen items-center justify-center px-4" style={{ backgroundColor: data.brandBgColor || "#f0f4ff" }}>
-        <div className="w-full max-w-md text-center space-y-6">
-          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full" style={{ backgroundColor: brandColor + "20" }}>
-            <CheckCircle2 className="h-10 w-10" style={{ color: brandColor }} />
+    // Thank you after form submit
+    if (formSubmitted) {
+      return (
+        <div className="flex min-h-screen items-center justify-center px-4" style={{ backgroundColor: data.brandBgColor || "#f0f4ff" }}>
+          <div className="w-full max-w-md text-center space-y-6">
+            <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full" style={{ backgroundColor: brandColor + "20" }}>
+              <CheckCircle2 className="h-10 w-10" style={{ color: brandColor }} />
+            </div>
+            <h1 className="text-2xl font-bold" style={{ color: data.brandTextColor || "#1e293b" }}>Спасибо!</h1>
+            <p className="text-gray-600">
+              Мы рассмотрим вашу заявку на позицию &laquo;{data.vacancyTitle}&raquo; и свяжемся с вами в ближайшее время.
+            </p>
+            {data.companyLogo && (
+              <img src={data.companyLogo} alt={data.companyName} className="mx-auto h-10 object-contain opacity-60" />
+            )}
           </div>
-          <h1 className="text-2xl font-bold" style={{ color: data.brandTextColor || "#1e293b" }}>
-            Спасибо за прохождение!
-          </h1>
-          <p className="text-gray-600">
-            Вы завершили демонстрацию должности &laquo;{data.vacancyTitle}&raquo; в компании {data.companyName}.
-            <br /><br />
-            Мы проверим ваши ответы и свяжемся с вами в ближайшее время.
-          </p>
+        </div>
+      )
+    }
+
+    // Candidate form
+    return (
+      <div className="flex min-h-screen items-center justify-center px-4 py-8" style={{ backgroundColor: data.brandBgColor || "#f0f4ff" }}>
+        <div className="w-full max-w-md space-y-6">
+          <div className="text-center">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full mb-4" style={{ backgroundColor: brandColor + "20" }}>
+              <CheckCircle2 className="h-8 w-8" style={{ color: brandColor }} />
+            </div>
+            <h1 className="text-xl font-bold" style={{ color: data.brandTextColor || "#1e293b" }}>
+              Отлично! Оставьте свои данные
+            </h1>
+            <p className="text-sm text-gray-500 mt-1">Мы свяжемся с вами по поводу позиции &laquo;{data.vacancyTitle}&raquo;</p>
+          </div>
+
+          <div className="bg-white rounded-xl p-6 shadow-sm space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs">Имя <span className="text-red-500">*</span></Label>
+                <Input value={formFirst} onChange={e => setFormFirst(e.target.value)} placeholder="Иван" className="h-10" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Фамилия <span className="text-red-500">*</span></Label>
+                <Input value={formLast} onChange={e => setFormLast(e.target.value)} placeholder="Иванов" className="h-10" />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Email <span className="text-red-500">*</span></Label>
+              <Input value={formEmail} onChange={e => setFormEmail(e.target.value)} placeholder="ivan@mail.ru" type="email" className="h-10" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Телефон <span className="text-red-500">*</span></Label>
+              <Input value={formPhone} onChange={e => setFormPhone(e.target.value)} placeholder="+7 (999) 123-45-67" className="h-10" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs">Дата рождения</Label>
+                <Input value={formBirth} onChange={e => setFormBirth(e.target.value)} type="date" className="h-10" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Город</Label>
+                <Input value={formCity} onChange={e => setFormCity(e.target.value)} placeholder="Москва" className="h-10" />
+              </div>
+            </div>
+            <Button className="w-full h-11" style={{ backgroundColor: brandColor }} onClick={handleFormSubmit}
+              disabled={formSubmitting || !formFirst.trim() || !formLast.trim() || !formEmail.trim() || !formPhone.trim()}>
+              {formSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Отправить заявку
+            </Button>
+          </div>
+
           {data.companyLogo && (
-            <img src={data.companyLogo} alt={data.companyName} className="mx-auto h-10 object-contain opacity-60" />
+            <img src={data.companyLogo} alt={data.companyName} className="mx-auto h-8 object-contain opacity-40" />
           )}
         </div>
       </div>

@@ -16,6 +16,7 @@ import { CandidateProfile } from "@/components/dashboard/candidate-profile"
 import { CandidateDrawer } from "@/components/candidates/candidate-drawer"
 import { AddCandidateDialog } from "@/components/dashboard/add-candidate-dialog"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -220,6 +221,9 @@ export default function VacancyPage() {
   const [rejectCandidateId, setRejectCandidateId] = useState<string | null>(null)
   const [rejectColumnId, setRejectColumnId] = useState<string | null>(null)
   const [rejectReason, setRejectReason] = useState("")
+  // Talent pool suggestion
+  const [talentPoolDialogOpen, setTalentPoolDialogOpen] = useState(false)
+  const [talentPoolCandidate, setTalentPoolCandidate] = useState<Candidate | null>(null)
 
   // Course editor toolbar state
   const courseEditorRef = useRef<NotionEditorHandle>(null)
@@ -1602,6 +1606,11 @@ export default function VacancyPage() {
                   setColumns(p => p.map(c => c.id !== rejectColumnId ? c : { ...c, candidates: c.candidates.filter(x => x.id !== rejectCandidateId), count: c.candidates.filter(x => x.id !== rejectCandidateId).length }))
                   toast.error(`${candidate?.name ?? "Кандидат"} — отказ`)
                   await updateStage(rejectCandidateId, "rejected")
+                  // Suggest talent pool for candidates with decent AI score
+                  if (candidate?.aiScore != null && candidate.aiScore >= 50) {
+                    setTalentPoolCandidate(candidate)
+                    setTalentPoolDialogOpen(true)
+                  }
                 }
                 setRejectDialogOpen(false)
               }}
@@ -1611,6 +1620,30 @@ export default function VacancyPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Talent Pool suggestion dialog */}
+      <AlertDialog open={talentPoolDialogOpen} onOpenChange={setTalentPoolDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Добавить в Talent Pool?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Кандидат {talentPoolCandidate?.name} набрал {talentPoolCandidate?.aiScore} баллов AI-скрининга. Хотите сохранить его в Talent Pool для будущих вакансий?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Нет</AlertDialogCancel>
+            <AlertDialogAction onClick={async () => {
+              if (talentPoolCandidate) {
+                await updateStage(talentPoolCandidate.id, "talent_pool")
+                toast.success(`${talentPoolCandidate.name} добавлен в Talent Pool`)
+              }
+              setTalentPoolDialogOpen(false)
+            }}>
+              Добавить в пул
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Candidate Drawer — opens with real API data when "Открыть профиль" is clicked */}
       <CandidateDrawer
