@@ -308,6 +308,13 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
     (initialAutomation.inviteTemplate as string) || "Здравствуйте, {имя}! Мы рассмотрели ваш отклик на позицию {должность} и хотели бы пригласить вас на следующий этап. {ссылка_на_демонстрацию}"
   )
 
+  // 9. Дозапрос данных
+  const initialCompleteness = (initialAutomation.completenessCheck as { enabled?: boolean; threshold?: number; channel?: string; delay?: string }) || {}
+  const [completenessEnabled, setCompletenessEnabled] = useState(initialCompleteness.enabled ?? false)
+  const [completenessThreshold, setCompletenessThreshold] = useState(String(initialCompleteness.threshold ?? 70))
+  const [completenessChannel, setCompletenessChannel] = useState(initialCompleteness.channel || "email")
+  const [completenessDelay, setCompletenessDelay] = useState(initialCompleteness.delay || "1hour")
+
   // 8. Бот-звонарь
   const initialDialer = (initialAutomation.dialer as { enabled?: boolean; scriptId?: string; trigger?: string }) || {}
   const [dialerEnabled, setDialerEnabled] = useState(initialDialer.enabled ?? false)
@@ -410,6 +417,7 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
         inviteTemplate,
         messageTemplates,
         dialer: { enabled: dialerEnabled, scriptId: dialerScriptId, trigger: dialerTrigger },
+        completenessCheck: { enabled: completenessEnabled, threshold: Number(completenessThreshold), channel: completenessChannel, delay: completenessDelay },
       }
 
       const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}`, {
@@ -435,7 +443,7 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
     } finally {
       setSaving(false)
     }
-  }, [vacancyId, scenarioType, descriptionJson, tone, firstMessageText, firstMessageDelay, workingHoursEnabled, workingHoursFrom, workingHoursTo, includeWeekends, responseReaction, followUpEnabled, followUpPreset, stopOnNo, stopOnClose, pipelinePreset, pipelineStages, autoInvite, autoReject, notifyManager, rejectTemplate, inviteTemplate, messageTemplates, dialerEnabled, dialerScriptId, dialerTrigger])
+  }, [vacancyId, scenarioType, descriptionJson, tone, firstMessageText, firstMessageDelay, workingHoursEnabled, workingHoursFrom, workingHoursTo, includeWeekends, responseReaction, followUpEnabled, followUpPreset, stopOnNo, stopOnClose, pipelinePreset, pipelineStages, autoInvite, autoReject, notifyManager, rejectTemplate, inviteTemplate, messageTemplates, dialerEnabled, dialerScriptId, dialerTrigger, completenessEnabled, completenessThreshold, completenessChannel, completenessDelay])
 
   return (
     <div className="space-y-6">
@@ -904,6 +912,61 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
               <Switch checked={notifyManager} onCheckedChange={setNotifyManager} />
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* ═══ 9. Дозапрос данных ═══════════════════════════════ */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <ClipboardList className="w-4 h-4" />
+            Дозапрос данных у кандидата
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium">Автоматически запрашивать недостающие данные</p>
+              <p className="text-xs text-muted-foreground">После прохождения демонстрации AI проверяет профиль и просит дополнить</p>
+            </div>
+            <Switch checked={completenessEnabled} onCheckedChange={setCompletenessEnabled} />
+          </div>
+          {completenessEnabled && (
+            <div className="space-y-3 pl-4 border-l-2 border-primary/20">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Порог заполненности (%)</Label>
+                <div className="flex items-center gap-3">
+                  <input type="range" min="30" max="100" step="10" value={completenessThreshold}
+                    onChange={e => setCompletenessThreshold(e.target.value)}
+                    className="flex-1 h-2 accent-primary" />
+                  <span className="text-sm font-medium w-10 text-right">{completenessThreshold}%</span>
+                </div>
+                <p className="text-[11px] text-muted-foreground">Запрашивать если заполнено менее {completenessThreshold}%</p>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Канал</Label>
+                <Select value={completenessChannel} onValueChange={setCompletenessChannel}>
+                  <SelectTrigger className="h-9 text-sm w-[200px]"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="email">Email</SelectItem>
+                    <SelectItem value="telegram">Telegram</SelectItem>
+                    <SelectItem value="both">Оба канала</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Когда отправлять</Label>
+                <Select value={completenessDelay} onValueChange={setCompletenessDelay}>
+                  <SelectTrigger className="h-9 text-sm w-[200px]"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="immediately">Сразу после демо</SelectItem>
+                    <SelectItem value="1hour">Через 1 час</SelectItem>
+                    <SelectItem value="24hours">Через 24 часа</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 

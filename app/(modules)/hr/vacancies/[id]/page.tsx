@@ -756,7 +756,7 @@ export default function VacancyPage() {
     const top = apiCandidates
       .filter(c => c.aiScore != null)
       .sort((a, b) => (b.aiScore ?? 0) - (a.aiScore ?? 0))
-      .slice(0, 3)
+      .slice(0, 5)
     if (top.length < 2) { toast.error("Нужно минимум 2 кандидата с AI-скором"); return }
     setCompareOpen(true)
     setCompareLoading(true)
@@ -961,7 +961,7 @@ export default function VacancyPage() {
                 <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs text-muted-foreground" disabled={duplicating} onClick={handleDuplicate}>
                   {duplicating ? <Loader2 className="size-3.5 animate-spin" /> : <Copy className="size-3.5" />}Создать похожую
                 </Button>
-                <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs text-muted-foreground" onClick={() => {
+                {apiCandidates.length > 0 && <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs text-muted-foreground" onClick={() => {
                   const stageLabels: Record<string, string> = { new: "Новые", demo: "Демо", decision: "Решение", interview: "Интервью", final_decision: "Финал", hired: "Наняты", rejected: "Отказ" }
                   const stageCounts: Record<string, number> = {}
                   for (const c of apiCandidates) { const s = c.stage || "new"; stageCounts[s] = (stageCounts[s] || 0) + 1 }
@@ -976,7 +976,7 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                   if (w) { w.document.write(html); w.document.close(); w.print() }
                 }}>
                   <Download className="size-3.5" />Отчёт PDF
-                </Button>
+                </Button>}
               </div>
             </div>
 
