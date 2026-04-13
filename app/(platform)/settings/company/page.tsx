@@ -208,10 +208,15 @@ export default function CompanyProfilePage() {
     errors.postalIndex !== "" ||
     errors.accounts.some(a => a.rs !== "" || a.ks !== "")
 
+  const hasErrorsRef = useRef(false)
+  hasErrorsRef.current = hasErrors
+
   const saveFn = useCallback(async (payload: Record<string, unknown>) => {
     await patchCompanyApi(payload)
   }, [])
-  const { schedule: autoSave, saveNow } = useAutoSave(saveFn)
+  const { schedule: autoSave, saveNow, status: autoSaveStatus } = useAutoSave(saveFn, {
+    canSave: () => !hasErrorsRef.current,
+  })
 
   // Helper: onChange + schedule autosave for a field
   const field = (apiKey: string, setter: (v: string) => void) => ({
@@ -321,7 +326,15 @@ export default function CompanyProfilePage() {
   return (
     <>
       <div className="mb-4">
-        <h1 className="text-xl font-semibold text-foreground mb-1">Профиль компании</h1>
+        <div className="flex items-center gap-3 mb-1">
+          <h1 className="text-xl font-semibold text-foreground">Профиль компании</h1>
+          {autoSaveStatus === "saving" && (
+            <span className="text-xs text-muted-foreground flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" />Сохранение...</span>
+          )}
+          {autoSaveStatus === "saved" && (
+            <span className="text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" />Сохранено</span>
+          )}
+        </div>
         <p className="text-muted-foreground text-sm">Данные организации и настройки для демонстраций</p>
       </div>
 
@@ -368,7 +381,7 @@ export default function CompanyProfilePage() {
               <div className="space-y-1 sm:col-span-2">
                 <Label className="text-sm">Почтовый адрес</Label>
                 <div className="flex items-center gap-2 mb-1.5">
-                  <input type="checkbox" id="postal-same" checked={postalSameAsLegal} onChange={e => { setPostalSameAsLegal(e.target.checked); if (e.target.checked) setPostalAddress(legalAddress) }} className="w-4 h-4 rounded border-border accent-primary cursor-pointer" />
+                  <input type="checkbox" id="postal-same" checked={postalSameAsLegal} onChange={e => { setPostalSameAsLegal(e.target.checked); if (e.target.checked) { setPostalAddress(legalAddress); saveNow("postal_address", legalAddress) } }} className="w-4 h-4 rounded border-border accent-primary cursor-pointer" />
                   <label htmlFor="postal-same" className="text-sm text-muted-foreground cursor-pointer select-none">Совпадает с юридическим</label>
                 </div>
                 <Input value={postalSameAsLegal ? legalAddress : postalAddress} onChange={e => !postalSameAsLegal && setPostalAddress(e.target.value)} readOnly={postalSameAsLegal} className={cn(postalSameAsLegal && "bg-muted/50 text-muted-foreground cursor-default select-none", ph)} placeholder="125009, г. Москва, ул. Тверская, д. 1" />
