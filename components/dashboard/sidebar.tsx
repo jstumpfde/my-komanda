@@ -399,20 +399,20 @@ export function DashboardSidebar() {
       <SidebarHeader className="p-4 border-b border-sidebar-border">
         <div className="flex items-center gap-3">
           {companyLogo ? (
-            <div className="h-9 max-w-[160px] shrink-0 flex items-center justify-center overflow-hidden group-data-[collapsible=icon]:max-w-9 group-data-[collapsible=icon]:w-9">
+            <div className="h-9 w-9 shrink-0 flex items-center justify-center rounded-lg bg-white p-1 overflow-hidden">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={companyLogo}
                 alt=""
-                className="max-h-8 max-w-[140px] w-auto h-auto object-contain group-data-[collapsible=icon]:max-w-9"
+                className="max-h-7 max-w-7 w-auto h-auto object-contain"
               />
             </div>
           ) : companyName ? (
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-sidebar-primary text-sidebar-primary-foreground shrink-0 text-base font-semibold">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground shrink-0 text-base font-semibold">
               {companyName.trim().charAt(0).toUpperCase()}
             </div>
           ) : (
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-sidebar-primary text-sidebar-primary-foreground shrink-0">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground shrink-0">
               <Briefcase className="size-5" />
             </div>
           )}
