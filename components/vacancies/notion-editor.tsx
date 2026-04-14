@@ -23,6 +23,7 @@ import { toast } from "sonner"
 import type { Demo, Block, BlockType, Lesson } from "@/lib/course-types"
 import { VARIABLES, BLOCK_TYPE_META, createBlock } from "@/lib/course-types"
 import { TEMPLATE_VARIABLES } from "@/lib/templates/demo-templates"
+import { LibraryDialog } from "./library-dialog"
 
 // ─── Variable highlighting ────────────────────────────────────────────────
 
@@ -45,6 +46,7 @@ export interface NotionEditorHandle {
   save: () => void
   openPreview: () => void
   openLibrary: () => void
+  openSaveTemplate: () => void
 }
 
 interface NotionEditorProps {
@@ -85,6 +87,33 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
   const [dragLessonIdx, setDragLessonIdx] = useState<number | null>(null)
   const [dragOverLessonIdx, setDragOverLessonIdx] = useState<number | null>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Library + save-template state
+  const [libraryOpen, setLibraryOpen] = useState(false)
+  const [saveTemplateOpen, setSaveTemplateOpen] = useState(false)
+  const [saveTemplateName, setSaveTemplateName] = useState("")
+  const [saveTemplateCategory, setSaveTemplateCategory] = useState("Общее")
+  const [savedTemplates, setSavedTemplates] = useState<{ title: string; category: string; lessons: Lesson[] }[]>([])
+  const [savedModules, setSavedModules] = useState<Lesson[]>([])
+
+  useEffect(() => {
+    try {
+      const t = localStorage.getItem("hireflow_demo_templates")
+      if (t) setSavedTemplates(JSON.parse(t))
+      const m = localStorage.getItem("hireflow_demo_modules")
+      if (m) setSavedModules(JSON.parse(m))
+    } catch {}
+  }, [])
+
+  const persistTemplates = useCallback((items: { title: string; category: string; lessons: Lesson[] }[]) => {
+    setSavedTemplates(items)
+    try { localStorage.setItem("hireflow_demo_templates", JSON.stringify(items)) } catch {}
+  }, [])
+
+  const persistModules = useCallback((items: Lesson[]) => {
+    setSavedModules(items)
+    try { localStorage.setItem("hireflow_demo_modules", JSON.stringify(items)) } catch {}
+  }, [])
 
   const activeLesson = demo.lessons.find((l) => l.id === activeLessonId)
 
@@ -153,8 +182,9 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
   useImperativeHandle(ref, () => ({
     save: saveNow,
     openPreview: () => { setPreviewIdx(0); setPreviewMode(true) },
-    openLibrary: () => onOpenLibrary?.(),
-  }), [saveNow])
+    openLibrary: () => { if (onOpenLibrary) onOpenLibrary(); else setLibraryOpen(true) },
+    openSaveTemplate: () => setSaveTemplateOpen(true),
+  }), [saveNow, onOpenLibrary])
 
   // Lesson ops
   const updateLesson = (lessonId: string, patch: Partial<Lesson>) =>
@@ -300,8 +330,11 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
             <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8" onClick={saveNow}>
               <Save className="w-3.5 h-3.5" />Сохранить
             </Button>
-            <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8" onClick={onOpenLibrary}>
-              <BookOpen className="w-3.5 h-3.5" />Библиотека
+            <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8" onClick={() => { if (onOpenLibrary) onOpenLibrary(); else setLibraryOpen(true) }}>
+              <BookOpen className="w-3.5 h-3.5" />Из библиотеки
+            </Button>
+            <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8" onClick={() => setSaveTemplateOpen(true)}>
+              <Save className="w-3.5 h-3.5" />В библиотеку
             </Button>
             <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8" onClick={generateWithAI} disabled={aiGenerating}>
               {aiGenerating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
@@ -430,6 +463,56 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
           )}
         </div>
       </div>
+
+      {/* Library dialog — opens when parent doesn't override via onOpenLibrary */}
+      <LibraryDialog
+        open={libraryOpen}
+        onOpenChange={setLibraryOpen}
+        currentLessons={demo.lessons}
+        onApplyTemplate={(lessons) => { save(lessons); if (lessons[0]) setActiveLessonId(lessons[0].id) }}
+        onInsertModule={(lesson) => { save([...demo.lessons, lesson]); setActiveLessonId(lesson.id) }}
+        savedModules={savedModules}
+        savedTemplates={savedTemplates}
+      />
+
+      {/* Save as template dialog */}
+      <Dialog open={saveTemplateOpen} onOpenChange={(o) => { setSaveTemplateOpen(o); if (!o) { setSaveTemplateName(""); setSaveTemplateCategory("Общее") } }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader><DialogTitle>Сохранить в библиотеку</DialogTitle></DialogHeader>
+          <div className="grid gap-3 py-2">
+            <Input value={saveTemplateName} onChange={(e) => setSaveTemplateName(e.target.value)} placeholder="Название шаблона" autoFocus />
+            <Input value={saveTemplateCategory} onChange={(e) => setSaveTemplateCategory(e.target.value)} placeholder="Категория (напр. Продажи)" />
+            {savedTemplates.length > 0 && (
+              <div className="space-y-1 border-t pt-3">
+                <p className="text-xs text-muted-foreground mb-1">Или обновить существующий:</p>
+                <div className="max-h-40 overflow-y-auto space-y-1">
+                  {savedTemplates.map((t, i) => (
+                    <button key={i} type="button"
+                      className="w-full flex items-center justify-between text-left px-2 py-1.5 rounded hover:bg-muted text-sm"
+                      onClick={() => {
+                        const next = savedTemplates.map((x, j) => j === i ? { ...x, lessons: demo.lessons } : x)
+                        persistTemplates(next)
+                        setSaveTemplateOpen(false)
+                        toast.success(`Шаблон «${t.title}» обновлён`)
+                      }}>
+                      <span className="truncate">{t.title}</span>
+                      <span className="text-[10px] text-muted-foreground">{t.lessons.length} ур.</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            <Button onClick={() => {
+              if (!saveTemplateName.trim()) { toast.error("Укажите название"); return }
+              const next = [...savedTemplates, { title: saveTemplateName.trim(), category: saveTemplateCategory.trim() || "Общее", lessons: demo.lessons }]
+              persistTemplates(next)
+              setSaveTemplateOpen(false)
+              setSaveTemplateName("")
+              toast.success("Шаблон сохранён в библиотеку")
+            }}>Сохранить как новый</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Delete confirm dialog */}
       <Dialog open={!!deleteConfirmId} onOpenChange={(open) => { if (!open) setDeleteConfirmId(null) }}>

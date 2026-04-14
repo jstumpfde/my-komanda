@@ -1131,8 +1131,11 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                         {courseEditorSaveStatus === "saving" ? "Сохранение..." : "✓ Сохранено"}
                       </span>
                     </div>
-                    <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8" onClick={() => router.push("/hr/library")}>
-                      <BookOpen className="w-3.5 h-3.5" />Библиотека
+                    <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8" onClick={() => courseEditorRef.current?.openLibrary()}>
+                      <BookOpen className="w-3.5 h-3.5" />Из библиотеки
+                    </Button>
+                    <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8" onClick={() => courseEditorRef.current?.openSaveTemplate()}>
+                      <Save className="w-3.5 h-3.5" />В библиотеку
                     </Button>
                     <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8" onClick={() => courseEditorRef.current?.openPreview()}>
                       <Eye className="w-3.5 h-3.5" />Превью
