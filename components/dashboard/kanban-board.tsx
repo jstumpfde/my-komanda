@@ -15,7 +15,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { cn } from "@/lib/utils"
 import type { CandidateAction } from "@/lib/column-config"
-import { COLUMN_ORDER } from "@/lib/column-config"
 
 export type ViewMode = "kanban" | "list" | "funnel" | "tiles"
 
@@ -84,23 +83,6 @@ export function KanbanBoard({ settings, viewMode, onViewModeChange, columns = []
     )
   }
 
-  // KPI metrics — only standard columns, cumulative funnel counts
-  const STANDARD_IDS = COLUMN_ORDER as readonly string[]
-  const KPI_LABELS: Record<string, string> = {
-    new: "Новый", demo: "Демо", decision: "Решение",
-    interview: "Интервью", final_decision: "Фин.решение", hired: "Нанят",
-  }
-  const standardCols = STANDARD_IDS
-    .map((id) => columns.find((c) => c.id === id))
-    .filter((col): col is ColumnData => !!col)
-  // Cumulative: each step = candidates in this stage + all stages after it
-  const kpiSteps = standardCols.map((col, i, arr) => {
-    const cumulative = arr.slice(i).reduce((acc, c) => acc + c.count, 0)
-    const prevCumulative = i > 0 ? arr.slice(i - 1).reduce((acc, c) => acc + c.count, 0) : null
-    const pct = prevCumulative && prevCumulative > 0 ? Math.round((cumulative / prevCumulative) * 100) : null
-    return { title: KPI_LABELS[col.id] || col.title, count: cumulative, pct }
-  })
-
   return (
     <div>
       {/* View mode switcher */}
@@ -126,26 +108,13 @@ export function KanbanBoard({ settings, viewMode, onViewModeChange, columns = []
         </div>
       )}
 
-      {/* KPI funnel metrics bar */}
-      {viewMode === "kanban" && kpiSteps.length > 0 && (
-        <div className="flex items-center gap-1.5 mb-4 px-1 text-sm flex-wrap">
-          {kpiSteps.map((step, i) => (
-            <span key={step.title} className="flex items-center gap-1.5 shrink-0">
-              {i > 0 && <span className="text-muted-foreground">→</span>}
-              <span className="text-muted-foreground">{step.title}:</span>
-              <span className="font-bold">{step.count}</span>
-              {step.pct !== null && (
-                <span className="text-muted-foreground text-xs">({step.pct}%)</span>
-              )}
-            </span>
-          ))}
-        </div>
-      )}
-
-      {/* Kanban View — no drag-and-drop */}
+      {/* Kanban View — equal-width columns filling full width */}
       {viewMode === "kanban" && (
         <div className="pb-4 -mx-4 px-4 sm:mx-0 sm:px-0 overflow-x-auto">
-          <div className="flex gap-3">
+          <div
+            className="grid gap-3 w-full"
+            style={{ gridTemplateColumns: `repeat(${columns.length || 1}, minmax(150px, 1fr))` }}
+          >
             {columns.map((column, colIndex) => {
               const isFirst = colIndex === 0
               const isLast = colIndex === columns.length - 1
@@ -155,31 +124,25 @@ export function KanbanBoard({ settings, viewMode, onViewModeChange, columns = []
               return (
                 <div
                   key={column.id}
-                  className={cn(
-                    "flex flex-col rounded-xl",
-                    columns.length <= 6
-                      ? "flex-1 min-w-[200px]"
-                      : "shrink-0 min-w-[200px]"
-                  )}
-                  style={columns.length > 6 ? { width: "calc((100% - 3.75rem) / 6)" } : undefined}
+                  className="flex flex-col rounded-xl min-w-0"
                 >
                   {/* Column Header */}
-                  <div className="mb-3 rounded-xl overflow-visible group relative">
+                  <div className="mb-3 rounded-lg overflow-visible group relative">
                     <div
-                      className="flex items-center justify-between px-3 py-1.5 rounded-full w-fit"
+                      className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg w-full relative"
                       style={{ background: `linear-gradient(135deg, ${column.colorFrom}, ${column.colorTo})` }}
                     >
-                      <div className="flex items-center gap-1.5">
-                        <h3 className="font-medium text-white text-xs">{column.title}</h3>
-                        <span className="text-white/90 font-bold text-xs">{column.count}</span>
+                      <h3 className="font-medium text-white text-xs truncate">{column.title}</h3>
+                      <span className="text-white/90 font-bold text-xs">{column.count}</span>
+                      <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                        <ColumnColorPicker
+                          colorFrom={column.colorFrom}
+                          colorTo={column.colorTo}
+                          onColorChange={(from, to) => handleColorChange(column.id, from, to)}
+                          title={column.title}
+                          onTitleChange={(t) => handleTitleChange(column.id, t)}
+                        />
                       </div>
-                      <ColumnColorPicker
-                        colorFrom={column.colorFrom}
-                        colorTo={column.colorTo}
-                        onColorChange={(from, to) => handleColorChange(column.id, from, to)}
-                        title={column.title}
-                        onTitleChange={(t) => handleTitleChange(column.id, t)}
-                      />
                     </div>
                     {/* Minus & Plus buttons on manageable columns */}
                     {canManage && !isFirst && !isLast && (
@@ -209,7 +172,12 @@ export function KanbanBoard({ settings, viewMode, onViewModeChange, columns = []
                   </div>
 
                   {/* Cards */}
-                  <div className="space-y-3 flex-1 min-h-[100px] rounded-lg p-1">
+                  <div
+                    className={cn(
+                      "space-y-3 flex-1 min-h-[300px] rounded-lg p-1",
+                      (column.candidates || []).length === 0 && "border-2 border-dashed border-border/50 flex items-center justify-center",
+                    )}
+                  >
                     {(column.candidates || []).map((candidate) => (
                       <CandidateCard
                         key={candidate.id}
@@ -222,9 +190,7 @@ export function KanbanBoard({ settings, viewMode, onViewModeChange, columns = []
                       />
                     ))}
                     {(column.candidates || []).length === 0 && (
-                      <div className="flex items-center justify-center h-20 rounded-lg border-2 border-dashed border-border/50 text-muted-foreground/40">
-                        <span className="text-xs">Пусто</span>
-                      </div>
+                      <span className="text-xs text-muted-foreground/50">Пусто</span>
                     )}
                   </div>
                 </div>
