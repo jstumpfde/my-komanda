@@ -201,14 +201,16 @@ export default function VacancyPage() {
   const [advisorScore, setAdvisorScore] = useState<{ score: number; label: string }>({ score: 0, label: "" })
   const mainHeaderRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
-    const el = mainHeaderRef.current
-    if (!el) return
-    const observer = new IntersectionObserver(
-      ([entry]) => setShowStickyHeader(!entry.isIntersecting),
-      { threshold: 0, rootMargin: "0px" },
-    )
-    observer.observe(el)
-    return () => observer.disconnect()
+    // Listen to scroll in capture phase — catches any scrolling element
+    const handleScroll = (e: Event) => {
+      const target = e.target as HTMLElement | Document
+      const scrollTop = target === document
+        ? window.scrollY
+        : (target as HTMLElement).scrollTop ?? 0
+      setShowStickyHeader(scrollTop > 200)
+    }
+    document.addEventListener("scroll", handleScroll, { passive: true, capture: true })
+    return () => document.removeEventListener("scroll", handleScroll, { capture: true })
   }, [])
   const [messageLogs, setMessageLogs] = useState<HhMessageLog[]>([])
   const [brandCompanyName, setBrandCompanyName] = useState("")
@@ -916,13 +918,13 @@ export default function VacancyPage() {
       <SidebarInset>
         <DashboardHeader />
         <main className="flex-1 overflow-auto bg-background">
-          {/* ═══ Sticky header: появляется только при скролле ═══ */}
+          {/* ═══ Fixed header: появляется только при скролле (под DashboardHeader) ═══ */}
           <div
             className={cn(
-              "sticky top-0 z-30 bg-background/95 backdrop-blur-sm border-b shadow-sm py-2 transition-all duration-200",
-              showStickyHeader ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-full pointer-events-none"
+              "fixed top-14 right-0 z-40 bg-background/95 backdrop-blur-sm border-b shadow-sm py-2 transition-all duration-200",
+              showStickyHeader ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-2 pointer-events-none"
             )}
-            style={{ paddingLeft: 56, paddingRight: 56 }}
+            style={{ left: "var(--sidebar-width, 16rem)", paddingLeft: 56, paddingRight: 56 }}
           >
             <div className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-3 min-w-0 flex-1">

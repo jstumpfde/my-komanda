@@ -64,6 +64,10 @@ interface ScreenInput {
     aiRequiredHardSkills?: string[]
     aiWeights?: Record<string, string>
     aiMinExperience?: string
+    avgDealSize?: string
+    salesCycle?: string
+    salesType?: string[]
+    targetAudience?: string[]
   }
 }
 
@@ -87,6 +91,13 @@ export async function POST(req: NextRequest) {
       aiSections.push(`Приоритеты оценки: ${weights}`)
     }
 
+    // Специфика продаж
+    const salesSections: string[] = []
+    if (va.avgDealSize) salesSections.push(`Средний чек: ${va.avgDealSize}`)
+    if (va.salesCycle) salesSections.push(`Цикл сделки: ${va.salesCycle}`)
+    if (va.salesType?.length) salesSections.push(`Тип продаж: ${va.salesType.join(", ")}`)
+    if (va.targetAudience?.length) salesSections.push(`ЛПР: ${va.targetAudience.join(", ")}`)
+
     const userMessage = `ВАКАНСИЯ:
 Должность: ${va.vacancyTitle || "не указана"}
 Обязанности: ${va.responsibilities || "не указаны"}
@@ -96,6 +107,7 @@ export async function POST(req: NextRequest) {
 Опыт: от ${va.experienceMin || "?"} лет
 Город: ${va.positionCity || "не указан"}
 ${aiSections.length > 0 ? "\nAI-КРИТЕРИИ ОТБОРА:\n" + aiSections.join("\n") : ""}
+${salesSections.length > 0 ? "\nСПЕЦИФИКА ПРОДАЖ:\n" + salesSections.join("\n") : ""}
 
 КАНДИДАТ:
 Имя: ${cd.name || "не указано"}

@@ -70,6 +70,11 @@ interface AnketaData {
   // 7. AI-генерация
   screeningQuestions: string[]
   hhDescription: string
+  // Специфика продаж (section 4)
+  avgDealSize: string
+  salesCycle: string
+  salesType: string[]
+  targetAudience: string[]
   // Фильтры критериев отбора
   filterCities: string[]
   filterCitizenship: { mode: "russia" | "any" | "custom"; countries: string[]; isStopFactor: boolean }
@@ -158,6 +163,18 @@ const EMPLOYEE_TYPE_OPTIONS = [
   { value: "permanent", label: "Постоянный" },
   { value: "temporary", label: "Временный / Проектный" },
 ]
+
+const SALES_CYCLE_OPTIONS = [
+  { value: "1-3d", label: "1-3 дня" },
+  { value: "1-2w", label: "1-2 недели" },
+  { value: "1-3m", label: "1-3 месяца" },
+  { value: "3-6m", label: "3-6 месяцев" },
+  { value: "6m+", label: "6+ месяцев" },
+]
+
+const SALES_TYPE_OPTIONS = ["Холодные звонки", "Входящие лиды", "Демонстрации", "Партнёрские", "Тендеры", "Нетворкинг"]
+
+const TARGET_AUDIENCE_OPTIONS = ["Собственники", "Директора/CEO", "HR-директора", "Коммерческие директора", "Руководители отделов"]
 
 const AI_WEIGHT_OPTIONS: { value: AiWeightLevel; label: string }[] = [
   { value: "critical", label: "Критично" },
@@ -285,6 +302,7 @@ function emptyAnketa(): AnketaData {
     desiredParams: DEFAULT_DESIRED_PARAMS.map(p => ({ ...p })),
     conditions: [], conditionsCustom: [],
     employmentType: [], schedule: "", employeeType: "permanent",
+    avgDealSize: "", salesCycle: "", salesType: [], targetAudience: [],
     filterCities: [],
     filterCitizenship: { mode: "russia", countries: [], isStopFactor: false },
     questions: [],
@@ -292,6 +310,12 @@ function emptyAnketa(): AnketaData {
     aiMinExperience: "", aiRequiredHardSkills: [], aiStopFactors: [],
     aiIdealProfile: "", aiWeights: { ...DEFAULT_AI_WEIGHTS },
   }
+}
+
+function isSalesCategory(category: string): boolean {
+  if (!category) return false
+  const lower = category.toLowerCase()
+  return /продаж|sales|менеджер|b2b/i.test(lower) || lower === "sales"
 }
 
 /** Collapse double newlines into single, trim blank lines */
@@ -1499,6 +1523,71 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange, onNavigat
             className="text-sm bg-[var(--input-bg)] border border-input"
           />
         </div>
+
+        {/* Специфика продаж — показываем только для продажных категорий */}
+        {isSalesCategory(data.positionCategory) && (
+          <div className="space-y-3 pt-3 border-t">
+            <div className="flex items-center gap-2">
+              <Label className="text-xs font-semibold">💼 Специфика продаж</Label>
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-primary border-primary/30">AI-профиль продавца</Badge>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs">Средний чек / стоимость продукта</Label>
+              <Input
+                value={data.avgDealSize}
+                onChange={e => set("avgDealSize", e.target.value)}
+                placeholder="от 100 000 до 990 000 ₽/год"
+                className="h-9 bg-[var(--input-bg)] border border-input w-full"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs">Цикл сделки</Label>
+              <div className="flex flex-wrap gap-2">
+                {SALES_CYCLE_OPTIONS.map(opt => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => set("salesCycle", data.salesCycle === opt.value ? "" : opt.value)}
+                    className={cn(
+                      "px-3 py-1.5 rounded-md text-sm border transition-colors",
+                      data.salesCycle === opt.value
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "bg-[var(--input-bg)] border-input hover:bg-accent"
+                    )}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs">Тип продаж</Label>
+              <div className="flex flex-wrap gap-3">
+                {SALES_TYPE_OPTIONS.map(opt => (
+                  <label key={opt} className="flex items-center gap-1.5">
+                    <Checkbox checked={data.salesType.includes(opt)} onCheckedChange={() => toggleArray("salesType", opt)} />
+                    <span className="text-sm">{opt}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs">ЛПР (лицо принимающее решение)</Label>
+              <div className="flex flex-wrap gap-3">
+                {TARGET_AUDIENCE_OPTIONS.map(opt => (
+                  <label key={opt} className="flex items-center gap-1.5">
+                    <Checkbox checked={data.targetAudience.includes(opt)} onCheckedChange={() => toggleArray("targetAudience", opt)} />
+                    <span className="text-sm">{opt}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
       </Section>
 
       {/* ── 5. Портрет кандидата ── */}

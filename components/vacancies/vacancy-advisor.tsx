@@ -298,12 +298,21 @@ export function VacancyAdvisor({ vacancyData, companyDescription, focusedField, 
           onApply={onApplySuggestion ? (t: string) => handleApply("vacancyTitle", t) : undefined}
         />
 
-        {/* Salary analysis */}
+        {/* 3. Формат работы */}
+        <FormatCard workFormats={(vacancyData.workFormats as string[]) || []} />
+
+        {/* 4. Опыт */}
+        <ExperienceInsightCard level={experienceLevel || "3-5"} currentLevel={experienceLevel} />
+
+        {/* 5. Аналитика зарплат */}
         {result.salaryAnalysis && (
           <SalaryAnalysisCard analysis={result.salaryAnalysis} />
         )}
 
-        {/* Motivation analysis */}
+        {/* 6. Рынок Q1 2025→2026 */}
+        <MarketContextCard />
+
+        {/* 7. Анализ мотивации */}
         <MotivationAnalysisCard
           salaryMin={parseInt(String(vacancyData.salaryFrom || "0").replace(/\s/g, "")) || 0}
           salaryMax={parseInt(String(vacancyData.salaryTo || "0").replace(/\s/g, "")) || 0}
@@ -317,10 +326,8 @@ export function VacancyAdvisor({ vacancyData, companyDescription, focusedField, 
           } : undefined}
         />
 
-        {/* Experience insight — соответствует полю "Требуемый опыт" */}
-        {experienceLevel && EXPERIENCE_INSIGHTS[experienceLevel] && (
-          <ExperienceInsightCard level={experienceLevel} />
-        )}
+        {/* 8. О компании */}
+        <CompanyDescriptionCard description={companyDescription || ""} />
 
         {/* Sections: критичные и рекомендации — соответствуют секциям 4-5 (обязанности, требования, навыки, стоп-факторы) */}
         {errors.length > 0 && (
@@ -355,11 +362,15 @@ export function VacancyAdvisor({ vacancyData, companyDescription, focusedField, 
           </div>
         )}
 
-        {/* Company description — соответствует описанию компании */}
-        <CompanyDescriptionCard description={companyDescription || ""} />
-
-        {/* Market context — динамика рынка внизу */}
-        <MarketContextCard />
+        {/* 14. Профиль продавца — на основе бизнес-критериев */}
+        <SellerProfileCard
+          avgDealSize={(vacancyData.avgDealSize as string) || ""}
+          salesCycle={(vacancyData.salesCycle as string) || ""}
+          salesType={(vacancyData.salesType as string[]) || []}
+          targetAudience={(vacancyData.targetAudience as string[]) || []}
+          currentRequirements={(vacancyData.requirements as string) || ""}
+          onFillRequirements={onApplySuggestion ? (text) => onApplySuggestion("requirements", text) : undefined}
+        />
 
         {/* Refresh */}
         <div className="pt-1">
@@ -477,17 +488,49 @@ function SalaryAnalysisCard({ analysis }: { analysis: SalaryAnalysis }) {
   )
 }
 
+// ── Format Card ─────────────────────────────────────────────────────────────
+
+function FormatCard({ workFormats }: { workFormats: string[] }) {
+  if (!workFormats || workFormats.length === 0) return null
+
+  const hasRemote = workFormats.some(f => /удалён/i.test(f))
+  const hasOffice = workFormats.some(f => /офис/i.test(f))
+  const hasHybrid = workFormats.some(f => /гибрид/i.test(f))
+
+  const tips: { emoji: string; text: string }[] = []
+  if (hasRemote) tips.push({ emoji: "✅", text: "Удалёнка: пул кандидатов в 3-5 раз шире. 88к+ вакансий Q1 2026 (+18% за год)" })
+  if (hasOffice && !hasRemote) tips.push({ emoji: "📍", text: "Офис сужает пул, но повышает контроль. Премия к зарплате +10-20%" })
+  if (hasHybrid) tips.push({ emoji: "🔄", text: "Гибрид — компромисс: +30% к пулу vs офис" })
+
+  return (
+    <div className="rounded-lg border p-3 space-y-2">
+      <div className="flex items-center gap-1.5">
+        <Sparkles className="w-3.5 h-3.5 text-primary" />
+        <span className="text-xs font-medium">Формат работы</span>
+      </div>
+      <div className="flex flex-wrap gap-1">
+        {workFormats.map(f => (
+          <Badge key={f} variant="secondary" className="text-[10px]">{f}</Badge>
+        ))}
+      </div>
+      {tips.map((t, i) => (
+        <p key={i} className="text-xs text-muted-foreground leading-relaxed">{t.emoji} {t.text}</p>
+      ))}
+    </div>
+  )
+}
+
 // ── Experience Insight Card ─────────────────────────────────────────────────
 
-function ExperienceInsightCard({ level }: { level: string }) {
-  const insight = EXPERIENCE_INSIGHTS[level]
+function ExperienceInsightCard({ level, currentLevel }: { level: string; currentLevel?: string | null }) {
+  const insight = EXPERIENCE_INSIGHTS[level] || EXPERIENCE_INSIGHTS["3-5"]
   if (!insight) return null
 
   return (
     <div className="rounded-lg border p-3 space-y-2">
       <div className="flex items-center gap-1.5">
         <Sparkles className="w-3.5 h-3.5 text-primary" />
-        <span className="text-xs font-medium">Опыт: {insight.label}</span>
+        <span className="text-xs font-medium">Опыт: {insight.label}{currentLevel === level ? " (текущий)" : ""}</span>
       </div>
       <p className="text-xs text-muted-foreground leading-relaxed">{insight.tip}</p>
       <div className="space-y-1">
@@ -507,10 +550,10 @@ function ExperienceInsightCard({ level }: { level: string }) {
         </div>
       </div>
       {level === "1-3" && (
-        <p className="text-[10px] text-muted-foreground">43% вакансий рынка открыты для 1-3 лет. Junior-вакансий стало на ~{marketStats.juniorVacancyDecline}% меньше за год.</p>
+        <p className="text-sm text-foreground leading-relaxed">43% вакансий рынка открыты для 1-3 лет. Junior-вакансий стало на <span className="font-semibold text-red-600 dark:text-red-400">~{marketStats.juniorVacancyDecline}%</span> меньше за год.</p>
       )}
       {level === "3-5" && (
-        <p className="text-[10px] text-muted-foreground">Рекомендуемый диапазон — оптимальный баланс количества и качества откликов.</p>
+        <p className="text-sm text-muted-foreground leading-relaxed">Рекомендуемый диапазон — оптимальный баланс количества и качества откликов.</p>
       )}
     </div>
   )
@@ -594,6 +637,93 @@ function TitleScoringCard({ title, context, suggestions, onApply }: {
   )
 }
 
+// ── Seller Profile Card ─────────────────────────────────────────────────────
+
+function SellerProfileCard({ avgDealSize, salesCycle, salesType, targetAudience, currentRequirements, onFillRequirements }: {
+  avgDealSize: string
+  salesCycle: string
+  salesType: string[]
+  targetAudience: string[]
+  currentRequirements: string
+  onFillRequirements?: (text: string) => void
+}) {
+  // Показываем только если заполнено хотя бы одно поле
+  if (!avgDealSize && !salesCycle && salesType.length === 0 && targetAudience.length === 0) return null
+
+  const tips: string[] = []
+  const reqTemplate: string[] = []
+
+  // Средний чек
+  const dealNum = parseInt(avgDealSize.replace(/\D/g, ""))
+  if (dealNum >= 100000) {
+    tips.push("💼 Нужен опыт продаж сложных решений, не FMCG")
+    reqTemplate.push("• Опыт продаж продуктов с чеком от 100к ₽")
+  }
+  if (dealNum >= 500000) {
+    tips.push("🎯 Длинные сделки — нужна системность и работа с CRM")
+    reqTemplate.push("• Опыт продаж enterprise-решений с чеком 500к+")
+  }
+
+  // Цикл сделки
+  const cycleMap: Record<string, string> = {
+    "1-3d": "Быстрые продажи — важна скорость и напор",
+    "1-2w": "Средний цикл — баланс скорости и качества",
+    "1-3m": "Нужна системность и работа с CRM",
+    "3-6m": "Сложные сделки — навыки выстраивания отношений",
+    "6m+": "Enterprise-продажи — опыт C-level переговоров",
+  }
+  if (salesCycle && cycleMap[salesCycle]) {
+    tips.push(`🔄 ${cycleMap[salesCycle]}`)
+    if (salesCycle === "3-6m" || salesCycle === "6m+") {
+      reqTemplate.push("• Опыт длинных сделок (3+ месяцев)")
+    }
+  }
+
+  // ЛПР
+  if (targetAudience.includes("Собственники") || targetAudience.includes("Директора/CEO")) {
+    tips.push("👔 Опыт переговоров C-level / с собственниками")
+    reqTemplate.push("• Опыт ведения переговоров на уровне C-level")
+  }
+
+  // Тип продаж
+  if (salesType.includes("Холодные звонки")) {
+    reqTemplate.push("• Опыт холодных продаж")
+  }
+  if (salesType.includes("Тендеры")) {
+    reqTemplate.push("• Опыт участия в тендерах")
+  }
+
+  if (tips.length === 0) return null
+
+  return (
+    <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 space-y-2">
+      <div className="flex items-center gap-1.5">
+        <Sparkles className="w-3.5 h-3.5 text-primary" />
+        <span className="text-xs font-medium text-primary">Профиль продавца</span>
+      </div>
+      <div className="space-y-1">
+        {tips.map((t, i) => (
+          <p key={i} className="text-xs text-foreground leading-relaxed">{t}</p>
+        ))}
+      </div>
+      {onFillRequirements && reqTemplate.length > 0 && (
+        <button
+          type="button"
+          onClick={() => {
+            const combined = currentRequirements
+              ? `${currentRequirements}\n${reqTemplate.join("\n")}`
+              : reqTemplate.join("\n")
+            onFillRequirements(combined)
+          }}
+          className="w-full text-left text-xs px-2 py-1.5 rounded bg-primary text-primary-foreground hover:bg-primary/90 transition-colors flex items-center justify-center gap-1 mt-1"
+        >
+          <Plus className="w-3 h-3" /> Заполнить требования из профиля
+        </button>
+      )}
+    </div>
+  )
+}
+
 // ── Motivation Analysis Card ────────────────────────────────────────────────
 
 function MotivationAnalysisCard({ salaryMin, salaryMax, bonuses, payFrequency, category, onAppendBonus }: {
@@ -668,12 +798,12 @@ function MotivationAnalysisCard({ salaryMin, salaryMax, bonuses, payFrequency, c
 
 function MarketContextCard() {
   return (
-    <div className="rounded-lg bg-muted/50 p-2.5 space-y-1">
-      <p className="text-[10px] font-medium text-muted-foreground">📊 Рынок {marketStats.period}</p>
-      <p className="text-[10px] text-muted-foreground leading-relaxed">
-        Зарплаты +{marketStats.overallMedianGrowth}%, резюме +{marketStats.resumeGrowth}%, конкуренция растёт. Junior −{marketStats.juniorVacancyDecline}%.
+    <div className="rounded-lg border p-3 space-y-2">
+      <p className="text-sm font-semibold">📊 Рынок {marketStats.period}</p>
+      <p className="text-sm text-foreground leading-relaxed">
+        Зарплаты <span className="font-semibold text-emerald-600 dark:text-emerald-400">+{marketStats.overallMedianGrowth}%</span>, резюме <span className="font-semibold text-emerald-600 dark:text-emerald-400">+{marketStats.resumeGrowth}%</span>, конкуренция растёт. Junior <span className="font-semibold text-red-600 dark:text-red-400">−{marketStats.juniorVacancyDecline}%</span>.
       </p>
-      <p className="text-[9px] text-muted-foreground/70">{marketStats.source}</p>
+      <p className="text-xs text-muted-foreground">{marketStats.source}</p>
     </div>
   )
 }
@@ -681,17 +811,62 @@ function MarketContextCard() {
 // ── Company Description Card ────────────────────────────────────────────────
 
 function CompanyDescriptionCard({ description }: { description: string }) {
-  if (!description) return null // handled by sections
+  const [includeInVacancy, setIncludeInVacancy] = useState(true)
 
-  const preview = description.length > 100 ? description.slice(0, 100) + "..." : description
+  // Пустое описание — подсказка с кнопкой заполнения
+  if (!description) {
+    return (
+      <div className="rounded-lg border border-amber-200 dark:border-amber-900/50 bg-amber-50/50 dark:bg-amber-950/20 p-3 space-y-2">
+        <div className="flex items-center gap-1.5">
+          <span className="text-sm font-semibold">🏢 О компании</span>
+        </div>
+        <p className="text-sm text-foreground leading-relaxed">
+          ⚠️ Описание компании не заполнено.
+        </p>
+        <p className="text-sm text-muted-foreground leading-relaxed">
+          Вакансии с описанием компании получают <span className="font-semibold text-emerald-600 dark:text-emerald-400">на 30% больше откликов</span>.
+        </p>
+        <a
+          href="/settings/company"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 text-sm text-primary hover:underline font-medium"
+        >
+          Заполнить в настройках →
+        </a>
+      </div>
+    )
+  }
+
+  const preview = description.length > 150 ? description.slice(0, 150) + "..." : description
 
   return (
-    <div className="rounded-lg bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/50 p-3 space-y-1">
+    <div className="rounded-lg border p-3 space-y-2">
       <div className="flex items-center gap-1.5">
-        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-        <span className="text-xs font-medium text-emerald-700 dark:text-emerald-300">Описание компании подтянуто</span>
+        <span className="text-sm font-semibold">🏢 О компании</span>
       </div>
-      <p className="text-xs text-muted-foreground leading-relaxed">{preview}</p>
+      <p className="text-sm text-foreground leading-relaxed">{preview}</p>
+      <div className="flex items-center gap-1.5">
+        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+        <span className="text-xs text-emerald-700 dark:text-emerald-400">Описание подтянуто из настроек</span>
+      </div>
+      <a
+        href="/settings/company"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+      >
+        Редактировать в настройках →
+      </a>
+      <label className="flex items-center gap-2 pt-1 border-t cursor-pointer">
+        <input
+          type="checkbox"
+          checked={includeInVacancy}
+          onChange={e => setIncludeInVacancy(e.target.checked)}
+          className="rounded"
+        />
+        <span className="text-sm">Включить в описание вакансии</span>
+      </label>
     </div>
   )
 }
