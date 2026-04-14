@@ -266,6 +266,8 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
   const [pipelinePreset, setPipelinePreset] = useState<PipelinePreset>(initialPipeline.preset)
   const [pipelineStages, setPipelineStages] = useState<PipelineStage[]>(initialPipeline.stages)
   const [newStageName, setNewStageName] = useState("")
+  const [dragStageIdx, setDragStageIdx] = useState<number | null>(null)
+  const [dragOverStageIdx, setDragOverStageIdx] = useState<number | null>(null)
 
   // AI recommendation based on salary
   const recommendedPipeline = (() => {
@@ -298,6 +300,20 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
   const renameStage = (id: string, name: string) => {
     setPipelineStages(prev => prev.map(s => s.id === id ? { ...s, name } : s))
     setPipelinePreset("custom")
+  }
+
+  const dropStage = (target: number) => {
+    if (dragStageIdx === null || dragStageIdx === target) {
+      setDragStageIdx(null); setDragOverStageIdx(null); return
+    }
+    setPipelineStages(prev => {
+      const next = [...prev]
+      const [moved] = next.splice(dragStageIdx, 1)
+      next.splice(target, 0, moved)
+      return next
+    })
+    setPipelinePreset("custom")
+    setDragStageIdx(null); setDragOverStageIdx(null)
   }
 
   // 6. Авто-действия
@@ -829,7 +845,21 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
             </div>
             <div className="space-y-1.5">
               {pipelineStages.map((stage, idx) => (
-                <div key={stage.id} className="flex items-center gap-2">
+                <div
+                  key={stage.id}
+                  draggable
+                  onDragStart={() => setDragStageIdx(idx)}
+                  onDragOver={e => { e.preventDefault(); setDragOverStageIdx(idx) }}
+                  onDragLeave={() => setDragOverStageIdx(prev => prev === idx ? null : prev)}
+                  onDrop={e => { e.preventDefault(); dropStage(idx) }}
+                  onDragEnd={() => { setDragStageIdx(null); setDragOverStageIdx(null) }}
+                  className={cn(
+                    "flex items-center gap-2 group rounded-md transition-all",
+                    dragStageIdx === idx && "opacity-50",
+                    dragOverStageIdx === idx && dragStageIdx !== idx && "ring-2 ring-primary/50 bg-primary/5",
+                  )}
+                >
+                  <GripVertical className="w-4 h-4 text-muted-foreground cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 shrink-0" />
                   <span className="text-xs text-muted-foreground w-5 text-right shrink-0">{idx + 1}.</span>
                   <Input
                     value={stage.name}
