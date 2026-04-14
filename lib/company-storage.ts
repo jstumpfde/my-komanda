@@ -215,6 +215,7 @@ export interface ApiCompanyUpdatePayload {
   full_name?: string
   director?: string
   description?: string
+  company_description?: string
   email?: string
   phone?: string
   employee_count?: number

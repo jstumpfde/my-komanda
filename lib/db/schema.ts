@@ -88,6 +88,7 @@ export const companies = pgTable("companies", {
   fullName:           text("full_name"),
   director:           text("director"),
   description:        text("description"),
+  companyDescription: text("company_description"),    // Описание для вакансий
   email:              text("email"),
   phone:              text("phone"),
   employeeCount:      integer("employee_count"),

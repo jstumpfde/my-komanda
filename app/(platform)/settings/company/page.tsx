@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
@@ -185,6 +186,7 @@ export default function CompanyProfilePage() {
   const [accounts, setAccounts] = useState<BankAccount[]>([{ id: "1", bankName: "", bik: "", rs: "", ks: "" }]); const [defaultAccountId, setDefaultAccountId] = useState("1"); const [bikSearching, setBikSearching] = useState<string|null>(null); const [bankNameSearching, setBankNameSearching] = useState<string|null>(null)
   const [email, setEmail] = useState(""); const [phone, setPhone] = useState(""); const [website, setWebsite] = useState("")
   const [description, setDescription] = useState(""); const [registrationDate, setRegistrationDate] = useState(""); const [employeeCount, setEmployeeCount] = useState("")
+  const [companyDescription, setCompanyDescription] = useState("")
   const [industry, setIndustry] = useState(""); const [officeAddress, setOfficeAddress] = useState(""); const [weekSchedule, setWeekSchedule] = useState<DaySchedule[]>(DEFAULT_SCHEDULE); const [scheduleExpanded, setScheduleExpanded] = useState(false)
   const [saving, setSaving] = useState(false)
 
@@ -249,7 +251,7 @@ export default function CompanyProfilePage() {
 
   const handleShortNameChange = (value: string) => { setShortName(value); setNameDropdownOpen(false); setNameSuggestions([]); if (nameDebounceRef.current) clearTimeout(nameDebounceRef.current) }
 
-  useEffect(() => { fetchCompanyApi().then((data: unknown) => { const c = data as Record<string, string> | null; if (!c) return; if (c.inn) setInn(c.inn); if (c.kpp) setKpp(c.kpp); if (c.name) { setShortName(c.name); setFullName(c.name) }; if (c.legalAddress) setLegalAddress(c.legalAddress); if (c.city) setPostalCity(c.city); if (c.postalCode) setPostalIndex(c.postalCode); if (c.industry) setIndustry(c.industry) }).catch(() => {}) }, [])
+  useEffect(() => { fetchCompanyApi().then((data: unknown) => { const c = data as Record<string, string> | null; if (!c) return; if (c.inn) setInn(c.inn); if (c.kpp) setKpp(c.kpp); if (c.name) { setShortName(c.name); setFullName(c.name) }; if (c.legalAddress) setLegalAddress(c.legalAddress); if (c.city) setPostalCity(c.city); if (c.postalCode) setPostalIndex(c.postalCode); if (c.industry) setIndustry(c.industry); if (c.companyDescription) setCompanyDescription(c.companyDescription) }).catch(() => {}) }, [])
   useEffect(() => { const handler = (e: MouseEvent) => { if (nameContainerRef.current && !nameContainerRef.current.contains(e.target as Node)) setNameDropdownOpen(false) }; document.addEventListener("mousedown", handler); return () => document.removeEventListener("mousedown", handler) }, [])
 
   const handleBikSearch = useCallback(async (accountId: string, bik: string) => {
@@ -300,6 +302,7 @@ export default function CompanyProfilePage() {
         full_name: fullName || undefined,
         director: director || undefined,
         description: description || undefined,
+        company_description: companyDescription || undefined,
         email: email || undefined,
         phone: phone || undefined,
         website: website || undefined,
@@ -453,6 +456,22 @@ export default function CompanyProfilePage() {
           </CardContent>
         </Card>
 
+
+        {/* ═══ Описание для вакансий ═══════════════════════ */}
+        <Card>
+          <CardHeader className="pb-2 pt-4 px-5"><CardTitle className="text-base flex items-center gap-2"><FileText className="w-4 h-4" /> Описание компании для вакансий</CardTitle></CardHeader>
+          <CardContent className="px-5 pb-4 pt-0 space-y-2">
+            <Textarea
+              value={companyDescription}
+              onChange={e => { setCompanyDescription(e.target.value); autoSave("company_description", e.target.value) }}
+              onBlur={() => saveNow("company_description", companyDescription)}
+              rows={6}
+              className="w-full text-sm"
+              placeholder="Company24.pro — AI-платформа для автоматизации бизнес-процессов. 14 модулей, 14 AI-агентов. Помогаем компаниям автоматизировать найм, обучение, продажи..."
+            />
+            <p className="text-xs text-muted-foreground">Этот текст будет подтягиваться в новые вакансии. Можно отредактировать в каждой вакансии отдельно.</p>
+          </CardContent>
+        </Card>
 
         {/* ═══ Сохранить ══════════════════════════════════ */}
         <div className="flex justify-end pb-4">

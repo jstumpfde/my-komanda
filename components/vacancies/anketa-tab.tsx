@@ -981,9 +981,10 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange, onNavigat
   // Fetch company description for advisor
   useEffect(() => {
     fetch("/api/companies").then(r => r.ok ? r.json() : null).then(json => {
-      if (json?.data?.description) {
-        setCompanyDescription(json.data.description)
-        setData(prev => prev.companyDescription ? prev : { ...prev, companyDescription: json.data.description })
+      const desc = json?.data?.companyDescription || json?.data?.description
+      if (desc) {
+        setCompanyDescription(desc)
+        setData(prev => prev.companyDescription ? prev : { ...prev, companyDescription: desc })
       }
     }).catch(() => {})
   }, [])

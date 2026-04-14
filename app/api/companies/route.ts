@@ -106,6 +106,7 @@ export async function PUT(req: NextRequest) {
       full_name?: string
       director?: string
       description?: string
+      company_description?: string
       email?: string
       phone?: string
       employee_count?: number
@@ -146,6 +147,7 @@ export async function PUT(req: NextRequest) {
     if (body.full_name !== undefined) fieldMap.fullName = body.full_name
     if (body.director !== undefined) fieldMap.director = body.director
     if (body.description !== undefined) fieldMap.description = body.description
+    if (body.company_description !== undefined) fieldMap.companyDescription = body.company_description
     if (body.email !== undefined) fieldMap.email = body.email
     if (body.phone !== undefined) fieldMap.phone = body.phone
     if (body.employee_count !== undefined) fieldMap.employeeCount = body.employee_count
