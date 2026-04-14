@@ -4,6 +4,7 @@ export const COLUMN_ORDER = [
   "new",
   "demo",
   "decision",
+  "ai_screening",
   "interview",
   "final_decision",
   "hired",
@@ -11,10 +12,11 @@ export const COLUMN_ORDER = [
 
 export const PROGRESS_BY_COLUMN: Record<string, number> = {
   new: 5,
-  demo: 20,
-  decision: 40,
-  interview: 60,
-  final_decision: 80,
+  demo: 15,
+  decision: 30,
+  ai_screening: 50,
+  interview: 70,
+  final_decision: 85,
   hired: 100,
 }
 
@@ -34,11 +36,12 @@ export interface ColumnConfig {
 }
 
 export const defaultColumnColors: Record<string, { from: string; to: string; label: string }> = {
-  new:              { from: "#94a3b8", to: "#64748b", label: "Новый" },
+  new:              { from: "#94a3b8", to: "#64748b", label: "Отклик" },
   demo:             { from: "#3b82f6", to: "#2563eb", label: "Демо-курс" },
-  decision:         { from: "#ef4444", to: "#dc2626", label: "Решение" },
-  interview:        { from: "#8b5cf6", to: "#7c3aed", label: "Интервью" },
-  final_decision:   { from: "#f97316", to: "#ea580c", label: "Финальное решение" },
+  decision:         { from: "#f59e0b", to: "#d97706", label: "Анкета" },
+  ai_screening:     { from: "#06b6d4", to: "#0891b2", label: "AI-скрининг" },
+  interview:        { from: "#8b5cf6", to: "#7c3aed", label: "Собеседование" },
+  final_decision:   { from: "#f97316", to: "#ea580c", label: "Оффер" },
   hired:            { from: "#22c55e", to: "#16a34a", label: "Нанят" },
 }
 

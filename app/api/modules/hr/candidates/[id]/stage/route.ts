@@ -5,7 +5,7 @@ import { candidates, vacancies } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 
 const VALID_STAGES = [
-  "new", "demo", "decision", "interview",
+  "new", "demo", "decision", "ai_screening", "interview",
   "final_decision", "hired", "rejected", "talent_pool",
   "pending", "preboarding",
 ] as const
