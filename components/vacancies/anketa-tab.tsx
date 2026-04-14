@@ -48,7 +48,9 @@ interface AnketaData {
   bonus: string
   payFrequency: string[]
   showSalary: boolean
-  // 4. Обязанности и требования
+  // 4. О компании
+  companyDescription: string
+  // 5. Обязанности и требования
   responsibilities: string
   requirements: string
   // 5. Портрет кандидата
@@ -295,6 +297,7 @@ function emptyAnketa(): AnketaData {
     positionCategory: "", workFormats: [], employment: [], positionCity: "",
     requiredExperience: "", hiringPlan: 1,
     salaryFrom: "", salaryTo: "", bonus: "", payFrequency: [], showSalary: true,
+    companyDescription: "",
     responsibilities: "", requirements: "",
     requiredSkills: [], desiredSkills: [], unacceptableSkills: [],
     experienceMin: "", experienceIdeal: "",
@@ -978,7 +981,10 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange, onNavigat
   // Fetch company description for advisor
   useEffect(() => {
     fetch("/api/companies").then(r => r.ok ? r.json() : null).then(json => {
-      if (json?.data?.description) setCompanyDescription(json.data.description)
+      if (json?.data?.description) {
+        setCompanyDescription(json.data.description)
+        setData(prev => prev.companyDescription ? prev : { ...prev, companyDescription: json.data.description })
+      }
     }).catch(() => {})
   }, [])
 
@@ -1320,9 +1326,10 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange, onNavigat
       case 1: return !!(data.companyName || data.clientCompanyId || data.companyMode === "own")
       case 2: return !!data.positionCategory
       case 3: return !!(data.salaryFrom || data.salaryTo)
-      case 4: return !!(data.responsibilities || data.requirements)
-      case 5: return data.requiredSkills.length > 0
-      case 6: return data.conditions.length > 0 || data.conditionsCustom.length > 0
+      case 4: return !!data.companyDescription
+      case 5: return !!(data.responsibilities || data.requirements)
+      case 6: return data.requiredSkills.length > 0
+      case 7: return data.conditions.length > 0 || data.conditionsCustom.length > 0
       default: return false
     }
   }
@@ -1492,8 +1499,35 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange, onNavigat
         </div>
       </Section>
 
-      {/* ── 4. Обязанности и требования ── */}
-      <Section title="Обязанности и требования" number={4} filled={sectionFilled(4)} id="section-4">
+      {/* ── 4. О компании ── */}
+      <Section title="О компании" number={4} filled={sectionFilled(4)} id="section-4">
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between gap-2">
+            <Label className="text-xs">Описание компании</Label>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 text-[11px] gap-1 px-2"
+              disabled={!companyDescription}
+              onClick={() => set("companyDescription", companyDescription)}
+            >
+              <RefreshCw className="w-3 h-3" /> Подтянуть из настроек
+            </Button>
+          </div>
+          <Textarea
+            value={data.companyDescription}
+            onChange={e => set("companyDescription", e.target.value)}
+            placeholder="Краткое описание компании для кандидатов..."
+            rows={5}
+            className="w-full text-sm bg-[var(--input-bg)] border border-input"
+          />
+          <p className="text-xs text-muted-foreground">Описание отображается в вакансии. По умолчанию подтягивается из настроек компании.</p>
+        </div>
+      </Section>
+
+      {/* ── 5. Обязанности и требования ── */}
+      <Section title="Обязанности и требования" number={5} filled={sectionFilled(5)} id="section-5">
         <p className="text-xs text-muted-foreground mt-1">Описание задач и функционала должности</p>
         <div className="space-y-1.5">
           <div className="flex items-center gap-2">
@@ -1590,8 +1624,8 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange, onNavigat
         )}
       </Section>
 
-      {/* ── 5. Портрет кандидата ── */}
-      <Section title="Портрет кандидата" number={5} filled={sectionFilled(5)} id="section-5">
+      {/* ── 6. Портрет кандидата ── */}
+      <Section title="Портрет кандидата" number={6} filled={sectionFilled(6)} id="section-6">
         {/* Skills */}
         <div className="space-y-1.5" onFocus={() => setAdvisorFocusedField("skills")}>
           <div className="flex items-center gap-2">
@@ -1793,8 +1827,8 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange, onNavigat
         </div>
       </Section>
 
-      {/* ── 6. Условия ── */}
-      <Section title="Условия" number={6} filled={sectionFilled(6)} id="section-6">
+      {/* ── 7. Условия ── */}
+      <Section title="Условия" number={7} filled={sectionFilled(7)} id="section-7">
         <div className="flex flex-wrap gap-x-4 gap-y-2">
           {CONDITIONS_OPTIONS.map(opt => (
             <label key={opt} className="flex items-center gap-1.5">
@@ -1882,7 +1916,7 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange, onNavigat
       </Section>
 
       {/* ── Документы и файлы ── */}
-      <Section title={`Документы${attachments.length > 0 ? ` (${attachments.length})` : ""}`} number={0} filled={attachments.length > 0}>
+      <Section title={`Документы${attachments.length > 0 ? ` (${attachments.length})` : ""}`} number={8} filled={attachments.length > 0}>
         <input ref={attachInputRef} type="file" multiple accept=".pdf,.doc,.docx,.xlsx,.xls,.txt,.jpg,.jpeg,.png,.webp" className="hidden"
           onChange={e => { if (e.target.files?.length) handleAttachUpload(e.target.files); e.target.value = "" }} />
 
@@ -1948,8 +1982,8 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange, onNavigat
         <p className="text-[11px] text-muted-foreground">Внутренние документы — не видны кандидатам. До 20 МБ на файл.</p>
       </Section>
 
-      {/* ── 7. AI-генерация ── */}
-      <Section title="AI-генерация" number={7} filled={data.screeningQuestions.length > 0 || !!data.hhDescription}>
+      {/* ── 9. AI-генерация ── */}
+      <Section title="AI-генерация" number={9} filled={data.screeningQuestions.length > 0 || !!data.hhDescription}>
         {/* Screening questions */}
         {data.screeningQuestions.length > 0 && (
           <div className="space-y-2">
