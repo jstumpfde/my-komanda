@@ -20,6 +20,12 @@ export interface ApiVacancy {
   status: string | null
   slug: string
   descriptionJson: unknown
+  experience: string | null
+  requiredExperience: string | null
+  employmentType: string[] | null
+  schedule: string | null
+  hiringPlan: number | null
+  employeeType: string | null
   deletedAt: string | null
   createdAt: string | null
   updatedAt: string | null

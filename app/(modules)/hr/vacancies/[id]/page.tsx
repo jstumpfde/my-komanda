@@ -1106,7 +1106,7 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
               </div>
 
               <TabsContent value="anketa">
-                <AnketaTab vacancyId={id} descriptionJson={apiVacancy?.descriptionJson} onTitleChange={(t) => { if (t) setInternalName(t) }} />
+                <AnketaTab vacancyId={id} descriptionJson={apiVacancy?.descriptionJson} onTitleChange={(t) => { if (t) setInternalName(t) }} onNavigateTab={(tab) => { setActiveTab(tab); window.scrollTo({ top: 0, behavior: "smooth" }) }} />
               </TabsContent>
 
               <TabsContent value="candidates">

@@ -925,10 +925,11 @@ function CategoryField({ value, onChange }: { value: string; onChange: (v: strin
 
 // ─── Main component ──────────────────────────────────────────────────────────
 
-export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
+export function AnketaTab({ vacancyId, descriptionJson, onTitleChange, onNavigateTab }: {
   vacancyId: string
   descriptionJson: unknown
   onTitleChange?: (title: string) => void
+  onNavigateTab?: (tab: string) => void
 }) {
   const [data, setData] = useState<AnketaData>(() => {
     const saved = (descriptionJson as Record<string, unknown>)?.anketa as Record<string, unknown> | undefined
@@ -1338,9 +1339,9 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
             onChange={e => { set("vacancyTitle", e.target.value); onTitleChange?.(e.target.value) }}
             placeholder="Менеджер по продажам"
             className="h-11 text-lg bg-[var(--input-bg)] border border-input w-full"
-            maxLength={50}
+            maxLength={75}
           />
-          <p className="text-xs text-muted-foreground text-right mt-1">{data.vacancyTitle.length}/50</p>
+          <p className="text-xs text-muted-foreground text-right mt-1">{data.vacancyTitle.length}/75</p>
         </div>
       </div>
 
@@ -1950,6 +1951,11 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
           {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
           Сохранить
         </Button>
+        {onNavigateTab && (
+          <Button size="sm" variant="default" className="gap-1.5 h-9 text-xs" onClick={async () => { await save(); onNavigateTab("course") }} disabled={saving}>
+            Далее &rarr; Демонстрация
+          </Button>
+        )}
       </div>
 
       {/* Preview modal */}
@@ -2124,6 +2130,36 @@ function AiProfileSection({ data, set }: {
       </button>
       {open && (
         <div className="px-4 pb-4 pt-1 space-y-4 border-t">
+          {/* Auto-fill button */}
+          {!hasSomeData && (data.requiredSkills.length > 0 || data.responsibilities || data.unacceptableSkills.length > 0) && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full h-9 text-xs gap-1.5 border-primary/30 text-primary hover:bg-primary/5"
+              onClick={() => {
+                // Map requiredExperience to years
+                const expMap: Record<string, string> = { "1-3": "1", "3-6": "3", "6+": "6", "none": "0" }
+                const minExp = expMap[data.requiredExperience] || data.experienceMin || ""
+
+                // Build ideal profile from responsibilities + requirements
+                const keySkills = data.requiredSkills.slice(0, 5).join(", ")
+                const keyDuties = data.responsibilities.split("\n").filter(l => l.trim()).slice(0, 3).map(l => l.replace(/^[•\-–]\s*/, "").trim()).join(", ")
+                const profile = keySkills && keyDuties
+                  ? `Кандидат с навыками: ${keySkills}. Ключевые задачи: ${keyDuties}.`
+                  : keySkills ? `Кандидат с навыками: ${keySkills}.`
+                  : ""
+
+                set("aiMinExperience", minExp)
+                set("aiRequiredHardSkills", [...data.requiredSkills])
+                set("aiStopFactors", [...data.unacceptableSkills])
+                if (profile) set("aiIdealProfile", profile)
+                toast.success("AI-профиль заполнен из данных анкеты")
+              }}
+            >
+              🤖 Заполнить из анкеты
+            </Button>
+          )}
+
           {/* Min experience */}
           <div className="space-y-1.5">
             <Label className="text-xs">Минимальный опыт для AI-фильтра (лет)</Label>

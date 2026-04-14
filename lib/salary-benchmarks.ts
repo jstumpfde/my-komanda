@@ -325,6 +325,15 @@ export const salaryBenchmarks: Record<string, SalaryBenchmark> = {
 
 // ── Общая рыночная статистика ───────────────────────────────────────────────
 
+export interface PositionStats {
+  vacancies2025: number
+  vacancies2026: number
+  vacancyGrowth: number
+  resumesPerVacancy2025: number
+  resumesPerVacancy2026: number
+  competition: "growing" | "stable" | "declining"
+}
+
 export const marketStats = {
   period: "Q1 2026 vs Q1 2025",
   overallMedianGrowth: 15,
@@ -338,6 +347,28 @@ export const marketStats = {
   juniorVacancyDecline: 40,
   optimalExperience: "3-5 лет",
   source: "hh.ru, DreamJob, Forbes, ГородРабот, CNews — Q1 2026",
+  positionStats: {
+    "Руководитель отдела продаж (РОП)": { vacancies2025: 12000, vacancies2026: 14500, vacancyGrowth: 21, resumesPerVacancy2025: 4.2, resumesPerVacancy2026: 5.8, competition: "growing" },
+    "Менеджер по продажам": { vacancies2025: 580000, vacancies2026: 646000, vacancyGrowth: 11, resumesPerVacancy2025: 6.0, resumesPerVacancy2026: 7.2, competition: "growing" },
+    "HR-менеджер": { vacancies2025: 45000, vacancies2026: 52000, vacancyGrowth: 16, resumesPerVacancy2025: 5.5, resumesPerVacancy2026: 6.3, competition: "growing" },
+    "Разработчик": { vacancies2025: 120000, vacancies2026: 110000, vacancyGrowth: -8, resumesPerVacancy2025: 3.8, resumesPerVacancy2026: 5.2, competition: "growing" },
+    "Продакт-менеджер": { vacancies2025: 15000, vacancies2026: 17000, vacancyGrowth: 13, resumesPerVacancy2025: 5.0, resumesPerVacancy2026: 6.1, competition: "growing" },
+    "Маркетолог": { vacancies2025: 65000, vacancies2026: 72000, vacancyGrowth: 11, resumesPerVacancy2025: 5.8, resumesPerVacancy2026: 6.5, competition: "growing" },
+    "Дизайнер": { vacancies2025: 35000, vacancies2026: 38000, vacancyGrowth: 9, resumesPerVacancy2025: 6.2, resumesPerVacancy2026: 7.0, competition: "growing" },
+    "Аналитик": { vacancies2025: 40000, vacancies2026: 45000, vacancyGrowth: 13, resumesPerVacancy2025: 4.5, resumesPerVacancy2026: 5.5, competition: "growing" },
+    "Бухгалтер": { vacancies2025: 85000, vacancies2026: 90000, vacancyGrowth: 6, resumesPerVacancy2025: 7.0, resumesPerVacancy2026: 7.5, competition: "stable" },
+    "Руководитель проекта": { vacancies2025: 25000, vacancies2026: 28000, vacancyGrowth: 12, resumesPerVacancy2025: 4.8, resumesPerVacancy2026: 5.6, competition: "growing" },
+    "Тестировщик": { vacancies2025: 30000, vacancies2026: 25000, vacancyGrowth: -17, resumesPerVacancy2025: 4.0, resumesPerVacancy2026: 5.8, competition: "growing" },
+    "DevOps-инженер": { vacancies2025: 18000, vacancies2026: 19000, vacancyGrowth: 6, resumesPerVacancy2025: 3.2, resumesPerVacancy2026: 3.8, competition: "stable" },
+    "Системный администратор": { vacancies2025: 30000, vacancies2026: 31000, vacancyGrowth: 3, resumesPerVacancy2025: 5.5, resumesPerVacancy2026: 6.0, competition: "stable" },
+    "Контент-менеджер": { vacancies2025: 20000, vacancies2026: 22000, vacancyGrowth: 10, resumesPerVacancy2025: 8.0, resumesPerVacancy2026: 9.2, competition: "growing" },
+    "Юрист": { vacancies2025: 35000, vacancies2026: 37000, vacancyGrowth: 6, resumesPerVacancy2025: 6.5, resumesPerVacancy2026: 7.0, competition: "stable" },
+    "Финансовый менеджер": { vacancies2025: 20000, vacancies2026: 22000, vacancyGrowth: 10, resumesPerVacancy2025: 5.0, resumesPerVacancy2026: 5.8, competition: "growing" },
+    "Менеджер по закупкам": { vacancies2025: 25000, vacancies2026: 26000, vacancyGrowth: 4, resumesPerVacancy2025: 6.0, resumesPerVacancy2026: 6.5, competition: "stable" },
+    "Логист": { vacancies2025: 30000, vacancies2026: 32000, vacancyGrowth: 7, resumesPerVacancy2025: 5.5, resumesPerVacancy2026: 6.0, competition: "stable" },
+    "Администратор": { vacancies2025: 50000, vacancies2026: 52000, vacancyGrowth: 4, resumesPerVacancy2025: 9.0, resumesPerVacancy2026: 10.0, competition: "growing" },
+    "Оператор call-центра": { vacancies2025: 40000, vacancies2026: 42000, vacancyGrowth: 5, resumesPerVacancy2025: 10.0, resumesPerVacancy2026: 11.5, competition: "growing" },
+  } as Record<string, PositionStats>,
 }
 
 // ── Коэффициенты для корректировки ──────────────────────────────────────────

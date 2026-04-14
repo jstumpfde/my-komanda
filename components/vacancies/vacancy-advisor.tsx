@@ -10,6 +10,7 @@ import {
   Loader2, RefreshCw, Bot, X, Plus, TrendingUp, Lightbulb,
 } from "lucide-react"
 import { formatSalary, marketStats } from "@/lib/salary-benchmarks"
+import { scoreVacancyTitle } from "@/lib/vacancy-title-scorer"
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -277,26 +278,16 @@ export function VacancyAdvisor({ vacancyData, companyDescription, focusedField, 
           </div>
         )}
 
-        {/* Title suggestions */}
-        {result.suggestions?.titles && result.suggestions.titles.length > 0 && onApplySuggestion && (
-          <div className="rounded-lg bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/50 p-3 space-y-2">
-            <div className="flex items-center gap-1.5">
-              <Lightbulb className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-              <span className="text-xs font-medium text-blue-700 dark:text-blue-300">Варианты с высоким откликом</span>
-            </div>
-            <div className="space-y-1">
-              {result.suggestions.titles.map((t, i) => (
-                <button
-                  key={i}
-                  onClick={() => handleApply("vacancyTitle", t)}
-                  className="w-full text-left text-xs px-2 py-1.5 rounded hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors text-blue-800 dark:text-blue-200 underline decoration-dotted underline-offset-2"
-                >
-                  {t}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+        {/* Title scoring + suggestions */}
+        <TitleScoringCard
+          title={(vacancyData.vacancyTitle as string) || ""}
+          context={{
+            format: (vacancyData.workFormats as string[])?.[0],
+            salaryMin: parseInt(String(vacancyData.salaryFrom || "0").replace(/\s/g, "")) || 0,
+          }}
+          suggestions={result.suggestions?.titles || []}
+          onApply={onApplySuggestion ? (t: string) => handleApply("vacancyTitle", t) : undefined}
+        />
 
         {/* Salary analysis */}
         {result.salaryAnalysis && (
@@ -497,6 +488,84 @@ function ExperienceInsightCard({ level }: { level: string }) {
       )}
       {level === "3-5" && (
         <p className="text-[10px] text-muted-foreground">Рекомендуемый диапазон — оптимальный баланс количества и качества откликов.</p>
+      )}
+    </div>
+  )
+}
+
+// ── Market Context Card ─────────────────────────────────────────────────────
+
+// ── Title Scoring Card ──────────────────────────────────────────────────────
+
+function TitleScoringCard({ title, context, suggestions, onApply }: {
+  title: string
+  context: { format?: string; city?: string; salaryMin?: number }
+  suggestions: string[]
+  onApply?: (title: string) => void
+}) {
+  if (!title) return null
+
+  const result = scoreVacancyTitle(title, context)
+  const scoreColor = result.score >= 60 ? "text-emerald-600 dark:text-emerald-400"
+    : result.score >= 40 ? "text-amber-600 dark:text-amber-400"
+    : "text-red-600 dark:text-red-400"
+  const barColor = result.score >= 80 ? "bg-emerald-500"
+    : result.score >= 60 ? "bg-emerald-400"
+    : result.score >= 40 ? "bg-amber-500"
+    : "bg-red-500"
+
+  return (
+    <div className="rounded-lg border p-3 space-y-2.5">
+      <div className="flex items-center gap-1.5">
+        <Lightbulb className="w-3.5 h-3.5 text-primary" />
+        <span className="text-xs font-medium">Оценка названия</span>
+      </div>
+
+      <p className="text-xs font-medium text-foreground truncate">&ldquo;{title}&rdquo;</p>
+
+      <div className="flex items-center gap-2">
+        <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+          <div className={cn("h-full rounded-full transition-all", barColor)} style={{ width: `${result.score}%` }} />
+        </div>
+        <span className={cn("text-xs font-bold tabular-nums", scoreColor)}>{result.score}/100</span>
+        <Badge variant={result.score >= 60 ? "default" : result.score >= 40 ? "secondary" : "destructive"} className="text-[10px] h-4 px-1.5">
+          {result.label}
+        </Badge>
+      </div>
+
+      <div className="space-y-0.5">
+        {result.checks.map((c, i) => (
+          <div key={i} className="flex items-start gap-1.5">
+            {c.status === "ok" ? (
+              <CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0 mt-0.5" />
+            ) : c.status === "error" ? (
+              <XCircle className="w-3 h-3 text-red-500 shrink-0 mt-0.5" />
+            ) : (
+              <AlertTriangle className="w-3 h-3 text-amber-500 shrink-0 mt-0.5" />
+            )}
+            <span className="text-[10px] text-muted-foreground leading-relaxed">{c.text}</span>
+          </div>
+        ))}
+      </div>
+
+      {suggestions.length > 0 && onApply && (
+        <div className="pt-1 border-t space-y-1">
+          <span className="text-[10px] font-medium text-muted-foreground">Варианты с высоким откликом:</span>
+          {suggestions.map((s, i) => {
+            const sScore = scoreVacancyTitle(s, context)
+            const sColor = sScore.score >= 60 ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"
+            return (
+              <button
+                key={i}
+                onClick={() => onApply(s)}
+                className="w-full text-left px-2 py-1.5 rounded hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors group"
+              >
+                <span className="text-xs text-blue-800 dark:text-blue-200 underline decoration-dotted underline-offset-2 group-hover:text-blue-600">{s}</span>
+                <span className={cn("text-[10px] font-bold ml-1.5", sColor)}>&rarr; {sScore.score}/100</span>
+              </button>
+            )
+          })}
+        </div>
       )}
     </div>
   )

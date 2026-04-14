@@ -1179,7 +1179,7 @@ export default function VacanciesPage() {
               )}
               <div className="space-y-1.5">
                 <Label className="text-xs font-medium">Название вакансии <span className="text-muted-foreground font-normal">(необязательно — AI определит из файла)</span></Label>
-                <Input value={newVacancyTitle} onChange={(e) => setNewVacancyTitle(e.target.value)} placeholder="Менеджер по продажам" className="h-10 border border-input" maxLength={50} />
+                <Input value={newVacancyTitle} onChange={(e) => setNewVacancyTitle(e.target.value)} placeholder="Менеджер по продажам" className="h-10 border border-input" maxLength={75} />
               </div>
               <Button className="w-full h-10" onClick={handleCreateVacancy} disabled={creating || !uploadedFile}>
                 {creating ? <Loader2 className="size-4 mr-1.5 animate-spin" /> : <Sparkles className="size-4 mr-1.5" />}
@@ -1196,7 +1196,7 @@ export default function VacanciesPage() {
                 className="h-40 bg-[var(--input-bg)] border border-input resize-none text-sm" autoFocus />
               <div className="space-y-1.5">
                 <Label className="text-xs font-medium">Название вакансии <span className="text-muted-foreground font-normal">(необязательно — AI определит из текста)</span></Label>
-                <Input value={newVacancyTitle} onChange={(e) => setNewVacancyTitle(e.target.value)} placeholder="Менеджер по продажам" className="h-10 border border-input" maxLength={50} />
+                <Input value={newVacancyTitle} onChange={(e) => setNewVacancyTitle(e.target.value)} placeholder="Менеджер по продажам" className="h-10 border border-input" maxLength={75} />
               </div>
               <Button className="w-full h-10" onClick={handleCreateVacancy} disabled={creating || !aiText.trim()}>
                 {creating ? <Loader2 className="size-4 mr-1.5 animate-spin" /> : <Sparkles className="size-4 mr-1.5" />}
@@ -1217,7 +1217,7 @@ export default function VacanciesPage() {
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs font-medium">Название вакансии <span className="text-muted-foreground font-normal">(необязательно — AI определит со страницы)</span></Label>
-                <Input value={newVacancyTitle} onChange={(e) => setNewVacancyTitle(e.target.value)} placeholder="Менеджер по продажам" className="h-10 border border-input" maxLength={50} />
+                <Input value={newVacancyTitle} onChange={(e) => setNewVacancyTitle(e.target.value)} placeholder="Менеджер по продажам" className="h-10 border border-input" maxLength={75} />
               </div>
               <Button className="w-full h-10" onClick={handleCreateVacancy} disabled={creating || !importUrl.trim()}>
                 {creating ? <Loader2 className="size-4 mr-1.5 animate-spin" /> : <Globe className="size-4 mr-1.5" />}
@@ -1257,7 +1257,7 @@ export default function VacanciesPage() {
                     readOnly={recording} />
                   <div className="space-y-1.5">
                     <Label className="text-xs font-medium">Название вакансии <span className="text-muted-foreground font-normal">(необязательно — AI определит из речи)</span></Label>
-                    <Input value={newVacancyTitle} onChange={(e) => setNewVacancyTitle(e.target.value)} placeholder="AI определит автоматически" className="h-10 border border-input" maxLength={50} />
+                    <Input value={newVacancyTitle} onChange={(e) => setNewVacancyTitle(e.target.value)} placeholder="AI определит автоматически" className="h-10 border border-input" maxLength={75} />
                   </div>
                   <p className="text-[11px] text-muted-foreground">Весь надиктованный текст пойдёт на AI-анализ. Название вакансии будет определено автоматически.</p>
                   <Button className="w-full h-10" onClick={handleCreateVacancy} disabled={creating || !voiceText.trim() || recording}>
@@ -1323,7 +1323,7 @@ export default function VacanciesPage() {
               <div className="space-y-1.5">
                 <Label className="text-xs font-medium">Название вакансии</Label>
                 <Input value={newVacancyTitle} onChange={(e) => setNewVacancyTitle(e.target.value)}
-                  placeholder="Менеджер по продажам" className="h-10 border border-input" maxLength={50} autoFocus
+                  placeholder="Менеджер по продажам" className="h-10 border border-input" maxLength={75} autoFocus
                   onKeyDown={(e) => { if (e.key === "Enter" && newVacancyTitle.trim()) handleCreateVacancy() }} />
               </div>
               <Button className="w-full h-10" onClick={handleCreateVacancy} disabled={creating || !newVacancyTitle.trim()}>
