@@ -26,6 +26,11 @@ export interface ParsedVacancy {
   unacceptableSkills: string[]
   experienceMin: string
   experienceIdeal: string
+  requiredExperience?: string
+  employmentType?: string[]
+  schedule?: string
+  employeeType?: string
+  hiringPlan?: number
   conditions: string[]
   screeningQuestions: string[]
   hhDescription: string

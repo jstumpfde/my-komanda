@@ -18,8 +18,11 @@ import { POSITION_CATEGORIES } from "@/lib/position-classifier"
 import { type Question, type QuestionAnswerType, defaultQuestion } from "@/lib/course-types"
 import { CompanySelector } from "@/components/vacancies/company-selector"
 import { type ParsedVacancy } from "@/components/vacancies/anketa-wizard"
+import { VacancyAdvisor } from "@/components/vacancies/vacancy-advisor"
 
 // ─── Types ───────────────────────────────────────────────────────────────────
+
+type AiWeightLevel = "critical" | "important" | "nice" | "irrelevant"
 
 interface AnketaData {
   // Top-level
@@ -37,6 +40,8 @@ interface AnketaData {
   workFormats: string[]
   employment: string[]
   positionCity: string
+  requiredExperience: string
+  hiringPlan: number
   // 3. Мотивация
   salaryFrom: string
   salaryTo: string
@@ -57,11 +62,20 @@ interface AnketaData {
   // 6. Условия
   conditions: string[]
   conditionsCustom: string[]
+  employmentType: string[]
+  schedule: string
+  employeeType: string
   // removed: questions (moved to Demonstration)
   questions: Question[]
   // 7. AI-генерация
   screeningQuestions: string[]
   hhDescription: string
+  // 8. AI-профиль кандидата
+  aiMinExperience: string
+  aiRequiredHardSkills: string[]
+  aiStopFactors: string[]
+  aiIdealProfile: string
+  aiWeights: Record<string, AiWeightLevel>
 }
 
 interface StopFactor {
@@ -118,6 +132,56 @@ const COMPANY_WORK_FORMAT_OPTIONS = [
   { value: "travel",   label: "Разъездной" },
 ]
 const EMPLOYMENT_OPTIONS = ["Полная", "Частичная", "Проектная"]
+
+const REQUIRED_EXPERIENCE_OPTIONS = [
+  { value: "none", label: "Без опыта" },
+  { value: "1-3", label: "1–3 года" },
+  { value: "3-6", label: "3–6 лет" },
+  { value: "6+", label: "от 6 лет" },
+]
+
+const EMPLOYMENT_TYPE_OPTIONS = ["Трудовой договор (ТК РФ)", "ГПХ", "Самозанятый", "ИП"]
+
+const SCHEDULE_OPTIONS = [
+  { value: "5/2", label: "5/2" },
+  { value: "2/2", label: "2/2" },
+  { value: "free", label: "Свободный" },
+  { value: "shift", label: "Сменный" },
+  { value: "rotation", label: "Вахта" },
+  { value: "other", label: "Другое" },
+]
+
+const EMPLOYEE_TYPE_OPTIONS = [
+  { value: "permanent", label: "Постоянный" },
+  { value: "temporary", label: "Временный / Проектный" },
+]
+
+const AI_WEIGHT_OPTIONS: { value: AiWeightLevel; label: string }[] = [
+  { value: "critical", label: "Критично" },
+  { value: "important", label: "Важно" },
+  { value: "nice", label: "Желательно" },
+  { value: "irrelevant", label: "Не важно" },
+]
+
+const AI_WEIGHT_CRITERIA = [
+  { id: "industry_experience", label: "Опыт в отрасли" },
+  { id: "management", label: "Опыт управления" },
+  { id: "education", label: "Образование" },
+  { id: "specific_skills", label: "Конкретные навыки" },
+  { id: "salary_match", label: "Зарплатное соответствие" },
+  { id: "work_format", label: "Формат работы" },
+  { id: "location", label: "Город/локация" },
+]
+
+const DEFAULT_AI_WEIGHTS: Record<string, AiWeightLevel> = {
+  industry_experience: "important",
+  management: "nice",
+  education: "nice",
+  specific_skills: "important",
+  salary_match: "important",
+  work_format: "nice",
+  location: "nice",
+}
 
 const PAY_FREQUENCY_OPTIONS = [
   { value: "monthly", label: "Ежемесячно" },
@@ -209,6 +273,7 @@ function emptyAnketa(): AnketaData {
     companyMode: "own", companyName: "", industry: "", companyCity: "", workFormat: "",
     clientCompanyId: null, clientContactId: null,
     positionCategory: "", workFormats: [], employment: [], positionCity: "",
+    requiredExperience: "", hiringPlan: 1,
     salaryFrom: "", salaryTo: "", bonus: "", payFrequency: [], showSalary: true,
     responsibilities: "", requirements: "",
     requiredSkills: [], desiredSkills: [], unacceptableSkills: [],
@@ -216,8 +281,11 @@ function emptyAnketa(): AnketaData {
     stopFactors: DEFAULT_STOP_FACTORS.map(f => ({ ...f })),
     desiredParams: DEFAULT_DESIRED_PARAMS.map(p => ({ ...p })),
     conditions: [], conditionsCustom: [],
+    employmentType: [], schedule: "", employeeType: "permanent",
     questions: [],
     screeningQuestions: [], hhDescription: "",
+    aiMinExperience: "", aiRequiredHardSkills: [], aiStopFactors: [],
+    aiIdealProfile: "", aiWeights: { ...DEFAULT_AI_WEIGHTS },
   }
 }
 
@@ -293,12 +361,12 @@ function migrateAnketa(saved: Record<string, unknown>): AnketaData {
 
 // ─── Section wrapper ─────────────────────────────────────────────────────────
 
-function Section({ title, number, children, filled }: {
-  title: string; number: number; children: React.ReactNode; filled: boolean
+function Section({ title, number, children, filled, id }: {
+  title: string; number: number; children: React.ReactNode; filled: boolean; id?: string
 }) {
   const [open, setOpen] = useState(true)
   return (
-    <div className="border rounded-lg">
+    <div className="border rounded-lg" id={id}>
       <button
         type="button"
         className="flex items-center justify-between w-full px-4 py-3 text-left hover:bg-muted/50 transition-colors"
@@ -803,7 +871,7 @@ function CategoryField({ value, onChange }: { value: string; onChange: (v: strin
       <Label className="text-xs">Категория</Label>
       <div className="flex items-center gap-3 w-full">
         <Select value={value} onValueChange={onChange}>
-          <SelectTrigger className="h-9 bg-[var(--input-bg)] border border-input w-1/2 min-w-[300px]" style={{ maxWidth: "calc(100% - 160px)" }}>
+          <SelectTrigger className="h-9 bg-[var(--input-bg)] border border-input flex-1">
             <SelectValue placeholder="Выберите категорию" />
           </SelectTrigger>
           <SelectContent>
@@ -868,11 +936,19 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
   })
   const [saving, setSaving] = useState(false)
   const [previewOpen, setPreviewOpen] = useState(false)
+  const [advisorFocusedField, setAdvisorFocusedField] = useState("")
   const [aiLoading, setAiLoading] = useState(false)
   const [aiLoadingStep, setAiLoadingStep] = useState(0)
   const [showCompanySection, setShowCompanySection] = useState(false)
+  const [companyDescription, setCompanyDescription] = useState("")
   useEffect(() => {
     setShowCompanySection(localStorage.getItem("mk_hr_show_company_selector") === "true")
+  }, [])
+  // Fetch company description for advisor
+  useEffect(() => {
+    fetch("/api/companies").then(r => r.ok ? r.json() : null).then(json => {
+      if (json?.data?.description) setCompanyDescription(json.data.description)
+    }).catch(() => {})
   }, [])
 
   const handleWizardComplete = useCallback((result: ParsedVacancy) => {
@@ -900,6 +976,11 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
       unacceptableSkills: result.unacceptableSkills.length > 0 ? result.unacceptableSkills : prev.unacceptableSkills,
       experienceMin: result.experienceMin || prev.experienceMin,
       experienceIdeal: result.experienceIdeal || prev.experienceIdeal,
+      requiredExperience: result.requiredExperience || prev.requiredExperience,
+      employmentType: result.employmentType && result.employmentType.length > 0 ? result.employmentType : prev.employmentType,
+      schedule: result.schedule || prev.schedule,
+      employeeType: result.employeeType || prev.employeeType,
+      hiringPlan: result.hiringPlan && result.hiringPlan > 1 ? result.hiringPlan : prev.hiringPlan,
       conditions: result.conditions.length > 0 ? result.conditions : prev.conditions,
       screeningQuestions: result.screeningQuestions.length > 0 ? result.screeningQuestions : prev.screeningQuestions,
       hhDescription: result.hhDescription || prev.hhDescription,
@@ -1232,7 +1313,8 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
   ]
 
   return (
-    <div className="relative space-y-4" onBlur={handleBlur}>
+    <div className="flex flex-col lg:flex-row gap-6 items-start">
+    <div className="relative space-y-4 flex-[2] min-w-0 w-full" onBlur={handleBlur}>
       {aiLoading && (
         <div className="absolute inset-0 bg-white/80 dark:bg-gray-950/80 backdrop-blur-sm z-50 flex items-center justify-center rounded-lg">
           <div className="flex flex-col items-center gap-3">
@@ -1248,9 +1330,9 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
       </div>
 
       {/* ── Название вакансии (top-level) ── */}
-      <div className="w-full space-y-1">
+      <div className="w-full space-y-1" id="section-title">
         <Label className="text-xs font-medium">Название вакансии</Label>
-        <div style={{ width: "fit-content", minWidth: "50%", maxWidth: "100%" }}>
+        <div className="w-full">
           <Input
             value={data.vacancyTitle}
             onChange={e => { set("vacancyTitle", e.target.value); onTitleChange?.(e.target.value) }}
@@ -1264,7 +1346,7 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
 
       {/* ── 1. Компания ── */}
       {showCompanySection ? (
-        <Section title="Компания" number={1} filled={sectionFilled(1)}>
+        <Section title="Компания" number={1} filled={sectionFilled(1)} id="section-1">
           <CompanySelector
             mode={data.companyMode}
             clientCompanyId={data.clientCompanyId}
@@ -1282,7 +1364,7 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
       )}
 
       {/* ── 2. Должность ── */}
-      <Section title="Должность" number={2} filled={sectionFilled(2)}>
+      <Section title="Должность" number={2} filled={sectionFilled(2)} id="section-2">
         <CategoryField value={data.positionCategory} onChange={v => set("positionCategory", v)} />
         <div className="space-y-1.5">
           <Label className="text-xs">Формат работы</Label>
@@ -1308,14 +1390,50 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
         </div>
         <div className="space-y-1.5">
           <Label className="text-xs">Город</Label>
-          <Input value={data.positionCity} onChange={e => set("positionCity", e.target.value)} placeholder="Москва" className="h-9 bg-[var(--input-bg)] border border-input w-1/2 min-w-[300px]" />
+          <Input value={data.positionCity} onChange={e => set("positionCity", e.target.value)} placeholder="Москва" className="h-9 bg-[var(--input-bg)] border border-input w-full" />
+        </div>
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-2">
+            <Label className="text-xs">Требуемый опыт</Label>
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-muted-foreground border-muted-foreground/30">hh.ru</Badge>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {REQUIRED_EXPERIENCE_OPTIONS.map(opt => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => set("requiredExperience", data.requiredExperience === opt.value ? "" : opt.value)}
+                className={cn(
+                  "px-3 py-1.5 rounded-md text-sm border transition-colors",
+                  data.requiredExperience === opt.value
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-[var(--input-bg)] border-input hover:bg-accent"
+                )}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-2">
+            <Label className="text-xs">Количество вакантных мест</Label>
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-muted-foreground border-muted-foreground/30">hh.ru</Badge>
+          </div>
+          <Input
+            type="number"
+            min={1}
+            value={data.hiringPlan}
+            onChange={e => set("hiringPlan", Math.max(1, parseInt(e.target.value) || 1))}
+            className="h-9 bg-[var(--input-bg)] border border-input w-24"
+          />
         </div>
       </Section>
 
       {/* ── 3. Мотивация ── */}
-      <Section title="Мотивация" number={3} filled={sectionFilled(3)}>
-        <div className="max-w-2xl space-y-4">
-          <div className="grid grid-cols-2 gap-4 max-w-lg">
+      <Section title="Мотивация" number={3} filled={sectionFilled(3)} id="section-3">
+        <div className="w-full space-y-4">
+          <div className="grid grid-cols-2 gap-4" onFocus={() => setAdvisorFocusedField("salary")}>
             <div className="space-y-1.5">
               <Label className="text-xs">Зарплата от</Label>
               <Input value={data.salaryFrom} onChange={e => set("salaryFrom", e.target.value)} placeholder="80 000 ₽" className="h-9 bg-[var(--input-bg)] border border-input" />
@@ -1344,23 +1462,31 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
       </Section>
 
       {/* ── 4. Обязанности и требования ── */}
-      <Section title="Обязанности и требования" number={4} filled={sectionFilled(4)}>
+      <Section title="Обязанности и требования" number={4} filled={sectionFilled(4)} id="section-4">
         <p className="text-xs text-muted-foreground mt-1">Описание задач и функционала должности</p>
         <div className="space-y-1.5">
-          <Label className="text-xs">Обязанности</Label>
+          <div className="flex items-center gap-2">
+            <Label className="text-xs">Обязанности</Label>
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-primary border-primary/30">Нужно для AI-скрининга</Badge>
+          </div>
           <Textarea
             value={data.responsibilities}
             onChange={e => set("responsibilities", e.target.value)}
+            onFocus={() => setAdvisorFocusedField("responsibilities")}
             placeholder="Опишите задачи и функционал должности..."
             rows={4}
             className="text-sm bg-[var(--input-bg)] border border-input"
           />
         </div>
         <div className="space-y-1.5">
-          <Label className="text-xs">Требования</Label>
+          <div className="flex items-center gap-2">
+            <Label className="text-xs">Требования</Label>
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-primary border-primary/30">Нужно для AI-скрининга</Badge>
+          </div>
           <Textarea
             value={data.requirements}
             onChange={e => set("requirements", e.target.value)}
+            onFocus={() => setAdvisorFocusedField("requirements")}
             placeholder="Что должен знать и уметь кандидат..."
             rows={4}
             className="text-sm bg-[var(--input-bg)] border border-input"
@@ -1369,24 +1495,33 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
       </Section>
 
       {/* ── 5. Портрет кандидата ── */}
-      <Section title="Портрет кандидата" number={5} filled={sectionFilled(5)}>
+      <Section title="Портрет кандидата" number={5} filled={sectionFilled(5)} id="section-5">
         {/* Skills */}
-        <div className="space-y-1.5">
-          <Label className="text-xs">Обязательные навыки</Label>
+        <div className="space-y-1.5" onFocus={() => setAdvisorFocusedField("skills")}>
+          <div className="flex items-center gap-2">
+            <Label className="text-xs">Обязательные навыки</Label>
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-primary border-primary/30">Нужно для AI-скрининга</Badge>
+          </div>
           <TagInputWithSuggestions tags={data.requiredSkills} onChange={v => set("requiredSkills", v)} placeholder="Добавить навык..." suggestions={REQUIRED_SKILL_SUGGESTIONS} customType="skill" />
         </div>
         <div className="space-y-1.5">
           <Label className="text-xs">Желательные навыки</Label>
           <TagInputWithSuggestions tags={data.desiredSkills} onChange={v => set("desiredSkills", v)} placeholder="Добавить навык..." suggestions={DESIRED_SKILL_SUGGESTIONS} customType="skill" />
         </div>
-        <div className="space-y-1.5">
-          <Label className="text-xs text-destructive/80">Неприемлемо</Label>
+        <div className="space-y-1.5" onFocus={() => setAdvisorFocusedField("stopFactors")}>
+          <div className="flex items-center gap-2">
+            <Label className="text-xs text-destructive/80">Неприемлемо</Label>
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-primary border-primary/30">Нужно для AI-скрининга</Badge>
+          </div>
           <TagInputWithSuggestions tags={data.unacceptableSkills} onChange={v => set("unacceptableSkills", v)} placeholder="Что неприемлемо..." suggestions={UNACCEPTABLE_SUGGESTIONS} customType="skill" />
         </div>
 
         {/* Stop factors */}
         <div className="space-y-2 pt-2 border-t">
-          <Label className="text-xs font-semibold">Критерии отбора</Label>
+          <div className="flex items-center gap-2">
+            <Label className="text-xs font-semibold">Критерии отбора</Label>
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-primary border-primary/30">Нужно для AI-скрининга</Badge>
+          </div>
           <div className="space-y-2">
             {data.stopFactors.map((f, idx) => (
               <div key={f.id}>
@@ -1515,7 +1650,7 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
       </Section>
 
       {/* ── 6. Условия ── */}
-      <Section title="Условия" number={6} filled={sectionFilled(6)}>
+      <Section title="Условия" number={6} filled={sectionFilled(6)} id="section-6">
         <div className="flex flex-wrap gap-x-4 gap-y-2">
           {CONDITIONS_OPTIONS.map(opt => (
             <label key={opt} className="flex items-center gap-1.5">
@@ -1537,6 +1672,69 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
           </div>
         )}
         <TagInput tags={[]} onChange={tags => { if (tags.length > 0) set("conditionsCustom", [...data.conditionsCustom, ...tags]) }} placeholder="Добавить своё условие..." customType="condition" />
+
+        <div className="space-y-1.5 pt-2 border-t">
+          <div className="flex items-center gap-2">
+            <Label className="text-xs">Оформление</Label>
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-muted-foreground border-muted-foreground/30">hh.ru</Badge>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            {EMPLOYMENT_TYPE_OPTIONS.map(opt => (
+              <label key={opt} className="flex items-center gap-1.5">
+                <Checkbox checked={data.employmentType.includes(opt)} onCheckedChange={() => toggleArray("employmentType", opt)} />
+                <span className="text-sm">{opt}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-2">
+            <Label className="text-xs">График работы</Label>
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-muted-foreground border-muted-foreground/30">hh.ru</Badge>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {SCHEDULE_OPTIONS.map(opt => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => set("schedule", data.schedule === opt.value ? "" : opt.value)}
+                className={cn(
+                  "px-3 py-1.5 rounded-md text-sm border transition-colors",
+                  data.schedule === opt.value
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-[var(--input-bg)] border-input hover:bg-accent"
+                )}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-2">
+            <Label className="text-xs">Тип сотрудника</Label>
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-muted-foreground border-muted-foreground/30">hh.ru</Badge>
+          </div>
+          <div className="flex gap-2">
+            {EMPLOYEE_TYPE_OPTIONS.map(opt => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => set("employeeType", opt.value)}
+                className={cn(
+                  "px-3 py-1.5 rounded-md text-sm border transition-colors",
+                  data.employeeType === opt.value
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-[var(--input-bg)] border-input hover:bg-accent"
+                )}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
       </Section>
 
       {/* ── Документы и файлы ── */}
@@ -1714,13 +1912,11 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
             </div>
           )}
 
-          {/* Saved description */}
+          {/* Saved description — preview/code toggle */}
           {data.hhDescription && !hhPreview && (
-            <Textarea
-              value={data.hhDescription}
-              onChange={e => set("hhDescription", e.target.value)}
-              rows={10}
-              className="text-sm bg-[var(--input-bg)] border border-input font-mono text-xs"
+            <HhDescriptionView
+              html={data.hhDescription}
+              onChange={v => set("hhDescription", v)}
             />
           )}
 
@@ -1736,6 +1932,9 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
           )}
         </div>
       </Section>
+
+      {/* ── 8. AI-профиль кандидата ── */}
+      <AiProfileSection data={data} set={set} />
 
       {/* Actions */}
       <div className="flex items-center gap-3 justify-end mt-4">
@@ -1866,6 +2065,201 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange }: {
           </div>
         </DialogContent>
       </Dialog>
+    </div>
+    {/* ── AI Advisor Panel ── */}
+    <VacancyAdvisor
+      vacancyData={data as unknown as Record<string, unknown>}
+      companyDescription={companyDescription}
+      focusedField={advisorFocusedField}
+      onApplySuggestion={(field, value) => {
+        if (field === "vacancyTitle") {
+          set("vacancyTitle", value as string)
+          onTitleChange?.(value as string)
+        } else if (field === "requiredSkills") {
+          set("requiredSkills", value as string[])
+        } else if (field === "unacceptableSkills") {
+          set("unacceptableSkills", value as string[])
+        } else if (field === "responsibilities") {
+          set("responsibilities", value as string)
+        } else if (field === "requirements") {
+          set("requirements", value as string)
+        }
+      }}
+    />
+    </div>
+  )
+}
+
+// ── AI Profile Section (collapsible) ────────────────────────────────────────
+
+function AiProfileSection({ data, set }: {
+  data: AnketaData
+  set: <K extends keyof AnketaData>(key: K, value: AnketaData[K]) => void
+}) {
+  const [open, setOpen] = useState(false)
+
+  const hasSomeData = data.aiIdealProfile || data.aiRequiredHardSkills.length > 0
+    || data.aiStopFactors.length > 0 || data.aiMinExperience
+
+  return (
+    <div className="border rounded-lg bg-violet-50/30 dark:bg-violet-950/10" id="section-8">
+      <button
+        type="button"
+        className="flex items-center justify-between w-full px-4 py-3 text-left hover:bg-muted/50 transition-colors"
+        onClick={() => setOpen(!open)}
+      >
+        <div className="flex items-center gap-3">
+          <span className={cn(
+            "flex items-center justify-center w-6 h-6 rounded-full text-xs",
+            hasSomeData ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+          )}>
+            🤖
+          </span>
+          <div>
+            <span className="font-medium text-sm">AI-профиль кандидата</span>
+            <p className="text-[10px] text-muted-foreground">Данные для автоматического скрининга и оценки</p>
+          </div>
+        </div>
+        <ChevronDown className={cn("w-4 h-4 text-muted-foreground transition-transform", open && "rotate-180")} />
+      </button>
+      {open && (
+        <div className="px-4 pb-4 pt-1 space-y-4 border-t">
+          {/* Min experience */}
+          <div className="space-y-1.5">
+            <Label className="text-xs">Минимальный опыт для AI-фильтра (лет)</Label>
+            <Input
+              type="number"
+              min={0}
+              value={data.aiMinExperience}
+              onChange={e => set("aiMinExperience", e.target.value)}
+              placeholder="0"
+              className="h-9 bg-[var(--input-bg)] border border-input w-24"
+            />
+            <p className="text-[10px] text-muted-foreground">AI будет автоматически снижать рейтинг кандидатам с опытом менее указанного</p>
+          </div>
+
+          {/* Required hard skills */}
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2">
+              <Label className="text-xs">Обязательные компетенции (hard skills)</Label>
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-primary border-primary/30">AI-скрининг</Badge>
+            </div>
+            <TagInput
+              tags={data.aiRequiredHardSkills}
+              onChange={v => set("aiRequiredHardSkills", v)}
+              placeholder="Добавить навык..."
+              customType="skill"
+            />
+            <p className="text-[10px] text-muted-foreground">Кандидат без этих навыков получит рейтинг ниже 50%</p>
+          </div>
+
+          {/* AI stop factors */}
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2">
+              <Label className="text-xs text-destructive/80">Автоматический отказ — стоп-факторы</Label>
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-primary border-primary/30">AI-скрининг</Badge>
+            </div>
+            <TagInput
+              tags={data.aiStopFactors}
+              onChange={v => set("aiStopFactors", v)}
+              placeholder="Нет опыта B2B, Нет опыта управления..."
+              customType="stop_factor"
+            />
+            <p className="text-[10px] text-muted-foreground">Если у кандидата есть хотя бы один стоп-фактор — автоматический отказ (рейтинг 0)</p>
+          </div>
+
+          {/* Ideal profile */}
+          <div className="space-y-1.5">
+            <Label className="text-xs">Описание идеального кандидата</Label>
+            <Textarea
+              value={data.aiIdealProfile}
+              onChange={e => set("aiIdealProfile", e.target.value)}
+              placeholder="Опытный руководитель продаж с B2B SaaS бэкграундом, который строил отдел с нуля, умеет продавать сам и растить команду. Управляет через метрики и CRM."
+              rows={3}
+              className="text-sm bg-[var(--input-bg)] border border-input"
+            />
+            <p className="text-[10px] text-muted-foreground">AI будет сравнивать каждое резюме с этим описанием</p>
+          </div>
+
+          {/* AI weights */}
+          <div className="space-y-2">
+            <Label className="text-xs font-semibold">Приоритеты оценки</Label>
+            <div className="space-y-2">
+              {AI_WEIGHT_CRITERIA.map(criterion => (
+                <div key={criterion.id} className="flex items-center justify-between gap-3">
+                  <span className="text-sm text-muted-foreground">{criterion.label}</span>
+                  <div className="flex gap-0.5">
+                    {AI_WEIGHT_OPTIONS.map(opt => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => set("aiWeights", { ...data.aiWeights, [criterion.id]: opt.value })}
+                        className={cn(
+                          "px-2 py-0.5 rounded text-[10px] font-medium border transition-colors",
+                          data.aiWeights[criterion.id] === opt.value
+                            ? opt.value === "critical" ? "bg-red-100 dark:bg-red-950/30 text-red-700 dark:text-red-300 border-red-300 dark:border-red-800"
+                              : opt.value === "important" ? "bg-amber-100 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-800"
+                              : opt.value === "nice" ? "bg-blue-100 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-800"
+                              : "bg-muted text-muted-foreground border-border"
+                            : "bg-background text-muted-foreground border-border hover:bg-accent"
+                        )}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── HH Description View (preview/code toggle) ──────────────────────────────
+
+function HhDescriptionView({ html, onChange }: { html: string; onChange: (v: string) => void }) {
+  const [mode, setMode] = useState<"preview" | "code">("preview")
+
+  return (
+    <div className="rounded-lg border overflow-hidden">
+      <div className="flex items-center gap-1 px-3 py-1.5 bg-muted/50 border-b">
+        <button
+          type="button"
+          onClick={() => setMode("preview")}
+          className={cn(
+            "px-2 py-0.5 rounded text-xs font-medium transition-colors",
+            mode === "preview" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          Предпросмотр
+        </button>
+        <button
+          type="button"
+          onClick={() => setMode("code")}
+          className={cn(
+            "px-2 py-0.5 rounded text-xs font-medium transition-colors",
+            mode === "code" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          Код
+        </button>
+      </div>
+      {mode === "preview" ? (
+        <div
+          className="p-4 prose prose-sm max-w-none text-sm [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:mt-3 [&_h3]:mb-1 [&_ul]:mt-1 [&_ul]:list-disc [&_ul]:pl-5 [&_li]:text-sm [&_p]:my-1.5"
+          dangerouslySetInnerHTML={{ __html: html }}
+        />
+      ) : (
+        <Textarea
+          value={html}
+          onChange={e => onChange(e.target.value)}
+          rows={12}
+          className="border-0 rounded-none text-xs font-mono bg-[var(--input-bg)] resize-none focus-visible:ring-0"
+        />
+      )}
     </div>
   )
 }

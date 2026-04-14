@@ -32,7 +32,7 @@ import {
   Plus, Briefcase, MapPin, List, LayoutGrid, Table2, Calendar, Banknote,
   Search, MoreHorizontal, Pencil, Copy, Archive, Trash2, ListFilter,
   RotateCcw, X, Upload, FileText, Loader2, CheckCircle2, Sparkles,
-  ClipboardPaste, Globe, PenLine, ArrowLeft, Mic, MicOff, MessageCircle, Send,
+  ClipboardPaste, Globe, PenLine, ArrowLeft, Mic, MicOff, MessageCircle, Send, FolderOpen,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
@@ -318,7 +318,10 @@ export default function VacanciesPage() {
   const [permanentDeleteTarget, setPermanentDeleteTarget] = useState<ApiVacancy | null>(null)
   // Create vacancy wizard
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
-  const [createMode, setCreateMode] = useState<"choose" | "file" | "text" | "url" | "manual" | "voice" | "chat">("choose")
+  const [createMode, setCreateMode] = useState<"choose" | "file" | "text" | "url" | "manual" | "voice" | "chat" | "template">("choose")
+  const [templateSearch, setTemplateSearch] = useState("")
+  const [templateVacancies, setTemplateVacancies] = useState<Array<{ id: string; title: string; status: string; createdAt: string }>>([])
+  const [templateLoading, setTemplateLoading] = useState(false)
   const [newVacancyTitle, setNewVacancyTitle] = useState("")
   const [creating, setCreating] = useState(false)
   const [importUrl, setImportUrl] = useState("")
@@ -353,7 +356,62 @@ export default function VacanciesPage() {
     setChatInput("")
     setChatStep(0)
     chatCollected.current = {}
+    setTemplateSearch("")
+    setTemplateVacancies([])
   }, [])
+
+  const loadTemplateVacancies = useCallback(async () => {
+    setTemplateLoading(true)
+    try {
+      const res = await fetch("/api/modules/hr/vacancies?limit=100")
+      if (res.ok) {
+        const data = await res.json()
+        const vacs = (data.vacancies ?? data.data ?? []) as Array<{ id: string; title: string; status: string; createdAt: string }>
+        setTemplateVacancies(vacs)
+      }
+    } catch {}
+    setTemplateLoading(false)
+  }, [])
+
+  const handleCreateFromTemplate = useCallback(async (templateId: string) => {
+    setCreating(true)
+    setAiProgress("Копирую вакансию...")
+    try {
+      // Fetch template vacancy data
+      const res = await fetch(`/api/modules/hr/vacancies/${templateId}`)
+      if (!res.ok) throw new Error("Не удалось загрузить шаблон")
+      const template = await res.json()
+      const src = template.data ?? template
+
+      // Create new vacancy with template data
+      const createRes = await fetch("/api/modules/hr/vacancies", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: `${src.title} (копия)`,
+          description: src.description || undefined,
+          description_json: src.descriptionJson || undefined,
+          city: src.city || undefined,
+          format: src.format || undefined,
+          employment: src.employment || undefined,
+          category: src.category || undefined,
+          salary_min: src.salaryMin || undefined,
+          salary_max: src.salaryMax || undefined,
+        }),
+      })
+      if (!createRes.ok) throw new Error("Не удалось создать вакансию")
+      const newVac = await createRes.json() as { id: string }
+      setCreateDialogOpen(false)
+      resetCreateDialog()
+      toast.success("Вакансия создана из шаблона — отредактируйте анкету")
+      router.push(`/hr/vacancies/${newVac.id}`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Ошибка создания")
+    } finally {
+      setCreating(false)
+      setAiProgress("")
+    }
+  }, [router, resetCreateDialog])
 
   const handleFileUpload = useCallback(async (file: File) => {
     const name = file.name.toLowerCase()
@@ -1043,75 +1101,43 @@ export default function VacanciesPage() {
               {createMode === "manual" && "Создать вручную"}
               {createMode === "voice" && "Надиктовать"}
               {createMode === "chat" && "Чат с Ненси"}
+              {createMode === "template" && "Выбрать вакансию-шаблон"}
             </DialogTitle>
           </DialogHeader>
 
-          {/* ── Step 1: Choose mode ── */}
+          {/* ── Step 1: Choose mode (3 cards) ── */}
           {createMode === "choose" && (
-            <div className="grid grid-cols-2 gap-3 py-2">
-              <button type="button" onClick={() => setCreateMode("file")}
-                className="flex flex-col items-center gap-2.5 p-5 rounded-xl border-2 border-muted hover:border-primary/50 hover:bg-primary/5 transition-all text-center group">
-                <div className="flex items-center justify-center size-11 rounded-lg bg-blue-50 dark:bg-blue-950/30 text-blue-600 group-hover:scale-110 transition-transform">
-                  <FileText className="size-5" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium">Загрузить файл</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">DOCX, PDF или TXT — AI заполнит анкету</p>
-                </div>
-              </button>
-
-              <button type="button" onClick={() => setCreateMode("text")}
-                className="flex flex-col items-center gap-2.5 p-5 rounded-xl border-2 border-muted hover:border-primary/50 hover:bg-primary/5 transition-all text-center group">
-                <div className="flex items-center justify-center size-11 rounded-lg bg-violet-50 dark:bg-violet-950/30 text-violet-600 group-hover:scale-110 transition-transform">
-                  <ClipboardPaste className="size-5" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium">Вставить текст</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">Скопируйте описание вакансии или должности</p>
-                </div>
-              </button>
-
-              <button type="button" onClick={() => setCreateMode("url")}
-                className="flex flex-col items-center gap-2.5 p-5 rounded-xl border-2 border-muted hover:border-primary/50 hover:bg-primary/5 transition-all text-center group">
-                <div className="flex items-center justify-center size-11 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 group-hover:scale-110 transition-transform">
-                  <Globe className="size-5" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium">Вставить ссылку</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">Ссылка на hh.ru или другой сайт</p>
-                </div>
-              </button>
-
-              <button type="button" onClick={() => { setCreateMode("voice"); setVoiceText("") }}
-                className="flex flex-col items-center gap-2.5 p-5 rounded-xl border-2 border-muted hover:border-primary/50 hover:bg-primary/5 transition-all text-center group">
-                <div className="flex items-center justify-center size-11 rounded-lg bg-rose-50 dark:bg-rose-950/30 text-rose-600 group-hover:scale-110 transition-transform">
-                  <Mic className="size-5" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium">Надиктовать</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">Расскажите голосом — AI заполнит анкету</p>
-                </div>
-              </button>
-
-              <button type="button" onClick={() => { setCreateMode("chat"); initChat() }}
-                className="flex flex-col items-center gap-2.5 p-5 rounded-xl border-2 border-muted hover:border-primary/50 hover:bg-primary/5 transition-all text-center group">
-                <div className="flex items-center justify-center size-11 rounded-lg bg-pink-50 dark:bg-pink-950/30 text-pink-600 group-hover:scale-110 transition-transform">
-                  <MessageCircle className="size-5" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium">Чат с Ненси</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">Ненси задаст вопросы и заполнит анкету</p>
-                </div>
-              </button>
-
+            <div className="grid grid-cols-3 gap-3 py-2">
               <button type="button" onClick={() => setCreateMode("manual")}
-                className="flex flex-col items-center gap-2.5 p-5 rounded-xl border-2 border-muted hover:border-primary/50 hover:bg-primary/5 transition-all text-center group col-span-2">
+                className="flex flex-col items-center gap-2.5 p-5 rounded-xl border-2 border-muted hover:border-primary/50 hover:bg-primary/5 transition-all text-center group">
                 <div className="flex items-center justify-center size-11 rounded-lg bg-amber-50 dark:bg-amber-950/30 text-amber-600 group-hover:scale-110 transition-transform">
                   <PenLine className="size-5" />
                 </div>
                 <div>
                   <p className="text-sm font-medium">Заполнить вручную</p>
                   <p className="text-xs text-muted-foreground mt-0.5">Создать пустую анкету</p>
+                </div>
+              </button>
+
+              <button type="button" onClick={() => setCreateMode("text")}
+                className="flex flex-col items-center gap-2.5 p-5 rounded-xl border-2 border-muted hover:border-primary/50 hover:bg-primary/5 transition-all text-center group">
+                <div className="flex items-center justify-center size-11 rounded-lg bg-blue-50 dark:bg-blue-950/30 text-blue-600 group-hover:scale-110 transition-transform">
+                  <ClipboardPaste className="size-5" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium">Вставить текст</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Скопируйте описание с hh.ru — AI заполнит анкету</p>
+                </div>
+              </button>
+
+              <button type="button" onClick={() => { setCreateMode("template"); loadTemplateVacancies() }}
+                className="flex flex-col items-center gap-2.5 p-5 rounded-xl border-2 border-muted hover:border-primary/50 hover:bg-primary/5 transition-all text-center group">
+                <div className="flex items-center justify-center size-11 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 group-hover:scale-110 transition-transform">
+                  <FolderOpen className="size-5" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium">Выбрать из шаблона</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Из архивных или действующих вакансий</p>
                 </div>
               </button>
             </div>
@@ -1304,6 +1330,62 @@ export default function VacanciesPage() {
                 {creating ? <Loader2 className="size-4 mr-1.5 animate-spin" /> : <Plus className="size-4 mr-1.5" />}
                 Создать вакансию
               </Button>
+            </div>
+          )}
+
+          {/* ── Mode: Template ── */}
+          {createMode === "template" && (
+            <div className="space-y-3 py-2">
+              <Input
+                value={templateSearch}
+                onChange={(e) => setTemplateSearch(e.target.value)}
+                placeholder="Поиск по названию..."
+                className="h-9 border border-input"
+                autoFocus
+              />
+              <div className="max-h-[50vh] overflow-y-auto space-y-1">
+                {templateLoading ? (
+                  <div className="flex items-center justify-center py-8 gap-2 text-muted-foreground">
+                    <Loader2 className="w-4 h-4 animate-spin" />Загрузка...
+                  </div>
+                ) : templateVacancies.filter(v =>
+                  !templateSearch || v.title.toLowerCase().includes(templateSearch.toLowerCase())
+                ).length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-8">
+                    {templateSearch ? "Ничего не найдено" : "Нет вакансий для копирования"}
+                  </p>
+                ) : (
+                  templateVacancies
+                    .filter(v => !templateSearch || v.title.toLowerCase().includes(templateSearch.toLowerCase()))
+                    .map(v => {
+                      const statusLabel = v.status === "published" ? "Активная" : v.status === "closed" ? "Архив" : "Черновик"
+                      const statusCls = v.status === "published"
+                        ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400"
+                        : v.status === "closed"
+                          ? "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400"
+                          : "bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400"
+                      return (
+                        <button
+                          key={v.id}
+                          type="button"
+                          onClick={() => handleCreateFromTemplate(v.id)}
+                          disabled={creating}
+                          className="w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg border border-border hover:bg-accent/50 hover:border-primary/30 transition-colors text-left"
+                        >
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">{v.title}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {v.createdAt ? new Date(v.createdAt).toLocaleDateString("ru-RU") : ""}
+                            </p>
+                          </div>
+                          <Badge variant="outline" className={cn("text-[10px] shrink-0", statusCls)}>
+                            {statusLabel}
+                          </Badge>
+                        </button>
+                      )
+                    })
+                )}
+              </div>
             </div>
           )}
         </DialogContent>

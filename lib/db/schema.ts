@@ -231,6 +231,11 @@ export const vacancies = pgTable("vacancies", {
   status: text("status").default("draft"), // 'draft' | 'published' | 'paused' | 'closed'
   slug: text("slug").unique().notNull(),
   descriptionJson: jsonb("description_json"),
+  requiredExperience: text("required_experience"), // 'none' | '1-3' | '3-6' | '6+'
+  employmentType: text("employment_type").array(), // ['ТК РФ', 'ГПХ', ...]
+  schedule: text("schedule"), // '5/2' | '2/2' | 'free' | 'shift' | 'rotation' | 'other'
+  hiringPlan: integer("hiring_plan").default(1),
+  employeeType: text("employee_type").default("permanent"), // 'permanent' | 'temporary'
   clientCompanyId: uuid("client_company_id").references(() => salesCompanies.id, { onDelete: "set null" }),
   clientContactId: uuid("client_contact_id").references(() => salesContacts.id, { onDelete: "set null" }),
   deletedAt: timestamp("deleted_at"),

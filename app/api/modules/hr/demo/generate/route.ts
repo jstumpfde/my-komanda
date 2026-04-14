@@ -6,7 +6,9 @@ import { vacancies } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { DEMO_TEMPLATES, type DemoTemplateId, type DemoTemplateBlock } from "@/lib/hr/demo-templates"
 
-const client = new Anthropic()
+const client = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY,
+})
 
 export async function POST(req: NextRequest) {
   try {
@@ -15,6 +17,10 @@ export async function POST(req: NextRequest) {
 
     if (!body.vacancyId) {
       return apiError("vacancyId is required", 400)
+    }
+
+    if (!process.env.ANTHROPIC_API_KEY) {
+      return apiError("ANTHROPIC_API_KEY не настроен", 500)
     }
 
     // Get vacancy data
@@ -94,10 +100,9 @@ ${blockList}
 
 Используй id из списка блоков: ${aiBlocks.map(b => b.id).join(", ")}`
 
-    const apiKey = process.env.ANTHROPIC_API_KEY
     let aiContents: Record<string, string> = {}
 
-    if (apiKey) {
+    try {
       const message = await client.messages.create({
         model: "claude-sonnet-4-20250514",
         max_tokens: 6000,
@@ -106,16 +111,17 @@ ${blockList}
 
       const text = message.content[0].type === "text" ? message.content[0].text : ""
 
-      try {
-        const jsonMatch = text.match(/\[[\s\S]*\]/)
-        if (!jsonMatch) throw new Error("No JSON array found")
+      const jsonMatch = text.match(/\[[\s\S]*\]/)
+      if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[0]) as Array<{ id: string; content: string }>
         for (const item of parsed) {
           aiContents[item.id] = item.content
         }
-      } catch {
-        // Fallback: use empty contents
       }
+    } catch (aiErr) {
+      console.error("Anthropic API error:", aiErr)
+      const msg = aiErr instanceof Error ? aiErr.message : "Ошибка AI-генерации"
+      return apiError(msg, 502)
     }
 
     // Build final blocks array

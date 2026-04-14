@@ -2,11 +2,11 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
-import { Plus, Eye, BookOpen, Pencil, Trash2, Loader2, LayoutGrid, List } from "lucide-react"
+import { Plus, Eye, Pencil, Trash2, Loader2, Copy, BookOpen, FileText } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Badge } from "@/components/ui/badge"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog"
@@ -15,6 +15,8 @@ import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { LENGTH_LABELS, NICHE_LABELS } from "@/lib/demo-types"
 import { toast } from "sonner"
+
+// ─── Types ──────────────────────────────────────────────────────────────────
 
 interface TemplateData {
   id: string
@@ -27,20 +29,47 @@ interface TemplateData {
   updatedAt: string
 }
 
+interface QuestionnaireTemplate {
+  id: string
+  name: string
+  type: "candidate" | "client" | "post_demo"
+  questionsCount: number
+  requiredCount: number
+  createdAt: string
+  usageCount: number
+}
+
+// ─── Constants ──────────────────────────────────────────────────────────────
+
+const TYPE_BADGE: Record<string, { label: string; cls: string }> = {
+  candidate: { label: "Кандидат", cls: "bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-400" },
+  client: { label: "Заказчик", cls: "bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400" },
+  post_demo: { label: "После демо", cls: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400" },
+}
+
+const LENGTH_BADGE: Record<string, { label: string; cls: string }> = {
+  short: { label: "Короткая", cls: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400" },
+  medium: { label: "Средняя", cls: "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400" },
+  long: { label: "Длинная", cls: "bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400" },
+}
+
+// ─── Mock questionnaire data ────────────────────────────────────────────────
+
+const MOCK_QUESTIONNAIRES: QuestionnaireTemplate[] = [
+  { id: "q1", name: "Анкета кандидата — базовая", type: "candidate", questionsCount: 12, requiredCount: 8, createdAt: "2026-04-12T10:00:00Z", usageCount: 7 },
+  { id: "q2", name: "Анкета кандидата — расширенная", type: "candidate", questionsCount: 25, requiredCount: 15, createdAt: "2026-04-11T10:00:00Z", usageCount: 3 },
+  { id: "q3", name: "Анкета заказчика (intake)", type: "client", questionsCount: 10, requiredCount: 10, createdAt: "2026-04-10T10:00:00Z", usageCount: 2 },
+  { id: "q4", name: "Опрос после демонстрации", type: "post_demo", questionsCount: 8, requiredCount: 5, createdAt: "2026-04-09T10:00:00Z", usageCount: 4 },
+]
+
+// ─── Page ───────────────────────────────────────────────────────────────────
+
 export default function LibraryPage() {
-  const [activeTab, setActiveTab] = useState("my")
-  const [viewMode, setViewMode] = useState<"grid" | "list">(() => {
-    if (typeof window === "undefined") return "grid"
-    const stored = window.localStorage.getItem("library-view")
-    return stored === "list" || stored === "grid" ? stored : "grid"
-  })
-  useEffect(() => {
-    if (typeof window !== "undefined") window.localStorage.setItem("library-view", viewMode)
-  }, [viewMode])
   const [templates, setTemplates] = useState<TemplateData[]>([])
   const [loading, setLoading] = useState(true)
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [questionnaires] = useState<QuestionnaireTemplate[]>(MOCK_QUESTIONNAIRES)
 
   const fetchTemplates = () => {
     setLoading(true)
@@ -51,15 +80,10 @@ export default function LibraryPage() {
         setTemplates(Array.isArray(rows) ? rows : [])
         setLoading(false)
       })
-      .catch(() => {
-        setLoading(false)
-      })
+      .catch(() => setLoading(false))
   }
 
   useEffect(() => { fetchTemplates() }, [])
-
-  const systemTemplates = templates.filter((t) => t.isSystem)
-  const myTemplates = templates.filter((t) => !t.isSystem)
 
   const handleDelete = async () => {
     if (!deleteId) return
@@ -79,89 +103,195 @@ export default function LibraryPage() {
     setDeleteId(null)
   }
 
+  const formatDate = (d: string) => {
+    if (!d) return "—"
+    return new Date(d).toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric" })
+  }
+
   return (
     <SidebarProvider>
       <DashboardSidebar />
       <SidebarInset>
         <DashboardHeader />
-        <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
-          {/* Header */}
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight">Библиотека демонстраций</h1>
-              <p className="text-sm text-muted-foreground mt-1">
-                Шаблоны для демонстраций должности кандидатам
-              </p>
+        <div className="flex-1 overflow-auto bg-background min-w-0">
+          <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
+            {/* Header */}
+            <div className="mb-6">
+              <h1 className="text-2xl font-bold tracking-tight">Библиотека</h1>
+              <p className="text-sm text-muted-foreground mt-1">Шаблоны демонстраций и анкет</p>
             </div>
-            <Button asChild>
-              <Link href="/hr/library/create">
-                <Plus className="h-4 w-4 mr-1" />
-                Создать демонстрацию
-              </Link>
-            </Button>
-          </div>
 
-          {loading ? (
-            <div className="flex items-center justify-center py-20 gap-2 text-muted-foreground">
-              <Loader2 className="w-5 h-5 animate-spin" />Загрузка...
-            </div>
-          ) : (
-            <Tabs value={activeTab} onValueChange={setActiveTab}>
-              <div className="flex items-center justify-between mb-4">
-                <TabsList>
-                  <TabsTrigger value="my">Мои шаблоны ({myTemplates.length})</TabsTrigger>
-                  <TabsTrigger value="system">Системные ({systemTemplates.length})</TabsTrigger>
-                </TabsList>
-                <div className="flex items-center gap-1 border border-border rounded-lg p-0.5">
-                  <button onClick={() => setViewMode("grid")} className={cn("p-1.5 rounded-md transition-colors", viewMode === "grid" ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground")}>
-                    <LayoutGrid className="w-4 h-4" />
-                  </button>
-                  <button onClick={() => setViewMode("list")} className={cn("p-1.5 rounded-md transition-colors", viewMode === "list" ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground")}>
-                    <List className="w-4 h-4" />
-                  </button>
+            {/* ═══ Block 1: Демонстрации ═══ */}
+            <Card className="mb-6">
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <BookOpen className="w-4 h-4 text-muted-foreground" />
+                    <CardTitle className="text-base">Шаблоны демонстраций</CardTitle>
+                    {!loading && <Badge variant="secondary" className="text-[10px]">{templates.length}</Badge>}
+                  </div>
+                  <Button size="sm" className="gap-1.5 h-8 text-xs" asChild>
+                    <Link href="/hr/library/create">
+                      <Plus className="h-3.5 w-3.5" />Создать шаблон
+                    </Link>
+                  </Button>
                 </div>
-              </div>
-
-              <TabsContent value="my">
-                {myTemplates.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-20 text-center">
-                    <BookOpen className="h-12 w-12 text-muted-foreground/40 mb-4" />
-                    <p className="text-lg font-medium text-muted-foreground mb-2">
-                      Нет шаблонов. Создайте первый!
-                    </p>
-                    <Button asChild className="mt-2">
-                      <Link href="/hr/library/create">
-                        <Plus className="h-4 w-4 mr-1" />
-                        Создать первый шаблон
-                      </Link>
+              </CardHeader>
+              <CardContent className="p-0">
+                {loading ? (
+                  <div className="flex items-center justify-center py-12 gap-2 text-muted-foreground">
+                    <Loader2 className="w-4 h-4 animate-spin" />Загрузка...
+                  </div>
+                ) : templates.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-center px-4">
+                    <BookOpen className="h-10 w-10 text-muted-foreground/30 mb-3" />
+                    <p className="text-sm text-muted-foreground mb-2">Нет шаблонов демонстраций</p>
+                    <Button size="sm" variant="outline" asChild>
+                      <Link href="/hr/library/create"><Plus className="h-3.5 w-3.5 mr-1" />Создать первый</Link>
                     </Button>
                   </div>
-                ) : viewMode === "grid" ? (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {myTemplates.map((template) => (
-                      <TemplateCard key={template.id} template={template} onDelete={() => setDeleteId(template.id)} />
-                    ))}
-                  </div>
                 ) : (
-                  <TemplateTable templates={myTemplates} onDelete={(id) => setDeleteId(id)} />
+                  <div className="overflow-auto" style={{ maxHeight: "40vh" }}>
+                    <table className="w-full">
+                      <thead className="bg-muted/50 border-b border-t border-border sticky top-0">
+                        <tr>
+                          <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-2.5">Название</th>
+                          <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-2.5 w-[100px]">Тип</th>
+                          <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-2.5 w-[160px]">Должность</th>
+                          <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-2.5 w-[100px]">Длительность</th>
+                          <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-2.5 w-[70px]">Блоков</th>
+                          <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-2.5 w-[110px]">Создан</th>
+                          <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-2.5 w-[110px]">Действия</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {templates.map((t) => {
+                          const lengthInfo = LENGTH_LABELS[t.length as keyof typeof LENGTH_LABELS]
+                          const nicheInfo = NICHE_LABELS[t.niche as keyof typeof NICHE_LABELS]
+                          const lb = LENGTH_BADGE[t.length]
+                          const sectionsCount = Array.isArray(t.sections) ? t.sections.length : 0
+                          const firstEmoji = Array.isArray(t.sections) && t.sections.length > 0
+                            ? (t.sections[0] as { emoji?: string })?.emoji || "📄" : "📄"
+                          return (
+                            <tr key={t.id} className="border-b border-border/50 hover:bg-muted/50 transition-colors group">
+                              <td className="px-4 py-2.5">
+                                <Link href={`/hr/library/create/editor?id=${t.id}`} className="flex items-center gap-2 min-w-0">
+                                  <span className="text-base shrink-0">{firstEmoji}</span>
+                                  <span className="text-sm font-medium text-foreground group-hover:text-primary transition-colors truncate">{t.name}</span>
+                                  {t.isSystem && <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 shrink-0">Системный</Badge>}
+                                </Link>
+                              </td>
+                              <td className="px-4 py-2.5">
+                                {lb && <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium", lb.cls)}>{lb.label}</span>}
+                              </td>
+                              <td className="px-4 py-2.5 text-sm text-muted-foreground truncate max-w-[160px]">{nicheInfo?.label || "—"}</td>
+                              <td className="px-4 py-2.5 text-center text-sm text-muted-foreground">{lengthInfo?.label || "—"}</td>
+                              <td className="px-4 py-2.5 text-center text-sm text-muted-foreground">{sectionsCount}</td>
+                              <td className="px-4 py-2.5 text-sm text-muted-foreground whitespace-nowrap">{formatDate(t.createdAt)}</td>
+                              <td className="px-4 py-2.5">
+                                <div className="flex items-center gap-0.5 justify-end">
+                                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0" asChild>
+                                    <Link href={`/hr/library/preview/${t.id}`} target="_blank"><Eye className="h-3.5 w-3.5" /></Link>
+                                  </Button>
+                                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0" asChild>
+                                    <Link href={`/hr/library/create/editor?id=${t.id}`}><Pencil className="h-3.5 w-3.5" /></Link>
+                                  </Button>
+                                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => toast.success("Шаблон скопирован")}>
+                                    <Copy className="h-3.5 w-3.5" />
+                                  </Button>
+                                  {!t.isSystem && (
+                                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive" onClick={() => setDeleteId(t.id)}>
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </Button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                 )}
-              </TabsContent>
+              </CardContent>
+            </Card>
 
-              <TabsContent value="system">
-                {systemTemplates.length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-12">Системные шаблоны пока недоступны</p>
-                ) : viewMode === "grid" ? (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {systemTemplates.map((template) => (
-                      <TemplateCard key={template.id} template={template} />
-                    ))}
+            {/* ═══ Block 2: Анкеты ═══ */}
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-muted-foreground" />
+                    <CardTitle className="text-base">Шаблоны анкет</CardTitle>
+                    <Badge variant="secondary" className="text-[10px]">{questionnaires.length}</Badge>
+                  </div>
+                  <Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs" onClick={() => toast("Создание шаблонов анкет — в разработке")}>
+                    <Plus className="h-3.5 w-3.5" />Создать шаблон
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="p-0">
+                {questionnaires.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-center px-4">
+                    <FileText className="h-10 w-10 text-muted-foreground/30 mb-3" />
+                    <p className="text-sm text-muted-foreground">Нет шаблонов анкет</p>
                   </div>
                 ) : (
-                  <TemplateTable templates={systemTemplates} />
+                  <div className="overflow-auto" style={{ maxHeight: "40vh" }}>
+                    <table className="w-full">
+                      <thead className="bg-muted/50 border-b border-t border-border sticky top-0">
+                        <tr>
+                          <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-2.5">Название</th>
+                          <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-2.5 w-[110px]">Тип</th>
+                          <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-2.5 w-[90px]">Вопросов</th>
+                          <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-2.5 w-[110px]">Обязат.</th>
+                          <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-2.5 w-[110px]">Создан</th>
+                          <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-2.5 w-[110px]">Использ.</th>
+                          <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-2.5 w-[110px]">Действия</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {questionnaires.map((q) => {
+                          const tb = TYPE_BADGE[q.type]
+                          return (
+                            <tr key={q.id} className="border-b border-border/50 hover:bg-muted/50 transition-colors group">
+                              <td className="px-4 py-2.5">
+                                <span className="text-sm font-medium text-foreground">{q.name}</span>
+                              </td>
+                              <td className="px-4 py-2.5">
+                                {tb && <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium", tb.cls)}>{tb.label}</span>}
+                              </td>
+                              <td className="px-4 py-2.5 text-center text-sm text-muted-foreground">{q.questionsCount}</td>
+                              <td className="px-4 py-2.5 text-center text-sm text-muted-foreground">{q.requiredCount}</td>
+                              <td className="px-4 py-2.5 text-sm text-muted-foreground whitespace-nowrap">{formatDate(q.createdAt)}</td>
+                              <td className="px-4 py-2.5 text-center text-sm text-muted-foreground">{q.usageCount}</td>
+                              <td className="px-4 py-2.5">
+                                <div className="flex items-center gap-0.5 justify-end">
+                                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => toast("Просмотр анкеты — в разработке")}>
+                                    <Eye className="h-3.5 w-3.5" />
+                                  </Button>
+                                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => toast("Редактирование анкеты — в разработке")}>
+                                    <Pencil className="h-3.5 w-3.5" />
+                                  </Button>
+                                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => toast("Шаблон скопирован")}>
+                                    <Copy className="h-3.5 w-3.5" />
+                                  </Button>
+                                  <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive" onClick={() => toast("Удаление анкеты — в разработке")}>
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </Button>
+                                </div>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                 )}
-              </TabsContent>
-            </Tabs>
-          )}
+              </CardContent>
+            </Card>
+
+          </div>
         </div>
       </SidebarInset>
 
@@ -180,136 +310,5 @@ export default function LibraryPage() {
         </DialogContent>
       </Dialog>
     </SidebarProvider>
-  )
-}
-
-function TemplateCard({ template, onDelete }: { template: TemplateData; onDelete?: () => void }) {
-  const router = useRouter()
-  const nicheInfo = NICHE_LABELS[template.niche]
-  const lengthInfo = LENGTH_LABELS[template.length]
-  const lessonsCount = Array.isArray(template.sections) ? template.sections.length : 0
-  const updatedAt = template.updatedAt ? new Date(template.updatedAt).toLocaleDateString("ru-RU") : ""
-  const firstEmoji = Array.isArray(template.sections) && template.sections.length > 0
-    ? (template.sections[0] as { emoji?: string })?.emoji || "📄"
-    : "📄"
-
-  const openEditor = () => router.push(`/hr/library/create/editor?id=${template.id}`)
-  const openPreview = (e: React.MouseEvent) => {
-    e.stopPropagation()
-    window.open(`/hr/library/preview/${template.id}`, "_blank")
-  }
-  const handleDeleteClick = (e: React.MouseEvent) => {
-    e.stopPropagation()
-    onDelete?.()
-  }
-
-  return (
-    <div
-      role="button"
-      tabIndex={0}
-      onClick={openEditor}
-      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openEditor() } }}
-      className="rounded-xl border border-border p-5 hover:shadow-md hover:border-primary/30 transition-all cursor-pointer group bg-card focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-    >
-      {/* Row 1: Emoji + Title */}
-      <div className="flex items-center gap-3 mb-3">
-        <span className="text-2xl shrink-0">{firstEmoji}</span>
-        <p className="text-base font-medium text-foreground group-hover:text-primary transition-colors truncate">{template.name}</p>
-      </div>
-
-      {/* Row 2: Pill badges */}
-      <div className="flex flex-wrap gap-1.5 mb-3">
-        {nicheInfo && (
-          <span className="inline-flex items-center rounded-full bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400 px-2.5 py-0.5 text-xs font-medium">{nicheInfo.label}</span>
-        )}
-        {lengthInfo && (
-          <span className="inline-flex items-center rounded-full bg-purple-100 text-purple-700 dark:bg-purple-950/40 dark:text-purple-400 px-2.5 py-0.5 text-xs font-medium">{lengthInfo.label}</span>
-        )}
-        <span className="inline-flex items-center rounded-full bg-muted text-muted-foreground px-2.5 py-0.5 text-xs font-medium">
-          {lessonsCount} {lessonsCount === 1 ? "урок" : lessonsCount < 5 ? "урока" : "уроков"}
-        </span>
-        {template.isSystem && (
-          <span className="inline-flex items-center rounded-full bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 px-2.5 py-0.5 text-xs font-medium">Системный</span>
-        )}
-      </div>
-
-      {/* Row 3: Date */}
-      {updatedAt && (
-        <p className="text-xs text-muted-foreground mb-4">Обновлено {updatedAt}</p>
-      )}
-
-      {/* Row 4: Actions */}
-      <div className="flex items-center gap-2">
-        <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 flex-1" onClick={(e) => { e.stopPropagation(); openEditor() }}>
-          <Pencil className="h-3 w-3" />Редактировать
-        </Button>
-        <Button size="sm" variant="outline" className="h-8 w-8 p-0" onClick={openPreview}>
-          <Eye className="h-3.5 w-3.5" />
-        </Button>
-        {!template.isSystem && onDelete && (
-          <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive" onClick={handleDeleteClick}>
-            <Trash2 className="h-3.5 w-3.5" />
-          </Button>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function TemplateTable({ templates, onDelete }: { templates: TemplateData[]; onDelete?: (id: string) => void }) {
-  return (
-    <div className="rounded-xl border border-border overflow-hidden bg-card">
-      <table className="w-full">
-        <thead className="bg-muted/50 border-b border-border">
-          <tr>
-            <th className="text-left uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-3">Название</th>
-            <th className="text-left uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-3">Формат</th>
-            <th className="text-center uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-3">Уроков</th>
-            <th className="text-left uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-3">Обновлено</th>
-            <th className="text-right uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-3">Действия</th>
-          </tr>
-        </thead>
-        <tbody>
-          {templates.map((template) => {
-            const lengthInfo = LENGTH_LABELS[template.length]
-            const lessonsCount = Array.isArray(template.sections) ? template.sections.length : 0
-            const updatedAt = template.updatedAt ? new Date(template.updatedAt).toLocaleDateString("ru-RU") : ""
-            const firstEmoji = Array.isArray(template.sections) && template.sections.length > 0
-              ? (template.sections[0] as { emoji?: string })?.emoji || "📄"
-              : "📄"
-            return (
-              <tr key={template.id} className="border-b border-border/50 hover:bg-muted/50 transition-colors group">
-                <td className="px-4 py-3">
-                  <Link href={`/hr/library/create/editor?id=${template.id}`} className="flex items-center gap-2 min-w-0">
-                    <span className="text-lg shrink-0">{firstEmoji}</span>
-                    <span className="text-sm font-medium text-foreground group-hover:text-primary transition-colors truncate max-w-sm">{template.name}</span>
-                  </Link>
-                </td>
-                <td className="px-4 py-3">
-                  {lengthInfo && <span className="inline-flex items-center rounded-full bg-purple-100 text-purple-700 dark:bg-purple-950/40 dark:text-purple-400 px-2 py-0.5 text-[10px] font-medium">{lengthInfo.label}</span>}
-                </td>
-                <td className="px-4 py-3 text-center text-sm text-muted-foreground">{lessonsCount}</td>
-                <td className="px-4 py-3 text-sm text-muted-foreground whitespace-nowrap">{updatedAt}</td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-1 justify-end">
-                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0" asChild>
-                      <Link href={`/hr/library/create/editor?id=${template.id}`}><Pencil className="h-3.5 w-3.5" /></Link>
-                    </Button>
-                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0" asChild>
-                      <Link href={`/hr/library/preview/${template.id}`} target="_blank"><Eye className="h-3.5 w-3.5" /></Link>
-                    </Button>
-                    {!template.isSystem && onDelete && (
-                      <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive" onClick={() => onDelete(template.id)}>
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
-    </div>
   )
 }

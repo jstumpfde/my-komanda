@@ -15,8 +15,9 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
-import { Settings, Clock, Save, Bell, GitBranch, MessageSquare, ShieldAlert, Plus, Pencil, Trash2, Palette, Play } from "lucide-react"
+import { Settings, Clock, Save, Bell, GitBranch, MessageSquare, ShieldAlert, Plus, Pencil, Trash2, Palette, Play, Plug } from "lucide-react"
 import { toast } from "sonner"
+import { IntegrationsContent } from "@/components/hr/integrations-content"
 
 // ─── Constants ─────────────────────────────────────────────────────────────
 
@@ -109,6 +110,15 @@ const DEFAULT_TEMPLATES: MessageTemplate[] = [
 // ─── Page ──────────────────────────────────────────────────────────────────
 
 export default function HiringSettingsPage() {
+  // ── Top-level tab (Основные / Интеграции) ──
+  const [topTab, setTopTab] = useState<"general" | "integrations">(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search)
+      return params.get("tab") === "integrations" ? "integrations" : "general"
+    }
+    return "general"
+  })
+
   // ── Schedule state ──
   const [slotDuration, setSlotDuration] = useState("30")
   const [bufferTime, setBufferTime] = useState("15")
@@ -321,6 +331,38 @@ export default function HiringSettingsPage() {
               </div>
               <p className="text-sm text-muted-foreground">Общие настройки для всех вакансий</p>
             </div>
+
+            {/* Top-level tabs: Основные | Интеграции */}
+            <div className="flex items-center gap-1 border-b border-border mb-5">
+              <button
+                onClick={() => setTopTab("general")}
+                className={cn(
+                  "px-4 py-2 text-sm font-medium border-b-2 transition-colors -mb-px",
+                  topTab === "general"
+                    ? "border-primary text-foreground"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <Settings className="w-3.5 h-3.5 inline mr-1.5 -mt-0.5" />
+                Основные
+              </button>
+              <button
+                onClick={() => setTopTab("integrations")}
+                className={cn(
+                  "px-4 py-2 text-sm font-medium border-b-2 transition-colors -mb-px",
+                  topTab === "integrations"
+                    ? "border-primary text-foreground"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <Plug className="w-3.5 h-3.5 inline mr-1.5 -mt-0.5" />
+                Интеграции
+              </button>
+            </div>
+
+            {topTab === "integrations" ? (
+              <IntegrationsContent />
+            ) : (<>
 
             {/* General toggles */}
             <Card className="mb-5 max-w-3xl">
@@ -1083,6 +1125,8 @@ export default function HiringSettingsPage() {
               </TabsContent>
 
             </Tabs>
+
+            </>)}
 
           </div>
         </div>

@@ -58,6 +58,11 @@ interface ScreenInput {
     experienceMin?: string
     positionCity?: string
     conditions?: string[]
+    aiIdealProfile?: string
+    aiStopFactors?: string[]
+    aiRequiredHardSkills?: string[]
+    aiWeights?: Record<string, string>
+    aiMinExperience?: string
   }
 }
 
@@ -70,6 +75,17 @@ export async function POST(req: NextRequest) {
 
     if (!cd || !va) return apiError("Данные кандидата и анкеты обязательны", 400)
 
+    const aiSections: string[] = []
+    if (va.aiIdealProfile) aiSections.push(`Идеальный кандидат: ${va.aiIdealProfile}`)
+    if (va.aiStopFactors?.length) aiSections.push(`СТОП-ФАКТОРЫ (автоматический отказ, рейтинг 0): ${va.aiStopFactors.join(", ")}`)
+    if (va.aiRequiredHardSkills?.length) aiSections.push(`Обязательные hard skills (без них рейтинг <50%): ${va.aiRequiredHardSkills.join(", ")}`)
+    if (va.aiMinExperience) aiSections.push(`Минимальный опыт для AI-фильтра: ${va.aiMinExperience} лет`)
+    if (va.aiWeights && Object.keys(va.aiWeights).length > 0) {
+      const weightLabels: Record<string, string> = { critical: "Критично", important: "Важно", nice: "Желательно", irrelevant: "Не важно" }
+      const weights = Object.entries(va.aiWeights).map(([k, v]) => `${k}: ${weightLabels[v] || v}`).join(", ")
+      aiSections.push(`Приоритеты оценки: ${weights}`)
+    }
+
     const userMessage = `ВАКАНСИЯ:
 Должность: ${va.vacancyTitle || "не указана"}
 Обязанности: ${va.responsibilities || "не указаны"}
@@ -78,6 +94,7 @@ export async function POST(req: NextRequest) {
 Желательные навыки: ${va.desiredSkills?.join(", ") || "не указаны"}
 Опыт: от ${va.experienceMin || "?"} лет
 Город: ${va.positionCity || "не указан"}
+${aiSections.length > 0 ? "\nAI-КРИТЕРИИ ОТБОРА:\n" + aiSections.join("\n") : ""}
 
 КАНДИДАТ:
 Имя: ${cd.name || "не указано"}

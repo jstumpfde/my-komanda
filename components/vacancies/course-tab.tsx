@@ -45,7 +45,10 @@ export const CourseTab = forwardRef<NotionEditorHandle, CourseTabProps>(
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ vacancyId, template: selectedTemplate }),
         })
-        if (!res.ok) throw new Error("Ошибка генерации")
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ error: "Ошибка генерации" }))
+          throw new Error(err.error || "Ошибка генерации")
+        }
         const blocks = await res.json() as Array<{ type: string; title: string; content: string; questionType?: string }>
 
         // Step 2: Convert to lessons
