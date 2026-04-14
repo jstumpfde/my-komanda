@@ -930,11 +930,12 @@ function CategoryField({ value, onChange }: { value: string; onChange: (v: strin
 
 // ─── Main component ──────────────────────────────────────────────────────────
 
-export function AnketaTab({ vacancyId, descriptionJson, onTitleChange, onNavigateTab }: {
+export function AnketaTab({ vacancyId, descriptionJson, onTitleChange, onNavigateTab, onScoreChange }: {
   vacancyId: string
   descriptionJson: unknown
   onTitleChange?: (title: string) => void
   onNavigateTab?: (tab: string) => void
+  onScoreChange?: (score: { score: number; label: string }) => void
 }) {
   const [data, setData] = useState<AnketaData>(() => {
     const saved = (descriptionJson as Record<string, unknown>)?.anketa as Record<string, unknown> | undefined
@@ -2130,6 +2131,7 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange, onNavigat
       vacancyData={data as unknown as Record<string, unknown>}
       companyDescription={companyDescription}
       focusedField={advisorFocusedField}
+      onScoreChange={onScoreChange}
       onApplySuggestion={(field, value) => {
         if (field === "vacancyTitle") {
           set("vacancyTitle", value as string)

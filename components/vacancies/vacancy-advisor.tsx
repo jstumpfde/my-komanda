@@ -59,6 +59,7 @@ interface VacancyAdvisorProps {
   focusedField?: string
   onScrollToSection?: (sectionId: string) => void
   onApplySuggestion?: (field: string, value: unknown) => void
+  onScoreChange?: (score: { score: number; label: string }) => void
 }
 
 // ── Section ID to anketa section mapping ─────────────────────────────────────
@@ -86,7 +87,7 @@ const EXPERIENCE_INSIGHTS: Record<string, { label: string; volumePercent: number
 
 // ── Component ────────────────────────────────────────────────────────────────
 
-export function VacancyAdvisor({ vacancyData, companyDescription, focusedField, onScrollToSection, onApplySuggestion }: VacancyAdvisorProps) {
+export function VacancyAdvisor({ vacancyData, companyDescription, focusedField, onScrollToSection, onApplySuggestion, onScoreChange }: VacancyAdvisorProps) {
   const [result, setResult] = useState<AdvisorResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
@@ -169,6 +170,13 @@ export function VacancyAdvisor({ vacancyData, companyDescription, focusedField, 
     fetchAnalysis()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Propagate score changes upward
+  useEffect(() => {
+    if (result && onScoreChange) {
+      onScoreChange({ score: result.score, label: result.scoreLabel })
+    }
+  }, [result, onScoreChange])
 
   const handleSectionClick = (sectionId: string) => {
     const targetId = SECTION_MAP[sectionId]

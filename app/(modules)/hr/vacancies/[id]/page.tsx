@@ -197,6 +197,19 @@ export default function VacancyPage() {
   const [addDialogOpen, setAddDialogOpen] = useState(false)
   const [internalName, setInternalName] = useState("")
   const [isEditingName, setIsEditingName] = useState(false)
+  const [showStickyHeader, setShowStickyHeader] = useState(false)
+  const [advisorScore, setAdvisorScore] = useState<{ score: number; label: string }>({ score: 0, label: "" })
+  const mainHeaderRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const el = mainHeaderRef.current
+    if (!el) return
+    const observer = new IntersectionObserver(
+      ([entry]) => setShowStickyHeader(!entry.isIntersecting),
+      { threshold: 0, rootMargin: "0px" },
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
   const [messageLogs, setMessageLogs] = useState<HhMessageLog[]>([])
   const [brandCompanyName, setBrandCompanyName] = useState("")
   const [brandColor, setBrandColor] = useState("#3B82F6")
@@ -903,13 +916,38 @@ export default function VacancyPage() {
       <SidebarInset>
         <DashboardHeader />
         <main className="flex-1 overflow-auto bg-background">
-          {/* ═══ Sticky header: название + статус (прилипает при скролле) ═══ */}
-          <div className="sticky top-0 z-30 bg-background/95 backdrop-blur-sm border-b shadow-sm py-2" style={{ paddingLeft: 56, paddingRight: 56 }}>
+          {/* ═══ Sticky header: появляется только при скролле ═══ */}
+          <div
+            className={cn(
+              "sticky top-0 z-30 bg-background/95 backdrop-blur-sm border-b shadow-sm py-2 transition-all duration-200",
+              showStickyHeader ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-full pointer-events-none"
+            )}
+            style={{ paddingLeft: 56, paddingRight: 56 }}
+          >
             <div className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-3 min-w-0 flex-1">
                 <h2 className="text-sm font-medium text-foreground truncate">{internalName || vacancyTitle}</h2>
                 <Badge variant="outline" className={cn("text-[10px] shrink-0", statusCfg.color)}>{statusCfg.label}</Badge>
               </div>
+              {advisorScore.score > 0 && (
+                <div className="flex items-center gap-2 shrink-0">
+                  <div className="w-20 h-1.5 rounded-full bg-muted overflow-hidden">
+                    <div className={cn(
+                      "h-full rounded-full transition-all",
+                      advisorScore.score >= 70 ? "bg-emerald-500" : advisorScore.score >= 40 ? "bg-amber-500" : "bg-red-500"
+                    )} style={{ width: `${advisorScore.score}%` }} />
+                  </div>
+                  <span className="text-sm font-medium tabular-nums">{advisorScore.score}%</span>
+                  <span className={cn(
+                    "text-xs px-2 py-0.5 rounded",
+                    advisorScore.score >= 70 ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400"
+                      : advisorScore.score >= 40 ? "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400"
+                      : "bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400"
+                  )}>
+                    {advisorScore.label}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -921,7 +959,7 @@ export default function VacancyPage() {
             </Button>
 
             {/* ═══ ШАПКА ═══════════════════════════════════ */}
-            <div className="flex flex-col sm:flex-row items-start justify-between gap-4 mb-4">
+            <div ref={mainHeaderRef} className="flex flex-col sm:flex-row items-start justify-between gap-4 mb-4">
               <div>
                 <div className="flex flex-wrap items-center gap-3 mb-1">
                   {isEditingName ? (
@@ -1116,7 +1154,7 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
               </div>
 
               <TabsContent value="anketa">
-                <AnketaTab vacancyId={id} descriptionJson={apiVacancy?.descriptionJson} onTitleChange={(t) => { if (t) setInternalName(t) }} onNavigateTab={(tab) => { setActiveTab(tab); window.scrollTo({ top: 0, behavior: "smooth" }) }} />
+                <AnketaTab vacancyId={id} descriptionJson={apiVacancy?.descriptionJson} onTitleChange={(t) => { if (t) setInternalName(t) }} onNavigateTab={(tab) => { setActiveTab(tab); window.scrollTo({ top: 0, behavior: "smooth" }) }} onScoreChange={setAdvisorScore} />
               </TabsContent>
 
               <TabsContent value="candidates">
