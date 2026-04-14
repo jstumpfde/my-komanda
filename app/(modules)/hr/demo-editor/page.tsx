@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
+import { useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
@@ -11,7 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { NotionEditor } from "@/components/vacancies/notion-editor"
 import { CourseTab } from "@/components/vacancies/course-tab"
 import {
-  Clock, Pause, Archive, Plus, Kanban, BarChart3, Zap, Globe, Settings, BookOpen, LayoutTemplate,
+  Clock, Pause, Archive, Plus, Kanban, BarChart3, Zap, Globe, Settings, BookOpen, LayoutTemplate, ClipboardList,
 } from "lucide-react"
 import { toast } from "sonner"
 import type { Demo } from "@/lib/course-types"
@@ -62,6 +63,7 @@ const KPI_ITEMS = [
 ]
 
 export default function DemoEditorPage() {
+  const router = useRouter()
   const [demo, setDemo] = useState<Demo | null>(null)
   const [hydrated, setHydrated] = useState(false)
   const [activeTab, setActiveTab] = useState("demo-notion")
@@ -153,9 +155,16 @@ export default function DemoEditorPage() {
             {/* Tabs */}
             <Tabs value={activeTab} onValueChange={setActiveTab}>
               <TabsList className="bg-transparent p-0 h-auto gap-0 border-0 rounded-none">
+                <button
+                  type="button"
+                  onClick={() => router.push("/hr/vacancies")}
+                  className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-none border-b-2 border-transparent text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <ClipboardList className="w-3.5 h-3.5" />Анкета
+                </button>
                 {[
-                  { id: "candidates", icon: <Kanban className="w-3.5 h-3.5" />, label: "Кандидаты" },
                   { id: "demo-notion", icon: <BookOpen className="w-3.5 h-3.5" />, label: "Демонстрация" },
+                  { id: "candidates", icon: <Kanban className="w-3.5 h-3.5" />, label: "Кандидаты" },
                   { id: "analytics", icon: <BarChart3 className="w-3.5 h-3.5" />, label: "Аналитика" },
                   { id: "automation", icon: <Zap className="w-3.5 h-3.5" />, label: "Автоматизация" },
                   { id: "publish", icon: <Globe className="w-3.5 h-3.5" />, label: "Публикация" },
