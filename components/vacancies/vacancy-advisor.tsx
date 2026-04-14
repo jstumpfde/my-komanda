@@ -11,6 +11,7 @@ import {
 } from "lucide-react"
 import { formatSalary, marketStats } from "@/lib/salary-benchmarks"
 import { scoreVacancyTitle } from "@/lib/vacancy-title-scorer"
+import { analyzeMotivation } from "@/lib/motivation-analyzer"
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -294,15 +295,26 @@ export function VacancyAdvisor({ vacancyData, companyDescription, focusedField, 
           <SalaryAnalysisCard analysis={result.salaryAnalysis} />
         )}
 
-        {/* Experience insight */}
+        {/* Motivation analysis */}
+        <MotivationAnalysisCard
+          salaryMin={parseInt(String(vacancyData.salaryFrom || "0").replace(/\s/g, "")) || 0}
+          salaryMax={parseInt(String(vacancyData.salaryTo || "0").replace(/\s/g, "")) || 0}
+          bonuses={(vacancyData.bonus as string) || ""}
+          payFrequency={(vacancyData.payFrequency as string[]) || []}
+          category={(vacancyData.positionCategory as string) || ""}
+          onAppendBonus={onApplySuggestion ? (text: string) => {
+            const current = (vacancyData.bonus as string) || ""
+            const newText = current ? `${current}\n• ${text}` : `• ${text}`
+            onApplySuggestion("bonus", newText)
+          } : undefined}
+        />
+
+        {/* Experience insight — соответствует полю "Требуемый опыт" */}
         {experienceLevel && EXPERIENCE_INSIGHTS[experienceLevel] && (
           <ExperienceInsightCard level={experienceLevel} />
         )}
 
-        {/* Company description status */}
-        <CompanyDescriptionCard description={companyDescription || ""} />
-
-        {/* Sections */}
+        {/* Sections: критичные и рекомендации — соответствуют секциям 4-5 (обязанности, требования, навыки, стоп-факторы) */}
         {errors.length > 0 && (
           <div className="space-y-1.5">
             <p className="text-xs font-medium text-red-600 dark:text-red-400 uppercase tracking-wider">Критично</p>
@@ -321,6 +333,11 @@ export function VacancyAdvisor({ vacancyData, companyDescription, focusedField, 
           </div>
         )}
 
+        {/* Clickable suggestions — рекомендуемые навыки, стоп-факторы, шаблоны */}
+        {result.suggestions && onApplySuggestion && (
+          <SuggestionsPanel suggestions={result.suggestions} onApply={handleApply} vacancyData={vacancyData} />
+        )}
+
         {oks.length > 0 && (
           <div className="space-y-1.5">
             <p className="text-xs font-medium text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Заполнено</p>
@@ -330,12 +347,10 @@ export function VacancyAdvisor({ vacancyData, companyDescription, focusedField, 
           </div>
         )}
 
-        {/* Clickable suggestions */}
-        {result.suggestions && onApplySuggestion && (
-          <SuggestionsPanel suggestions={result.suggestions} onApply={handleApply} vacancyData={vacancyData} />
-        )}
+        {/* Company description — соответствует описанию компании */}
+        <CompanyDescriptionCard description={companyDescription || ""} />
 
-        {/* Market context */}
+        {/* Market context — динамика рынка внизу */}
         <MarketContextCard />
 
         {/* Refresh */}
@@ -360,7 +375,7 @@ export function VacancyAdvisor({ vacancyData, companyDescription, focusedField, 
     <>
       {/* Desktop sidebar */}
       <div className="hidden lg:block flex-[1] min-w-[340px]">
-        <div className="sticky top-20 space-y-3 border-l pl-4 max-h-[calc(100vh-120px)] overflow-y-auto">
+        <div className="space-y-3 border-l pl-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Bot className="w-4 h-4 text-primary" />
@@ -565,6 +580,76 @@ function TitleScoringCard({ title, context, suggestions, onApply }: {
               </button>
             )
           })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Motivation Analysis Card ────────────────────────────────────────────────
+
+function MotivationAnalysisCard({ salaryMin, salaryMax, bonuses, payFrequency, category, onAppendBonus }: {
+  salaryMin: number
+  salaryMax: number
+  bonuses: string
+  payFrequency: string[]
+  category: string
+  onAppendBonus?: (text: string) => void
+}) {
+  // Don't show if nothing is filled
+  if (!salaryMin && !salaryMax && !bonuses) return null
+
+  const result = analyzeMotivation({ salaryMin: salaryMin || undefined, salaryMax: salaryMax || undefined, bonuses, payFrequency, category })
+
+  const barColor = result.score >= 80 ? "bg-emerald-500"
+    : result.score >= 60 ? "bg-emerald-400"
+    : result.score >= 40 ? "bg-amber-500"
+    : "bg-red-500"
+  const scoreColor = result.score >= 60 ? "text-emerald-600 dark:text-emerald-400"
+    : result.score >= 40 ? "text-amber-600 dark:text-amber-400"
+    : "text-red-600 dark:text-red-400"
+
+  return (
+    <div className="rounded-lg border p-3 space-y-2.5">
+      <div className="flex items-center gap-1.5">
+        <TrendingUp className="w-3.5 h-3.5 text-primary" />
+        <span className="text-xs font-medium">Анализ мотивации</span>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+          <div className={cn("h-full rounded-full transition-all", barColor)} style={{ width: `${result.score}%` }} />
+        </div>
+        <span className={cn("text-xs font-bold tabular-nums", scoreColor)}>{result.score}/100</span>
+      </div>
+
+      <div className="space-y-0.5">
+        {result.checks.map((c, i) => (
+          <div key={i} className="flex items-start gap-1.5">
+            {c.status === "ok" ? (
+              <CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0 mt-0.5" />
+            ) : c.status === "error" ? (
+              <XCircle className="w-3 h-3 text-red-500 shrink-0 mt-0.5" />
+            ) : (
+              <AlertTriangle className="w-3 h-3 text-amber-500 shrink-0 mt-0.5" />
+            )}
+            <span className="text-[10px] text-muted-foreground leading-relaxed">{c.text}</span>
+          </div>
+        ))}
+      </div>
+
+      {result.suggestions.length > 0 && onAppendBonus && (
+        <div className="pt-1 border-t space-y-1">
+          <span className="text-[10px] font-medium text-muted-foreground">Добавить в бонусы:</span>
+          {result.suggestions.map((s, i) => (
+            <button
+              key={i}
+              onClick={() => onAppendBonus(s)}
+              className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-amber-50 dark:hover:bg-amber-950/20 transition-colors text-amber-800 dark:text-amber-200 underline decoration-dotted underline-offset-2"
+            >
+              + {s}
+            </button>
+          ))}
         </div>
       )}
     </div>

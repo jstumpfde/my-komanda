@@ -903,6 +903,16 @@ export default function VacancyPage() {
       <SidebarInset>
         <DashboardHeader />
         <main className="flex-1 overflow-auto bg-background">
+          {/* ═══ Sticky header: название + статус (прилипает при скролле) ═══ */}
+          <div className="sticky top-0 z-30 bg-background/95 backdrop-blur-sm border-b shadow-sm py-2" style={{ paddingLeft: 56, paddingRight: 56 }}>
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3 min-w-0 flex-1">
+                <h2 className="text-sm font-medium text-foreground truncate">{internalName || vacancyTitle}</h2>
+                <Badge variant="outline" className={cn("text-[10px] shrink-0", statusCfg.color)}>{statusCfg.label}</Badge>
+              </div>
+            </div>
+          </div>
+
           <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
             {/* ═══ Breadcrumb ═══════════════════════════════ */}
             <Button variant="ghost" size="sm" className="gap-1 text-sm text-muted-foreground -ml-2 mb-2" onClick={() => router.push("/hr/vacancies")}>

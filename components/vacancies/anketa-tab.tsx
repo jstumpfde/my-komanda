@@ -2142,6 +2142,8 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange, onNavigat
           set("responsibilities", value as string)
         } else if (field === "requirements") {
           set("requirements", value as string)
+        } else if (field === "bonus") {
+          set("bonus", value as string)
         }
       }}
     />
