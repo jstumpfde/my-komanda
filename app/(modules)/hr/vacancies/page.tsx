@@ -1088,7 +1088,7 @@ export default function VacanciesPage() {
           )}
 
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
+            <DialogTitle className="flex items-center gap-2 text-xl font-bold">
               {createMode !== "choose" && (
                 <button type="button" onClick={() => { setCreateMode("choose"); setUploadedFile(null); setAiText(""); setImportUrl("") }} className="text-muted-foreground hover:text-foreground transition-colors">
                   <ArrowLeft className="size-4" />
@@ -1105,40 +1105,43 @@ export default function VacanciesPage() {
             </DialogTitle>
           </DialogHeader>
 
-          {/* ── Step 1: Choose mode (3 cards) ── */}
+          {/* ── Step 1: Choose mode (3 cards in Company24 style) ── */}
           {createMode === "choose" && (
-            <div className="grid grid-cols-3 gap-3 py-2">
-              <button type="button" onClick={() => setCreateMode("manual")}
-                className="flex flex-col items-center gap-2.5 p-5 rounded-xl border-2 border-muted hover:border-primary/50 hover:bg-primary/5 transition-all text-center group">
-                <div className="flex items-center justify-center size-11 rounded-lg bg-amber-50 dark:bg-amber-950/30 text-amber-600 group-hover:scale-110 transition-transform">
-                  <PenLine className="size-5" />
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 py-4">
+              <button
+                type="button"
+                onClick={() => setCreateMode("manual")}
+                className="flex flex-col items-center text-center gap-3 p-6 rounded-xl border border-border bg-card hover:border-primary hover:shadow-lg hover:scale-[1.02] focus:outline-none focus-visible:ring-2 focus-visible:ring-primary transition-all duration-200 cursor-pointer group"
+              >
+                <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-orange-500/10 text-orange-500">
+                  <PenLine className="w-6 h-6" />
                 </div>
-                <div>
-                  <p className="text-sm font-medium">Заполнить вручную</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">Создать пустую анкету</p>
-                </div>
+                <span className="text-base font-semibold text-foreground">Заполнить вручную</span>
+                <span className="text-sm text-muted-foreground">Создать пустую анкету</span>
               </button>
 
-              <button type="button" onClick={() => setCreateMode("text")}
-                className="flex flex-col items-center gap-2.5 p-5 rounded-xl border-2 border-muted hover:border-primary/50 hover:bg-primary/5 transition-all text-center group">
-                <div className="flex items-center justify-center size-11 rounded-lg bg-blue-50 dark:bg-blue-950/30 text-blue-600 group-hover:scale-110 transition-transform">
-                  <ClipboardPaste className="size-5" />
+              <button
+                type="button"
+                onClick={() => setCreateMode("text")}
+                className="flex flex-col items-center text-center gap-3 p-6 rounded-xl border border-border bg-card hover:border-primary hover:shadow-lg hover:scale-[1.02] focus:outline-none focus-visible:ring-2 focus-visible:ring-primary transition-all duration-200 cursor-pointer group"
+              >
+                <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-blue-500/10 text-blue-500">
+                  <ClipboardPaste className="w-6 h-6" />
                 </div>
-                <div>
-                  <p className="text-sm font-medium">Вставить текст</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">Скопируйте описание с hh.ru — AI заполнит анкету</p>
-                </div>
+                <span className="text-base font-semibold text-foreground">Вставить текст</span>
+                <span className="text-sm text-muted-foreground">Скопируйте описание с hh.ru — AI заполнит анкету</span>
               </button>
 
-              <button type="button" onClick={() => { setCreateMode("template"); loadTemplateVacancies() }}
-                className="flex flex-col items-center gap-2.5 p-5 rounded-xl border-2 border-muted hover:border-primary/50 hover:bg-primary/5 transition-all text-center group">
-                <div className="flex items-center justify-center size-11 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 group-hover:scale-110 transition-transform">
-                  <FolderOpen className="size-5" />
+              <button
+                type="button"
+                onClick={() => { setCreateMode("template"); loadTemplateVacancies() }}
+                className="flex flex-col items-center text-center gap-3 p-6 rounded-xl border border-border bg-card hover:border-primary hover:shadow-lg hover:scale-[1.02] focus:outline-none focus-visible:ring-2 focus-visible:ring-primary transition-all duration-200 cursor-pointer group"
+              >
+                <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-green-500/10 text-green-500">
+                  <FolderOpen className="w-6 h-6" />
                 </div>
-                <div>
-                  <p className="text-sm font-medium">Выбрать из шаблона</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">Из архивных или действующих вакансий</p>
-                </div>
+                <span className="text-base font-semibold text-foreground">Выбрать из шаблона</span>
+                <span className="text-sm text-muted-foreground">Из архивных или действующих вакансий</span>
               </button>
             </div>
           )}
