@@ -3,6 +3,7 @@ import { eq, and } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { vacancies } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
+import { logActivity } from "@/lib/activity-log"
 
 export async function GET(
   _req: NextRequest,
@@ -94,6 +95,8 @@ export async function PUT(
       .where(eq(vacancies.id, id))
       .returning()
 
+    const changedFields = Object.keys(updates).filter(k => k !== "updatedAt")
+    logActivity({ companyId: user.companyId, userId: user.id!, action: "update", entityType: "vacancy", entityId: id, entityTitle: updated.title, module: "hr", details: { changedFields }, request: req })
     return apiSuccess(updated)
   } catch (err) {
     if (err instanceof Response) return err
@@ -146,6 +149,7 @@ export async function DELETE(
       return apiError("Vacancy not found", 404)
     }
 
+    logActivity({ companyId: user.companyId, userId: user.id!, action: "delete", entityType: "vacancy", entityId: id, module: "hr", request: _req })
     return apiSuccess({ deleted: true })
   } catch (err) {
     if (err instanceof Response) return err

@@ -2,6 +2,7 @@ import { NextRequest } from "next/server"
 import Anthropic from "@anthropic-ai/sdk"
 import { requireAuth, apiError, apiSuccess } from "@/lib/api-helpers"
 import { AI_SAFETY_PROMPT } from "@/lib/ai-safety"
+import { logActivity } from "@/lib/activity-log"
 
 const client = new Anthropic()
 
@@ -68,7 +69,7 @@ interface ScreenInput {
 
 export async function POST(req: NextRequest) {
   try {
-    await requireAuth()
+    const authUser = await requireAuth() as { id?: string; companyId?: string }
 
     const body = (await req.json()) as ScreenInput
     const { candidateData: cd, vacancyAnketa: va } = body
@@ -159,6 +160,9 @@ ${aiSections.length > 0 ? "\nAI-КРИТЕРИИ ОТБОРА:\n" + aiSections.j
       needsManualReview: needsManual,
     }
 
+    if (authUser.companyId && authUser.id) {
+      logActivity({ companyId: authUser.companyId, userId: authUser.id, action: "ai_request", entityType: "candidate", module: "hr", details: { agent: "screen-candidate", score: result.score, verdict: result.verdict }, request: req })
+    }
     return apiSuccess(result)
   } catch (err) {
     if (err instanceof Response) return err

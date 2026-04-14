@@ -70,6 +70,9 @@ interface AnketaData {
   // 7. AI-генерация
   screeningQuestions: string[]
   hhDescription: string
+  // Фильтры критериев отбора
+  filterCities: string[]
+  filterCitizenship: { mode: "russia" | "any" | "custom"; countries: string[]; isStopFactor: boolean }
   // 8. AI-профиль кандидата
   aiMinExperience: string
   aiRequiredHardSkills: string[]
@@ -282,6 +285,8 @@ function emptyAnketa(): AnketaData {
     desiredParams: DEFAULT_DESIRED_PARAMS.map(p => ({ ...p })),
     conditions: [], conditionsCustom: [],
     employmentType: [], schedule: "", employeeType: "permanent",
+    filterCities: [],
+    filterCitizenship: { mode: "russia", countries: [], isStopFactor: false },
     questions: [],
     screeningQuestions: [], hhDescription: "",
     aiMinExperience: "", aiRequiredHardSkills: [], aiStopFactors: [],
@@ -1572,7 +1577,55 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange, onNavigat
                     </div>
                   </div>
                 )}
-                {f.enabled && (f.id === "experience" || f.id === "citizenship" || f.id === "salaryMax" || f.id === "city" || f.id === "documents") && (
+                {f.enabled && f.id === "city" && (
+                  <div className="ml-6 mt-1.5">
+                    <TagInput
+                      tags={data.filterCities}
+                      onChange={v => set("filterCities", v)}
+                      placeholder="Введите город и нажмите Enter..."
+                      customType="city"
+                    />
+                  </div>
+                )}
+                {f.enabled && f.id === "citizenship" && (
+                  <div className="ml-6 mt-1.5 space-y-2">
+                    <div className="flex flex-wrap gap-2">
+                      {(["russia", "any", "custom"] as const).map(m => (
+                        <button
+                          key={m}
+                          type="button"
+                          onClick={() => set("filterCitizenship", { ...data.filterCitizenship, mode: m })}
+                          className={cn(
+                            "px-2.5 py-1 rounded text-xs border transition-colors",
+                            data.filterCitizenship.mode === m
+                              ? "bg-primary text-primary-foreground border-primary"
+                              : "bg-[var(--input-bg)] border-input hover:bg-accent"
+                          )}
+                        >
+                          {m === "russia" ? "Только из России" : m === "any" ? "Любое гражданство" : "Указать страны"}
+                        </button>
+                      ))}
+                    </div>
+                    {data.filterCitizenship.mode === "custom" && (
+                      <TagInput
+                        tags={data.filterCitizenship.countries}
+                        onChange={v => set("filterCitizenship", { ...data.filterCitizenship, countries: v })}
+                        placeholder="Россия, Беларусь, Казахстан..."
+                        customType="country"
+                      />
+                    )}
+                    {data.filterCitizenship.mode !== "any" && (
+                      <label className="flex items-center gap-1.5">
+                        <Checkbox
+                          checked={data.filterCitizenship.isStopFactor}
+                          onCheckedChange={v => set("filterCitizenship", { ...data.filterCitizenship, isStopFactor: !!v })}
+                        />
+                        <span className="text-xs text-destructive/80">Стоп-фактор: автоотказ если не из указанных стран</span>
+                      </label>
+                    )}
+                  </div>
+                )}
+                {f.enabled && (f.id === "experience" || f.id === "salaryMax" || f.id === "documents") && (
                   <Input
                     value={f.value ?? ""}
                     onChange={e => {

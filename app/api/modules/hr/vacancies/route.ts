@@ -4,6 +4,7 @@ import { nanoid } from "nanoid"
 import { db } from "@/lib/db"
 import { vacancies } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
+import { logActivity } from "@/lib/activity-log"
 
 // Transliterate Russian text to Latin for slug generation
 function transliterate(text: string): string {
@@ -111,6 +112,7 @@ export async function POST(req: NextRequest) {
       .returning()
 
     console.log("[POST /api/modules/hr/vacancies] created:", vacancy.id)
+    logActivity({ companyId: user.companyId, userId: user.id!, action: "create", entityType: "vacancy", entityId: vacancy.id, entityTitle: vacancy.title, module: "hr", request: req })
     return apiSuccess(vacancy, 201)
   } catch (err) {
     if (err instanceof Response) return err

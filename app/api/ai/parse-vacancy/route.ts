@@ -2,6 +2,7 @@ import { NextRequest } from "next/server"
 import Anthropic from "@anthropic-ai/sdk"
 import { requireAuth, apiError, apiSuccess } from "@/lib/api-helpers"
 import { AI_SAFETY_PROMPT } from "@/lib/ai-safety"
+import { logActivity } from "@/lib/activity-log"
 
 const client = new Anthropic()
 
@@ -91,7 +92,7 @@ desiredSkills (Желательные навыки — массив):
 
 export async function POST(req: NextRequest) {
   try {
-    await requireAuth()
+    const user = await requireAuth() as { id?: string; companyId?: string }
 
     const body = await req.json() as { text?: string }
     if (!body.text?.trim()) {
@@ -135,6 +136,9 @@ export async function POST(req: NextRequest) {
 
     const result = normalize(parsed)
     console.log("[parse-vacancy] AI result:", JSON.stringify(result, null, 2).slice(0, 500))
+    if (user.companyId && user.id) {
+      logActivity({ companyId: user.companyId, userId: user.id, action: "ai_request", entityType: "vacancy", module: "hr", details: { agent: "parse-vacancy" }, request: req })
+    }
     return apiSuccess({ data: result })
   } catch (err) {
     if (err instanceof Response) return err

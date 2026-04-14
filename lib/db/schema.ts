@@ -1541,3 +1541,20 @@ export const vacancyIntakes = pgTable("vacancy_intakes", {
   vacancyId: uuid("vacancy_id").references(() => vacancies.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow(),
 })
+
+// ─── Activity Log ────────────────────────────────────────────────────────────
+
+export const activityLog = pgTable("activity_log", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id").references(() => companies.id).notNull(),
+  userId: uuid("user_id").references(() => users.id).notNull(),
+  action: text("action").notNull(),
+  entityType: text("entity_type").notNull(),
+  entityId: uuid("entity_id"),
+  entityTitle: text("entity_title"),
+  module: text("module"),
+  details: jsonb("details").default("{}"),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  createdAt: timestamp("created_at").defaultNow(),
+})
