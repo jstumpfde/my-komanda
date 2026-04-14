@@ -13,9 +13,11 @@ function getEnv(key: string): string {
 
 // ─── OAuth ──────────────────────────────────────────────────────────────────
 
+const DEFAULT_REDIRECT_URI = "https://company24.pro/api/integrations/hh/callback"
+
 export function getAuthUrl(state?: string): string {
   const clientId = getEnv("HH_CLIENT_ID")
-  const redirectUri = getEnv("HH_REDIRECT_URI")
+  const redirectUri = process.env.HH_REDIRECT_URI || DEFAULT_REDIRECT_URI
   const params = new URLSearchParams({
     response_type: "code",
     client_id: clientId,
@@ -40,7 +42,7 @@ export async function exchangeCode(code: string): Promise<HHTokenResponse> {
       grant_type: "authorization_code",
       client_id: getEnv("HH_CLIENT_ID"),
       client_secret: getEnv("HH_CLIENT_SECRET"),
-      redirect_uri: getEnv("HH_REDIRECT_URI"),
+      redirect_uri: process.env.HH_REDIRECT_URI || DEFAULT_REDIRECT_URI,
       code,
     }),
   })

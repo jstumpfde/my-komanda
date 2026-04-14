@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
   const state = searchParams.get("state")
 
   if (!code || !state) {
-    return NextResponse.redirect(new URL("/hr/integrations?error=missing_params", req.url))
+    return NextResponse.redirect(new URL("/hr/hiring-settings?tab=integrations&error=missing_params", req.url))
   }
 
   let companyId: string
@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
     companyId = parsed.companyId
     userId = parsed.userId
   } catch {
-    return NextResponse.redirect(new URL("/hr/integrations?error=invalid_state", req.url))
+    return NextResponse.redirect(new URL("/hr/hiring-settings?tab=integrations&error=invalid_state", req.url))
   }
 
   try {
@@ -66,9 +66,9 @@ export async function GET(req: NextRequest) {
         })
     }
 
-    return NextResponse.redirect(new URL("/hr/integrations?connected=hh", req.url))
+    return NextResponse.redirect(new URL("/hr/hiring-settings?tab=integrations&connected=hh", req.url))
   } catch (err) {
     console.error("[hh/callback]", err)
-    return NextResponse.redirect(new URL("/hr/integrations?error=auth_failed", req.url))
+    return NextResponse.redirect(new URL("/hr/hiring-settings?tab=integrations&error=auth_failed", req.url))
   }
 }
