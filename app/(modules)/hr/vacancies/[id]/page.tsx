@@ -176,11 +176,14 @@ export default function VacancyPage() {
         body.title = parsed.positionTitle
       }
       const res = await fetch(`/api/modules/hr/vacancies/${id}`, {
-        method: "PATCH",
+        method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       })
-      if (!res.ok) throw new Error("Не удалось сохранить анкету")
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({})) as { error?: string }
+        throw new Error(errBody.error || "Не удалось сохранить анкету")
+      }
       await refetchVacancy()
       toast.success("Анкета заполнена из текста")
       setTextDialogOpen(false)
@@ -224,7 +227,7 @@ export default function VacancyPage() {
       if (src.salaryMax != null) body.salary_max = src.salaryMax
 
       const patchRes = await fetch(`/api/modules/hr/vacancies/${id}`, {
-        method: "PATCH",
+        method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       })
