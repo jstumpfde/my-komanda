@@ -23,7 +23,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { CourseTab } from "@/components/vacancies/course-tab"
+import { CourseTab, type CourseTabHandle } from "@/components/vacancies/course-tab"
 import { AnketaTab } from "@/components/vacancies/anketa-tab"
 import type { NotionEditorHandle } from "@/components/vacancies/notion-editor"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -382,6 +382,7 @@ export default function VacancyPage() {
 
   // Course editor toolbar state
   const courseEditorRef = useRef<NotionEditorHandle>(null)
+  const courseTabRef = useRef<CourseTabHandle>(null)
   const [courseEditorSaveStatus, setCourseEditorSaveStatus] = useState<"saved" | "saving">("saved")
 
   // HH.ru integration state
@@ -1262,6 +1263,9 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                         {courseEditorSaveStatus === "saving" ? "Сохранение..." : "✓ Сохранено"}
                       </span>
                     </div>
+                    <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8" onClick={() => courseTabRef.current?.openAiGenerate()}>
+                      <Sparkles className="w-3.5 h-3.5" />Сгенерировать с AI
+                    </Button>
                     <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8" onClick={() => courseEditorRef.current?.openLibrary()}>
                       <BookOpen className="w-3.5 h-3.5" />Из библиотеки
                     </Button>
@@ -1373,6 +1377,7 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                   vacancyId={id}
                   vacancyTitle={vacancyTitle}
                   editorRef={courseEditorRef}
+                  tabRef={courseTabRef}
                   onSaveStatusChange={setCourseEditorSaveStatus}
                 />
               </TabsContent>
