@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo, useEffect, useCallback, useRef } from "react"
+import { useState, useMemo, useEffect, useCallback } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
@@ -23,20 +23,14 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
-} from "@/components/ui/dialog"
-import { Label } from "@/components/ui/label"
 import { useVacancies, type ApiVacancy } from "@/hooks/use-vacancies"
 import {
   Plus, Briefcase, MapPin, List, LayoutGrid, Table2, Calendar, Banknote,
   Search, MoreHorizontal, Pencil, Copy, Archive, Trash2, ListFilter,
-  RotateCcw, X, Upload, FileText, Loader2, CheckCircle2, Sparkles,
-  ClipboardPaste, Globe, PenLine, ArrowLeft, Mic, MicOff, MessageCircle, Send, FolderOpen,
+  RotateCcw, X, Loader2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
-import { Textarea } from "@/components/ui/textarea"
 import { useAuth } from "@/lib/auth"
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle,
@@ -316,377 +310,30 @@ export default function VacanciesPage() {
   const [trashItems, setTrashItems] = useState<ApiVacancy[]>([])
   const [trashLoading, setTrashLoading] = useState(false)
   const [permanentDeleteTarget, setPermanentDeleteTarget] = useState<ApiVacancy | null>(null)
-  // Create vacancy wizard
-  const [createDialogOpen, setCreateDialogOpen] = useState(false)
-  const [createMode, setCreateMode] = useState<"choose" | "file" | "text" | "url" | "manual" | "voice" | "chat" | "template">("choose")
-  const [templateSearch, setTemplateSearch] = useState("")
-  const [templateVacancies, setTemplateVacancies] = useState<Array<{ id: string; title: string; status: string; createdAt: string }>>([])
-  const [templateLoading, setTemplateLoading] = useState(false)
-  const [newVacancyTitle, setNewVacancyTitle] = useState("")
+  // Create vacancy — быстрое создание пустой анкеты
   const [creating, setCreating] = useState(false)
-  const [importUrl, setImportUrl] = useState("")
-  const [uploadedFile, setUploadedFile] = useState<{ name: string; text: string } | null>(null)
-  const [uploading, setUploading] = useState(false)
-  const [aiText, setAiText] = useState("")
-  const [dragOver, setDragOver] = useState(false)
-  const [aiProgress, setAiProgress] = useState("")
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  // Voice input
-  const [recording, setRecording] = useState(false)
-  const [voiceText, setVoiceText] = useState("")
-  const [voiceSupported, setVoiceSupported] = useState(true)
-  const recognitionRef = useRef<unknown>(null)
-  // Chat with Nancy
-  const [chatMessages, setChatMessages] = useState<{ role: "nancy" | "user"; text: string }[]>([])
-  const [chatInput, setChatInput] = useState("")
-  const [chatStep, setChatStep] = useState(0)
-  const [chatLoading, setChatLoading] = useState(false)
-  const chatCollected = useRef<Record<string, string>>({})
 
-  const resetCreateDialog = useCallback(() => {
-    setCreateMode("choose")
-    setNewVacancyTitle("")
-    setImportUrl("")
-    setUploadedFile(null)
-    setAiText("")
-    setAiProgress("")
-    setVoiceText("")
-    setRecording(false)
-    setChatMessages([])
-    setChatInput("")
-    setChatStep(0)
-    chatCollected.current = {}
-    setTemplateSearch("")
-    setTemplateVacancies([])
-  }, [])
-
-  const loadTemplateVacancies = useCallback(async () => {
-    setTemplateLoading(true)
-    try {
-      const res = await fetch("/api/modules/hr/vacancies?limit=100")
-      if (res.ok) {
-        const data = await res.json()
-        const vacs = (data.vacancies ?? data.data ?? []) as Array<{ id: string; title: string; status: string; createdAt: string }>
-        setTemplateVacancies(vacs)
-      }
-    } catch {}
-    setTemplateLoading(false)
-  }, [])
-
-  const handleCreateFromTemplate = useCallback(async (templateId: string) => {
+  const handleQuickCreate = useCallback(async () => {
+    if (creating) return
     setCreating(true)
-    setAiProgress("Копирую вакансию...")
     try {
-      // Fetch template vacancy data
-      const res = await fetch(`/api/modules/hr/vacancies/${templateId}`)
-      if (!res.ok) throw new Error("Не удалось загрузить шаблон")
-      const template = await res.json()
-      const src = template.data ?? template
-
-      // Create new vacancy with template data
-      const createRes = await fetch("/api/modules/hr/vacancies", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: `${src.title} (копия)`,
-          description: src.description || undefined,
-          description_json: src.descriptionJson || undefined,
-          city: src.city || undefined,
-          format: src.format || undefined,
-          employment: src.employment || undefined,
-          category: src.category || undefined,
-          salary_min: src.salaryMin || undefined,
-          salary_max: src.salaryMax || undefined,
-        }),
-      })
-      if (!createRes.ok) throw new Error("Не удалось создать вакансию")
-      const newVac = await createRes.json() as { id: string }
-      setCreateDialogOpen(false)
-      resetCreateDialog()
-      toast.success("Вакансия создана из шаблона — отредактируйте анкету")
-      router.push(`/hr/vacancies/${newVac.id}`)
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Ошибка создания")
-    } finally {
-      setCreating(false)
-      setAiProgress("")
-    }
-  }, [router, resetCreateDialog])
-
-  const handleFileUpload = useCallback(async (file: File) => {
-    const name = file.name.toLowerCase()
-    if (!name.endsWith(".txt") && !name.endsWith(".pdf") && !name.endsWith(".docx") && !name.endsWith(".doc")) {
-      toast.error("Неподдерживаемый формат. Используйте DOCX, PDF или TXT")
-      return
-    }
-    if (file.size > 50 * 1024 * 1024) {
-      toast.error("Файл слишком большой (максимум 50 МБ)")
-      return
-    }
-    setUploading(true)
-    try {
-      const formData = new FormData()
-      formData.append("file", file)
-      const res = await fetch("/api/modules/hr/vacancies/parse-file", { method: "POST", body: formData })
-      const data = await res.json() as { text?: string; fileName?: string; error?: string }
-      if (!res.ok) throw new Error(data.error ?? "Ошибка")
-      setUploadedFile({ name: file.name, text: data.text ?? "" })
-      const titleFromFile = file.name.replace(/\.(docx?|pdf|txt)$/i, "").trim()
-      if (titleFromFile && newVacancyTitle.trim().length < 3) {
-        setNewVacancyTitle(titleFromFile)
-      }
-      toast.success(`Файл "${file.name}" обработан`)
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Ошибка обработки файла")
-    } finally {
-      setUploading(false)
-    }
-  }, [newVacancyTitle])
-
-  // Create vacancy with AI text → parse → create in DB → redirect
-  const createWithAiText = useCallback(async (text: string, title: string, importedFrom?: Record<string, unknown>) => {
-    setCreating(true)
-    setAiProgress("AI анализирует текст...")
-    try {
-      // Step 1: AI parse
-      setAiProgress("Извлекаю обязанности и требования...")
-      const aiRes = await fetch("/api/ai/parse-vacancy", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
-      })
-      let parsed: Record<string, unknown> = {}
-      let aiParsed = false
-      if (!aiRes.ok) {
-        console.warn("[createWithAiText] AI parse failed, status:", aiRes.status)
-        // Fallback: create vacancy without AI parsing
-      } else {
-        const aiData = (await aiRes.json()) as { data: Record<string, unknown> }
-        parsed = aiData.data || {}
-        aiParsed = true
-      }
-
-      // Step 2: Build description_json
-      setAiProgress("Создаю вакансию...")
-      const finalTitle = title.trim() || String(parsed.positionTitle || "Новая вакансия")
-      const descriptionJson: Record<string, unknown> = {
-        anketa: {
-          vacancyTitle: finalTitle,
-          positionCategory: parsed.positionCategory || "",
-          workFormats: parsed.workFormats || [],
-          employment: parsed.employment || [],
-          positionCity: parsed.positionCity || "",
-          salaryFrom: parsed.salaryFrom || "",
-          salaryTo: parsed.salaryTo || "",
-          bonus: parsed.bonus || "",
-          responsibilities: parsed.responsibilities || "",
-          requirements: parsed.requirements || "",
-          requiredSkills: parsed.requiredSkills || [],
-          desiredSkills: parsed.desiredSkills || [],
-          unacceptableSkills: parsed.unacceptableSkills || [],
-          experienceMin: parsed.experienceMin || "",
-          experienceIdeal: parsed.experienceIdeal || "",
-          conditions: parsed.conditions || [],
-          screeningQuestions: parsed.screeningQuestions || [],
-          hhDescription: parsed.hhDescription || "",
-        },
-        ...(importedFrom ? { importedFrom } : {}),
-      }
-
-      // If AI failed, save text for anketa-tab to retry
-      if (!aiParsed && text) {
-        try { sessionStorage.setItem("vacancy_ai_text", text) } catch {}
-      }
-
-      // Step 3: Create vacancy
       const res = await fetch("/api/modules/hr/vacancies", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: finalTitle, description_json: descriptionJson }),
+        body: JSON.stringify({ title: "Новая вакансия" }),
       })
       if (!res.ok) {
         const errBody = await res.json().catch(() => ({})) as { error?: string }
         throw new Error(errBody.error || `HTTP ${res.status}`)
       }
       const data = await res.json() as { id: string }
-      setCreateDialogOpen(false)
-      resetCreateDialog()
-      toast.success(aiParsed ? "Вакансия создана — AI заполнил анкету" : "Вакансия создана — заполните анкету вручную")
       router.push(`/hr/vacancies/${data.id}`)
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Неизвестная ошибка"
       toast.error(`Не удалось создать вакансию: ${msg}`)
-    } finally {
       setCreating(false)
-      setAiProgress("")
     }
-  }, [router, resetCreateDialog])
-
-  // Handle create depending on mode
-  const handleCreateVacancy = useCallback(async () => {
-    if (createMode === "manual") {
-      if (!newVacancyTitle.trim()) { toast.error("Введите название вакансии"); return }
-      setCreating(true)
-      try {
-        const res = await fetch("/api/modules/hr/vacancies", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ title: newVacancyTitle.trim() }),
-        })
-        if (!res.ok) {
-          const errBody = await res.json().catch(() => ({})) as { error?: string }
-          throw new Error(errBody.error || `HTTP ${res.status}`)
-        }
-        const data = await res.json() as { id: string }
-        setCreateDialogOpen(false)
-        resetCreateDialog()
-        toast.success("Вакансия создана — заполните анкету")
-        router.push(`/hr/vacancies/${data.id}`)
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : "Неизвестная ошибка"
-        toast.error(`Не удалось создать вакансию: ${msg}`)
-      } finally {
-        setCreating(false)
-      }
-      return
-    }
-
-    if (createMode === "file") {
-      if (!uploadedFile?.text) { toast.error("Загрузите файл"); return }
-      await createWithAiText(uploadedFile.text, newVacancyTitle, { type: "file", fileName: uploadedFile.name })
-      return
-    }
-
-    if (createMode === "text") {
-      if (!aiText.trim()) { toast.error("Вставьте текст вакансии"); return }
-      await createWithAiText(aiText.trim(), newVacancyTitle)
-      return
-    }
-
-    if (createMode === "voice") {
-      if (!voiceText.trim()) { toast.error("Надиктуйте описание вакансии"); return }
-      await createWithAiText(voiceText.trim(), newVacancyTitle)
-      return
-    }
-
-    if (createMode === "url") {
-      if (!importUrl.trim()) { toast.error("Введите ссылку"); return }
-      setCreating(true)
-      setAiProgress("Загружаю страницу...")
-      try {
-        const urlRes = await fetch("/api/core/fetch-url", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ url: importUrl.trim() }),
-        })
-        if (!urlRes.ok) {
-          const errBody = await urlRes.json().catch(() => ({})) as { error?: string }
-          throw new Error(errBody.error || "Не удалось загрузить страницу")
-        }
-        const urlData = (await urlRes.json()) as { text: string }
-        await createWithAiText(urlData.text, newVacancyTitle, { type: "url", url: importUrl.trim() })
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : "Неизвестная ошибка"
-        toast.error(msg)
-        setCreating(false)
-        setAiProgress("")
-      }
-    }
-  }, [createMode, newVacancyTitle, uploadedFile, aiText, importUrl, router, resetCreateDialog, createWithAiText])
-
-  // ── Voice recording ──
-  const startRecording = useCallback(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
-    if (!SR) { setVoiceSupported(false); return }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const recognition = new SR() as any
-    recognition.lang = "ru-RU"
-    recognition.continuous = true
-    recognition.interimResults = true
-    let finalText = voiceText
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    recognition.onresult = (event: any) => {
-      let interim = ""
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        if (event.results[i].isFinal) {
-          finalText += event.results[i][0].transcript + " "
-        } else {
-          interim += event.results[i][0].transcript
-        }
-      }
-      setVoiceText(finalText + interim)
-    }
-    recognition.onerror = () => { setRecording(false) }
-    recognition.onend = () => { setRecording(false) }
-    recognition.start()
-    recognitionRef.current = recognition
-    setRecording(true)
-  }, [voiceText])
-
-  const stopRecording = useCallback(() => {
-    if (recognitionRef.current) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (recognitionRef.current as any).stop()
-    }
-    setRecording(false)
-  }, [])
-
-  // ── Chat with Nancy ──
-  const CHAT_QUESTIONS = [
-    "Как называется должность?",
-    "Что будет делать сотрудник? Опишите основные обязанности.",
-    "Какой опыт и навыки нужны?",
-    "В каком городе и формате работы? (офис/удалённо/гибрид)",
-    "Какая зарплатная вилка? (например: 80 000 – 150 000)",
-    "Какие условия предлагаете? (ДМС, обучение, бонусы и т.д.)",
-  ]
-  const CHAT_KEYS = ["title", "responsibilities", "requirements", "cityFormat", "salary", "conditions"]
-
-  const initChat = useCallback(() => {
-    setChatMessages([{ role: "nancy", text: `Привет! Давайте создадим вакансию. ${CHAT_QUESTIONS[0]}` }])
-    setChatStep(0)
-    chatCollected.current = {}
-  }, [])
-
-  const sendChatMessage = useCallback(async () => {
-    const msg = chatInput.trim()
-    if (!msg) return
-    setChatInput("")
-
-    // Save user answer
-    const key = CHAT_KEYS[chatStep]
-    chatCollected.current[key] = msg
-    setChatMessages(prev => [...prev, { role: "user", text: msg }])
-
-    const nextStep = chatStep + 1
-    if (nextStep < CHAT_QUESTIONS.length) {
-      // Ask next question
-      setChatStep(nextStep)
-      setTimeout(() => {
-        setChatMessages(prev => [...prev, { role: "nancy", text: CHAT_QUESTIONS[nextStep] }])
-      }, 500)
-    } else {
-      // All questions asked — build text and create
-      setChatLoading(true)
-      const d = chatCollected.current
-      const text = [
-        d.title && `Должность: ${d.title}`,
-        d.responsibilities && `Обязанности: ${d.responsibilities}`,
-        d.requirements && `Требования: ${d.requirements}`,
-        d.cityFormat && `Город/формат: ${d.cityFormat}`,
-        d.salary && `Зарплата: ${d.salary}`,
-        d.conditions && `Условия: ${d.conditions}`,
-      ].filter(Boolean).join("\n")
-
-      setTimeout(() => {
-        setChatMessages(prev => [...prev, { role: "nancy", text: "Отлично! Создаю вакансию с AI-заполнением..." }])
-      }, 500)
-
-      await createWithAiText(text, d.title || "")
-      setChatLoading(false)
-    }
-  }, [chatInput, chatStep, createWithAiText])
+  }, [creating, router])
 
   const hrManagerTrashEnabled = typeof window !== "undefined" && localStorage.getItem(TRASH_ACCESS_KEY) === "true"
   const canSeeTrash = TRASH_ROLES_ALWAYS.includes(role) || (role === TRASH_ROLE_OPTIONAL && hrManagerTrashEnabled)
@@ -874,8 +521,9 @@ export default function VacanciesPage() {
                     )}
                   </button>
                 )}
-                <Button onClick={() => setCreateDialogOpen(true)}>
-                  <Plus className="size-4 mr-1.5" />Создать вакансию
+                <Button onClick={handleQuickCreate} disabled={creating}>
+                  {creating ? <Loader2 className="size-4 mr-1.5 animate-spin" /> : <Plus className="size-4 mr-1.5" />}
+                  Создать вакансию
                 </Button>
               </div>
             </div>
@@ -918,7 +566,10 @@ export default function VacanciesPage() {
                 <Briefcase className="size-12 text-muted-foreground/30 mb-4" />
                 <p className="text-muted-foreground font-medium">Вакансий пока нет</p>
                 <p className="text-sm text-muted-foreground/60 mt-1 mb-4">Создайте первую вакансию чтобы начать найм</p>
-                <Button onClick={() => setCreateDialogOpen(true)}><Plus className="size-4 mr-1.5" />Создать вакансию</Button>
+                <Button onClick={handleQuickCreate} disabled={creating}>
+                  {creating ? <Loader2 className="size-4 mr-1.5 animate-spin" /> : <Plus className="size-4 mr-1.5" />}
+                  Создать вакансию
+                </Button>
               </div>
             )}
 
@@ -1074,325 +725,6 @@ export default function VacanciesPage() {
         </SheetContent>
       </Sheet>
 
-      {/* ── Create vacancy dialog ── */}
-      <Dialog open={createDialogOpen} onOpenChange={(open) => { setCreateDialogOpen(open); if (!open) resetCreateDialog() }}>
-        <DialogContent className="sm:max-w-2xl bg-background">
-          {/* AI progress overlay */}
-          {creating && aiProgress && (
-            <div className="absolute inset-0 bg-white/90 dark:bg-gray-950/90 backdrop-blur-sm z-50 flex items-center justify-center rounded-lg">
-              <div className="flex flex-col items-center gap-3">
-                <Loader2 className="size-8 text-primary animate-spin" />
-                <p className="text-sm font-medium">{aiProgress}</p>
-              </div>
-            </div>
-          )}
-
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-2xl font-bold mb-6">
-              {createMode !== "choose" && (
-                <button type="button" onClick={() => { setCreateMode("choose"); setUploadedFile(null); setAiText(""); setImportUrl("") }} className="text-muted-foreground hover:text-foreground transition-colors">
-                  <ArrowLeft className="size-4" />
-                </button>
-              )}
-              {createMode === "choose" && "Как создать вакансию?"}
-              {createMode === "file" && "Загрузить файл"}
-              {createMode === "text" && "Вставить текст"}
-              {createMode === "url" && "Импорт по ссылке"}
-              {createMode === "manual" && "Создать вручную"}
-              {createMode === "voice" && "Надиктовать"}
-              {createMode === "chat" && "Чат с Ненси"}
-              {createMode === "template" && "Выбрать вакансию-шаблон"}
-            </DialogTitle>
-          </DialogHeader>
-
-          {/* ── Step 1: Choose mode (3 cards in Company24 style) ── */}
-          {createMode === "choose" && (
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 py-4">
-              <button
-                type="button"
-                onClick={() => setCreateMode("manual")}
-                className="flex flex-col items-center text-center gap-3 p-8 min-h-[180px] rounded-2xl border-2 border-transparent bg-card hover:border-primary/50 hover:shadow-xl hover:scale-[1.03] focus:outline-none focus-visible:ring-2 focus-visible:ring-primary transition-all duration-200 cursor-pointer group"
-              >
-                <div className="w-14 h-14 rounded-2xl flex items-center justify-center bg-orange-500/10 text-orange-500">
-                  <PenLine className="w-7 h-7" />
-                </div>
-                <span className="text-lg font-semibold text-foreground">Заполнить вручную</span>
-                <span className="text-sm text-muted-foreground mt-2">Создать пустую анкету</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setCreateMode("text")}
-                className="flex flex-col items-center text-center gap-3 p-8 min-h-[180px] rounded-2xl border-2 border-transparent bg-card hover:border-primary/50 hover:shadow-xl hover:scale-[1.03] focus:outline-none focus-visible:ring-2 focus-visible:ring-primary transition-all duration-200 cursor-pointer group"
-              >
-                <div className="w-14 h-14 rounded-2xl flex items-center justify-center bg-blue-500/10 text-blue-500">
-                  <ClipboardPaste className="w-7 h-7" />
-                </div>
-                <span className="text-lg font-semibold text-foreground">Вставить текст</span>
-                <span className="text-sm text-muted-foreground mt-2">Скопируйте описание с hh.ru — AI заполнит анкету</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => { setCreateMode("template"); loadTemplateVacancies() }}
-                className="flex flex-col items-center text-center gap-3 p-8 min-h-[180px] rounded-2xl border-2 border-transparent bg-card hover:border-primary/50 hover:shadow-xl hover:scale-[1.03] focus:outline-none focus-visible:ring-2 focus-visible:ring-primary transition-all duration-200 cursor-pointer group"
-              >
-                <div className="w-14 h-14 rounded-2xl flex items-center justify-center bg-green-500/10 text-green-500">
-                  <FolderOpen className="w-7 h-7" />
-                </div>
-                <span className="text-lg font-semibold text-foreground">Выбрать из шаблона</span>
-                <span className="text-sm text-muted-foreground mt-2">Из архивных или действующих вакансий</span>
-              </button>
-            </div>
-          )}
-
-          {/* ── Mode: File upload ── */}
-          {createMode === "file" && (
-            <div className="space-y-4 py-2">
-              <input ref={fileInputRef} type="file" accept=".docx,.doc,.pdf,.txt" className="hidden"
-                onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileUpload(f); e.target.value = "" }} />
-              {uploadedFile ? (
-                <div className="flex items-center gap-2 p-3 rounded-lg border bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800">
-                  <CheckCircle2 className="size-4 text-emerald-600 shrink-0" />
-                  <span className="text-sm text-emerald-700 dark:text-emerald-400 flex-1 break-all">{uploadedFile.name}</span>
-                  <button type="button" onClick={() => setUploadedFile(null)} className="text-muted-foreground hover:text-destructive shrink-0">
-                    <X className="size-3.5" />
-                  </button>
-                </div>
-              ) : (
-                <button type="button"
-                  className={cn(
-                    "w-full h-28 rounded-lg border-2 border-dashed flex flex-col items-center justify-center gap-2 transition-colors",
-                    dragOver ? "border-primary bg-primary/5 text-primary" : "border-muted-foreground/30 text-muted-foreground hover:border-primary/50 hover:text-primary",
-                    uploading && "pointer-events-none opacity-60",
-                  )}
-                  onClick={() => fileInputRef.current?.click()}
-                  onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
-                  onDragLeave={() => setDragOver(false)}
-                  onDrop={(e) => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files[0]; if (f) handleFileUpload(f) }}
-                >
-                  {uploading ? <Loader2 className="size-6 animate-spin" /> : (
-                    <>
-                      <Upload className="size-6" />
-                      <span className="text-sm">Перетащите файл или нажмите</span>
-                      <span className="text-xs opacity-60">DOCX, PDF, TXT (до 50 МБ)</span>
-                    </>
-                  )}
-                </button>
-              )}
-              <div className="space-y-1.5">
-                <Label className="text-xs font-medium">Название вакансии <span className="text-muted-foreground font-normal">(необязательно — AI определит из файла)</span></Label>
-                <Input value={newVacancyTitle} onChange={(e) => setNewVacancyTitle(e.target.value)} placeholder="Менеджер по продажам" className="h-10 border border-input" maxLength={75} />
-              </div>
-              <Button className="w-full h-10" onClick={handleCreateVacancy} disabled={creating || !uploadedFile}>
-                {creating ? <Loader2 className="size-4 mr-1.5 animate-spin" /> : <Sparkles className="size-4 mr-1.5" />}
-                Создать с AI-заполнением
-              </Button>
-            </div>
-          )}
-
-          {/* ── Mode: Paste text ── */}
-          {createMode === "text" && (
-            <div className="space-y-4 py-2">
-              <Textarea value={aiText} onChange={(e) => setAiText(e.target.value)}
-                placeholder="Вставьте описание вакансии, должностные обязанности или любой текст о позиции..."
-                className="h-40 bg-[var(--input-bg)] border border-input resize-none text-sm" autoFocus />
-              <div className="space-y-1.5">
-                <Label className="text-xs font-medium">Название вакансии <span className="text-muted-foreground font-normal">(необязательно — AI определит из текста)</span></Label>
-                <Input value={newVacancyTitle} onChange={(e) => setNewVacancyTitle(e.target.value)} placeholder="Менеджер по продажам" className="h-10 border border-input" maxLength={75} />
-              </div>
-              <Button className="w-full h-10" onClick={handleCreateVacancy} disabled={creating || !aiText.trim()}>
-                {creating ? <Loader2 className="size-4 mr-1.5 animate-spin" /> : <Sparkles className="size-4 mr-1.5" />}
-                Создать с AI-заполнением
-              </Button>
-            </div>
-          )}
-
-          {/* ── Mode: URL import ── */}
-          {createMode === "url" && (
-            <div className="space-y-4 py-2">
-              <div className="space-y-1.5">
-                <Label className="text-xs font-medium">Ссылка на вакансию</Label>
-                <Input value={importUrl} onChange={(e) => setImportUrl(e.target.value)}
-                  placeholder="https://hh.ru/vacancy/12345678" className="h-10 border border-input" autoFocus
-                  onKeyDown={(e) => { if (e.key === "Enter" && importUrl.trim()) handleCreateVacancy() }} />
-                <p className="text-xs text-muted-foreground">hh.ru, SuperJob, Habr Career или любой сайт с вакансией</p>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs font-medium">Название вакансии <span className="text-muted-foreground font-normal">(необязательно — AI определит со страницы)</span></Label>
-                <Input value={newVacancyTitle} onChange={(e) => setNewVacancyTitle(e.target.value)} placeholder="Менеджер по продажам" className="h-10 border border-input" maxLength={75} />
-              </div>
-              <Button className="w-full h-10" onClick={handleCreateVacancy} disabled={creating || !importUrl.trim()}>
-                {creating ? <Loader2 className="size-4 mr-1.5 animate-spin" /> : <Globe className="size-4 mr-1.5" />}
-                Загрузить и создать
-              </Button>
-            </div>
-          )}
-
-          {/* ── Mode: Voice ── */}
-          {createMode === "voice" && (
-            <div className="space-y-4 py-2">
-              {!voiceSupported ? (
-                <div className="text-center py-6">
-                  <MicOff className="size-8 text-muted-foreground mx-auto mb-2" />
-                  <p className="text-sm text-muted-foreground">Ваш браузер не поддерживает голосовой ввод.</p>
-                  <Button variant="link" size="sm" className="mt-2" onClick={() => setCreateMode("text")}>Используйте текстовый режим</Button>
-                </div>
-              ) : (
-                <>
-                  <div className="flex justify-center">
-                    <button type="button" onClick={recording ? stopRecording : startRecording}
-                      className={cn(
-                        "size-20 rounded-full flex items-center justify-center transition-all",
-                        recording
-                          ? "bg-red-500 text-white animate-pulse shadow-lg shadow-red-500/30"
-                          : "bg-primary/10 text-primary hover:bg-primary/20"
-                      )}>
-                      {recording ? <MicOff className="size-8" /> : <Mic className="size-8" />}
-                    </button>
-                  </div>
-                  <p className="text-xs text-center text-muted-foreground">
-                    {recording ? "Говорите... Нажмите чтобы остановить" : "Нажмите чтобы начать запись"}
-                  </p>
-                  <Textarea value={voiceText} onChange={e => setVoiceText(e.target.value)}
-                    placeholder="Здесь появится текст..." rows={5}
-                    className="text-sm bg-[var(--input-bg)] border border-input resize-none"
-                    readOnly={recording} />
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-medium">Название вакансии <span className="text-muted-foreground font-normal">(необязательно — AI определит из речи)</span></Label>
-                    <Input value={newVacancyTitle} onChange={(e) => setNewVacancyTitle(e.target.value)} placeholder="AI определит автоматически" className="h-10 border border-input" maxLength={75} />
-                  </div>
-                  <p className="text-[11px] text-muted-foreground">Весь надиктованный текст пойдёт на AI-анализ. Название вакансии будет определено автоматически.</p>
-                  <Button className="w-full h-10" onClick={handleCreateVacancy} disabled={creating || !voiceText.trim() || recording}>
-                    {creating ? <Loader2 className="size-4 mr-1.5 animate-spin" /> : <Sparkles className="size-4 mr-1.5" />}
-                    Создать с AI-заполнением
-                  </Button>
-                </>
-              )}
-            </div>
-          )}
-
-          {/* ── Mode: Chat with Nancy ── */}
-          {createMode === "chat" && (
-            <div className="flex flex-col" style={{ height: 420 }}>
-              {/* Messages */}
-              <div className="flex-1 overflow-y-auto space-y-3 py-2 pr-1">
-                {chatMessages.map((m, i) => (
-                  <div key={i} className={cn("flex gap-2", m.role === "user" ? "justify-end" : "justify-start")}>
-                    {m.role === "nancy" && (
-                      <div className="size-7 rounded-full bg-pink-100 dark:bg-pink-950/30 flex items-center justify-center shrink-0 text-xs">
-                        🤖
-                      </div>
-                    )}
-                    <div className={cn(
-                      "max-w-[80%] rounded-xl px-3 py-2 text-sm",
-                      m.role === "user"
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-muted"
-                    )}>
-                      {m.text}
-                    </div>
-                  </div>
-                ))}
-                {chatLoading && (
-                  <div className="flex gap-2 justify-start">
-                    <div className="size-7 rounded-full bg-pink-100 dark:bg-pink-950/30 flex items-center justify-center shrink-0 text-xs">🤖</div>
-                    <div className="bg-muted rounded-xl px-3 py-2"><Loader2 className="size-4 animate-spin" /></div>
-                  </div>
-                )}
-              </div>
-
-              {/* Progress */}
-              <div className="text-xs text-muted-foreground text-center py-1">
-                Шаг {Math.min(chatStep + 1, CHAT_QUESTIONS.length)} из {CHAT_QUESTIONS.length}
-              </div>
-
-              {/* Input */}
-              <div className="flex gap-2 pt-2 border-t">
-                <Input value={chatInput} onChange={e => setChatInput(e.target.value)}
-                  placeholder="Ваш ответ..." className="h-10 flex-1"
-                  onKeyDown={e => { if (e.key === "Enter" && !chatLoading) sendChatMessage() }}
-                  disabled={chatLoading || creating} autoFocus />
-                <Button size="icon" className="size-10 shrink-0" onClick={sendChatMessage} disabled={chatLoading || creating || !chatInput.trim()}>
-                  <Send className="size-4" />
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {/* ── Mode: Manual ── */}
-          {createMode === "manual" && (
-            <div className="space-y-4 py-2">
-              <div className="space-y-1.5">
-                <Label className="text-xs font-medium">Название вакансии</Label>
-                <Input value={newVacancyTitle} onChange={(e) => setNewVacancyTitle(e.target.value)}
-                  placeholder="Менеджер по продажам" className="h-10 border border-input" maxLength={75} autoFocus
-                  onKeyDown={(e) => { if (e.key === "Enter" && newVacancyTitle.trim()) handleCreateVacancy() }} />
-              </div>
-              <Button className="w-full h-10" onClick={handleCreateVacancy} disabled={creating || !newVacancyTitle.trim()}>
-                {creating ? <Loader2 className="size-4 mr-1.5 animate-spin" /> : <Plus className="size-4 mr-1.5" />}
-                Создать вакансию
-              </Button>
-            </div>
-          )}
-
-          {/* ── Mode: Template ── */}
-          {createMode === "template" && (
-            <div className="space-y-3 py-2">
-              <Input
-                value={templateSearch}
-                onChange={(e) => setTemplateSearch(e.target.value)}
-                placeholder="Поиск по названию..."
-                className="h-9 border border-input"
-                autoFocus
-              />
-              <div className="max-h-[50vh] overflow-y-auto space-y-1">
-                {templateLoading ? (
-                  <div className="flex items-center justify-center py-8 gap-2 text-muted-foreground">
-                    <Loader2 className="w-4 h-4 animate-spin" />Загрузка...
-                  </div>
-                ) : templateVacancies.filter(v =>
-                  !templateSearch || v.title.toLowerCase().includes(templateSearch.toLowerCase())
-                ).length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-8">
-                    {templateSearch ? "Ничего не найдено" : "Нет вакансий для копирования"}
-                  </p>
-                ) : (
-                  templateVacancies
-                    .filter(v => !templateSearch || v.title.toLowerCase().includes(templateSearch.toLowerCase()))
-                    .map(v => {
-                      const statusLabel = v.status === "published" ? "Активная" : v.status === "closed" ? "Архив" : "Черновик"
-                      const statusCls = v.status === "published"
-                        ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400"
-                        : v.status === "closed"
-                          ? "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400"
-                          : "bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400"
-                      return (
-                        <button
-                          key={v.id}
-                          type="button"
-                          onClick={() => handleCreateFromTemplate(v.id)}
-                          disabled={creating}
-                          className="w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg border border-border hover:bg-accent/50 hover:border-primary/30 transition-colors text-left"
-                        >
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium truncate">{v.title}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {v.createdAt ? new Date(v.createdAt).toLocaleDateString("ru-RU") : ""}
-                            </p>
-                          </div>
-                          <Badge variant="outline" className={cn("text-[10px] shrink-0", statusCls)}>
-                            {statusLabel}
-                          </Badge>
-                        </button>
-                      )
-                    })
-                )}
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
     </SidebarProvider>
   )
 }

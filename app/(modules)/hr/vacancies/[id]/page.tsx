@@ -117,7 +117,127 @@ export default function VacancyPage() {
   const id = params.id as string
 
   // ── Real API data ──────────────────────────────────────────
-  const { vacancy: apiVacancy, loading: vacancyLoading, error: vacancyError } = useVacancy(id)
+  const { vacancy: apiVacancy, loading: vacancyLoading, error: vacancyError, refetch: refetchVacancy } = useVacancy(id)
+
+  // ── Quick-fill: paste text (AI) / from library (template) ──
+  const [textDialogOpen, setTextDialogOpen] = useState(false)
+  const [pasteText, setPasteText] = useState("")
+  const [pasteBusy, setPasteBusy] = useState(false)
+  const [pasteProgress, setPasteProgress] = useState("")
+  const [libraryDialogOpen, setLibraryDialogOpen] = useState(false)
+  const [libraryItems, setLibraryItems] = useState<Array<{ id: string; title: string; status: string; createdAt: string }>>([])
+  const [libraryLoading, setLibraryLoading] = useState(false)
+  const [librarySearch, setLibrarySearch] = useState("")
+  const [libraryBusy, setLibraryBusy] = useState(false)
+
+  const handlePasteAndFill = async () => {
+    const text = pasteText.trim()
+    if (!text) { toast.error("Вставьте текст вакансии"); return }
+    setPasteBusy(true)
+    setPasteProgress("AI анализирует текст...")
+    try {
+      const aiRes = await fetch("/api/ai/parse-vacancy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      })
+      if (!aiRes.ok) throw new Error("AI-парсинг не удался")
+      const aiData = (await aiRes.json()) as { data: Record<string, unknown> }
+      const parsed = aiData.data || {}
+
+      setPasteProgress("Обновляю анкету...")
+      const existing = (apiVacancy?.descriptionJson as Record<string, unknown>) || {}
+      const existingAnketa = (existing.anketa as Record<string, unknown>) || {}
+      const newAnketa: Record<string, unknown> = {
+        ...existingAnketa,
+        vacancyTitle: existingAnketa.vacancyTitle || parsed.positionTitle || "",
+        positionCategory: parsed.positionCategory ?? existingAnketa.positionCategory ?? "",
+        workFormats: parsed.workFormats ?? existingAnketa.workFormats ?? [],
+        employment: parsed.employment ?? existingAnketa.employment ?? [],
+        positionCity: parsed.positionCity ?? existingAnketa.positionCity ?? "",
+        salaryFrom: parsed.salaryFrom ?? existingAnketa.salaryFrom ?? "",
+        salaryTo: parsed.salaryTo ?? existingAnketa.salaryTo ?? "",
+        bonus: parsed.bonus ?? existingAnketa.bonus ?? "",
+        responsibilities: parsed.responsibilities ?? existingAnketa.responsibilities ?? "",
+        requirements: parsed.requirements ?? existingAnketa.requirements ?? "",
+        requiredSkills: parsed.requiredSkills ?? existingAnketa.requiredSkills ?? [],
+        desiredSkills: parsed.desiredSkills ?? existingAnketa.desiredSkills ?? [],
+        unacceptableSkills: parsed.unacceptableSkills ?? existingAnketa.unacceptableSkills ?? [],
+        experienceMin: parsed.experienceMin ?? existingAnketa.experienceMin ?? "",
+        experienceIdeal: parsed.experienceIdeal ?? existingAnketa.experienceIdeal ?? "",
+        conditions: parsed.conditions ?? existingAnketa.conditions ?? [],
+        screeningQuestions: parsed.screeningQuestions ?? existingAnketa.screeningQuestions ?? [],
+        hhDescription: parsed.hhDescription ?? existingAnketa.hhDescription ?? "",
+      }
+      const body: Record<string, unknown> = {
+        description_json: { ...existing, anketa: newAnketa },
+      }
+      if (parsed.positionTitle && typeof parsed.positionTitle === "string") {
+        body.title = parsed.positionTitle
+      }
+      const res = await fetch(`/api/modules/hr/vacancies/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) throw new Error("Не удалось сохранить анкету")
+      await refetchVacancy()
+      toast.success("Анкета заполнена из текста")
+      setTextDialogOpen(false)
+      setPasteText("")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Ошибка")
+    } finally {
+      setPasteBusy(false)
+      setPasteProgress("")
+    }
+  }
+
+  const loadLibrary = async () => {
+    setLibraryLoading(true)
+    try {
+      const res = await fetch("/api/modules/hr/vacancies?limit=100")
+      if (res.ok) {
+        const data = await res.json()
+        const vacs = (data.vacancies ?? data.data ?? []) as Array<{ id: string; title: string; status: string; createdAt: string }>
+        setLibraryItems(vacs.filter(v => v.id !== id))
+      }
+    } catch {}
+    setLibraryLoading(false)
+  }
+
+  const handleApplyTemplate = async (templateId: string) => {
+    setLibraryBusy(true)
+    try {
+      const res = await fetch(`/api/modules/hr/vacancies/${templateId}`)
+      if (!res.ok) throw new Error("Не удалось загрузить шаблон")
+      const template = await res.json()
+      const src = template.data ?? template
+
+      const body: Record<string, unknown> = {}
+      if (src.descriptionJson) body.description_json = src.descriptionJson
+      if (src.city) body.city = src.city
+      if (src.format) body.format = src.format
+      if (src.employment) body.employment = src.employment
+      if (src.category) body.category = src.category
+      if (src.salaryMin != null) body.salary_min = src.salaryMin
+      if (src.salaryMax != null) body.salary_max = src.salaryMax
+
+      const patchRes = await fetch(`/api/modules/hr/vacancies/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      })
+      if (!patchRes.ok) throw new Error("Не удалось применить шаблон")
+      await refetchVacancy()
+      toast.success(`Анкета заполнена из «${src.title}»`)
+      setLibraryDialogOpen(false)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Ошибка")
+    } finally {
+      setLibraryBusy(false)
+    }
+  }
   const { candidates: apiCandidates, updateStage, refetch: refetchCandidates } = useCandidates(id)
 
   const [status, setStatus] = useState<VacancyStatus>("draft")
@@ -976,6 +1096,14 @@ export default function VacancyPage() {
                   {status === "active" && apiVacancy?.createdAt && <span className="flex items-center gap-1.5 text-xs text-muted-foreground"><Clock className="size-3.5" />{Math.floor((Date.now() - new Date(apiVacancy.createdAt).getTime()) / 86400000)} дн.</span>}
                 </div>
                 <p className="text-muted-foreground text-xs">{totalCandidates} кандидатов · {vacancyTitle} · {apiVacancy?.city ?? "Москва"}</p>
+                <div className="flex items-center gap-2 mt-2">
+                  <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={() => setTextDialogOpen(true)}>
+                    <ClipboardList className="size-3.5" />Вставить текст
+                  </Button>
+                  <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={() => { setLibraryDialogOpen(true); loadLibrary() }}>
+                    <BookOpen className="size-3.5" />Из библиотеки
+                  </Button>
+                </div>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 {status === "draft" && <>
@@ -1936,6 +2064,85 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
       </SidebarInset>
 
       <AddCandidateDialog open={addDialogOpen} onOpenChange={setAddDialogOpen} onAdd={handleAddCandidate} />
+
+      {/* ── Paste text dialog ── */}
+      <Dialog open={textDialogOpen} onOpenChange={(o) => { if (!pasteBusy) { setTextDialogOpen(o); if (!o) setPasteText("") } }}>
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Вставить текст</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-xs text-muted-foreground">Вставьте описание вакансии — AI заполнит анкету. Существующие поля будут перезаписаны.</p>
+            <Textarea
+              value={pasteText}
+              onChange={(e) => setPasteText(e.target.value)}
+              placeholder="Скопируйте описание с hh.ru, SuperJob или любого сайта..."
+              className="h-48 resize-none text-sm"
+              autoFocus
+              disabled={pasteBusy}
+            />
+            <Button className="w-full h-10" onClick={handlePasteAndFill} disabled={pasteBusy || !pasteText.trim()}>
+              {pasteBusy ? <><Loader2 className="size-4 mr-1.5 animate-spin" />{pasteProgress || "AI работает..."}</> : <><Sparkles className="size-4 mr-1.5" />Заполнить анкету AI</>}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Library dialog ── */}
+      <Dialog open={libraryDialogOpen} onOpenChange={(o) => { if (!libraryBusy) { setLibraryDialogOpen(o); if (!o) setLibrarySearch("") } }}>
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Из библиотеки</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-xs text-muted-foreground">Выберите существующую вакансию, чтобы скопировать анкету в текущую. Существующие поля будут перезаписаны.</p>
+            <Input
+              value={librarySearch}
+              onChange={(e) => setLibrarySearch(e.target.value)}
+              placeholder="Поиск по названию..."
+              className="h-9"
+              autoFocus
+            />
+            <div className="max-h-[50vh] overflow-y-auto space-y-1">
+              {libraryLoading ? (
+                <div className="flex items-center justify-center py-8 gap-2 text-muted-foreground">
+                  <Loader2 className="w-4 h-4 animate-spin" />Загрузка...
+                </div>
+              ) : libraryItems.filter(v => !librarySearch || v.title.toLowerCase().includes(librarySearch.toLowerCase())).length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-8">
+                  {librarySearch ? "Ничего не найдено" : "Нет вакансий в библиотеке"}
+                </p>
+              ) : (
+                libraryItems
+                  .filter(v => !librarySearch || v.title.toLowerCase().includes(librarySearch.toLowerCase()))
+                  .map(v => {
+                    const statusLabel = v.status === "active" || v.status === "published" ? "Активная" : v.status?.startsWith("closed") ? "Архив" : "Черновик"
+                    return (
+                      <button
+                        key={v.id}
+                        type="button"
+                        onClick={() => handleApplyTemplate(v.id)}
+                        disabled={libraryBusy}
+                        className="w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg border border-border hover:bg-accent/50 hover:border-primary/30 transition-colors text-left disabled:opacity-50"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{v.title}</p>
+                          <p className="text-xs text-muted-foreground">{v.createdAt ? new Date(v.createdAt).toLocaleDateString("ru-RU") : ""}</p>
+                        </div>
+                        <Badge variant="outline" className="text-[10px] shrink-0">{statusLabel}</Badge>
+                      </button>
+                    )
+                  })
+              )}
+            </div>
+            {libraryBusy && (
+              <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground pt-2 border-t">
+                <Loader2 className="w-4 h-4 animate-spin" />Применяю шаблон...
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Reject confirmation dialog */}
       <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
