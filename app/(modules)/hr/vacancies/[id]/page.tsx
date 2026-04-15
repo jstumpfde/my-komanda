@@ -30,7 +30,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Checkbox } from "@/components/ui/checkbox"
 import { Slider } from "@/components/ui/slider"
 import { Input } from "@/components/ui/input"
-import { Plus, Clock, Pause, Play, Archive, RotateCcw, Trash2, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, Zap, Globe, AlertTriangle, TrendingUp, Calendar, MapPin, DollarSign, Filter, X, Link2, Copy, Save, Sparkles, Eye, Check, Loader2, Download, ExternalLink, ClipboardList, ChevronLeft, ChevronRight, ChevronDown, CheckCircle2, XCircle, Users, Phone } from "lucide-react"
+import { Plus, Clock, Pause, Play, Archive, RotateCcw, Trash2, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, Zap, Globe, AlertTriangle, TrendingUp, Calendar, MapPin, DollarSign, Filter, X, Link2, Copy, Save, Sparkles, Eye, Check, Loader2, Download, ExternalLink, ClipboardList, ChevronLeft, ChevronRight, ChevronDown, CheckCircle2, XCircle, Users, Phone, Upload } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Label } from "@/components/ui/label"
@@ -119,7 +119,7 @@ export default function VacancyPage() {
   // ── Real API data ──────────────────────────────────────────
   const { vacancy: apiVacancy, loading: vacancyLoading, error: vacancyError, refetch: refetchVacancy } = useVacancy(id)
 
-  // ── Quick-fill: paste text (AI) / from library (template) ──
+  // ── Quick-fill: paste text (AI) / from library (template) / upload file ──
   const [textDialogOpen, setTextDialogOpen] = useState(false)
   const [pasteText, setPasteText] = useState("")
   const [pasteBusy, setPasteBusy] = useState(false)
@@ -129,10 +129,10 @@ export default function VacancyPage() {
   const [libraryLoading, setLibraryLoading] = useState(false)
   const [librarySearch, setLibrarySearch] = useState("")
   const [libraryBusy, setLibraryBusy] = useState(false)
+  const anketaFileInputRef = useRef<HTMLInputElement>(null)
 
-  const handlePasteAndFill = async () => {
-    const text = pasteText.trim()
-    if (!text) { toast.error("Вставьте текст вакансии"); return }
+  const parseTextAndFillAnketa = async (text: string) => {
+    if (!text.trim()) { toast.error("Нет текста для парсинга"); return }
     setPasteBusy(true)
     setPasteProgress("AI анализирует текст...")
     try {
@@ -185,12 +185,40 @@ export default function VacancyPage() {
         throw new Error(errBody.error || "Не удалось сохранить анкету")
       }
       await refetchVacancy()
-      toast.success("Анкета заполнена из текста")
+      toast.success("Анкета заполнена")
       setTextDialogOpen(false)
       setPasteText("")
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Ошибка")
     } finally {
+      setPasteBusy(false)
+      setPasteProgress("")
+    }
+  }
+
+  const handlePasteAndFill = () => parseTextAndFillAnketa(pasteText.trim())
+
+  const handleAnketaFileUpload = async (file: File) => {
+    const name = file.name.toLowerCase()
+    if (!name.endsWith(".txt") && !name.endsWith(".pdf") && !name.endsWith(".docx") && !name.endsWith(".doc")) {
+      toast.error("Поддерживаются DOCX, PDF, TXT")
+      return
+    }
+    if (file.size > 50 * 1024 * 1024) {
+      toast.error("Файл слишком большой (макс. 50 МБ)")
+      return
+    }
+    setPasteBusy(true)
+    setPasteProgress("Извлекаю текст из файла...")
+    try {
+      const fd = new FormData()
+      fd.append("file", file)
+      const res = await fetch("/api/modules/hr/vacancies/parse-file", { method: "POST", body: fd })
+      const data = await res.json() as { text?: string; error?: string }
+      if (!res.ok || !data.text) throw new Error(data.error || "Не удалось извлечь текст")
+      await parseTextAndFillAnketa(data.text)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Ошибка обработки файла")
       setPasteBusy(false)
       setPasteProgress("")
     }
@@ -1101,12 +1129,33 @@ export default function VacancyPage() {
                 </div>
                 <p className="text-muted-foreground text-xs">{totalCandidates} кандидатов · {vacancyTitle} · {apiVacancy?.city ?? "Москва"}</p>
                 <div className="flex items-center gap-2 mt-2">
-                  <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={() => setTextDialogOpen(true)}>
-                    <ClipboardList className="size-3.5" />Вставить текст
-                  </Button>
-                  <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={() => { setLibraryDialogOpen(true); loadLibrary() }}>
-                    <BookOpen className="size-3.5" />Из библиотеки
-                  </Button>
+                  <input
+                    ref={anketaFileInputRef}
+                    type="file"
+                    accept=".docx,.doc,.pdf,.txt"
+                    className="hidden"
+                    onChange={(e) => { const f = e.target.files?.[0]; if (f) handleAnketaFileUpload(f); e.target.value = "" }}
+                  />
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" disabled={pasteBusy}>
+                        {pasteBusy ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
+                        Заполнить из...
+                        <ChevronDown className="size-3 ml-0.5 opacity-50" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start">
+                      <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => setTextDialogOpen(true)}>
+                        <ClipboardList className="size-3.5" />Вставить текст
+                      </DropdownMenuItem>
+                      <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => { setLibraryDialogOpen(true); loadLibrary() }}>
+                        <BookOpen className="size-3.5" />Из библиотеки
+                      </DropdownMenuItem>
+                      <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => anketaFileInputRef.current?.click()}>
+                        <Upload className="size-3.5" />Загрузить файл
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-2">
@@ -1263,12 +1312,25 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                         {courseEditorSaveStatus === "saving" ? "Сохранение..." : "✓ Сохранено"}
                       </span>
                     </div>
-                    <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8" onClick={() => courseTabRef.current?.openAiGenerate()}>
-                      <Sparkles className="w-3.5 h-3.5" />Сгенерировать с AI
-                    </Button>
-                    <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8" onClick={() => courseEditorRef.current?.openLibrary()}>
-                      <BookOpen className="w-3.5 h-3.5" />Из библиотеки
-                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8">
+                          <Sparkles className="w-3.5 h-3.5" />Создать из...
+                          <ChevronDown className="w-3 h-3 ml-0.5 opacity-50" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start">
+                        <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => courseTabRef.current?.openAiGenerate()}>
+                          <Sparkles className="w-3.5 h-3.5" />Сгенерировать с AI
+                        </DropdownMenuItem>
+                        <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => courseEditorRef.current?.openLibrary()}>
+                          <BookOpen className="w-3.5 h-3.5" />Из библиотеки
+                        </DropdownMenuItem>
+                        <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => courseTabRef.current?.openFileUpload()}>
+                          <Upload className="w-3.5 h-3.5" />Загрузить файл
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                     <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8" onClick={() => courseEditorRef.current?.openSaveTemplate()}>
                       <Save className="w-3.5 h-3.5" />В библиотеку
                     </Button>

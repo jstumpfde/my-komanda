@@ -14,6 +14,7 @@ import { toast } from "sonner"
 
 export interface CourseTabHandle {
   openAiGenerate: () => void
+  openFileUpload: () => void
 }
 
 interface CourseTabProps {
@@ -108,8 +109,53 @@ export const CourseTab = forwardRef<NotionEditorHandle, CourseTabProps>(
       }
     }, [vacancyId, selectedTemplate, vacancyTitle, createDemo, updateDemo, demo])
 
+    const fileInputRef = useRef<HTMLInputElement>(null)
+    const [fileBusy, setFileBusy] = useState(false)
+
+    const handleFileUpload = useCallback(async (file: File) => {
+      const name = file.name.toLowerCase()
+      if (!name.endsWith(".txt") && !name.endsWith(".pdf") && !name.endsWith(".docx") && !name.endsWith(".doc")) {
+        toast.error("Поддерживаются DOCX, PDF, TXT")
+        return
+      }
+      if (file.size > 50 * 1024 * 1024) {
+        toast.error("Файл слишком большой (макс. 50 МБ)")
+        return
+      }
+      setFileBusy(true)
+      try {
+        const fd = new FormData()
+        fd.append("file", file)
+        const res = await fetch("/api/modules/hr/vacancies/parse-file", { method: "POST", body: fd })
+        const data = await res.json() as { text?: string; error?: string }
+        if (!res.ok || !data.text) throw new Error(data.error || "Не удалось извлечь текст")
+
+        const block = createBlock("text")
+        block.content = data.text
+        const lesson: Lesson = {
+          id: `lesson-file-${Date.now()}`,
+          emoji: "📄",
+          title: file.name.replace(/\.(docx?|pdf|txt)$/i, "").trim() || "Новый урок",
+          blocks: [block],
+        }
+        if (demo) {
+          updateDemo({ ...demo, lessons: [lesson, ...demo.lessons] })
+          toast.success("Файл добавлен в демонстрацию")
+        } else {
+          const created = await createDemo(vacancyTitle || "Демонстрация должности", [lesson])
+          if (created) toast.success("Демонстрация создана из файла")
+          else throw new Error("Не удалось сохранить")
+        }
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Ошибка обработки файла")
+      } finally {
+        setFileBusy(false)
+      }
+    }, [demo, updateDemo, createDemo, vacancyTitle])
+
     useImperativeHandle(tabRef, () => ({
       openAiGenerate: () => setAiDialogOpen(true),
+      openFileUpload: () => fileInputRef.current?.click(),
     }), [])
 
     // Loading state (пока создаём пустую демо или грузим существующую)
@@ -133,8 +179,21 @@ export const CourseTab = forwardRef<NotionEditorHandle, CourseTabProps>(
 
     return (
       <>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".docx,.doc,.pdf,.txt"
+          className="hidden"
+          onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileUpload(f); e.target.value = "" }}
+        />
         {/* Save status indicator */}
-        <div className="flex justify-end px-1 pb-1">
+        <div className="flex justify-end px-1 pb-1 gap-2">
+          {fileBusy && (
+            <span className="flex items-center gap-1 text-xs text-muted-foreground">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              Загружаю файл...
+            </span>
+          )}
           {saveStatus === "saving" && (
             <span className="flex items-center gap-1 text-xs text-muted-foreground">
               <Loader2 className="w-3 h-3 animate-spin" />
