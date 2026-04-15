@@ -981,7 +981,7 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange, onNavigat
   // Fetch company description for advisor
   useEffect(() => {
     fetch("/api/companies").then(r => r.ok ? r.json() : null).then(json => {
-      const desc = json?.data?.companyDescription || json?.data?.description
+      const desc = json?.companyDescription || json?.description
       if (desc) {
         setCompanyDescription(desc)
         setData(prev => prev.companyDescription ? prev : { ...prev, companyDescription: desc })
@@ -1315,11 +1315,19 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange, onNavigat
 
   // ── Autosave ──
   const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const dataDirtyRef = useRef(false)
   const scheduleAutosave = useCallback(() => {
     if (autosaveTimer.current) clearTimeout(autosaveTimer.current)
     autosaveTimer.current = setTimeout(() => save(), 2000)
   }, [save])
   useEffect(() => () => { if (autosaveTimer.current) clearTimeout(autosaveTimer.current) }, [])
+  useEffect(() => {
+    if (!dataDirtyRef.current) {
+      dataDirtyRef.current = true
+      return
+    }
+    scheduleAutosave()
+  }, [data, scheduleAutosave])
   const handleBlur = useCallback(() => scheduleAutosave(), [scheduleAutosave])
 
   const sectionFilled = (idx: number) => {
