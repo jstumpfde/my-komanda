@@ -1225,9 +1225,16 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                 {healthNextStep && healthScore < 100 && (
                   <div className="flex items-center justify-between mt-1.5">
                     <p className="text-[11px] text-muted-foreground">Следующий шаг: {healthNextStep}</p>
-                    {healthScore < 70 && !autoSetupDone && (
-                      <Button variant="outline" size="sm" className="h-6 text-[10px] gap-1 shrink-0" onClick={handleAutoSetup} disabled={autoSetupRunning}>
-                        {autoSetupRunning ? <><Loader2 className="w-3 h-3 animate-spin" />{autoSetupStep}</> : <><Sparkles className="w-3 h-3" />Настроить автоматически</>}
+                    {healthScore >= 40 && healthScore < 90 && !autoSetupDone && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-6 text-[10px] gap-1 shrink-0"
+                        onClick={handleAutoSetup}
+                        disabled={autoSetupRunning}
+                        title="На основе анкеты: сгенерирует описание для hh.ru, создаст демонстрацию должности и настроит воронку найма"
+                      >
+                        {autoSetupRunning ? <><Loader2 className="w-3 h-3 animate-spin" />{autoSetupStep}</> : <><Sparkles className="w-3 h-3" />Создать описание, демо и воронку</>}
                       </Button>
                     )}
                   </div>
