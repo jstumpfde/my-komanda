@@ -12,6 +12,55 @@ import { useDemo } from "@/hooks/use-demo"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 
+const LESSON_EMOJIS = ["📘", "📗", "📙", "📕", "📔", "📓", "📒", "📖"]
+
+function splitTextIntoLessons(text: string, fileName: string): Lesson[] {
+  const fallbackTitle = fileName.replace(/\.(docx?|pdf|txt)$/i, "").trim() || "Новый урок"
+  const lines = text.split(/\r?\n/)
+
+  const headingRe = /^\s*(?:#+\s*)?Урок\s*(\d+)\s*[:.\-–—)]?\s*(.*)$/i
+  const sections: { title: string; body: string[] }[] = []
+  let intro: string[] = []
+
+  for (const line of lines) {
+    const m = line.match(headingRe)
+    if (m) {
+      const num = m[1]
+      const rest = (m[2] || "").trim().replace(/^[:.\-–—)]\s*/, "")
+      sections.push({ title: rest ? `Урок ${num}. ${rest}` : `Урок ${num}`, body: [] })
+    } else if (sections.length === 0) {
+      intro.push(line)
+    } else {
+      sections[sections.length - 1].body.push(line)
+    }
+  }
+
+  if (sections.length === 0) {
+    const block = createBlock("text")
+    block.content = text
+    return [{ id: `lesson-file-${Date.now()}`, emoji: "📄", title: fallbackTitle, blocks: [block] }]
+  }
+
+  const result: Lesson[] = []
+  const introContent = intro.join("\n").trim()
+  if (introContent) {
+    const block = createBlock("text")
+    block.content = introContent
+    result.push({ id: `lesson-file-${Date.now()}-intro`, emoji: "📄", title: fallbackTitle, blocks: [block] })
+  }
+  sections.forEach((s, i) => {
+    const block = createBlock("text")
+    block.content = s.body.join("\n").trim()
+    result.push({
+      id: `lesson-file-${Date.now()}-${i}`,
+      emoji: LESSON_EMOJIS[i % LESSON_EMOJIS.length],
+      title: s.title,
+      blocks: [block],
+    })
+  })
+  return result
+}
+
 export interface CourseTabHandle {
   openAiGenerate: () => void
   openFileUpload: () => void
@@ -130,20 +179,17 @@ export const CourseTab = forwardRef<NotionEditorHandle, CourseTabProps>(
         const data = await res.json() as { text?: string; error?: string }
         if (!res.ok || !data.text) throw new Error(data.error || "Не удалось извлечь текст")
 
-        const block = createBlock("text")
-        block.content = data.text
-        const lesson: Lesson = {
-          id: `lesson-file-${Date.now()}`,
-          emoji: "📄",
-          title: file.name.replace(/\.(docx?|pdf|txt)$/i, "").trim() || "Новый урок",
-          blocks: [block],
-        }
+        const lessons = splitTextIntoLessons(data.text, file.name)
         if (demo) {
-          updateDemo({ ...demo, lessons: [lesson, ...demo.lessons] })
-          toast.success("Файл добавлен в демонстрацию")
+          updateDemo({ ...demo, lessons: [...lessons, ...demo.lessons] })
+          toast.success(lessons.length > 1
+            ? `Файл добавлен — ${lessons.length} уроков`
+            : "Файл добавлен в демонстрацию")
         } else {
-          const created = await createDemo(vacancyTitle || "Демонстрация должности", [lesson])
-          if (created) toast.success("Демонстрация создана из файла")
+          const created = await createDemo(vacancyTitle || "Демонстрация должности", lessons)
+          if (created) toast.success(lessons.length > 1
+            ? `Демонстрация создана — ${lessons.length} уроков`
+            : "Демонстрация создана из файла")
           else throw new Error("Не удалось сохранить")
         }
       } catch (err) {
