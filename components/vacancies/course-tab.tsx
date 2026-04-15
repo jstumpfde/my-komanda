@@ -16,48 +16,69 @@ const LESSON_EMOJIS = ["📘", "📗", "📙", "📕", "📔", "📓", "📒", "
 
 function splitTextIntoLessons(text: string, fileName: string): Lesson[] {
   const fallbackTitle = fileName.replace(/\.(docx?|pdf|txt)$/i, "").trim() || "Новый урок"
-  const lines = text.split(/\r?\n/)
+  const normalized = text.replace(/\r\n/g, "\n")
 
-  const headingRe = /^\s*(?:#+\s*)?Урок\s*(\d+)\s*[:.\-–—)]?\s*(.*)$/i
-  const sections: { title: string; body: string[] }[] = []
-  let intro: string[] = []
-
-  for (const line of lines) {
-    const m = line.match(headingRe)
-    if (m) {
-      const num = m[1]
-      const rest = (m[2] || "").trim().replace(/^[:.\-–—)]\s*/, "")
-      sections.push({ title: rest ? `Урок ${num}. ${rest}` : `Урок ${num}`, body: [] })
-    } else if (sections.length === 0) {
-      intro.push(line)
-    } else {
-      sections[sections.length - 1].body.push(line)
-    }
+  // Находим все вхождения «Урок N» в тексте (в начале строки или с пробелом/переносом перед)
+  const markerRe = /(?:^|\s)(?:#+\s*)?Урок\s*(\d+)\s*[:.\-–—)]?\s*/gi
+  type Match = { index: number; endIndex: number; num: string }
+  const matches: Match[] = []
+  let m: RegExpExecArray | null
+  while ((m = markerRe.exec(normalized)) !== null) {
+    // При (?:^|\s) пробел включен в m[0] — смещаем start до самого «Урок»
+    const leading = m[0].match(/^\s*/)?.[0].length ?? 0
+    matches.push({
+      index: m.index + leading,
+      endIndex: m.index + m[0].length,
+      num: m[1],
+    })
   }
 
-  if (sections.length === 0) {
+  if (matches.length === 0) {
     const block = createBlock("text")
-    block.content = text
+    block.content = normalized.trim()
     return [{ id: `lesson-file-${Date.now()}`, emoji: "📄", title: fallbackTitle, blocks: [block] }]
   }
 
   const result: Lesson[] = []
-  const introContent = intro.join("\n").trim()
-  if (introContent) {
+  const baseId = Date.now()
+
+  // Текст до первого маркера — вступление
+  const introText = normalized.slice(0, matches[0].index).trim()
+  if (introText) {
     const block = createBlock("text")
-    block.content = introContent
-    result.push({ id: `lesson-file-${Date.now()}-intro`, emoji: "📄", title: fallbackTitle, blocks: [block] })
+    block.content = introText
+    result.push({ id: `lesson-file-${baseId}-intro`, emoji: "📄", title: fallbackTitle, blocks: [block] })
   }
-  sections.forEach((s, i) => {
+
+  matches.forEach((match, i) => {
+    const end = i + 1 < matches.length ? matches[i + 1].index : normalized.length
+    const body = normalized.slice(match.endIndex, end).trim()
+
+    // Заголовок урока: первая строка или первое предложение тела
+    let title = `Урок ${match.num}`
+    let content = body
+    const nlIdx = body.indexOf("\n")
+    const firstLine = (nlIdx >= 0 ? body.slice(0, nlIdx) : body).trim()
+    // Пытаемся отрезать короткий заголовок из первого предложения
+    const sentenceMatch = firstLine.match(/^(.{3,120}?)(?:[.!?—–]|\s—\s)/)
+    if (sentenceMatch) {
+      title = `Урок ${match.num}. ${sentenceMatch[1].trim()}`
+      content = body.slice(sentenceMatch[0].length).trim()
+    } else if (firstLine && firstLine.length <= 120) {
+      title = `Урок ${match.num}. ${firstLine}`
+      content = nlIdx >= 0 ? body.slice(nlIdx + 1).trim() : ""
+    }
+
     const block = createBlock("text")
-    block.content = s.body.join("\n").trim()
+    block.content = content || body
     result.push({
-      id: `lesson-file-${Date.now()}-${i}`,
+      id: `lesson-file-${baseId}-${i}`,
       emoji: LESSON_EMOJIS[i % LESSON_EMOJIS.length],
-      title: s.title,
+      title,
       blocks: [block],
     })
   })
+
   return result
 }
 
