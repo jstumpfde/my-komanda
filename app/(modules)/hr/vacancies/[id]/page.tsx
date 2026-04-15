@@ -1128,35 +1128,13 @@ export default function VacancyPage() {
                   {status === "active" && apiVacancy?.createdAt && <span className="flex items-center gap-1.5 text-xs text-muted-foreground"><Clock className="size-3.5" />{Math.floor((Date.now() - new Date(apiVacancy.createdAt).getTime()) / 86400000)} дн.</span>}
                 </div>
                 <p className="text-muted-foreground text-xs">{totalCandidates} кандидатов · {vacancyTitle} · {apiVacancy?.city ?? "Москва"}</p>
-                <div className="flex items-center gap-2 mt-2">
-                  <input
-                    ref={anketaFileInputRef}
-                    type="file"
-                    accept=".docx,.doc,.pdf,.txt"
-                    className="hidden"
-                    onChange={(e) => { const f = e.target.files?.[0]; if (f) handleAnketaFileUpload(f); e.target.value = "" }}
-                  />
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" disabled={pasteBusy}>
-                        {pasteBusy ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
-                        Заполнить из...
-                        <ChevronDown className="size-3 ml-0.5 opacity-50" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="start">
-                      <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => setTextDialogOpen(true)}>
-                        <ClipboardList className="size-3.5" />Вставить текст
-                      </DropdownMenuItem>
-                      <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => { setLibraryDialogOpen(true); loadLibrary() }}>
-                        <BookOpen className="size-3.5" />Из библиотеки
-                      </DropdownMenuItem>
-                      <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => anketaFileInputRef.current?.click()}>
-                        <Upload className="size-3.5" />Загрузить файл
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
+                <input
+                  ref={anketaFileInputRef}
+                  type="file"
+                  accept=".docx,.doc,.pdf,.txt"
+                  className="hidden"
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) handleAnketaFileUpload(f); e.target.value = "" }}
+                />
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 {status === "draft" && <>
@@ -1295,6 +1273,30 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                         <button key={v.mode} className={cn("h-7 px-2.5 rounded-md text-xs font-medium transition-all whitespace-nowrap", viewMode === v.mode ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground")} onClick={() => setViewMode(v.mode)}>{v.label}</button>
                       ))}
                     </div>
+                  </div>
+                )}
+                {activeTab === "anketa" && (
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8" disabled={pasteBusy}>
+                          {pasteBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                          Заполнить из...
+                          <ChevronDown className="w-3 h-3 ml-0.5 opacity-50" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => setTextDialogOpen(true)}>
+                          <ClipboardList className="size-3.5" />Вставить текст
+                        </DropdownMenuItem>
+                        <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => { setLibraryDialogOpen(true); loadLibrary() }}>
+                          <BookOpen className="size-3.5" />Из библиотеки
+                        </DropdownMenuItem>
+                        <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => anketaFileInputRef.current?.click()}>
+                          <Upload className="size-3.5" />Загрузить файл
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                 )}
                 {activeTab === "course" && (
