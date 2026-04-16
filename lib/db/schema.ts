@@ -128,6 +128,19 @@ export const companies = pgTable("companies", {
   updatedAt:          timestamp("updated_at").defaultNow(),
 })
 
+export const companyBankAccounts = pgTable("company_bank_accounts", {
+  id:         uuid("id").primaryKey().defaultRandom(),
+  companyId:  uuid("company_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  bankName:   text("bank_name"),
+  bik:        text("bik"),
+  rs:         text("rs"),
+  ks:         text("ks"),
+  isDefault:  boolean("is_default").default(false),
+  sortOrder:  integer("sort_order").default(0),
+  createdAt:  timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt:  timestamp("updated_at", { withTimezone: true }).defaultNow(),
+})
+
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
   email: text("email").notNull().unique(),

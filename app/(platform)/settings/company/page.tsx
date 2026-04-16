@@ -51,6 +51,19 @@ function parseDadataSuggestion(s: any): DadataResult & { inn: string } {
 // ─── Bank account ────────────────────────────────────────────
 interface BankAccount { id: string; bankName: string; bik: string; ks: string; rs: string }
 
+// Server row ↔ client row (Drizzle returns camelCase)
+interface BankAccountRow {
+  id: string
+  bankName: string | null
+  bik: string | null
+  rs: string | null
+  ks: string | null
+  isDefault: boolean | null
+  sortOrder: number | null
+}
+function isTempId(id: string) { return id.startsWith("tmp-") }
+function emptyAccount(tempId: string): BankAccount { return { id: tempId, bankName: "", bik: "", rs: "", ks: "" } }
+
 // ─── Schedule ────────────────────────────────────────────────
 interface DaySchedule { enabled: boolean; from: string; to: string }
 const DAY_LABELS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
@@ -174,7 +187,8 @@ function FieldError({ error }: { error: string }) {
 }
 
 // ─── Component ───────────────────────────────────────────────
-let _nextId = 2
+let _nextTempId = 1
+function nextTempAccountId() { return `tmp-${_nextTempId++}` }
 
 export default function CompanyProfilePage() {
   const [inn, setInn] = useState(""); const [searching, setSearching] = useState(false); const [found, setFound] = useState(false)
@@ -183,7 +197,8 @@ export default function CompanyProfilePage() {
   const [fullName, setFullName] = useState(""); const [shortName, setShortName] = useState(""); const [kpp, setKpp] = useState(""); const [ogrn, setOgrn] = useState("")
   const [legalAddress, setLegalAddress] = useState(""); const [director, setDirector] = useState(""); const [companyStatus, setCompanyStatus] = useState<CompanyStatus>("")
   const [postalSameAsLegal, setPostalSameAsLegal] = useState(false); const [postalAddress, setPostalAddress] = useState(""); const [postalIndex, setPostalIndex] = useState(""); const [postalCity, setPostalCity] = useState("")
-  const [accounts, setAccounts] = useState<BankAccount[]>([{ id: "1", bankName: "", bik: "", rs: "", ks: "" }]); const [defaultAccountId, setDefaultAccountId] = useState("1"); const [bikSearching, setBikSearching] = useState<string|null>(null); const [bankNameSearching, setBankNameSearching] = useState<string|null>(null)
+  const [accounts, setAccounts] = useState<BankAccount[]>(() => [emptyAccount(nextTempAccountId())]); const [defaultAccountId, setDefaultAccountId] = useState<string>(() => accounts[0]?.id ?? "")
+  const [bikSearching, setBikSearching] = useState<string|null>(null); const [bankNameSearching, setBankNameSearching] = useState<string|null>(null)
   const [email, setEmail] = useState(""); const [phone, setPhone] = useState(""); const [website, setWebsite] = useState("")
   const [description, setDescription] = useState(""); const [registrationDate, setRegistrationDate] = useState(""); const [employeeCount, setEmployeeCount] = useState("")
   const [companyDescription, setCompanyDescription] = useState("")
@@ -251,7 +266,51 @@ export default function CompanyProfilePage() {
 
   const handleShortNameChange = (value: string) => { setShortName(value); setNameDropdownOpen(false); setNameSuggestions([]); if (nameDebounceRef.current) clearTimeout(nameDebounceRef.current) }
 
-  useEffect(() => { fetchCompanyApi().then((data: unknown) => { const c = data as Record<string, string> | null; if (!c) return; if (c.inn) setInn(c.inn); if (c.kpp) setKpp(c.kpp); if (c.name) { setShortName(c.name); setFullName(c.name) }; if (c.legalAddress) setLegalAddress(c.legalAddress); if (c.city) setPostalCity(c.city); if (c.postalCode) setPostalIndex(c.postalCode); if (c.industry) setIndustry(c.industry); if (c.companyDescription) setCompanyDescription(c.companyDescription) }).catch(() => {}) }, [])
+  useEffect(() => {
+    fetchCompanyApi().then((data: unknown) => {
+      const c = data as Record<string, unknown> | null
+      if (!c) return
+      const s = (k: string) => typeof c[k] === "string" ? c[k] as string : ""
+      if (s("inn")) setInn(s("inn"))
+      if (s("kpp")) setKpp(s("kpp"))
+      if (s("name")) { setShortName(s("name")); if (!s("fullName")) setFullName(s("name")) }
+      if (s("fullName")) setFullName(s("fullName"))
+      if (s("legalAddress")) setLegalAddress(s("legalAddress"))
+      if (s("city")) setPostalCity(s("city"))
+      if (s("postalCode")) setPostalIndex(s("postalCode"))
+      if (s("industry")) setIndustry(s("industry"))
+      if (s("companyDescription")) setCompanyDescription(s("companyDescription"))
+      if (s("ogrn")) setOgrn(s("ogrn"))
+      if (s("director")) setDirector(s("director"))
+      if (s("description")) setDescription(s("description"))
+      if (s("email")) setEmail(s("email"))
+      if (s("phone")) setPhone(s("phone"))
+      if (s("website")) setWebsite(s("website"))
+      if (typeof c.employeeCount === "number") setEmployeeCount(String(c.employeeCount))
+      if (s("registrationDate")) setRegistrationDate(s("registrationDate"))
+      if (s("officeAddress")) setOfficeAddress(s("officeAddress"))
+      if (s("postalAddress")) {
+        setPostalAddress(s("postalAddress"))
+        if (s("legalAddress") && s("postalAddress") === s("legalAddress")) setPostalSameAsLegal(true)
+      }
+    }).catch(() => {})
+    // Load bank accounts
+    fetch("/api/companies/bank-accounts").then(async (r) => {
+      if (!r.ok) return
+      const rows = await r.json() as BankAccountRow[]
+      if (!Array.isArray(rows) || rows.length === 0) return
+      const mapped: BankAccount[] = rows.map(row => ({
+        id: row.id,
+        bankName: row.bankName ?? "",
+        bik: row.bik ?? "",
+        rs: row.rs ?? "",
+        ks: row.ks ?? "",
+      }))
+      setAccounts(mapped)
+      const def = rows.find(r => r.isDefault) ?? rows[0]
+      if (def) setDefaultAccountId(def.id)
+    }).catch(() => {})
+  }, [])
   useEffect(() => { const handler = (e: MouseEvent) => { if (nameContainerRef.current && !nameContainerRef.current.contains(e.target as Node)) setNameDropdownOpen(false) }; document.addEventListener("mousedown", handler); return () => document.removeEventListener("mousedown", handler) }, [])
 
   const handleBikSearch = useCallback(async (accountId: string, bik: string) => {
@@ -318,9 +377,94 @@ export default function CompanyProfilePage() {
     } finally { setSaving(false) }
   }
 
-  const addAccount = () => { const id = String(_nextId++); setAccounts(prev => [...prev, { id, bankName: "", bik: "", rs: "", ks: "" }]) }
-  const updateAccount = (u: BankAccount) => { setAccounts(prev => prev.map(a => a.id === u.id ? u : a)) }
-  const removeAccount = (id: string) => { setAccounts(prev => { const next = prev.filter(a => a.id !== id); if (defaultAccountId === id && next.length > 0) setDefaultAccountId(next[0].id); return next }) }
+  // ─── Bank accounts persistence ──────────────────────────────
+  const accountsRef = useRef(accounts); accountsRef.current = accounts
+  const defaultAccountIdRef = useRef(defaultAccountId); defaultAccountIdRef.current = defaultAccountId
+  const accountSaveTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
+  const accountInFlightRef = useRef<Set<string>>(new Set())
+  const accountDirtyRef = useRef<Set<string>>(new Set())
+
+  const flushAccount = useCallback(async (accountId: string) => {
+    const acc = accountsRef.current.find(a => a.id === accountId)
+    if (!acc) return
+    if (accountInFlightRef.current.has(accountId)) return // already saving — new edits tracked via dirty flag
+    accountInFlightRef.current.add(accountId)
+    accountDirtyRef.current.delete(accountId) // clear; any edit during flight re-adds it
+    let resolvedId = accountId
+    try {
+      const payload = {
+        bank_name: acc.bankName,
+        bik: acc.bik,
+        rs: acc.rs,
+        ks: acc.ks,
+        is_default: defaultAccountIdRef.current === acc.id,
+        sort_order: accountsRef.current.findIndex(a => a.id === acc.id),
+      }
+      if (isTempId(accountId)) {
+        const res = await fetch("/api/companies/bank-accounts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })
+        if (!res.ok) throw new Error(`POST ${res.status}`)
+        const created = await res.json() as BankAccountRow
+        resolvedId = created.id
+        setAccounts(prev => prev.map(a => a.id === accountId ? { ...a, id: created.id } : a))
+        setDefaultAccountId(prev => prev === accountId ? created.id : prev)
+        // If user typed during POST, the dirty flag was added against tempId;
+        // transfer it to the real id so the retry below persists those edits.
+        if (accountDirtyRef.current.has(accountId)) {
+          accountDirtyRef.current.delete(accountId)
+          accountDirtyRef.current.add(created.id)
+        }
+      } else {
+        const res = await fetch(`/api/companies/bank-accounts/${accountId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })
+        if (!res.ok) throw new Error(`PUT ${res.status}`)
+      }
+    } catch (err) {
+      console.error("[bank-accounts save]", err)
+      accountDirtyRef.current.add(resolvedId) // retry on next schedule
+    } finally {
+      accountInFlightRef.current.delete(accountId)
+      if (accountDirtyRef.current.has(resolvedId)) {
+        const t = setTimeout(() => { accountSaveTimersRef.current.delete(resolvedId); flushAccount(resolvedId) }, 300)
+        accountSaveTimersRef.current.set(resolvedId, t)
+      }
+    }
+  }, [])
+
+  const scheduleAccountSave = useCallback((accountId: string, delay = 1200) => {
+    accountDirtyRef.current.add(accountId)
+    const prev = accountSaveTimersRef.current.get(accountId)
+    if (prev) clearTimeout(prev)
+    const t = setTimeout(() => {
+      accountSaveTimersRef.current.delete(accountId)
+      flushAccount(accountId)
+    }, delay)
+    accountSaveTimersRef.current.set(accountId, t)
+  }, [flushAccount])
+
+  const addAccount = () => {
+    const id = nextTempAccountId()
+    setAccounts(prev => [...prev, emptyAccount(id)])
+  }
+  const updateAccount = (u: BankAccount) => {
+    setAccounts(prev => prev.map(a => a.id === u.id ? u : a))
+    scheduleAccountSave(u.id)
+  }
+  const removeAccount = (id: string) => {
+    setAccounts(prev => {
+      const next = prev.filter(a => a.id !== id)
+      if (defaultAccountId === id && next.length > 0) setDefaultAccountId(next[0].id)
+      return next
+    })
+    const timer = accountSaveTimersRef.current.get(id)
+    if (timer) { clearTimeout(timer); accountSaveTimersRef.current.delete(id) }
+    accountDirtyRef.current.delete(id)
+    if (!isTempId(id)) {
+      fetch(`/api/companies/bank-accounts/${id}`, { method: "DELETE" }).catch(err => console.error("[bank-accounts DELETE]", err))
+    }
+  }
+  const pickDefaultAccount = (id: string) => {
+    setDefaultAccountId(id)
+    if (!isTempId(id)) scheduleAccountSave(id, 0)
+  }
   const updateDaySchedule = (i: number, patch: Partial<DaySchedule>) => { setWeekSchedule(prev => prev.map((d, idx) => idx === i ? { ...d, ...patch } : d)) }
 
   const years = yearsFromDate(registrationDate)
@@ -406,7 +550,7 @@ export default function CompanyProfilePage() {
               <div key={account.id} className="space-y-2 p-3 rounded-lg border border-border/60 bg-muted/10">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <button type="button" onClick={() => setDefaultAccountId(account.id)} title="Сделать основным">
+                    <button type="button" onClick={() => pickDefaultAccount(account.id)} title="Сделать основным">
                       <div className={cn("w-4 h-4 rounded-full border-2 flex items-center justify-center transition-colors", account.id === defaultAccountId ? "border-primary bg-primary" : "border-muted-foreground/40 hover:border-primary/60")}>{account.id === defaultAccountId && <div className="w-1.5 h-1.5 rounded-full bg-white" />}</div>
                     </button>
                     <span className="text-xs text-muted-foreground">{account.id === defaultAccountId ? "Основной счёт" : "Доп. счёт"}</span>
