@@ -7,6 +7,7 @@ export const runtime = "nodejs"
 // Маршруты доступны без авторизации
 const PUBLIC_PREFIXES = [
   "/login",
+  "/dev-login",
   "/register",
   "/landing",
   "/vacancy/",

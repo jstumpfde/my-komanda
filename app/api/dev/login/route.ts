@@ -1,19 +1,32 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { eq, and, isNotNull } from "drizzle-orm"
 import bcrypt from "bcryptjs"
 import { db } from "@/lib/db"
 import { users, companies, plans, planModules, tenantModules } from "@/lib/db/schema"
 
-// POST /api/dev/login — только в development или при ALLOW_DEV_LOGIN=true
-// Возвращает userId первого активного пользователя с компанией.
-// Применяет тариф "pro" + все модули ко ВСЕМ компаниям в БД.
-const isDevAllowed =
-  process.env.NODE_ENV === "development" ||
-  process.env.ALLOW_DEV_LOGIN === "true" ||
-  process.env.NEXT_PUBLIC_ALLOW_DEV_LOGIN === "true"
+// POST /api/dev/login — быстрый «вход как демо».
+// Gate:
+//  1) Если установлен DEV_LOGIN_KEY — требуется cookie `dev_login_key` или
+//     header `x-dev-login-key` совпадающий с env. Это защищает prod.
+//  2) Иначе — бэкап для локального dev: пропускаем при NODE_ENV=development
+//     или ALLOW_DEV_LOGIN=true (старое поведение).
+//  3) Иначе — 403.
+function isAllowed(req: NextRequest): boolean {
+  const key = process.env.DEV_LOGIN_KEY
+  if (key) {
+    const cookieKey = req.cookies.get("dev_login_key")?.value
+    const headerKey = req.headers.get("x-dev-login-key")
+    return cookieKey === key || headerKey === key
+  }
+  return (
+    process.env.NODE_ENV === "development" ||
+    process.env.ALLOW_DEV_LOGIN === "true" ||
+    process.env.NEXT_PUBLIC_ALLOW_DEV_LOGIN === "true"
+  )
+}
 
-export async function POST() {
-  if (!isDevAllowed) {
+export async function POST(req: NextRequest) {
+  if (!isAllowed(req)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 
