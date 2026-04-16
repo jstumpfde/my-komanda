@@ -25,6 +25,9 @@ export async function POST(req: NextRequest) {
       console.error("[upload/logo] no file in form data")
       return NextResponse.json({ error: "Файл не найден в поле 'file'" }, { status: 400 })
     }
+    // variant: "light" (default, основной логотип) | "dark" (для тёмных фонов — sidebar)
+    const variantRaw = (formData.get("variant") ?? "light") as string
+    const variant: "light" | "dark" = variantRaw === "dark" ? "dark" : "light"
 
     const filename0 = (file as File).name ?? "logo"
     if (file.size > 2 * 1024 * 1024) {
@@ -56,7 +59,8 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const safeFilename = `${session.user.companyId}.${ext}`
+    const suffix = variant === "dark" ? "-dark" : ""
+    const safeFilename = `${session.user.companyId}${suffix}.${ext}`
     const filepath = path.join(dir, safeFilename)
 
     try {
@@ -70,12 +74,15 @@ export async function POST(req: NextRequest) {
     }
 
     // Cache-buster в URL, чтобы браузер не показывал старую версию
-    const logoUrl = `/uploads/logos/${safeFilename}?v=${Date.now()}`
+    const url = `/uploads/logos/${safeFilename}?v=${Date.now()}`
 
     try {
+      const patch = variant === "dark"
+        ? { logoDarkUrl: url, updatedAt: new Date() }
+        : { logoUrl: url, updatedAt: new Date() }
       await db
         .update(companies)
-        .set({ logoUrl, updatedAt: new Date() })
+        .set(patch)
         .where(eq(companies.id, session.user.companyId))
     } catch (dbErr) {
       console.error("[upload/logo] DB update failed", dbErr)
@@ -85,8 +92,14 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    console.log("[upload/logo] success", { companyId: session.user.companyId, logoUrl, size: file.size })
-    return NextResponse.json({ logoUrl })
+    console.log("[upload/logo] success", { companyId: session.user.companyId, variant, url, size: file.size })
+    // Возвращаем оба поля (один заполнен, второй null) для совместимости
+    // со старым клиентом, который читает только logoUrl.
+    return NextResponse.json(
+      variant === "dark"
+        ? { logoDarkUrl: url }
+        : { logoUrl: url },
+    )
   } catch (err) {
     console.error("[upload/logo] unexpected error", err)
     const message = err instanceof Error ? err.message : "Unknown error"

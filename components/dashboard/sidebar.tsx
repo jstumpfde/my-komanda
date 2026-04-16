@@ -172,9 +172,11 @@ export function DashboardSidebar() {
   useEffect(() => {
     const loadCompany = () => {
       fetch('/api/companies').then(r => r.ok ? r.json() : null)
-        .then((d: { logoUrl?: string; name?: string; brandName?: string; brandSlogan?: string } | null) => {
+        .then((d: { logoUrl?: string; logoDarkUrl?: string; name?: string; brandName?: string; brandSlogan?: string } | null) => {
           if (d) {
-            setCompanyLogo(d.logoUrl ?? null)
+            // Sidebar всегда тёмный — предпочитаем светлую версию (logoDarkUrl),
+            // fallback на основной логотип если отдельная версия не задана.
+            setCompanyLogo(d.logoDarkUrl ?? d.logoUrl ?? null)
             const display = d.brandName?.trim() || d.name?.trim() || null
             setCompanyName(display)
             setCompanySlogan(d.brandSlogan?.trim() || null)
@@ -399,12 +401,15 @@ export function DashboardSidebar() {
       <SidebarHeader className="p-4 border-b border-sidebar-border">
         <div className="flex items-center gap-3">
           {companyLogo ? (
-            <div className="h-9 w-9 shrink-0 flex items-center justify-center overflow-hidden">
+            // Умный контейнер: квадрат 40×40 в свёрнутом режиме, растягивается до
+            // 120×40 в развёрнутом — чтобы узкие значки и широкие логотайпы
+            // отображались пропорционально (object-contain + max-w/max-h).
+            <div className="h-10 w-auto max-w-[120px] min-w-10 group-data-[collapsible=icon]:w-10 group-data-[collapsible=icon]:max-w-10 shrink-0 flex items-center justify-center overflow-hidden">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={companyLogo}
                 alt=""
-                className="h-9 w-9 object-contain rounded-lg"
+                className="max-h-full max-w-full object-contain"
               />
             </div>
           ) : companyName ? (

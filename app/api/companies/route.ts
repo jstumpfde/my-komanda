@@ -97,6 +97,7 @@ export async function PUT(req: NextRequest) {
       sales_manager_type?: string
       is_multi_product?: boolean
       logo_url?: string
+      logo_dark_url?: string
       brand_primary_color?: string
       brand_bg_color?: string
       brand_text_color?: string
@@ -138,6 +139,7 @@ export async function PUT(req: NextRequest) {
     // Пустая строка → null (nullable колонки). Клиент отправляет ""
     // для очистки, undefined — чтобы поле не трогалось вообще.
     if (body.logo_url !== undefined) fieldMap.logoUrl = body.logo_url === "" ? null : body.logo_url
+    if (body.logo_dark_url !== undefined) fieldMap.logoDarkUrl = body.logo_dark_url === "" ? null : body.logo_dark_url
     if (body.brand_primary_color !== undefined) fieldMap.brandPrimaryColor = body.brand_primary_color
     if (body.brand_bg_color !== undefined) fieldMap.brandBgColor = body.brand_bg_color
     if (body.brand_text_color !== undefined) fieldMap.brandTextColor = body.brand_text_color

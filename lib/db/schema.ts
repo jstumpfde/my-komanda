@@ -104,6 +104,7 @@ export const companies = pgTable("companies", {
   salesManagerType:   text("sales_manager_type"),      // 'none'|'hunter'|...
   isMultiProduct:     boolean("is_multi_product").default(false),
   logoUrl:            text("logo_url"),
+  logoDarkUrl:        text("logo_dark_url"),
   brandPrimaryColor:  text("brand_primary_color").default("#3b82f6"),
   brandBgColor:       text("brand_bg_color").default("#f0f4ff"),
   brandTextColor:     text("brand_text_color").default("#1e293b"),

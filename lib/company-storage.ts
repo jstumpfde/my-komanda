@@ -206,6 +206,7 @@ export interface ApiCompanyUpdatePayload {
   sales_manager_type?: string
   is_multi_product?: boolean
   logo_url?: string
+  logo_dark_url?: string
   brand_primary_color?: string
   brand_bg_color?: string
   brand_text_color?: string
