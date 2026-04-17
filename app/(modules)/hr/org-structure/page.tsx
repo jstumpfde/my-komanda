@@ -551,7 +551,7 @@ export default function OrgStructurePage() {
               <div className="space-y-1.5">
                 <Label>Руководитель</Label>
                 <Select value={edHeadUserId} onValueChange={setEdHeadUserId}>
-                  <SelectTrigger><SelectValue placeholder="Не назначен" /></SelectTrigger>
+                  <SelectTrigger className="w-full"><SelectValue placeholder="Не назначен" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__none">— Не назначен —</SelectItem>
                     {team.map((m) => <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>)}
@@ -561,7 +561,7 @@ export default function OrgStructurePage() {
               <div className="space-y-1.5">
                 <Label>Родительский отдел</Label>
                 <Select value={edParentId} onValueChange={setEdParentId}>
-                  <SelectTrigger><SelectValue placeholder="Нет (верхний уровень)" /></SelectTrigger>
+                  <SelectTrigger className="w-full"><SelectValue placeholder="Нет (верхний уровень)" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__none">— Верхний уровень —</SelectItem>
                     {departments.filter(d => d.id !== edDept.id).map((d) => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
@@ -614,7 +614,7 @@ export default function OrgStructurePage() {
               <div className="space-y-1.5">
                 <Label>Отдел</Label>
                 <Select value={epDeptId} onValueChange={setEpDeptId}>
-                  <SelectTrigger><SelectValue placeholder="Без отдела" /></SelectTrigger>
+                  <SelectTrigger className="w-full"><SelectValue placeholder="Без отдела" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__none">— Без отдела (корень) —</SelectItem>
                     {departments.map((d) => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
@@ -624,7 +624,7 @@ export default function OrgStructurePage() {
               <div className="space-y-1.5">
                 <Label>Сотрудник</Label>
                 <Select value={epUserId} onValueChange={setEpUserId}>
-                  <SelectTrigger><SelectValue placeholder="Не назначен" /></SelectTrigger>
+                  <SelectTrigger className="w-full"><SelectValue placeholder="Не назначен" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__none">— Не назначен —</SelectItem>
                     {team.map((m) => <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>)}
@@ -653,7 +653,7 @@ export default function OrgStructurePage() {
               <div className="space-y-1.5">
                 <Label>Сотрудник</Label>
                 <Select value={asUserId} onValueChange={setAsUserId}>
-                  <SelectTrigger><SelectValue placeholder="Выберите сотрудника" /></SelectTrigger>
+                  <SelectTrigger className="w-full"><SelectValue placeholder="Выберите сотрудника" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__none">— Снять назначение —</SelectItem>
                     {team.map((m) => <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>)}
