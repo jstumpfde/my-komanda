@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server"
 import { eq, and } from "drizzle-orm"
 import * as cheerio from "cheerio"
+import Anthropic from "@anthropic-ai/sdk"
 import { db } from "@/lib/db"
 import { vacancies } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
@@ -8,6 +9,50 @@ import { logActivity } from "@/lib/activity-log"
 
 const BROWSER_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
+const anthropic = new Anthropic()
+
+const SPLIT_PROMPT = `Раздели текст описания вакансии на две части:
+1. Обязанности — что сотрудник будет делать (задачи, функционал, зоны ответственности)
+2. Требования — что должен знать и уметь кандидат (опыт, навыки, образование, личные качества)
+
+Верни JSON: { "responsibilities": "текст обязанностей", "requirements": "текст требований" }
+Каждый пункт на новой строке, начинается с —. Без нумерации. Только JSON, без markdown.`
+
+async function splitDescriptionWithAi(description: string): Promise<{ responsibilities: string; requirements: string } | null> {
+  if (!process.env.ANTHROPIC_API_KEY) return null
+  try {
+    const response = await anthropic.messages.create({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 2000,
+      system: SPLIT_PROMPT,
+      messages: [{ role: "user", content: description }],
+    })
+    const content = response.content[0]
+    if (content.type !== "text") return null
+    const raw = content.text.replace(/^```json?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim()
+    let parsed: { responsibilities?: string; requirements?: string }
+    try {
+      parsed = JSON.parse(raw)
+    } catch {
+      const jsonMatch = content.text.match(/\{[\s\S]*\}/)
+      if (!jsonMatch) return null
+      parsed = JSON.parse(jsonMatch[0])
+    }
+    return {
+      responsibilities: String(parsed.responsibilities || "").trim(),
+      requirements: String(parsed.requirements || "").trim(),
+    }
+  } catch (err) {
+    console.error("[hh-import] AI split failed:", err)
+    return null
+  }
+}
+
+function extractCityName(raw: string): string {
+  if (!raw) return ""
+  return raw.split(",")[0].trim()
+}
 
 function parseNumber(raw: string | undefined | null): number | null {
   if (!raw) return null
@@ -201,11 +246,21 @@ export async function POST(
 
     const html = await res.text()
     const mappedData = parseHhHtml(html)
+    mappedData.city = extractCityName(mappedData.city)
     console.log("[hh-import] HH parsed:", JSON.stringify(mappedData, null, 2))
 
     if (!mappedData.title && !mappedData.description) {
       return apiError("Не удалось извлечь данные со страницы hh.ru", 422)
     }
+
+    // Split description → responsibilities + requirements via AI (falls back
+    // to description-in-responsibilities if Anthropic unavailable).
+    const split = mappedData.description
+      ? await splitDescriptionWithAi(mappedData.description)
+      : null
+    const anketaResponsibilities = split?.responsibilities || mappedData.description
+    const anketaRequirements = split?.requirements || ""
+    console.log("[hh-import] AI split:", split ? "ok" : "fallback")
 
     // ─── Map HH values → anketa schema (Russian labels / schema ids) ────────
     const EMPLOYMENT_TO_ANKETA: Record<string, string> = {
@@ -251,7 +306,8 @@ export async function POST(
       ...existingAnketa,
       ...(mappedData.title ? { vacancyTitle: mappedData.title } : {}),
       ...(mappedData.city ? { positionCity: mappedData.city } : {}),
-      ...(mappedData.description ? { responsibilities: mappedData.description } : {}),
+      ...(anketaResponsibilities ? { responsibilities: anketaResponsibilities } : {}),
+      ...(anketaRequirements ? { requirements: anketaRequirements } : {}),
       ...(mappedData.skills.length ? { requiredSkills: mappedData.skills } : {}),
       ...(mappedData.salaryFrom !== null ? { salaryFrom: String(mappedData.salaryFrom) } : {}),
       ...(mappedData.salaryTo !== null ? { salaryTo: String(mappedData.salaryTo) } : {}),
