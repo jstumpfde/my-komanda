@@ -1469,6 +1469,7 @@ export const positions = pgTable("positions", {
   grade:        text("grade"),
   salaryMin:    integer("salary_min"),
   salaryMax:    integer("salary_max"),
+  userId:       uuid("user_id").references(() => users.id, { onDelete: "set null" }),
   createdAt:    timestamp("created_at").defaultNow(),
   updatedAt:    timestamp("updated_at").defaultNow(),
 })

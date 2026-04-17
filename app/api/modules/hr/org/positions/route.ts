@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server"
 import { eq } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { positions, departments } from "@/lib/db/schema"
+import { positions, departments, users } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 
 // GET /api/modules/hr/org/positions
@@ -19,11 +19,15 @@ export async function GET() {
         grade: positions.grade,
         salaryMin: positions.salaryMin,
         salaryMax: positions.salaryMax,
+        userId: positions.userId,
+        userName: users.name,
+        userAvatar: users.avatarUrl,
         createdAt: positions.createdAt,
         updatedAt: positions.updatedAt,
       })
       .from(positions)
       .leftJoin(departments, eq(positions.departmentId, departments.id))
+      .leftJoin(users, eq(positions.userId, users.id))
       .where(eq(positions.tenantId, user.companyId))
 
     return apiSuccess(rows)

@@ -19,6 +19,7 @@ export async function PATCH(
       grade?: string | null
       salaryMin?: number | null
       salaryMax?: number | null
+      userId?: string | null
     }
 
     const [updated] = await db
@@ -30,6 +31,7 @@ export async function PATCH(
         ...(body.grade !== undefined && { grade: body.grade }),
         ...(body.salaryMin !== undefined && { salaryMin: body.salaryMin }),
         ...(body.salaryMax !== undefined && { salaryMax: body.salaryMax }),
+        ...(body.userId !== undefined && { userId: body.userId }),
         updatedAt: new Date(),
       })
       .where(and(eq(positions.id, id), eq(positions.tenantId, user.companyId)))
