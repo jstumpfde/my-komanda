@@ -1,25 +1,34 @@
 import { NextRequest } from "next/server"
 import { eq, and } from "drizzle-orm"
-import Anthropic from "@anthropic-ai/sdk"
 import { db } from "@/lib/db"
 import { vacancies } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { DEMO_TEMPLATES, type DemoTemplateId, type DemoTemplateBlock } from "@/lib/hr/demo-templates"
+import { getClaudeMessagesUrl } from "@/lib/claude-proxy"
 
-const client = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-})
+const TONE_HINT: Record<string, string> = {
+  energetic: "энергичный — вызов и драйв",
+  friendly: "дружелюбный — тёплый и поддерживающий",
+  business: "деловой — факты без эмоций",
+  direct: "прямой — только суть",
+}
 
 export async function POST(req: NextRequest) {
   try {
     const user = await requireCompany()
-    const body = await req.json() as { vacancyId: string; template?: DemoTemplateId }
+    const body = await req.json() as {
+      vacancyId: string
+      template?: DemoTemplateId
+      tone?: string
+      market?: string[]
+    }
 
     if (!body.vacancyId) {
       return apiError("vacancyId is required", 400)
     }
 
-    if (!process.env.ANTHROPIC_API_KEY) {
+    const apiKey = process.env.ANTHROPIC_API_KEY
+    if (!apiKey) {
       return apiError("ANTHROPIC_API_KEY не настроен", 500)
     }
 
@@ -68,6 +77,9 @@ export async function POST(req: NextRequest) {
     const aiBlocks = template.blocks.filter(b => b.type === "text" && b.ai)
     const blockList = aiBlocks.map((b, i) => `${i + 1}. "${b.title}" — ${b.description}`).join("\n")
 
+    const toneText = body.tone && TONE_HINT[body.tone] ? TONE_HINT[body.tone] : "деловой — факты без эмоций"
+    const marketText = Array.isArray(body.market) && body.market.length > 0 ? body.market.join(", ") : "B2B"
+
     const prompt = `Сгенерируй контент для демонстрации должности "${position}" в компании "${companyName}".
 
 Данные о вакансии:
@@ -82,11 +94,17 @@ export async function POST(req: NextRequest) {
 - Навыки: ${requiredSkills || "не указаны"}
 - Условия: ${allConditions || "не указаны"}
 
+Параметры подачи:
+- Тон: ${toneText}
+- Тип рынка: ${marketText}
+
 Нужно сгенерировать контент для ${aiBlocks.length} блоков:
 ${blockList}
 
 ПРАВИЛА:
 - Пиши живым деловым русским языком, от лица компании.
+- Соблюдай выбранный тон во всех блоках.
+- Если тип рынка указан — учитывай специфику (для B2B — длинные продажи, LTV; для B2C — массовый спрос; для B2G — тендеры, регламенты).
 - Используй HTML для форматирования: <b>, <br>, <ul><li>.
 - Каждый блок — 2-5 абзацев. Конкретика из данных вакансии.
 - НЕ придумывай информацию которой нет в данных. Если данных нет — напиши общую формулировку.
@@ -100,17 +118,30 @@ ${blockList}
 
 Используй id из списка блоков: ${aiBlocks.map(b => b.id).join(", ")}`
 
-    let aiContents: Record<string, string> = {}
+    const aiContents: Record<string, string> = {}
 
     try {
-      const message = await client.messages.create({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 6000,
-        messages: [{ role: "user", content: prompt }],
+      const aiRes = await fetch(getClaudeMessagesUrl(), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 6000,
+          messages: [{ role: "user", content: prompt }],
+        }),
       })
-
-      const text = message.content[0].type === "text" ? message.content[0].text : ""
-
+      if (!aiRes.ok) {
+        const errText = await aiRes.text()
+        console.error("[demo/generate] Claude HTTP", aiRes.status, errText.slice(0, 300))
+        return apiError(`AI API error (${aiRes.status})`, 502)
+      }
+      const data = await aiRes.json() as { content?: Array<{ type: string; text?: string }> }
+      const textBlock = data.content?.find(b => b.type === "text")
+      const text = textBlock?.text || ""
       const jsonMatch = text.match(/\[[\s\S]*\]/)
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[0]) as Array<{ id: string; content: string }>
@@ -119,7 +150,7 @@ ${blockList}
         }
       }
     } catch (aiErr) {
-      console.error("Anthropic API error:", aiErr)
+      console.error("[demo/generate] AI error:", aiErr)
       const msg = aiErr instanceof Error ? aiErr.message : "Ошибка AI-генерации"
       return apiError(msg, 502)
     }
