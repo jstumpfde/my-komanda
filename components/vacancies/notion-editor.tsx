@@ -47,6 +47,24 @@ export interface NotionEditorHandle {
   openPreview: () => void
   openLibrary: () => void
   openSaveTemplate: () => void
+  downloadTxt: () => void
+}
+
+function htmlToPlainText(html: string): string {
+  if (!html) return ""
+  const withBreaks = html
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(p|h[1-6]|li|div|tr)>/gi, "\n")
+    .replace(/<li[^>]*>/gi, "• ")
+  const stripped = withBreaks.replace(/<[^>]+>/g, "")
+  const decoded = stripped
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, "\"")
+    .replace(/&#39;/g, "'")
+  return decoded.replace(/\n{3,}/g, "\n\n").trim()
 }
 
 interface NotionEditorProps {
@@ -184,7 +202,30 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
     openPreview: () => { setPreviewIdx(0); setPreviewMode(true) },
     openLibrary: () => { if (onOpenLibrary) onOpenLibrary(); else setLibraryOpen(true) },
     openSaveTemplate: () => setSaveTemplateOpen(true),
-  }), [saveNow, onOpenLibrary])
+    downloadTxt: () => {
+      const parts: string[] = []
+      demo.lessons.forEach((l, i) => {
+        parts.push(`=== Урок ${i + 1}. ${l.title} ===`)
+        const body = l.blocks
+          .map(b => htmlToPlainText(b.content || ""))
+          .filter(Boolean)
+          .join("\n\n")
+        if (body) parts.push(body)
+        parts.push("")
+      })
+      const content = parts.join("\n")
+      const blob = new Blob([content], { type: "text/plain;charset=utf-8" })
+      const url = URL.createObjectURL(blob)
+      const safeTitle = (demo.title || "Демонстрация должности").replace(/[\/\\:*?"<>|]/g, "").trim() || "Демонстрация должности"
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `Демонстрация — ${safeTitle}.txt`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    },
+  }), [saveNow, onOpenLibrary, demo])
 
   // Lesson ops
   const updateLesson = (lessonId: string, patch: Partial<Lesson>) =>
