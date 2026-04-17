@@ -18,7 +18,7 @@ import {
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import {
-  Building2, Briefcase, Network, Plus, Crown, Loader2, UserPlus,
+  Building2, Briefcase, Network, Plus, Crown, Loader2, UserPlus, Trash2,
 } from "lucide-react"
 
 // ─── Types ───────────────────────────────────────────────
@@ -77,11 +77,13 @@ function buildTree(depts: Department[], positions: Position[]): { roots: TreeNod
 }
 
 // ─── Position row (shared between desktop & mobile) ─────
-function PosRow({ pos, onAssign }: { pos: Position; onAssign: (p: Position) => void }) {
+function PosRow({ pos, onAssign, onEdit }: { pos: Position; onAssign: (p: Position) => void; onEdit: (p: Position) => void }) {
   return (
     <div className="flex items-center gap-2 text-xs py-1 px-2 rounded bg-muted/20">
       <Briefcase className="w-3 h-3 text-muted-foreground shrink-0" />
-      <span className="truncate flex-1">{pos.name}</span>
+      <button type="button" className="truncate flex-1 text-left hover:text-primary transition-colors" onClick={() => onEdit(pos)} title="Редактировать должность">
+        {pos.name}
+      </button>
       {pos.userName ? (
         <span className="text-[10px] font-medium text-primary truncate max-w-[90px]">{pos.userName}</span>
       ) : (
@@ -129,11 +131,12 @@ function ChildrenRow({ children: kids }: { children: React.ReactNode[] }) {
 }
 
 // ─── Desktop: department card (always expanded) ─────────
-function DeptCard({ node, onAddDept, onAddPos, onAssign }: {
+function DeptCard({ node, onAddDept, onAddPos, onAssign, onEditPos }: {
   node: TreeNode
   onAddDept: (parentId: string) => void
   onAddPos: (deptId: string) => void
   onAssign: (pos: Position) => void
+  onEditPos: (pos: Position) => void
 }) {
   const head = node.dept.headUserName
   return (
@@ -175,7 +178,7 @@ function DeptCard({ node, onAddDept, onAddPos, onAssign }: {
               <div className="border-t border-border/50 mx-2" />
               <div className="px-2 py-2 space-y-1">
                 {node.positions.map((pos) => (
-                  <PosRow key={pos.id} pos={pos} onAssign={onAssign} />
+                  <PosRow key={pos.id} pos={pos} onAssign={onAssign} onEdit={onEditPos} />
                 ))}
               </div>
             </>
@@ -197,7 +200,7 @@ function DeptCard({ node, onAddDept, onAddPos, onAssign }: {
       {node.children.length > 0 && (
         <ChildrenRow>
           {node.children.map((child) => (
-            <DeptCard key={child.dept.id} node={child} onAddDept={onAddDept} onAddPos={onAddPos} onAssign={onAssign} />
+            <DeptCard key={child.dept.id} node={child} onAddDept={onAddDept} onAddPos={onAddPos} onAssign={onAssign} onEditPos={onEditPos} />
           ))}
         </ChildrenRow>
       )}
@@ -206,11 +209,12 @@ function DeptCard({ node, onAddDept, onAddPos, onAssign }: {
 }
 
 // ─── Mobile: department (always expanded, indent) ───────
-function DeptCardMobile({ node, depth, onAddDept, onAddPos, onAssign }: {
+function DeptCardMobile({ node, depth, onAddDept, onAddPos, onAssign, onEditPos }: {
   node: TreeNode; depth: number
   onAddDept: (parentId: string) => void
   onAddPos: (deptId: string) => void
   onAssign: (pos: Position) => void
+  onEditPos: (pos: Position) => void
 }) {
   return (
     <div style={{ marginLeft: depth * 16 }}>
@@ -240,7 +244,7 @@ function DeptCardMobile({ node, depth, onAddDept, onAddPos, onAssign }: {
             <div className="border-t border-border/50 mx-2" />
             <div className="px-2 py-2 space-y-1">
               {node.positions.map((pos) => (
-                <PosRow key={pos.id} pos={pos} onAssign={onAssign} />
+                <PosRow key={pos.id} pos={pos} onAssign={onAssign} onEdit={onEditPos} />
               ))}
             </div>
           </>
@@ -255,7 +259,7 @@ function DeptCardMobile({ node, depth, onAddDept, onAddPos, onAssign }: {
         </button>
       </div>
       {node.children.map((child) => (
-        <DeptCardMobile key={child.dept.id} node={child} depth={depth + 1} onAddDept={onAddDept} onAddPos={onAddPos} onAssign={onAssign} />
+        <DeptCardMobile key={child.dept.id} node={child} depth={depth + 1} onAddDept={onAddDept} onAddPos={onAddPos} onAssign={onAssign} onEditPos={onEditPos} />
       ))}
     </div>
   )
@@ -288,6 +292,16 @@ export default function OrgStructurePage() {
   const [assignPos, setAssignPos] = useState<Position | null>(null)
   const [assignUserId, setAssignUserId] = useState<string>("")
   const [assigning, setAssigning] = useState(false)
+
+  // Edit position modal
+  const [editOpen, setEditOpen] = useState(false)
+  const [editPos, setEditPos] = useState<Position | null>(null)
+  const [editName, setEditName] = useState("")
+  const [editGrade, setEditGrade] = useState("")
+  const [editSalaryMin, setEditSalaryMin] = useState("")
+  const [editSalaryMax, setEditSalaryMax] = useState("")
+  const [editSaving, setEditSaving] = useState(false)
+  const [editDeleting, setEditDeleting] = useState(false)
 
   const fetchData = useCallback(async () => {
     try {
@@ -368,6 +382,39 @@ export default function OrgStructurePage() {
     } catch { toast.error("Ошибка сети") } finally { setAssigning(false) }
   }
 
+  const openEditModal = (pos: Position) => {
+    setEditPos(pos)
+    setEditName(pos.name)
+    setEditGrade(pos.grade ?? "")
+    setEditSalaryMin(pos.salaryMin != null ? String(pos.salaryMin / 100) : "")
+    setEditSalaryMax(pos.salaryMax != null ? String(pos.salaryMax / 100) : "")
+    setEditOpen(true)
+  }
+  const handleEditSave = async () => {
+    if (!editPos || !editName.trim()) { toast.error("Введите название"); return }
+    setEditSaving(true)
+    try {
+      const body: Record<string, unknown> = { name: editName.trim() }
+      body.grade = editGrade.trim() || null
+      body.salaryMin = editSalaryMin ? parseInt(editSalaryMin) * 100 : null
+      body.salaryMax = editSalaryMax ? parseInt(editSalaryMax) * 100 : null
+      const res = await fetch(`/api/modules/hr/org/positions/${editPos.id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+      })
+      if (!res.ok) { toast.error("Ошибка сохранения"); return }
+      toast.success("Должность обновлена"); setEditOpen(false); await fetchData()
+    } catch { toast.error("Ошибка сети") } finally { setEditSaving(false) }
+  }
+  const handleEditDelete = async () => {
+    if (!editPos) return
+    setEditDeleting(true)
+    try {
+      const res = await fetch(`/api/modules/hr/org/positions/${editPos.id}`, { method: "DELETE" })
+      if (!res.ok) { toast.error("Ошибка удаления"); return }
+      toast.success("Должность удалена"); setEditOpen(false); await fetchData()
+    } catch { toast.error("Ошибка сети") } finally { setEditDeleting(false) }
+  }
+
   const { roots, unassigned } = buildTree(departments, positions)
   const parentDeptName = deptParentId ? departments.find(d => d.id === deptParentId)?.name : null
   const posDeptName = posDeptId ? departments.find(d => d.id === posDeptId)?.name : null
@@ -406,7 +453,7 @@ export default function OrgStructurePage() {
           <div className="border-t border-primary/20 mx-2" />
           <div className="px-2 py-2 space-y-1">
             {unassigned.map((pos) => (
-              <PosRow key={pos.id} pos={pos} onAssign={openAssignModal} />
+              <PosRow key={pos.id} pos={pos} onAssign={openAssignModal} onEdit={openEditModal} />
             ))}
           </div>
         </>
@@ -461,7 +508,7 @@ export default function OrgStructurePage() {
                     {roots.length > 0 && (
                       <ChildrenRow>
                         {roots.map((node) => (
-                          <DeptCard key={node.dept.id} node={node} onAddDept={openDeptModal} onAddPos={openPosModal} onAssign={openAssignModal} />
+                          <DeptCard key={node.dept.id} node={node} onAddDept={openDeptModal} onAddPos={openPosModal} onAssign={openAssignModal} onEditPos={openEditModal} />
                         ))}
                       </ChildrenRow>
                     )}
@@ -472,7 +519,7 @@ export default function OrgStructurePage() {
                 <div className="md:hidden space-y-2">
                   <div className="mb-3">{rootBlock(true)}</div>
                   {roots.map((node) => (
-                    <DeptCardMobile key={node.dept.id} node={node} depth={0} onAddDept={openDeptModal} onAddPos={openPosModal} onAssign={openAssignModal} />
+                    <DeptCardMobile key={node.dept.id} node={node} depth={0} onAddDept={openDeptModal} onAddPos={openPosModal} onAssign={openAssignModal} onEditPos={openEditModal} />
                   ))}
                 </div>
               </>
@@ -534,6 +581,47 @@ export default function OrgStructurePage() {
               </Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit position */}
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle>Редактировать должность</DialogTitle></DialogHeader>
+          {editPos && (
+            <div className="space-y-4 mt-2">
+              <div className="space-y-1.5">
+                <Label>Название *</Label>
+                <Input value={editName} onChange={(e) => setEditName(e.target.value)} autoFocus onKeyDown={(e) => e.key === "Enter" && handleEditSave()} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Грейд</Label>
+                <Input value={editGrade} onChange={(e) => setEditGrade(e.target.value)} placeholder="Senior, Middle..." />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label>Зарплата от (₽)</Label>
+                  <Input type="number" value={editSalaryMin} onChange={(e) => setEditSalaryMin(e.target.value)} placeholder="80 000" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Зарплата до (₽)</Label>
+                  <Input type="number" value={editSalaryMax} onChange={(e) => setEditSalaryMax(e.target.value)} placeholder="150 000" />
+                </div>
+              </div>
+              <div className="flex items-center justify-between pt-1">
+                <Button variant="destructive" size="sm" className="gap-1.5" onClick={handleEditDelete} disabled={editDeleting || editSaving}>
+                  {editDeleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                  Удалить
+                </Button>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={() => setEditOpen(false)}>Отмена</Button>
+                  <Button size="sm" onClick={handleEditSave} disabled={editSaving || editDeleting || !editName.trim()}>
+                    {editSaving && <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" />}Сохранить
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 
