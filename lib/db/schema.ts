@@ -253,6 +253,9 @@ export const vacancies = pgTable("vacancies", {
   employeeType: text("employee_type").default("permanent"), // 'permanent' | 'temporary'
   clientCompanyId: uuid("client_company_id").references(() => salesCompanies.id, { onDelete: "set null" }),
   clientContactId: uuid("client_contact_id").references(() => salesContacts.id, { onDelete: "set null" }),
+  hhVacancyId: text("hh_vacancy_id"),
+  hhUrl: text("hh_url"),
+  hhSyncedAt: timestamp("hh_synced_at"),
   deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
