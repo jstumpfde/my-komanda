@@ -101,6 +101,7 @@ export const CourseTab = forwardRef<NotionEditorHandle, CourseTabProps>(
     const [generating, setGenerating] = useState(false)
     const [aiDialogOpen, setAiDialogOpen] = useState(false)
     const [selectedTemplate, setSelectedTemplate] = useState<DemoTemplateId>("medium")
+    const [selectedTone, setSelectedTone] = useState<"energetic" | "friendly" | "business" | "direct">("friendly")
     const autoCreatingRef = useRef(false)
 
     // Sync save status to parent
@@ -135,7 +136,7 @@ export const CourseTab = forwardRef<NotionEditorHandle, CourseTabProps>(
         const res = await fetch("/api/modules/hr/demo/generate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ vacancyId, template: selectedTemplate }),
+          body: JSON.stringify({ vacancyId, template: selectedTemplate, tone: selectedTone }),
         })
         if (!res.ok) {
           const err = await res.json().catch(() => ({ error: "Ошибка генерации" }))
@@ -177,7 +178,7 @@ export const CourseTab = forwardRef<NotionEditorHandle, CourseTabProps>(
       } finally {
         setGenerating(false)
       }
-    }, [vacancyId, selectedTemplate, vacancyTitle, createDemo, updateDemo, demo])
+    }, [vacancyId, selectedTemplate, selectedTone, vacancyTitle, createDemo, updateDemo, demo])
 
     const fileInputRef = useRef<HTMLInputElement>(null)
     const [fileBusy, setFileBusy] = useState(false)
@@ -332,6 +333,31 @@ export const CourseTab = forwardRef<NotionEditorHandle, CourseTabProps>(
                     </div>
                   </button>
                 ))}
+              </div>
+              <div className="pt-1">
+                <p className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1.5">Тон</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {([
+                    { id: "energetic", emoji: "🔥", label: "Энергичный" },
+                    { id: "friendly",  emoji: "🤝", label: "Дружелюбный" },
+                    { id: "business",  emoji: "🏢", label: "Деловой" },
+                    { id: "direct",    emoji: "🎯", label: "Прямой" },
+                  ] as const).map(t => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => setSelectedTone(t.id)}
+                      className={cn(
+                        "h-8 px-3 rounded-md text-xs font-medium border transition-colors",
+                        selectedTone === t.id
+                          ? "border-primary bg-primary/10 text-foreground"
+                          : "border-border bg-background hover:border-primary/40 text-muted-foreground",
+                      )}
+                    >
+                      {t.emoji} {t.label}
+                    </button>
+                  ))}
+                </div>
               </div>
               <Button className="w-full h-10 gap-1.5" onClick={handleGenerateDemo} disabled={generating}>
                 {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
