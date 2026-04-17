@@ -24,7 +24,7 @@ const DEPARTMENTS = [
 
 const LEVELS = ["Линейный", "Старший / ведущий", "Руководитель"]
 
-type Path = "manual" | "library" | "document" | "voice"
+type Path = "manual" | "ai" | "library" | "document" | "voice"
 
 type LibraryTemplate = {
   id: string
@@ -36,10 +36,9 @@ type LibraryTemplate = {
 }
 
 const PATH_CARDS: { id: Path; emoji: string; title: string; desc: string }[] = [
-  { id: "manual",   emoji: "📝", title: "С чистого листа", desc: "Заполнить параметры вручную" },
-  { id: "library",  emoji: "📚", title: "Из библиотеки",   desc: "Выбрать готовый шаблон" },
-  { id: "document", emoji: "📄", title: "Из документа",    desc: "Загрузить DOCX, PDF или TXT" },
-  { id: "voice",    emoji: "🎙️", title: "Голосом",         desc: "Надиктуйте — AI создаст" },
+  { id: "manual",   emoji: "✏️", title: "С чистого листа",      desc: "Заполнить параметры вручную" },
+  { id: "ai",       emoji: "✨", title: "Сгенерировать с AI",   desc: "AI создаст демонстрацию по анкете вакансии" },
+  { id: "document", emoji: "📄", title: "Из документа",         desc: "Загрузить DOCX, PDF или TXT" },
 ]
 
 const DEFAULT_BLOCK_FIELDS = {
