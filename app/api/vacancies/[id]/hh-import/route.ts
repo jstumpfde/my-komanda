@@ -165,7 +165,7 @@ export async function POST(
     const { id } = await params
 
     const [existing] = await db
-      .select({ id: vacancies.id })
+      .select({ id: vacancies.id, descriptionJson: vacancies.descriptionJson })
       .from(vacancies)
       .where(and(eq(vacancies.id, id), eq(vacancies.companyId, user.companyId)))
       .limit(1)
@@ -201,9 +201,64 @@ export async function POST(
 
     const html = await res.text()
     const mappedData = parseHhHtml(html)
+    console.log("[hh-import] HH parsed:", JSON.stringify(mappedData, null, 2))
 
     if (!mappedData.title && !mappedData.description) {
       return apiError("Не удалось извлечь данные со страницы hh.ru", 422)
+    }
+
+    // ─── Map HH values → anketa schema (Russian labels / schema ids) ────────
+    const EMPLOYMENT_TO_ANKETA: Record<string, string> = {
+      full: "Полная",
+      part: "Частичная",
+      project: "Проектная",
+      probation: "Проектная",
+    }
+    const EXPERIENCE_TO_ANKETA: Record<string, string> = {
+      noExperience: "none",
+      between1And3: "1-3",
+      between3And6: "3-6",
+      moreThan6: "6+",
+    }
+    const SCHEDULE_TO_ANKETA: Record<string, string> = {
+      fullDay: "5/2",
+      shift: "shift",
+      flexible: "free",
+      flyInFlyOut: "rotation",
+      remote: "free",
+    }
+    const anketaEmployment = mappedData.employment && EMPLOYMENT_TO_ANKETA[mappedData.employment]
+      ? [EMPLOYMENT_TO_ANKETA[mappedData.employment]]
+      : []
+    const anketaRequiredExperience = mappedData.experience
+      ? (EXPERIENCE_TO_ANKETA[mappedData.experience] ?? "")
+      : ""
+    const anketaSchedule = mappedData.schedule
+      ? (SCHEDULE_TO_ANKETA[mappedData.schedule] ?? "")
+      : ""
+    const anketaWorkFormats = mappedData.schedule === "remote"
+      ? ["Удалёнка"]
+      : mappedData.schedule === "flyInFlyOut"
+        ? ["Вахта"]
+        : mappedData.city
+          ? ["Офис"]
+          : []
+
+    // ─── Merge into existing descriptionJson.anketa ─────────────────────────
+    const existingDescJson = (existing.descriptionJson as Record<string, unknown>) || {}
+    const existingAnketa = (existingDescJson.anketa as Record<string, unknown>) || {}
+    const newAnketa: Record<string, unknown> = {
+      ...existingAnketa,
+      ...(mappedData.title ? { vacancyTitle: mappedData.title } : {}),
+      ...(mappedData.city ? { positionCity: mappedData.city } : {}),
+      ...(mappedData.description ? { responsibilities: mappedData.description } : {}),
+      ...(mappedData.skills.length ? { requiredSkills: mappedData.skills } : {}),
+      ...(mappedData.salaryFrom !== null ? { salaryFrom: String(mappedData.salaryFrom) } : {}),
+      ...(mappedData.salaryTo !== null ? { salaryTo: String(mappedData.salaryTo) } : {}),
+      ...(anketaEmployment.length ? { employment: anketaEmployment } : {}),
+      ...(anketaRequiredExperience ? { requiredExperience: anketaRequiredExperience } : {}),
+      ...(anketaSchedule ? { schedule: anketaSchedule } : {}),
+      ...(anketaWorkFormats.length ? { workFormats: anketaWorkFormats } : {}),
     }
 
     const now = new Date()
@@ -212,16 +267,19 @@ export async function POST(
       hhUrl,
       hhSyncedAt: now,
       updatedAt: now,
+      descriptionJson: { ...existingDescJson, anketa: newAnketa },
     }
 
     if (mappedData.title) updates.title = mappedData.title
     if (mappedData.description) updates.description = mappedData.description
     if (mappedData.city) updates.city = mappedData.city
-    if (mappedData.employment) updates.employment = mappedData.employment
-    if (mappedData.schedule) updates.schedule = mappedData.schedule
     if (mappedData.salaryFrom !== null) updates.salaryMin = mappedData.salaryFrom
     if (mappedData.salaryTo !== null) updates.salaryMax = mappedData.salaryTo
-    if (mappedData.experience) updates.requiredExperience = mappedData.experience
+    if (anketaRequiredExperience) updates.requiredExperience = anketaRequiredExperience
+    if (anketaSchedule) updates.schedule = anketaSchedule
+    if (anketaEmployment.length) updates.employment = anketaEmployment[0]
+
+    console.log("[hh-import] DB updates:", JSON.stringify(updates, null, 2))
 
     const [updated] = await db
       .update(vacancies)
