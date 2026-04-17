@@ -51,12 +51,35 @@ interface TreeNode {
   positions: Position[]
 }
 
+type DragPayload = { type: "position"; id: string } | { type: "department"; id: string }
+
+function getDescendantIds(deptId: string, allDepts: Department[]): Set<string> {
+  const result = new Set<string>()
+  const queue = [deptId]
+  while (queue.length) {
+    const current = queue.shift()!
+    for (const d of allDepts) {
+      if (d.parentId === current && !result.has(d.id)) {
+        result.add(d.id)
+        queue.push(d.id)
+      }
+    }
+  }
+  return result
+}
+
 type Callbacks = {
   onAddDept: (parentId: string | null) => void
   onEditDept: (dept: Department) => void
   onAddPos: (deptId: string) => void
   onEditPos: (pos: Position) => void
   onAssign: (pos: Position) => void
+  onDragStartPos: (e: React.DragEvent, posId: string) => void
+  onDragStartDept: (e: React.DragEvent, deptId: string) => void
+  onDragOverDept: (e: React.DragEvent, deptId: string | null) => void
+  onDragLeaveDept: () => void
+  onDropOnDept: (e: React.DragEvent, deptId: string | null) => void
+  dropTarget: string | null
 }
 
 // ─── Tree builder ────────────────────────────────────────
@@ -89,7 +112,9 @@ function buildTree(depts: Department[], positions: Position[]): { roots: TreeNod
 function PosRow({ pos, cb }: { pos: Position; cb: Callbacks }) {
   return (
     <div
-      className="flex items-start gap-2 py-1.5 px-2 rounded bg-muted/20 cursor-pointer hover:bg-muted/40 transition-colors"
+      draggable
+      onDragStart={(e) => { cb.onDragStartPos(e, pos.id); e.stopPropagation() }}
+      className="flex items-start gap-2 py-1.5 px-2 rounded bg-muted/20 cursor-grab hover:bg-muted/40 transition-colors active:cursor-grabbing"
       onClick={() => cb.onEditPos(pos)}
     >
       <div className="flex-1 min-w-0">
@@ -142,10 +167,19 @@ function ChildrenRow({ children: kids }: { children: React.ReactNode[] }) {
 // ─── Desktop department card ─────────────────────────────
 function DeptCard({ node, cb }: { node: TreeNode; cb: Callbacks }) {
   const head = node.dept.headUserName
+  const isDropTarget = cb.dropTarget === node.dept.id
   return (
     <div className="flex flex-col items-center">
       <div className="w-[230px]">
-        <div className="rounded-xl border bg-card group relative transition-all hover:shadow-md hover:border-primary/50 overflow-hidden">
+        <div
+          className={cn(
+            "rounded-xl border bg-card group relative transition-all hover:shadow-md hover:border-primary/50 overflow-hidden",
+            isDropTarget && "border-dashed !border-primary bg-primary/5 shadow-lg",
+          )}
+          onDragOver={(e) => { e.preventDefault(); cb.onDragOverDept(e, node.dept.id) }}
+          onDragLeave={() => cb.onDragLeaveDept()}
+          onDrop={(e) => cb.onDropOnDept(e, node.dept.id)}
+        >
           <button
             type="button"
             className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full bg-primary text-primary-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm z-10"
@@ -155,8 +189,13 @@ function DeptCard({ node, cb }: { node: TreeNode; cb: Callbacks }) {
             <Plus className="w-3 h-3" />
           </button>
 
-          {/* Название — кликабельное */}
-          <div className="px-3 pt-3 pb-2 cursor-pointer" onClick={() => cb.onEditDept(node.dept)}>
+          {/* Название — кликабельное + draggable */}
+          <div
+            draggable
+            onDragStart={(e) => { cb.onDragStartDept(e, node.dept.id); e.stopPropagation() }}
+            className="px-3 pt-3 pb-2 cursor-grab active:cursor-grabbing"
+            onClick={() => cb.onEditDept(node.dept)}
+          >
             <div className="flex items-center justify-center gap-1.5">
               <Building2 className="w-3.5 h-3.5 text-primary shrink-0" />
               <span className="text-sm font-bold leading-tight line-clamp-2 hover:text-primary transition-colors">{node.dept.name}</span>
@@ -306,6 +345,9 @@ export default function OrgStructurePage() {
   const [epUserId, setEpUserId] = useState("")
   const [epSaving, setEpSaving] = useState(false)
   const [epDeleting, setEpDeleting] = useState(false)
+
+  // Drag and drop
+  const [dropTarget, setDropTarget] = useState<string | null>(null)
 
   // Assign user (quick)
   const [asOpen, setAsOpen] = useState(false)
@@ -461,14 +503,84 @@ export default function OrgStructurePage() {
     } catch { toast.error("Ошибка сети") } finally { setAsSaving(false) }
   }
 
-  const { roots, unassigned } = buildTree(departments, positions)
-  const cb: Callbacks = { onAddDept: openCreateDept, onEditDept: openEditDept, onAddPos: openCreatePos, onEditPos: openEditPos, onAssign: openAssign }
+  // ── Drag & Drop ─────────────────────────────────────────
+  const handleDragStartPos = (e: React.DragEvent, posId: string) => {
+    e.dataTransfer.setData("application/json", JSON.stringify({ type: "position", id: posId }))
+    e.dataTransfer.effectAllowed = "move"
+    ;(e.currentTarget as HTMLElement).style.opacity = "0.5"
+    setTimeout(() => { (e.currentTarget as HTMLElement).style.opacity = "" }, 0)
+  }
+  const handleDragStartDept = (e: React.DragEvent, deptId: string) => {
+    e.dataTransfer.setData("application/json", JSON.stringify({ type: "department", id: deptId }))
+    e.dataTransfer.effectAllowed = "move"
+  }
+  const handleDragOverDept = (e: React.DragEvent, deptId: string | null) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = "move"
+    setDropTarget(deptId)
+  }
+  const handleDragLeaveDept = () => setDropTarget(null)
+  const handleDropOnDept = async (e: React.DragEvent, targetDeptId: string | null) => {
+    e.preventDefault()
+    setDropTarget(null)
+    let payload: DragPayload
+    try {
+      payload = JSON.parse(e.dataTransfer.getData("application/json")) as DragPayload
+    } catch { return }
 
+    if (payload.type === "position") {
+      const pos = positions.find(p => p.id === payload.id)
+      if (!pos) return
+      if ((pos.departmentId ?? null) === targetDeptId) return
+      try {
+        const res = await fetch(`/api/modules/hr/org/positions/${payload.id}`, {
+          method: "PATCH", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ departmentId: targetDeptId }),
+        })
+        if (res.ok) { toast.success("Должность перемещена"); await fetchData() }
+        else toast.error("Ошибка перемещения")
+      } catch { toast.error("Ошибка сети") }
+    } else if (payload.type === "department") {
+      if (payload.id === targetDeptId) return
+      if (targetDeptId) {
+        const descendants = getDescendantIds(payload.id, departments)
+        if (descendants.has(targetDeptId)) { toast.error("Нельзя переместить отдел в свой подотдел"); return }
+      }
+      const dept = departments.find(d => d.id === payload.id)
+      if (!dept) return
+      if ((dept.parentId ?? null) === targetDeptId) return
+      try {
+        const res = await fetch(`/api/modules/hr/departments/${payload.id}`, {
+          method: "PATCH", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ parentId: targetDeptId }),
+        })
+        if (res.ok) { toast.success("Отдел перемещён"); await fetchData() }
+        else toast.error("Ошибка перемещения")
+      } catch { toast.error("Ошибка сети") }
+    }
+  }
+
+  const { roots, unassigned } = buildTree(departments, positions)
+  const cb: Callbacks = {
+    onAddDept: openCreateDept, onEditDept: openEditDept, onAddPos: openCreatePos,
+    onEditPos: openEditPos, onAssign: openAssign,
+    onDragStartPos: handleDragStartPos, onDragStartDept: handleDragStartDept,
+    onDragOverDept: handleDragOverDept, onDragLeaveDept: handleDragLeaveDept,
+    onDropOnDept: handleDropOnDept, dropTarget,
+  }
+
+  const isRootDropTarget = dropTarget === "__root__"
   const rootBlock = (mobile: boolean) => (
-    <div className={cn(
-      "rounded-xl border-2 border-primary/30 bg-card shadow-md group relative transition-all hover:shadow-lg hover:border-primary/50 overflow-hidden",
-      mobile ? "w-full" : "w-[260px]",
-    )}>
+    <div
+      className={cn(
+        "rounded-xl border-2 border-primary/30 bg-card shadow-md group relative transition-all hover:shadow-lg hover:border-primary/50 overflow-hidden",
+        mobile ? "w-full" : "w-[260px]",
+        isRootDropTarget && "border-dashed !border-primary bg-primary/5 shadow-lg",
+      )}
+      onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; setDropTarget("__root__") }}
+      onDragLeave={() => setDropTarget(null)}
+      onDrop={(e) => handleDropOnDept(e, null)}
+    >
       <button type="button" className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full bg-primary text-primary-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm z-10" onClick={() => openCreateDept(null)} title="Добавить отдел"><Plus className="w-3 h-3" /></button>
       <div className="px-3 pt-3 pb-2 text-center">
         <div className="flex items-center justify-center gap-2 mb-0.5">
