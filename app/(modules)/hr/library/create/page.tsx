@@ -37,7 +37,7 @@ type LibraryTemplate = {
 
 const PATH_CARDS: { id: Path; emoji: string; title: string; desc: string }[] = [
   { id: "manual",   emoji: "✏️", title: "С чистого листа",      desc: "Заполнить параметры вручную" },
-  { id: "ai",       emoji: "✨", title: "Сгенерировать с AI",   desc: "AI создаст демонстрацию по анкете вакансии" },
+  { id: "ai",       emoji: "✨", title: "Сгенерировать с AI",   desc: "AI создаст по анкете вакансии" },
   { id: "document", emoji: "📄", title: "Из документа",         desc: "Загрузить DOCX, PDF или TXT" },
 ]
 
@@ -1200,7 +1200,9 @@ export default function CreateDemoPage() {
               </div>
 
               {/* ═══ Path cards ═══ */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div
+                className="grid gap-4 grid-cols-1 sm:[grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]"
+              >
                 {PATH_CARDS.map((card) => {
                   const active = path === card.id
                   return (
@@ -1209,7 +1211,7 @@ export default function CreateDemoPage() {
                       type="button"
                       onClick={() => setPath(card.id)}
                       className={cn(
-                        "h-32 rounded-xl p-6 cursor-pointer text-center transition-all duration-200 flex flex-col items-center justify-center gap-1.5",
+                        "min-h-[148px] rounded-xl p-6 cursor-pointer text-center transition-all duration-200 flex flex-col items-center justify-center gap-1.5",
                         active
                           ? "border-2 border-primary bg-primary/5 shadow-sm"
                           : "border border-border hover:border-primary/50",
@@ -1217,7 +1219,7 @@ export default function CreateDemoPage() {
                     >
                       <div className="text-[32px] leading-none">{card.emoji}</div>
                       <div className="text-base font-bold">{card.title}</div>
-                      <div className="text-sm text-muted-foreground">{card.desc}</div>
+                      <div className="text-sm text-muted-foreground line-clamp-2">{card.desc}</div>
                     </button>
                   )
                 })}
