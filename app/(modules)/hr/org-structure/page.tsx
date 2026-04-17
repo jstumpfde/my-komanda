@@ -5,7 +5,6 @@ import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Card, CardContent } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -19,8 +18,7 @@ import {
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import {
-  Building2, Briefcase, ChevronDown, ChevronRight, Network,
-  Users, Plus, Crown, Loader2, UserPlus,
+  Building2, Briefcase, Network, Plus, Crown, Loader2, UserPlus,
 } from "lucide-react"
 
 // ─── Types ───────────────────────────────────────────────
@@ -44,11 +42,7 @@ interface Position {
   userAvatar: string | null
 }
 
-interface TeamMember {
-  id: string
-  name: string
-  avatarUrl: string | null
-}
+interface TeamMember { id: string; name: string; avatarUrl: string | null }
 
 interface TreeNode {
   dept: Department
@@ -82,30 +76,50 @@ function buildTree(depts: Department[], positions: Position[]): { roots: TreeNod
   return { roots, unassigned }
 }
 
-// ─── Connector: children row with real div lines ────────
-function ChildrenRow({ children }: { children: React.ReactNode[] }) {
-  if (children.length === 0) return null
+// ─── Position row (shared between desktop & mobile) ─────
+function PosRow({ pos, onAssign }: { pos: Position; onAssign: (p: Position) => void }) {
+  return (
+    <div className="flex items-center gap-2 text-xs py-1 px-2 rounded bg-muted/20">
+      <Briefcase className="w-3 h-3 text-muted-foreground shrink-0" />
+      <span className="truncate flex-1">{pos.name}</span>
+      {pos.userName ? (
+        <span className="text-[10px] font-medium text-primary truncate max-w-[90px]">{pos.userName}</span>
+      ) : (
+        <span className="text-[10px] text-muted-foreground/60 italic">Вакантно</span>
+      )}
+      {!pos.userName && (
+        <button type="button" className="text-muted-foreground hover:text-primary transition-colors shrink-0" onClick={() => onAssign(pos)} title="Назначить">
+          <UserPlus className="w-3 h-3" />
+        </button>
+      )}
+    </div>
+  )
+}
+
+// ─── Connector: children with CORRECT top-down lines ────
+function ChildrenRow({ children: kids }: { children: React.ReactNode[] }) {
+  if (kids.length === 0) return null
   return (
     <>
-      {/* Vertical stem from parent down */}
+      {/* Vertical stem DOWN from parent */}
       <div className="w-0.5 h-7 bg-border mx-auto" />
-      {/* Row of children with horizontal connector */}
+      {/* Children row: horizontal bar at TOP, vertical stems DOWN to each child */}
       <div className="flex justify-center">
-        {children.map((child, i) => {
+        {kids.map((child, i) => {
           const isFirst = i === 0
-          const isLast = i === children.length - 1
-          const isOnly = children.length === 1
+          const isLast = i === kids.length - 1
+          const isOnly = kids.length === 1
           return (
             <div key={i} className="flex flex-col items-center">
-              {/* Horizontal bar segment + vertical stem to child */}
               <div className="flex self-stretch h-7">
-                <div className={cn("flex-1 border-b-2 border-border", (isFirst || isOnly) && "border-b-0")} />
+                {/* Left half of horizontal bar */}
+                <div className={cn("flex-1 border-t-2 border-border", (isFirst || isOnly) && "border-t-0")} />
+                {/* Vertical stem down to child */}
                 <div className="w-0.5 bg-border shrink-0" />
-                <div className={cn("flex-1 border-b-2 border-border", (isLast || isOnly) && "border-b-0")} />
+                {/* Right half of horizontal bar */}
+                <div className={cn("flex-1 border-t-2 border-border", (isLast || isOnly) && "border-t-0")} />
               </div>
-              <div className="px-2">
-                {child}
-              </div>
+              <div className="px-2">{child}</div>
             </div>
           )
         })}
@@ -114,98 +128,76 @@ function ChildrenRow({ children }: { children: React.ReactNode[] }) {
   )
 }
 
-// ─── Desktop org-chart node ─────────────────────────────
-function OrgNodeDesktop({ node, onAddDept, onAddPos, onAssign }: {
+// ─── Desktop: department card (always expanded) ─────────
+function DeptCard({ node, onAddDept, onAddPos, onAssign }: {
   node: TreeNode
   onAddDept: (parentId: string) => void
   onAddPos: (deptId: string) => void
   onAssign: (pos: Position) => void
 }) {
-  const [posOpen, setPosOpen] = useState(false)
-  const posCount = node.positions.length
-
+  const head = node.dept.headUserName
   return (
     <div className="flex flex-col items-center">
-      {/* Node card */}
-      <div className="w-[220px]">
-        <div
-          className="rounded-xl border bg-card p-3 text-center group relative transition-all hover:shadow-md hover:border-primary/50 cursor-pointer"
-          onClick={() => posCount > 0 && setPosOpen(!posOpen)}
-        >
+      <div className="w-[230px]">
+        <div className="rounded-xl border bg-card group relative transition-all hover:shadow-md hover:border-primary/50 overflow-hidden">
+          {/* + подотдел */}
           <button
             type="button"
-            className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-primary text-primary-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm z-10"
-            onClick={(e) => { e.stopPropagation(); onAddDept(node.dept.id) }}
+            className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full bg-primary text-primary-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm z-10"
+            onClick={() => onAddDept(node.dept.id)}
             title="Добавить подотдел"
           >
             <Plus className="w-3 h-3" />
           </button>
-          <div className="flex items-center justify-center gap-1.5 mb-1">
-            <Building2 className="w-3.5 h-3.5 text-primary shrink-0" />
-            <span className="text-sm font-semibold leading-tight line-clamp-2">{node.dept.name}</span>
+
+          {/* Название */}
+          <div className="px-3 pt-3 pb-2">
+            <div className="flex items-center justify-center gap-1.5">
+              <Building2 className="w-3.5 h-3.5 text-primary shrink-0" />
+              <span className="text-sm font-bold leading-tight line-clamp-2">{node.dept.name}</span>
+            </div>
           </div>
-          {node.dept.headUserName && (
-            <p className="text-[11px] text-muted-foreground flex items-center justify-center gap-1">
-              <Users className="w-3 h-3" />{node.dept.headUserName}
-            </p>
+
+          {/* Руководитель */}
+          {head && (
+            <>
+              <div className="border-t border-border/50 mx-2" />
+              <div className="px-3 py-1.5 flex items-center gap-1.5 text-xs">
+                <span>👑</span>
+                <span className="font-semibold truncate">{head}</span>
+              </div>
+            </>
           )}
-          {posCount > 0 && (
-            <div className="mt-1.5 text-[11px] text-muted-foreground flex items-center justify-center gap-0.5">
-              <Briefcase className="w-3 h-3" />{posCount} должн.
-              {posOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-            </div>
+
+          {/* Должности */}
+          {(node.positions.length > 0) && (
+            <>
+              <div className="border-t border-border/50 mx-2" />
+              <div className="px-2 py-2 space-y-1">
+                {node.positions.map((pos) => (
+                  <PosRow key={pos.id} pos={pos} onAssign={onAssign} />
+                ))}
+              </div>
+            </>
           )}
-          {posOpen && (
-            <div className="mt-2 space-y-1 text-left border-t pt-2" onClick={(e) => e.stopPropagation()}>
-              {node.positions.map((pos) => (
-                <div key={pos.id} className="flex items-center gap-1.5 text-xs py-1">
-                  <Briefcase className="w-3 h-3 text-muted-foreground shrink-0" />
-                  <span className="truncate flex-1">{pos.name}</span>
-                  {pos.userName ? (
-                    <span className="text-[10px] text-primary font-medium truncate max-w-[70px]">{pos.userName}</span>
-                  ) : (
-                    <button
-                      type="button"
-                      className="text-muted-foreground hover:text-primary transition-colors"
-                      onClick={() => onAssign(pos)}
-                      title="Назначить сотрудника"
-                    >
-                      <UserPlus className="w-3 h-3" />
-                    </button>
-                  )}
-                </div>
-              ))}
-              <button
-                type="button"
-                className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-primary transition-colors pt-1"
-                onClick={() => onAddPos(node.dept.id)}
-              >
-                <Plus className="w-3 h-3" />Должность
-              </button>
-            </div>
-          )}
-          {!posOpen && (
-            <button
-              type="button"
-              className="mt-1 flex items-center gap-0.5 text-[10px] text-muted-foreground hover:text-primary transition-colors mx-auto"
-              onClick={(e) => { e.stopPropagation(); onAddPos(node.dept.id) }}
-            >
-              <Plus className="w-3 h-3" />Должность
-            </button>
-          )}
+
+          {/* + Должность */}
+          <div className="border-t border-border/50 mx-2" />
+          <button
+            type="button"
+            className="w-full flex items-center justify-center gap-1 text-[10px] text-muted-foreground hover:text-primary hover:bg-muted/30 transition-colors py-1.5"
+            onClick={() => onAddPos(node.dept.id)}
+          >
+            <Plus className="w-3 h-3" />Должность
+          </button>
         </div>
       </div>
-      {/* Children with connector lines */}
+
+      {/* Children */}
       {node.children.length > 0 && (
         <ChildrenRow>
           {node.children.map((child) => (
-            <OrgNodeDesktop
-              key={child.dept.id}
-              node={child}
-              onAddDept={onAddDept}
-              onAddPos={onAddPos}
-              onAssign={onAssign}
-            />
+            <DeptCard key={child.dept.id} node={child} onAddDept={onAddDept} onAddPos={onAddPos} onAssign={onAssign} />
           ))}
         </ChildrenRow>
       )}
@@ -213,71 +205,57 @@ function OrgNodeDesktop({ node, onAddDept, onAddPos, onAssign }: {
   )
 }
 
-// ─── Mobile list node ───────────────────────────────────
-function OrgNodeMobile({ node, depth, onAddDept, onAddPos, onAssign }: {
+// ─── Mobile: department (always expanded, indent) ───────
+function DeptCardMobile({ node, depth, onAddDept, onAddPos, onAssign }: {
   node: TreeNode; depth: number
   onAddDept: (parentId: string) => void
   onAddPos: (deptId: string) => void
   onAssign: (pos: Position) => void
 }) {
-  const [expanded, setExpanded] = useState(depth < 2)
-  const hasChildren = node.children.length > 0 || node.positions.length > 0
-
   return (
     <div style={{ marginLeft: depth * 16 }}>
-      <div className="rounded-lg border bg-card p-3 mb-2 group transition-all hover:shadow-sm hover:border-primary/40">
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setExpanded(!expanded)}
-            className="p-0.5 hover:bg-muted rounded transition-colors shrink-0"
-            disabled={!hasChildren}
-          >
-            {hasChildren ? (
-              expanded ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />
-            ) : <span className="w-4" />}
-          </button>
+      <div className="rounded-lg border bg-card mb-2 group transition-all hover:shadow-sm hover:border-primary/40 overflow-hidden">
+        <div className="px-3 pt-2.5 pb-2 flex items-center gap-2">
           <Building2 className="h-4 w-4 text-primary shrink-0" />
-          <span className="text-sm font-medium flex-1 min-w-0 truncate">{node.dept.name}</span>
-          {node.dept.headUserName && (
-            <Badge variant="secondary" className="gap-1 text-[10px] shrink-0">
-              <Users className="h-2.5 w-2.5" />{node.dept.headUserName}
-            </Badge>
-          )}
+          <span className="text-sm font-bold flex-1 min-w-0 truncate">{node.dept.name}</span>
           <button
             type="button"
-            className="w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+            className="w-5 h-5 rounded-full bg-primary text-primary-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
             onClick={() => onAddDept(node.dept.id)}
           >
             <Plus className="w-3 h-3" />
           </button>
         </div>
-        {expanded && (
-          <div className="mt-2 ml-6 space-y-1">
-            {node.positions.map((pos) => (
-              <div key={pos.id} className="flex items-center gap-2 py-1 px-2 rounded bg-muted/30 text-xs">
-                <Briefcase className="h-3 w-3 text-muted-foreground shrink-0" />
-                <span className="flex-1 min-w-0 truncate">{pos.name}</span>
-                {pos.userName ? (
-                  <span className="text-[10px] text-primary font-medium truncate max-w-[80px]">{pos.userName}</span>
-                ) : (
-                  <button type="button" className="text-muted-foreground hover:text-primary" onClick={() => onAssign(pos)}>
-                    <UserPlus className="w-3 h-3" />
-                  </button>
-                )}
-              </div>
-            ))}
-            <button
-              type="button"
-              className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-primary transition-colors px-2 py-1"
-              onClick={() => onAddPos(node.dept.id)}
-            >
-              <Plus className="w-3 h-3" />Должность
-            </button>
-          </div>
+        {node.dept.headUserName && (
+          <>
+            <div className="border-t border-border/50 mx-2" />
+            <div className="px-3 py-1.5 flex items-center gap-1.5 text-xs">
+              <span>👑</span>
+              <span className="font-semibold truncate">{node.dept.headUserName}</span>
+            </div>
+          </>
         )}
+        {node.positions.length > 0 && (
+          <>
+            <div className="border-t border-border/50 mx-2" />
+            <div className="px-2 py-2 space-y-1">
+              {node.positions.map((pos) => (
+                <PosRow key={pos.id} pos={pos} onAssign={onAssign} />
+              ))}
+            </div>
+          </>
+        )}
+        <div className="border-t border-border/50 mx-2" />
+        <button
+          type="button"
+          className="w-full flex items-center justify-center gap-1 text-[10px] text-muted-foreground hover:text-primary hover:bg-muted/30 transition-colors py-1.5"
+          onClick={() => onAddPos(node.dept.id)}
+        >
+          <Plus className="w-3 h-3" />Должность
+        </button>
       </div>
-      {expanded && node.children.map((child) => (
-        <OrgNodeMobile key={child.dept.id} node={child} depth={depth + 1} onAddDept={onAddDept} onAddPos={onAddPos} onAssign={onAssign} />
+      {node.children.map((child) => (
+        <DeptCardMobile key={child.dept.id} node={child} depth={depth + 1} onAddDept={onAddDept} onAddPos={onAddPos} onAssign={onAssign} />
       ))}
     </div>
   )
@@ -292,15 +270,13 @@ export default function OrgStructurePage() {
   const [companyName, setCompanyName] = useState<string>("Компания")
   const [loading, setLoading] = useState(true)
 
-  // Create department modal
   const [deptOpen, setDeptOpen] = useState(false)
   const [deptParentId, setDeptParentId] = useState<string | null>(null)
   const [deptName, setDeptName] = useState("")
   const [deptDesc, setDeptDesc] = useState("")
   const [deptCreating, setDeptCreating] = useState(false)
 
-  // Create position modal
-  const [posOpen, setPosOpen] = useState(false)
+  const [posModalOpen, setPosModalOpen] = useState(false)
   const [posDeptId, setPosDeptId] = useState<string>("")
   const [posName, setPosName] = useState("")
   const [posGrade, setPosGrade] = useState("")
@@ -308,7 +284,6 @@ export default function OrgStructurePage() {
   const [posSalaryMax, setPosSalaryMax] = useState("")
   const [posCreating, setPosCreating] = useState(false)
 
-  // Assign user modal
   const [assignOpen, setAssignOpen] = useState(false)
   const [assignPos, setAssignPos] = useState<Position | null>(null)
   const [assignUserId, setAssignUserId] = useState<string>("")
@@ -340,7 +315,6 @@ export default function OrgStructurePage() {
 
   useEffect(() => { fetchData() }, [fetchData])
 
-  // ── Handlers ──
   const openDeptModal = (parentId: string | null) => {
     setDeptParentId(parentId); setDeptName(""); setDeptDesc(""); setDeptOpen(true)
   }
@@ -358,13 +332,14 @@ export default function OrgStructurePage() {
   }
 
   const openPosModal = (deptId: string) => {
-    setPosDeptId(deptId); setPosName(""); setPosGrade(""); setPosSalaryMin(""); setPosSalaryMax(""); setPosOpen(true)
+    setPosDeptId(deptId); setPosName(""); setPosGrade(""); setPosSalaryMin(""); setPosSalaryMax(""); setPosModalOpen(true)
   }
   const handleCreatePos = async () => {
     if (!posName.trim()) { toast.error("Введите название"); return }
     setPosCreating(true)
     try {
-      const body: Record<string, unknown> = { name: posName.trim(), departmentId: posDeptId || undefined }
+      const body: Record<string, unknown> = { name: posName.trim() }
+      if (posDeptId) body.departmentId = posDeptId
       if (posGrade.trim()) body.grade = posGrade.trim()
       if (posSalaryMin) body.salaryMin = parseInt(posSalaryMin) * 100
       if (posSalaryMax) body.salaryMax = parseInt(posSalaryMax) * 100
@@ -372,7 +347,7 @@ export default function OrgStructurePage() {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
       })
       if (!res.ok) { const d = await res.json().catch(() => ({})) as { error?: string }; toast.error(d.error ?? "Ошибка"); return }
-      toast.success("Должность создана"); setPosOpen(false); await fetchData()
+      toast.success("Должность создана"); setPosModalOpen(false); await fetchData()
     } catch { toast.error("Ошибка сети") } finally { setPosCreating(false) }
   }
 
@@ -383,18 +358,71 @@ export default function OrgStructurePage() {
     if (!assignPos) return
     setAssigning(true)
     try {
+      const uid = assignUserId === "__none" ? null : (assignUserId || null)
       const res = await fetch(`/api/modules/hr/org/positions/${assignPos.id}`, {
         method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: assignUserId || null }),
+        body: JSON.stringify({ userId: uid }),
       })
       if (!res.ok) { toast.error("Ошибка назначения"); return }
-      toast.success(assignUserId ? "Сотрудник назначен" : "Назначение снято"); setAssignOpen(false); await fetchData()
+      toast.success(uid ? "Сотрудник назначен" : "Назначение снято"); setAssignOpen(false); await fetchData()
     } catch { toast.error("Ошибка сети") } finally { setAssigning(false) }
   }
 
   const { roots, unassigned } = buildTree(departments, positions)
   const parentDeptName = deptParentId ? departments.find(d => d.id === deptParentId)?.name : null
   const posDeptName = posDeptId ? departments.find(d => d.id === posDeptId)?.name : null
+
+  // Root block content (company + unassigned positions)
+  const rootBlock = (mobile: boolean) => (
+    <div className={cn(
+      "rounded-xl border-2 border-primary/30 bg-card shadow-md group relative transition-all hover:shadow-lg hover:border-primary/50 overflow-hidden",
+      mobile ? "w-full" : "w-[260px]",
+    )}>
+      {/* + отдел */}
+      <button
+        type="button"
+        className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full bg-primary text-primary-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm z-10"
+        onClick={() => openDeptModal(null)}
+        title="Добавить отдел"
+      >
+        <Plus className="w-3 h-3" />
+      </button>
+
+      {/* Компания */}
+      <div className="px-3 pt-3 pb-2 text-center">
+        <div className="flex items-center justify-center gap-2 mb-0.5">
+          <Crown className="w-4 h-4 text-primary" />
+          <span className="text-sm font-bold">{companyName}</span>
+        </div>
+        {directorName && <p className="text-xs text-muted-foreground">Директор: {directorName}</p>}
+        <p className="text-[10px] text-muted-foreground mt-0.5">
+          {departments.length} отдел. · {positions.length} должн.
+        </p>
+      </div>
+
+      {/* Должности без отдела */}
+      {unassigned.length > 0 && (
+        <>
+          <div className="border-t border-primary/20 mx-2" />
+          <div className="px-2 py-2 space-y-1">
+            {unassigned.map((pos) => (
+              <PosRow key={pos.id} pos={pos} onAssign={openAssignModal} />
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* + Должность (корневая, без отдела) */}
+      <div className="border-t border-primary/20 mx-2" />
+      <button
+        type="button"
+        className="w-full flex items-center justify-center gap-1 text-[10px] text-muted-foreground hover:text-primary hover:bg-muted/30 transition-colors py-1.5"
+        onClick={() => openPosModal("")}
+      >
+        <Plus className="w-3 h-3" />Должность
+      </button>
+    </div>
+  )
 
   return (
     <SidebarProvider defaultOpen={true}>
@@ -429,103 +457,23 @@ export default function OrgStructurePage() {
                 {/* ═══ Desktop ═══ */}
                 <div className="hidden md:block overflow-x-auto pb-8">
                   <div className="min-w-fit flex flex-col items-center">
-                    {/* Root node */}
-                    <div className="w-[240px] rounded-xl border-2 border-primary/30 bg-card shadow-md p-4 text-center group relative transition-all hover:shadow-lg hover:border-primary/50">
-                      <button
-                        type="button"
-                        className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-primary text-primary-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm z-10"
-                        onClick={() => openDeptModal(null)}
-                        title="Добавить отдел"
-                      >
-                        <Plus className="w-3 h-3" />
-                      </button>
-                      <div className="flex items-center justify-center gap-2 mb-1">
-                        <Crown className="w-4 h-4 text-primary" />
-                        <span className="text-sm font-bold">{companyName}</span>
-                      </div>
-                      {directorName && <p className="text-xs text-muted-foreground">Директор: {directorName}</p>}
-                      <p className="text-[10px] text-muted-foreground mt-1">
-                        {departments.length} отдел. · {positions.length} должн.
-                      </p>
-                    </div>
-
-                    {/* Tree with real div connector lines */}
+                    {rootBlock(false)}
                     {roots.length > 0 && (
                       <ChildrenRow>
                         {roots.map((node) => (
-                          <OrgNodeDesktop key={node.dept.id} node={node} onAddDept={openDeptModal} onAddPos={openPosModal} onAssign={openAssignModal} />
+                          <DeptCard key={node.dept.id} node={node} onAddDept={openDeptModal} onAddPos={openPosModal} onAssign={openAssignModal} />
                         ))}
                       </ChildrenRow>
                     )}
                   </div>
-
-                  {/* Unassigned positions */}
-                  {unassigned.length > 0 && (
-                    <div className="mt-6 max-w-md mx-auto">
-                      <div className="rounded-lg border border-dashed bg-muted/20 p-3">
-                        <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5 mb-2">
-                          <Briefcase className="w-3.5 h-3.5" />Без отдела ({unassigned.length})
-                        </p>
-                        <div className="space-y-1">
-                          {unassigned.map((pos) => (
-                            <div key={pos.id} className="flex items-center gap-2 text-xs py-1 px-2 rounded bg-card">
-                              <span className="truncate flex-1">{pos.name}</span>
-                              {pos.userName ? (
-                                <span className="text-[10px] text-primary font-medium">{pos.userName}</span>
-                              ) : (
-                                <button type="button" className="text-muted-foreground hover:text-primary" onClick={() => openAssignModal(pos)}>
-                                  <UserPlus className="w-3 h-3" />
-                                </button>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  )}
                 </div>
 
                 {/* ═══ Mobile ═══ */}
                 <div className="md:hidden space-y-2">
-                  <div className="rounded-lg border-2 border-primary/30 bg-card p-3 mb-3 group relative">
-                    <div className="flex items-center gap-2">
-                      <Crown className="w-4 h-4 text-primary" />
-                      <span className="text-sm font-bold">{companyName}</span>
-                      <button
-                        type="button"
-                        className="ml-auto w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-                        onClick={() => openDeptModal(null)}
-                      >
-                        <Plus className="w-3 h-3" />
-                      </button>
-                    </div>
-                    {directorName && <p className="text-xs text-muted-foreground ml-6">Директор: {directorName}</p>}
-                  </div>
+                  <div className="mb-3">{rootBlock(true)}</div>
                   {roots.map((node) => (
-                    <OrgNodeMobile key={node.dept.id} node={node} depth={0} onAddDept={openDeptModal} onAddPos={openPosModal} onAssign={openAssignModal} />
+                    <DeptCardMobile key={node.dept.id} node={node} depth={0} onAddDept={openDeptModal} onAddPos={openPosModal} onAssign={openAssignModal} />
                   ))}
-                  {unassigned.length > 0 && (
-                    <div className="rounded-lg border border-dashed bg-muted/20 p-3 mt-4">
-                      <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5 mb-2">
-                        <Briefcase className="w-3.5 h-3.5" />Без отдела ({unassigned.length})
-                      </p>
-                      <div className="space-y-1">
-                        {unassigned.map((pos) => (
-                          <div key={pos.id} className="flex items-center gap-2 text-xs py-1 px-2 rounded bg-card">
-                            <Briefcase className="w-3 h-3 text-muted-foreground shrink-0" />
-                            <span className="truncate flex-1">{pos.name}</span>
-                            {pos.userName ? (
-                              <span className="text-[10px] text-primary font-medium">{pos.userName}</span>
-                            ) : (
-                              <button type="button" className="text-muted-foreground hover:text-primary" onClick={() => openAssignModal(pos)}>
-                                <UserPlus className="w-3 h-3" />
-                              </button>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
                 </div>
               </>
             )}
@@ -533,12 +481,10 @@ export default function OrgStructurePage() {
         </main>
       </SidebarInset>
 
-      {/* ─── Create department ─── */}
+      {/* Create department */}
       <Dialog open={deptOpen} onOpenChange={setDeptOpen}>
         <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>{parentDeptName ? `Подотдел в «${parentDeptName}»` : "Новый отдел"}</DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle>{parentDeptName ? `Подотдел в «${parentDeptName}»` : "Новый отдел"}</DialogTitle></DialogHeader>
           <div className="space-y-4 mt-2">
             <div className="space-y-1.5">
               <Label>Название *</Label>
@@ -558,12 +504,10 @@ export default function OrgStructurePage() {
         </DialogContent>
       </Dialog>
 
-      {/* ─── Create position ─── */}
-      <Dialog open={posOpen} onOpenChange={setPosOpen}>
+      {/* Create position */}
+      <Dialog open={posModalOpen} onOpenChange={setPosModalOpen}>
         <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Новая должность{posDeptName ? ` в «${posDeptName}»` : ""}</DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle>Новая должность{posDeptName ? ` в «${posDeptName}»` : ""}</DialogTitle></DialogHeader>
           <div className="space-y-4 mt-2">
             <div className="space-y-1.5">
               <Label>Название *</Label>
@@ -584,7 +528,7 @@ export default function OrgStructurePage() {
               </div>
             </div>
             <div className="flex justify-end gap-2">
-              <Button variant="outline" size="sm" onClick={() => setPosOpen(false)}>Отмена</Button>
+              <Button variant="outline" size="sm" onClick={() => setPosModalOpen(false)}>Отмена</Button>
               <Button size="sm" onClick={handleCreatePos} disabled={posCreating || !posName.trim()}>
                 {posCreating && <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" />}Создать
               </Button>
@@ -593,12 +537,10 @@ export default function OrgStructurePage() {
         </DialogContent>
       </Dialog>
 
-      {/* ─── Assign user to position ─── */}
+      {/* Assign user */}
       <Dialog open={assignOpen} onOpenChange={setAssignOpen}>
         <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Назначить сотрудника</DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle>Назначить сотрудника</DialogTitle></DialogHeader>
           {assignPos && (
             <div className="space-y-4 mt-2">
               <p className="text-sm text-muted-foreground">Должность: <span className="font-medium text-foreground">{assignPos.name}</span></p>
@@ -616,7 +558,7 @@ export default function OrgStructurePage() {
               </div>
               <div className="flex justify-end gap-2">
                 <Button variant="outline" size="sm" onClick={() => setAssignOpen(false)}>Отмена</Button>
-                <Button size="sm" onClick={() => { if (assignUserId === "__none") { setAssignUserId(""); } handleAssign() }} disabled={assigning}>
+                <Button size="sm" onClick={handleAssign} disabled={assigning}>
                   {assigning && <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" />}Назначить
                 </Button>
               </div>
