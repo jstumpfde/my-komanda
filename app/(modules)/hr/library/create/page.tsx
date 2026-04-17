@@ -646,6 +646,12 @@ export default function CreateDemoPage() {
   const [docValidUntil, setDocValidUntil] = useState<string>("")
   const abortRef = useRef<AbortController | null>(null)
 
+  // ── AI-from-vacancy fields ──
+  const [vacancyList, setVacancyList] = useState<Array<{ id: string; title: string; city?: string | null }> | null>(null)
+  const [vacancyLoading, setVacancyLoading] = useState(false)
+  const [selectedVacancyId, setSelectedVacancyId] = useState<string | null>(null)
+  const [aiSearch, setAiSearch] = useState("")
+
   // ── Submission state ──
   const [submitting, setSubmitting] = useState(false)
   const [submitStage, setSubmitStage] = useState("")
@@ -667,6 +673,24 @@ export default function CreateDemoPage() {
       .catch(() => { /* autofill is best-effort */ })
     return () => { cancelled = true }
   }, [])
+
+  // Load vacancies lazily when entering the AI path
+  useEffect(() => {
+    if (path !== "ai" || vacancyList !== null || vacancyLoading) return
+    setVacancyLoading(true)
+    fetch("/api/modules/hr/vacancies?limit=200")
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((d) => {
+        const vacs = (d.vacancies ?? d.data ?? []) as Array<{ id: string; title: string; city?: string | null; deletedAt?: string | null }>
+        setVacancyList(vacs.filter((v) => !v.deletedAt))
+        setVacancyLoading(false)
+      })
+      .catch(() => {
+        toast.error("Не удалось загрузить вакансии")
+        setVacancyList([])
+        setVacancyLoading(false)
+      })
+  }, [path, vacancyList, vacancyLoading])
 
   // Load templates lazily when entering the library path
   useEffect(() => {
@@ -1040,6 +1064,101 @@ export default function CreateDemoPage() {
     }
   }
 
+  const handleCreateFromAi = async () => {
+    if (!selectedVacancyId) return
+    const vacancy = vacancyList?.find((v) => v.id === selectedVacancyId)
+    if (!vacancy) return
+
+    // Map frontend length → backend template id
+    const LENGTH_TO_TEMPLATE: Record<DemoLength, "short" | "medium" | "long"> = {
+      short: "short",
+      standard: "medium",
+      full: "long",
+    }
+
+    setSubmitting(true)
+    setSubmitStage("AI генерирует демонстрацию...")
+    try {
+      const genRes = await fetch("/api/modules/hr/demo/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          vacancyId: selectedVacancyId,
+          template: LENGTH_TO_TEMPLATE[docLength],
+          tone: docTone,
+          market: docMarket,
+        }),
+      })
+      const genData = await genRes.json()
+      if (!genRes.ok) {
+        toast.error(genData.error || "Ошибка AI-генерации")
+        setSubmitting(false)
+        setSubmitStage("")
+        return
+      }
+
+      const aiBlocks = (genData.data ?? genData) as Array<{ type: string; title: string; content: string; questionType?: string }>
+      if (!Array.isArray(aiBlocks) || aiBlocks.length === 0) {
+        toast.error("AI не вернул блоки")
+        setSubmitting(false)
+        setSubmitStage("")
+        return
+      }
+
+      // Each AI block → its own lesson section (one block per section)
+      const sections = aiBlocks.map((b, i) => {
+        const emojiMatch = b.title.match(/^\p{Extended_Pictographic}+/u)
+        const emoji = emojiMatch?.[0] || "📄"
+        const title = b.title.replace(/^\p{Extended_Pictographic}+\s*/u, "").trim() || `Блок ${i + 1}`
+        return {
+          id: `lesson-${Date.now()}-${i}`,
+          emoji,
+          title,
+          blocks: [
+            {
+              ...DEFAULT_BLOCK_FIELDS,
+              id: `blk-${Date.now()}-${i}`,
+              type: b.type === "question" ? "task" : "text",
+              content: b.type === "question" ? "" : (b.content || ""),
+              ...(b.type === "question" ? { taskTitle: title, taskDescription: b.content, questions: [] } : {}),
+            },
+          ],
+        }
+      })
+
+      setSubmitStage("Сохраняем демонстрацию...")
+      const name = `AI: ${vacancy.title}`.slice(0, 76)
+      const createRes = await fetch("/api/demo-templates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name,
+          niche: "universal",
+          length: docLength,
+          sections,
+          audience: docAudience,
+          reviewCycle: docReviewCycle,
+          validUntil: docValidUntil || null,
+        }),
+      })
+      const created = await createRes.json()
+      if (!createRes.ok) {
+        toast.error(created.error || "Ошибка создания")
+        setSubmitting(false)
+        setSubmitStage("")
+        return
+      }
+      const id = (created.data ?? created).id
+      toast.success(`Демонстрация создана: ${sections.length} блоков`)
+      router.push(`/hr/library/create/editor?id=${id}`)
+    } catch (err) {
+      console.error("[ai-from-vacancy]", err)
+      toast.error("Ошибка сети")
+      setSubmitting(false)
+      setSubmitStage("")
+    }
+  }
+
   const handleCancelSubmission = () => {
     abortRef.current?.abort()
     abortRef.current = null
@@ -1214,6 +1333,142 @@ export default function CreateDemoPage() {
                       })}
                     </div>
                   )}
+                </div>
+              )}
+
+              {path === "ai" && (
+                <div className="space-y-6">
+                  {/* Vacancy picker */}
+                  <div>
+                    <SectionLabel>Выбрать вакансию *</SectionLabel>
+                    <p className="text-xs text-muted-foreground mb-2 -mt-1">AI возьмёт данные анкеты (обязанности, требования, зарплата, условия) и сгенерирует демонстрацию.</p>
+                    <div className="relative mb-3">
+                      <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        value={aiSearch}
+                        onChange={(e) => setAiSearch(e.target.value)}
+                        placeholder="Поиск по названию..."
+                        className="h-10 pl-9 bg-[var(--input-bg)]"
+                      />
+                    </div>
+                    {vacancyLoading ? (
+                      <div className="flex items-center justify-center h-32 gap-2 text-muted-foreground">
+                        <Loader2 className="w-5 h-5 animate-spin" />Загрузка вакансий...
+                      </div>
+                    ) : !vacancyList || vacancyList.length === 0 ? (
+                      <div className="flex items-center justify-center h-32 text-sm text-muted-foreground border border-dashed border-border rounded-lg">
+                        Вакансии не найдены. Создайте вакансию, чтобы использовать AI-генерацию.
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-3 max-h-80 overflow-y-auto pr-1">
+                        {vacancyList
+                          .filter((v) => !aiSearch || v.title.toLowerCase().includes(aiSearch.toLowerCase()))
+                          .map((v) => {
+                            const active = selectedVacancyId === v.id
+                            return (
+                              <button
+                                key={v.id}
+                                type="button"
+                                onClick={() => setSelectedVacancyId(v.id)}
+                                className={cn(
+                                  "rounded-lg p-4 text-left cursor-pointer transition-all duration-200 flex items-start gap-3",
+                                  active
+                                    ? "border-2 border-primary bg-primary/5 shadow-sm"
+                                    : "border border-border hover:border-primary/50",
+                                )}
+                              >
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-sm font-semibold truncate">{v.title}</p>
+                                  {v.city && <p className="text-xs text-muted-foreground mt-0.5 truncate">{v.city}</p>}
+                                </div>
+                              </button>
+                            )
+                          })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Length */}
+                  <div>
+                    <SectionLabel>Формат</SectionLabel>
+                    <div className="grid grid-cols-3 gap-3">
+                      {lengthKeys.map((key) => {
+                        const l = LENGTH_LABELS[key]
+                        const active = docLength === key
+                        return (
+                          <button
+                            key={key}
+                            type="button"
+                            onClick={() => setDocLength(key)}
+                            className={cn(
+                              "rounded-lg p-4 text-left cursor-pointer transition-all duration-200 h-[72px] flex flex-col justify-center",
+                              active
+                                ? "border-2 border-primary bg-primary/5 shadow-sm"
+                                : "border border-border hover:border-primary/50",
+                            )}
+                          >
+                            <div className="flex items-center gap-2 mb-0.5">
+                              <span className="text-base leading-none">{l.emoji}</span>
+                              <span className="text-sm font-semibold">{l.label}</span>
+                            </div>
+                            <p className="text-xs text-muted-foreground">{l.time} · {l.subblocks} блоков</p>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Tone */}
+                  <div>
+                    <SectionLabel>Тон</SectionLabel>
+                    <div className="flex flex-wrap gap-2">
+                      {(Object.keys(TONE_META) as Tone[]).map((key) => {
+                        const t = TONE_META[key]
+                        return (
+                          <Pill
+                            key={key}
+                            label={`${t.emoji} ${t.label}`}
+                            active={docTone === key}
+                            onClick={() => setDocTone(key)}
+                          />
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Market */}
+                  <div>
+                    <SectionLabel>Тип рынка</SectionLabel>
+                    <div className="flex flex-wrap gap-2">
+                      {MARKETS.map((m) => (
+                        <Pill
+                          key={m}
+                          label={m}
+                          active={docMarket.includes(m)}
+                          onClick={() => toggleDocMarket(m)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Submit button */}
+                  <div className="flex justify-end gap-3 pt-2 pb-4">
+                    {submitting ? (
+                      <Button disabled className="h-10 px-6 gap-2">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        {submitStage || "Генерация..."}
+                      </Button>
+                    ) : (
+                      <Button
+                        onClick={handleCreateFromAi}
+                        disabled={!selectedVacancyId}
+                        className="h-10 px-6 gap-2"
+                      >
+                        <ArrowRight className="w-4 h-4" />
+                        Сгенерировать
+                      </Button>
+                    )}
+                  </div>
                 </div>
               )}
 
