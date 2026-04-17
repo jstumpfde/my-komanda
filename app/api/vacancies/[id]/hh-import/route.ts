@@ -1,16 +1,14 @@
 import { NextRequest } from "next/server"
 import { eq, and } from "drizzle-orm"
 import * as cheerio from "cheerio"
-import Anthropic from "@anthropic-ai/sdk"
 import { db } from "@/lib/db"
 import { vacancies } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { logActivity } from "@/lib/activity-log"
+import { getClaudeMessagesUrl } from "@/lib/claude-proxy"
 
 const BROWSER_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-
-const anthropic = new Anthropic()
 
 const SPLIT_PROMPT = `Раздели текст описания вакансии на две части:
 1. Обязанности — что сотрудник будет делать (задачи, функционал, зоны ответственности)
@@ -20,22 +18,38 @@ const SPLIT_PROMPT = `Раздели текст описания ваканси�
 Каждый пункт на новой строке, начинается с —. Без нумерации. Только JSON, без markdown.`
 
 async function splitDescriptionWithAi(description: string): Promise<{ responsibilities: string; requirements: string } | null> {
-  if (!process.env.ANTHROPIC_API_KEY) return null
+  const apiKey = process.env.ANTHROPIC_API_KEY
+  if (!apiKey) return null
   try {
-    const response = await anthropic.messages.create({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 2000,
-      system: SPLIT_PROMPT,
-      messages: [{ role: "user", content: description }],
+    const res = await fetch(getClaudeMessagesUrl(), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 2000,
+        system: SPLIT_PROMPT,
+        messages: [{ role: "user", content: description }],
+      }),
     })
-    const content = response.content[0]
-    if (content.type !== "text") return null
-    const raw = content.text.replace(/^```json?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim()
+    if (!res.ok) {
+      const err = await res.text()
+      console.error("[hh-import] AI split HTTP", res.status, err.slice(0, 300))
+      return null
+    }
+    const data = await res.json() as { content?: Array<{ type: string; text?: string }> }
+    const textBlock = data.content?.find(b => b.type === "text")
+    const text = textBlock?.text || ""
+    if (!text) return null
+    const raw = text.replace(/^```json?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim()
     let parsed: { responsibilities?: string; requirements?: string }
     try {
       parsed = JSON.parse(raw)
     } catch {
-      const jsonMatch = content.text.match(/\{[\s\S]*\}/)
+      const jsonMatch = text.match(/\{[\s\S]*\}/)
       if (!jsonMatch) return null
       parsed = JSON.parse(jsonMatch[0])
     }
