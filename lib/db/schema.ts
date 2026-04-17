@@ -1454,6 +1454,7 @@ export const departments = pgTable("departments", {
   parentId:    uuid("parent_id"),  // self-reference handled at DB level
   headUserId:  uuid("head_user_id").references(() => users.id, { onDelete: "set null" }),
   modules:     jsonb("modules").default("[]"), // ["hr", "crm", "learning"]
+  sortOrder:   integer("sort_order").default(0),
   createdAt:   timestamp("created_at").defaultNow(),
   updatedAt:   timestamp("updated_at").defaultNow(),
 })

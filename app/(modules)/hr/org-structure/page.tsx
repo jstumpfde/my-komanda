@@ -18,7 +18,7 @@ import {
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import {
-  Building2, Briefcase, Network, Plus, Crown, Loader2, UserPlus, Trash2, Pencil,
+  Building2, Briefcase, Network, Plus, Crown, Loader2, UserPlus, Trash2, Pencil, ArrowLeft, ArrowRight,
 } from "lucide-react"
 
 // ─── Types ───────────────────────────────────────────────
@@ -29,6 +29,7 @@ interface Department {
   parentId: string | null
   headUserId: string | null
   headUserName: string | null
+  sortOrder: number | null
 }
 
 interface Position {
@@ -80,6 +81,8 @@ type Callbacks = {
   onDragLeaveDept: () => void
   onDropOnDept: (e: React.DragEvent, deptId: string | null) => void
   dropTarget: string | null
+  onSwapDept: (deptId: string, direction: "left" | "right") => void
+  getSiblingIndex: (deptId: string) => { index: number; total: number }
 }
 
 // ─── Tree builder ────────────────────────────────────────
@@ -188,6 +191,26 @@ function DeptCard({ node, cb }: { node: TreeNode; cb: Callbacks }) {
           >
             <Plus className="w-3 h-3" />
           </button>
+
+          {/* Стрелки ← → для смены порядка */}
+          {(() => {
+            const { index, total } = cb.getSiblingIndex(node.dept.id)
+            if (total <= 1) return null
+            return (
+              <div className="absolute top-1.5 left-1.5 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                {index > 0 && (
+                  <button type="button" className="w-5 h-5 rounded-full bg-muted hover:bg-primary hover:text-primary-foreground flex items-center justify-center shadow-sm transition-colors" onClick={() => cb.onSwapDept(node.dept.id, "left")} title="Влево">
+                    <ArrowLeft className="w-3 h-3" />
+                  </button>
+                )}
+                {index < total - 1 && (
+                  <button type="button" className="w-5 h-5 rounded-full bg-muted hover:bg-primary hover:text-primary-foreground flex items-center justify-center shadow-sm transition-colors" onClick={() => cb.onSwapDept(node.dept.id, "right")} title="Вправо">
+                    <ArrowRight className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+            )
+          })()}
 
           {/* Название — кликабельное + draggable */}
           <div
@@ -560,6 +583,44 @@ export default function OrgStructurePage() {
     }
   }
 
+  // ── Sort order (arrows) ─────────────────────────────────
+  const getSiblingIndex = (deptId: string): { index: number; total: number } => {
+    const dept = departments.find(d => d.id === deptId)
+    if (!dept) return { index: 0, total: 0 }
+    const siblings = departments
+      .filter(d => (d.parentId ?? null) === (dept.parentId ?? null))
+      .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+    const idx = siblings.findIndex(d => d.id === deptId)
+    return { index: idx, total: siblings.length }
+  }
+
+  const handleSwapDept = async (deptId: string, direction: "left" | "right") => {
+    const dept = departments.find(d => d.id === deptId)
+    if (!dept) return
+    const siblings = departments
+      .filter(d => (d.parentId ?? null) === (dept.parentId ?? null))
+      .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+    const idx = siblings.findIndex(d => d.id === deptId)
+    const swapIdx = direction === "left" ? idx - 1 : idx + 1
+    if (swapIdx < 0 || swapIdx >= siblings.length) return
+    const other = siblings[swapIdx]
+    const myOrder = dept.sortOrder ?? 0
+    const otherOrder = other.sortOrder ?? 0
+    try {
+      await Promise.all([
+        fetch(`/api/modules/hr/departments/${dept.id}`, {
+          method: "PATCH", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sortOrder: otherOrder }),
+        }),
+        fetch(`/api/modules/hr/departments/${other.id}`, {
+          method: "PATCH", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sortOrder: myOrder }),
+        }),
+      ])
+      await fetchData()
+    } catch { toast.error("Ошибка сортировки") }
+  }
+
   const { roots, unassigned } = buildTree(departments, positions)
   const cb: Callbacks = {
     onAddDept: openCreateDept, onEditDept: openEditDept, onAddPos: openCreatePos,
@@ -567,6 +628,7 @@ export default function OrgStructurePage() {
     onDragStartPos: handleDragStartPos, onDragStartDept: handleDragStartDept,
     onDragOverDept: handleDragOverDept, onDragLeaveDept: handleDragLeaveDept,
     onDropOnDept: handleDropOnDept, dropTarget,
+    onSwapDept: handleSwapDept, getSiblingIndex,
   }
 
   const isRootDropTarget = dropTarget === "__root__"

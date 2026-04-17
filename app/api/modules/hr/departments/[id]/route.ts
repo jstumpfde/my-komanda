@@ -17,6 +17,7 @@ export async function PATCH(
       description?: string
       parentId?: string | null
       headUserId?: string | null
+      sortOrder?: number
     }
 
     const [updated] = await db
@@ -26,6 +27,7 @@ export async function PATCH(
         ...(body.description !== undefined && { description: body.description }),
         ...(body.parentId !== undefined && { parentId: body.parentId }),
         ...(body.headUserId !== undefined && { headUserId: body.headUserId }),
+        ...(body.sortOrder !== undefined && { sortOrder: body.sortOrder }),
         updatedAt: new Date(),
       })
       .where(and(eq(departments.id, id), eq(departments.tenantId, user.companyId)))

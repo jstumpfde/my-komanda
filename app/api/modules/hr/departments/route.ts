@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server"
-import { eq } from "drizzle-orm"
+import { asc, eq } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { departments, users } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
@@ -16,11 +16,13 @@ export async function GET() {
         description: departments.description,
         parentId: departments.parentId,
         headUserId: departments.headUserId,
+        sortOrder: departments.sortOrder,
         createdAt: departments.createdAt,
         updatedAt: departments.updatedAt,
       })
       .from(departments)
       .where(eq(departments.tenantId, user.companyId))
+      .orderBy(asc(departments.sortOrder), asc(departments.createdAt))
 
     // Attach parent name and head user name
     const idToName = new Map(rows.map((r) => [r.id, r.name]))
