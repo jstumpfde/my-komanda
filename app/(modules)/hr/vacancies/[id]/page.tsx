@@ -377,6 +377,42 @@ export default function VacancyPage() {
   const [addDialogOpen, setAddDialogOpen] = useState(false)
   const [internalName, setInternalName] = useState("")
   const [isEditingName, setIsEditingName] = useState(false)
+  const [savingName, setSavingName] = useState(false)
+
+  // Keep internalName in sync with the persisted title so the edit field
+  // starts populated and so external updates (e.g. hh.ru import) are reflected.
+  useEffect(() => {
+    if (apiVacancy?.title) setInternalName(apiVacancy.title)
+  }, [apiVacancy?.title])
+
+  const saveVacancyName = async (next: string) => {
+    const trimmed = next.trim()
+    if (!trimmed || trimmed === apiVacancy?.title) return
+    setSavingName(true)
+    try {
+      const existing = (apiVacancy?.descriptionJson as Record<string, unknown>) || {}
+      const existingAnketa = (existing.anketa as Record<string, unknown>) || {}
+      const body = {
+        title: trimmed,
+        description_json: { ...existing, anketa: { ...existingAnketa, vacancyTitle: trimmed } },
+      }
+      const res = await fetch(`/api/modules/hr/vacancies/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({})) as { error?: string }
+        throw new Error(err.error || "Не удалось сохранить название")
+      }
+      await refetchVacancy()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Ошибка сохранения названия")
+      if (apiVacancy?.title) setInternalName(apiVacancy.title)
+    } finally {
+      setSavingName(false)
+    }
+  }
   const [showStickyHeader, setShowStickyHeader] = useState(false)
   const [advisorScore, setAdvisorScore] = useState<{ score: number; label: string }>({ score: 0, label: "" })
   const mainHeaderRef = useRef<HTMLDivElement>(null)
@@ -1146,7 +1182,19 @@ export default function VacancyPage() {
               <div>
                 <div className="flex flex-wrap items-center gap-3 mb-1">
                   {isEditingName ? (
-                    <input autoFocus className="text-xl sm:text-2xl font-semibold text-foreground bg-transparent border-b-2 border-primary outline-none px-0 py-0.5 min-w-[200px]" value={internalName} onChange={(e) => setInternalName(e.target.value)} onBlur={() => setIsEditingName(false)} onKeyDown={(e) => { if (e.key === "Enter") setIsEditingName(false) }} placeholder="Название" />
+                    <input
+                      autoFocus
+                      disabled={savingName}
+                      className="flex-1 min-w-[320px] w-full text-xl sm:text-2xl font-semibold text-foreground bg-transparent border-b-2 border-primary outline-none px-0 py-0.5"
+                      value={internalName}
+                      onChange={(e) => setInternalName(e.target.value)}
+                      onBlur={async () => { await saveVacancyName(internalName); setIsEditingName(false) }}
+                      onKeyDown={async (e) => {
+                        if (e.key === "Enter") { e.preventDefault(); (e.currentTarget as HTMLInputElement).blur() }
+                        if (e.key === "Escape") { setInternalName(apiVacancy?.title ?? ""); setIsEditingName(false) }
+                      }}
+                      placeholder="Название"
+                    />
                   ) : (
                     <button className="flex items-center gap-2 group text-left" onClick={() => setIsEditingName(true)}>
                       <h1 className="text-xl sm:text-2xl font-semibold text-foreground line-clamp-2">{internalName || vacancyTitle}</h1>
