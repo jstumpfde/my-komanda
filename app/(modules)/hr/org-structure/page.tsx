@@ -79,21 +79,25 @@ function buildTree(depts: Department[], positions: Position[]): { roots: TreeNod
 // ─── Position row (shared between desktop & mobile) ─────
 function PosRow({ pos, onAssign, onEdit }: { pos: Position; onAssign: (p: Position) => void; onEdit: (p: Position) => void }) {
   return (
-    <div className="flex items-center gap-2 text-xs py-1 px-2 rounded bg-muted/20">
-      <Briefcase className="w-3 h-3 text-muted-foreground shrink-0" />
-      <button type="button" className="truncate flex-1 text-left hover:text-primary transition-colors" onClick={() => onEdit(pos)} title="Редактировать должность">
-        {pos.name}
-      </button>
-      {pos.userName ? (
-        <span className="text-[10px] font-medium text-primary truncate max-w-[90px]">{pos.userName}</span>
-      ) : (
-        <span className="text-[10px] text-muted-foreground/60 italic">Вакантно</span>
-      )}
-      {!pos.userName && (
-        <button type="button" className="text-muted-foreground hover:text-primary transition-colors shrink-0" onClick={() => onAssign(pos)} title="Назначить">
-          <UserPlus className="w-3 h-3" />
+    <div className="flex items-start gap-2 py-1.5 px-2 rounded bg-muted/20">
+      <div className="flex-1 min-w-0">
+        <button type="button" className="text-xs font-semibold text-left truncate block w-full hover:text-primary transition-colors" onClick={() => onEdit(pos)} title="Редактировать">
+          {pos.name}
         </button>
-      )}
+        {pos.userName ? (
+          <span className="text-[10px] text-muted-foreground truncate block">{pos.userName}</span>
+        ) : (
+          <span className="text-[10px] text-muted-foreground/50 italic block">Вакантно</span>
+        )}
+      </div>
+      <button
+        type="button"
+        className="mt-1 text-muted-foreground hover:text-primary transition-colors shrink-0"
+        onClick={() => onAssign(pos)}
+        title={pos.userName ? "Сменить сотрудника" : "Назначить сотрудника"}
+      >
+        <UserPlus className="w-3.5 h-3.5" />
+      </button>
     </div>
   )
 }
