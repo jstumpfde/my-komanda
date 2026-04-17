@@ -129,6 +129,9 @@ export default function VacancyPage() {
   const [libraryLoading, setLibraryLoading] = useState(false)
   const [librarySearch, setLibrarySearch] = useState("")
   const [libraryBusy, setLibraryBusy] = useState(false)
+  const [hhImportDialogOpen, setHhImportDialogOpen] = useState(false)
+  const [hhImportUrl, setHhImportUrl] = useState("")
+  const [hhImportBusy, setHhImportBusy] = useState(false)
   const anketaFileInputRef = useRef<HTMLInputElement>(null)
 
   const parseTextAndFillAnketa = async (text: string) => {
@@ -221,6 +224,32 @@ export default function VacancyPage() {
       toast.error(err instanceof Error ? err.message : "Ошибка обработки файла")
       setPasteBusy(false)
       setPasteProgress("")
+    }
+  }
+
+  const handleHhVacancyImport = async () => {
+    const url = hhImportUrl.trim()
+    if (!/hh\.ru\/vacancy\//i.test(url)) {
+      toast.error("Ссылка должна содержать hh.ru/vacancy/")
+      return
+    }
+    setHhImportBusy(true)
+    try {
+      const res = await fetch(`/api/vacancies/${id}/hh-import`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hhUrl: url }),
+      })
+      const data = await res.json().catch(() => ({})) as { error?: string }
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
+      await refetchVacancy()
+      toast.success("✅ Данные импортированы с hh.ru")
+      setHhImportDialogOpen(false)
+      setHhImportUrl("")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Ошибка импорта")
+    } finally {
+      setHhImportBusy(false)
     }
   }
 
@@ -1302,6 +1331,9 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                         <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => anketaFileInputRef.current?.click()}>
                           <Upload className="size-3.5" />Загрузить файл
                         </DropdownMenuItem>
+                        <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => setHhImportDialogOpen(true)}>
+                          <Globe className="size-3.5" />Импорт с hh.ru
+                        </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </div>
@@ -2090,6 +2122,30 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
             />
             <Button className="w-full h-10" onClick={handlePasteAndFill} disabled={pasteBusy || !pasteText.trim()}>
               {pasteBusy ? <><Loader2 className="size-4 mr-1.5 animate-spin" />{pasteProgress || "AI работает..."}</> : <><Sparkles className="size-4 mr-1.5" />Заполнить анкету AI</>}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── hh.ru import dialog ── */}
+      <Dialog open={hhImportDialogOpen} onOpenChange={(o) => { if (!hhImportBusy) { setHhImportDialogOpen(o); if (!o) setHhImportUrl("") } }}>
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Импорт с hh.ru</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-xs text-muted-foreground">Вставьте ссылку на вакансию с hh.ru — данные будут загружены и анкета заполнена автоматически.</p>
+            <Input
+              value={hhImportUrl}
+              onChange={(e) => setHhImportUrl(e.target.value)}
+              placeholder="Вставьте ссылку на вакансию с hh.ru (например https://hh.ru/vacancy/12345678)"
+              className="h-10 text-sm"
+              autoFocus
+              disabled={hhImportBusy}
+              onKeyDown={(e) => { if (e.key === "Enter" && hhImportUrl.trim() && !hhImportBusy) handleHhVacancyImport() }}
+            />
+            <Button className="w-full h-10" onClick={handleHhVacancyImport} disabled={hhImportBusy || !hhImportUrl.trim()}>
+              {hhImportBusy ? <><Loader2 className="size-4 mr-1.5 animate-spin" />Импорт...</> : <><Globe className="size-4 mr-1.5" />Импортировать</>}
             </Button>
           </div>
         </DialogContent>
