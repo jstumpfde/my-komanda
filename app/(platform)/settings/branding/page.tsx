@@ -28,9 +28,7 @@ export default function BrandingPage() {
   const [brandPlan] = useState<BrandConfig["plan"]>("business")
   const canBrand = canCustomizeBrand(brandPlan)
   const [logoPreview, setLogoPreview] = useState<string | null>(null)
-  const [logoDarkPreview, setLogoDarkPreview] = useState<string | null>(null)
   const [uploadingLogo, setUploadingLogo] = useState(false)
-  const [uploadingLogoDark, setUploadingLogoDark] = useState(false)
   const [brandName, setBrandName] = useState("")
   const [brandSlogan, setBrandSlogan] = useState("")
   const [customDomain, setCustomDomain] = useState("")
@@ -38,12 +36,10 @@ export default function BrandingPage() {
   const [verifying, setVerifying] = useState(false)
   const [saving, setSaving] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
-  const [isDraggingDark, setIsDraggingDark] = useState(false)
   const [themeEnabled, setThemeEnabled] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(THEME_KEYS.map(k => [k, true]))
   )
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const fileInputDarkRef = useRef<HTMLInputElement>(null)
 
   const loadCompany = useCallback(async () => {
     try {
@@ -55,7 +51,6 @@ export default function BrandingPage() {
       const brandNameVal = (c.brandName ?? c.brand_name ?? "") as string
       const brandSloganVal = (c.brandSlogan ?? c.brand_slogan ?? "") as string
       const logoUrlVal = (c.logoUrl ?? c.logo_url) as string | undefined
-      const logoDarkUrlVal = (c.logoDarkUrl ?? c.logo_dark_url) as string | undefined
       const customThemeVal = (c.customTheme ?? c.custom_theme) as
         | Record<string, { enabled?: boolean }>
         | undefined
@@ -65,7 +60,6 @@ export default function BrandingPage() {
       setBrandName(brandNameVal)
       setBrandSlogan(brandSloganVal)
       if (logoUrlVal) setLogoPreview(logoUrlVal)
-      if (logoDarkUrlVal) setLogoDarkPreview(logoDarkUrlVal)
       // subdomain: пока не используется (планируется позже)
       if (customThemeVal) {
         setThemeEnabled(prev => {
@@ -85,26 +79,21 @@ export default function BrandingPage() {
     void loadCompany()
   }, [loadCompany])
 
-  const uploadLogoFile = async (file: File, variant: "light" | "dark" = "light") => {
+  const uploadLogoFile = async (file: File) => {
     if (file.size > 2 * 1024 * 1024) { toast.error("Максимум 2 МБ"); return }
     const ext = file.name.split(".").pop()?.toLowerCase() ?? ""
     if (!["png", "jpg", "jpeg", "svg", "webp"].includes(ext)) { toast.error("PNG, SVG, JPG или WebP"); return }
 
-    const setPreview = variant === "dark" ? setLogoDarkPreview : setLogoPreview
-    const setUploading = variant === "dark" ? setUploadingLogoDark : setUploadingLogo
-
-    // Оптимистичный предпросмотр (base64) — чтобы показать картинку сразу
     const reader = new FileReader()
-    reader.onload = () => setPreview(reader.result as string)
+    reader.onload = () => setLogoPreview(reader.result as string)
     reader.readAsDataURL(file)
 
-    setUploading(true)
+    setUploadingLogo(true)
     try {
       const fd = new FormData()
       fd.append("file", file)
-      fd.append("variant", variant)
       const res = await fetch("/api/upload/logo", { method: "POST", body: fd })
-      const data = await res.json().catch(() => ({})) as { logoUrl?: string; logoDarkUrl?: string; error?: string }
+      const data = await res.json().catch(() => ({})) as { logoUrl?: string; error?: string }
 
       if (!res.ok) {
         const msg = data.error || `HTTP ${res.status}`
@@ -112,16 +101,14 @@ export default function BrandingPage() {
         toast.error(msg)
         return
       }
-      const url = variant === "dark" ? data.logoDarkUrl : data.logoUrl
-      if (!url) {
+      if (!data.logoUrl) {
         toast.error("Сервер не вернул URL логотипа")
         return
       }
 
-      setPreview(url)
-      toast.success(variant === "dark" ? "Логотип для тёмного фона загружен" : "Логотип загружен")
+      setLogoPreview(data.logoUrl)
+      toast.success("Логотип загружен")
 
-      // Сервер уже обновил БД — дёрнем sidebar чтобы подхватил новый лого
       if (typeof window !== "undefined") {
         window.dispatchEvent(new Event("company-updated"))
       }
@@ -129,7 +116,7 @@ export default function BrandingPage() {
       console.error("[uploadLogoFile] network error", e)
       toast.error(e instanceof Error ? e.message : "Ошибка сети")
     } finally {
-      setUploading(false)
+      setUploadingLogo(false)
     }
   }
 
@@ -160,7 +147,6 @@ export default function BrandingPage() {
     try {
       await updateCompanyApi({
         logo_url: logoPreview ?? "",
-        logo_dark_url: logoDarkPreview ?? "",
         brand_name: brandName,
         brand_slogan: brandSlogan,
       })
@@ -218,117 +204,63 @@ export default function BrandingPage() {
             <h3 className="text-base font-semibold">Логотип, название и слоган</h3>
           </div>
 
-          {/* Логотип (основной, для светлых фонов) */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <Label className="text-sm">Логотип (основной)</Label>
-              <span className="text-xs text-muted-foreground">Для светлых фонов — публичные страницы, вакансии</span>
+          {/* Логотип */}
+          <div className="flex items-start gap-6">
+            <div
+              onDragOver={(e) => { e.preventDefault(); setIsDragging(true) }}
+              onDragLeave={() => setIsDragging(false)}
+              onDrop={(e) => { e.preventDefault(); setIsDragging(false); const f = e.dataTransfer.files?.[0]; if (f) uploadLogoFile(f) }}
+              onClick={() => canBrand && fileInputRef.current?.click()}
+              className={cn(
+                "flex flex-col items-center justify-center gap-2 p-4 rounded-xl border-2 border-dashed transition-all w-40 h-32 shrink-0",
+                canBrand ? "cursor-pointer hover:border-primary/40 hover:bg-muted/20" : "cursor-not-allowed opacity-60",
+                isDragging && "border-primary bg-primary/5",
+              )}
+            >
+              <input ref={fileInputRef} type="file" accept=".png,.svg,.jpg,.jpeg,.webp" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadLogoFile(f) }} disabled={!canBrand} />
+              {uploadingLogo ? <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                : <Upload className="w-5 h-5 text-muted-foreground" />}
+              <p className="text-xs text-center text-muted-foreground">PNG, SVG, до 2 МБ</p>
             </div>
-            <div className="flex items-start gap-6">
-              <div
-                onDragOver={(e) => { e.preventDefault(); setIsDragging(true) }}
-                onDragLeave={() => setIsDragging(false)}
-                onDrop={(e) => { e.preventDefault(); setIsDragging(false); const f = e.dataTransfer.files?.[0]; if (f) uploadLogoFile(f, "light") }}
-                onClick={() => canBrand && fileInputRef.current?.click()}
-                className={cn(
-                  "flex flex-col items-center justify-center gap-2 p-4 rounded-xl border-2 border-dashed transition-all w-40 h-32 shrink-0",
-                  canBrand ? "cursor-pointer hover:border-primary/40 hover:bg-muted/20" : "cursor-not-allowed opacity-60",
-                  isDragging && "border-primary bg-primary/5",
-                )}
-              >
-                <input ref={fileInputRef} type="file" accept=".png,.svg,.jpg,.jpeg,.webp" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadLogoFile(f, "light") }} disabled={!canBrand} />
-                {uploadingLogo ? <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-                  : <Upload className="w-5 h-5 text-muted-foreground" />}
-                <p className="text-xs text-center text-muted-foreground">PNG, SVG, до 2 МБ</p>
-              </div>
 
-              <div className="flex items-center gap-4 flex-1 min-h-[128px]">
-                {logoPreview ? (
-                  <>
-                    <div className="flex items-start gap-4">
-                      <div className="flex flex-col items-center gap-1">
-                        <div className="w-[120px] h-10 rounded-lg border bg-[#1a1040] flex items-center justify-center overflow-hidden p-1">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={logoDarkPreview ?? logoPreview} alt="" className="max-w-full max-h-full object-contain" />
-                        </div>
-                        <span className="text-[10px] text-muted-foreground">Sidebar{logoDarkPreview ? " (тёмный)" : ""}</span>
-                      </div>
-                      <div className="flex flex-col items-center gap-1">
-                        <div className="w-[80px] h-[80px] rounded-xl border bg-muted/20 flex items-center justify-center overflow-hidden">
-                          <CompanyLogo logoUrl={logoPreview} companyName={brandName} size="lg" rounded="md" className="!w-[60px] !h-[60px]" />
-                        </div>
-                        <span className="text-[10px] text-muted-foreground">Вакансия</span>
-                      </div>
-                      <div className="flex flex-col items-center gap-1">
-                        <div className="w-8 h-8 rounded-md border bg-muted/20 flex items-center justify-center overflow-hidden">
-                          <CompanyLogo logoUrl={logoPreview} companyName={brandName} size="sm" rounded="sm" />
-                        </div>
-                        <span className="text-[10px] text-muted-foreground">Мобильный</span>
-                      </div>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="gap-1.5 text-destructive h-7 text-xs self-start"
-                      onClick={() => { setLogoPreview(null); if (fileInputRef.current) fileInputRef.current.value = "" }}
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />Удалить
-                    </Button>
-                  </>
-                ) : (
-                  <p className="text-sm text-muted-foreground">Логотип не загружен</p>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Логотип для тёмного фона (опционально) */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <Label className="text-sm">Логотип для тёмного фона <span className="text-muted-foreground font-normal">(опционально)</span></Label>
-              <span className="text-xs text-muted-foreground">Показывается в sidebar. Если не задан — используется основной.</span>
-            </div>
-            <div className="flex items-start gap-6">
-              <div
-                onDragOver={(e) => { e.preventDefault(); setIsDraggingDark(true) }}
-                onDragLeave={() => setIsDraggingDark(false)}
-                onDrop={(e) => { e.preventDefault(); setIsDraggingDark(false); const f = e.dataTransfer.files?.[0]; if (f) uploadLogoFile(f, "dark") }}
-                onClick={() => canBrand && fileInputDarkRef.current?.click()}
-                className={cn(
-                  "flex flex-col items-center justify-center gap-2 p-4 rounded-xl border-2 border-dashed transition-all w-40 h-32 shrink-0",
-                  canBrand ? "cursor-pointer hover:border-primary/40 hover:bg-muted/20" : "cursor-not-allowed opacity-60",
-                  isDraggingDark && "border-primary bg-primary/5",
-                )}
-              >
-                <input ref={fileInputDarkRef} type="file" accept=".png,.svg,.jpg,.jpeg,.webp" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadLogoFile(f, "dark") }} disabled={!canBrand} />
-                {uploadingLogoDark ? <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-                  : <Upload className="w-5 h-5 text-muted-foreground" />}
-                <p className="text-xs text-center text-muted-foreground">Светлая версия лого</p>
-              </div>
-
-              <div className="flex items-center gap-4 flex-1 min-h-[128px]">
-                {logoDarkPreview ? (
-                  <>
+            <div className="flex items-center gap-4 flex-1 min-h-[128px]">
+              {logoPreview ? (
+                <>
+                  <div className="flex items-start gap-4">
                     <div className="flex flex-col items-center gap-1">
-                      <div className="w-[120px] h-10 rounded-lg border border-white/10 bg-[#1a1040] flex items-center justify-center overflow-hidden p-1">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={logoDarkPreview} alt="" className="max-w-full max-h-full object-contain" />
+                      <div className="w-[140px] h-10 rounded-md bg-[#1a1040] flex items-center justify-center overflow-hidden p-1">
+                        <div className="bg-white/15 rounded p-0.5 flex items-center justify-center max-w-full max-h-full">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={logoPreview} alt="" className="max-w-[120px] max-h-8 object-contain" />
+                        </div>
                       </div>
-                      <span className="text-[10px] text-muted-foreground">На тёмном фоне</span>
+                      <span className="text-[10px] text-muted-foreground">Sidebar</span>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="gap-1.5 text-destructive h-7 text-xs self-start"
-                      onClick={() => { setLogoDarkPreview(null); if (fileInputDarkRef.current) fileInputDarkRef.current.value = "" }}
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />Удалить
-                    </Button>
-                  </>
-                ) : (
-                  <p className="text-sm text-muted-foreground">Будет использован основной логотип на тёмном фоне sidebar</p>
-                )}
-              </div>
+                    <div className="flex flex-col items-center gap-1">
+                      <div className="w-[80px] h-[80px] rounded-xl border bg-muted/20 flex items-center justify-center overflow-hidden">
+                        <CompanyLogo logoUrl={logoPreview} companyName={brandName} size="lg" rounded="md" className="!w-[60px] !h-[60px]" />
+                      </div>
+                      <span className="text-[10px] text-muted-foreground">Вакансия</span>
+                    </div>
+                    <div className="flex flex-col items-center gap-1">
+                      <div className="w-8 h-8 rounded-md border bg-muted/20 flex items-center justify-center overflow-hidden">
+                        <CompanyLogo logoUrl={logoPreview} companyName={brandName} size="sm" rounded="sm" />
+                      </div>
+                      <span className="text-[10px] text-muted-foreground">Мобильный</span>
+                    </div>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="gap-1.5 text-destructive h-7 text-xs self-start"
+                    onClick={() => { setLogoPreview(null); if (fileInputRef.current) fileInputRef.current.value = "" }}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />Удалить
+                  </Button>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">Логотип не загружен</p>
+              )}
             </div>
           </div>
 
