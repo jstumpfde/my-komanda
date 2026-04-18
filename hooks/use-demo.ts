@@ -122,12 +122,45 @@ export function useDemo(vacancyId: string | null): UseDemoResult {
     }
   }, [vacancyId])
 
-  // Cleanup debounce on unmount
-  useEffect(() => {
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current)
+  // Flush pending changes: save immediately
+  const flush = useCallback(() => {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current)
+      debounceRef.current = null
     }
-  }, [])
+    if (latestDemoRef.current) {
+      // Use sendBeacon-like synchronous approach — fire and forget
+      persistUpdate(latestDemoRef.current).catch(() => {})
+    }
+  }, [persistUpdate])
+
+  // Save on unmount and before page unload
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (debounceRef.current && latestDemoRef.current) {
+        clearTimeout(debounceRef.current)
+        // Use navigator.sendBeacon for reliable delivery on unload
+        const blob = new Blob(
+          [JSON.stringify({
+            title: latestDemoRef.current.title,
+            status: latestDemoRef.current.status,
+            lessons_json: latestDemoRef.current.lessons,
+          })],
+          { type: "application/json" }
+        )
+        navigator.sendBeacon(`/api/modules/hr/demos/${latestDemoRef.current.id}`, blob)
+      }
+    }
+    window.addEventListener("beforeunload", handleBeforeUnload)
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload)
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+      // Flush on unmount too
+      if (latestDemoRef.current) {
+        persistUpdate(latestDemoRef.current).catch(() => {})
+      }
+    }
+  }, [persistUpdate])
 
   return { demo, loading, error, saveStatus, createDemo, updateDemo }
 }
