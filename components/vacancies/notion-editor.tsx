@@ -2137,7 +2137,7 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
                     ref={imgRef}
                     src={block.imageUrl}
                     alt=""
-                    className={cn("object-contain max-h-64 bg-muted/30", imgSize !== "L" && "mx-auto")}
+                    className={cn("object-contain bg-muted/30 w-full h-auto", imgSize === "L" ? "max-h-[600px]" : imgSize === "M" ? "max-h-[450px]" : "max-h-[300px]", imgSize !== "L" && "mx-auto")}
                     style={{ borderRadius: 0, width: mediaSizeToWidth(imgSize) }}
                     onLoad={() => setImgHeight(imgRef.current?.offsetHeight ?? 256)}
                   />
