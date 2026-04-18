@@ -252,6 +252,7 @@ export async function POST(req: NextRequest) {
         name: companies.name,
         companyDescription: companies.companyDescription,
         description: companies.description,
+        demoProfile: companies.demoProfile,
       })
       .from(companies)
       .where(eq(companies.id, user.companyId))
