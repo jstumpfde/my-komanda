@@ -1,18 +1,17 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
-import { useRouter } from "next/navigation"
+import { useState, useEffect, useCallback, useRef } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { NotionEditor } from "@/components/vacancies/notion-editor"
-import { CourseTab } from "@/components/vacancies/course-tab"
 import {
-  Clock, Pause, Archive, Plus, Kanban, BarChart3, Zap, Globe, Settings, BookOpen, LayoutTemplate, ClipboardList,
+  Clock, Pause, Archive, Plus, Kanban, BarChart3, Zap, Globe, Settings, BookOpen, LayoutTemplate, ClipboardList, Loader2,
 } from "lucide-react"
 import { toast } from "sonner"
 import type { Demo } from "@/lib/course-types"
@@ -20,67 +19,196 @@ import { createDemo } from "@/lib/course-types"
 import { TemplateSelectorDialog } from "@/components/vacancies/template-selector-dialog"
 import type { DemoTemplate } from "@/lib/templates/demo-templates"
 
-const STORAGE_KEY = "hireflow-demos"
-const NOTION_DEMO_KEY = "notion-demo-editor-demo"
-
-function loadOrCreateDemo(): Demo {
-  if (typeof window === "undefined") return createDemo("Менеджер по продажам")
-  try {
-    // Try to load from notion key first (persisted demo for this editor)
-    const raw = localStorage.getItem(NOTION_DEMO_KEY)
-    if (raw) {
-      const d = JSON.parse(raw)
-      return { ...d, createdAt: new Date(d.createdAt), updatedAt: new Date(d.updatedAt) }
-    }
-    // Otherwise try from shared demos storage
-    const shared = localStorage.getItem(STORAGE_KEY)
-    if (shared) {
-      const arr = JSON.parse(shared)
-      if (arr.length > 0) {
-        const d = arr[0]
-        return { ...d, createdAt: new Date(d.createdAt), updatedAt: new Date(d.updatedAt) }
-      }
-    }
-  } catch { /* fallback */ }
-  return createDemo("Менеджер по продажам")
-}
-
-function saveDemo(demo: Demo) {
-  try {
-    localStorage.setItem(NOTION_DEMO_KEY, JSON.stringify(demo))
-    console.log("[DemoEditor] saved demo", demo.id, "lessons:", demo.lessons.length)
-  } catch (e) { console.error("[DemoEditor] save error", e) }
-}
-
-// KPI data for the header
+// KPI для шапки — в реальности данные придут из API, пока плейсхолдеры
 const KPI_ITEMS = [
-  { label: "Всего откликов", value: "1001", pct: "+60%", color: "text-muted-foreground" },
-  { label: "Перешли на демо", value: "601", pct: "+27%", color: "text-blue-600" },
-  { label: "Прошли демо ≥85%", value: "164", pct: "+184%", color: "text-violet-600" },
-  { label: "Назначено интервью", value: "301", pct: "+40%", color: "text-amber-600" },
-  { label: "Прошли интервью", value: "121", pct: "+34%", color: "text-orange-600" },
-  { label: "Нанято", value: "41", pct: "", color: "text-emerald-600" },
+  { label: "Всего откликов", value: "0", pct: "", color: "text-muted-foreground" },
+  { label: "Перешли на демо", value: "0", pct: "", color: "text-blue-600" },
+  { label: "Прошли демо ≥85%", value: "0", pct: "", color: "text-violet-600" },
+  { label: "Назначено интервью", value: "0", pct: "", color: "text-amber-600" },
+  { label: "Прошли интервью", value: "0", pct: "", color: "text-orange-600" },
+  { label: "Нанято", value: "0", pct: "", color: "text-emerald-600" },
 ]
+
+// ─── Загрузка демо из БД ─────────────────────────────────────────────────────
+
+async function fetchDemoByVacancy(vacancyId: string): Promise<{ id: string; title: string; lessons_json: unknown[] } | null> {
+  try {
+    const res = await fetch(`/api/modules/hr/demos?vacancy_id=${encodeURIComponent(vacancyId)}`)
+    if (!res.ok) return null
+    const json = await res.json()
+    const rows = (json?.data ?? json) as Array<{ id: string; title: string; lessonsJson: unknown[] }>
+    if (!Array.isArray(rows) || rows.length === 0) return null
+    const first = rows[0]
+    return {
+      id: first.id,
+      title: first.title,
+      lessons_json: Array.isArray(first.lessonsJson) ? first.lessonsJson : [],
+    }
+  } catch (err) {
+    console.error("[demo-editor] fetchDemoByVacancy error:", err)
+    return null
+  }
+}
+
+async function fetchVacancyTitle(vacancyId: string): Promise<string> {
+  try {
+    const res = await fetch(`/api/vacancies/${encodeURIComponent(vacancyId)}`)
+    if (!res.ok) return "Демонстрация"
+    const json = await res.json()
+    const v = json?.data ?? json
+    return v?.title || "Демонстрация"
+  } catch {
+    return "Демонстрация"
+  }
+}
+
+async function createEmptyDemo(vacancyId: string, title: string): Promise<{ id: string } | null> {
+  try {
+    const res = await fetch(`/api/modules/hr/demos`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ vacancy_id: vacancyId, title, lessons_json: [] }),
+    })
+    if (!res.ok) return null
+    const json = await res.json()
+    const created = json?.data ?? json
+    return created?.id ? { id: created.id } : null
+  } catch (err) {
+    console.error("[demo-editor] createEmptyDemo error:", err)
+    return null
+  }
+}
+
+async function saveDemoToDb(demoId: string, demo: Demo): Promise<boolean> {
+  try {
+    const res = await fetch(`/api/modules/hr/demos/${encodeURIComponent(demoId)}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: demo.title,
+        lessons_json: demo.lessons,
+      }),
+    })
+    return res.ok
+  } catch (err) {
+    console.error("[demo-editor] saveDemoToDb error:", err)
+    return false
+  }
+}
+
+// ─── Конверсия lessons_json из БД в Demo ─────────────────────────────────────
+
+function buildDemoFromDb(dbId: string, title: string, lessonsJson: unknown[]): Demo {
+  // Базовый объект Demo с правильной структурой
+  const base = createDemo(title)
+  return {
+    ...base,
+    id: dbId,
+    title,
+    // Если есть сохранённые уроки — используем их, иначе дефолт из createDemo
+    lessons: Array.isArray(lessonsJson) && lessonsJson.length > 0
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ? (lessonsJson as any[])
+      : base.lessons,
+  }
+}
+
+// ─── Главный компонент ──────────────────────────────────────────────────────
 
 export default function DemoEditorPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const vacancyIdFromUrl = searchParams?.get("vacancyId") || null
+
   const [demo, setDemo] = useState<Demo | null>(null)
-  const [hydrated, setHydrated] = useState(false)
+  const [demoDbId, setDemoDbId] = useState<string | null>(null)
+  const [vacancyTitle, setVacancyTitle] = useState<string>("Демонстрация")
+  const [loading, setLoading] = useState<boolean>(true)
+  const [saving, setSaving] = useState<boolean>(false)
   const [activeTab, setActiveTab] = useState("demo-notion")
   const [templateDialogOpen, setTemplateDialogOpen] = useState(false)
 
-  useEffect(() => {
-    const d = loadOrCreateDemo()
-    setDemo(d)
-    setHydrated(true)
-  }, [])
+  // Debounce для autosave
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // ─── Инициализация: загрузка/создание демо ────────────────────────────────
+  useEffect(() => {
+    let cancelled = false
+
+    async function init() {
+      setLoading(true)
+
+      if (!vacancyIdFromUrl) {
+        // Нет vacancyId — создаём временный локальный демо, без БД
+        if (!cancelled) {
+          const local = createDemo("Новая демонстрация")
+          setDemo(local)
+          setVacancyTitle(local.title)
+          setLoading(false)
+        }
+        return
+      }
+
+      // Загружаем название вакансии и существующее демо параллельно
+      const [title, existing] = await Promise.all([
+        fetchVacancyTitle(vacancyIdFromUrl),
+        fetchDemoByVacancy(vacancyIdFromUrl),
+      ])
+
+      if (cancelled) return
+
+      setVacancyTitle(title)
+
+      if (existing) {
+        // Демо уже есть — загружаем
+        const loaded = buildDemoFromDb(existing.id, existing.title || title, existing.lessons_json)
+        setDemo(loaded)
+        setDemoDbId(existing.id)
+        setLoading(false)
+        return
+      }
+
+      // Демо нет — создаём пустое
+      const created = await createEmptyDemo(vacancyIdFromUrl, title)
+      if (cancelled) return
+
+      if (!created) {
+        toast.error("Не удалось создать демонстрацию")
+        const local = createDemo(title)
+        setDemo(local)
+        setLoading(false)
+        return
+      }
+
+      const fresh = buildDemoFromDb(created.id, title, [])
+      setDemo(fresh)
+      setDemoDbId(created.id)
+      setLoading(false)
+    }
+
+    void init()
+    return () => {
+      cancelled = true
+    }
+  }, [vacancyIdFromUrl])
+
+  // ─── Автосохранение с debounce 2 сек ──────────────────────────────────────
   const handleUpdate = useCallback((updated: Demo) => {
     setDemo(updated)
-    saveDemo(updated)
-  }, [])
 
+    if (!demoDbId) return // Нет ID в БД — не сохраняем
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(async () => {
+      setSaving(true)
+      const ok = await saveDemoToDb(demoDbId, updated)
+      setSaving(false)
+      if (!ok) toast.error("Не удалось сохранить")
+    }, 2000)
+  }, [demoDbId])
+
+  // Применить шаблон из библиотеки
   const handleTemplateSelect = useCallback((template: DemoTemplate) => {
+    if (!demo) return
     const ts = Date.now()
     const lessons = template.lessons.map((l, i) => ({
       ...l,
@@ -88,15 +216,22 @@ export default function DemoEditorPage() {
       blocks: l.blocks.map((b) => ({ ...b, id: `${b.id}-${ts}-${i}` })),
     }))
     const newDemo: Demo = {
-      ...(demo || createDemo(template.title)),
+      ...demo,
       title: template.title,
       lessons,
       updatedAt: new Date(),
     }
     setDemo(newDemo)
-    saveDemo(newDemo)
-    toast.success(`Шаблон «${template.title}» применён`)
-  }, [demo])
+    // Сохраняем немедленно после применения шаблона
+    if (demoDbId) {
+      void saveDemoToDb(demoDbId, newDemo).then((ok) => {
+        if (ok) toast.success(`Шаблон «${template.title}» применён`)
+        else toast.error("Не удалось сохранить шаблон")
+      })
+    } else {
+      toast.success(`Шаблон «${template.title}» применён (локально)`)
+    }
+  }, [demo, demoDbId])
 
   return (
     <SidebarProvider>
@@ -104,21 +239,29 @@ export default function DemoEditorPage() {
       <SidebarInset>
         <DashboardHeader />
         <div className="flex flex-col flex-1 overflow-hidden">
-          {/* Vacancy header */}
+          {/* Шапка вакансии */}
           <div className="px-6 pt-4 pb-0 border-b border-border flex-shrink-0">
-            {/* Title row */}
             <div className="flex items-center justify-between mb-3">
               <div>
                 <div className="flex items-center gap-2.5">
-                  <h1 className="text-xl font-bold text-foreground">Менеджер по продажам</h1>
+                  <h1 className="text-xl font-bold text-foreground">{vacancyTitle}</h1>
                   <Badge variant="outline" className="bg-emerald-500/10 text-emerald-700 border-emerald-200 text-xs">
                     Активна
                   </Badge>
                   <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                    <Clock className="w-3.5 h-3.5" />18 дн.
+                    <Clock className="w-3.5 h-3.5" />Редактор демонстрации
                   </span>
+                  {saving && (
+                    <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />Сохранение...
+                    </span>
+                  )}
                 </div>
-                <p className="text-xs text-muted-foreground mt-0.5">1001 кандидатов · Менеджер по продажам · Москва</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {vacancyIdFromUrl
+                    ? "Демонстрация привязана к вакансии"
+                    : "Локальный черновик (без привязки к вакансии)"}
+                </p>
               </div>
               <div className="flex items-center gap-2">
                 <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => setTemplateDialogOpen(true)}>
@@ -136,7 +279,7 @@ export default function DemoEditorPage() {
               </div>
             </div>
 
-            {/* KPI row */}
+            {/* KPI */}
             <div className="flex gap-px mb-3">
               {KPI_ITEMS.map((kpi, i) => (
                 <div key={i} className={cn(
@@ -152,12 +295,12 @@ export default function DemoEditorPage() {
               ))}
             </div>
 
-            {/* Tabs */}
+            {/* Табы */}
             <Tabs value={activeTab} onValueChange={setActiveTab}>
               <TabsList className="bg-transparent p-0 h-auto gap-0 border-0 rounded-none">
                 <button
                   type="button"
-                  onClick={() => router.push("/hr/vacancies")}
+                  onClick={() => router.push(vacancyIdFromUrl ? `/hr/vacancies/${vacancyIdFromUrl}` : "/hr/vacancies")}
                   className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-none border-b-2 border-transparent text-muted-foreground hover:text-foreground transition-colors"
                 >
                   <ClipboardList className="w-3.5 h-3.5" />Анкета
@@ -187,7 +330,7 @@ export default function DemoEditorPage() {
             </Tabs>
           </div>
 
-          {/* Tab content */}
+          {/* Контент табов */}
           <div className="flex-1 overflow-hidden">
             {activeTab === "candidates" && (
               <div className="h-full flex items-center justify-center text-muted-foreground/40 text-sm">
@@ -197,7 +340,11 @@ export default function DemoEditorPage() {
 
             {activeTab === "demo-notion" && (
               <div className="h-full overflow-y-auto px-6 pt-4">
-                {hydrated && demo ? (
+                {loading ? (
+                  <div className="flex items-center justify-center h-full text-muted-foreground/60 text-sm gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin" />Загрузка демонстрации...
+                  </div>
+                ) : demo ? (
                   <NotionEditor
                     demo={demo}
                     onBack={() => {}}
@@ -206,7 +353,7 @@ export default function DemoEditorPage() {
                   />
                 ) : (
                   <div className="flex items-center justify-center h-full text-muted-foreground/40 text-sm">
-                    Загрузка...
+                    Не удалось загрузить демонстрацию
                   </div>
                 )}
               </div>
@@ -235,7 +382,7 @@ export default function DemoEditorPage() {
           </div>
         </div>
 
-        {/* Template selector modal */}
+        {/* Диалог выбора шаблона */}
         <TemplateSelectorDialog
           open={templateDialogOpen}
           onOpenChange={setTemplateDialogOpen}
