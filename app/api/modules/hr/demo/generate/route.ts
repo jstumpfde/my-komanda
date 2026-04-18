@@ -1,12 +1,12 @@
 // app/api/modules/hr/demo/generate/route.ts
 // AI-генерация контента для демонстрации должности
-// Версия 2.0 — переписана под логику эталонной v8 маркетолога
+// Версия 3.0 — генерация по одному блоку за раз, с использованием системных блоков компании.
 // Дата: 18 апреля 2026
 
 import { NextRequest } from "next/server"
-import { eq, and } from "drizzle-orm"
+import { eq, and, isNull, inArray } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { vacancies } from "@/lib/db/schema"
+import { vacancies, demoTemplates } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import {
   DEMO_TEMPLATES,
@@ -26,65 +26,175 @@ interface GenerateRequestBody {
   tone?: ToneId
   strictness?: FilterStrictnessId
   market?: string[]
+  blockIndex?: number  // Номер блока для генерации (0, 1, 2...)
+  mode?: "single" | "all"  // single = один блок, all = весь шаблон за раз (старое поведение)
 }
 
-// ─── СИСТЕМНЫЙ ПРОМТ: правила качества (эталон v8) ──────────────────────────
+// ─── МАППИНГ БЛОКОВ ИЗ СИСТЕМНЫХ БЛОКОВ КОМПАНИИ ────────────────────────────
 
-const SYSTEM_RULES = `Ты создаёшь интерактивную демонстрацию должности. Это НЕ классическая вакансия с HH.ru, а полноценная презентация компании и роли, которая заменяет 2-3 первичных собеседования.
+// Соответствие наших блоков шаблонов к niche системных блоков компании
+const COMPANY_BLOCK_MAP: Record<string, string> = {
+  // Длинный шаблон
+  "l1": "company_block_greeting",      // Приветствие
+  "l2": "company_block_product",       // О продукте
+  "l3": "company_block_market",        // Рынок и клиенты
+  "l4": "company_block_ceo",           // О руководителе
+  "l7": "company_block_stack",         // Стек и инструменты
+  "l13": "company_block_team",         // Команда и условия
+  "l16": "company_block_next",         // Что дальше
+  // Средний шаблон
+  "m1": "company_block_greeting",
+  "m2": "company_block_product",
+  "m3": "company_block_ceo",
+  "m5": "company_block_stack",
+  "m10": "company_block_team",
+  // Короткий шаблон
+  "s1": "company_block_greeting",
+  "s2": "company_block_product",
+  "s7": "company_block_next",
+}
 
-ЭТАЛОННЫЙ СТИЛЬ — как пишет опытный CEO-основатель в личном разговоре с сильным кандидатом. Не HR-менеджер, не маркетолог, не PR. Живой человек, который:
-- Уважает время и интеллект кандидата
-- Говорит прямо и по делу
-- Не боится сложных формулировок про сложные вещи
-- Не льстит, не продаёт, не пугает
+// ─── СИСТЕМНЫЙ ПРОМТ: правила качества ──────────────────────────────────────
 
-ЖЁСТКИЕ ЗАПРЕТЫ (нарушение = провал генерации):
-1. Никаких AI-паттернов:
-   - НЕ используй конструкцию "не X, а Y" (например, "не просто работа, а вызов")
-   - НЕ используй триады параллельных прилагательных ("сильный, честный, основательный")
-   - НЕ пиши "важно отметить", "стоит подчеркнуть", "хочется особо выделить"
-   - НЕ используй "во-первых / во-вторых / в-третьих"
-2. Никаких HR-штампов:
-   - "динамично развивающаяся компания"
-   - "молодой дружный коллектив"
-   - "конкурентная заработная плата"
-   - "возможности профессионального роста"
-3. Никаких инфобизнес-оборотов:
-   - "раскрой свой потенциал"
-   - "это твой шанс"
-   - "мы ищем именно тебя"
-   - восклицательных знаков больше 1 на блок
-4. Никакого пафоса:
-   - "миссия меняющая индустрию"
-   - "лидер рынка" (если компания не реальный лидер с доказательствами)
-   - "работа мечты"
-5. Запрещённые эмодзи: 🚀 ✨ 💡 🎯 🔥 ⚡ 🌟 ✅ 💪 — это эмодзи инфобизнеса.
-6. Длинное тире (—) используй ТОЛЬКО в роли "термин — пояснение". Не как основной разделитель.
-7. "Вы" пиши со строчной буквы (массовое обращение), не с заглавной.
+const SYSTEM_RULES = `Ты создаёшь ОДИН блок интерактивной демонстрации должности — полноценную презентацию компании и роли в стиле опытного CEO-основателя.
+
+ЭТАЛОННЫЙ СТИЛЬ — как пишет опытный CEO в личном разговоре с сильным кандидатом. Живой человек, который уважает время и интеллект кандидата, говорит прямо и по делу.
+
+ЖЁСТКИЕ ЗАПРЕТЫ:
+1. Никаких AI-паттернов: НЕ используй "не X, а Y", триады прилагательных, "важно отметить", "во-первых/во-вторых".
+2. Никаких HR-штампов: "динамично развивающаяся", "молодой дружный коллектив", "конкурентная заработная плата".
+3. Никакого инфобизнеса: "раскрой потенциал", "это твой шанс", восклицательных знаков больше 1 на блок.
+4. Никакого пафоса: "миссия меняющая индустрию", "лидер рынка" без доказательств.
+5. Запрещённые эмодзи: 🚀 ✨ 💡 🎯 🔥 ⚡ 🌟 ✅ 💪.
+6. Длинное тире (—) только в "термин — пояснение", не как разделитель.
+7. "Вы" со строчной буквы.
 
 ТИПОГРАФИКА:
-- Числовые диапазоны через длинное тире с неразрывным пробелом: "60 000–80 000 ₽"
-- Проценты и числа без пробелов перед знаком: "80%", "6 месяцев"
-- Название компании пиши ровно так, как оно дано в данных (с суффиксом .Pro если есть)
-- AI-термины через дефис: "AI-агенты", "AI-первый", "AI-стек"
+- Диапазоны через длинное тире с пробелами: "60 000–80 000 ₽"
+- Проценты без пробелов: "80%"
+- AI-термины через дефис: "AI-агенты"
 
 ЧТО ХОРОШО:
-- Конкретные цифры вместо общих слов ("60 клиентов в месяц" вместо "хороший объём")
-- Короткие предложения. Один абзац = 2-4 предложения максимум.
-- Прямые формулировки: "будет тяжело, если...", "не подойдёт тем, кто..."
-- Буллиты для списков, не сплошной текст
-- Жирные **акценты** на ключевых фактах для сканирования с телефона
+- Конкретные цифры вместо общих слов
+- Короткие предложения (2-4 на абзац)
+- Прямые формулировки
+- Буллиты для списков
+- Жирные акценты на ключевых фактах
 
-ПРИНЦИП КАЖДОГО БЛОКА:
-- Кандидат читает с телефона, 10-20 секунд на блок
-- Должен понять суть за первые 2 предложения
-- Детали в буллитах, не в сплошном тексте
-- В конце блока — плавный переход к следующему, например "Далее — о руководителе." с эмодзи ➡️`
+ДЛИНА БЛОКА: 3–6 абзацев, с буллитами где уместно. Глубокий и содержательный, не огрызки.
 
-// ─── ИНСТРУКЦИЯ ПОД КОНКРЕТНЫЙ БЛОК ─────────────────────────────────────────
+ФОРМАТ: Верни ТОЛЬКО HTML-контент блока (без тегов <html>, <body>). Используй <p>, <b>, <br>, <ul><li>. Параграфы с margin и line-height inline.
 
-function blockInstruction(blockTitle: string, blockDescription: string): string {
-  return `БЛОК "${blockTitle}". ${blockDescription}`
+Пример параграфа:
+<p style="margin:0 0 12px 0;line-height:1.55">Текст абзаца.</p>`
+
+// ─── ФУНКЦИЯ: получить системные блоки компании ─────────────────────────────
+
+async function fetchCompanyBlocks(): Promise<Map<string, string>> {
+  const niches = Object.values(COMPANY_BLOCK_MAP)
+  const uniqueNiches = Array.from(new Set(niches))
+
+  const rows = await db
+    .select({
+      niche: demoTemplates.niche,
+      sections: demoTemplates.sections,
+    })
+    .from(demoTemplates)
+    .where(
+      and(
+        eq(demoTemplates.isSystem, true),
+        isNull(demoTemplates.tenantId),
+        inArray(demoTemplates.niche, uniqueNiches),
+      )
+    )
+
+  const map = new Map<string, string>()
+  for (const row of rows) {
+    // sections — это [lesson][block], берём первый блок первого урока
+    try {
+      const sections = row.sections as Array<{ blocks?: Array<{ content?: string }> }>
+      if (Array.isArray(sections) && sections[0]?.blocks?.[0]?.content) {
+        map.set(row.niche, sections[0].blocks[0].content)
+      }
+    } catch {
+      // skip malformed
+    }
+  }
+
+  return map
+}
+
+// ─── ФУНКЦИЯ: подставить плейсхолдеры в блок компании ───────────────────────
+
+function applyPlaceholders(html: string, data: Record<string, string>): string {
+  let result = html
+  for (const [key, value] of Object.entries(data)) {
+    const pattern = new RegExp(`\\[${key}\\]`, "g")
+    result = result.replace(pattern, value || `[${key}]`)
+  }
+  return result
+}
+
+// ─── ФУНКЦИЯ: сгенерировать ОДИН блок через AI ──────────────────────────────
+
+async function generateSingleBlock(
+  apiKey: string,
+  blockTitle: string,
+  blockDescription: string,
+  context: string,
+  toneHint: string,
+  strictnessHint: string,
+): Promise<string> {
+  const prompt = `${SYSTEM_RULES}
+
+═══════════════════════════════════════════
+КОНТЕКСТ
+═══════════════════════════════════════════
+
+${context}
+
+Тон: ${toneHint}
+Жёсткость фильтра: ${strictnessHint}
+
+═══════════════════════════════════════════
+ЗАДАЧА
+═══════════════════════════════════════════
+
+Создай блок "${blockTitle}".
+
+ЧТО ПИШЕМ В ЭТОМ БЛОКЕ:
+${blockDescription}
+
+ВАЖНО:
+- Если данных не хватает (например, для блока "О руководителе" нет имени) — напиши заглушку "[укажите эти данные]" или "Эту информацию вы узнаете при встрече".
+- Если данные есть — используй ВСЕ конкретные цифры и факты.
+- Длина: 3–6 абзацев, глубоко, не огрызки.
+
+Верни ТОЛЬКО HTML-контент блока. Без объяснений до или после.`
+
+  const aiRes = await fetch(getClaudeMessagesUrl(), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 2500,
+      messages: [{ role: "user", content: prompt }],
+    }),
+  })
+
+  if (!aiRes.ok) {
+    const errText = await aiRes.text()
+    console.error("[demo/generate] Claude HTTP", aiRes.status, errText.slice(0, 300))
+    throw new Error(`AI API error (${aiRes.status})`)
+  }
+
+  const data = (await aiRes.json()) as { content?: Array<{ type: string; text?: string }> }
+  const textBlock = data.content?.find((b) => b.type === "text")
+  return textBlock?.text?.trim() || "<p>Не удалось сгенерировать контент блока.</p>"
 }
 
 // ─── ОСНОВНОЙ HANDLER ───────────────────────────────────────────────────────
@@ -103,7 +213,7 @@ export async function POST(req: NextRequest) {
       return apiError("ANTHROPIC_API_KEY не настроен", 500)
     }
 
-    // ─── 1. Загружаем данные вакансии ───────────────────────────────────────
+    // 1. Загружаем данные вакансии
     const [vacancy] = await db
       .select({
         id: vacancies.id,
@@ -121,12 +231,11 @@ export async function POST(req: NextRequest) {
       return apiError("Vacancy not found", 404)
     }
 
-    // ─── 2. Извлекаем анкету ────────────────────────────────────────────────
+    // 2. Извлекаем анкету
     const dj = (vacancy.descriptionJson as Record<string, unknown>) || {}
     const anketa = (dj.anketa as Record<string, unknown>) || {}
 
     const companyName = String(anketa.companyName || anketa.company || "Компания")
-    const companyDescription = String(anketa.companyDescription || anketa.aboutCompany || "")
     const position = vacancy.title || String(anketa.position || "Должность")
     const industry = String(anketa.industry || "")
     const responsibilities = String(anketa.responsibilities || "")
@@ -134,10 +243,6 @@ export async function POST(req: NextRequest) {
     const conditions = Array.isArray(anketa.conditions)
       ? (anketa.conditions as string[]).join(", ")
       : String(anketa.conditions || "")
-    const conditionsCustom = Array.isArray(anketa.conditionsCustom)
-      ? (anketa.conditionsCustom as string[]).join(", ")
-      : ""
-    const allConditions = [conditions, conditionsCustom].filter(Boolean).join(", ")
     const bonus = String(anketa.bonus || "")
     const salary =
       vacancy.salaryMin && vacancy.salaryMax
@@ -147,11 +252,9 @@ export async function POST(req: NextRequest) {
     const workFormats = Array.isArray(anketa.workFormats)
       ? (anketa.workFormats as string[]).join(", ")
       : ""
-    const requiredSkills = Array.isArray(anketa.requiredSkills)
-      ? (anketa.requiredSkills as string[]).join(", ")
-      : ""
+    const companyDescription = String(anketa.companyDescription || anketa.aboutCompany || "")
 
-    // ─── 3. Настройки генерации ─────────────────────────────────────────────
+    // 3. Настройки
     const templateId: DemoTemplateId = body.template || "medium"
     const template = DEMO_TEMPLATES.find((t) => t.id === templateId) || DEMO_TEMPLATES[1]
 
@@ -161,23 +264,8 @@ export async function POST(req: NextRequest) {
     const strictnessId: FilterStrictnessId = (body.strictness as FilterStrictnessId) || "medium"
     const strictnessHint = FILTER_STRICTNESS[strictnessId] || FILTER_STRICTNESS.medium
 
-    const marketText =
-      Array.isArray(body.market) && body.market.length > 0 ? body.market.join(", ") : "B2B"
-
-    // ─── 4. Фильтруем только AI-блоки ───────────────────────────────────────
-    const aiBlocks = template.blocks.filter((b) => b.type === "text" && b.ai)
-    const blockList = aiBlocks
-      .map((b, i) => `${i + 1}. ID: "${b.id}" — ${blockInstruction(b.title, b.description)}`)
-      .join("\n\n")
-
-    // ─── 5. Собираем финальный промт ────────────────────────────────────────
-    const prompt = `${SYSTEM_RULES}
-
-═════════════════════════════════════════════════════════════
-ДАННЫЕ О ВАКАНСИИ
-═════════════════════════════════════════════════════════════
-
-Компания: ${companyName}${industry ? ` (отрасль: ${industry})` : ""}
+    // 4. Общий контекст для AI-блоков
+    const context = `Компания: ${companyName}${industry ? ` (отрасль: ${industry})` : ""}
 ${companyDescription ? `О компании: ${companyDescription}` : ""}
 Должность: ${position}
 Город: ${city || "не указан"}
@@ -186,119 +274,122 @@ ${companyDescription ? `О компании: ${companyDescription}` : ""}
 Бонусы: ${bonus || "не указаны"}
 Обязанности: ${responsibilities || "не указаны"}
 Требования: ${requirements || "не указаны"}
-Ключевые навыки: ${requiredSkills || "не указаны"}
-Условия: ${allConditions || "не указаны"}
+Условия: ${conditions || "не указаны"}
+Размер демо: ${template.label} (${template.time})`
 
-═════════════════════════════════════════════════════════════
-ПАРАМЕТРЫ ПОДАЧИ
-═════════════════════════════════════════════════════════════
-
-Тон коммуникации: ${toneHint}
-Жёсткость фильтра кандидатов: ${strictnessHint}
-Тип рынка: ${marketText}
-Размер демонстрации: ${template.label} (${template.time})
-
-═════════════════════════════════════════════════════════════
-ЗАДАЧА
-═════════════════════════════════════════════════════════════
-
-Нужно сгенерировать HTML-контент для ${aiBlocks.length} блоков демонстрации.
-
-ВАЖНО про контент:
-- Если данных для блока НЕ ХВАТАЕТ (например, в анкете нет описания руководителя для блока "О руководителе") — пиши короткую заглушку со словами в духе "Эту информацию вы узнаете при встрече" или "[Напишите здесь о себе]". НЕ придумывай факты.
-- Если данные ЕСТЬ — используй ВСЕ конкретные цифры и факты из анкеты. Не заменяй "60 000 ₽" на "достойная зарплата".
-- Соблюдай выбранный тон коммуникации во всех блоках единообразно.
-- Если указан тип рынка — учитывай специфику: B2B — длинные продажи, LTV, ROI; B2C — массовый спрос, конверсия; B2G — тендеры, регламенты.
-- Длина блока: 3–6 абзацев, с буллитами где уместно. Избегай воды. Лучше коротко и чётко, чем длинно и размыто.
-- Используй HTML: <p>, <b>, <br>, <ul><li>. Структура с жирными якорями для ключевых фраз.
-- Каждый блок — самостоятельная единица. Читается независимо.
-
-БЛОКИ ДЛЯ ГЕНЕРАЦИИ:
-
-${blockList}
-
-═════════════════════════════════════════════════════════════
-ФОРМАТ ОТВЕТА
-═════════════════════════════════════════════════════════════
-
-Верни ТОЛЬКО валидный JSON массив (без обёртки markdown, без объяснений до или после):
-
-[
-  {"id": "${aiBlocks[0]?.id || "id_блока"}", "content": "HTML-контент блока"},
-  ...
-]
-
-Используй точно эти id: ${aiBlocks.map((b) => b.id).join(", ")}
-
-Всё. Начинай генерацию.`
-
-    // ─── 6. Запрос к AI ─────────────────────────────────────────────────────
-    const aiContents: Record<string, string> = {}
-
-    try {
-      const aiRes = await fetch(getClaudeMessagesUrl(), {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": apiKey,
-          "anthropic-version": "2023-06-01",
-        },
-        body: JSON.stringify({
-          model: "claude-haiku-4-5-20251001",
-          max_tokens: 10000,
-          messages: [{ role: "user", content: prompt }],
-        }),
-      })
-
-      if (!aiRes.ok) {
-        const errText = await aiRes.text()
-        console.error("[demo/generate] Claude HTTP", aiRes.status, errText.slice(0, 300))
-        return apiError(`AI API error (${aiRes.status})`, 502)
-      }
-
-      const data = (await aiRes.json()) as { content?: Array<{ type: string; text?: string }> }
-      const textBlock = data.content?.find((b) => b.type === "text")
-      const text = textBlock?.text || ""
-
-      const jsonMatch = text.match(/\[[\s\S]*\]/)
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]) as Array<{ id: string; content: string }>
-        for (const item of parsed) {
-          aiContents[item.id] = item.content
-        }
-      }
-    } catch (aiErr) {
-      console.error("[demo/generate] AI error:", aiErr)
-      const msg = aiErr instanceof Error ? aiErr.message : "Ошибка AI-генерации"
-      return apiError(msg, 502)
+    // 5. Плейсхолдеры для системных блоков компании
+    const placeholders: Record<string, string> = {
+      "ДОЛЖНОСТЬ": position.toLowerCase(),
+      "ИМЯ_РУКОВОДИТЕЛЯ": String(anketa.ceoName || ""),
+      "ИМЯ_CEO": String(anketa.ceoName || "CEO").split(" ")[0],
+      // Остальные плейсхолдеры остаются пустыми или подставятся дефолты
     }
 
-    // ─── 7. Собираем финальную структуру блоков ─────────────────────────────
-    const resultBlocks = template.blocks.map((b) => {
-      if (b.type === "text" && b.ai) {
-        return {
-          type: "text" as const,
-          title: b.title,
-          content: aiContents[b.id] || `<p><i>${b.description}</i></p>`,
-        }
+    // 6. Загружаем системные блоки компании
+    const companyBlocks = await fetchCompanyBlocks()
+
+    // ═══ РЕЖИМ single: генерируем ОДИН блок по blockIndex ═══
+    if (body.mode === "single" && typeof body.blockIndex === "number") {
+      const blockIdx = body.blockIndex
+      if (blockIdx < 0 || blockIdx >= template.blocks.length) {
+        return apiError("blockIndex вне диапазона", 400)
       }
+
+      const b = template.blocks[blockIdx]
+
+      // Если это question-блок — возвращаем как есть
       if (b.type === "question") {
-        return {
-          type: "question" as const,
-          title: b.title,
-          content: b.description,
-          questionType: b.questionType || "long",
+        return apiSuccess({
+          index: blockIdx,
+          total: template.blocks.length,
+          block: {
+            type: "question",
+            title: b.title,
+            content: b.description,
+            questionType: b.questionType || "long",
+          },
+        })
+      }
+
+      // Если это placeholder-блок — возвращаем описание
+      if (b.type === "placeholder") {
+        return apiSuccess({
+          index: blockIdx,
+          total: template.blocks.length,
+          block: {
+            type: "text",
+            title: b.title,
+            content: `<p style="color: #999"><i>${b.description}</i></p>`,
+          },
+        })
+      }
+
+      // Если это text-блок — сначала проверим системный блок компании
+      const companyNiche = COMPANY_BLOCK_MAP[b.id]
+      if (companyNiche) {
+        const systemHtml = companyBlocks.get(companyNiche)
+        if (systemHtml) {
+          // Используем системный блок с подстановкой плейсхолдеров
+          return apiSuccess({
+            index: blockIdx,
+            total: template.blocks.length,
+            block: {
+              type: "text",
+              title: b.title,
+              content: applyPlaceholders(systemHtml, placeholders),
+              source: "system",
+            },
+          })
         }
       }
-      // placeholder
-      return {
-        type: "text" as const,
-        title: b.title,
-        content: `<p style="color: #999"><i>${b.description}</i></p>`,
+
+      // Иначе — генерим через AI
+      try {
+        const content = await generateSingleBlock(
+          apiKey,
+          b.title,
+          b.description,
+          context,
+          toneHint,
+          strictnessHint,
+        )
+        return apiSuccess({
+          index: blockIdx,
+          total: template.blocks.length,
+          block: {
+            type: "text",
+            title: b.title,
+            content,
+            source: "ai",
+          },
+        })
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "AI error"
+        return apiError(`Ошибка генерации блока: ${msg}`, 502)
       }
+    }
+
+    // ═══ РЕЖИМ all (по умолчанию): возвращаем метаданные для фронта ═══
+    // Фронт будет вызывать single для каждого блока по очереди
+    const blocksMeta = template.blocks.map((b, idx) => ({
+      index: idx,
+      id: b.id,
+      title: b.title,
+      type: b.type,
+      description: b.description,
+      source: COMPANY_BLOCK_MAP[b.id] && companyBlocks.has(COMPANY_BLOCK_MAP[b.id])
+        ? "system"
+        : b.type === "text" && b.ai
+        ? "ai"
+        : "placeholder",
+    }))
+
+    return apiSuccess({
+      total: template.blocks.length,
+      template: template.label,
+      blocks: blocksMeta,
     })
 
-    return apiSuccess(resultBlocks)
   } catch (err) {
     if (err instanceof Response) return err
     console.error("POST /api/modules/hr/demo/generate", err)

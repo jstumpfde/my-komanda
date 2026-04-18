@@ -18,11 +18,13 @@ function splitTextIntoLessons(text: string, fileName: string): Lesson[] {
   const fallbackTitle = fileName.replace(/\.(docx?|pdf|txt)$/i, "").trim() || "Новый урок"
   const normalized = text.replace(/\r\n/g, "\n")
 
+  // Находим все вхождения «Урок N» в тексте (в начале строки или с пробелом/переносом перед)
   const markerRe = /(?:^|\s)(?:#+\s*)?Урок\s*(\d+)\s*[:.\-–—)]?\s*/gi
   type Match = { index: number; endIndex: number; num: string }
   const matches: Match[] = []
   let m: RegExpExecArray | null
   while ((m = markerRe.exec(normalized)) !== null) {
+    // При (?:^|\s) пробел включен в m[0] — смещаем start до самого «Урок»
     const leading = m[0].match(/^\s*/)?.[0].length ?? 0
     matches.push({
       index: m.index + leading,
@@ -40,6 +42,7 @@ function splitTextIntoLessons(text: string, fileName: string): Lesson[] {
   const result: Lesson[] = []
   const baseId = Date.now()
 
+  // Текст до первого маркера — вступление
   const introText = normalized.slice(0, matches[0].index).trim()
   if (introText) {
     const block = createBlock("text")
@@ -51,10 +54,12 @@ function splitTextIntoLessons(text: string, fileName: string): Lesson[] {
     const end = i + 1 < matches.length ? matches[i + 1].index : normalized.length
     const body = normalized.slice(match.endIndex, end).trim()
 
+    // Заголовок урока: первая строка или первое предложение тела
     let title = `Урок ${match.num}`
     let content = body
     const nlIdx = body.indexOf("\n")
     const firstLine = (nlIdx >= 0 ? body.slice(0, nlIdx) : body).trim()
+    // Пытаемся отрезать короткий заголовок из первого предложения
     const sentenceMatch = firstLine.match(/^(.{3,120}?)(?:[.!?—–]|\s—\s)/)
     if (sentenceMatch) {
       title = `Урок ${match.num}. ${sentenceMatch[1].trim()}`
@@ -94,7 +99,6 @@ export const CourseTab = forwardRef<NotionEditorHandle, CourseTabProps>(
   function CourseTab({ vacancyId, vacancyTitle, editorRef, tabRef, onSaveStatusChange }, _ref) {
     const { demo, loading, error, saveStatus, createDemo, updateDemo } = useDemo(vacancyId)
     const [generating, setGenerating] = useState(false)
-    const [genProgress, setGenProgress] = useState<{ current: number; total: number } | null>(null)
     const [aiDialogOpen, setAiDialogOpen] = useState(false)
     const [selectedTemplate, setSelectedTemplate] = useState<DemoTemplateId>("medium")
     const [selectedTone, setSelectedTone] = useState<"energetic" | "friendly" | "business" | "direct">("friendly")
@@ -125,75 +129,22 @@ export const CourseTab = forwardRef<NotionEditorHandle, CourseTabProps>(
         .catch(() => toast.error("Не удалось создать демонстрацию"))
     }, [loading, demo, error, vacancyTitle, createDemo])
 
-    // ═══ ГЕНЕРАЦИЯ БЛОК-ЗА-БЛОКОМ ═══
     const handleGenerateDemo = useCallback(async () => {
       setGenerating(true)
-      setGenProgress(null)
       setAiDialogOpen(false)
       try {
-        // Шаг 1: получить метаданные шаблона (список блоков)
-        const metaRes = await fetch("/api/modules/hr/demo/generate", {
+        const res = await fetch("/api/modules/hr/demo/generate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            vacancyId,
-            template: selectedTemplate,
-            tone: selectedTone,
-            mode: "all",
-          }),
+          body: JSON.stringify({ vacancyId, template: selectedTemplate, tone: selectedTone }),
         })
-        if (!metaRes.ok) {
-          const err = await metaRes.json().catch(() => ({ error: "Ошибка" }))
-          throw new Error(err.error || "Не удалось получить шаблон")
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ error: "Ошибка генерации" }))
+          throw new Error(err.error || "Ошибка генерации")
         }
-        const metaJson = await metaRes.json()
-        const meta = (metaJson?.data ?? metaJson) as {
-          total: number
-          template: string
-          blocks: Array<{ index: number; id: string; title: string; type: string; description: string; source: string }>
-        }
+        const blocks = await res.json() as Array<{ type: string; title: string; content: string; questionType?: string }>
 
-        const total = meta.total
-        setGenProgress({ current: 0, total })
-
-        // Шаг 2: генерируем блоки по одному
-        const generatedBlocks: Array<{ type: string; title: string; content: string; questionType?: string }> = []
-
-        for (let i = 0; i < total; i++) {
-          setGenProgress({ current: i + 1, total })
-
-          const blockRes = await fetch("/api/modules/hr/demo/generate", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              vacancyId,
-              template: selectedTemplate,
-              tone: selectedTone,
-              mode: "single",
-              blockIndex: i,
-            }),
-          })
-
-          if (!blockRes.ok) {
-            const errMsg = await blockRes.text().catch(() => "")
-            console.error(`[gen] Block ${i} failed:`, errMsg.slice(0, 200))
-            generatedBlocks.push({
-              type: "text",
-              title: meta.blocks[i]?.title || `Блок ${i + 1}`,
-              content: `<p style="color:#999"><i>Не удалось сгенерировать. Попробуйте перегенерировать вручную.</i></p>`,
-            })
-            continue
-          }
-
-          const blockJson = await blockRes.json()
-          const result = (blockJson?.data ?? blockJson) as {
-            block: { type: string; title: string; content: string; questionType?: string }
-          }
-          generatedBlocks.push(result.block)
-        }
-
-        // Шаг 3: собираем уроки
-        const lessons: Lesson[] = generatedBlocks.map((b, i) => {
+        const lessons: Lesson[] = blocks.map((b, i) => {
           const block = createBlock(b.type === "question" ? "task" : "text")
           block.content = b.content
           if (b.type === "question") {
@@ -212,9 +163,11 @@ export const CourseTab = forwardRef<NotionEditorHandle, CourseTabProps>(
           }
         })
 
+        // Если демо уже существует (пустая заглушка) — перезаписываем через updateDemo,
+        // иначе создаём новое.
         if (demo) {
           updateDemo({ ...demo, title: vacancyTitle || demo.title, lessons })
-          toast.success(`Демонстрация заполнена — ${lessons.length} блоков`)
+          toast.success(`Демонстрация заполнена AI — ${lessons.length} блоков`)
         } else {
           const created = await createDemo(vacancyTitle || "Демонстрация должности", lessons)
           if (created) toast.success(`Демонстрация создана — ${lessons.length} блоков`)
@@ -224,7 +177,6 @@ export const CourseTab = forwardRef<NotionEditorHandle, CourseTabProps>(
         toast.error(err instanceof Error ? err.message : "Не удалось сгенерировать демонстрацию")
       } finally {
         setGenerating(false)
-        setGenProgress(null)
       }
     }, [vacancyId, selectedTemplate, selectedTone, vacancyTitle, createDemo, updateDemo, demo])
 
@@ -274,7 +226,7 @@ export const CourseTab = forwardRef<NotionEditorHandle, CourseTabProps>(
       openFileUpload: () => fileInputRef.current?.click(),
     }), [])
 
-    // Loading state
+    // Loading state (пока создаём пустую демо или грузим существующую)
     if (loading || (!demo && !error)) {
       return (
         <div className="flex items-center justify-center py-20 text-muted-foreground">
@@ -289,41 +241,6 @@ export const CourseTab = forwardRef<NotionEditorHandle, CourseTabProps>(
         <div className="flex items-center justify-center py-20 text-destructive gap-2">
           <AlertCircle className="w-5 h-5" />
           {error}
-        </div>
-      )
-    }
-
-    // ═══ ПОЛНОЭКРАННЫЙ ЛОАДЕР ПРИ ГЕНЕРАЦИИ ═══
-    if (generating) {
-      const pct = genProgress ? Math.round((genProgress.current / genProgress.total) * 100) : 0
-      return (
-        <div className="flex flex-col items-center justify-center py-24 gap-4">
-          <div className="relative w-16 h-16">
-            <Loader2 className="w-16 h-16 animate-spin text-primary" />
-            <Sparkles className="w-6 h-6 absolute inset-0 m-auto text-primary" />
-          </div>
-          <div className="text-center">
-            <p className="text-lg font-semibold text-foreground">AI создаёт демонстрацию</p>
-            {genProgress ? (
-              <>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Блок {genProgress.current} из {genProgress.total}
-                </p>
-                <div className="w-64 h-2 bg-muted rounded-full mt-3 overflow-hidden">
-                  <div
-                    className="h-full bg-primary transition-all duration-300"
-                    style={{ width: `${pct}%` }}
-                  />
-                </div>
-                <p className="text-xs text-muted-foreground mt-2">{pct}%</p>
-              </>
-            ) : (
-              <p className="text-sm text-muted-foreground mt-1">Готовим шаблон...</p>
-            )}
-          </div>
-          <p className="text-xs text-muted-foreground max-w-sm text-center">
-            Это может занять 1-2 минуты. AI подбирает готовые блоки компании из библиотеки и генерирует персонализированный контент для вакансии.
-          </p>
         </div>
       )
     }
@@ -381,7 +298,7 @@ export const CourseTab = forwardRef<NotionEditorHandle, CourseTabProps>(
               <DialogTitle>Сгенерировать демонстрацию с AI</DialogTitle>
             </DialogHeader>
             <div className="space-y-3">
-              <p className="text-xs text-muted-foreground">Выберите длительность — AI заполнит контент из анкеты вакансии и готовых блоков компании. Существующая демонстрация будет перезаписана.</p>
+              <p className="text-xs text-muted-foreground">Выберите длительность — AI заполнит контент из анкеты вакансии. Существующая демонстрация будет перезаписана.</p>
               <div className="space-y-2">
                 {DEMO_TEMPLATES.map(t => (
                   <button
@@ -446,7 +363,9 @@ export const CourseTab = forwardRef<NotionEditorHandle, CourseTabProps>(
                 {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
                 {generating ? "AI генерирует..." : "Сгенерировать"}
               </Button>
-              <p className="text-[11px] text-muted-foreground text-center">Занимает 1-2 минуты, генерация идёт по блокам</p>
+              {generating && (
+                <p className="text-[11px] text-muted-foreground text-center">Это займёт 10-20 секунд</p>
+              )}
             </div>
           </DialogContent>
         </Dialog>
