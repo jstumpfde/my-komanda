@@ -65,7 +65,15 @@ function splitTextIntoLessons(text: string, fileName: string): Lesson[] {
     }
 
     const block = createBlock("text")
-    block.content = content || body
+    // Преобразуем plain text → HTML: параграфы через \n\n, переносы через <br>
+    const rawText = content || body
+    const htmlContent = rawText
+      .split(/\n\s*\n/)
+      .map(p => p.trim())
+      .filter(p => p.length > 0)
+      .map(p => `<p style="margin:0 0 12px 0;line-height:1.55">${p.replace(/\n/g, "<br>")}</p>`)
+      .join("")
+    block.content = htmlContent || rawText
     result.push({
       id: `lesson-file-${baseId}-${i}`,
       emoji: LESSON_EMOJIS[i % LESSON_EMOJIS.length],
