@@ -18,7 +18,7 @@ function splitTextIntoLessons(text: string, fileName: string): Lesson[] {
   const fallbackTitle = fileName.replace(/\.(docx?|pdf|txt)$/i, "").trim() || "Новый урок"
   const normalized = text.replace(/\r\n/g, "\n")
 
-  const markerRe = /(?:^|\s)(?:#+\s*)?Урок\s*(\d+)\s*[:.\-–—)]?\s*/gi
+  const markerRe = /(?:^|\s)(?:#+\s*)?(?:Урок|Блок|Глава)\s*(\d+)\s*[:.\-–—)]?\s*/gi
   type Match = { index: number; endIndex: number; num: string }
   const matches: Match[] = []
   let m: RegExpExecArray | null
@@ -51,16 +51,16 @@ function splitTextIntoLessons(text: string, fileName: string): Lesson[] {
     const end = i + 1 < matches.length ? matches[i + 1].index : normalized.length
     const body = normalized.slice(match.endIndex, end).trim()
 
-    let title = `Урок ${match.num}`
+    let title = `${match.num}`
     let content = body
     const nlIdx = body.indexOf("\n")
     const firstLine = (nlIdx >= 0 ? body.slice(0, nlIdx) : body).trim()
     const sentenceMatch = firstLine.match(/^(.{3,120}?)(?:[.!?—–]|\s—\s)/)
     if (sentenceMatch) {
-      title = `Урок ${match.num}. ${sentenceMatch[1].trim()}`
+      title = `${sentenceMatch[1].trim()}`
       content = body.slice(sentenceMatch[0].length).trim()
     } else if (firstLine && firstLine.length <= 120) {
-      title = `Урок ${match.num}. ${firstLine}`
+      title = `${firstLine}`
       content = nlIdx >= 0 ? body.slice(nlIdx + 1).trim() : ""
     }
 
