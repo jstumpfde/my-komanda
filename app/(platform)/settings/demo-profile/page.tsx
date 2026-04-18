@@ -198,7 +198,7 @@ export default function DemoProfilePage() {
               />
             </div>
             <div>
-              <Label className="text-xs">Опыт в бизнесе</Label>
+              <Label className="text-xs">Опыт и регалии</Label>
               <Input
                 value={data.ceoExperience || ""}
                 onChange={(e) => update("ceoExperience", e.target.value)}
@@ -209,7 +209,7 @@ export default function DemoProfilePage() {
           </div>
 
           <div>
-            <Label className="text-xs">Краткая справка — как представляетесь</Label>
+            <Label className="text-xs">Короткое позиционирование</Label>
             <Textarea
               value={data.ceoShortBio || ""}
               onChange={(e) => update("ceoShortBio", e.target.value)}
@@ -220,7 +220,7 @@ export default function DemoProfilePage() {
           </div>
 
           <div>
-            <Label className="text-xs">Чем занимались за эти годы</Label>
+            <Label className="text-xs">История и путь</Label>
             <Textarea
               value={data.ceoBackground || ""}
               onChange={(e) => update("ceoBackground", e.target.value)}
@@ -231,7 +231,7 @@ export default function DemoProfilePage() {
           </div>
 
           <div>
-            <Label className="text-xs">Отношение к AI и технологиям</Label>
+            <Label className="text-xs">Взгляды и принципы</Label>
             <Textarea
               value={data.ceoAiAttitude || ""}
               onChange={(e) => update("ceoAiAttitude", e.target.value)}
@@ -242,7 +242,7 @@ export default function DemoProfilePage() {
           </div>
 
           <div>
-            <Label className="text-xs">Стиль мышления и работы</Label>
+            <Label className="text-xs">Стиль управления</Label>
             <Textarea
               value={data.ceoStyle || ""}
               onChange={(e) => update("ceoStyle", e.target.value)}
@@ -253,7 +253,7 @@ export default function DemoProfilePage() {
           </div>
 
           <div>
-            <Label className="text-xs">Что цените в людях</Label>
+            <Label className="text-xs">Ценности и команда</Label>
             <Input
               value={data.ceoValues || ""}
               onChange={(e) => update("ceoValues", e.target.value)}
