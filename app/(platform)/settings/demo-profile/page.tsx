@@ -1,11 +1,9 @@
 // app/(platform)/settings/demo-profile/page.tsx
 // Страница настроек "Профиль для демонстраций должности".
-// Данные используются AI-генератором демо вакансий для подстановки в блоки
-// "О руководителе", "Приветствие", "Что дальше" и т.д.
 
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -14,7 +12,7 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import {
-  Loader2, Save, Sparkles, User, Building2, TrendingUp, Info, CheckCircle2,
+  Loader2, Save, Sparkles, User, Building2, TrendingUp, Info, CheckCircle2, Upload, X,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -42,8 +40,9 @@ export default function DemoProfilePage() {
   const [aiOpen, setAiOpen] = useState(false)
   const [aiText, setAiText] = useState("")
   const [aiLoading, setAiLoading] = useState(false)
+  const [photoUploading, setPhotoUploading] = useState(false)
+  const photoInputRef = useRef<HTMLInputElement>(null)
 
-  // Загрузка профиля
   useEffect(() => {
     let cancelled = false
     async function load() {
@@ -85,6 +84,54 @@ export default function DemoProfilePage() {
     }
   }, [data])
 
+  const handlePhotoUpload = useCallback(async (file: File) => {
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      toast.error("Формат: jpg, png, webp")
+      return
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Максимум 5 МБ")
+      return
+    }
+    setPhotoUploading(true)
+    try {
+      const fd = new FormData()
+      fd.append("file", file)
+      const res = await fetch("/api/companies/demo-profile/photo", {
+        method: "POST",
+        body: fd,
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Ошибка" }))
+        throw new Error(err.error || "Ошибка загрузки")
+      }
+      const json = await res.json()
+      const url = json?.data?.ceoPhotoUrl ?? json?.ceoPhotoUrl
+      if (url) {
+        setData(prev => ({ ...prev, ceoPhotoUrl: url }))
+        toast.success("Фото загружено")
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Не удалось загрузить")
+    } finally {
+      setPhotoUploading(false)
+    }
+  }, [])
+
+  const handlePhotoDelete = useCallback(async () => {
+    setPhotoUploading(true)
+    try {
+      const res = await fetch("/api/companies/demo-profile/photo", { method: "DELETE" })
+      if (!res.ok) throw new Error("Delete failed")
+      setData(prev => ({ ...prev, ceoPhotoUrl: "" }))
+      toast.success("Фото удалено")
+    } catch {
+      toast.error("Не удалось удалить")
+    } finally {
+      setPhotoUploading(false)
+    }
+  }, [])
+
   const handleAiMaster = useCallback(async () => {
     if (aiText.trim().length < 20) {
       toast.error("Напишите минимум 2-3 предложения о себе и компании")
@@ -104,7 +151,6 @@ export default function DemoProfilePage() {
       const json = await res.json()
       const suggested = (json?.data?.demoProfile ?? json?.demoProfile ?? {}) as DemoProfileData
 
-      // Мерджим: заполняем только пустые поля, существующие не трогаем
       setData(prev => {
         const merged: DemoProfileData = { ...prev }
         for (const [k, v] of Object.entries(suggested)) {
@@ -145,6 +191,19 @@ export default function DemoProfilePage() {
 
   return (
     <div className="max-w-4xl space-y-5 pb-12">
+      {/* Скрытый input для загрузки */}
+      <input
+        ref={photoInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0]
+          if (f) handlePhotoUpload(f)
+          e.target.value = ""
+        }}
+      />
+
       {/* Заголовок + статус */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
@@ -187,6 +246,49 @@ export default function DemoProfilePage() {
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* Фото */}
+          <div>
+            <Label className="text-xs">Фото руководителя</Label>
+            <div className="mt-2 flex items-center gap-4">
+              {data.ceoPhotoUrl ? (
+                <div className="relative">
+                  <img
+                    src={data.ceoPhotoUrl}
+                    alt={data.ceoName || "Руководитель"}
+                    className="w-24 h-24 rounded-lg object-cover border border-border"
+                  />
+                  <button
+                    type="button"
+                    onClick={handlePhotoDelete}
+                    disabled={photoUploading}
+                    className="absolute -top-1 -right-1 w-6 h-6 rounded-full bg-destructive text-destructive-foreground hover:opacity-80 flex items-center justify-center"
+                    title="Удалить"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ) : (
+                <div className="w-24 h-24 rounded-lg bg-muted flex items-center justify-center border border-dashed border-border">
+                  <User className="w-8 h-8 text-muted-foreground" />
+                </div>
+              )}
+              <div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => photoInputRef.current?.click()}
+                  disabled={photoUploading}
+                  className="gap-1.5"
+                >
+                  {photoUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                  {data.ceoPhotoUrl ? "Заменить" : "Загрузить фото"}
+                </Button>
+                <p className="text-[11px] text-muted-foreground mt-1.5">JPG, PNG, WebP — до 5 МБ</p>
+              </div>
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <Label className="text-xs">Имя и фамилия *</Label>
@@ -246,7 +348,7 @@ export default function DemoProfilePage() {
             <Textarea
               value={data.ceoStyle || ""}
               onChange={(e) => update("ceoStyle", e.target.value)}
-              placeholder="Думаю глубоко, строю основательно. Говорю просто..."
+              placeholder="Работаю в плотной связке в первые 2-3 месяца — задаю стратегию, обсуждаем приоритеты..."
               rows={2}
               className="mt-1 resize-none"
             />
@@ -260,19 +362,6 @@ export default function DemoProfilePage() {
               placeholder="глубину мышления, способность видеть суть, открытость новому"
               className="mt-1"
             />
-          </div>
-
-          <div>
-            <Label className="text-xs">Ссылка на фото руководителя (опционально)</Label>
-            <Input
-              value={data.ceoPhotoUrl || ""}
-              onChange={(e) => update("ceoPhotoUrl", e.target.value)}
-              placeholder="https://..."
-              className="mt-1"
-            />
-            <p className="text-[11px] text-muted-foreground mt-1">
-              Можно оставить пустым. В будущем появится загрузка файла.
-            </p>
           </div>
         </CardContent>
       </Card>
@@ -304,7 +393,7 @@ export default function DemoProfilePage() {
             <Textarea
               value={data.companyMission || ""}
               onChange={(e) => update("companyMission", e.target.value)}
-              placeholder="Company24.Pro — AI-операционная система для бизнеса. Мы меняем конструкцию, где 80% рутины забирает AI..."
+              placeholder="Company24.Pro — AI-операционная система для бизнеса..."
               rows={3}
               className="mt-1 resize-none"
             />
@@ -315,7 +404,7 @@ export default function DemoProfilePage() {
             <Textarea
               value={data.companyMarket || ""}
               onChange={(e) => update("companyMarket", e.target.value)}
-              placeholder="Подписка 180 000–990 000 ₽/год. Рынок — сотни тысяч компаний в РФ и СНГ. Цели: 2026 — 1000 клиентов, 2027 — 3000..."
+              placeholder="Подписка 180 000–990 000 ₽/год. Рынок — сотни тысяч компаний в РФ и СНГ..."
               rows={3}
               className="mt-1 resize-none"
             />
@@ -326,7 +415,7 @@ export default function DemoProfilePage() {
             <Textarea
               value={data.companyTeam || ""}
               onChange={(e) => update("companyTeam", e.target.value)}
-              placeholder="CEO, технический сотрудник, несколько подрядчиков на разработке и точечных задачах, формируется отдел продаж..."
+              placeholder="CEO, технический сотрудник, несколько подрядчиков..."
               rows={2}
               className="mt-1 resize-none"
             />
@@ -371,7 +460,7 @@ export default function DemoProfilePage() {
         </CardContent>
       </Card>
 
-      {/* ─── Кнопка сохранения ─────────────────────────────── */}
+      {/* Кнопка сохранения */}
       <div className="sticky bottom-0 bg-background/95 backdrop-blur-sm border-t border-border py-3 -mx-14 px-14 flex items-center justify-between gap-3">
         <p className="text-xs text-muted-foreground flex items-center gap-1.5">
           <Info className="w-3 h-3" />
@@ -383,7 +472,7 @@ export default function DemoProfilePage() {
         </Button>
       </div>
 
-      {/* ─── AI-Мастер диалог ─────────────────────────────── */}
+      {/* AI-Мастер */}
       <Dialog open={aiOpen} onOpenChange={(o) => { if (!aiLoading) setAiOpen(o) }}>
         <DialogContent className="sm:max-w-xl">
           <DialogHeader>
