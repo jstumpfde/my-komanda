@@ -1,12 +1,11 @@
 // app/api/modules/hr/demo/generate/route.ts
 // AI-генерация контента для демонстрации должности
-// Версия 3.0 — генерация по одному блоку за раз, с использованием системных блоков компании.
-// Дата: 18 апреля 2026
+// Версия 3.1 — блок-за-блоком + системные блоки + очистка markdown + demoProfile из компании
 
 import { NextRequest } from "next/server"
 import { eq, and, isNull, inArray } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { vacancies, demoTemplates } from "@/lib/db/schema"
+import { vacancies, demoTemplates, companies } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import {
   DEMO_TEMPLATES,
@@ -18,81 +17,101 @@ import {
 } from "@/lib/hr/demo-templates"
 import { getClaudeMessagesUrl } from "@/lib/claude-proxy"
 
-// ─── ТИПЫ ЗАПРОСА ───────────────────────────────────────────────────────────
-
 interface GenerateRequestBody {
   vacancyId: string
   template?: DemoTemplateId
   tone?: ToneId
   strictness?: FilterStrictnessId
   market?: string[]
-  blockIndex?: number  // Номер блока для генерации (0, 1, 2...)
-  mode?: "single" | "all"  // single = один блок, all = весь шаблон за раз (старое поведение)
+  blockIndex?: number
+  mode?: "single" | "all"
 }
 
-// ─── МАППИНГ БЛОКОВ ИЗ СИСТЕМНЫХ БЛОКОВ КОМПАНИИ ────────────────────────────
+// ─── МАППИНГ БЛОКОВ ШАБЛОНОВ → БЛОКИ КОМПАНИИ ───────────────────────────────
 
-// Соответствие наших блоков шаблонов к niche системных блоков компании
 const COMPANY_BLOCK_MAP: Record<string, string> = {
-  // Длинный шаблон
-  "l1": "company_block_greeting",      // Приветствие
-  "l2": "company_block_product",       // О продукте
-  "l3": "company_block_market",        // Рынок и клиенты
-  "l4": "company_block_ceo",           // О руководителе
-  "l7": "company_block_stack",         // Стек и инструменты
-  "l13": "company_block_team",         // Команда и условия
-  "l16": "company_block_next",         // Что дальше
-  // Средний шаблон
+  // Long
+  "l1": "company_block_greeting",
+  "l2": "company_block_product",
+  "l3": "company_block_market",
+  "l4": "company_block_ceo",
+  "l7": "company_block_stack",
+  "l13": "company_block_team",
+  "l16": "company_block_next",
+  // Medium
   "m1": "company_block_greeting",
   "m2": "company_block_product",
   "m3": "company_block_ceo",
   "m5": "company_block_stack",
   "m10": "company_block_team",
-  // Короткий шаблон
+  // Short
   "s1": "company_block_greeting",
   "s2": "company_block_product",
   "s7": "company_block_next",
 }
 
-// ─── СИСТЕМНЫЙ ПРОМТ: правила качества ──────────────────────────────────────
+// ─── СИСТЕМНЫЙ ПРОМТ ────────────────────────────────────────────────────────
 
-const SYSTEM_RULES = `Ты создаёшь ОДИН блок интерактивной демонстрации должности — полноценную презентацию компании и роли в стиле опытного CEO-основателя.
+const SYSTEM_RULES = `Ты создаёшь ОДИН блок интерактивной демонстрации должности в стиле опытного CEO-основателя, который говорит лично с сильным кандидатом.
 
-ЭТАЛОННЫЙ СТИЛЬ — как пишет опытный CEO в личном разговоре с сильным кандидатом. Живой человек, который уважает время и интеллект кандидата, говорит прямо и по делу.
+ЭТАЛОННЫЙ СТИЛЬ:
+- Живой человек, не HR-отдел и не маркетолог
+- Уважает время и интеллект кандидата
+- Прямо, по делу, без пафоса
+- Конкретные цифры вместо общих слов
+- Короткие предложения (2–4 на абзац)
 
-ЖЁСТКИЕ ЗАПРЕТЫ:
-1. Никаких AI-паттернов: НЕ используй "не X, а Y", триады прилагательных, "важно отметить", "во-первых/во-вторых".
-2. Никаких HR-штампов: "динамично развивающаяся", "молодой дружный коллектив", "конкурентная заработная плата".
-3. Никакого инфобизнеса: "раскрой потенциал", "это твой шанс", восклицательных знаков больше 1 на блок.
-4. Никакого пафоса: "миссия меняющая индустрию", "лидер рынка" без доказательств.
-5. Запрещённые эмодзи: 🚀 ✨ 💡 🎯 🔥 ⚡ 🌟 ✅ 💪.
-6. Длинное тире (—) только в "термин — пояснение", не как разделитель.
-7. "Вы" со строчной буквы.
+ЖЁСТКИЕ ЗАПРЕТЫ (нарушение = провал):
+1. НЕ используй конструкцию "не X, а Y"
+2. НЕ используй триады прилагательных ("сильный, честный, основательный")
+3. НЕ пиши "важно отметить", "стоит подчеркнуть"
+4. НЕ используй "во-первых / во-вторых"
+5. НЕ пиши HR-штампы: "динамично развивающаяся", "молодой дружный коллектив", "конкурентная заработная плата"
+6. НЕ пиши инфобизнес: "раскрой потенциал", "это твой шанс"
+7. НЕ используй эмодзи 🚀 ✨ 💡 🎯 🔥 ⚡ 🌟 ✅ 💪
+8. "Вы" со строчной буквы
+9. Восклицательных знаков — максимум 1 на блок
+10. Длинное тире (—) только в "термин — пояснение", не как разделитель
 
 ТИПОГРАФИКА:
-- Диапазоны через длинное тире с пробелами: "60 000–80 000 ₽"
-- Проценты без пробелов: "80%"
+- Диапазоны: "60 000–80 000 ₽" (с пробелами)
+- Проценты: "80%" (без пробела)
 - AI-термины через дефис: "AI-агенты"
 
-ЧТО ХОРОШО:
-- Конкретные цифры вместо общих слов
-- Короткие предложения (2-4 на абзац)
-- Прямые формулировки
-- Буллиты для списков
-- Жирные акценты на ключевых фактах
+СТРУКТУРА БЛОКА:
+- Заголовок или якорь первой фразой
+- 3-6 абзацев (ТЕКСТ ДОЛЖЕН БЫТЬ ГЛУБОКИМ, НЕ ОГРЫЗКИ)
+- Буллиты для списков (3+ пунктов)
+- Жирные <b>акценты</b> на ключевых фактах
 
-ДЛИНА БЛОКА: 3–6 абзацев, с буллитами где уместно. Глубокий и содержательный, не огрызки.
+HTML-ФОРМАТ:
+- Каждый параграф: <p style="margin:0 0 12px 0;line-height:1.55">Текст</p>
+- Списки: <ul style="margin:0 0 12px 0;padding-left:22px"><li style="margin:0 0 6px 0">Пункт</li></ul>
+- Жирный: <b>текст</b>
+- Разделители между смысловыми блоками: дополнительный <p> с коротким заголовком
 
-ФОРМАТ: Верни ТОЛЬКО HTML-контент блока (без тегов <html>, <body>). Используй <p>, <b>, <br>, <ul><li>. Параграфы с margin и line-height inline.
+КРИТИЧЕСКИ ВАЖНО:
+- Верни ТОЛЬКО HTML-контент блока
+- БЕЗ обёртки \`\`\`html или \`\`\`markdown или \`\`\`
+- БЕЗ объяснений до или после
+- БЕЗ тегов <html>, <body>, <head>
+- Начинай сразу с <p> или <h3>`
 
-Пример параграфа:
-<p style="margin:0 0 12px 0;line-height:1.55">Текст абзаца.</p>`
+// ─── ОЧИСТКА ОТ MARKDOWN-ОБЁРТКИ ────────────────────────────────────────────
 
-// ─── ФУНКЦИЯ: получить системные блоки компании ─────────────────────────────
+function cleanMarkdownWrapper(text: string): string {
+  let t = text.trim()
+  // Убираем ```html, ```markdown, ``` в начале
+  t = t.replace(/^```(?:html|markdown|md)?\s*\n?/i, "")
+  // Убираем ``` в конце
+  t = t.replace(/\n?```\s*$/, "")
+  return t.trim()
+}
+
+// ─── ЗАГРУЗКА СИСТЕМНЫХ БЛОКОВ КОМПАНИИ ─────────────────────────────────────
 
 async function fetchCompanyBlocks(): Promise<Map<string, string>> {
-  const niches = Object.values(COMPANY_BLOCK_MAP)
-  const uniqueNiches = Array.from(new Set(niches))
+  const niches = Array.from(new Set(Object.values(COMPANY_BLOCK_MAP)))
 
   const rows = await db
     .select({
@@ -104,38 +123,39 @@ async function fetchCompanyBlocks(): Promise<Map<string, string>> {
       and(
         eq(demoTemplates.isSystem, true),
         isNull(demoTemplates.tenantId),
-        inArray(demoTemplates.niche, uniqueNiches),
+        inArray(demoTemplates.niche, niches),
       )
     )
 
   const map = new Map<string, string>()
   for (const row of rows) {
-    // sections — это [lesson][block], берём первый блок первого урока
     try {
       const sections = row.sections as Array<{ blocks?: Array<{ content?: string }> }>
       if (Array.isArray(sections) && sections[0]?.blocks?.[0]?.content) {
         map.set(row.niche, sections[0].blocks[0].content)
       }
     } catch {
-      // skip malformed
+      // skip
     }
   }
 
   return map
 }
 
-// ─── ФУНКЦИЯ: подставить плейсхолдеры в блок компании ───────────────────────
+// ─── ПОДСТАНОВКА ПЛЕЙСХОЛДЕРОВ ──────────────────────────────────────────────
 
 function applyPlaceholders(html: string, data: Record<string, string>): string {
   let result = html
   for (const [key, value] of Object.entries(data)) {
     const pattern = new RegExp(`\\[${key}\\]`, "g")
-    result = result.replace(pattern, value || `[${key}]`)
+    if (value && value.trim()) {
+      result = result.replace(pattern, value.trim())
+    }
   }
   return result
 }
 
-// ─── ФУНКЦИЯ: сгенерировать ОДИН блок через AI ──────────────────────────────
+// ─── ГЕНЕРАЦИЯ ОДНОГО БЛОКА AI ──────────────────────────────────────────────
 
 async function generateSingleBlock(
   apiKey: string,
@@ -147,30 +167,23 @@ async function generateSingleBlock(
 ): Promise<string> {
   const prompt = `${SYSTEM_RULES}
 
-═══════════════════════════════════════════
-КОНТЕКСТ
-═══════════════════════════════════════════
-
+═══ КОНТЕКСТ ═══
 ${context}
 
 Тон: ${toneHint}
-Жёсткость фильтра: ${strictnessHint}
+Жёсткость фильтра кандидатов: ${strictnessHint}
 
-═══════════════════════════════════════════
-ЗАДАЧА
-═══════════════════════════════════════════
-
+═══ ЗАДАЧА ═══
 Создай блок "${blockTitle}".
 
-ЧТО ПИШЕМ В ЭТОМ БЛОКЕ:
+Содержание блока:
 ${blockDescription}
 
 ВАЖНО:
-- Если данных не хватает (например, для блока "О руководителе" нет имени) — напиши заглушку "[укажите эти данные]" или "Эту информацию вы узнаете при встрече".
-- Если данные есть — используй ВСЕ конкретные цифры и факты.
-- Длина: 3–6 абзацев, глубоко, не огрызки.
-
-Верни ТОЛЬКО HTML-контент блока. Без объяснений до или после.`
+- Если данных не хватает — пиши в духе "Эту информацию вы узнаете при встрече" или оставь короткую заглушку в квадратных скобках
+- Если данные есть — используй ВСЕ конкретные цифры и факты
+- Длина: 3–6 абзацев, глубоко, с буллитами где уместно
+- Верни ТОЛЬКО HTML-контент без любых обёрток`
 
   const aiRes = await fetch(getClaudeMessagesUrl(), {
     method: "POST",
@@ -194,7 +207,9 @@ ${blockDescription}
 
   const data = (await aiRes.json()) as { content?: Array<{ type: string; text?: string }> }
   const textBlock = data.content?.find((b) => b.type === "text")
-  return textBlock?.text?.trim() || "<p>Не удалось сгенерировать контент блока.</p>"
+  const raw = textBlock?.text?.trim() || ""
+  const cleaned = cleanMarkdownWrapper(raw)
+  return cleaned || "<p>Не удалось сгенерировать контент блока.</p>"
 }
 
 // ─── ОСНОВНОЙ HANDLER ───────────────────────────────────────────────────────
@@ -213,7 +228,7 @@ export async function POST(req: NextRequest) {
       return apiError("ANTHROPIC_API_KEY не настроен", 500)
     }
 
-    // 1. Загружаем данные вакансии
+    // 1. Загружаем вакансию
     const [vacancy] = await db
       .select({
         id: vacancies.id,
@@ -231,11 +246,24 @@ export async function POST(req: NextRequest) {
       return apiError("Vacancy not found", 404)
     }
 
-    // 2. Извлекаем анкету
+    // 2. Загружаем профиль компании
+    const [company] = await db
+      .select({
+        name: companies.name,
+        companyDescription: companies.companyDescription,
+        description: companies.description,
+      })
+      .from(companies)
+      .where(eq(companies.id, user.companyId))
+      .limit(1)
+
+    // 3. Данные анкеты
     const dj = (vacancy.descriptionJson as Record<string, unknown>) || {}
     const anketa = (dj.anketa as Record<string, unknown>) || {}
+    const demoProfile = (dj.demoProfile as Record<string, string>) || {}
 
-    const companyName = String(anketa.companyName || anketa.company || "Компания")
+    const companyName = company?.name || String(anketa.companyName || anketa.company || "Компания")
+    const companyDesc = company?.companyDescription || company?.description || String(anketa.companyDescription || "")
     const position = vacancy.title || String(anketa.position || "Должность")
     const industry = String(anketa.industry || "")
     const responsibilities = String(anketa.responsibilities || "")
@@ -252,9 +280,8 @@ export async function POST(req: NextRequest) {
     const workFormats = Array.isArray(anketa.workFormats)
       ? (anketa.workFormats as string[]).join(", ")
       : ""
-    const companyDescription = String(anketa.companyDescription || anketa.aboutCompany || "")
 
-    // 3. Настройки
+    // 4. Настройки генерации
     const templateId: DemoTemplateId = body.template || "medium"
     const template = DEMO_TEMPLATES.find((t) => t.id === templateId) || DEMO_TEMPLATES[1]
 
@@ -264,9 +291,9 @@ export async function POST(req: NextRequest) {
     const strictnessId: FilterStrictnessId = (body.strictness as FilterStrictnessId) || "medium"
     const strictnessHint = FILTER_STRICTNESS[strictnessId] || FILTER_STRICTNESS.medium
 
-    // 4. Общий контекст для AI-блоков
+    // 5. Контекст для AI
     const context = `Компания: ${companyName}${industry ? ` (отрасль: ${industry})` : ""}
-${companyDescription ? `О компании: ${companyDescription}` : ""}
+${companyDesc ? `О компании: ${companyDesc}` : ""}
 Должность: ${position}
 Город: ${city || "не указан"}
 Формат работы: ${workFormats || "не указан"}
@@ -277,18 +304,27 @@ ${companyDescription ? `О компании: ${companyDescription}` : ""}
 Условия: ${conditions || "не указаны"}
 Размер демо: ${template.label} (${template.time})`
 
-    // 5. Плейсхолдеры для системных блоков компании
+    // 6. Плейсхолдеры
+    const ceoName = String(demoProfile.ceoName || anketa.ceoName || "")
     const placeholders: Record<string, string> = {
       "ДОЛЖНОСТЬ": position.toLowerCase(),
-      "ИМЯ_РУКОВОДИТЕЛЯ": String(anketa.ceoName || ""),
-      "ИМЯ_CEO": String(anketa.ceoName || "CEO").split(" ")[0],
-      // Остальные плейсхолдеры остаются пустыми или подставятся дефолты
+      "ИМЯ_РУКОВОДИТЕЛЯ": ceoName,
+      "ИМЯ_CEO": ceoName ? ceoName.split(" ")[0] : "CEO",
+      "КРАТКАЯ_СПРАВКА": String(demoProfile.ceoShortBio || ""),
+      "ОПЫТ_ЛЕТ": String(demoProfile.ceoExperience || ""),
+      "ЧТО_ДЕЛАЛ": String(demoProfile.ceoBackground || ""),
+      "ОТНОШЕНИЕ_К_AI": String(demoProfile.ceoAiAttitude || ""),
+      "СТИЛЬ": String(demoProfile.ceoStyle || ""),
+      "ЦЕННОСТИ": String(demoProfile.ceoValues || ""),
+      "ГАРАНТИЯ": String(demoProfile.guarantee || anketa.bonus || ""),
+      "ОКЛАД": vacancy.salaryMin ? vacancy.salaryMin.toLocaleString("ru-RU") : "",
+      "ДОХОД_СРЕДНИЙ": String(demoProfile.incomeMedium || ""),
     }
 
-    // 6. Загружаем системные блоки компании
+    // 7. Системные блоки
     const companyBlocks = await fetchCompanyBlocks()
 
-    // ═══ РЕЖИМ single: генерируем ОДИН блок по blockIndex ═══
+    // ═══ РЕЖИМ single ═══
     if (body.mode === "single" && typeof body.blockIndex === "number") {
       const blockIdx = body.blockIndex
       if (blockIdx < 0 || blockIdx >= template.blocks.length) {
@@ -297,7 +333,6 @@ ${companyDescription ? `О компании: ${companyDescription}` : ""}
 
       const b = template.blocks[blockIdx]
 
-      // Если это question-блок — возвращаем как есть
       if (b.type === "question") {
         return apiSuccess({
           index: blockIdx,
@@ -311,7 +346,6 @@ ${companyDescription ? `О компании: ${companyDescription}` : ""}
         })
       }
 
-      // Если это placeholder-блок — возвращаем описание
       if (b.type === "placeholder") {
         return apiSuccess({
           index: blockIdx,
@@ -319,17 +353,15 @@ ${companyDescription ? `О компании: ${companyDescription}` : ""}
           block: {
             type: "text",
             title: b.title,
-            content: `<p style="color: #999"><i>${b.description}</i></p>`,
+            content: `<p style="margin:0 0 12px 0;line-height:1.55;color:#666"><i>${b.description}</i></p><p style="margin:0 0 12px 0;line-height:1.55;color:#999;font-size:13px">Этот блок заполняется автоматически при прохождении демонстрации кандидатом.</p>`,
           },
         })
       }
 
-      // Если это text-блок — сначала проверим системный блок компании
       const companyNiche = COMPANY_BLOCK_MAP[b.id]
       if (companyNiche) {
         const systemHtml = companyBlocks.get(companyNiche)
         if (systemHtml) {
-          // Используем системный блок с подстановкой плейсхолдеров
           return apiSuccess({
             index: blockIdx,
             total: template.blocks.length,
@@ -343,7 +375,6 @@ ${companyDescription ? `О компании: ${companyDescription}` : ""}
         }
       }
 
-      // Иначе — генерим через AI
       try {
         const content = await generateSingleBlock(
           apiKey,
@@ -369,8 +400,7 @@ ${companyDescription ? `О компании: ${companyDescription}` : ""}
       }
     }
 
-    // ═══ РЕЖИМ all (по умолчанию): возвращаем метаданные для фронта ═══
-    // Фронт будет вызывать single для каждого блока по очереди
+    // ═══ РЕЖИМ all ═══
     const blocksMeta = template.blocks.map((b, idx) => ({
       index: idx,
       id: b.id,
