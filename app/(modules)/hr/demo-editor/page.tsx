@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from "react"
+import { useState, useEffect, useCallback, useRef, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
@@ -115,7 +115,7 @@ function buildDemoFromDb(dbId: string, title: string, lessonsJson: unknown[]): D
 
 // ─── Главный компонент ──────────────────────────────────────────────────────
 
-export default function DemoEditorPage() {
+function DemoEditorContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const vacancyIdFromUrl = searchParams?.get("vacancyId") || null
@@ -390,5 +390,13 @@ export default function DemoEditorPage() {
         />
       </SidebarInset>
     </SidebarProvider>
+  )
+}
+
+export default function DemoEditorPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center h-screen text-muted-foreground text-sm">Загрузка...</div>}>
+      <DemoEditorContent />
+    </Suspense>
   )
 }
