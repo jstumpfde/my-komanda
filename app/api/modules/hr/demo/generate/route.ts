@@ -260,7 +260,9 @@ export async function POST(req: NextRequest) {
     // 3. Данные анкеты
     const dj = (vacancy.descriptionJson as Record<string, unknown>) || {}
     const anketa = (dj.anketa as Record<string, unknown>) || {}
-    const demoProfile = (dj.demoProfile as Record<string, string>) || {}
+    const companyDemoProfile = (company as { demoProfile?: Record<string, string> } | undefined)?.demoProfile
+    const vacancyDemoProfile = dj.demoProfile as Record<string, string> | undefined
+    const demoProfile: Record<string, string> = { ...(vacancyDemoProfile || {}), ...(companyDemoProfile || {}) }
 
     const companyName = company?.name || String(anketa.companyName || anketa.company || "Компания")
     const companyDesc = company?.companyDescription || company?.description || String(anketa.companyDescription || "")
