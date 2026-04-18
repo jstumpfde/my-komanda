@@ -109,6 +109,7 @@ export const companies = pgTable("companies", {
   brandBgColor:       text("brand_bg_color").default("#f0f4ff"),
   brandTextColor:     text("brand_text_color").default("#1e293b"),
   customTheme:        jsonb("custom_theme"),       // { primary, background, foreground, sidebar, accent }
+  demoProfile:        jsonb("demo_profile").default({}),  // Профиль для демонстраций должности
   brandName:          text("brand_name"),
   brandSlogan:        text("brand_slogan"),
   subdomain:          text("subdomain").unique(),
