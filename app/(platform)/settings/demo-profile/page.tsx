@@ -255,7 +255,7 @@ export default function DemoProfilePage() {
                   <img
                     src={data.ceoPhotoUrl}
                     alt={data.ceoName || "Руководитель"}
-                    className="w-24 h-24 rounded-lg object-cover border border-border"
+                    className="w-40 h-40 rounded-lg object-cover border border-border"
                   />
                   <button
                     type="button"
@@ -268,7 +268,7 @@ export default function DemoProfilePage() {
                   </button>
                 </div>
               ) : (
-                <div className="w-24 h-24 rounded-lg bg-muted flex items-center justify-center border border-dashed border-border">
+                <div className="w-40 h-40 rounded-lg bg-muted flex items-center justify-center border border-dashed border-border">
                   <User className="w-8 h-8 text-muted-foreground" />
                 </div>
               )}
