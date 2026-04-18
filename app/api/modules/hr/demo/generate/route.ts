@@ -1,27 +1,98 @@
+// app/api/modules/hr/demo/generate/route.ts
+// AI-генерация контента для демонстрации должности
+// Версия 2.0 — переписана под логику эталонной v8 маркетолога
+// Дата: 18 апреля 2026
+
 import { NextRequest } from "next/server"
 import { eq, and } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { vacancies } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
-import { DEMO_TEMPLATES, type DemoTemplateId, type DemoTemplateBlock } from "@/lib/hr/demo-templates"
+import {
+  DEMO_TEMPLATES,
+  TONE_OPTIONS,
+  FILTER_STRICTNESS,
+  type DemoTemplateId,
+  type ToneId,
+  type FilterStrictnessId,
+} from "@/lib/hr/demo-templates"
 import { getClaudeMessagesUrl } from "@/lib/claude-proxy"
 
-const TONE_HINT: Record<string, string> = {
-  energetic: "Энергичный — с энтузиазмом, восклицаниями, мотивирующий",
-  friendly: "Дружелюбный — тепло, по-свойски, как с будущим коллегой",
-  business: "Деловой — профессионально, сдержанно, без эмодзи",
-  direct: "Прямой — кратко, факты без воды",
+// ─── ТИПЫ ЗАПРОСА ───────────────────────────────────────────────────────────
+
+interface GenerateRequestBody {
+  vacancyId: string
+  template?: DemoTemplateId
+  tone?: ToneId
+  strictness?: FilterStrictnessId
+  market?: string[]
 }
+
+// ─── СИСТЕМНЫЙ ПРОМТ: правила качества (эталон v8) ──────────────────────────
+
+const SYSTEM_RULES = `Ты создаёшь интерактивную демонстрацию должности. Это НЕ классическая вакансия с HH.ru, а полноценная презентация компании и роли, которая заменяет 2-3 первичных собеседования.
+
+ЭТАЛОННЫЙ СТИЛЬ — как пишет опытный CEO-основатель в личном разговоре с сильным кандидатом. Не HR-менеджер, не маркетолог, не PR. Живой человек, который:
+- Уважает время и интеллект кандидата
+- Говорит прямо и по делу
+- Не боится сложных формулировок про сложные вещи
+- Не льстит, не продаёт, не пугает
+
+ЖЁСТКИЕ ЗАПРЕТЫ (нарушение = провал генерации):
+1. Никаких AI-паттернов:
+   - НЕ используй конструкцию "не X, а Y" (например, "не просто работа, а вызов")
+   - НЕ используй триады параллельных прилагательных ("сильный, честный, основательный")
+   - НЕ пиши "важно отметить", "стоит подчеркнуть", "хочется особо выделить"
+   - НЕ используй "во-первых / во-вторых / в-третьих"
+2. Никаких HR-штампов:
+   - "динамично развивающаяся компания"
+   - "молодой дружный коллектив"
+   - "конкурентная заработная плата"
+   - "возможности профессионального роста"
+3. Никаких инфобизнес-оборотов:
+   - "раскрой свой потенциал"
+   - "это твой шанс"
+   - "мы ищем именно тебя"
+   - восклицательных знаков больше 1 на блок
+4. Никакого пафоса:
+   - "миссия меняющая индустрию"
+   - "лидер рынка" (если компания не реальный лидер с доказательствами)
+   - "работа мечты"
+5. Запрещённые эмодзи: 🚀 ✨ 💡 🎯 🔥 ⚡ 🌟 ✅ 💪 — это эмодзи инфобизнеса.
+6. Длинное тире (—) используй ТОЛЬКО в роли "термин — пояснение". Не как основной разделитель.
+7. "Вы" пиши со строчной буквы (массовое обращение), не с заглавной.
+
+ТИПОГРАФИКА:
+- Числовые диапазоны через длинное тире с неразрывным пробелом: "60 000–80 000 ₽"
+- Проценты и числа без пробелов перед знаком: "80%", "6 месяцев"
+- Название компании пиши ровно так, как оно дано в данных (с суффиксом .Pro если есть)
+- AI-термины через дефис: "AI-агенты", "AI-первый", "AI-стек"
+
+ЧТО ХОРОШО:
+- Конкретные цифры вместо общих слов ("60 клиентов в месяц" вместо "хороший объём")
+- Короткие предложения. Один абзац = 2-4 предложения максимум.
+- Прямые формулировки: "будет тяжело, если...", "не подойдёт тем, кто..."
+- Буллиты для списков, не сплошной текст
+- Жирные **акценты** на ключевых фактах для сканирования с телефона
+
+ПРИНЦИП КАЖДОГО БЛОКА:
+- Кандидат читает с телефона, 10-20 секунд на блок
+- Должен понять суть за первые 2 предложения
+- Детали в буллитах, не в сплошном тексте
+- В конце блока — плавный переход к следующему, например "Далее — о руководителе." с эмодзи ➡️`
+
+// ─── ИНСТРУКЦИЯ ПОД КОНКРЕТНЫЙ БЛОК ─────────────────────────────────────────
+
+function blockInstruction(blockTitle: string, blockDescription: string): string {
+  return `БЛОК "${blockTitle}". ${blockDescription}`
+}
+
+// ─── ОСНОВНОЙ HANDLER ───────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
   try {
     const user = await requireCompany()
-    const body = await req.json() as {
-      vacancyId: string
-      template?: DemoTemplateId
-      tone?: string
-      market?: string[]
-    }
+    const body = (await req.json()) as GenerateRequestBody
 
     if (!body.vacancyId) {
       return apiError("vacancyId is required", 400)
@@ -32,7 +103,7 @@ export async function POST(req: NextRequest) {
       return apiError("ANTHROPIC_API_KEY не настроен", 500)
     }
 
-    // Get vacancy data
+    // ─── 1. Загружаем данные вакансии ───────────────────────────────────────
     const [vacancy] = await db
       .select({
         id: vacancies.id,
@@ -50,80 +121,118 @@ export async function POST(req: NextRequest) {
       return apiError("Vacancy not found", 404)
     }
 
-    // Extract anketa data
+    // ─── 2. Извлекаем анкету ────────────────────────────────────────────────
     const dj = (vacancy.descriptionJson as Record<string, unknown>) || {}
     const anketa = (dj.anketa as Record<string, unknown>) || {}
+
     const companyName = String(anketa.companyName || anketa.company || "Компания")
+    const companyDescription = String(anketa.companyDescription || anketa.aboutCompany || "")
     const position = vacancy.title || String(anketa.position || "Должность")
     const industry = String(anketa.industry || "")
     const responsibilities = String(anketa.responsibilities || "")
     const requirements = String(anketa.requirements || "")
-    const conditions = Array.isArray(anketa.conditions) ? (anketa.conditions as string[]).join(", ") : String(anketa.conditions || "")
-    const conditionsCustom = Array.isArray(anketa.conditionsCustom) ? (anketa.conditionsCustom as string[]).join(", ") : ""
+    const conditions = Array.isArray(anketa.conditions)
+      ? (anketa.conditions as string[]).join(", ")
+      : String(anketa.conditions || "")
+    const conditionsCustom = Array.isArray(anketa.conditionsCustom)
+      ? (anketa.conditionsCustom as string[]).join(", ")
+      : ""
     const allConditions = [conditions, conditionsCustom].filter(Boolean).join(", ")
     const bonus = String(anketa.bonus || "")
-    const salary = vacancy.salaryMin && vacancy.salaryMax
-      ? `${vacancy.salaryMin.toLocaleString("ru-RU")} – ${vacancy.salaryMax.toLocaleString("ru-RU")} ₽`
-      : String(anketa.salary || "")
+    const salary =
+      vacancy.salaryMin && vacancy.salaryMax
+        ? `${vacancy.salaryMin.toLocaleString("ru-RU")}–${vacancy.salaryMax.toLocaleString("ru-RU")} ₽`
+        : String(anketa.salary || "")
     const city = vacancy.city || String(anketa.positionCity || "")
-    const workFormats = Array.isArray(anketa.workFormats) ? (anketa.workFormats as string[]).join(", ") : ""
-    const requiredSkills = Array.isArray(anketa.requiredSkills) ? (anketa.requiredSkills as string[]).join(", ") : ""
+    const workFormats = Array.isArray(anketa.workFormats)
+      ? (anketa.workFormats as string[]).join(", ")
+      : ""
+    const requiredSkills = Array.isArray(anketa.requiredSkills)
+      ? (anketa.requiredSkills as string[]).join(", ")
+      : ""
 
-    // Select template
-    const templateId = body.template || "medium"
-    const template = DEMO_TEMPLATES.find(t => t.id === templateId) || DEMO_TEMPLATES[1]
+    // ─── 3. Настройки генерации ─────────────────────────────────────────────
+    const templateId: DemoTemplateId = body.template || "medium"
+    const template = DEMO_TEMPLATES.find((t) => t.id === templateId) || DEMO_TEMPLATES[1]
 
-    // Build block descriptions for AI
-    const aiBlocks = template.blocks.filter(b => b.type === "text" && b.ai)
-    const blockList = aiBlocks.map((b, i) => `${i + 1}. "${b.title}" — ${b.description}`).join("\n")
+    const toneId: ToneId = (body.tone as ToneId) || "friendly"
+    const toneHint = TONE_OPTIONS[toneId] || TONE_OPTIONS.friendly
 
-    const toneText = body.tone && TONE_HINT[body.tone] ? TONE_HINT[body.tone] : "деловой — факты без эмоций"
-    const marketText = Array.isArray(body.market) && body.market.length > 0 ? body.market.join(", ") : "B2B"
+    const strictnessId: FilterStrictnessId = (body.strictness as FilterStrictnessId) || "medium"
+    const strictnessHint = FILTER_STRICTNESS[strictnessId] || FILTER_STRICTNESS.medium
 
-    const prompt = `Сгенерируй контент для демонстрации должности "${position}" в компании "${companyName}".
+    const marketText =
+      Array.isArray(body.market) && body.market.length > 0 ? body.market.join(", ") : "B2B"
 
-Данные о вакансии:
-- Компания: ${companyName}${industry ? ` (${industry})` : ""}
-- Должность: ${position}
-- Город: ${city || "не указан"}
-- Формат: ${workFormats || "не указан"}
-- Зарплата: ${salary || "не указана"}
-- Бонусы: ${bonus || "не указаны"}
-- Обязанности: ${responsibilities || "не указаны"}
-- Требования: ${requirements || "не указаны"}
-- Навыки: ${requiredSkills || "не указаны"}
-- Условия: ${allConditions || "не указаны"}
+    // ─── 4. Фильтруем только AI-блоки ───────────────────────────────────────
+    const aiBlocks = template.blocks.filter((b) => b.type === "text" && b.ai)
+    const blockList = aiBlocks
+      .map((b, i) => `${i + 1}. ID: "${b.id}" — ${blockInstruction(b.title, b.description)}`)
+      .join("\n\n")
 
-Параметры подачи:
-- Тон коммуникации: ${toneText}
-- Тип рынка: ${marketText}
+    // ─── 5. Собираем финальный промт ────────────────────────────────────────
+    const prompt = `${SYSTEM_RULES}
 
-Нужно сгенерировать контент для ${aiBlocks.length} блоков:
+═════════════════════════════════════════════════════════════
+ДАННЫЕ О ВАКАНСИИ
+═════════════════════════════════════════════════════════════
+
+Компания: ${companyName}${industry ? ` (отрасль: ${industry})` : ""}
+${companyDescription ? `О компании: ${companyDescription}` : ""}
+Должность: ${position}
+Город: ${city || "не указан"}
+Формат работы: ${workFormats || "не указан"}
+Зарплата: ${salary || "не указана"}
+Бонусы: ${bonus || "не указаны"}
+Обязанности: ${responsibilities || "не указаны"}
+Требования: ${requirements || "не указаны"}
+Ключевые навыки: ${requiredSkills || "не указаны"}
+Условия: ${allConditions || "не указаны"}
+
+═════════════════════════════════════════════════════════════
+ПАРАМЕТРЫ ПОДАЧИ
+═════════════════════════════════════════════════════════════
+
+Тон коммуникации: ${toneHint}
+Жёсткость фильтра кандидатов: ${strictnessHint}
+Тип рынка: ${marketText}
+Размер демонстрации: ${template.label} (${template.time})
+
+═════════════════════════════════════════════════════════════
+ЗАДАЧА
+═════════════════════════════════════════════════════════════
+
+Нужно сгенерировать HTML-контент для ${aiBlocks.length} блоков демонстрации.
+
+ВАЖНО про контент:
+- Если данных для блока НЕ ХВАТАЕТ (например, в анкете нет описания руководителя для блока "О руководителе") — пиши короткую заглушку со словами в духе "Эту информацию вы узнаете при встрече" или "[Напишите здесь о себе]". НЕ придумывай факты.
+- Если данные ЕСТЬ — используй ВСЕ конкретные цифры и факты из анкеты. Не заменяй "60 000 ₽" на "достойная зарплата".
+- Соблюдай выбранный тон коммуникации во всех блоках единообразно.
+- Если указан тип рынка — учитывай специфику: B2B — длинные продажи, LTV, ROI; B2C — массовый спрос, конверсия; B2G — тендеры, регламенты.
+- Длина блока: 3–6 абзацев, с буллитами где уместно. Избегай воды. Лучше коротко и чётко, чем длинно и размыто.
+- Используй HTML: <p>, <b>, <br>, <ul><li>. Структура с жирными якорями для ключевых фраз.
+- Каждый блок — самостоятельная единица. Читается независимо.
+
+БЛОКИ ДЛЯ ГЕНЕРАЦИИ:
+
 ${blockList}
 
-ПРАВИЛА:
-- Пиши живым деловым русским языком, от лица компании.
-- Соблюдай выбранный тон во всех блоках.
-- Если тип рынка указан — учитывай специфику (для B2B — длинные продажи, LTV; для B2C — массовый спрос; для B2G — тендеры, регламенты).
-- Используй HTML для форматирования: <b>, <br>, <ul><li>.
-- Каждый блок — 2-5 абзацев. Конкретика из данных вакансии.
-- НЕ придумывай информацию которой нет в данных. Если данных нет — напиши общую формулировку.
-- Для блока "Следующий шаг" — используй переменную {{имя}} для обращения к кандидату.
-- Без clickbait, без "лучшая компания мира", без пустых обещаний.
-- ОБЪЁМ: каждый текстовый блок должен содержать 4-8 абзацев, минимум 800 символов на блок. Это КРИТИЧЕСКИ ВАЖНО — пиши развёрнуто, с деталями и примерами.
-- Используй ВСЕ конкретные данные из анкеты: цифры зарплаты, названия навыков, город, условия. Не пиши "конкурентная зарплата" если есть цифры.
-- Для блока "Должность и задачи" — разбей на подсекции: <b>Основные задачи:</b>, <b>Чем предстоит заниматься каждый день:</b>
-- Для блока "Условия и ЗП" — разбей: <b>Доход:</b>, <b>График:</b>, <b>Оформление:</b>
-- Для блока "О компании" — опиши продукт, рынок, клиентов, масштаб, миссию.
-- Добавляй эмодзи для визуального выделения ключевых пунктов (✅, 💰, 📊, 🚀).
+═════════════════════════════════════════════════════════════
+ФОРМАТ ОТВЕТА
+═════════════════════════════════════════════════════════════
 
-Верни ТОЛЬКО валидный JSON массив (без markdown):
+Верни ТОЛЬКО валидный JSON массив (без обёртки markdown, без объяснений до или после):
+
 [
-  {"id": "block_id", "content": "HTML-текст блока"}
+  {"id": "${aiBlocks[0]?.id || "id_блока"}", "content": "HTML-контент блока"},
+  ...
 ]
 
-Используй id из списка блоков: ${aiBlocks.map(b => b.id).join(", ")}`
+Используй точно эти id: ${aiBlocks.map((b) => b.id).join(", ")}
 
+Всё. Начинай генерацию.`
+
+    // ─── 6. Запрос к AI ─────────────────────────────────────────────────────
     const aiContents: Record<string, string> = {}
 
     try {
@@ -135,19 +244,22 @@ ${blockList}
           "anthropic-version": "2023-06-01",
         },
         body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 12000,
+          model: "claude-sonnet-4-5-20250929",
+          max_tokens: 16000,
           messages: [{ role: "user", content: prompt }],
         }),
       })
+
       if (!aiRes.ok) {
         const errText = await aiRes.text()
         console.error("[demo/generate] Claude HTTP", aiRes.status, errText.slice(0, 300))
         return apiError(`AI API error (${aiRes.status})`, 502)
       }
-      const data = await aiRes.json() as { content?: Array<{ type: string; text?: string }> }
-      const textBlock = data.content?.find(b => b.type === "text")
+
+      const data = (await aiRes.json()) as { content?: Array<{ type: string; text?: string }> }
+      const textBlock = data.content?.find((b) => b.type === "text")
       const text = textBlock?.text || ""
+
       const jsonMatch = text.match(/\[[\s\S]*\]/)
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[0]) as Array<{ id: string; content: string }>
@@ -161,13 +273,13 @@ ${blockList}
       return apiError(msg, 502)
     }
 
-    // Build final blocks array
-    const resultBlocks = template.blocks.map(b => {
+    // ─── 7. Собираем финальную структуру блоков ─────────────────────────────
+    const resultBlocks = template.blocks.map((b) => {
       if (b.type === "text" && b.ai) {
         return {
           type: "text" as const,
           title: b.title,
-          content: aiContents[b.id] || `<p>${b.description}</p>`,
+          content: aiContents[b.id] || `<p><i>${b.description}</i></p>`,
         }
       }
       if (b.type === "question") {
@@ -178,7 +290,7 @@ ${blockList}
           questionType: b.questionType || "long",
         }
       }
-      // Placeholder
+      // placeholder
       return {
         type: "text" as const,
         title: b.title,
