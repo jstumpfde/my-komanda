@@ -324,7 +324,7 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
         </div>
         <div className="bg-card rounded-2xl border p-8 sm:p-10">
           <div className="text-center mb-8">
-            <span className="text-5xl block mb-3">{lesson.emoji}</span>
+            {/* <span className="text-5xl block mb-3">{lesson.emoji}</span> */}
             <h1 className="text-2xl font-bold">{lesson.title}</h1>
           </div>
           <div className="space-y-5">
@@ -435,7 +435,7 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
                     )}
                   >
                     <GripVertical className={cn("w-3 h-3 flex-shrink-0 cursor-grab active:cursor-grabbing", isActive ? "text-primary-foreground/40" : "text-muted-foreground/30 group-hover:text-muted-foreground/60")} />
-                    <span className="text-xl flex-shrink-0 leading-none">{lesson.emoji}</span>
+                    {/* <span className="text-xl flex-shrink-0 leading-none">{lesson.emoji}</span> */}
                     {isRenaming ? (
                       <input
                         autoFocus
