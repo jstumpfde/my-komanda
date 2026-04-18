@@ -311,7 +311,7 @@ ${companyDesc ? `О компании: ${companyDesc}` : ""}
     const ceoName = String(demoProfile.ceoName || anketa.ceoName || "")
     const ceoPhotoUrl = String(demoProfile.ceoPhotoUrl || "").trim()
     const ceoPhotoHtml = ceoPhotoUrl
-      ? `<p style="margin:12px 0;text-align:center"><img src="${ceoPhotoUrl}" alt="${ceoName}" style="max-width:400px;width:100%;border-radius:12px;display:inline-block"/></p>`
+      ? `<p style="margin:12px 0;text-align:center"><img src="${ceoPhotoUrl}" alt="${ceoName}" style="max-width:500px;width:100%;border-radius:12px;display:inline-block"/></p>`
       : ""
 
     const placeholders: Record<string, string> = {
