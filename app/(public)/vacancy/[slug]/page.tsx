@@ -123,6 +123,13 @@ function VacancyPageInner({ params }: { params: Promise<{ slug: string }> }) {
         const data = await res.json()
         throw new Error(data.error || "Ошибка отправки")
       }
+      const data = await res.json()
+      const token = data?.data?.token ?? data?.token
+      if (token) {
+        // Редирект на персональную демонстрацию
+        window.location.href = `/demo/${token}`
+        return
+      }
       setScreen("done")
     } catch (err: any) {
       toast.error(err.message || "Не удалось отправить отклик")

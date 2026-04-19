@@ -80,7 +80,7 @@ export async function POST(
       })
       .returning()
 
-    return apiSuccess({ ok: true, candidateId: created.id }, 201)
+    return apiSuccess({ ok: true, candidateId: created.id, token: created.token }, 201)
   } catch (err) {
     if (err instanceof Response) return err
     console.error("POST /api/public/vacancy/[slug]/apply", err)
