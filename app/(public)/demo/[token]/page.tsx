@@ -258,6 +258,16 @@ export default function DemoPage() {
   const [saving, setSaving] = useState(false)
   const blockStartTime = useRef(Date.now())
 
+  // Form state (must be declared before any conditional returns — React rules of hooks)
+  const [formSubmitted, setFormSubmitted] = useState(false)
+  const [formSubmitting, setFormSubmitting] = useState(false)
+  const [formFirst, setFormFirst] = useState("")
+  const [formLast, setFormLast] = useState("")
+  const [formEmail, setFormEmail] = useState("")
+  const [formPhone, setFormPhone] = useState("")
+  const [formBirth, setFormBirth] = useState("")
+  const [formCity, setFormCity] = useState("")
+
   // Fetch demo data
   useEffect(() => {
     fetch(`/api/public/demo/${token}`)
@@ -286,6 +296,16 @@ export default function DemoPage() {
       .catch(() => setError("Не удалось загрузить курс"))
       .finally(() => setLoading(false))
   }, [token])
+
+  // Initialize form fields when data arrives
+  useEffect(() => {
+    if (data) {
+      const parts = data.candidateName?.split(" ") || []
+      setFormFirst(parts[0] || "")
+      setFormLast(parts.slice(1).join(" ") || "")
+      setFormCity(data.city || "")
+    }
+  }, [data])
 
   const flatBlocks = data ? flattenLessons(data.lessons) : []
   const totalBlocks = flatBlocks.length
@@ -364,15 +384,6 @@ export default function DemoPage() {
   const brandColor = data.brandPrimaryColor || "#6366f1"
 
   // ─── Final screen: form + thank you ────────────────────────────────────────
-
-  const [formSubmitted, setFormSubmitted] = useState(false)
-  const [formSubmitting, setFormSubmitting] = useState(false)
-  const [formFirst, setFormFirst] = useState(data?.candidateName?.split(" ")[0] || "")
-  const [formLast, setFormLast] = useState(data?.candidateName?.split(" ").slice(1).join(" ") || "")
-  const [formEmail, setFormEmail] = useState("")
-  const [formPhone, setFormPhone] = useState("")
-  const [formBirth, setFormBirth] = useState("")
-  const [formCity, setFormCity] = useState(data?.city || "")
 
   const handleFormSubmit = async () => {
     if (!formFirst.trim() || !formLast.trim() || !formEmail.trim() || !formPhone.trim()) return
