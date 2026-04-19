@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server"
-import { eq, and, isNull } from "drizzle-orm"
+import { eq, and, or, isNull } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { vacancies, candidates, vacancyUtmLinks } from "@/lib/db/schema"
 import { sql } from "drizzle-orm"
@@ -35,8 +35,8 @@ export async function POST(
       .from(vacancies)
       .where(
         and(
-          eq(vacancies.slug, slug),
-          eq(vacancies.status, "published"),
+          or(eq(vacancies.slug, slug), eq(vacancies.id, slug)),
+          or(eq(vacancies.status, "active"), eq(vacancies.status, "published")),
           isNull(vacancies.deletedAt),
         ),
       )
