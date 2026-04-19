@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server"
-import { eq, and, isNull } from "drizzle-orm"
+import { eq, and, isNull, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { candidates, vacancies, demos, companies } from "@/lib/db/schema"
 import { apiError, apiSuccess } from "@/lib/api-helpers"
@@ -71,12 +71,8 @@ export async function GET(
         lessonsJson: demos.lessonsJson,
       })
       .from(demos)
-      .where(
-        and(
-          eq(demos.vacancyId, vacancy.id),
-          eq(demos.status, "published"),
-        ),
-      )
+      .where(eq(demos.vacancyId, vacancy.id))
+      .orderBy(sql`${demos.updatedAt} DESC`)
       .limit(1)
 
     if (demoRows.length === 0) {
