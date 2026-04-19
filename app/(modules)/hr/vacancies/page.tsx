@@ -716,7 +716,7 @@ export default function VacanciesPage() {
 
       {/* Trash panel */}
       <Sheet open={trashOpen} onOpenChange={setTrashOpen}>
-        <SheetContent className="w-[420px] sm:w-[480px] flex flex-col">
+        <SheetContent className="w-[560px] sm:w-[640px] flex flex-col">
           <SheetHeader>
             <SheetTitle className="flex items-center gap-2">
               <Trash2 className="size-5" />
