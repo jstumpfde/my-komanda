@@ -267,6 +267,7 @@ export default function DemoPage() {
   const [formPhone, setFormPhone] = useState("")
   const [formBirth, setFormBirth] = useState("")
   const [formCity, setFormCity] = useState("")
+  const [formConsent, setFormConsent] = useState(false)
 
   // Fetch demo data
   useEffect(() => {
@@ -473,8 +474,20 @@ export default function DemoPage() {
                 <Input value={formCity} onChange={e => setFormCity(e.target.value)} placeholder="Москва" className="h-10" />
               </div>
             </div>
+            <label className="flex items-start gap-2 text-xs text-gray-600 cursor-pointer select-none pt-1">
+              <input
+                type="checkbox"
+                checked={formConsent}
+                onChange={e => setFormConsent(e.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-gray-300 cursor-pointer flex-shrink-0"
+                style={{ accentColor: brandColor }}
+              />
+              <span>
+                Я согласен на обработку персональных данных в соответствии с <a href="/privacy" target="_blank" className="underline hover:opacity-80">ФЗ-152</a>. Данные используются только для целей найма.
+              </span>
+            </label>
             <Button className="w-full h-11" style={{ backgroundColor: brandColor }} onClick={handleFormSubmit}
-              disabled={formSubmitting || !formFirst.trim() || !formLast.trim() || !formEmail.trim() || !formPhone.trim()}>
+              disabled={formSubmitting || !formFirst.trim() || !formLast.trim() || !formEmail.trim() || !formPhone.trim() || !formConsent}>
               {formSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               Отправить заявку
             </Button>

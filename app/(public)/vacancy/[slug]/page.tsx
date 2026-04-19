@@ -99,10 +99,6 @@ function VacancyPageInner({ params }: { params: Promise<{ slug: string }> }) {
       toast.error("Введите имя")
       return
     }
-    if (!contact.trim()) {
-      toast.error(contactType === "phone" ? "Введите телефон" : "Введите Telegram")
-      return
-    }
 
     const missingRequired = miniFormFields.find(
       (f) => f.required && !extraFields[f.id]?.trim(),
@@ -117,7 +113,7 @@ function VacancyPageInner({ params }: { params: Promise<{ slug: string }> }) {
       const res = await fetch(`/api/public/vacancy/${slug}/apply`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, contact, contactType, utmSource, refId, extraFields }),
+        body: JSON.stringify({ name, contact: name, contactType: "phone", utmSource, refId, extraFields }),
       })
       if (!res.ok) {
         const data = await res.json()
@@ -277,30 +273,6 @@ function VacancyPageInner({ params }: { params: Promise<{ slug: string }> }) {
                     onChange={(e) => setName(e.target.value)}
                     placeholder="Имя Фамилия"
                     autoFocus
-                  />
-                </div>
-
-                {/* Системное: Телефон / Telegram */}
-                <div className="space-y-2">
-                  <Label className="text-sm">Способ связи <span className="text-destructive">*</span></Label>
-                  <RadioGroup
-                    value={contactType}
-                    onValueChange={(v) => setContactType(v as "phone" | "telegram")}
-                    className="flex gap-4"
-                  >
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="phone" id="phone" />
-                      <Label htmlFor="phone" className="text-sm cursor-pointer">Телефон</Label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="telegram" id="telegram" />
-                      <Label htmlFor="telegram" className="text-sm cursor-pointer">Telegram</Label>
-                    </div>
-                  </RadioGroup>
-                  <Input
-                    value={contact}
-                    onChange={(e) => setContact(e.target.value)}
-                    placeholder={contactType === "phone" ? "+7 (___) ___-__-__" : "@username"}
                   />
                 </div>
 
