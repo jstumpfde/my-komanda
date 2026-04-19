@@ -39,7 +39,7 @@ interface UseDemoResult {
 
 export function useDemo(vacancyId: string | null): UseDemoResult {
   const [demo, setDemo] = useState<Demo | null>(null)
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "error" | "idle">("idle")
 
