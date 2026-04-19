@@ -10,6 +10,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Label } from "@/components/ui/label"
 import { CheckCircle2, ChevronRight, Loader2 } from "lucide-react"
 import type { Block, Lesson, Question } from "@/lib/course-types"
+import { resolveBrand } from "@/lib/brand-colors"
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -365,15 +366,15 @@ export default function DemoPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50">
-        <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
+      <div className="flex min-h-screen items-center justify-center bg-white">
+        <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
       </div>
     )
   }
 
   if (error || !data) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
+      <div className="flex min-h-screen items-center justify-center bg-white px-4">
         <div className="text-center">
           <h1 className="text-2xl font-bold text-gray-800">Курс не найден</h1>
           <p className="mt-2 text-gray-500">{error || "Проверьте ссылку и попробуйте снова"}</p>
@@ -382,7 +383,10 @@ export default function DemoPage() {
     )
   }
 
-  const brandColor = data.brandPrimaryColor || "#6366f1"
+  const brand = resolveBrand(data)
+  const brandColor = brand.primary
+  const bgColor = brand.bg
+  const textColor = brand.text
 
   // ─── Final screen: form + thank you ────────────────────────────────────────
 
@@ -414,12 +418,12 @@ export default function DemoPage() {
     // Thank you after form submit
     if (formSubmitted) {
       return (
-        <div className="flex min-h-screen items-center justify-center px-4" style={{ backgroundColor: data.brandBgColor || "#f0f4ff" }}>
+        <div className="flex min-h-screen items-center justify-center px-4" style={{ backgroundColor: bgColor }}>
           <div className="w-full max-w-md text-center space-y-6">
             <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full" style={{ backgroundColor: brandColor + "20" }}>
               <CheckCircle2 className="h-10 w-10" style={{ color: brandColor }} />
             </div>
-            <h1 className="text-2xl font-bold" style={{ color: data.brandTextColor || "#1e293b" }}>Спасибо!</h1>
+            <h1 className="text-2xl font-bold" style={{ color: textColor }}>Спасибо!</h1>
             <p className="text-gray-600">
               Мы рассмотрим вашу заявку на позицию &laquo;{data.vacancyTitle}&raquo; и свяжемся с вами в ближайшее время.
             </p>
@@ -433,13 +437,13 @@ export default function DemoPage() {
 
     // Candidate form
     return (
-      <div className="flex min-h-screen items-center justify-center px-4 py-8" style={{ backgroundColor: data.brandBgColor || "#f0f4ff" }}>
+      <div className="flex min-h-screen items-center justify-center px-4 py-8" style={{ backgroundColor: bgColor }}>
         <div className="w-full max-w-md space-y-6">
           <div className="text-center">
             <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full mb-4" style={{ backgroundColor: brandColor + "20" }}>
               <CheckCircle2 className="h-8 w-8" style={{ color: brandColor }} />
             </div>
-            <h1 className="text-xl font-bold" style={{ color: data.brandTextColor || "#1e293b" }}>
+            <h1 className="text-xl font-bold" style={{ color: textColor }}>
               Отлично! Оставьте свои данные
             </h1>
             <p className="text-sm text-gray-500 mt-1">Мы свяжемся с вами по поводу позиции &laquo;{data.vacancyTitle}&raquo;</p>
@@ -513,7 +517,7 @@ export default function DemoPage() {
   )
 
   return (
-    <div className="flex min-h-screen flex-col" style={{ backgroundColor: data.brandBgColor || "#f0f4ff" }}>
+    <div className="flex min-h-screen flex-col" style={{ backgroundColor: bgColor }}>
       {/* Header + Progress */}
       <div className="sticky top-0 z-10 bg-white/90 backdrop-blur-sm border-b">
         <div className="mx-auto max-w-2xl px-4 py-3">

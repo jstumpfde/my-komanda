@@ -24,6 +24,7 @@ import {
 } from "lucide-react"
 import type { MiniFormField } from "@/components/vacancies/mini-form-builder"
 import { FORMAT_LABELS, EMPLOYMENT_LABELS } from "@/lib/vacancy-types"
+import { resolveBrand } from "@/lib/brand-colors"
 
 interface VacancyData {
   id: string
@@ -90,9 +91,10 @@ function VacancyPageInner({ params }: { params: Promise<{ slug: string }> }) {
     }
   }, [slug, utmSource, utmMedium, screen])
 
-  const accentColor = vacancy?.brandPrimaryColor || "#3b82f6"
-  const bgColor = vacancy?.brandBgColor || "#f0f4ff"
-  const textColor = vacancy?.brandTextColor || "#1e293b"
+  const brand = vacancy ? resolveBrand(vacancy) : resolveBrand({})
+  const accentColor = brand.primary
+  const bgColor = brand.bg
+  const textColor = brand.text
 
   const handleSubmit = async () => {
     if (!name.trim()) {
@@ -155,7 +157,7 @@ function VacancyPageInner({ params }: { params: Promise<{ slug: string }> }) {
 
   if (screen === "done") {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-blue-50 via-white to-indigo-50">
+      <div className="min-h-screen flex items-center justify-center p-4" style={{ backgroundColor: bgColor, color: textColor }}>
         <div className="max-w-md w-full text-center space-y-6">
           <CheckCircle2 className="w-16 h-16 mx-auto" style={{ color: accentColor }} />
           <h1 className="text-2xl font-bold text-foreground">Спасибо за отклик!</h1>
