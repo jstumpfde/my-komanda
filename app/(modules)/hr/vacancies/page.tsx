@@ -19,6 +19,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator } from "@/components/ui/context-menu"
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -176,6 +177,41 @@ function SortableHeader({
 }
 
 // ─── Row actions ─────────────────────────────────────────────────────────────
+
+// Контекстное меню для строки таблицы (правый клик)
+function RowContextMenu({
+  v, children, onDuplicate, onArchive, onDelete,
+}: {
+  v: ApiVacancy
+  children: React.ReactNode
+  onDuplicate: (v: ApiVacancy) => void
+  onArchive: (v: ApiVacancy) => void
+  onDelete: (v: ApiVacancy) => void
+}) {
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
+      <ContextMenuContent className="w-44">
+        <ContextMenuItem onClick={() => window.location.href = `/hr/vacancies/${v.id}/edit`}>
+          <Pencil className="size-4 mr-2" />Редактировать
+        </ContextMenuItem>
+        <ContextMenuItem onClick={() => onDuplicate(v)}>
+          <Copy className="size-4 mr-2" />Дублировать
+        </ContextMenuItem>
+        <ContextMenuSeparator />
+        <ContextMenuItem onClick={() => onArchive(v)}>
+          <Archive className="size-4 mr-2" />В архив
+        </ContextMenuItem>
+        <ContextMenuItem
+          className="text-destructive focus:text-destructive"
+          onClick={() => onDelete(v)}
+        >
+          <Trash2 className="size-4 mr-2" />В корзину
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
+  )
+}
 
 function RowActions({
   v, onDuplicate, onArchive, onDelete,
@@ -603,7 +639,7 @@ export default function VacanciesPage() {
                   <thead>
                     <tr className="border-b border-border bg-muted/40">
                       <th className="pl-5 pr-2 py-3 w-10"><Checkbox checked={allSelected} onCheckedChange={toggleAll} /></th>
-                      <th className="px-4 py-3 text-sm font-semibold text-muted-foreground">Вакансия</th>
+                      <th className="px-4 py-3 text-sm font-semibold text-muted-foreground" style={{ minWidth: 450 }}>Вакансия</th>
                       <th className="px-4 py-3 text-sm font-semibold text-muted-foreground">Город</th>
                       <th className="px-4 py-3"><SortableHeader label="Статус" column="status" current={colSort} onToggle={toggleColSort} /></th>
                       <th className="px-4 py-3"><SortableHeader label="Создана" column="date" current={colSort} onToggle={toggleColSort} /></th>
@@ -613,7 +649,8 @@ export default function VacanciesPage() {
                   </thead>
                   <tbody>
                     {filtered.map((v, i) => (
-                      <tr key={v.id}
+                      <RowContextMenu key={v.id} v={v} {...actions}>
+                      <tr
                         className={cn("transition-colors cursor-pointer hover:bg-accent/40",
                           selected.has(v.id) && "bg-primary/[0.04]",
                           i < filtered.length - 1 && "border-b border-border/60",
@@ -622,7 +659,7 @@ export default function VacanciesPage() {
                         <td className="pl-5 pr-2 py-3.5" onClick={(e) => e.stopPropagation()}>
                           <Checkbox checked={selected.has(v.id)} onCheckedChange={() => toggleOne(v.id)} />
                         </td>
-                        <td className="px-4 py-3.5 font-medium text-sm text-foreground">{v.title}</td>
+                        <td className="px-4 py-3.5 font-medium text-sm text-foreground" style={{ minWidth: 450 }}>{v.title}</td>
                         <td className="px-4 py-3.5 text-sm text-muted-foreground">{v.city ?? "—"}</td>
                         <td className="px-4 py-3.5"><StatusBadge status={v.status} /></td>
                         <td className="px-4 py-3.5 text-sm text-muted-foreground whitespace-nowrap">{formatDate(v.createdAt)}</td>
@@ -631,6 +668,7 @@ export default function VacanciesPage() {
                           <RowActions v={v} {...actions} />
                         </td>
                       </tr>
+                      </RowContextMenu>
                     ))}
                   </tbody>
                 </table>
