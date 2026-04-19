@@ -483,7 +483,7 @@ export default function DemoPage() {
                 style={{ accentColor: brandColor }}
               />
               <span>
-                Я согласен на обработку персональных данных в соответствии с <a href="/privacy" target="_blank" className="underline hover:opacity-80">ФЗ-152</a>. Данные используются только для целей найма.
+                Я согласен на обработку персональных данных в соответствии с <a href="/politicahr2026" target="_blank" className="underline hover:opacity-80">ФЗ-152</a>. Данные используются только для целей найма.
               </span>
             </label>
             <Button className="w-full h-11" style={{ backgroundColor: brandColor }} onClick={handleFormSubmit}
