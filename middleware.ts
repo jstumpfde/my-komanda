@@ -27,6 +27,7 @@ const PUBLIC_PREFIXES = [
   "/intake/",
   "/vacancy-view/",
   "/demo/",
+  "/politicahr2026",
   "/ask/",
 ]
 
