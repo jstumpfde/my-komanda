@@ -255,14 +255,7 @@ export default function PolitikaHr2026Page() {
           <h2 className="text-xl font-bold mt-8 mb-3">10. Изменения политики</h2>
           <p className="mb-2">
             <strong>10.1.</strong> Оператор вправе вносить изменения в Политику.
-            Актуальная редакция публикуется на Сайте по адресу{" "}
-            
-              href="https://company24.pro/politicahr2026"
-              className="text-blue-600 hover:underline"
-            >
-              https://company24.pro/politicahr2026
-            </a>
-            .
+            Актуальная редакция публикуется на Сайте по адресу: https://company24.pro/politicahr2026
           </p>
           <p className="mb-4">
             <strong>10.2.</strong> Использование Сайта после внесения изменений
