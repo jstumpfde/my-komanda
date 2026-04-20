@@ -4,6 +4,16 @@ import { nanoid } from "nanoid"
 import { db } from "@/lib/db"
 import { candidates, demos, vacancies } from "@/lib/db/schema"
 
+type AnketaPayload = {
+  telegram?: string
+  experienceSummary?: string
+  portfolioUrl?: string
+  hhUrl?: string
+  otherLinks?: string
+  employmentPreference?: string
+  niches?: string
+}
+
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ token: string }> }
@@ -17,21 +27,35 @@ export async function POST(
       phone: string
       birthDate?: string
       city?: string
+      anketa?: AnketaPayload
     }
 
     if (!body.firstName || !body.lastName || !body.email || !body.phone) {
       return NextResponse.json({ error: "Заполните обязательные поля" }, { status: 400 })
     }
 
+    // Готовим объект анкеты для jsonb. Пропускаем пустые значения.
+    const cleanAnketa: Record<string, unknown> = {}
+    if (body.anketa) {
+      for (const [k, v] of Object.entries(body.anketa)) {
+        if (typeof v === "string" && v.trim().length > 0) cleanAnketa[k] = v.trim()
+      }
+    }
+    if (body.birthDate) cleanAnketa.birthDate = body.birthDate
+    cleanAnketa.submittedAt = new Date().toISOString()
+
     // Find candidate by token
     const [existing] = await db
-      .select({ id: candidates.id, vacancyId: candidates.vacancyId })
+      .select({ id: candidates.id, vacancyId: candidates.vacancyId, anketaAnswers: candidates.anketaAnswers })
       .from(candidates)
       .where(eq(candidates.token, token))
       .limit(1)
 
     if (existing) {
-      // Update existing candidate with form data
+      // Слияние с уже сохранёнными ответами (jsonb)
+      const prev = (existing.anketaAnswers as Record<string, unknown> | null) ?? {}
+      const merged = { ...prev, ...cleanAnketa }
+
       await db
         .update(candidates)
         .set({
@@ -39,6 +63,7 @@ export async function POST(
           email: body.email,
           phone: body.phone,
           city: body.city || null,
+          anketaAnswers: merged,
           updatedAt: new Date(),
         })
         .where(eq(candidates.id, existing.id))
@@ -46,17 +71,12 @@ export async function POST(
       return NextResponse.json({ success: true, id: existing.id })
     }
 
-    // Find vacancy through demo token — look up candidate's demo
-    // The token is a candidate token, find their vacancy
+    // Fallback: нет кандидата с таким токеном — создаём нового.
+    // Берём первую активную вакансию из demos (исторический fallback).
     const [demo] = await db
       .select({ vacancyId: demos.vacancyId })
       .from(demos)
       .limit(1)
-
-    // Create new candidate
-    const [vacancy] = demo?.vacancyId
-      ? await db.select({ companyId: vacancies.companyId }).from(vacancies).where(eq(vacancies.id, demo.vacancyId)).limit(1)
-      : [null]
 
     if (!demo?.vacancyId) {
       return NextResponse.json({ error: "Вакансия не найдена" }, { status: 404 })
@@ -73,6 +93,7 @@ export async function POST(
         source: "demo",
         stage: "new",
         token: nanoid(12),
+        anketaAnswers: cleanAnketa,
       })
       .returning()
 

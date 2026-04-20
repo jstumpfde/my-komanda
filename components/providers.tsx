@@ -7,13 +7,18 @@ import { MobileBottomNav } from "@/components/dashboard/mobile-nav"
 import type { ReactNode } from "react"
 import { usePathname } from "next/navigation"
 
-// Public pages — доступны без авторизации (guard теперь в middleware.ts)
+// Public pages — доступны без авторизации. Список синхронизирован с
+// PUBLIC_PREFIXES в middleware.ts: на этих маршрутах не показываем
+// интерфейс платформы (мобильную навигацию).
 const PUBLIC_PATHS = [
-  "/candidate/", "/schedule/", "/vacancy/", "/ref/",
-  "/register", "/login", "/hr/onboarding",
+  "/candidate/", "/schedule/", "/vacancy/", "/ref/", "/v/", "/join/",
+  "/register", "/login", "/dev-login", "/landing", "/hr/onboarding",
+  "/demo/", "/intake/", "/vacancy-view/", "/candidate-update/",
+  "/ask/", "/politicahr2026",
 ]
 
 function isPublicPath(pathname: string) {
+  if (pathname === "/") return true
   return PUBLIC_PATHS.some(p => pathname === p || pathname.startsWith(p))
 }
 

@@ -68,9 +68,108 @@ function flattenLessons(lessons: Lesson[]): FlatBlock[] {
 
 // ─── Block Renderers ─────────────────────────────────────────────────────────
 
+// ─── Markdown-like table parser ──────────────────────────────────────────────
+// Находит в тексте группы подряд идущих строк вида «|cell1|cell2|...|»
+// и превращает их в HTML-таблицу. Остальные строки остаются обычным текстом
+// с переносами через <br/>. Вторая строка-разделитель (|---|---|) трактуется
+// как маркер заголовка. Если разделителя нет — первая строка всё равно
+// рендерится как thead для удобства восприятия.
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+}
+
+function isPipeTableRow(s: string): boolean {
+  const t = s.trim()
+  if (!(t.startsWith("|") && t.endsWith("|"))) return false
+  // Должно быть как минимум 2 разделителя, то есть 2+ ячейки
+  return (t.match(/\|/g) || []).length >= 2
+}
+
+function isPipeTableSeparator(cells: string[]): boolean {
+  return cells.length > 0 && cells.every((c) => /^:?-{2,}:?$/.test(c.trim()))
+}
+
+function parsePipeRow(s: string): string[] {
+  const t = s.trim().replace(/^\||\|$/g, "")
+  return t.split("|").map((c) => c.trim())
+}
+
+function renderPipeTable(rows: string[][]): string {
+  let headerCells: string[] | null = null
+  let body = rows
+  if (rows.length >= 2 && isPipeTableSeparator(rows[1])) {
+    headerCells = rows[0]
+    body = rows.slice(2).filter((r) => !isPipeTableSeparator(r))
+  } else if (rows.length >= 1) {
+    // Нет явного разделителя — первая строка считается заголовком
+    headerCells = rows[0]
+    body = rows.slice(1).filter((r) => !isPipeTableSeparator(r))
+  }
+
+  const thead = headerCells
+    ? `<thead><tr>${headerCells
+        .map(
+          (c) =>
+            `<th class="px-3 py-2 text-left text-[13px] font-semibold bg-gray-50 text-gray-700 border-b border-gray-200">${escapeHtml(c)}</th>`,
+        )
+        .join("")}</tr></thead>`
+    : ""
+  const tbody = `<tbody>${body
+    .map(
+      (r) =>
+        `<tr class="odd:bg-white even:bg-gray-50/40">${r
+          .map(
+            (c) =>
+              `<td class="px-3 py-2 align-top text-sm text-gray-800 border-b border-gray-100">${escapeHtml(c)}</td>`,
+          )
+          .join("")}</tr>`,
+    )
+    .join("")}</tbody>`
+
+  return `<div class="my-3 overflow-x-auto rounded-lg border border-gray-200"><table class="w-full border-collapse text-left">${thead}${tbody}</table></div>`
+}
+
+function renderContentWithTables(content: string): string {
+  // Если в контенте уже есть готовая HTML-таблица — не трогаем её и просто
+  // возвращаем как есть (переводы строк вне таблицы конвертируем отдельно).
+  if (/<table[\s>]/i.test(content)) {
+    return content
+  }
+
+  const lines = content.split(/\r?\n/)
+  const out: string[] = []
+  let i = 0
+  while (i < lines.length) {
+    if (
+      isPipeTableRow(lines[i]) &&
+      i + 1 < lines.length &&
+      isPipeTableRow(lines[i + 1])
+    ) {
+      const buf: string[] = []
+      while (i < lines.length && isPipeTableRow(lines[i])) {
+        buf.push(lines[i])
+        i++
+      }
+      const rows = buf.map(parsePipeRow)
+      out.push(renderPipeTable(rows))
+    } else {
+      out.push(escapeHtml(lines[i]) + "<br/>")
+      i++
+    }
+  }
+  // Убираем трейлинговый <br/>
+  let html = out.join("")
+  html = html.replace(/(?:<br\/>)+$/, "")
+  return html
+}
+
 function TextBlock({ block, data }: { block: Block; data: DemoData }) {
-  const html = replaceVars(block.content, data)
-    .replace(/\n/g, "<br/>")
+  const html = renderContentWithTables(replaceVars(block.content, data))
   return (
     <div
       className="prose prose-sm sm:prose max-w-none text-gray-800 leading-relaxed"
@@ -86,7 +185,7 @@ function InfoBlock({ block, data }: { block: Block; data: DemoData }) {
     success: "bg-green-50 border-green-200 text-green-900",
     error: "bg-red-50 border-red-200 text-red-900",
   }
-  const html = replaceVars(block.content, data).replace(/\n/g, "<br/>")
+  const html = renderContentWithTables(replaceVars(block.content, data))
   return (
     <div className={`rounded-lg border p-4 ${styleMap[block.infoStyle] || styleMap.info}`}>
       <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: html }} />
@@ -269,6 +368,14 @@ export default function DemoPage() {
   const [formBirth, setFormBirth] = useState("")
   const [formCity, setFormCity] = useState("")
   const [formConsent, setFormConsent] = useState(false)
+  // Анкета финального этапа — расширенные поля (сохраняются в candidates.anketa_answers)
+  const [formTelegram, setFormTelegram] = useState("")
+  const [formExperience, setFormExperience] = useState("")
+  const [formPortfolio, setFormPortfolio] = useState("")
+  const [formHh, setFormHh] = useState("")
+  const [formOtherLinks, setFormOtherLinks] = useState("")
+  const [formEmployment, setFormEmployment] = useState("")
+  const [formNiches, setFormNiches] = useState("")
 
   // Fetch demo data
   useEffect(() => {
@@ -404,6 +511,15 @@ export default function DemoPage() {
           phone: formPhone.trim(),
           birthDate: formBirth || undefined,
           city: formCity.trim() || undefined,
+          anketa: {
+            telegram:             formTelegram.trim() || undefined,
+            experienceSummary:    formExperience.trim() || undefined,
+            portfolioUrl:         formPortfolio.trim() || undefined,
+            hhUrl:                formHh.trim() || undefined,
+            otherLinks:           formOtherLinks.trim() || undefined,
+            employmentPreference: formEmployment || undefined,
+            niches:               formNiches.trim() || undefined,
+          },
         }),
       })
       setFormSubmitted(true)
@@ -435,21 +551,31 @@ export default function DemoPage() {
       )
     }
 
-    // Candidate form
+    // Candidate form — анкета финального этапа
+    const EMPLOYMENT_OPTIONS = [
+      "Трудовой договор ТК РФ",
+      "ИП",
+      "Самозанятость",
+      "ГПХ",
+      "Обсуждаем",
+    ]
+
     return (
       <div className="flex min-h-screen items-center justify-center px-4 py-8" style={{ backgroundColor: bgColor }}>
-        <div className="w-full max-w-md space-y-6">
+        <div className="w-full max-w-xl space-y-6">
           <div className="text-center">
             <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full mb-4" style={{ backgroundColor: brandColor + "20" }}>
               <CheckCircle2 className="h-8 w-8" style={{ color: brandColor }} />
             </div>
             <h1 className="text-xl font-bold" style={{ color: textColor }}>
-              Отлично! Оставьте свои данные
+              Анкета финального этапа
             </h1>
             <p className="text-sm text-gray-500 mt-1">Мы свяжемся с вами по поводу позиции &laquo;{data.vacancyTitle}&raquo;</p>
           </div>
 
           <div className="bg-white rounded-xl p-6 shadow-sm space-y-4">
+
+            {/* Основные данные */}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label className="text-xs">Имя <span className="text-red-500">*</span></Label>
@@ -464,9 +590,15 @@ export default function DemoPage() {
               <Label className="text-xs">Email <span className="text-red-500">*</span></Label>
               <Input value={formEmail} onChange={e => setFormEmail(e.target.value)} placeholder="ivan@mail.ru" type="email" className="h-10" />
             </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Телефон <span className="text-red-500">*</span></Label>
-              <Input value={formPhone} onChange={e => setFormPhone(e.target.value)} placeholder="+7 (999) 123-45-67" className="h-10" />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs">Телефон <span className="text-red-500">*</span></Label>
+                <Input value={formPhone} onChange={e => setFormPhone(e.target.value)} placeholder="+7 (999) 123-45-67" className="h-10" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Telegram</Label>
+                <Input value={formTelegram} onChange={e => setFormTelegram(e.target.value)} placeholder="@username" className="h-10" />
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
@@ -478,6 +610,61 @@ export default function DemoPage() {
                 <Input value={formCity} onChange={e => setFormCity(e.target.value)} placeholder="Москва" className="h-10" />
               </div>
             </div>
+
+            {/* Опыт */}
+            <div className="space-y-1 pt-2">
+              <Label className="text-xs">Опыт работы — последние 2–3 места</Label>
+              <Textarea
+                value={formExperience}
+                onChange={e => setFormExperience(e.target.value)}
+                rows={3}
+                placeholder="Компания, должность, период, ключевые результаты"
+                className="resize-none text-sm"
+              />
+            </div>
+
+            {/* Ссылки */}
+            <div className="space-y-1">
+              <Label className="text-xs">Портфолио / кейсы</Label>
+              <Input value={formPortfolio} onChange={e => setFormPortfolio(e.target.value)} placeholder="https://…" type="url" className="h-10" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs">HH.ru</Label>
+                <Input value={formHh} onChange={e => setFormHh(e.target.value)} placeholder="https://hh.ru/resume/…" type="url" className="h-10" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Другие ссылки</Label>
+                <Input value={formOtherLinks} onChange={e => setFormOtherLinks(e.target.value)} placeholder="LinkedIn, GitHub, соцсети" className="h-10" />
+              </div>
+            </div>
+
+            {/* Форма оформления */}
+            <div className="space-y-2 pt-1">
+              <Label className="text-xs">Предпочитаемая форма оформления</Label>
+              <RadioGroup value={formEmployment} onValueChange={setFormEmployment} className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {EMPLOYMENT_OPTIONS.map((opt) => (
+                  <label key={opt} className="flex items-center gap-2 rounded-lg border border-gray-200 p-2.5 cursor-pointer hover:bg-gray-50 transition-colors text-sm">
+                    <RadioGroupItem value={opt} id={`emp-${opt}`} />
+                    <span className="flex-1">{opt}</span>
+                  </label>
+                ))}
+              </RadioGroup>
+            </div>
+
+            {/* Ниши */}
+            <div className="space-y-1 pt-1">
+              <Label className="text-xs">Опыт в нишах</Label>
+              <Textarea
+                value={formNiches}
+                onChange={e => setFormNiches(e.target.value)}
+                rows={2}
+                placeholder="B2B SaaS, EdTech, FinTech, маркетплейсы…"
+                className="resize-none text-sm"
+              />
+            </div>
+
+            {/* Согласие */}
             <label className="flex items-start gap-2 text-xs text-gray-600 cursor-pointer select-none pt-1">
               <input
                 type="checkbox"
@@ -490,6 +677,7 @@ export default function DemoPage() {
                 Я согласен на обработку персональных данных в соответствии с <a href="/politicahr2026" target="_blank" className="underline hover:opacity-80">ФЗ-152</a>. Данные используются только для целей найма.
               </span>
             </label>
+
             <Button className="w-full h-11" style={{ backgroundColor: brandColor }} onClick={handleFormSubmit}
               disabled={formSubmitting || !formFirst.trim() || !formLast.trim() || !formEmail.trim() || !formPhone.trim() || !formConsent}>
               {formSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
