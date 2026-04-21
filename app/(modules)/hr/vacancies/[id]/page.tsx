@@ -1436,6 +1436,30 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                           const res = await fetch(`/api/modules/hr/vacancies/${id}/preview-link`)
                           const json = await res.json()
                           const url = json?.data?.url || json?.url
+                          if (url) {
+                            const fullUrl = `${window.location.origin}${url}`
+                            await navigator.clipboard.writeText(fullUrl)
+                            toast.success("Ссылка скопирована")
+                          } else {
+                            toast.error("Не удалось получить ссылку")
+                          }
+                        } catch {
+                          toast.error("Ошибка получения ссылки")
+                        }
+                      }}
+                    >
+                      <Copy className="w-3.5 h-3.5" />Копировать
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5 text-xs h-8"
+                      onClick={async () => {
+                        if (!id) { toast.error("Сохраните вакансию"); return }
+                        try {
+                          const res = await fetch(`/api/modules/hr/vacancies/${id}/preview-link`)
+                          const json = await res.json()
+                          const url = json?.data?.url || json?.url
                           if (url) window.open(url, "_blank", "noopener,noreferrer")
                           else toast.error("Не удалось получить ссылку")
                         } catch {
@@ -1444,9 +1468,6 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                       }}
                     >
                       <Eye className="w-3.5 h-3.5" />Как кандидат
-                    </Button>
-                    <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8" onClick={() => courseEditorRef.current?.openPreview()}>
-                      <Eye className="w-3.5 h-3.5" />Превью
                     </Button>
                   </div>
                 )}
