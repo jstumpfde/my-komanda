@@ -4,6 +4,11 @@ import { useState, useRef, useEffect, useCallback, useId, forwardRef, useImperat
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Switch } from "@/components/ui/switch"
+import { Textarea } from "@/components/ui/textarea"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu"
@@ -89,6 +94,7 @@ const SLASH_ITEMS = [
   { type: "info" as BlockType, icon: <Info className="w-4 h-4" />, inlineIcon: <Info className="w-[17px] h-[17px]" />, label: "Инфо", desc: "Блок с иконкой" },
   { type: "button" as BlockType, icon: <MousePointerClick className="w-4 h-4" />, inlineIcon: <MousePointerClick className="w-[17px] h-[17px]" />, label: "Кнопка", desc: "Кнопка-ссылка" },
   { type: "task" as BlockType, icon: <CheckSquare className="w-4 h-4" />, inlineIcon: <CheckSquare className="w-[17px] h-[17px]" />, label: "Задание", desc: "Вопросы кандидату" },
+  { type: "media" as BlockType, icon: <Video className="w-4 h-4" />, inlineIcon: <Video className="w-[17px] h-[17px]" />, label: "Запись медиа", desc: "Запись видео/аудио/фото от кандидата" },
 ]
 
 // ─── Main component ────────────────────────────────────────────────────────
@@ -2065,6 +2071,97 @@ function TaskEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: 
   )
 }
 
+// ─── Media recording block (candidate uploads) ───────────────────────────
+
+function MediaEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: Partial<Block>) => void }) {
+  const allowVideo = block.mediaAllowVideo ?? true
+  const allowAudio = block.mediaAllowAudio ?? false
+  const allowPhoto = block.mediaAllowPhoto ?? false
+  const maxDuration = block.mediaMaxDuration === undefined ? 60 : block.mediaMaxDuration
+  const required = block.mediaRequired ?? false
+  const instruction = block.mediaInstruction ?? ""
+
+  const durationValue = maxDuration === null ? "none" : String(maxDuration)
+
+  const atLeastOne = allowVideo || allowAudio || allowPhoto
+
+  return (
+    <div className="rounded-xl border border-dashed border-border bg-muted/20 p-4 space-y-4">
+      <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+        <Video className="w-4 h-4" />
+        <span>Запись медиа от кандидата</span>
+      </div>
+
+      <div className="space-y-2">
+        <Label className="text-xs text-muted-foreground">Что кандидат может отправить</Label>
+        <div className="flex flex-wrap gap-4">
+          <label className="flex items-center gap-2 text-sm cursor-pointer">
+            <Checkbox
+              checked={allowVideo}
+              onCheckedChange={(v) => onUpdate({ mediaAllowVideo: !!v })}
+            />
+            Видео
+          </label>
+          <label className="flex items-center gap-2 text-sm cursor-pointer">
+            <Checkbox
+              checked={allowAudio}
+              onCheckedChange={(v) => onUpdate({ mediaAllowAudio: !!v })}
+            />
+            Аудио
+          </label>
+          <label className="flex items-center gap-2 text-sm cursor-pointer">
+            <Checkbox
+              checked={allowPhoto}
+              onCheckedChange={(v) => onUpdate({ mediaAllowPhoto: !!v })}
+            />
+            Фото
+          </label>
+        </div>
+        {!atLeastOne && (
+          <p className="text-xs text-destructive">Выберите хотя бы один тип</p>
+        )}
+      </div>
+
+      <div className="space-y-2">
+        <Label className="text-xs text-muted-foreground">Максимальная длительность записи</Label>
+        <Select
+          value={durationValue}
+          onValueChange={(v) => onUpdate({ mediaMaxDuration: v === "none" ? null : Number(v) })}
+        >
+          <SelectTrigger className="h-9 w-full max-w-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="30">30 секунд</SelectItem>
+            <SelectItem value="60">60 секунд</SelectItem>
+            <SelectItem value="120">2 минуты</SelectItem>
+            <SelectItem value="none">Без лимита</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="flex items-center justify-between gap-3">
+        <Label className="text-sm">Обязательный блок</Label>
+        <Switch
+          checked={required}
+          onCheckedChange={(v) => onUpdate({ mediaRequired: v })}
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label className="text-xs text-muted-foreground">Инструкция для кандидата</Label>
+        <Textarea
+          value={instruction}
+          onChange={(e) => onUpdate({ mediaInstruction: e.target.value })}
+          placeholder="Например: Запишите 30-секундное видео о себе — расскажите про опыт и почему хотите к нам"
+          rows={3}
+          className="resize-none text-sm"
+        />
+      </div>
+    </div>
+  )
+}
+
 // ─── Media / other block types ─────────────────────────────────────────────
 
 function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdate: (patch: Partial<Block>) => void; onRemove: () => void }) {
@@ -2557,6 +2654,9 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
     case "task":
       return <TaskEditorBlock block={block} onUpdate={onUpdate} />
 
+    case "media":
+      return <MediaEditorBlock block={block} onUpdate={onUpdate} />
+
     default:
       return (
         <div className="rounded-xl border border-dashed border-border bg-muted/20 p-4 text-sm text-muted-foreground flex items-center gap-2">
@@ -2608,6 +2708,11 @@ const TOOLBAR_BLOCK_ITEMS: { type: BlockType; label: string; light: { bg: string
     type: "button", label: "Задание",
     light: { bg: "#FAEEDA", icon: "#854F0B" }, dark: { bg: "#1f1a0e", icon: "#FBBF24" },
     svg: (c) => <path d="M12 2l3 6.5h6.5l-5.2 4 2 6.5L12 15.5 5.7 19l2-6.5L2.5 8.5H9z" stroke={c} strokeWidth="1.3" strokeLinejoin="round" fill="none"/>,
+  },
+  {
+    type: "media", label: "Запись",
+    light: { bg: "#FDE7E7", icon: "#B91C1C" }, dark: { bg: "#231515", icon: "#F87171" },
+    svg: (c) => <><circle cx="12" cy="12" r="9" stroke={c} strokeWidth="1.3"/><circle cx="12" cy="12" r="4" fill={c}/></>,
   },
 ]
 
@@ -3659,6 +3764,32 @@ function SimplePreviewBlock({ block }: { block: Block }) {
     case "task":
       if (!block.taskTitle?.trim() && !block.taskDescription?.trim() && block.questions.length === 0) return null
       return <TaskPreviewBlock block={block} />
+    case "media": {
+      const types: string[] = []
+      if (block.mediaAllowVideo) types.push("видео")
+      if (block.mediaAllowAudio) types.push("аудио")
+      if (block.mediaAllowPhoto) types.push("фото")
+      const dur = block.mediaMaxDuration
+      const durLabel = dur === null || dur === undefined
+        ? null
+        : dur >= 60 ? `до ${Math.round(dur / 60)} мин` : `до ${dur} сек`
+      return (
+        <div className="rounded-xl border border-border bg-muted/20 p-4 space-y-2">
+          <div className="flex items-center gap-2 text-sm font-medium">
+            <Video className="w-4 h-4 text-primary" />
+            <span>Запись медиа</span>
+            {block.mediaRequired && <Badge variant="secondary" className="text-xs">Обязательно</Badge>}
+          </div>
+          {block.mediaInstruction && (
+            <p className="text-sm text-muted-foreground whitespace-pre-wrap">{block.mediaInstruction}</p>
+          )}
+          <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+            {types.length > 0 && <span>Типы: {types.join(" / ")}</span>}
+            {durLabel && <span>· {durLabel}</span>}
+          </div>
+        </div>
+      )
+    }
     default:
       return null
   }

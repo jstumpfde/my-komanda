@@ -8,7 +8,7 @@ import { Progress } from "@/components/ui/progress"
 import { Textarea } from "@/components/ui/textarea"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Label } from "@/components/ui/label"
-import { CheckCircle2, ChevronRight, Loader2 } from "lucide-react"
+import { CheckCircle2, ChevronRight, Loader2, Video as VideoIcon, Mic, Camera, Square, RotateCcw, Send, Upload } from "lucide-react"
 import type { Block, Lesson, Question } from "@/lib/course-types"
 import { resolveBrand } from "@/lib/brand-colors"
 
@@ -36,6 +36,14 @@ interface FlatLesson {
   lessonTitle: string
   lessonEmoji: string
   blocks: Block[]
+}
+
+interface MediaAnswer {
+  url: string
+  mediaType: "video" | "audio" | "photo"
+  duration?: number
+  size?: number
+  mime?: string
 }
 
 // ─── Variable replacement ────────────────────────────────────────────────────
@@ -354,6 +362,7 @@ export default function DemoPage() {
   const [currentIndex, setCurrentIndex] = useState(0)
   const [finished, setFinished] = useState(false)
   const [taskAnswers, setTaskAnswers] = useState<Record<string, Record<string, string>>>({})
+  const [mediaUploaded, setMediaUploaded] = useState<Record<string, MediaAnswer>>({})
   const [saving, setSaving] = useState(false)
   const blockStartTime = useRef(Date.now())
 
@@ -394,13 +403,19 @@ export default function DemoPage() {
           }
           // Restore answers
           if (d.answers) {
-            const restored: Record<string, Record<string, string>> = {}
+            const restoredTasks: Record<string, Record<string, string>> = {}
+            const restoredMedia: Record<string, MediaAnswer> = {}
             for (const a of d.answers) {
               if (typeof a.answer === "object" && a.answer !== null) {
-                restored[a.blockId] = a.answer
+                if (typeof a.answer.url === "string" && typeof a.answer.mediaType === "string") {
+                  restoredMedia[a.blockId] = a.answer as MediaAnswer
+                } else {
+                  restoredTasks[a.blockId] = a.answer
+                }
               }
             }
-            setTaskAnswers(restored)
+            setTaskAnswers(restoredTasks)
+            setMediaUploaded(restoredMedia)
           }
         }
       })
@@ -461,6 +476,12 @@ export default function DemoPage() {
       if (missing) return
     }
 
+    // Валидация обязательных media-блоков урока
+    const mediaBlocks = currentFlat.blocks.filter((b) => b.type === "media")
+    for (const mb of mediaBlocks) {
+      if (mb.mediaRequired && !mediaUploaded[mb.id]) return
+    }
+
     // Сохраняем ответы по каждому task-блоку отдельно
     if (taskBlocks.length > 0) {
       setSaving(true)
@@ -483,7 +504,7 @@ export default function DemoPage() {
       // Save final progress
       await saveAnswer("__complete__", { completed: true })
     }
-  }, [currentFlat, currentIndex, totalLessons, taskAnswers, saveAnswer])
+  }, [currentFlat, currentIndex, totalLessons, taskAnswers, mediaUploaded, saveAnswer])
 
   // ─── Loading state ──────────────────────────────────────────────────────────
 
@@ -661,10 +682,16 @@ export default function DemoPage() {
   if (!currentFlat) return null
 
   // Валидация: хоть один task-блок урока с незаполненным обязательным вопросом
+  // или обязательный media-блок без загруженного файла
   const hasRequiredUnanswered = currentFlat.blocks.some((b) => {
-    if (b.type !== "task" || b.questions.length === 0) return false
-    const a = taskAnswers[b.id] || {}
-    return b.questions.some((q) => q.required && !a[q.id]?.trim())
+    if (b.type === "task" && b.questions.length > 0) {
+      const a = taskAnswers[b.id] || {}
+      return b.questions.some((q) => q.required && !a[q.id]?.trim())
+    }
+    if (b.type === "media" && b.mediaRequired) {
+      return !mediaUploaded[b.id]
+    }
+    return false
   })
 
   return (
@@ -740,6 +767,17 @@ export default function DemoPage() {
                     </span>
                   </a>
                 )}
+                {block.type === "media" && (
+                  <MediaBlock
+                    block={block}
+                    token={token}
+                    brandColor={brandColor}
+                    existing={mediaUploaded[block.id]}
+                    onUploaded={(ans) =>
+                      setMediaUploaded((prev) => ({ ...prev, [block.id]: ans }))
+                    }
+                  />
+                )}
               </div>
             ))}
           </div>
@@ -779,6 +817,487 @@ export default function DemoPage() {
           </Button>
         </div>
       </div>
+    </div>
+  )
+}
+
+// ─── Media recording block ───────────────────────────────────────────────────
+
+const MAX_MEDIA_SIZE = 50 * 1024 * 1024
+
+const VIDEO_MIME_CANDIDATES = [
+  "video/webm;codecs=vp9,opus",
+  "video/webm;codecs=vp8,opus",
+  "video/webm",
+  "video/mp4",
+]
+const AUDIO_MIME_CANDIDATES = [
+  "audio/webm;codecs=opus",
+  "audio/webm",
+  "audio/mp4",
+  "audio/mpeg",
+]
+
+function pickSupportedMime(candidates: string[]): string | null {
+  if (typeof MediaRecorder === "undefined") return null
+  for (const t of candidates) {
+    try {
+      if (MediaRecorder.isTypeSupported(t)) return t
+    } catch {
+      // ignore
+    }
+  }
+  return null
+}
+
+function mimeToExt(mime: string): string {
+  if (mime.includes("webm")) return "webm"
+  if (mime.includes("mp4")) return "mp4"
+  if (mime.includes("mpeg")) return "mp3"
+  if (mime.includes("jpeg")) return "jpg"
+  if (mime.includes("png")) return "png"
+  if (mime.includes("gif")) return "gif"
+  if (mime.includes("heic")) return "heic"
+  return "bin"
+}
+
+function formatTime(seconds: number): string {
+  const m = Math.floor(seconds / 60)
+  const s = Math.floor(seconds % 60)
+  return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`
+}
+
+type MediaBlockMode = "idle" | "recording" | "preview" | "uploading" | "done" | "error"
+
+function MediaBlock({
+  block,
+  token,
+  brandColor,
+  existing,
+  onUploaded,
+}: {
+  block: Block
+  token: string
+  brandColor: string
+  existing?: MediaAnswer
+  onUploaded: (ans: MediaAnswer) => void
+}) {
+  const allowVideo = block.mediaAllowVideo ?? true
+  const allowAudio = block.mediaAllowAudio ?? false
+  const allowPhoto = block.mediaAllowPhoto ?? false
+  const maxDuration = block.mediaMaxDuration === undefined ? 60 : block.mediaMaxDuration
+
+  const [mode, setMode] = useState<MediaBlockMode>(existing ? "done" : "idle")
+  const [recType, setRecType] = useState<"video" | "audio" | null>(null)
+  const [elapsed, setElapsed] = useState(0)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [previewMime, setPreviewMime] = useState<string>("")
+  const [errMsg, setErrMsg] = useState("")
+  const [result, setResult] = useState<MediaAnswer | null>(existing ?? null)
+
+  const streamRef = useRef<MediaStream | null>(null)
+  const recorderRef = useRef<MediaRecorder | null>(null)
+  const chunksRef = useRef<Blob[]>([])
+  const blobRef = useRef<Blob | null>(null)
+  const blobMimeRef = useRef<string>("")
+  const blobMediaTypeRef = useRef<"video" | "audio" | "photo">("video")
+  const videoPreviewRef = useRef<HTMLVideoElement>(null)
+  const timerRef = useRef<number | null>(null)
+  const photoInputRef = useRef<HTMLInputElement>(null)
+
+  // Определяем, можно ли записывать через MediaRecorder — если нет, показываем file fallback
+  const canRecordVideo = !!pickSupportedMime(VIDEO_MIME_CANDIDATES) && typeof navigator !== "undefined" && !!navigator.mediaDevices?.getUserMedia
+  const canRecordAudio = !!pickSupportedMime(AUDIO_MIME_CANDIDATES) && typeof navigator !== "undefined" && !!navigator.mediaDevices?.getUserMedia
+
+  const cleanup = useCallback(() => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current)
+      timerRef.current = null
+    }
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop())
+      streamRef.current = null
+    }
+    recorderRef.current = null
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      cleanup()
+      if (previewUrl) URL.revokeObjectURL(previewUrl)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const startRecording = async (type: "video" | "audio") => {
+    setErrMsg("")
+    try {
+      const constraints: MediaStreamConstraints =
+        type === "video"
+          ? { audio: true, video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } } }
+          : { audio: true, video: false }
+
+      const stream = await navigator.mediaDevices.getUserMedia(constraints)
+      streamRef.current = stream
+
+      if (type === "video" && videoPreviewRef.current) {
+        videoPreviewRef.current.srcObject = stream
+        videoPreviewRef.current.muted = true
+        videoPreviewRef.current.play().catch(() => {})
+      }
+
+      const mime = type === "video"
+        ? pickSupportedMime(VIDEO_MIME_CANDIDATES)
+        : pickSupportedMime(AUDIO_MIME_CANDIDATES)
+      if (!mime) {
+        setErrMsg("Браузер не поддерживает запись. Используйте загрузку файла.")
+        cleanup()
+        return
+      }
+
+      const recorder = new MediaRecorder(stream, { mimeType: mime })
+      recorderRef.current = recorder
+      chunksRef.current = []
+
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) chunksRef.current.push(e.data)
+      }
+      recorder.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: mime })
+        blobRef.current = blob
+        blobMimeRef.current = mime
+        blobMediaTypeRef.current = type
+        const url = URL.createObjectURL(blob)
+        setPreviewUrl(url)
+        setPreviewMime(mime)
+        setMode("preview")
+        cleanup()
+      }
+
+      recorder.start()
+      setRecType(type)
+      setElapsed(0)
+      setMode("recording")
+
+      const startedAt = Date.now()
+      timerRef.current = window.setInterval(() => {
+        const secs = (Date.now() - startedAt) / 1000
+        setElapsed(secs)
+        if (maxDuration !== null && secs >= maxDuration && recorder.state === "recording") {
+          recorder.stop()
+        }
+      }, 200)
+    } catch (err) {
+      console.error("getUserMedia error", err)
+      setErrMsg("Не удалось получить доступ к камере/микрофону. Разрешите доступ и попробуйте снова.")
+      cleanup()
+      setMode("idle")
+    }
+  }
+
+  const stopRecording = () => {
+    const rec = recorderRef.current
+    if (rec && rec.state === "recording") rec.stop()
+  }
+
+  const resetToIdle = () => {
+    if (previewUrl) URL.revokeObjectURL(previewUrl)
+    setPreviewUrl(null)
+    setPreviewMime("")
+    blobRef.current = null
+    blobMimeRef.current = ""
+    setElapsed(0)
+    setErrMsg("")
+    setRecType(null)
+    setMode("idle")
+  }
+
+  const pickPhoto = (file: File) => {
+    if (file.size > MAX_MEDIA_SIZE) {
+      setErrMsg("Файл больше 50MB. Выберите файл поменьше.")
+      return
+    }
+    blobRef.current = file
+    blobMimeRef.current = file.type || "image/jpeg"
+    blobMediaTypeRef.current = "photo"
+    const url = URL.createObjectURL(file)
+    setPreviewUrl(url)
+    setPreviewMime(blobMimeRef.current)
+    setErrMsg("")
+    setMode("preview")
+  }
+
+  const pickVideoFile = (file: File) => {
+    if (file.size > MAX_MEDIA_SIZE) {
+      setErrMsg("Файл больше 50MB. Запишите короче или выберите другой файл.")
+      return
+    }
+    blobRef.current = file
+    blobMimeRef.current = file.type || "video/mp4"
+    blobMediaTypeRef.current = "video"
+    const url = URL.createObjectURL(file)
+    setPreviewUrl(url)
+    setPreviewMime(blobMimeRef.current)
+    setErrMsg("")
+    setMode("preview")
+  }
+
+  const upload = async () => {
+    const blob = blobRef.current
+    if (!blob) return
+    if (blob.size > MAX_MEDIA_SIZE) {
+      setErrMsg("Размер файла больше 50MB. Попробуйте записать короче.")
+      return
+    }
+
+    setMode("uploading")
+    setErrMsg("")
+
+    const mediaType = blobMediaTypeRef.current
+    const mime = blobMimeRef.current || blob.type || ""
+    const ext = mimeToExt(mime)
+    const fileName = `media.${ext}`
+    const fileObj = blob instanceof File
+      ? blob
+      : new File([blob], fileName, { type: mime })
+
+    const fd = new FormData()
+    fd.append("file", fileObj)
+    fd.append("blockId", block.id)
+    fd.append("mediaType", mediaType)
+    if (mediaType !== "photo") fd.append("duration", String(Math.round(elapsed)))
+
+    try {
+      const res = await fetch(`/api/public/demo/${token}/upload-media`, {
+        method: "POST",
+        body: fd,
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.url) {
+        throw new Error(data?.error || "Ошибка загрузки")
+      }
+      const answer: MediaAnswer = {
+        url: data.url,
+        mediaType,
+        duration: mediaType !== "photo" ? Math.round(elapsed) : undefined,
+        size: blob.size,
+        mime,
+      }
+      setResult(answer)
+      onUploaded(answer)
+      if (previewUrl) URL.revokeObjectURL(previewUrl)
+      setPreviewUrl(null)
+      setMode("done")
+    } catch (err: any) {
+      console.error("upload error", err)
+      setErrMsg(err?.message || "Ошибка загрузки. Попробуйте ещё раз.")
+      setMode("preview")
+    }
+  }
+
+  const iconClass = "h-6 w-6"
+  const bigBtnBase = "h-12 min-w-12 px-4 rounded-xl font-medium inline-flex items-center justify-center gap-2 text-sm transition-colors"
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2 text-sm font-medium text-gray-800">
+        <VideoIcon className="h-4 w-4 text-gray-500" />
+        <span>Запись медиа</span>
+        {block.mediaRequired && (
+          <span className="text-xs font-normal text-red-600">* обязательно</span>
+        )}
+      </div>
+
+      {block.mediaInstruction && (
+        <p className="text-sm text-gray-600 whitespace-pre-wrap">{block.mediaInstruction}</p>
+      )}
+
+      {errMsg && (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          {errMsg}
+        </div>
+      )}
+
+      {mode === "idle" && (
+        <div className="flex flex-wrap gap-3">
+          {allowVideo && (
+            canRecordVideo ? (
+              <button
+                onClick={() => startRecording("video")}
+                className={`${bigBtnBase} bg-gray-900 text-white hover:bg-gray-800`}
+              >
+                <VideoIcon className={iconClass} />
+                Записать видео
+              </button>
+            ) : (
+              <>
+                <button
+                  onClick={() => document.getElementById(`${block.id}-videofile`)?.click()}
+                  className={`${bigBtnBase} bg-gray-900 text-white hover:bg-gray-800`}
+                >
+                  <Upload className={iconClass} />
+                  Загрузить видео
+                </button>
+                <input
+                  id={`${block.id}-videofile`}
+                  type="file"
+                  accept="video/*"
+                  capture="user"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0]
+                    if (f) pickVideoFile(f)
+                    e.target.value = ""
+                  }}
+                />
+              </>
+            )
+          )}
+
+          {allowAudio && canRecordAudio && (
+            <button
+              onClick={() => startRecording("audio")}
+              className={`${bigBtnBase} bg-gray-900 text-white hover:bg-gray-800`}
+            >
+              <Mic className={iconClass} />
+              Записать аудио
+            </button>
+          )}
+
+          {allowPhoto && (
+            <>
+              <button
+                onClick={() => photoInputRef.current?.click()}
+                className={`${bigBtnBase} bg-gray-900 text-white hover:bg-gray-800`}
+              >
+                <Camera className={iconClass} />
+                Загрузить фото
+              </button>
+              <input
+                ref={photoInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0]
+                  if (f) pickPhoto(f)
+                  e.target.value = ""
+                }}
+              />
+            </>
+          )}
+        </div>
+      )}
+
+      {mode === "recording" && (
+        <div className="space-y-3">
+          {recType === "video" ? (
+            <div className="relative rounded-xl overflow-hidden bg-black aspect-video">
+              <video ref={videoPreviewRef} playsInline className="w-full h-full object-cover" />
+              <div className="absolute top-3 left-3 flex items-center gap-2 rounded-full bg-black/60 px-3 py-1">
+                <span className="h-3 w-3 rounded-full bg-red-500 animate-pulse" />
+                <span className="text-white text-sm font-medium">REC</span>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center justify-center h-32 rounded-xl bg-gray-900">
+              <div className="flex items-center gap-3 text-white">
+                <span className="h-4 w-4 rounded-full bg-red-500 animate-pulse" />
+                <Mic className="h-8 w-8" />
+                <span className="text-lg font-medium">Идёт запись</span>
+              </div>
+            </div>
+          )}
+
+          <div className="flex items-center justify-between gap-3">
+            <div className="font-mono font-bold tabular-nums" style={{ fontSize: "32px" }}>
+              {formatTime(elapsed)}
+              {maxDuration !== null && (
+                <span className="text-gray-400 text-base font-normal"> / {formatTime(maxDuration)}</span>
+              )}
+            </div>
+            <button
+              onClick={stopRecording}
+              className="h-12 min-w-12 px-5 rounded-xl font-semibold text-white bg-red-600 hover:bg-red-700 inline-flex items-center gap-2 text-base"
+            >
+              <Square className="h-5 w-5 fill-white" />
+              Стоп
+            </button>
+          </div>
+        </div>
+      )}
+
+      {mode === "preview" && previewUrl && (
+        <div className="space-y-3">
+          {blobMediaTypeRef.current === "video" && (
+            <video
+              src={previewUrl}
+              controls
+              playsInline
+              className="w-full rounded-xl bg-black aspect-video"
+            />
+          )}
+          {blobMediaTypeRef.current === "audio" && (
+            <audio src={previewUrl} controls className="w-full" />
+          )}
+          {blobMediaTypeRef.current === "photo" && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={previewUrl} alt="" className="w-full rounded-xl" />
+          )}
+
+          <div className="flex flex-wrap gap-3">
+            <button
+              onClick={resetToIdle}
+              className={`${bigBtnBase} border border-gray-300 bg-white text-gray-800 hover:bg-gray-50`}
+            >
+              <RotateCcw className={iconClass} />
+              Перезаписать
+            </button>
+            <button
+              onClick={upload}
+              className={`${bigBtnBase} text-white flex-1`}
+              style={{ backgroundColor: brandColor }}
+            >
+              <Send className={iconClass} />
+              Отправить
+            </button>
+          </div>
+        </div>
+      )}
+
+      {mode === "uploading" && (
+        <div className="flex items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 p-4">
+          <Loader2 className="h-5 w-5 animate-spin text-gray-600" />
+          <span className="text-sm text-gray-700">Отправка…</span>
+        </div>
+      )}
+
+      {mode === "done" && result && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 rounded-xl border border-green-200 bg-green-50 p-3 text-sm text-green-700">
+            <CheckCircle2 className="h-5 w-5 flex-shrink-0" />
+            <span>Отправлено</span>
+          </div>
+          {result.mediaType === "video" && (
+            <video src={result.url} controls playsInline className="w-full rounded-xl bg-black aspect-video" />
+          )}
+          {result.mediaType === "audio" && (
+            <audio src={result.url} controls className="w-full" />
+          )}
+          {result.mediaType === "photo" && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={result.url} alt="" className="w-full rounded-xl" />
+          )}
+          <button
+            onClick={resetToIdle}
+            className={`${bigBtnBase} border border-gray-300 bg-white text-gray-800 hover:bg-gray-50`}
+          >
+            <RotateCcw className={iconClass} />
+            Переснять
+          </button>
+        </div>
+      )}
     </div>
   )
 }
