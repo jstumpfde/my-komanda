@@ -1393,7 +1393,7 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                         {courseEditorSaveStatus === "saving" ? (
                           <Loader2 className="w-3.5 h-3.5 animate-spin" />
                         ) : (
-                          <Check className="w-3.5 h-3.5 text-emerald-500" />
+                          <Check className="w-3.5 h-3.5" />
                         )}
                         Сохранить
                       </Button>
@@ -1425,6 +1425,25 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                     </Button>
                     <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8" onClick={() => courseEditorRef.current?.downloadTxt()}>
                       <Download className="w-3.5 h-3.5" />Скачать
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5 text-xs h-8"
+                      onClick={async () => {
+                        if (!vacancy?.id) { toast.error("Сохраните вакансию"); return }
+                        try {
+                          const res = await fetch(`/api/modules/hr/vacancies/${vacancy.id}/preview-link`)
+                          const json = await res.json()
+                          const url = json?.data?.url || json?.url
+                          if (url) window.open(url, "_blank", "noopener,noreferrer")
+                          else toast.error("Не удалось получить ссылку")
+                        } catch {
+                          toast.error("Ошибка получения ссылки")
+                        }
+                      }}
+                    >
+                      <Eye className="w-3.5 h-3.5" />Как кандидат
                     </Button>
                     <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8" onClick={() => courseEditorRef.current?.openPreview()}>
                       <Eye className="w-3.5 h-3.5" />Превью
