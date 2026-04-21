@@ -1431,9 +1431,9 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                       size="sm"
                       className="gap-1.5 text-xs h-8"
                       onClick={async () => {
-                        if (!vacancy?.id) { toast.error("Сохраните вакансию"); return }
+                        if (!id) { toast.error("Сохраните вакансию"); return }
                         try {
-                          const res = await fetch(`/api/modules/hr/vacancies/${vacancy.id}/preview-link`)
+                          const res = await fetch(`/api/modules/hr/vacancies/${id}/preview-link`)
                           const json = await res.json()
                           const url = json?.data?.url || json?.url
                           if (url) window.open(url, "_blank", "noopener,noreferrer")
