@@ -387,6 +387,29 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
               {aiGenerating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
               {aiGenerating ? "Генерация..." : "AI"}
             </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 text-xs h-8"
+              onClick={async () => {
+                if (!vacancyId) { toast.error("Сохраните вакансию перед предпросмотром"); return }
+                try {
+                  const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}/preview-link`)
+                  const json = await res.json()
+                  const url = json?.data?.url || json?.url
+                  if (url) {
+                    window.open(url, "_blank", "noopener,noreferrer")
+                  } else {
+                    toast.error("Не удалось получить ссылку")
+                  }
+                } catch {
+                  toast.error("Ошибка получения ссылки")
+                }
+              }}
+            >
+              <Eye className="w-3.5 h-3.5" />
+              Как кандидат
+            </Button>
             <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8" onClick={() => { if (previewMode) { setPreviewMode(false) } else { setPreviewIdx(0); setPreviewMode(true) } }}>
               {previewMode ? <X className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
               {previewMode ? "Закрыть превью" : "Превью"}
