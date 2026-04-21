@@ -31,11 +31,11 @@ interface DemoData {
   answers: { blockId: string; answer: any }[] | null
 }
 
-interface FlatBlock {
-  block: Block
+interface FlatLesson {
+  lessonId: string
   lessonTitle: string
   lessonEmoji: string
-  globalIndex: number
+  blocks: Block[]
 }
 
 // ─── Variable replacement ────────────────────────────────────────────────────
@@ -53,17 +53,16 @@ function replaceVars(text: string, data: DemoData): string {
   return text.replace(/\{\{(\w+)\}\}/g, (_, key) => map[key] ?? `{{${key}}}`)
 }
 
-// ─── Flatten lessons into sequential blocks ──────────────────────────────────
+// ─── Group blocks by lesson for single-page rendering ────────────────────────
+// Каждый урок — одна «страница» демо. Все его блоки рендерятся подряд.
 
-function flattenLessons(lessons: Lesson[]): FlatBlock[] {
-  const flat: FlatBlock[] = []
-  let idx = 0
-  for (const lesson of lessons) {
-    for (const block of lesson.blocks) {
-      flat.push({ block, lessonTitle: lesson.title, lessonEmoji: lesson.emoji, globalIndex: idx++ })
-    }
-  }
-  return flat
+function flattenLessons(lessons: Lesson[]): FlatLesson[] {
+  return lessons.map((lesson) => ({
+    lessonId:    lesson.id,
+    lessonTitle: lesson.title,
+    lessonEmoji: lesson.emoji,
+    blocks:      lesson.blocks,
+  }))
 }
 
 // ─── Block Renderers ─────────────────────────────────────────────────────────
@@ -386,9 +385,12 @@ export default function DemoPage() {
           setError(d.error)
         } else {
           setData(d)
-          // Restore progress
-          if (d.progress?.currentBlock) {
-            setCurrentIndex(d.progress.currentBlock)
+          // Restore progress — теперь currentBlock в БД означает «индекс урока».
+          // Для старых записей, где сохранялся индекс блока, значение может
+          // оказаться больше числа уроков — клампим к диапазону.
+          if (typeof d.progress?.currentBlock === "number" && d.progress.currentBlock > 0) {
+            const maxLessonIdx = Math.max(0, (d.lessons?.length || 1) - 1)
+            setCurrentIndex(Math.min(d.progress.currentBlock, maxLessonIdx))
           }
           // Restore answers
           if (d.answers) {
@@ -416,10 +418,10 @@ export default function DemoPage() {
     }
   }, [data])
 
-  const flatBlocks = data ? flattenLessons(data.lessons) : []
-  const totalBlocks = flatBlocks.length
-  const currentFlat = flatBlocks[currentIndex]
-  const progressPercent = totalBlocks > 0 ? ((currentIndex + 1) / totalBlocks) * 100 : 0
+  const flatLessons = data ? flattenLessons(data.lessons) : []
+  const totalLessons = flatLessons.length
+  const currentFlat = flatLessons[currentIndex]
+  const progressPercent = totalLessons > 0 ? ((currentIndex + 1) / totalLessons) * 100 : 0
 
   const saveAnswer = useCallback(async (blockId: string, answer: any) => {
     const timeSpent = Math.round((Date.now() - blockStartTime.current) / 1000)
@@ -431,43 +433,57 @@ export default function DemoPage() {
           blockId,
           answer,
           timeSpent,
+          // Теперь индекс — это индекс УРОКА, а total — количество уроков.
+          // Поле API называется currentBlock/totalBlocks исторически;
+          // семантика изменилась, формат JSON — нет (обратная совместимость
+          // по структуре сохранения прогресса).
           currentBlock: currentIndex,
-          totalBlocks,
+          totalBlocks:  totalLessons,
         }),
       })
     } catch {
       // silently fail — answers are best-effort
     }
-  }, [token, currentIndex, totalBlocks])
+  }, [token, currentIndex, totalLessons])
 
   const handleNext = useCallback(async () => {
     if (!currentFlat) return
 
-    const block = currentFlat.block
+    // Собираем все task-блоки внутри текущего урока
+    const taskBlocks = currentFlat.blocks.filter(
+      (b) => b.type === "task" && b.questions.length > 0,
+    )
 
-    // If task block, validate required questions and save answers
-    if (block.type === "task" && block.questions.length > 0) {
-      const answers = taskAnswers[block.id] || {}
-      const requiredMissing = block.questions.some(
-        (q) => q.required && !answers[q.id]?.trim()
-      )
-      if (requiredMissing) return // don't advance if required questions unanswered
+    // Валидация обязательных вопросов по всем task-блокам урока
+    for (const tb of taskBlocks) {
+      const answers = taskAnswers[tb.id] || {}
+      const missing = tb.questions.some((q) => q.required && !answers[q.id]?.trim())
+      if (missing) return
+    }
 
+    // Сохраняем ответы по каждому task-блоку отдельно
+    if (taskBlocks.length > 0) {
       setSaving(true)
-      await saveAnswer(block.id, answers)
-      setSaving(false)
+      try {
+        for (const tb of taskBlocks) {
+          const answers = taskAnswers[tb.id] || {}
+          await saveAnswer(tb.id, answers)
+        }
+      } finally {
+        setSaving(false)
+      }
     }
 
     blockStartTime.current = Date.now()
 
-    if (currentIndex < totalBlocks - 1) {
+    if (currentIndex < totalLessons - 1) {
       setCurrentIndex((i) => i + 1)
     } else {
       setFinished(true)
       // Save final progress
       await saveAnswer("__complete__", { completed: true })
     }
-  }, [currentFlat, currentIndex, totalBlocks, taskAnswers, saveAnswer])
+  }, [currentFlat, currentIndex, totalLessons, taskAnswers, saveAnswer])
 
   // ─── Loading state ──────────────────────────────────────────────────────────
 
@@ -697,12 +713,12 @@ export default function DemoPage() {
 
   if (!currentFlat) return null
 
-  const block = currentFlat.block
-  const isTask = block.type === "task" && block.questions.length > 0
-  const currentTaskAnswers = taskAnswers[block.id] || {}
-  const hasRequiredUnanswered = isTask && block.questions.some(
-    (q) => q.required && !currentTaskAnswers[q.id]?.trim()
-  )
+  // Валидация: хоть один task-блок урока с незаполненным обязательным вопросом
+  const hasRequiredUnanswered = currentFlat.blocks.some((b) => {
+    if (b.type !== "task" || b.questions.length === 0) return false
+    const a = taskAnswers[b.id] || {}
+    return b.questions.some((q) => q.required && !a[q.id]?.trim())
+  })
 
   return (
     <div className="flex min-h-screen flex-col" style={{ backgroundColor: bgColor }}>
@@ -717,14 +733,14 @@ export default function DemoPage() {
               <span className="text-sm font-medium text-gray-700 truncate">{data.companyName}</span>
             </div>
             <span className="text-sm text-gray-500 flex-shrink-0 ml-2">
-              {currentIndex + 1} из {totalBlocks}
+              {currentIndex + 1} из {totalLessons}
             </span>
           </div>
           <Progress value={progressPercent} className="h-2" />
         </div>
       </div>
 
-      {/* Content */}
+      {/* Content — все блоки текущего урока рендерятся на одной странице */}
       <div className="flex-1">
         <div className="mx-auto max-w-2xl px-4 py-6 sm:py-8">
           {/* Lesson header */}
@@ -734,38 +750,51 @@ export default function DemoPage() {
             </span>
           </div>
 
-          {/* Block content */}
-          <div className="rounded-xl bg-white p-5 sm:p-8 space-y-4">
-            {block.type === "text" && <TextBlock block={block} data={data} />}
-            {block.type === "info" && <InfoBlock block={block} data={data} />}
-            {block.type === "video" && <VideoBlock block={block} />}
-            {block.type === "image" && <ImageBlock block={block} />}
-            {block.type === "button" && <ButtonBlock block={block} />}
-            {block.type === "task" && (
-              <TaskBlock
-                block={block}
-                data={data}
-                answers={currentTaskAnswers}
-                onAnswersChange={(a) => setTaskAnswers((prev) => ({ ...prev, [block.id]: a }))}
-              />
-            )}
-            {block.type === "audio" && block.audioUrl && (
-              <div className="space-y-2">
-                {block.audioTitle && <p className="font-medium text-gray-800">{block.audioTitle}</p>}
-                <audio src={block.audioUrl} controls className="w-full" />
-              </div>
-            )}
-            {block.type === "file" && block.fileUrl && (
-              <a
-                href={block.fileUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-3 rounded-lg border p-4 hover:bg-gray-50 transition-colors"
+          {/* Blocks — по одной карточке на каждый блок урока, со скроллом */}
+          <div className="space-y-4">
+            {currentFlat.blocks.map((block) => (
+              <div
+                key={block.id}
+                className="rounded-xl bg-white p-5 sm:p-8 space-y-4"
               >
-                <span className="text-2xl">📄</span>
-                <span className="font-medium text-gray-700">{block.fileName || "Скачать файл"}</span>
-              </a>
-            )}
+                {block.type === "text" && <TextBlock block={block} data={data} />}
+                {block.type === "info" && <InfoBlock block={block} data={data} />}
+                {block.type === "video" && <VideoBlock block={block} />}
+                {block.type === "image" && <ImageBlock block={block} />}
+                {block.type === "button" && <ButtonBlock block={block} />}
+                {block.type === "task" && (
+                  <TaskBlock
+                    block={block}
+                    data={data}
+                    answers={taskAnswers[block.id] || {}}
+                    onAnswersChange={(a) =>
+                      setTaskAnswers((prev) => ({ ...prev, [block.id]: a }))
+                    }
+                  />
+                )}
+                {block.type === "audio" && block.audioUrl && (
+                  <div className="space-y-2">
+                    {block.audioTitle && (
+                      <p className="font-medium text-gray-800">{block.audioTitle}</p>
+                    )}
+                    <audio src={block.audioUrl} controls className="w-full" />
+                  </div>
+                )}
+                {block.type === "file" && block.fileUrl && (
+                  <a
+                    href={block.fileUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-3 rounded-lg border p-4 hover:bg-gray-50 transition-colors"
+                  >
+                    <span className="text-2xl">📄</span>
+                    <span className="font-medium text-gray-700">
+                      {block.fileName || "Скачать файл"}
+                    </span>
+                  </a>
+                )}
+              </div>
+            ))}
           </div>
         </div>
       </div>
@@ -792,7 +821,7 @@ export default function DemoPage() {
           >
             {saving ? (
               <Loader2 className="h-5 w-5 animate-spin" />
-            ) : currentIndex === totalBlocks - 1 ? (
+            ) : currentIndex === totalLessons - 1 ? (
               "Завершить"
             ) : (
               <>
