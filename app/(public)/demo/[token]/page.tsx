@@ -136,7 +136,7 @@ function renderPipeTable(rows: string[][]): string {
 function renderContentWithTables(content: string): string {
   // Если в контенте уже есть готовая HTML-таблица — не трогаем её и просто
   // возвращаем как есть (переводы строк вне таблицы конвертируем отдельно).
-  if (/<table[\s>]/i.test(content)) {
+  if (/<(p|div|span|b|strong|i|em|br|table|ul|ol|li|h[1-6])[\s>]/i.test(content)) {
     return content
   }
 
