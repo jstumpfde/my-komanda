@@ -703,10 +703,19 @@ export default function DemoPage() {
             <p className="text-sm text-gray-500 mt-1">Мы свяжемся с вами по поводу позиции &laquo;{data.vacancyTitle}&raquo;</p>
           </div>
 
+          <div className="bg-blue-50 border border-blue-100 rounded-xl p-5 text-sm text-gray-700 space-y-3 leading-relaxed">
+            <p>Спасибо за заполнение анкеты и за время, которое вы инвестировали на демонстрацию.</p>
+            <p className="font-medium text-gray-800">Заполните ваши данные!</p>
+            <p>Мы разберём ваши ответы — в том числе ответы на вопросы — и свяжемся с вами.</p>
+            <p>Если видим, что подходим друг другу — приглашаем на финальный созвон с CEO на 30–40 минут: уточняем детали, обсуждаем оффер, договариваемся о дате выхода.</p>
+            <p>Если на этом этапе понимаем, что не сработаемся — честно сообщаем, почему. Без долгих формулировок и дежурных «мы вам перезвоним».</p>
+            <p className="font-medium text-gray-800">Удачи.</p>
+          </div>
+
           <div className="bg-white rounded-xl p-6 shadow-sm space-y-4">
 
             {/* Основные данные */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-4">
               <div className="space-y-1">
                 <Label className="text-xs">Имя <span className="text-red-500">*</span></Label>
                 <Input value={formFirst} onChange={e => setFormFirst(e.target.value)} placeholder="Иван" className="h-10" />
@@ -720,7 +729,7 @@ export default function DemoPage() {
               <Label className="text-xs">Email <span className="text-red-500">*</span></Label>
               <Input value={formEmail} onChange={e => setFormEmail(e.target.value)} placeholder="ivan@mail.ru" type="email" className="h-10" />
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-4">
               <div className="space-y-1">
                 <Label className="text-xs">Телефон <span className="text-red-500">*</span></Label>
                 <Input value={formPhone} onChange={e => setFormPhone(e.target.value)} placeholder="+7 (999) 123-45-67" className="h-10" />
@@ -730,7 +739,7 @@ export default function DemoPage() {
                 <Input value={formTelegram} onChange={e => setFormTelegram(e.target.value)} placeholder="@username" className="h-10" />
               </div>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-4">
               <div className="space-y-1">
                 <Label className="text-xs">Дата рождения</Label>
                 <Input value={formBirth} onChange={e => setFormBirth(e.target.value)} type="date" className="h-10" />
