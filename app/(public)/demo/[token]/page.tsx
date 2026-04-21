@@ -397,7 +397,10 @@ export default function DemoPage() {
           // Restore progress — теперь currentBlock в БД означает «индекс урока».
           // Для старых записей, где сохранялся индекс блока, значение может
           // оказаться больше числа уроков — клампим к диапазону.
-          if (typeof d.progress?.currentBlock === "number" && d.progress.currentBlock > 0) {
+          // Для токенов test-demo-preview-* (предпросмотр) прогресс не восстанавливаем —
+          // HR всегда хочет видеть демо с начала.
+          const isPreviewToken = typeof token === "string" && token.startsWith("test-demo-preview-")
+          if (!isPreviewToken && typeof d.progress?.currentBlock === "number" && d.progress.currentBlock > 0) {
             const maxLessonIdx = Math.max(0, (d.lessons?.length || 1) - 1)
             setCurrentIndex(Math.min(d.progress.currentBlock, maxLessonIdx))
           }

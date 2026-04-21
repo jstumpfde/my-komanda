@@ -1389,14 +1389,31 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                 {activeTab === "course" && (
                   <div className="flex items-center gap-1.5 shrink-0">
                     <div className="relative">
-                      <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8" onClick={() => courseEditorRef.current?.save()}>
-                        {courseEditorSaveStatus === "saving" ? (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        ) : (
-                          <Check className="w-3.5 h-3.5" />
-                        )}
-                        Сохранить
-                      </Button>
+                      <div className="flex items-center">
+                        <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8 rounded-r-none border-r-0" onClick={() => courseEditorRef.current?.save()}>
+                          {courseEditorSaveStatus === "saving" ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Check className="w-3.5 h-3.5" />
+                          )}
+                          Сохранить
+                        </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="outline" size="sm" className="h-8 px-2 rounded-l-none">
+                              <ChevronDown className="w-3 h-3 opacity-50" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="start">
+                            <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => courseEditorRef.current?.openSaveTemplate()}>
+                              <Save className="w-3.5 h-3.5" />В библиотеку
+                            </DropdownMenuItem>
+                            <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => courseEditorRef.current?.downloadTxt()}>
+                              <Download className="w-3.5 h-3.5" />Скачать
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
                       <span className={cn("absolute left-1/2 -translate-x-1/2 top-full mt-0.5 text-[10px] leading-none whitespace-nowrap transition-colors", courseEditorSaveStatus === "saving" ? "text-amber-500" : "text-muted-foreground/40")}>
                         {courseEditorSaveStatus === "saving" ? "Сохранение..." : "✓ Сохранено"}
                       </span>
@@ -1420,55 +1437,56 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
-                    <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8" onClick={() => courseEditorRef.current?.openSaveTemplate()}>
-                      <Save className="w-3.5 h-3.5" />В библиотеку
-                    </Button>
-                    <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8" onClick={() => courseEditorRef.current?.downloadTxt()}>
-                      <Download className="w-3.5 h-3.5" />Скачать
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="gap-1.5 text-xs h-8"
-                      onClick={async () => {
-                        if (!id) { toast.error("Сохраните вакансию"); return }
-                        try {
-                          const res = await fetch(`/api/modules/hr/vacancies/${id}/preview-link`)
-                          const json = await res.json()
-                          const url = json?.data?.url || json?.url
-                          if (url) {
-                            const fullUrl = `${window.location.origin}${url}`
-                            await navigator.clipboard.writeText(fullUrl)
-                            toast.success("Ссылка скопирована")
-                          } else {
-                            toast.error("Не удалось получить ссылку")
+                    <div className="w-px h-6 bg-border mx-1" />
+                    <div className="flex items-center">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-1.5 text-xs h-8 rounded-r-none border-r-0"
+                        onClick={async () => {
+                          if (!id) { toast.error("Сохраните вакансию"); return }
+                          try {
+                            const res = await fetch(`/api/modules/hr/vacancies/${id}/preview-link`)
+                            const json = await res.json()
+                            const url = json?.data?.url || json?.url
+                            if (url) window.open(url, "_blank", "noopener,noreferrer")
+                            else toast.error("Не удалось получить ссылку")
+                          } catch {
+                            toast.error("Ошибка получения ссылки")
                           }
-                        } catch {
-                          toast.error("Ошибка получения ссылки")
-                        }
-                      }}
-                    >
-                      <Copy className="w-3.5 h-3.5" />Копировать
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="gap-1.5 text-xs h-8"
-                      onClick={async () => {
-                        if (!id) { toast.error("Сохраните вакансию"); return }
-                        try {
-                          const res = await fetch(`/api/modules/hr/vacancies/${id}/preview-link`)
-                          const json = await res.json()
-                          const url = json?.data?.url || json?.url
-                          if (url) window.open(url, "_blank", "noopener,noreferrer")
-                          else toast.error("Не удалось получить ссылку")
-                        } catch {
-                          toast.error("Ошибка получения ссылки")
-                        }
-                      }}
-                    >
-                      <Eye className="w-3.5 h-3.5" />Как кандидат
-                    </Button>
+                        }}
+                      >
+                        <Eye className="w-3.5 h-3.5" />Просмотр
+                      </Button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="outline" size="sm" className="h-8 px-2 rounded-l-none">
+                            <ChevronDown className="w-3 h-3 opacity-50" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem className="gap-2 cursor-pointer" onClick={async () => {
+                            if (!id) { toast.error("Сохраните вакансию"); return }
+                            try {
+                              const res = await fetch(`/api/modules/hr/vacancies/${id}/preview-link`)
+                              const json = await res.json()
+                              const url = json?.data?.url || json?.url
+                              if (url) {
+                                const fullUrl = `${window.location.origin}${url}`
+                                await navigator.clipboard.writeText(fullUrl)
+                                toast.success("Ссылка скопирована")
+                              } else {
+                                toast.error("Не удалось получить ссылку")
+                              }
+                            } catch {
+                              toast.error("Ошибка получения ссылки")
+                            }
+                          }}>
+                            <Copy className="w-3.5 h-3.5" />Копировать ссылку
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
                   </div>
                 )}
                 {activeTab === "analytics" && (
