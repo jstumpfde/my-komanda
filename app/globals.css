@@ -201,3 +201,12 @@
 @media (min-width: 768px) and (max-width: 1023px) {
   [data-sidebar="sidebar"] { --sidebar-width: 60px; }
 }
+
+
+@layer base {
+  b, strong { font-weight: 700 !important; }
+  ul, ol { list-style: revert; padding-left: 1.5rem; }
+  h1 { font-size: 1.5rem; font-weight: 700; margin: 0.5rem 0; }
+  h2 { font-size: 1.25rem; font-weight: 700; margin: 0.5rem 0; }
+  h3 { font-size: 1.1rem; font-weight: 600; margin: 0.5rem 0; }
+}

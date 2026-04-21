@@ -499,10 +499,17 @@ export default function DemoPage() {
 
     if (currentIndex < totalLessons - 1) {
       setCurrentIndex((i) => i + 1)
+      // Скролл наверх при переходе к новому уроку
+      if (typeof window !== "undefined") {
+        window.scrollTo({ top: 0, behavior: "smooth" })
+      }
     } else {
       setFinished(true)
       // Save final progress
       await saveAnswer("__complete__", { completed: true })
+      if (typeof window !== "undefined") {
+        window.scrollTo({ top: 0, behavior: "smooth" })
+      }
     }
   }, [currentFlat, currentIndex, totalLessons, taskAnswers, mediaUploaded, saveAnswer])
 
@@ -613,7 +620,7 @@ export default function DemoPage() {
           <div className="bg-white rounded-xl p-6 shadow-sm space-y-4">
 
             {/* Основные данные */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label className="text-xs">Имя <span className="text-red-500">*</span></Label>
                 <Input value={formFirst} onChange={e => setFormFirst(e.target.value)} placeholder="Иван" className="h-10" />
@@ -627,7 +634,7 @@ export default function DemoPage() {
               <Label className="text-xs">Email <span className="text-red-500">*</span></Label>
               <Input value={formEmail} onChange={e => setFormEmail(e.target.value)} placeholder="ivan@mail.ru" type="email" className="h-10" />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label className="text-xs">Телефон <span className="text-red-500">*</span></Label>
                 <Input value={formPhone} onChange={e => setFormPhone(e.target.value)} placeholder="+7 (999) 123-45-67" className="h-10" />
@@ -637,7 +644,7 @@ export default function DemoPage() {
                 <Input value={formTelegram} onChange={e => setFormTelegram(e.target.value)} placeholder="@username" className="h-10" />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label className="text-xs">Дата рождения</Label>
                 <Input value={formBirth} onChange={e => setFormBirth(e.target.value)} type="date" className="h-10" />
@@ -665,7 +672,7 @@ export default function DemoPage() {
             <Button className="w-full h-11" style={{ backgroundColor: brandColor }} onClick={handleFormSubmit}
               disabled={formSubmitting || !formFirst.trim() || !formLast.trim() || !formEmail.trim() || !formPhone.trim() || !formConsent}>
               {formSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              Отправить заявку
+              Отправить
             </Button>
           </div>
 
@@ -892,6 +899,7 @@ function MediaBlock({
   const [elapsed, setElapsed] = useState(0)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [previewMime, setPreviewMime] = useState<string>("")
+  const [uploadProgress, setUploadProgress] = useState<number>(0)
   const [errMsg, setErrMsg] = useState("")
   const [result, setResult] = useState<MediaAnswer | null>(existing ?? null)
 
@@ -940,10 +948,17 @@ function MediaBlock({
       const stream = await navigator.mediaDevices.getUserMedia(constraints)
       streamRef.current = stream
 
-      if (type === "video" && videoPreviewRef.current) {
-        videoPreviewRef.current.srcObject = stream
-        videoPreviewRef.current.muted = true
-        videoPreviewRef.current.play().catch(() => {})
+      if (type === "video") {
+        const attachStream = () => {
+          if (videoPreviewRef.current) {
+            videoPreviewRef.current.srcObject = stream
+            videoPreviewRef.current.muted = true
+            videoPreviewRef.current.play().catch(() => {})
+          } else {
+            setTimeout(attachStream, 50)
+          }
+        }
+        attachStream()
       }
 
       const mime = type === "video"
@@ -1067,15 +1082,31 @@ function MediaBlock({
     fd.append("mediaType", mediaType)
     if (mediaType !== "photo") fd.append("duration", String(Math.round(elapsed)))
 
+    setUploadProgress(0)
     try {
-      const res = await fetch(`/api/public/demo/${token}/upload-media`, {
-        method: "POST",
-        body: fd,
+      const data = await new Promise<any>((resolve, reject) => {
+        const xhr = new XMLHttpRequest()
+        xhr.open("POST", `/api/public/demo/${token}/upload-media`)
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) {
+            setUploadProgress(Math.round((e.loaded / e.total) * 100))
+          }
+        }
+        xhr.onload = () => {
+          try {
+            const parsed = JSON.parse(xhr.responseText || "{}")
+            if (xhr.status >= 200 && xhr.status < 300 && parsed?.url) {
+              resolve(parsed)
+            } else {
+              reject(new Error(parsed?.error || "Ошибка загрузки"))
+            }
+          } catch {
+            reject(new Error("Ошибка ответа сервера"))
+          }
+        }
+        xhr.onerror = () => reject(new Error("Сеть недоступна"))
+        xhr.send(fd)
       })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok || !data?.url) {
-        throw new Error(data?.error || "Ошибка загрузки")
-      }
       const answer: MediaAnswer = {
         url: data.url,
         mediaType,
@@ -1194,7 +1225,7 @@ function MediaBlock({
         <div className="space-y-3">
           {recType === "video" ? (
             <div className="relative rounded-xl overflow-hidden bg-black aspect-video">
-              <video ref={videoPreviewRef} playsInline className="w-full h-full object-cover" />
+              <video ref={videoPreviewRef} playsInline className="w-full h-full object-contain" />
               <div className="absolute top-3 left-3 flex items-center gap-2 rounded-full bg-black/60 px-3 py-1">
                 <span className="h-3 w-3 rounded-full bg-red-500 animate-pulse" />
                 <span className="text-white text-sm font-medium">REC</span>
@@ -1267,9 +1298,19 @@ function MediaBlock({
       )}
 
       {mode === "uploading" && (
-        <div className="flex items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 p-4">
-          <Loader2 className="h-5 w-5 animate-spin text-gray-600" />
-          <span className="text-sm text-gray-700">Отправка…</span>
+        <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 space-y-2">
+          <div className="flex items-center gap-3">
+            <Loader2 className="h-5 w-5 animate-spin text-gray-600" />
+            <span className="text-sm text-gray-700">
+              {uploadProgress > 0 ? `Отправка… ${uploadProgress}%` : "Отправка…"}
+            </span>
+          </div>
+          <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+            <div
+              className="h-full rounded-full transition-all"
+              style={{ width: `${uploadProgress}%`, backgroundColor: brandColor }}
+            />
+          </div>
         </div>
       )}
 

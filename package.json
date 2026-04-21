@@ -88,6 +88,7 @@
   "devDependencies": {
     "@tailwindcss/oxide-darwin-arm64": "^4.2.2",
     "@tailwindcss/postcss": "^4.2.0",
+    "@tailwindcss/typography": "^0.5.19",
     "@types/bcryptjs": "^3.0.0",
     "@types/node": "^22",
     "@types/nodemailer": "^7.0.11",

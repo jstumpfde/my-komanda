@@ -4,6 +4,37 @@ import mammoth from "mammoth"
 
 const MAX_TEXT_CHARS = 50000
 
+function htmlToMarkdown(html: string): string {
+  return html
+    // Заголовки
+    .replace(/<h1[^>]*>(.*?)<\/h1>/gi, "\n# $1\n\n")
+    .replace(/<h2[^>]*>(.*?)<\/h2>/gi, "\n## $1\n\n")
+    .replace(/<h3[^>]*>(.*?)<\/h3>/gi, "\n### $1\n\n")
+    .replace(/<h4[^>]*>(.*?)<\/h4>/gi, "\n#### $1\n\n")
+    // Жирный/курсив
+    .replace(/<(strong|b)[^>]*>(.*?)<\/\1>/gi, "**$2**")
+    .replace(/<(em|i)[^>]*>(.*?)<\/\1>/gi, "*$2*")
+    // Списки
+    .replace(/<li[^>]*>(.*?)<\/li>/gi, "- $1\n")
+    .replace(/<\/?(ul|ol)[^>]*>/gi, "\n")
+    // Параграфы и переносы
+    .replace(/<p[^>]*>/gi, "")
+    .replace(/<\/p>/gi, "\n\n")
+    .replace(/<br\s*\/?>/gi, "\n")
+    // Удаляем остальные теги
+    .replace(/<[^>]+>/g, "")
+    // Декодируем HTML entities
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, "\"")
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, " ")
+    // Убираем лишние пустые строки
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
+}
+
 async function extractText(file: File): Promise<string> {
   const ext = file.name.split(".").pop()?.toLowerCase() ?? ""
 
@@ -13,8 +44,10 @@ async function extractText(file: File): Promise<string> {
 
   if (ext === "docx") {
     const buffer = Buffer.from(await file.arrayBuffer())
-    const result = await mammoth.extractRawText({ buffer })
-    return result.value
+    // convertToHtml сохраняет <strong>, <em>, списки, заголовки
+    const result = await mammoth.convertToHtml({ buffer })
+    // Конвертируем HTML в markdown, чтобы сохранить форматирование
+    return result.value.replace(/<b>/g, "<strong>").replace(/<\/b>/g, "</strong>").replace(/<b /g, "<strong ").replace(/<\/i>/g, "</em>").replace(/<i>/g, "<em>").replace(/<i /g, "<em ")
   }
 
   if (ext === "pdf") {

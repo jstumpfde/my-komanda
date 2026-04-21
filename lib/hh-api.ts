@@ -152,3 +152,30 @@ export interface HHNegotiationsResponse {
 export async function getNegotiations(accessToken: string, page = 0): Promise<HHNegotiationsResponse> {
   return hhFetch(`/negotiations?page=${page}&per_page=50`, accessToken)
 }
+
+export async function changeNegotiationState(
+  accessToken: string,
+  negotiationId: string,
+  action: "invitation" | "discard",
+  message?: string,
+  _vacancyId?: string,
+  _resumeId?: string
+): Promise<void> {
+  const hhAction = action === "invitation" ? "phone_interview" : "discard_by_employer"
+  const bodyParams = new URLSearchParams()
+  if (message) bodyParams.set("message", message)
+  const url = `${HH_API_BASE}/negotiations/${hhAction}/${negotiationId}`
+  const res = await fetch(url, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "User-Agent": USER_AGENT,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: bodyParams.toString(),
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`HH ${hhAction} ${negotiationId} failed: ${res.status} ${text}`)
+  }
+}
