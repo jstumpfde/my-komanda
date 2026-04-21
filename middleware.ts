@@ -29,6 +29,7 @@ const PUBLIC_PREFIXES = [
   "/demo/",
   "/politicahr2026",
   "/ask/",
+  "/uploads/",
 ]
 
 function isPublic(pathname: string): boolean {
