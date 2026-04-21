@@ -1,4 +1,4 @@
-export type BlockType = "text" | "image" | "video" | "audio" | "file" | "info" | "button" | "task"
+export type BlockType = "text" | "image" | "video" | "audio" | "file" | "info" | "button" | "task" | "media"
 
 export type ImageLayout = "full" | "image-left" | "image-right"
 export type AudioLayout = "full" | "audio-left" | "audio-right"
@@ -71,6 +71,13 @@ export interface Block {
   taskTitle: string        // заголовок задания (новое)
   taskDescription: string  // вступительный текст
   questions: Question[]
+  // media-блок — запись/загрузка видео/аудио/фото кандидатом
+  mediaAllowVideo?: boolean
+  mediaAllowAudio?: boolean
+  mediaAllowPhoto?: boolean
+  mediaMaxDuration?: number | null  // секунды, null = без лимита
+  mediaRequired?: boolean
+  mediaInstruction?: string
 }
 
 export interface Lesson {
@@ -119,6 +126,7 @@ export const BLOCK_TYPE_META: { type: BlockType; icon: string; label: string }[]
   { type: "info", icon: "ℹ️", label: "Инфо" },
   { type: "button", icon: "🔘", label: "Кнопка" },
   { type: "task", icon: "✅", label: "Задание" },
+  { type: "media", icon: "🎥", label: "Запись медиа" },
 ]
 
 export function defaultQuestion(): Question {
@@ -137,6 +145,12 @@ export function createBlock(type: BlockType): Block {
     infoStyle: "info", infoColor: "", infoIcon: "", infoSize: "m",
     buttonText: "Подробнее", buttonUrl: "", buttonVariant: "primary", buttonColor: "", buttonIconBefore: "", buttonIconAfter: "",
     taskTitle: "", taskDescription: "", questions: type === "task" ? [defaultQuestion()] : [],
+    mediaAllowVideo: type === "media" ? true : undefined,
+    mediaAllowAudio: type === "media" ? false : undefined,
+    mediaAllowPhoto: type === "media" ? false : undefined,
+    mediaMaxDuration: type === "media" ? 60 : undefined,
+    mediaRequired: type === "media" ? false : undefined,
+    mediaInstruction: type === "media" ? "" : undefined,
   }
 }
 
