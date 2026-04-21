@@ -13,11 +13,28 @@ import { toast } from "sonner"
 import {
   ArrowLeft, Mail, Phone, MapPin, Briefcase, Star,
   UserPlus, Archive, XCircle, Loader2, Save, CheckCircle2, Clock,
-  ExternalLink,
+  ExternalLink, Video as VideoIcon, Mic, Image as ImageIcon, Download,
 } from "lucide-react"
 import Link from "next/link"
 
 // ─── Types ──────────────────────────────────────────────────────────────────
+
+interface MediaAnswer {
+  url: string
+  mediaType: "video" | "audio" | "photo"
+  duration?: number
+  size?: number
+  mime?: string
+}
+
+type AnketaEntry =
+  | { question: string; answer: string } // legacy
+  | { blockId: string; answer: string | MediaAnswer | Record<string, unknown>; answeredAt?: string; timeSpent?: number }
+
+interface MediaRecording extends MediaAnswer {
+  blockId: string
+  answeredAt?: string
+}
 
 interface Candidate {
   id: string
@@ -34,7 +51,7 @@ interface Candidate {
   experience: string | null
   skills: string[]
   demoProgressJson: { blocks?: { title: string; status: string; timeSpent?: number }[]; notes?: { text: string; createdAt: string }[] } | null
-  anketaAnswers: { question: string; answer: string }[] | null
+  anketaAnswers: AnketaEntry[] | null
   aiScore: number | null
   aiSummary: string | null
   createdAt: string
@@ -94,6 +111,62 @@ function scoreTextColor(score: number): string {
   if (score >= 70) return "text-emerald-700"
   if (score >= 40) return "text-amber-700"
   return "text-red-700"
+}
+
+function formatFileSize(bytes: number | undefined): string {
+  if (!bytes || bytes <= 0) return "—"
+  if (bytes < 1024) return `${bytes} Б`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} КБ`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} МБ`
+}
+
+function formatAnsweredAt(iso: string | undefined): string {
+  if (!iso) return ""
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return ""
+  return d.toLocaleString("ru-RU", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })
+}
+
+function formatDuration(seconds: number | undefined): string {
+  if (!seconds || seconds <= 0) return ""
+  const m = Math.floor(seconds / 60)
+  const s = seconds % 60
+  if (m === 0) return `${s} сек`
+  return `${m} мин ${s.toString().padStart(2, "0")} сек`
+}
+
+function extractMediaRecordings(entries: AnketaEntry[] | null | undefined): MediaRecording[] {
+  if (!entries) return []
+  const out: MediaRecording[] = []
+  for (const entry of entries) {
+    if (!entry || typeof entry !== "object") continue
+    const ans = (entry as any).answer
+    const blockId = (entry as any).blockId
+    if (!blockId || !ans || typeof ans !== "object") continue
+    if (typeof ans.url !== "string" || typeof ans.mediaType !== "string") continue
+    if (!["video", "audio", "photo"].includes(ans.mediaType)) continue
+    out.push({
+      blockId,
+      answeredAt: (entry as any).answeredAt,
+      url: ans.url,
+      mediaType: ans.mediaType,
+      duration: typeof ans.duration === "number" ? ans.duration : undefined,
+      size: typeof ans.size === "number" ? ans.size : undefined,
+      mime: typeof ans.mime === "string" ? ans.mime : undefined,
+    })
+  }
+  // новые — первыми
+  return out.sort((a, b) => {
+    const ta = a.answeredAt ? Date.parse(a.answeredAt) : 0
+    const tb = b.answeredAt ? Date.parse(b.answeredAt) : 0
+    return tb - ta
+  })
+}
+
+const MEDIA_TYPE_LABEL: Record<MediaAnswer["mediaType"], string> = {
+  video: "Видео",
+  audio: "Аудио",
+  photo: "Фото",
 }
 
 // ─── Page ───────────────────────────────────────────────────────────────────
@@ -177,6 +250,13 @@ export default function CandidateDetailPage() {
   const stageCfg = STAGE_CONFIG[candidate.stage] ?? { label: candidate.stage, cls: "bg-muted text-muted-foreground" }
   const demoBlocks = candidate.demoProgressJson?.blocks ?? []
   const anketaAnswers = candidate.anketaAnswers ?? []
+  const mediaRecordings = extractMediaRecordings(candidate.anketaAnswers)
+  // Для легаси-рендера анкеты отфильтровываем media-записи
+  const textAnketaAnswers = anketaAnswers.filter((a: any) => {
+    if (!a || typeof a !== "object") return false
+    const ans = a.answer
+    return !(ans && typeof ans === "object" && typeof ans.url === "string" && typeof ans.mediaType === "string")
+  })
 
   return (
     <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
@@ -337,17 +417,77 @@ export default function CandidateDetailPage() {
 
       {/* ═══ Таб: Анкета ═══ */}
       {activeTab === "anketa" && (
-        <div className="max-w-3xl">
+        <div className="max-w-3xl space-y-4">
+          {mediaRecordings.length > 0 && (
+            <Card className="rounded-xl border border-border p-5">
+              <h3 className="text-sm font-semibold mb-3">Записи кандидата</h3>
+              <div className="space-y-5">
+                {mediaRecordings.map((rec) => {
+                  const Icon = rec.mediaType === "video" ? VideoIcon : rec.mediaType === "audio" ? Mic : ImageIcon
+                  const answeredLabel = formatAnsweredAt(rec.answeredAt)
+                  const sizeLabel = formatFileSize(rec.size)
+                  const durationLabel = formatDuration(rec.duration)
+                  return (
+                    <div key={rec.blockId} className="space-y-2">
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <div className="flex items-center gap-2 text-sm font-medium">
+                          <Icon className="w-4 h-4 text-muted-foreground" />
+                          <span>{MEDIA_TYPE_LABEL[rec.mediaType]}</span>
+                        </div>
+                        <a
+                          href={rec.url}
+                          download
+                          className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          Скачать
+                        </a>
+                      </div>
+
+                      {rec.mediaType === "video" && (
+                        <video
+                          src={rec.url}
+                          controls
+                          playsInline
+                          className="w-full rounded-lg bg-black aspect-video"
+                        />
+                      )}
+                      {rec.mediaType === "audio" && (
+                        <audio src={rec.url} controls className="w-full" />
+                      )}
+                      {rec.mediaType === "photo" && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={rec.url} alt="" className="w-full rounded-lg object-contain bg-muted/30 max-h-[480px]" />
+                      )}
+
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                        {answeredLabel && <span>{answeredLabel}</span>}
+                        {sizeLabel !== "—" && <span>{sizeLabel}</span>}
+                        {durationLabel && <span>{durationLabel}</span>}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </Card>
+          )}
+
           <Card className="rounded-xl border border-border p-5">
             <h3 className="text-sm font-semibold mb-3">Ответы на анкету</h3>
-            {anketaAnswers.length === 0 ? (
+            {textAnketaAnswers.length === 0 ? (
               <p className="text-sm text-muted-foreground">Анкета не заполнена</p>
             ) : (
               <div className="divide-y divide-border">
-                {anketaAnswers.map((qa, i) => (
+                {textAnketaAnswers.map((qa: any, i: number) => (
                   <div key={i} className="py-2.5">
-                    <p className="text-xs text-muted-foreground mb-0.5">{qa.question}</p>
-                    <p className="text-sm text-foreground">{qa.answer}</p>
+                    <p className="text-xs text-muted-foreground mb-0.5">{qa.question ?? qa.blockId ?? ""}</p>
+                    <p className="text-sm text-foreground">
+                      {typeof qa.answer === "string"
+                        ? qa.answer
+                        : qa.answer && typeof qa.answer === "object"
+                          ? Object.entries(qa.answer).map(([k, v]) => `${k}: ${String(v)}`).join("; ")
+                          : ""}
+                    </p>
                   </div>
                 ))}
               </div>
