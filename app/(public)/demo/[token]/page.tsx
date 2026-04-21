@@ -627,59 +627,6 @@ export default function DemoPage() {
               </div>
             </div>
 
-            {/* Опыт */}
-            <div className="space-y-1 pt-2">
-              <Label className="text-xs">Опыт работы — последние 2–3 места</Label>
-              <Textarea
-                value={formExperience}
-                onChange={e => setFormExperience(e.target.value)}
-                rows={3}
-                placeholder="Компания, должность, период, ключевые результаты"
-                className="resize-none text-sm"
-              />
-            </div>
-
-            {/* Ссылки */}
-            <div className="space-y-1">
-              <Label className="text-xs">Портфолио / кейсы</Label>
-              <Input value={formPortfolio} onChange={e => setFormPortfolio(e.target.value)} placeholder="https://…" type="url" className="h-10" />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label className="text-xs">HH.ru</Label>
-                <Input value={formHh} onChange={e => setFormHh(e.target.value)} placeholder="https://hh.ru/resume/…" type="url" className="h-10" />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Другие ссылки</Label>
-                <Input value={formOtherLinks} onChange={e => setFormOtherLinks(e.target.value)} placeholder="LinkedIn, GitHub, соцсети" className="h-10" />
-              </div>
-            </div>
-
-            {/* Форма оформления */}
-            <div className="space-y-2 pt-1">
-              <Label className="text-xs">Предпочитаемая форма оформления</Label>
-              <RadioGroup value={formEmployment} onValueChange={setFormEmployment} className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {EMPLOYMENT_OPTIONS.map((opt) => (
-                  <label key={opt} className="flex items-center gap-2 rounded-lg border border-gray-200 p-2.5 cursor-pointer hover:bg-gray-50 transition-colors text-sm">
-                    <RadioGroupItem value={opt} id={`emp-${opt}`} />
-                    <span className="flex-1">{opt}</span>
-                  </label>
-                ))}
-              </RadioGroup>
-            </div>
-
-            {/* Ниши */}
-            <div className="space-y-1 pt-1">
-              <Label className="text-xs">Опыт в нишах</Label>
-              <Textarea
-                value={formNiches}
-                onChange={e => setFormNiches(e.target.value)}
-                rows={2}
-                placeholder="B2B SaaS, EdTech, FinTech, маркетплейсы…"
-                className="resize-none text-sm"
-              />
-            </div>
-
             {/* Согласие */}
             <label className="flex items-start gap-2 text-xs text-gray-600 cursor-pointer select-none pt-1">
               <input
