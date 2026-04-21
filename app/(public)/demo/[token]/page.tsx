@@ -402,7 +402,7 @@ export default function DemoPage() {
             setCurrentIndex(Math.min(d.progress.currentBlock, maxLessonIdx))
           }
           // Restore answers
-          if (d.answers) {
+          if (Array.isArray(d.answers)) {
             const restoredTasks: Record<string, Record<string, string>> = {}
             const restoredMedia: Record<string, MediaAnswer> = {}
             for (const a of d.answers) {
