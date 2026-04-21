@@ -298,6 +298,58 @@ function QuestionInput({
     )
   }
 
+  if (type === "sort") {
+    // Порядок хранится как строки через "|||"
+    const currentOrder = value ? value.split("|||") : [...question.options]
+    // Добавим опции которых ещё нет (на случай если options изменились)
+    for (const opt of question.options) {
+      if (!currentOrder.includes(opt)) currentOrder.push(opt)
+    }
+    // Удалим опции которых больше нет
+    const order = currentOrder.filter(o => question.options.includes(o))
+
+    const move = (idx: number, dir: -1 | 1) => {
+      const newIdx = idx + dir
+      if (newIdx < 0 || newIdx >= order.length) return
+      const next = [...order]
+      ;[next[idx], next[newIdx]] = [next[newIdx], next[idx]]
+      onChange(next.join("|||"))
+    }
+
+    return (
+      <div className="space-y-2">
+        <p className="font-medium text-gray-800">{question.text}{question.required && <span className="text-red-500"> *</span>}</p>
+        <p className="text-xs text-gray-500">Расставьте в правильном порядке</p>
+        <div className="space-y-2">
+          {order.map((opt, i) => (
+            <div key={opt} className="flex items-center gap-2 rounded-lg border p-3 bg-white">
+              <span className="text-sm font-semibold text-gray-500 w-6">{i + 1}.</span>
+              <span className="flex-1">{opt}</span>
+              <button
+                type="button"
+                onClick={() => move(i, -1)}
+                disabled={i === 0}
+                className="h-8 w-8 rounded border border-gray-300 flex items-center justify-center hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed"
+                aria-label="Вверх"
+              >
+                ▲
+              </button>
+              <button
+                type="button"
+                onClick={() => move(i, 1)}
+                disabled={i === order.length - 1}
+                className="h-8 w-8 rounded border border-gray-300 flex items-center justify-center hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed"
+                aria-label="Вниз"
+              >
+                ▼
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
   if (type === "yesno") {
     return (
       <div className="space-y-2">
