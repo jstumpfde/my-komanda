@@ -251,7 +251,7 @@ function QuestionInput({
 }) {
   const type = question.answerType
 
-  if (type === "single" || type === "multiple") {
+  if (type === "single") {
     return (
       <div className="space-y-2">
         <p className="font-medium text-gray-800">{question.text}{question.required && <span className="text-red-500"> *</span>}</p>
@@ -263,6 +263,37 @@ function QuestionInput({
             </div>
           ))}
         </RadioGroup>
+      </div>
+    )
+  }
+
+  if (type === "multiple") {
+    const selected = value ? value.split("|||") : []
+    const toggle = (opt: string) => {
+      const next = selected.includes(opt)
+        ? selected.filter(x => x !== opt)
+        : [...selected, opt]
+      onChange(next.join("|||"))
+    }
+    return (
+      <div className="space-y-2">
+        <p className="font-medium text-gray-800">{question.text}{question.required && <span className="text-red-500"> *</span>}</p>
+        <div className="space-y-2">
+          {question.options.map((opt, i) => {
+            const checked = selected.includes(opt)
+            return (
+              <label key={i} className="flex items-center gap-2 rounded-lg border p-3 hover:bg-gray-50 transition-colors cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={() => toggle(opt)}
+                  className="h-4 w-4 rounded border-gray-300"
+                />
+                <span className="flex-1">{opt}</span>
+              </label>
+            )
+          })}
+        </div>
       </div>
     )
   }
