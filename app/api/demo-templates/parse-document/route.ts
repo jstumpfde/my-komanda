@@ -44,10 +44,10 @@ async function extractText(file: File): Promise<string> {
 
   if (ext === "docx") {
     const buffer = Buffer.from(await file.arrayBuffer())
-    // convertToHtml сохраняет <strong>, <em>, списки, заголовки
     const result = await mammoth.convertToHtml({ buffer })
-    // Конвертируем HTML в markdown, чтобы сохранить форматирование
-    return result.value.replace(/<b>/g, "<strong>").replace(/<\/b>/g, "</strong>").replace(/<b /g, "<strong ").replace(/<\/i>/g, "</em>").replace(/<i>/g, "<em>").replace(/<i /g, "<em ")
+    let text = result.value.replace(/<b>/g, "<strong>").replace(/<\/b>/g, "</strong>").replace(/<b /g, "<strong ").replace(/<\/i>/g, "</em>").replace(/<i>/g, "<em>").replace(/<i /g, "<em ")
+    text = htmlToMarkdown(text)
+    return text
   }
 
   if (ext === "pdf") {
