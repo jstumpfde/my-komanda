@@ -27,6 +27,7 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [submitted, setSubmitted] = useState(false)
+  const [consent, setConsent] = useState(false)
 
   const formatPhone = (digits: string) => {
     if (digits.length === 0) return ""
@@ -181,7 +182,21 @@ export default function RegisterPage() {
                     </p>
                   )}
 
-                  <Button type="submit" className="w-full h-11 font-semibold" disabled={loading}>
+                  <label className="flex items-start gap-2 text-xs text-gray-600 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={consent}
+                      onChange={(e) => setConsent(e.target.checked)}
+                      className="mt-0.5 h-4 w-4 rounded border-gray-300 cursor-pointer flex-shrink-0"
+                    />
+                    <span>
+                      Я согласен на обработку персональных данных в соответствии с{" "}
+                      <a href="/politicahr2026" target="_blank" className="underline hover:opacity-80">ФЗ-152</a>.
+                      {" "}Данные используются для целей регистрации и связи.
+                    </span>
+                  </label>
+
+                  <Button type="submit" className="w-full h-11 font-semibold" disabled={loading || !consent}>
                     {loading ? (
                       <span className="flex items-center gap-2"><Spinner /> Отправляем...</span>
                     ) : (
