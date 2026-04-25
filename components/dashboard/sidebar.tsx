@@ -12,7 +12,7 @@ import {
   ClipboardList, ClipboardCheck, UserCheck2, Trophy, HeartHandshake, BookOpen, Award, Zap,
   AlertTriangle, UserMinus, Brain, Radar, Bot, Store, TrendingDown, Handshake,
   BookMarked, GraduationCap, Target, PieChart, FilePlus, Lock, Library,
-  Sparkles, Plus, Coins, SlidersHorizontal,
+  Sparkles, Plus, Coins, SlidersHorizontal, Sunrise,
   type LucideIcon,
 } from "lucide-react"
 import {
@@ -439,6 +439,42 @@ export function DashboardSidebar() {
             COLLAPSED STATE (56px): Module icons + active module menu items
            ══════════════════════════════════════════════════════════════════ */}
         <div className="hidden group-data-[collapsible=icon]:flex flex-col gap-0.5 items-center">
+          {/* AI-инструменты: Конфигуратор, Цели, Утренний обзор */}
+          <SidebarMenuButton
+            tooltip="Конфигуратор"
+            isActive={pathname.startsWith("/configurator")}
+            onClick={() => router.push("/configurator")}
+            className={cn(
+              "justify-center h-10 w-10",
+              pathname.startsWith("/configurator") && "text-indigo-400"
+            )}
+          >
+            <Sparkles className="size-5" />
+          </SidebarMenuButton>
+          <SidebarMenuButton
+            tooltip="Мои цели"
+            isActive={pathname.startsWith("/goals")}
+            onClick={() => router.push("/goals")}
+            className={cn(
+              "justify-center h-10 w-10",
+              pathname.startsWith("/goals") && "text-violet-400"
+            )}
+          >
+            <Target className="size-5" />
+          </SidebarMenuButton>
+          <SidebarMenuButton
+            tooltip="Утренний обзор"
+            isActive={pathname.startsWith("/morning-brief")}
+            onClick={() => router.push("/morning-brief")}
+            className={cn(
+              "justify-center h-10 w-10",
+              pathname.startsWith("/morning-brief") && "text-amber-400"
+            )}
+          >
+            <Sunrise className="size-5" />
+          </SidebarMenuButton>
+          <div className="my-1 w-6 border-t border-sidebar-border" />
+
           {/* Module switcher icons */}
           {(Object.keys(MODULE_REGISTRY) as ModuleId[])
             .filter((id) => (id !== 'hr' || vis.hiring) && isModuleVisible(id))
@@ -496,6 +532,42 @@ export function DashboardSidebar() {
             EXPANDED STATE: Module accordions with nested group accordions
            ══════════════════════════════════════════════════════════════════ */}
         <div className="group-data-[collapsible=icon]:hidden space-y-1">
+          {/* AI-инструменты: Конфигуратор / Мои цели / Утренний обзор */}
+          {([
+            { href: "/configurator", label: "Конфигуратор", Icon: Sparkles, accent: "indigo", color: "#818cf8" },
+            { href: "/goals",        label: "Мои цели",      Icon: Target,   accent: "violet", color: "#a78bfa" },
+            { href: "/morning-brief",label: "Утренний обзор", Icon: Sunrise,  accent: "amber",  color: "#fbbf24" },
+          ] as const).map(({ href, label, Icon, accent, color }) => {
+            const isActive = pathname.startsWith(href)
+            const textActive =
+              accent === "indigo" ? "bg-indigo-500/10 text-indigo-400"
+              : accent === "violet" ? "bg-violet-500/10 text-violet-400"
+              : "bg-amber-500/10 text-amber-400"
+            const iconActive =
+              accent === "indigo" ? "text-indigo-400"
+              : accent === "violet" ? "text-violet-400"
+              : "text-amber-400"
+            return (
+              <Link
+                key={href}
+                href={href}
+                style={isActive ? { borderLeft: `3px solid ${color}` } : { borderLeft: "3px solid transparent" }}
+                className={cn(
+                  "flex items-center gap-2.5 w-full px-3 py-2.5 text-sm font-semibold transition-all duration-150 rounded-none rounded-r-lg",
+                  "hover:bg-sidebar-accent",
+                  isActive ? textActive : "text-sidebar-foreground/70"
+                )}
+              >
+                <Icon className={cn("size-4 shrink-0", isActive && iconActive)} />
+                <span className="flex-1 text-left">{label}</span>
+                {href === "/configurator" && (
+                  <span className="text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-indigo-500/15 text-indigo-400">AI</span>
+                )}
+              </Link>
+            )
+          })}
+          <div className="my-1.5 mx-3 border-t border-sidebar-border/60" />
+
           {(Object.keys(MODULE_REGISTRY) as ModuleId[])
             .filter((id) => (id !== 'hr' || vis.hiring) && isModuleVisible(id))
             .map((id) => {

@@ -14,6 +14,14 @@ import { toast } from "sonner"
 
 const LESSON_EMOJIS = ["📘", "📗", "📙", "📕", "📔", "📓", "📒", "📖"]
 
+// Убирает ведущие и трейлинговые эмодзи из заголовка
+function cleanEmojiFromTitle(s: string): string {
+  // Убираем эмодзи в начале
+  return s.replace(/^[\p{Emoji_Presentation}\p{Extended_Pictographic}\s]+/u, "")
+          .replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}\s]+$/u, "")
+          .trim()
+}
+
 function splitTextIntoLessons(text: string, fileName: string): Lesson[] {
   const fallbackTitle = fileName.replace(/\.(docx?|pdf|txt)$/i, "").trim() || "Новый урок"
   const normalized = text.replace(/\r\n/g, "\n")
@@ -57,10 +65,10 @@ function splitTextIntoLessons(text: string, fileName: string): Lesson[] {
     const firstLine = (nlIdx >= 0 ? body.slice(0, nlIdx) : body).trim()
     const sentenceMatch = firstLine.match(/^(.{3,120}?)(?:[.!?—–]|\s—\s)/)
     if (sentenceMatch) {
-      title = `${sentenceMatch[1].trim()}`
+      title = cleanEmojiFromTitle(sentenceMatch[1])
       content = body.slice(sentenceMatch[0].length).trim()
     } else if (firstLine && firstLine.length <= 120) {
-      title = `${firstLine}`
+      title = cleanEmojiFromTitle(firstLine)
       content = nlIdx >= 0 ? body.slice(nlIdx + 1).trim() : ""
     }
 
