@@ -26,6 +26,8 @@ export interface ApiVacancy {
   schedule: string | null
   hiringPlan: number | null
   employeeType: string | null
+  hhVacancyId: string | null
+  hhUrl: string | null
   deletedAt: string | null
   createdAt: string | null
   updatedAt: string | null

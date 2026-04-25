@@ -37,7 +37,7 @@ import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
 import { defaultColumnColors, type CandidateAction, getNextColumnId, PROGRESS_BY_COLUMN } from "@/lib/column-config"
 import type { Candidate } from "@/components/dashboard/candidate-card"
-import { HhIntegration, type HhMessageLog } from "@/components/vacancies/hh-integration"
+import { HhVacancyBanner } from "@/components/vacancies/hh-vacancy-banner"
 import { AutomationSettings } from "@/components/vacancies/automation-settings"
 import { PublishTab } from "@/components/vacancies/publish-tab"
 import { MiniFormBuilder } from "@/components/vacancies/mini-form-builder"
@@ -428,7 +428,6 @@ export default function VacancyPage() {
     document.addEventListener("scroll", handleScroll, { passive: true, capture: true })
     return () => document.removeEventListener("scroll", handleScroll, { capture: true })
   }, [])
-  const [messageLogs, setMessageLogs] = useState<HhMessageLog[]>([])
   const [brandCompanyName, setBrandCompanyName] = useState("")
   const [brandColor, setBrandColor] = useState("#3B82F6")
   const [brandSlogan, setBrandSlogan] = useState("")
@@ -629,18 +628,6 @@ export default function VacancyPage() {
   }
 
   const totalCandidates = columns.reduce((acc, col) => acc + col.candidates.length, 0)
-
-  const handleHhCandidatesImported = (candidates: Candidate[]) => {
-    setColumns(prev => prev.map(col => {
-      if (col.id !== "new") return col
-      const newCandidates = [...col.candidates, ...candidates]
-      return { ...col, candidates: newCandidates, count: newCandidates.length }
-    }))
-  }
-
-  const handleHhMessageLog = (log: HhMessageLog) => {
-    setMessageLogs(prev => [...prev, log])
-  }
 
   const saveBranding = async (updates?: { companyName?: string; color?: string; slogan?: string; logo?: string }) => {
     setBrandSaving(true)
@@ -1510,6 +1497,12 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
               </TabsContent>
 
               <TabsContent value="candidates">
+                <HhVacancyBanner
+                  vacancyId={id}
+                  hhVacancyId={apiVacancy?.hhVacancyId ?? null}
+                  vacancyTitle={apiVacancy?.title ?? ""}
+                  onCandidatesUpdated={refetchCandidates}
+                />
                 {/* Talent Pool radar */}
                 {talentMatches.length > 0 && !talentRadarHidden && (
                   <div className="mb-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
@@ -2076,13 +2069,27 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                       <h3 className="text-lg font-semibold text-foreground mb-1">Источники кандидатов</h3>
                       <p className="text-sm text-muted-foreground mb-3">Подключение сервисов для импорта откликов</p>
                       <div className="space-y-3">
-                        <div className="rounded-lg border bg-card p-4 flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-white text-[11px] font-bold" style={{ backgroundColor: "#D6001C" }}>hh</div>
-                          <div className="flex-1 min-w-0"><p className="text-sm font-medium">hh.ru</p><p className="text-[11px] text-muted-foreground">Импорт откликов и управление вакансиями</p></div>
-                          <span className="text-xs text-muted-foreground shrink-0">0 кликов · 0 кандидатов</span>
-                          <Badge variant="outline" className="text-xs h-6 text-muted-foreground shrink-0">Не подключено</Badge>
-                          <Button size="sm" className="h-8 text-xs shrink-0" onClick={() => toast.info("Подключение hh.ru (заглушка)")}>Подключить</Button>
-                        </div>
+                        {apiVacancy?.hhVacancyId ? (
+                          <div className="rounded-lg border bg-card p-4 flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-white text-[11px] font-bold" style={{ backgroundColor: "#D6001C" }}>hh</div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium">hh.ru</p>
+                              <p className="text-[11px] text-muted-foreground">Привязана к hh-вакансии {apiVacancy.hhVacancyId}</p>
+                            </div>
+                            <Badge variant="outline" className="text-xs h-6 bg-emerald-500/10 text-emerald-700 border-emerald-200 shrink-0">Привязана</Badge>
+                            {apiVacancy.hhUrl && (
+                              <a href={apiVacancy.hhUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline shrink-0 flex items-center gap-1">
+                                Открыть на hh.ru <ExternalLink className="w-3 h-3" />
+                              </a>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="rounded-lg border bg-card p-4 flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-white text-[11px] font-bold" style={{ backgroundColor: "#D6001C" }}>hh</div>
+                            <div className="flex-1 min-w-0"><p className="text-sm font-medium">hh.ru</p><p className="text-[11px] text-muted-foreground">Эта вакансия не привязана. Привязка делается в табе «Кандидаты».</p></div>
+                            <Badge variant="outline" className="text-xs h-6 text-muted-foreground shrink-0">Не привязана</Badge>
+                          </div>
+                        )}
                         <div className="rounded-lg border bg-card p-4 flex items-center gap-3">
                           <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-white text-[11px] font-bold" style={{ backgroundColor: "#00AAFF" }}>A</div>
                           <div className="flex-1 min-w-0"><p className="text-sm font-medium flex items-center gap-2">Авито Работа <span className="text-[10px] bg-amber-100 text-amber-700 rounded-full px-2 py-0.5 font-normal">Скоро</span></p><p className="text-[11px] text-muted-foreground">Импорт откликов с Авито</p></div>
@@ -2098,7 +2105,6 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                           <Button size="sm" className="h-8 text-xs shrink-0" disabled>Подключить</Button>
                         </div>
                       </div>
-                      <div className="hidden"><HhIntegration onCandidatesImported={handleHhCandidatesImported} onMessageLog={handleHhMessageLog} /></div>
                     </div>
 
                     {/* CRM Integrations */}
@@ -2129,44 +2135,6 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
 
                     {/* Источники и UTM-ссылки */}
                     <UtmLinksSection vacancyId={id} vacancySlug={id} />
-
-                    {/* Лог сообщений hh-чат */}
-                    <Card>
-                      <CardHeader className="pb-3">
-                        <CardTitle className="text-base flex items-center gap-2">
-                          <MessageCircle className="w-4 h-4" />
-                          Лог сообщений hh-чат
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        {messageLogs.length === 0 ? (
-                          <p className="text-sm text-muted-foreground text-center py-6">
-                            Сообщения появятся после синхронизации откликов
-                          </p>
-                        ) : (
-                          <div className="space-y-2 max-h-[400px] overflow-y-auto">
-                            {messageLogs.slice().reverse().map((log, i) => (
-                              <div key={i} className="flex items-start gap-3 p-2.5 rounded-lg bg-muted/50 border border-border text-sm">
-                                <div className="w-6 h-6 rounded-full bg-emerald-500/10 flex items-center justify-center shrink-0 mt-0.5">
-                                  <MessageCircle className="w-3 h-3 text-emerald-600" />
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center justify-between gap-2">
-                                    <span className="font-medium text-foreground truncate">{log.candidateName}</span>
-                                    <span className="text-xs text-muted-foreground shrink-0">
-                                      {log.sentAt.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}
-                                    </span>
-                                  </div>
-                                  <p className="text-xs text-muted-foreground mt-0.5">
-                                    Сообщение отправлено в hh-чат {log.sentAt.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}
-                                  </p>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
                   </div>
                 </div>
               </TabsContent>

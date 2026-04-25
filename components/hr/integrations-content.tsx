@@ -1,18 +1,14 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
-import { Card, CardContent } from "@/components/ui/card"
+import { useState, useEffect } from "react"
+import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
-import { HhAutoProcess } from "@/components/hh/hh-auto-process"
 import {
-  Plug, RefreshCw, Loader2, ExternalLink, CheckCircle2, XCircle,
-  Download, Clock, Building2, Briefcase, MapPin, Users, FileText,
+  Plug, RefreshCw, Loader2, CheckCircle2, XCircle, Clock, Building2,
 } from "lucide-react"
-
-// ─── Types ──────────────────────────────────────────────────────────────────
 
 interface HHStatus {
   connected: boolean
@@ -22,70 +18,16 @@ interface HHStatus {
   connectedAt?: string
 }
 
-interface HHVacancy {
-  id: string
-  hhVacancyId: string
-  title: string
-  areaName: string | null
-  salaryFrom: number | null
-  salaryTo: number | null
-  salaryCurrency: string | null
-  status: string
-  responsesCount: number
-  url: string | null
-  localVacancyId: string | null
-}
-
-interface HHResponse {
-  id: string
-  hhVacancyId: string
-  hhResponseId: string
-  candidateName: string | null
-  candidateEmail: string | null
-  resumeTitle: string | null
-  resumeUrl: string | null
-  status: string
-  createdAt: string
-}
-
-// ─── Helpers ────────────────────────────────────────────────────────────────
-
-function formatSalary(from: number | null, to: number | null, currency: string | null): string {
-  if (!from && !to) return "Не указана"
-  const c = currency === "RUR" ? "₽" : currency ?? ""
-  if (from && to) return `${from.toLocaleString("ru-RU")}–${to.toLocaleString("ru-RU")} ${c}`
-  if (from) return `от ${from.toLocaleString("ru-RU")} ${c}`
-  return `до ${to!.toLocaleString("ru-RU")} ${c}`
-}
-
 function formatDate(d: string | null | undefined): string {
   if (!d) return "—"
   return new Date(d).toLocaleDateString("ru-RU", { day: "numeric", month: "short", year: "numeric" })
 }
-
-const HH_STATUS_LABELS: Record<string, { label: string; cls: string }> = {
-  open:      { label: "Активна",   cls: "bg-emerald-500/10 text-emerald-700 border-emerald-200" },
-  closed:    { label: "Закрыта",   cls: "bg-gray-500/10 text-gray-600 border-gray-200" },
-  archived:  { label: "В архиве",  cls: "bg-amber-500/10 text-amber-700 border-amber-200" },
-}
-
-const RESPONSE_STATUS_LABELS: Record<string, string> = {
-  new: "Новый", invitation: "Приглашение", response: "Отклик", discard: "Отклонён",
-}
-
-// ─── Component ──────────────────────────────────────────────────────────────
 
 export function IntegrationsContent() {
   const [status, setStatus] = useState<HHStatus | null>(null)
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
   const [disconnecting, setDisconnecting] = useState(false)
-  const [activeTab, setActiveTab] = useState<"vacancies" | "responses">("vacancies")
-  const [vacancies, setVacancies] = useState<HHVacancy[]>([])
-  const [responses, setResponses] = useState<HHResponse[]>([])
-  const [loadingVacancies, setLoadingVacancies] = useState(false)
-  const [loadingResponses, setLoadingResponses] = useState(false)
-  const [linkingId, setLinkingId] = useState<string | null>(null)
 
   useEffect(() => {
     fetch("/api/integrations/hh/status")
@@ -107,40 +49,16 @@ export function IntegrationsContent() {
     }
   }, [])
 
-  const loadVacancies = useCallback(async () => {
-    setLoadingVacancies(true)
-    try {
-      const res = await fetch("/api/integrations/hh/vacancies")
-      const data = await res.json()
-      setVacancies(data.vacancies ?? [])
-      if (data.fromCache) toast("Загружено из кэша")
-    } catch { toast.error("Ошибка загрузки вакансий") }
-    finally { setLoadingVacancies(false) }
-  }, [])
-
-  const loadResponses = useCallback(async () => {
-    setLoadingResponses(true)
-    try {
-      const res = await fetch("/api/integrations/hh/responses")
-      const data = await res.json()
-      setResponses(data.responses ?? [])
-      if (data.fromCache) toast("Загружено из кэша")
-    } catch { toast.error("Ошибка загрузки откликов") }
-    finally { setLoadingResponses(false) }
-  }, [])
-
-  useEffect(() => {
-    if (status?.connected) {
-      loadVacancies()
-      loadResponses()
-    }
-  }, [status?.connected, loadVacancies, loadResponses])
-
   const handleSync = async () => {
     setSyncing(true)
     try {
-      await Promise.all([loadVacancies(), loadResponses()])
-      toast.success("Данные синхронизированы")
+      await Promise.all([
+        fetch("/api/integrations/hh/vacancies"),
+        fetch("/api/integrations/hh/responses"),
+      ])
+      const res = await fetch("/api/integrations/hh/status")
+      setStatus(await res.json())
+      toast.success("Синхронизировано с hh.ru")
     } catch { toast.error("Ошибка синхронизации") }
     finally { setSyncing(false) }
   }
@@ -150,26 +68,9 @@ export function IntegrationsContent() {
     try {
       await fetch("/api/integrations/hh/status", { method: "DELETE" })
       setStatus({ connected: false })
-      setVacancies([])
-      setResponses([])
       toast.success("hh.ru отключён")
     } catch { toast.error("Ошибка отключения") }
     finally { setDisconnecting(false) }
-  }
-
-  const handleLink = async (vac: HHVacancy) => {
-    setLinkingId(vac.id)
-    try {
-      const res = await fetch(`/api/integrations/hh/vacancies/${vac.id}/link`, { method: "POST" })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || "Не удалось привязать")
-      toast.success(data.created ? "Вакансия привязана и создана локально" : "Вакансия привязана")
-      loadVacancies()
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Ошибка привязки")
-    } finally {
-      setLinkingId(null)
-    }
   }
 
   return (
@@ -233,183 +134,10 @@ export function IntegrationsContent() {
         </div>
       </Card>
 
-      {/* Tabs: vacancies / responses */}
-      {status?.connected && (
-        <>
-          <div className="flex items-center gap-1 border-b border-border">
-            <button
-              onClick={() => setActiveTab("vacancies")}
-              className={cn(
-                "px-4 py-2 text-sm font-medium border-b-2 transition-colors -mb-px",
-                activeTab === "vacancies"
-                  ? "border-primary text-foreground"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
-              )}
-            >
-              <Briefcase className="w-3.5 h-3.5 inline mr-1.5 -mt-0.5" />
-              Вакансии на hh.ru
-              {vacancies.length > 0 && <Badge variant="secondary" className="ml-2 text-[10px] px-1.5">{vacancies.length}</Badge>}
-            </button>
-            <button
-              onClick={() => setActiveTab("responses")}
-              className={cn(
-                "px-4 py-2 text-sm font-medium border-b-2 transition-colors -mb-px",
-                activeTab === "responses"
-                  ? "border-primary text-foreground"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
-              )}
-            >
-              <Users className="w-3.5 h-3.5 inline mr-1.5 -mt-0.5" />
-              Отклики
-              {responses.length > 0 && <Badge variant="secondary" className="ml-2 text-[10px] px-1.5">{responses.length}</Badge>}
-            </button>
-          </div>
-
-          {activeTab === "vacancies" && (
-            <Card className="rounded-xl border border-border overflow-hidden">
-              <CardContent className="p-0">
-                {loadingVacancies ? (
-                  <div className="flex items-center justify-center py-12">
-                    <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
-                  </div>
-                ) : vacancies.length === 0 ? (
-                  <div className="py-12 text-center text-sm text-muted-foreground">
-                    Нет вакансий на hh.ru
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead>
-                        <tr className="border-b bg-muted/50">
-                          <th className="text-left uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-3">Название</th>
-                          <th className="text-left uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-3 w-[130px]">Город</th>
-                          <th className="text-left uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-3 w-[160px]">Зарплата</th>
-                          <th className="text-center uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-3 w-[90px]">Отклики</th>
-                          <th className="text-center uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-3 w-[100px]">Статус</th>
-                          <th className="text-center uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-3 w-[80px]">Импорт</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {vacancies.map(vac => {
-                          const st = HH_STATUS_LABELS[vac.status] ?? { label: vac.status, cls: "bg-muted text-muted-foreground" }
-                          return (
-                            <tr key={vac.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
-                              <td className="px-4 py-3">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-sm font-medium text-foreground">{vac.title}</span>
-                                  {vac.url && (
-                                    <a href={vac.url} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground">
-                                      <ExternalLink className="w-3 h-3" />
-                                    </a>
-                                  )}
-                                </div>
-                              </td>
-                              <td className="px-4 py-3 text-sm text-muted-foreground">
-                                {vac.areaName && <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{vac.areaName}</span>}
-                              </td>
-                              <td className="px-4 py-3 text-sm text-muted-foreground">
-                                {formatSalary(vac.salaryFrom, vac.salaryTo, vac.salaryCurrency)}
-                              </td>
-                              <td className="text-center px-4 py-3 text-sm font-medium">{vac.responsesCount}</td>
-                              <td className="text-center px-4 py-3">
-                                <Badge variant="outline" className={cn("text-[10px]", st.cls)}>{st.label}</Badge>
-                              </td>
-                              <td className="text-center px-4 py-3">
-                                {vac.localVacancyId ? (
-                                  <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-700 border-emerald-200">Импорт.</Badge>
-                                ) : (
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-7 w-7"
-                                    onClick={() => handleLink(vac)}
-                                    disabled={linkingId === vac.id}
-                                    title="Импортировать в локальные вакансии"
-                                  >
-                                    {linkingId === vac.id
-                                      ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                      : <Download className="w-3.5 h-3.5" />}
-                                  </Button>
-                                )}
-                              </td>
-                            </tr>
-                          )
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
-
-          {activeTab === "responses" && (
-            <div className="space-y-4">
-              <HhAutoProcess onProcessed={loadResponses} />
-              <Card className="rounded-xl border border-border overflow-hidden">
-              <CardContent className="p-0">
-                {loadingResponses ? (
-                  <div className="flex items-center justify-center py-12">
-                    <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
-                  </div>
-                ) : responses.length === 0 ? (
-                  <div className="py-12 text-center text-sm text-muted-foreground">
-                    Нет откликов
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead>
-                        <tr className="border-b bg-muted/50">
-                          <th className="text-left uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-3">Кандидат</th>
-                          <th className="text-left uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-3">Вакансия</th>
-                          <th className="text-center uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-3 w-[120px]">Статус</th>
-                          <th className="text-center uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-3 w-[80px]">Резюме</th>
-                          <th className="text-left uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-3 w-[110px]">Дата</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {responses.map(resp => {
-                          const vacTitle = vacancies.find(v => v.hhVacancyId === resp.hhVacancyId)?.title ?? `#${resp.hhVacancyId}`
-                          return (
-                            <tr key={resp.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
-                              <td className="px-4 py-3">
-                                <div>
-                                  <span className="text-sm font-medium text-foreground">{resp.candidateName ?? "—"}</span>
-                                  {resp.candidateEmail && <p className="text-xs text-muted-foreground">{resp.candidateEmail}</p>}
-                                </div>
-                              </td>
-                              <td className="px-4 py-3 text-sm text-muted-foreground">{vacTitle}</td>
-                              <td className="text-center px-4 py-3">
-                                <Badge variant="outline" className="text-[10px]">
-                                  {RESPONSE_STATUS_LABELS[resp.status] ?? resp.status}
-                                </Badge>
-                              </td>
-                              <td className="text-center px-4 py-3">
-                                {resp.resumeUrl ? (
-                                  <a href={resp.resumeUrl} target="_blank" rel="noopener noreferrer">
-                                    <Button variant="ghost" size="icon" className="h-7 w-7">
-                                      <FileText className="w-3.5 h-3.5" />
-                                    </Button>
-                                  </a>
-                                ) : (
-                                  <span className="text-xs text-muted-foreground">—</span>
-                                )}
-                              </td>
-                              <td className="px-4 py-3 text-sm text-muted-foreground">{formatDate(resp.createdAt)}</td>
-                            </tr>
-                          )
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-            </div>
-          )}
-        </>
-      )}
+      {/* Hint */}
+      <p className="text-sm text-muted-foreground px-1">
+        Управление вакансиями и откликами происходит в карточке каждой вакансии. Здесь — только подключение площадок.
+      </p>
 
       {/* Other integrations — placeholders */}
       <div className="pt-2">

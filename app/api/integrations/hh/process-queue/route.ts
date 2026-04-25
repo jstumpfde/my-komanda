@@ -63,20 +63,20 @@ export async function POST(req: NextRequest) {
   const tokenResult = await getValidToken(companyId)
   if (!tokenResult) return NextResponse.json({ error: "hh.ru не подключён" }, { status: 400 })
 
-  // Если указана локальная вакансия, найдём её hh_vacancy_id через совпадение title
+  // Если указана локальная вакансия — точный фильтр через vacancies.hh_vacancy_id
   let hhVacancyFilter: string | null = null
   if (localVacancyId) {
-    const [localVac] = await db.select().from(vacancies).where(eq(vacancies.id, localVacancyId)).limit(1)
-    if (localVac?.title) {
-      // Найти hh_vacancy_id по совпадению в rawData.vacancy.name
-      const allResps = await db.select().from(hhResponses).where(eq(hhResponses.companyId, companyId))
-      const firstWord = localVac.title.toLowerCase().split(/\s+/)[0] || ""
-      const match = allResps.find(r => {
-        const raw = r.rawData as { vacancy?: { name?: string } } | null
-        return raw?.vacancy?.name?.toLowerCase().includes(firstWord)
-      })
-      if (match) hhVacancyFilter = match.hhVacancyId
+    const [localVac] = await db
+      .select({ hhVacancyId: vacancies.hhVacancyId })
+      .from(vacancies)
+      .where(and(eq(vacancies.id, localVacancyId), eq(vacancies.companyId, companyId)))
+      .limit(1)
+    if (!localVac?.hhVacancyId) {
+      return NextResponse.json({
+        error: "Вакансия не привязана к hh.ru. Сначала установите связь в карточке вакансии."
+      }, { status: 400 })
     }
+    hhVacancyFilter = localVac.hhVacancyId
   }
 
   const newResponses = await db
