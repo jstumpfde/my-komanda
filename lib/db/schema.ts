@@ -1579,3 +1579,25 @@ export const activityLog = pgTable("activity_log", {
   userAgent: text("user_agent"),
   createdAt: timestamp("created_at").defaultNow(),
 })
+
+// ─── Goals (Координатор Целей) ───────────────────────────────────────────────
+// Годовые / месячные / недельные цели пользователя. Прогресс обновляется
+// вручную (автотрекинг — следующая фаза). Используется на /goals и
+// /morning-brief.
+
+export const goals = pgTable("goals", {
+  id:             uuid("id").primaryKey().defaultRandom(),
+  userId:         uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  parentId:       uuid("parent_id"),
+  level:          text("level").notNull(),            // 'yearly' | 'monthly' | 'weekly'
+  title:          text("title").notNull(),
+  description:    text("description"),
+  targetValue:    text("target_value"),               // numeric as text (напр. "50")
+  targetUnit:     text("target_unit"),                // "млн ₽", "контрактов", ...
+  currentValue:   text("current_value").default("0"), // numeric as text
+  deadline:       date("deadline"),
+  isFocusToday:   boolean("is_focus_today").default(false),
+  status:         text("status").notNull().default("active"), // 'active' | 'completed' | 'paused' | 'archived'
+  createdAt:      timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt:      timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+})
