@@ -16,7 +16,11 @@ interface Result {
   error?: string
 }
 
-export function HhAutoProcess() {
+interface HhAutoProcessProps {
+  onProcessed?: () => void
+}
+
+export function HhAutoProcess({ onProcessed }: HhAutoProcessProps = {}) {
   const [running, setRunning] = useState(false)
   const [stopping, setStopping] = useState(false)
   const [limit, setLimit] = useState(5)
@@ -39,6 +43,7 @@ export function HhAutoProcess() {
       toast.success(dryRun
         ? `Сухой прогон: обработано ${data.processed}`
         : `Разобрано ${data.processed} откликов`)
+      if (!dryRun) onProcessed?.()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Ошибка")
     } finally {

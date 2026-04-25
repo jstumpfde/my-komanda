@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
+import { HhAutoProcess } from "@/components/hh/hh-auto-process"
 import {
   Plug, RefreshCw, Loader2, ExternalLink, CheckCircle2, XCircle,
   Download, Clock, Building2, Briefcase, MapPin, Users, FileText,
@@ -84,6 +85,7 @@ export function IntegrationsContent() {
   const [responses, setResponses] = useState<HHResponse[]>([])
   const [loadingVacancies, setLoadingVacancies] = useState(false)
   const [loadingResponses, setLoadingResponses] = useState(false)
+  const [linkingId, setLinkingId] = useState<string | null>(null)
 
   useEffect(() => {
     fetch("/api/integrations/hh/status")
@@ -153,6 +155,21 @@ export function IntegrationsContent() {
       toast.success("hh.ru отключён")
     } catch { toast.error("Ошибка отключения") }
     finally { setDisconnecting(false) }
+  }
+
+  const handleLink = async (vac: HHVacancy) => {
+    setLinkingId(vac.id)
+    try {
+      const res = await fetch(`/api/integrations/hh/vacancies/${vac.id}/link`, { method: "POST" })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "Не удалось привязать")
+      toast.success(data.created ? "Вакансия привязана и создана локально" : "Вакансия привязана")
+      loadVacancies()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Ошибка привязки")
+    } finally {
+      setLinkingId(null)
+    }
   }
 
   return (
@@ -301,8 +318,17 @@ export function IntegrationsContent() {
                                 {vac.localVacancyId ? (
                                   <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-700 border-emerald-200">Импорт.</Badge>
                                 ) : (
-                                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => toast.success(`Вакансия «${vac.title}» импортирована`)}>
-                                    <Download className="w-3.5 h-3.5" />
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7"
+                                    onClick={() => handleLink(vac)}
+                                    disabled={linkingId === vac.id}
+                                    title="Импортировать в локальные вакансии"
+                                  >
+                                    {linkingId === vac.id
+                                      ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                      : <Download className="w-3.5 h-3.5" />}
                                   </Button>
                                 )}
                               </td>
@@ -318,7 +344,9 @@ export function IntegrationsContent() {
           )}
 
           {activeTab === "responses" && (
-            <Card className="rounded-xl border border-border overflow-hidden">
+            <div className="space-y-4">
+              <HhAutoProcess onProcessed={loadResponses} />
+              <Card className="rounded-xl border border-border overflow-hidden">
               <CardContent className="p-0">
                 {loadingResponses ? (
                   <div className="flex items-center justify-center py-12">
@@ -378,6 +406,7 @@ export function IntegrationsContent() {
                 )}
               </CardContent>
             </Card>
+            </div>
           )}
         </>
       )}
