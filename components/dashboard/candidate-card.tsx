@@ -2,7 +2,7 @@
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Calendar, Check, X } from "lucide-react"
+import { Calendar, Check, X, Star } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { CardDisplaySettings } from "./card-settings"
 import type { CandidateAction } from "@/lib/column-config"
@@ -38,6 +38,8 @@ export interface Candidate {
     totalBlocks?: number
     completedAt?: string | null
   } | null
+  isFavorite?: boolean
+  createdAt?: string | Date | null
 }
 
 interface CandidateCardProps {
@@ -50,9 +52,10 @@ interface CandidateCardProps {
   onDragEnd?: () => void
   onOpenProfile?: (candidate: Candidate) => void
   onAction?: (candidateId: string, columnId: string, action: CandidateAction) => void
+  onToggleFavorite?: (candidateId: string, isFavorite: boolean) => void
 }
 
-export function CandidateCard({ candidate, settings, columnId, isLastColumn, onOpenProfile, onAction }: CandidateCardProps) {
+export function CandidateCard({ candidate, settings, columnId, isLastColumn, onOpenProfile, onAction, onToggleFavorite }: CandidateCardProps) {
   const isDecisionColumn = columnId === "decision" || columnId === "final_decision"
   const isInterviewColumn = columnId === "interview"
 
@@ -90,20 +93,40 @@ export function CandidateCard({ candidate, settings, columnId, isLastColumn, onO
       className="relative p-3.5 rounded-lg border bg-card cursor-pointer transition"
       onClick={() => onOpenProfile?.(candidate)}
     >
-      {/* Score badge — top right */}
-      {settings.showScore && (
-        <span
-          className={cn(
-            "absolute top-2 right-2 rounded-md px-1.5 h-5 text-xs font-bold inline-flex items-center justify-center",
-            getScoreColor(candidate.score)
-          )}
-        >
-          {candidate.score}
-        </span>
-      )}
+      {/* Top-right cluster: ★ favorite + score badge */}
+      <div className="absolute top-2 right-2 flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+        {settings.showScore && (
+          <span
+            className={cn(
+              "rounded-md px-1.5 h-5 text-xs font-bold inline-flex items-center justify-center",
+              getScoreColor(candidate.score)
+            )}
+          >
+            {candidate.score}
+          </span>
+        )}
+        {onToggleFavorite && (
+          <button
+            type="button"
+            className={cn(
+              "transition-colors p-0.5 -m-0.5",
+              candidate.isFavorite
+                ? "text-amber-400 hover:text-amber-500"
+                : "text-muted-foreground/40 hover:text-amber-400"
+            )}
+            onClick={() => onToggleFavorite(candidate.id, !candidate.isFavorite)}
+            title={candidate.isFavorite ? "Убрать из избранного" : "Добавить в избранное"}
+          >
+            <Star className={cn("w-4 h-4", candidate.isFavorite && "fill-current")} />
+          </button>
+        )}
+      </div>
 
       {/* Row 1: ФИО */}
-      <p className={cn("font-medium text-base text-foreground", settings.showScore && "pr-10")}>{candidate.name}</p>
+      <p className={cn(
+        "font-medium text-base text-foreground",
+        (settings.showScore || onToggleFavorite) && "pr-14"
+      )}>{candidate.name}</p>
 
       {/* Demo progress bar */}
       {(() => {

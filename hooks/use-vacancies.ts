@@ -28,6 +28,12 @@ export interface ApiVacancy {
   employeeType: string | null
   hhVacancyId: string | null
   hhUrl: string | null
+  aiProcessSettings: {
+    minScore?: number
+    belowThresholdAction?: "reject" | "keep_new"
+    inviteMessage?: string
+    rejectMessage?: string
+  } | null
   deletedAt: string | null
   createdAt: string | null
   updatedAt: string | null

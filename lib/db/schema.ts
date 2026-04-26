@@ -257,10 +257,18 @@ export const vacancies = pgTable("vacancies", {
   hhVacancyId: text("hh_vacancy_id"),
   hhUrl: text("hh_url"),
   hhSyncedAt: timestamp("hh_synced_at"),
+  aiProcessSettings: jsonb("ai_process_settings").default({}),
   deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 })
+
+export interface VacancyAiProcessSettings {
+  minScore?: number
+  belowThresholdAction?: "reject" | "keep_new"
+  inviteMessage?: string
+  rejectMessage?: string
+}
 
 export const demos = pgTable("demos", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -293,6 +301,7 @@ export const candidates = pgTable("candidates", {
   aiSummary: text("ai_summary"),
   aiDetails: jsonb("ai_details"), // [{question, score, comment}]
   stageHistory: jsonb("stage_history").default("[]"), // [{stage, date, note}]
+  isFavorite: boolean("is_favorite").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 })

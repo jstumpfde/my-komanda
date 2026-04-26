@@ -158,6 +158,8 @@ export interface CandidateDrawerProps {
   onOpenChange: (open: boolean) => void
   /** Called after a successful stage change so the parent can update kanban */
   onStageChange?: (candidateId: string, newStage: string) => void
+  /** Toggle favorite from outside (kanban hook). Drawer optimistically updates local state too. */
+  onToggleFavorite?: (candidateId: string, isFavorite: boolean) => void | Promise<void>
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
@@ -167,6 +169,7 @@ export function CandidateDrawer({
   open,
   onOpenChange,
   onStageChange,
+  onToggleFavorite,
 }: CandidateDrawerProps) {
   const [candidate, setCandidate] = useState<ApiCandidate | null>(null)
   const [notes, setNotes] = useState<CandidateNote[]>([])
@@ -218,6 +221,34 @@ export function CandidateDrawer({
   }, [open, candidateId, fetchCandidate, fetchNotes])
 
   // ── Stage change ─────────────────────────────────────────────────────────
+
+  const handleFavoriteToggle = async () => {
+    if (!candidate) return
+    const next = !candidate.isFavorite
+    // Локально обновляем сразу
+    setCandidate(prev => prev ? { ...prev, isFavorite: next } : prev)
+    if (onToggleFavorite) {
+      try {
+        await onToggleFavorite(candidate.id, next)
+      } catch {
+        setCandidate(prev => prev ? { ...prev, isFavorite: !next } : prev)
+        toast.error("Не удалось обновить избранное")
+      }
+    } else {
+      // Fallback — пишем в API напрямую
+      try {
+        const res = await fetch(`/api/modules/hr/candidates/${candidate.id}/favorite`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ isFavorite: next }),
+        })
+        if (!res.ok) throw new Error()
+      } catch {
+        setCandidate(prev => prev ? { ...prev, isFavorite: !next } : prev)
+        toast.error("Не удалось обновить избранное")
+      }
+    }
+  }
 
   const handleStageChange = async (newStage: string) => {
     if (!candidate || changingStage) return
@@ -334,8 +365,21 @@ export function CandidateDrawer({
             <div className="flex items-start gap-4">
               <AvatarInitials name={candidate.name} size="md" />
               <div className="flex-1 min-w-0">
-                <SheetTitle className="text-base font-semibold leading-tight mb-1">
-                  {candidate.name}
+                <SheetTitle className="text-base font-semibold leading-tight mb-1 flex items-center gap-2">
+                  <span className="truncate">{candidate.name}</span>
+                  <button
+                    type="button"
+                    onClick={handleFavoriteToggle}
+                    className={cn(
+                      "shrink-0 transition-colors p-0.5",
+                      candidate.isFavorite
+                        ? "text-amber-400 hover:text-amber-500"
+                        : "text-muted-foreground/40 hover:text-amber-400"
+                    )}
+                    title={candidate.isFavorite ? "Убрать из избранного" : "Добавить в избранное"}
+                  >
+                    <Star className={cn("w-4 h-4", candidate.isFavorite && "fill-current")} />
+                  </button>
                 </SheetTitle>
                 <div className="flex flex-wrap items-center gap-2">
                   {stageCfg && (

@@ -5,7 +5,8 @@ import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { toast } from "sonner"
-import { Link2, RefreshCw, Loader2, Sparkles } from "lucide-react"
+import { Link2, RefreshCw, Loader2 } from "lucide-react"
+import { HhAutoProcess } from "@/components/hh/hh-auto-process"
 
 interface HhUnlinkedVacancy {
   id: string
@@ -27,7 +28,7 @@ interface Props {
   onCandidatesUpdated?: () => void
 }
 
-export function HhVacancyBanner({ hhVacancyId, vacancyTitle, onCandidatesUpdated }: Props) {
+export function HhVacancyBanner({ vacancyId, hhVacancyId, vacancyTitle, onCandidatesUpdated }: Props) {
   const [connected, setConnected] = useState<boolean | null>(null)
   const [unlinked, setUnlinked] = useState<HhUnlinkedVacancy[]>([])
   const [selected, setSelected] = useState<string>("")
@@ -131,10 +132,6 @@ export function HhVacancyBanner({ hhVacancyId, vacancyTitle, onCandidatesUpdated
     }
   }
 
-  // TODO Пакет В: подключить троттлинг через hh_process_jobs
-  const processDisabled = true
-  const processTitle = "Скоро будет щадящий режим — пока обработка отключена"
-
   return (
     <Card className="mb-3 px-4 py-3 flex items-center gap-3 bg-emerald-500/5 border-emerald-200">
       <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-bold shrink-0" style={{ backgroundColor: "#D6001C" }}>hh</div>
@@ -149,10 +146,11 @@ export function HhVacancyBanner({ hhVacancyId, vacancyTitle, onCandidatesUpdated
           {syncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
           Синхронизировать
         </Button>
-        <Button size="sm" className="h-8 text-xs gap-1.5" disabled={processDisabled} title={processTitle}>
-          <Sparkles className="w-3.5 h-3.5" />
-          Разобрать{pendingCount ? ` ${pendingCount}` : ""}
-        </Button>
+        <HhAutoProcess
+          vacancyId={vacancyId}
+          pendingCount={pendingCount ?? undefined}
+          onProcessed={() => { loadPending(); onCandidatesUpdated?.() }}
+        />
       </div>
     </Card>
   )

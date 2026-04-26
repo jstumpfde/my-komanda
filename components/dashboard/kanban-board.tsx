@@ -7,14 +7,80 @@ import { FunnelView } from "./funnel-view"
 import { TilesView } from "./tiles-view"
 import { ColumnColorPicker } from "./column-color-picker"
 import type { CardDisplaySettings } from "./card-settings"
-import { LayoutGrid, List, TrendingDown, Grid3X3, Plus, Minus, MonitorPlay, Clock, X } from "lucide-react"
+import { LayoutGrid, List, TrendingDown, Grid3X3, Plus, Minus, MonitorPlay, Clock, X, ArrowUpDown, ArrowDown, ArrowUp, BarChart3, Sparkles, Star } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 import type { CandidateAction } from "@/lib/column-config"
+
+export type CandidateSortMode = "date_desc" | "date_asc" | "demo_progress" | "ai_score" | "favorite"
+
+const SORT_OPTIONS: Array<{ value: CandidateSortMode; label: string; icon: React.ElementType }> = [
+  { value: "date_desc",     label: "По дате (новые сверху)", icon: ArrowDown },
+  { value: "date_asc",      label: "По дате (старые сверху)", icon: ArrowUp },
+  { value: "demo_progress", label: "По прогрессу демо",       icon: BarChart3 },
+  { value: "ai_score",      label: "По AI-скору",             icon: Sparkles },
+  { value: "favorite",      label: "Избранные сверху",        icon: Star },
+]
+
+function timestampOf(c: Candidate): number {
+  if (c.createdAt) {
+    const d = c.createdAt instanceof Date ? c.createdAt : new Date(c.createdAt)
+    const t = d.getTime()
+    if (!Number.isNaN(t)) return t
+  }
+  if (c.addedAt) {
+    const t = c.addedAt instanceof Date ? c.addedAt.getTime() : new Date(c.addedAt as unknown as string).getTime()
+    if (!Number.isNaN(t)) return t
+  }
+  return 0
+}
+
+function demoProgressOf(c: Candidate): number {
+  const dp = c.demoProgressJson
+  if (!dp || !Array.isArray(dp.blocks)) return -1
+  const total = dp.totalBlocks ?? dp.blocks.length
+  if (total <= 0) return -1
+  const completed = dp.blocks.filter(b => b?.status === "completed").length
+  return completed / total
+}
+
+export function applySortMode(list: Candidate[], mode: CandidateSortMode): Candidate[] {
+  const arr = [...list]
+  switch (mode) {
+    case "date_desc":
+      return arr.sort((a, b) => timestampOf(b) - timestampOf(a))
+    case "date_asc":
+      return arr.sort((a, b) => timestampOf(a) - timestampOf(b))
+    case "demo_progress":
+      return arr.sort((a, b) => {
+        const da = demoProgressOf(a)
+        const db = demoProgressOf(b)
+        if (db !== da) return db - da
+        return timestampOf(b) - timestampOf(a)
+      })
+    case "ai_score":
+      return arr.sort((a, b) => {
+        const sa = a.aiScore ?? -1
+        const sb = b.aiScore ?? -1
+        if (sb !== sa) return sb - sa
+        return timestampOf(b) - timestampOf(a)
+      })
+    case "favorite":
+      return arr.sort((a, b) => {
+        const fa = a.isFavorite ? 1 : 0
+        const fb = b.isFavorite ? 1 : 0
+        if (fb !== fa) return fb - fa
+        return timestampOf(b) - timestampOf(a)
+      })
+    default:
+      return arr
+  }
+}
 
 export type ViewMode = "kanban" | "list" | "funnel" | "tiles"
 
@@ -35,6 +101,7 @@ interface KanbanBoardProps {
   onColumnsChange: (columns: ColumnData[]) => void
   onOpenProfile?: (candidate: Candidate, columnId: string) => void
   onAction?: (candidateId: string, columnId: string, action: CandidateAction) => void
+  onToggleFavorite?: (candidateId: string, isFavorite: boolean) => void
   hideViewSwitcher?: boolean
   onAddCustomColumn?: (name: string, color: string, afterColumnId?: string) => void
   onRemoveColumn?: (columnId: string) => void
@@ -49,12 +116,14 @@ const VIEW_BUTTONS: { mode: ViewMode; icon: React.ElementType; label: string }[]
 
 const PRESET_COLORS = ["#94a3b8", "#3b82f6", "#ef4444", "#8b5cf6", "#f97316", "#22c55e", "#ec4899", "#06b6d4", "#f59e0b", "#10b981"]
 
-export function KanbanBoard({ settings, viewMode, onViewModeChange, columns = [], onColumnsChange, onOpenProfile, onAction, hideViewSwitcher, onAddCustomColumn, onRemoveColumn }: KanbanBoardProps) {
+export function KanbanBoard({ settings, viewMode, onViewModeChange, columns = [], onColumnsChange, onOpenProfile, onAction, onToggleFavorite, hideViewSwitcher, onAddCustomColumn, onRemoveColumn }: KanbanBoardProps) {
   const [addColOpen, setAddColOpen] = useState(false)
   const [newColName, setNewColName] = useState("")
   const [newColColor, setNewColColor] = useState("#3b82f6")
   const [insertAfterColId, setInsertAfterColId] = useState<string | null>(null)
   const [removeColId, setRemoveColId] = useState<string | null>(null)
+  const [sortMode, setSortMode] = useState<CandidateSortMode>("date_desc")
+  const sortLabel = SORT_OPTIONS.find(o => o.value === sortMode)?.label ?? "Сортировка"
 
   const handleAddColumn = () => {
     if (!newColName.trim() || !onAddCustomColumn) return
@@ -85,9 +154,9 @@ export function KanbanBoard({ settings, viewMode, onViewModeChange, columns = []
 
   return (
     <div>
-      {/* View mode switcher */}
+      {/* View mode switcher + sort */}
       {!hideViewSwitcher && (
-        <div className="flex items-center gap-2 mb-5">
+        <div className="flex items-center gap-2 mb-5 flex-wrap">
           <div className="flex items-center bg-muted rounded-lg p-1 gap-0.5">
             {VIEW_BUTTONS.map(({ mode, icon: Icon, label }) => (
               <Button
@@ -105,6 +174,31 @@ export function KanbanBoard({ settings, viewMode, onViewModeChange, columns = []
               </Button>
             ))}
           </div>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="h-7 px-2.5 text-xs gap-1.5">
+                <ArrowUpDown className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">{sortLabel}</span>
+                <span className="sm:hidden">Сортировка</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-56">
+              {SORT_OPTIONS.map(opt => {
+                const Icon = opt.icon
+                return (
+                  <DropdownMenuItem
+                    key={opt.value}
+                    onClick={() => setSortMode(opt.value)}
+                    className={cn(sortMode === opt.value && "bg-accent")}
+                  >
+                    <Icon className="w-3.5 h-3.5 mr-2" />
+                    {opt.label}
+                  </DropdownMenuItem>
+                )
+              })}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       )}
 
@@ -192,7 +286,7 @@ export function KanbanBoard({ settings, viewMode, onViewModeChange, columns = []
                       (column.candidates || []).length === 0 && "border-2 border-dashed border-border/50 flex items-center justify-center",
                     )}
                   >
-                    {(column.candidates || []).map((candidate) => (
+                    {applySortMode(column.candidates || [], sortMode).map((candidate) => (
                       <CandidateCard
                         key={candidate.id}
                         candidate={candidate}
@@ -201,6 +295,7 @@ export function KanbanBoard({ settings, viewMode, onViewModeChange, columns = []
                         isLastColumn={isLast}
                         onOpenProfile={(c) => onOpenProfile?.(c, column.id)}
                         onAction={onAction}
+                        onToggleFavorite={onToggleFavorite}
                       />
                     ))}
                     {(column.candidates || []).length === 0 && (

@@ -24,6 +24,7 @@ export interface ApiCandidate {
   aiScore: number | null
   aiSummary: string | null
   aiDetails: { question: string; score: number; comment: string }[] | null
+  isFavorite: boolean | null
   createdAt: string | null
   updatedAt: string | null
 }
@@ -88,5 +89,32 @@ export function useCandidates(
     }
   }, [])
 
-  return { candidates, loading, error, refetch: fetch_, updateStage }
+  const toggleFavorite = useCallback(async (candidateId: string, isFavorite: boolean): Promise<boolean> => {
+    // Оптимистично обновляем UI сразу
+    setCandidates(prev =>
+      prev.map(c => c.id === candidateId ? { ...c, isFavorite } : c)
+    )
+    try {
+      const res = await fetch(`/api/modules/hr/candidates/${candidateId}/favorite`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isFavorite }),
+      })
+      if (!res.ok) {
+        // Откатываем
+        setCandidates(prev =>
+          prev.map(c => c.id === candidateId ? { ...c, isFavorite: !isFavorite } : c)
+        )
+        return false
+      }
+      return true
+    } catch {
+      setCandidates(prev =>
+        prev.map(c => c.id === candidateId ? { ...c, isFavorite: !isFavorite } : c)
+      )
+      return false
+    }
+  }, [])
+
+  return { candidates, loading, error, refetch: fetch_, updateStage, toggleFavorite }
 }

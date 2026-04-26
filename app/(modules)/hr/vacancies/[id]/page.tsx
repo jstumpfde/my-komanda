@@ -37,11 +37,13 @@ import { toast } from "sonner"
 import { defaultColumnColors, type CandidateAction, getNextColumnId, PROGRESS_BY_COLUMN } from "@/lib/column-config"
 import type { Candidate } from "@/components/dashboard/candidate-card"
 import { HhVacancyBanner } from "@/components/vacancies/hh-vacancy-banner"
+import { HhAutoProcess } from "@/components/hh/hh-auto-process"
 import { AutomationSettings } from "@/components/vacancies/automation-settings"
 import { PublishTab } from "@/components/vacancies/publish-tab"
 import { MiniFormBuilder } from "@/components/vacancies/mini-form-builder"
 import { UtmLinksSection } from "@/components/vacancies/utm-links-section"
 import { PostDemoSettings } from "@/components/vacancies/post-demo-settings"
+import { VacancyAiProcessSettings } from "@/components/vacancies/vacancy-ai-process-settings"
 import {
   ResponsiveContainer,
   BarChart,
@@ -108,6 +110,8 @@ function apiCandidateToCard(c: ApiCandidate, columnId: string): Candidate {
     aiSummary: c.aiSummary ?? undefined,
     aiVerdict: c.aiScore != null ? (c.aiScore >= 70 ? "подходит" : c.aiScore >= 40 ? "возможно" : "не подходит") : undefined,
     demoProgressJson: c.demoProgressJson as Candidate["demoProgressJson"],
+    isFavorite: c.isFavorite ?? false,
+    createdAt: c.createdAt,
   }
 }
 
@@ -298,7 +302,12 @@ export default function VacancyPage() {
       setLibraryBusy(false)
     }
   }
-  const { candidates: apiCandidates, updateStage, refetch: refetchCandidates } = useCandidates(id)
+  const { candidates: apiCandidates, updateStage, refetch: refetchCandidates, toggleFavorite } = useCandidates(id)
+
+  const handleToggleFavorite = useCallback(async (candidateId: string, isFavorite: boolean) => {
+    const ok = await toggleFavorite(candidateId, isFavorite)
+    if (!ok) toast.error("Не удалось обновить избранное")
+  }, [toggleFavorite])
 
   const [status, setStatus] = useState<VacancyStatus>("draft")
   const [columns, setColumns] = useState<ColumnData[]>(emptyColumns())
@@ -1619,10 +1628,13 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                       {hhSyncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
                       Синхронизировать
                     </Button>
-                    <Button size="sm" className="h-8 text-xs gap-1.5" disabled={true} title="Скоро будет щадящий режим — пока обработка отключена">
-                      <Sparkles className="w-3.5 h-3.5" />
-                      Разобрать
-                    </Button>
+                    <HhAutoProcess
+                      vacancyId={id}
+                      defaultMinScore={
+                        ((apiVacancy?.aiProcessSettings as { minScore?: number } | null)?.minScore) ?? 70
+                      }
+                      onProcessed={() => { refetchCandidates(); handleHhSync() }}
+                    />
                     <div className="h-5 w-px bg-border mx-1 shrink-0" />
                   </>)}
                   <DropdownMenu>
@@ -1657,6 +1669,7 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                     setDrawerOpen(true)
                   }}
                   onAction={handleAction}
+                  onToggleFavorite={handleToggleFavorite}
                   hideViewSwitcher
                   onAddCustomColumn={handleAddCustomColumn}
                   onRemoveColumn={handleRemoveColumn}
@@ -1887,6 +1900,13 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
 
               <TabsContent value="automation">
                 <AutomationSettings vacancyId={id} descriptionJson={apiVacancy?.descriptionJson} vacancyTitle={apiVacancy?.title} salaryFrom={apiVacancy?.salaryMin} salaryTo={apiVacancy?.salaryMax} />
+                <div className="mt-6">
+                  <VacancyAiProcessSettings
+                    vacancyId={id}
+                    initial={apiVacancy?.aiProcessSettings ?? null}
+                    onSaved={() => refetchVacancy()}
+                  />
+                </div>
                 <PostDemoSettings />
               </TabsContent>
 
@@ -2582,6 +2602,7 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
           setDrawerOpen(open)
           if (!open) setDrawerCandidateId(null)
         }}
+        onToggleFavorite={handleToggleFavorite}
         onStageChange={(candidateId, newStage) => {
           // Sync kanban columns when stage changes in drawer
           setColumns((prev) => {
