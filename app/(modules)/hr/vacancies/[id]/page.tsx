@@ -1263,25 +1263,30 @@ export default function VacancyPage() {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    {status === "active" && (
-                      <DropdownMenuItem className="gap-2 cursor-pointer text-destructive focus:text-destructive" onClick={() => { updateVacancyStatus("paused"); toast.warning("Вакансия приостановлена") }}>
-                        <Pause className="size-3.5" />Остановить
-                      </DropdownMenuItem>
-                    )}
                     {(status === "draft" || status === "paused") && (
                       <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => { updateVacancyStatus("active"); toast.success("Вакансия запущена") }}>
                         <Play className="size-3.5" />Запустить
                       </DropdownMenuItem>
                     )}
-                    {(status === "draft" || status === "paused") && (
-                      <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => { updateVacancyStatus("closed_cancelled"); toast("В архив") }}>
-                        <Archive className="size-3.5" />В архив
+                    {(status === "draft" || status === "paused") && <DropdownMenuSeparator />}
+                    {apiCandidates.length > 0 && (
+                      <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => {
+                        const stageLabels: Record<string, string> = { new: "Новые", demo: "Демо", decision: "Решение", interview: "Интервью", final_decision: "Финал", hired: "Наняты", rejected: "Отказ" }
+                        const stageCounts: Record<string, number> = {}
+                        for (const c of apiCandidates) { const s = c.stage || "new"; stageCounts[s] = (stageCounts[s] || 0) + 1 }
+                        const topCandidates = apiCandidates.filter(c => c.aiScore != null).sort((a, b) => (b.aiScore ?? 0) - (a.aiScore ?? 0)).slice(0, 10)
+                        const html = `<html><head><title>Отчёт: ${vacancyTitle}</title><style>body{font-family:system-ui;max-width:800px;margin:40px auto;padding:0 20px;color:#1a1a1a}h1{font-size:22px}h2{font-size:16px;margin-top:24px}table{width:100%;border-collapse:collapse;margin:12px 0}td,th{border:1px solid #ddd;padding:8px;text-size:13px;text-align:left}th{background:#f5f5f5}.bar{height:16px;background:#6366f1;border-radius:4px}@media print{body{margin:20px}}</style></head><body>
+<h1>${vacancyTitle}</h1><p>Статус: ${status} | Город: ${apiVacancy?.city || "—"} | ЗП: ${apiVacancy?.salaryMin ? apiVacancy.salaryMin.toLocaleString("ru") : "—"} — ${apiVacancy?.salaryMax ? apiVacancy.salaryMax.toLocaleString("ru") : "—"} ₽</p>
+<h2>Воронка (${apiCandidates.length} кандидатов)</h2><table><tr><th>Этап</th><th>Кол-во</th></tr>${Object.entries(stageCounts).map(([s, n]) => `<tr><td>${stageLabels[s] || s}</td><td>${n}</td></tr>`).join("")}</table>
+${topCandidates.length > 0 ? `<h2>Топ кандидаты</h2><table><tr><th>Имя</th><th>AI-скор</th><th>Этап</th><th>Источник</th></tr>${topCandidates.map(c => `<tr><td>${c.name}</td><td>${c.aiScore}</td><td>${stageLabels[c.stage || "new"] || c.stage}</td><td>${c.source || "—"}</td></tr>`).join("")}</table>` : ""}
+${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
+<p style="color:#999;font-size:11px;margin-top:40px">Сгенерировано Company24.pro</p></body></html>`
+                        const w = window.open("", "_blank")
+                        if (w) { w.document.write(html); w.document.close(); w.print() }
+                      }}>
+                        <Download className="size-3.5" />Отчёт PDF
                       </DropdownMenuItem>
                     )}
-                    {(status === "active" || status === "draft" || status === "paused") && <DropdownMenuSeparator />}
-                    <DropdownMenuItem className="gap-2 cursor-pointer" disabled={duplicating} onClick={handleDuplicate}>
-                      {duplicating ? <Loader2 className="size-3.5 animate-spin" /> : <Copy className="size-3.5" />}Создать похожую
-                    </DropdownMenuItem>
                     {apiCandidates.length > 0 && (
                       <DropdownMenuItem className="gap-2 cursor-pointer" onClick={async () => {
                         const XLSX = (await import("xlsx")).default
@@ -1305,30 +1310,26 @@ export default function VacancyPage() {
                         <Download className="size-3.5" />Экспорт Excel
                       </DropdownMenuItem>
                     )}
-                    {apiCandidates.length > 0 && (
-                      <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => {
-                        const stageLabels: Record<string, string> = { new: "Новые", demo: "Демо", decision: "Решение", interview: "Интервью", final_decision: "Финал", hired: "Наняты", rejected: "Отказ" }
-                        const stageCounts: Record<string, number> = {}
-                        for (const c of apiCandidates) { const s = c.stage || "new"; stageCounts[s] = (stageCounts[s] || 0) + 1 }
-                        const topCandidates = apiCandidates.filter(c => c.aiScore != null).sort((a, b) => (b.aiScore ?? 0) - (a.aiScore ?? 0)).slice(0, 10)
-                        const html = `<html><head><title>Отчёт: ${vacancyTitle}</title><style>body{font-family:system-ui;max-width:800px;margin:40px auto;padding:0 20px;color:#1a1a1a}h1{font-size:22px}h2{font-size:16px;margin-top:24px}table{width:100%;border-collapse:collapse;margin:12px 0}td,th{border:1px solid #ddd;padding:8px;text-size:13px;text-align:left}th{background:#f5f5f5}.bar{height:16px;background:#6366f1;border-radius:4px}@media print{body{margin:20px}}</style></head><body>
-<h1>${vacancyTitle}</h1><p>Статус: ${status} | Город: ${apiVacancy?.city || "—"} | ЗП: ${apiVacancy?.salaryMin ? apiVacancy.salaryMin.toLocaleString("ru") : "—"} — ${apiVacancy?.salaryMax ? apiVacancy.salaryMax.toLocaleString("ru") : "—"} ₽</p>
-<h2>Воронка (${apiCandidates.length} кандидатов)</h2><table><tr><th>Этап</th><th>Кол-во</th></tr>${Object.entries(stageCounts).map(([s, n]) => `<tr><td>${stageLabels[s] || s}</td><td>${n}</td></tr>`).join("")}</table>
-${topCandidates.length > 0 ? `<h2>Топ кандидаты</h2><table><tr><th>Имя</th><th>AI-скор</th><th>Этап</th><th>Источник</th></tr>${topCandidates.map(c => `<tr><td>${c.name}</td><td>${c.aiScore}</td><td>${stageLabels[c.stage || "new"] || c.stage}</td><td>${c.source || "—"}</td></tr>`).join("")}</table>` : ""}
-${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
-<p style="color:#999;font-size:11px;margin-top:40px">Сгенерировано Company24.pro</p></body></html>`
-                        const w = window.open("", "_blank")
-                        if (w) { w.document.write(html); w.document.close(); w.print() }
-                      }}>
-                        <Download className="size-3.5" />Отчёт PDF
+                    {apiCandidates.length > 0 && <DropdownMenuSeparator />}
+                    <DropdownMenuItem className="gap-2 cursor-pointer" disabled={duplicating} onClick={handleDuplicate}>
+                      {duplicating ? <Loader2 className="size-3.5 animate-spin" /> : <Copy className="size-3.5" />}Создать похожую
+                    </DropdownMenuItem>
+                    {(status === "draft" || status === "paused") && (
+                      <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => { updateVacancyStatus("closed_cancelled"); toast("В архив") }}>
+                        <Archive className="size-3.5" />В архив
                       </DropdownMenuItem>
                     )}
-                    {(status === "active" || status === "paused") && <>
-                      <DropdownMenuSeparator />
+                    {(status === "active" || status === "paused") && <DropdownMenuSeparator />}
+                    {status === "active" && (
+                      <DropdownMenuItem className="gap-2 cursor-pointer text-destructive focus:text-destructive" onClick={() => { updateVacancyStatus("paused"); toast.warning("Вакансия приостановлена") }}>
+                        <Pause className="size-3.5" />Остановить
+                      </DropdownMenuItem>
+                    )}
+                    {(status === "active" || status === "paused") && (
                       <DropdownMenuItem className="gap-2 cursor-pointer text-destructive focus:text-destructive" onClick={() => { updateVacancyStatus("closed_cancelled"); toast.warning("Вакансия отменена") }}>
                         <X className="size-3.5" />Закрыть вакансию
                       </DropdownMenuItem>
-                    </>}
+                    )}
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
@@ -1609,13 +1610,6 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                     <span className="font-medium text-foreground">{apiCandidates.filter(c => c.demoProgressJson != null).length}</span> в демо
                   </span>
                   <div className="h-5 w-px bg-border mx-1 shrink-0" />
-                  <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs" onClick={screenAllNew} disabled={bulkScreening}>
-                    {bulkScreening ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-                    {bulkScreening ? "Скрининг..." : "AI-оценить новых"}
-                  </Button>
-                  <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs" onClick={handleCompare}>
-                    <BarChart3 className="w-3.5 h-3.5" />Сравнить топ
-                  </Button>
                   {hhConnected === true && apiVacancy?.hhVacancyId && hhSyncMeta && (<>
                     <span className="text-xs text-muted-foreground hidden sm:inline">
                       ✓ Синх. {relativeHhSyncTime(hhSyncMeta.syncedAt)}
@@ -1628,7 +1622,15 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                       <Sparkles className="w-3.5 h-3.5" />
                       Разобрать
                     </Button>
+                    <div className="h-5 w-px bg-border mx-1 shrink-0" />
                   </>)}
+                  <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs" onClick={screenAllNew} disabled={bulkScreening}>
+                    {bulkScreening ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                    {bulkScreening ? "Скрининг..." : "AI-оценить новых"}
+                  </Button>
+                  <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs" onClick={handleCompare}>
+                    <BarChart3 className="w-3.5 h-3.5" />Сравнить топ
+                  </Button>
                   {bulkScreening && <span className="text-xs text-muted-foreground">AI анализирует кандидатов...</span>}
                 </div>
                 <KanbanBoard
