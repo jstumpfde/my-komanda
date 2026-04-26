@@ -1,6 +1,6 @@
 "use client"
 
-import { ArrowUpDown, ArrowDown, ArrowUp, BarChart3, Sparkles, Star } from "lucide-react"
+import { ArrowUpDown, ArrowDown, ArrowUp, BarChart3, Sparkles, Star, Check } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
@@ -20,28 +20,27 @@ interface SortMenuProps {
 }
 
 export function SortMenu({ sortMode, onSortChange }: SortMenuProps) {
-  const sortLabel = SORT_OPTIONS.find(o => o.value === sortMode)?.label ?? "Сортировка"
-
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs gap-1.5">
+        <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs">
           <ArrowUpDown className="w-3.5 h-3.5" />
-          <span className="hidden sm:inline">{sortLabel}</span>
-          <span className="sm:hidden">Сортировка</span>
+          Сортировка
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
         {SORT_OPTIONS.map(opt => {
           const Icon = opt.icon
+          const active = sortMode === opt.value
           return (
             <DropdownMenuItem
               key={opt.value}
               onClick={() => onSortChange(opt.value)}
-              className={cn(sortMode === opt.value && "bg-accent")}
+              className={cn("flex items-center", active && "bg-accent")}
             >
               <Icon className="w-3.5 h-3.5 mr-2" />
-              {opt.label}
+              <span className="flex-1">{opt.label}</span>
+              {active && <Check className="w-3.5 h-3.5 ml-2 text-foreground/70" />}
             </DropdownMenuItem>
           )
         })}

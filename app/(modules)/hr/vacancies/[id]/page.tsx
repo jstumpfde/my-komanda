@@ -1428,7 +1428,6 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                 {activeTab === "candidates" && (
                   <div className="flex items-center gap-2 shrink-0">
                     <CandidateFilters filters={filters} onFiltersChange={setFilters} candidates={columns.flatMap((c) => c.candidates)} />
-                    <SortMenu sortMode={sortMode} onSortChange={setSortMode} />
                     <CardSettings settings={cardSettings} onSettingsChange={setCardSettings} />
                     <div className="flex items-center bg-muted rounded-lg p-0.5 gap-0.5">
                       {([
@@ -1659,6 +1658,7 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
+                  <SortMenu sortMode={sortMode} onSortChange={setSortMode} />
                   {bulkScreening && <span className="text-xs text-muted-foreground">AI анализирует кандидатов...</span>}
                 </div>
                 <KanbanBoard
