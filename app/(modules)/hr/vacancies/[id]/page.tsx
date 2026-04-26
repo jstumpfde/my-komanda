@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useCallback } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { useAuth, isPlatformRole } from "@/lib/auth"
@@ -29,7 +29,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Checkbox } from "@/components/ui/checkbox"
 import { Slider } from "@/components/ui/slider"
 import { Input } from "@/components/ui/input"
-import { Plus, Clock, Pause, Play, Archive, RotateCcw, Trash2, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, Zap, Globe, AlertTriangle, TrendingUp, Calendar, MapPin, DollarSign, Filter, X, Link2, Copy, Save, Sparkles, Eye, Check, Loader2, Download, ExternalLink, ClipboardList, ChevronLeft, ChevronRight, ChevronDown, CheckCircle2, XCircle, Users, Phone, Upload } from "lucide-react"
+import { Plus, Clock, Pause, Play, Archive, RotateCcw, Trash2, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, Zap, Globe, AlertTriangle, TrendingUp, Calendar, MapPin, DollarSign, Filter, X, Link2, Copy, Save, Sparkles, Eye, Check, Loader2, Download, ExternalLink, ClipboardList, ChevronLeft, ChevronRight, ChevronDown, CheckCircle2, XCircle, Users, Phone, Upload, RefreshCw } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Label } from "@/components/ui/label"
@@ -484,6 +484,64 @@ export default function VacancyPage() {
   const [hhSalaryFrom, setHhSalaryFrom] = useState("")
   const [hhSalaryTo, setHhSalaryTo] = useState("")
   const [hhSchedule, setHhSchedule] = useState("fullDay")
+
+  // HH.ru sync state (lifted from VacancyPulse — used by both pulse hero text and bottom toolbar buttons)
+  const [hhSyncMeta, setHhSyncMeta] = useState<{ hhVacancyId: string; responsesCount: number; syncedAt: string; createdAt: string; localVacancyId: string | null } | null>(null)
+  const [hhPendingResponses, setHhPendingResponses] = useState<number | null>(null)
+  const [hhSyncing, setHhSyncing] = useState(false)
+
+  const loadHhSyncMeta = useCallback(async () => {
+    const hhVacId = apiVacancy?.hhVacancyId
+    if (!hhVacId) return
+    try {
+      const res = await fetch("/api/integrations/hh/vacancies")
+      const data = await res.json() as { vacancies?: Array<{ hhVacancyId: string; responsesCount: number; syncedAt: string; createdAt: string; localVacancyId: string | null }> }
+      setHhSyncMeta((data.vacancies ?? []).find(v => v.hhVacancyId === hhVacId) ?? null)
+    } catch { /* silent */ }
+  }, [apiVacancy?.hhVacancyId])
+
+  const loadHhPending = useCallback(async () => {
+    const hhVacId = apiVacancy?.hhVacancyId
+    if (!hhVacId) return
+    try {
+      const res = await fetch("/api/integrations/hh/responses")
+      const data = await res.json() as { responses?: Array<{ hhVacancyId: string; status: string }> }
+      const count = (data.responses ?? []).filter(r => r.hhVacancyId === hhVacId && r.status === "response").length
+      setHhPendingResponses(count)
+    } catch { /* silent */ }
+  }, [apiVacancy?.hhVacancyId])
+
+  useEffect(() => {
+    if (hhConnected !== true || !apiVacancy?.hhVacancyId) return
+    loadHhSyncMeta()
+    loadHhPending()
+  }, [hhConnected, apiVacancy?.hhVacancyId, loadHhSyncMeta, loadHhPending])
+
+  const handleHhSync = async () => {
+    setHhSyncing(true)
+    try {
+      await Promise.all([
+        fetch("/api/integrations/hh/vacancies"),
+        fetch("/api/integrations/hh/responses"),
+      ])
+      await Promise.all([loadHhSyncMeta(), loadHhPending()])
+      refetchCandidates(); refetchVacancy()
+      toast.success("Синхронизировано с hh.ru")
+    } catch { toast.error("Ошибка синхронизации") }
+    finally { setHhSyncing(false) }
+  }
+
+  const relativeHhSyncTime = (date: string | null | undefined): string => {
+    if (!date) return "—"
+    const diff = Date.now() - new Date(date).getTime()
+    const min = Math.floor(diff / 60000)
+    if (min < 1) return "только что"
+    if (min < 60) return `${min} мин`
+    const hr = Math.floor(min / 60)
+    if (hr < 24) return `${hr} ч`
+    if (hr < 48) return "вчера"
+    return `${Math.floor(hr / 24)} дн.`
+  }
 
   // ── Persist status changes to API ──────────────────────
   const updateVacancyStatus = async (newStatus: VacancyStatus) => {
@@ -1248,6 +1306,27 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                 }}>
                   <Download className="size-3.5" />Отчёт PDF
                 </Button>}
+                {apiCandidates.length > 0 && <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs text-muted-foreground" onClick={async () => {
+                  const XLSX = (await import("xlsx")).default
+                  const data = apiCandidates.map(c => ({
+                    "Имя": c.name,
+                    "Email": c.email || "",
+                    "Телефон": c.phone || "",
+                    "Город": c.city || "",
+                    "Источник": c.source || "",
+                    "Этап": c.stage || "",
+                    "AI-скор": c.aiScore ?? "",
+                    "Вердикт": c.aiScore != null ? (c.aiScore >= 70 ? "подходит" : c.aiScore >= 40 ? "возможно" : "не подходит") : "",
+                    "Дата": c.createdAt ? new Date(c.createdAt).toLocaleDateString("ru-RU") : "",
+                  }))
+                  const ws = XLSX.utils.json_to_sheet(data)
+                  const wb = XLSX.utils.book_new()
+                  XLSX.utils.book_append_sheet(wb, ws, "Кандидаты")
+                  XLSX.writeFile(wb, `кандидаты-${vacancyTitle}.xlsx`)
+                  toast.success("Экспорт готов")
+                }}>
+                  <Download className="size-3.5" />Экспорт Excel
+                </Button>}
               </div>
             </div>
 
@@ -1312,6 +1391,9 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                 createdAt={apiVacancy?.createdAt ?? null}
                 localCandidatesCount={totalCandidates}
                 inDemoCount={apiCandidates.filter(c => c.demoProgressJson != null).length}
+                connected={hhConnected}
+                hhMeta={hhSyncMeta}
+                pendingCount={hhPendingResponses}
                 onSyncDone={() => { refetchCandidates(); refetchVacancy() }}
               />
             )}
@@ -1537,27 +1619,19 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                   <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs" onClick={handleCompare}>
                     <BarChart3 className="w-3.5 h-3.5" />Сравнить топ
                   </Button>
-                  <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs" onClick={async () => {
-                    const XLSX = (await import("xlsx")).default
-                    const data = apiCandidates.map(c => ({
-                      "Имя": c.name,
-                      "Email": c.email || "",
-                      "Телефон": c.phone || "",
-                      "Город": c.city || "",
-                      "Источник": c.source || "",
-                      "Этап": c.stage || "",
-                      "AI-скор": c.aiScore ?? "",
-                      "Вердикт": c.aiScore != null ? (c.aiScore >= 70 ? "подходит" : c.aiScore >= 40 ? "возможно" : "не подходит") : "",
-                      "Дата": c.createdAt ? new Date(c.createdAt).toLocaleDateString("ru-RU") : "",
-                    }))
-                    const ws = XLSX.utils.json_to_sheet(data)
-                    const wb = XLSX.utils.book_new()
-                    XLSX.utils.book_append_sheet(wb, ws, "Кандидаты")
-                    XLSX.writeFile(wb, `кандидаты-${vacancyTitle}.xlsx`)
-                    toast.success("Экспорт готов")
-                  }}>
-                    <Download className="w-3.5 h-3.5" />Экспорт Excel
-                  </Button>
+                  {hhConnected === true && apiVacancy?.hhVacancyId && hhSyncMeta && (<>
+                    <span className="text-xs text-muted-foreground hidden sm:inline">
+                      ✓ Синх. {relativeHhSyncTime(hhSyncMeta.syncedAt)}
+                    </span>
+                    <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={handleHhSync} disabled={hhSyncing}>
+                      {hhSyncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                      Синхронизировать
+                    </Button>
+                    <Button size="sm" className="h-8 text-xs gap-1.5" disabled={true} title="Скоро будет щадящий режим — пока обработка отключена">
+                      <Sparkles className="w-3.5 h-3.5" />
+                      Разобрать
+                    </Button>
+                  </>)}
                   {bulkScreening && <span className="text-xs text-muted-foreground">AI анализирует кандидатов...</span>}
                 </div>
                 <KanbanBoard
