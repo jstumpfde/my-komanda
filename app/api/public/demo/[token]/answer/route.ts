@@ -4,6 +4,22 @@ import { db } from "@/lib/db"
 import { candidates } from "@/lib/db/schema"
 import { apiError, apiSuccess } from "@/lib/api-helpers"
 
+interface DemoBlock {
+  blockId: string
+  status: string
+  timeSpent: number
+  answeredAt: string
+}
+
+interface StageHistoryEntry {
+  from: string | null
+  to: string
+  at: string
+  reason: string
+}
+
+const FINAL_STAGES = new Set(["hired", "rejected"])
+
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ token: string }> },
@@ -18,10 +34,11 @@ export async function POST(
       return apiError("blockId и answer обязательны", 400)
     }
 
-    // Find candidate
     const candidateRows = await db
       .select({
         id: candidates.id,
+        stage: candidates.stage,
+        stageHistory: candidates.stageHistory,
         anketaAnswers: candidates.anketaAnswers,
         demoProgressJson: candidates.demoProgressJson,
       })
@@ -34,36 +51,74 @@ export async function POST(
     }
 
     const candidate = candidateRows[0]
+    const now = new Date().toISOString()
 
-    // Update anketa answers — append or replace by blockId
+    // ── anketa_answers (legacy шаблон [{blockId, answer, ...}]) ──
     const existingAnswers = (candidate.anketaAnswers as any[] | null) || []
     const answerIndex = existingAnswers.findIndex((a: any) => a.blockId === blockId)
-    const newAnswer = { blockId, answer, timeSpent: timeSpent || 0, answeredAt: new Date().toISOString() }
-
+    const newAnswer = { blockId, answer, timeSpent: timeSpent || 0, answeredAt: now }
     if (answerIndex >= 0) {
       existingAnswers[answerIndex] = newAnswer
     } else {
       existingAnswers.push(newAnswer)
     }
 
-    // Update progress
+    // ── demo_progress_json: накапливаем blocks[] (без дублей по blockId) ──
+    const prevProgress = (candidate.demoProgressJson as Record<string, unknown> | null) || {}
+    const prevBlocks = Array.isArray(prevProgress.blocks) ? (prevProgress.blocks as DemoBlock[]) : []
+    const filteredBlocks = prevBlocks.filter(b => b.blockId !== blockId)
+    const isComplete = blockId === "__complete__"
+    const newBlock: DemoBlock = {
+      blockId,
+      status: "completed",
+      timeSpent: timeSpent || 0,
+      answeredAt: now,
+    }
+    const updatedBlocks = [...filteredBlocks, newBlock]
     const progress = {
-      ...(candidate.demoProgressJson as any || {}),
-      currentBlock: currentBlock ?? 0,
-      totalBlocks: totalBlocks ?? 0,
-      lastUpdated: new Date().toISOString(),
+      ...prevProgress,
+      blocks: updatedBlocks,
+      currentBlock: currentBlock ?? prevProgress.currentBlock ?? 0,
+      totalBlocks: totalBlocks ?? prevProgress.totalBlocks ?? 0,
+      completedAt: isComplete ? now : (prevProgress.completedAt ?? null),
+      lastUpdated: now,
     }
 
-    await db
-      .update(candidates)
-      .set({
-        anketaAnswers: existingAnswers,
-        demoProgressJson: progress,
-        updatedAt: new Date(),
-      })
-      .where(eq(candidates.id, candidate.id))
+    // ── Авто-переход stage ──
+    const currentStage = candidate.stage ?? "new"
+    let newStage: string | null = null
+    let stageReason: string | null = null
 
-    return apiSuccess({ ok: true })
+    if (!FINAL_STAGES.has(currentStage)) {
+      // F2.A: первый ответ + stage='new' → demo
+      if (currentStage === "new" && prevBlocks.length === 0 && !isComplete) {
+        newStage = "demo"
+        stageReason = "demo_started"
+      }
+      // F2.B: финальный шаг → decision (только из new/demo, чтобы не регрессить)
+      if (isComplete && (currentStage === "new" || currentStage === "demo")) {
+        newStage = "decision"
+        stageReason = "demo_completed"
+      }
+    }
+
+    const stageHistory = (candidate.stageHistory as StageHistoryEntry[] | null) || []
+    const updates: Record<string, unknown> = {
+      anketaAnswers: existingAnswers,
+      demoProgressJson: progress,
+      updatedAt: new Date(),
+    }
+    if (newStage && newStage !== currentStage) {
+      updates.stage = newStage
+      updates.stageHistory = [
+        ...stageHistory,
+        { from: currentStage, to: newStage, at: now, reason: stageReason },
+      ]
+    }
+
+    await db.update(candidates).set(updates).where(eq(candidates.id, candidate.id))
+
+    return apiSuccess({ ok: true, stage: newStage ?? currentStage })
   } catch (err) {
     if (err instanceof Response) return err
     console.error("POST /api/public/demo/[token]/answer", err)
