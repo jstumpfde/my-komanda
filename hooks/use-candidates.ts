@@ -27,6 +27,7 @@ export interface ApiCandidate {
   isFavorite: boolean | null
   createdAt: string | null
   updatedAt: string | null
+  hhResponseId?: string | null
 }
 
 // ─── useCandidates ────────────────────────────────────────────────────────────

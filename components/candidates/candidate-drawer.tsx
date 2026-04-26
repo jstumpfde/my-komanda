@@ -58,6 +58,15 @@ interface StageHistoryEntry {
   comment?: string
 }
 
+interface HhMessage {
+  id: string
+  text: string
+  authorType: string
+  createdAt: string | null
+  viewedByMe: boolean
+  viewedByOpponent: boolean
+}
+
 interface DemoBlock {
   blockId: string
   status: string
@@ -181,6 +190,11 @@ export function CandidateDrawer({
   const [savingNote, setSavingNote] = useState(false)
   const [scoringAi, setScoringAi] = useState(false)
   const [showAiDetails, setShowAiDetails] = useState(false)
+  const [activeTab, setActiveTab] = useState("contacts")
+  const [hhMessages, setHhMessages] = useState<HhMessage[]>([])
+  const [hhLoading, setHhLoading] = useState(false)
+  const [hhError, setHhError] = useState<string | null>(null)
+  const [hhFetched, setHhFetched] = useState(false)
 
   // ── Fetch candidate details ───────────────────────────────────────────────
 
@@ -216,10 +230,45 @@ export function CandidateDrawer({
     if (open && candidateId) {
       setCandidate(null)
       setNotes([])
+      setHhMessages([])
+      setHhError(null)
+      setHhFetched(false)
+      setActiveTab("contacts")
       fetchCandidate(candidateId)
       fetchNotes(candidateId)
     }
   }, [open, candidateId, fetchCandidate, fetchNotes])
+
+  // ── Lazy-load hh messages when chat tab opens ─────────────────────────────
+  useEffect(() => {
+    const hhResponseId = candidate?.hhResponseId
+    if (activeTab !== "chat" || !hhResponseId || hhFetched || hhLoading) return
+
+    let cancelled = false
+    setHhLoading(true)
+    setHhError(null)
+    ;(async () => {
+      try {
+        const res = await fetch(`/api/integrations/hh/messages/${hhResponseId}`)
+        const data = await res.json() as { messages?: HhMessage[]; error?: string }
+        if (cancelled) return
+        if (!res.ok) {
+          setHhError(data.error ?? `Ошибка ${res.status}`)
+        } else {
+          setHhMessages(data.messages ?? [])
+        }
+      } catch (err) {
+        if (!cancelled) setHhError(err instanceof Error ? err.message : "Сетевая ошибка")
+      } finally {
+        if (!cancelled) {
+          setHhLoading(false)
+          setHhFetched(true)
+        }
+      }
+    })()
+
+    return () => { cancelled = true }
+  }, [activeTab, candidate?.hhResponseId, hhFetched, hhLoading])
 
   // ── Stage change ─────────────────────────────────────────────────────────
 
@@ -415,7 +464,7 @@ export function CandidateDrawer({
           const answers = candidate.anketaAnswers ?? []
 
           return (
-            <Tabs defaultValue="contacts" className="flex-1 flex flex-col min-h-0">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
               <TabsList className="grid grid-cols-5 mx-6 mt-3 shrink-0">
                 <TabsTrigger value="contacts" className="text-xs">Контакты</TabsTrigger>
                 <TabsTrigger value="demo" className="text-xs">Демо</TabsTrigger>
@@ -703,9 +752,70 @@ export function CandidateDrawer({
                             <p className="text-[11px] text-muted-foreground">Сообщения отклика</p>
                           </div>
                         </div>
-                        <span className="text-[10px] text-muted-foreground/60 px-2 py-0.5 rounded-full bg-muted/40">скоро</span>
+                        {candidate.hhResponseId ? (
+                          hhLoading ? (
+                            <span className="text-[10px] text-muted-foreground/70 px-2 py-0.5 rounded-full bg-muted/40 flex items-center gap-1">
+                              <Loader2 className="w-3 h-3 animate-spin" /> загрузка
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-muted-foreground/70 px-2 py-0.5 rounded-full bg-muted/40 tabular-nums">
+                              {hhMessages.length} сообщ.
+                            </span>
+                          )
+                        ) : (
+                          <span className="text-[10px] text-muted-foreground/60 px-2 py-0.5 rounded-full bg-muted/40">нет связи</span>
+                        )}
                       </div>
-                      <p className="text-xs text-muted-foreground italic">Здесь будет переписка из hh.ru — отклик кандидата, ответы, приглашения и отказы</p>
+
+                      {!candidate.hhResponseId ? (
+                        <p className="text-xs text-muted-foreground italic">У этого кандидата нет связанного отклика hh</p>
+                      ) : hhLoading ? (
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground italic py-2">
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          Загружаю переписку из hh...
+                        </div>
+                      ) : hhError ? (
+                        <p className="text-xs text-muted-foreground">{hhError}</p>
+                      ) : hhMessages.length === 0 ? (
+                        <p className="text-xs text-muted-foreground italic">Пока нет сообщений. Отправь приглашение или отказ — кандидат увидит в hh</p>
+                      ) : (
+                        <div className="space-y-2 pt-1">
+                          {hhMessages.map((m) => {
+                            const mine = m.authorType === "employer"
+                            return (
+                              <div key={m.id} className={cn("flex", mine ? "justify-end" : "justify-start")}>
+                                <div
+                                  className={cn(
+                                    "max-w-[80%] rounded-lg px-3 py-2 text-xs space-y-1",
+                                    mine
+                                      ? "bg-indigo-500/10 text-foreground border border-indigo-500/20"
+                                      : "bg-muted/60 text-foreground border border-border/40"
+                                  )}
+                                >
+                                  <p className="whitespace-pre-wrap break-words">{m.text || <span className="italic text-muted-foreground">пустое сообщение</span>}</p>
+                                  <div className="flex items-center justify-between gap-2 text-[10px] text-muted-foreground/80">
+                                    <span>
+                                      {m.createdAt
+                                        ? new Date(m.createdAt).toLocaleString("ru-RU", {
+                                            day: "2-digit",
+                                            month: "2-digit",
+                                            hour: "2-digit",
+                                            minute: "2-digit",
+                                          })
+                                        : ""}
+                                    </span>
+                                    {mine && (
+                                      <span title={m.viewedByOpponent ? "прочитано" : "не прочитано"}>
+                                        {m.viewedByOpponent ? "✓✓" : "✓"}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
                     </div>
 
                     {/* Telegram */}

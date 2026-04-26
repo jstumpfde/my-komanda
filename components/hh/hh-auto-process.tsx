@@ -163,13 +163,13 @@ export function HhAutoProcess({
         </div>
         <Slider
           value={[minScore]}
-          min={50}
+          min={0}
           max={95}
           step={5}
           onValueChange={v => setMinScore(v[0] ?? 70)}
         />
         <div className="flex justify-between text-[10px] text-muted-foreground mt-1">
-          <span>50</span>
+          <span>0</span>
           <span>95</span>
         </div>
       </div>

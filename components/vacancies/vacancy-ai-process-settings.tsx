@@ -84,13 +84,13 @@ export function VacancyAiProcessSettings({ vacancyId, initial, onSaved }: Props)
           </div>
           <Slider
             value={[minScore]}
-            min={50}
+            min={0}
             max={95}
             step={5}
             onValueChange={v => setMinScore(v[0] ?? 70)}
           />
           <div className="flex justify-between text-[10px] text-muted-foreground mt-1">
-            <span>50 (мягкий фильтр)</span>
+            <span>0 (без фильтра)</span>
             <span>95 (только топ)</span>
           </div>
         </div>

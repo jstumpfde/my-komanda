@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server"
 import { eq, and } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { candidates, vacancies } from "@/lib/db/schema"
+import { candidates, vacancies, hhResponses } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 
 // Helper: verify candidate belongs to user's company
@@ -10,9 +10,14 @@ async function getOwnedCandidate(candidateId: string, companyId: string) {
     .select({
       candidate: candidates,
       vacancyTitle: vacancies.title,
+      hhResponseId: hhResponses.hhResponseId,
     })
     .from(candidates)
     .innerJoin(vacancies, eq(candidates.vacancyId, vacancies.id))
+    .leftJoin(
+      hhResponses,
+      and(eq(hhResponses.localCandidateId, candidates.id), eq(hhResponses.companyId, companyId))
+    )
     .where(and(eq(candidates.id, candidateId), eq(vacancies.companyId, companyId)))
     .limit(1)
 
@@ -32,7 +37,7 @@ export async function GET(
       return apiError("Candidate not found", 404)
     }
 
-    return apiSuccess({ ...row.candidate, vacancyTitle: row.vacancyTitle })
+    return apiSuccess({ ...row.candidate, vacancyTitle: row.vacancyTitle, hhResponseId: row.hhResponseId ?? null })
   } catch (err) {
     if (err instanceof Response) return err
     return apiError("Internal server error", 500)
