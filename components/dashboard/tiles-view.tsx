@@ -120,11 +120,20 @@ export function TilesView({ columns, settings, onOpenProfile, onAction, sortMode
                     </div>
                   </div>
                 </div>
-                {settings.showScore && (
-                  <Badge variant="outline" className={cn("font-bold text-sm border", getScoreColor(candidate.score))}>
-                    {candidate.score}
-                  </Badge>
-                )}
+                {settings.showScore && (() => {
+                  const aiActuallyRan = candidate.aiScore != null && !!candidate.aiSummary
+                  return (
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "font-bold text-sm border",
+                        aiActuallyRan ? getScoreColor(candidate.aiScore!) : "text-muted-foreground/50 bg-muted/30 border-muted"
+                      )}
+                    >
+                      {aiActuallyRan ? candidate.aiScore : "—"}
+                    </Badge>
+                  )
+                })()}
               </div>
 
               {/* Info */}

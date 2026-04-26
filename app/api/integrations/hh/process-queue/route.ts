@@ -204,12 +204,23 @@ export async function POST(req: NextRequest) {
       verdict: screenResult.verdict,
     })
 
+    // Уважаем autoAction='review' от AI — оставляем кандидата в "Новый" для ручной проверки
+    const aiSaysReview = screenResult.autoAction === "review" || screenResult.confidenceLevel === "low"
     const passes = screenResult.score >= effMinScore
 
+    type Decision = "invite" | "reject" | "keep_new"
+    let decision: Decision
+    if (aiSaysReview) {
+      decision = "keep_new"
+    } else if (passes) {
+      decision = "invite"
+    } else {
+      decision = effBelowAction === "reject" ? "reject" : "keep_new"
+    }
+
     if (dryRun) {
-      const dryAction = passes
-        ? "dry:invite"
-        : effBelowAction === "reject" ? "dry:reject" : "dry:keep_new"
+      const dryAction = decision === "invite" ? "dry:invite"
+        : decision === "reject" ? "dry:reject" : "dry:keep_new"
       results.push({
         id: resp.hhResponseId,
         name: resp.candidateName,
@@ -217,18 +228,12 @@ export async function POST(req: NextRequest) {
         score: screenResult.score,
         verdict: screenResult.verdict,
       })
-      if (passes) invitedCount++
-      else if (effBelowAction === "reject") rejectedCount++
+      if (decision === "invite") invitedCount++
+      else if (decision === "reject") rejectedCount++
       else keptCount++
       if (idx < newResponses.length - 1) await sleep(effDelayMs)
       continue
     }
-
-    // Решаем что делаем: invite / reject / keep_new
-    type Decision = "invite" | "reject" | "keep_new"
-    const decision: Decision = passes
-      ? "invite"
-      : effBelowAction === "reject" ? "reject" : "keep_new"
 
     const targetStage = decision === "invite" ? "demo" : decision === "reject" ? "rejected" : "new"
     const baseMessage = decision === "invite" ? effInviteMsg : decision === "reject" ? effRejectMsg : null

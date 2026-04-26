@@ -150,9 +150,20 @@ export function ListView({ columns, settings, onOpenProfile, onAction, sortMode 
               {/* Score */}
               {settings.showScore && (
                 <div>
-                  <Badge variant="outline" className={cn("text-[14px] border font-semibold", getScoreColor(candidate.score))}>
-                    {candidate.score}
-                  </Badge>
+                  {(() => {
+                    const aiActuallyRan = candidate.aiScore != null && !!candidate.aiSummary
+                    return (
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "text-[14px] border font-semibold",
+                          aiActuallyRan ? getScoreColor(candidate.aiScore!) : "text-muted-foreground/50 bg-muted/30 border-muted"
+                        )}
+                      >
+                        {aiActuallyRan ? candidate.aiScore : "—"}
+                      </Badge>
+                    )
+                  })()}
                 </div>
               )}
 

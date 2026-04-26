@@ -46,24 +46,36 @@ export interface ScreenInput {
 
 const client = new Anthropic({ baseURL: getClaudeApiUrl() })
 
-const SYSTEM_PROMPT = `Ты — AI-рекрутер. Сравни данные кандидата с требованиями вакансии и дай оценку.
+const SYSTEM_PROMPT = `Ты — AI-рекрутер. Сравниваешь данные кандидата с требованиями вакансии и даёшь оценку.
 
-ПРАВИЛА:
-- Оценивай СТРОГО на основе предоставленных данных. Не додумывай.
-- Если данных о кандидате мало — снижай уверенность, но не ставь 0.
-- score: 0-100 (реалистично: 85+ = отличное совпадение, 60-84 = хорошее, 40-59 = частичное, <40 = слабое)
-- verdict: "подходит" (70+), "возможно" (40-69), "не подходит" (<40)
-- strengths/weaknesses: 2-3 конкретных пункта каждый, короткие фразы
-- recommendation: 1-2 предложения, что делать с кандидатом
-- autoAction: "invite" (70+), "review" (40-69), "reject" (<40)
+КРИТИЧЕСКОЕ ПРАВИЛО АНТИГАЛЛЮЦИНАЦИЙ:
+- Каждый пункт в strengths и weaknesses должен ОПИРАТЬСЯ на конкретный факт из присланного резюме.
+- Если факта нет в резюме (например, в резюме нет упоминания "EdTech", "недвижимость", "руководитель отдела") — НЕ ВЫДУМЫВАЙ. Не пиши то, чего нет.
+- Если данных в резюме мало или совсем нет (резюме пустое, скрытые поля) — пиши strengths: ["Недостаточно данных для оценки"], weaknesses: ["Резюме скрыто или неполное, требуется ручная проверка"], confidenceLevel: "low".
 
-ФОРМАТ — только валидный JSON:
+ПРАВИЛО CONFIDENCE ↔ SCORE:
+- Если confidenceLevel = "low" — score НЕ МОЖЕТ быть выше 55. Максимум 55.
+- Если confidenceLevel = "medium" — score может быть в диапазоне 0-100.
+- Если confidenceLevel = "high" — score может быть в диапазоне 0-100, но требуются конкретные факты-подтверждения.
+
+ПРАВИЛО AUTOACTION:
+- "invite" — высокая уверенность И score >= 70. Резюме богатое, факты подтверждают соответствие.
+- "review" — низкая уверенность ИЛИ confidenceLevel="low" ИЛИ резюме скрыто. НЕ автоотказ, а ручная проверка.
+- "reject" — высокая уверенность что кандидат НЕ подходит (явный мисматч: возраст вне диапазона, профессия другая, опыт 0).
+
+КАК ОЦЕНИВАТЬ:
+- score: 0-100. Реалистично: 85+ отличное совпадение, 60-84 хорошее, 40-59 частичное, <40 слабое.
+- verdict: "подходит" (70+), "возможно" (40-69), "не подходит" (<40).
+- strengths/weaknesses: 2-3 пункта, каждый — короткая фраза с фактом из резюме.
+- recommendation: 1-2 предложения, что делать с кандидатом.
+
+ФОРМАТ — только валидный JSON, без префиксов и пояснений:
 {
   "score": 75,
   "verdict": "подходит",
-  "strengths": ["Опыт B2B продаж 3 года", "Знание CRM"],
-  "weaknesses": ["Нет опыта в отрасли"],
-  "recommendation": "Пригласить на интервью. Уточнить опыт в отрасли.",
+  "strengths": ["..."],
+  "weaknesses": ["..."],
+  "recommendation": "...",
   "autoAction": "invite",
   "confidenceLevel": "high",
   "manipulationDetected": false
@@ -137,10 +149,11 @@ ${salesSections.length > 0 ? "\nСПЕЦИФИКА ПРОДАЖ:\n" + salesSecti
     }
   }
 
-  const score = Math.max(0, Math.min(100, Number(parsed.score) || 50))
-  const manipulation = Boolean(parsed.manipulationDetected)
   const confidence = (["high", "medium", "low"].includes(String(parsed.confidenceLevel))
     ? String(parsed.confidenceLevel) : "medium") as ScreeningResult["confidenceLevel"]
+  const rawScore = Math.max(0, Math.min(100, Number(parsed.score) || 50))
+  const score = (confidence === "low" && rawScore > 55) ? 55 : rawScore
+  const manipulation = Boolean(parsed.manipulationDetected)
   const weaknessTexts = Array.isArray(parsed.weaknesses) ? parsed.weaknesses.map(String) : []
   const strengthTexts = Array.isArray(parsed.strengths) ? parsed.strengths.map(String) : []
   const needsManual = manipulation || confidence === "low"
