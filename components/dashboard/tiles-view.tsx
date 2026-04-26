@@ -84,7 +84,8 @@ export function TilesView({ columns, settings, onOpenProfile, onAction }: TilesV
         return (
           <div
             key={candidate.id}
-            className="rounded-xl border border-border bg-card transition-all duration-200 overflow-hidden"
+            className="rounded-xl border border-border bg-card transition-all duration-200 overflow-hidden cursor-pointer hover:border-primary/40"
+            onClick={() => onOpenProfile?.(candidate, candidate.columnId)}
           >
             {/* Color bar */}
             <div
@@ -180,7 +181,7 @@ export function TilesView({ columns, settings, onOpenProfile, onAction }: TilesV
 
               {/* Actions */}
               {settings.showActions && (
-                <div className="flex items-center gap-1 pt-2 border-t border-border/60">
+                <div className="flex items-center gap-1 pt-2 border-t border-border/60" onClick={(e) => e.stopPropagation()}>
                   {isDecisionStage ? (
                     <>
                       <Button variant="ghost" size="sm" className="flex-1 h-7 text-[11px] text-success hover:bg-success/10" onClick={() => onAction?.(candidate.id, candidate.columnId, "advance")}>

@@ -124,9 +124,10 @@ export function ListView({ columns, settings, onOpenProfile, onAction }: ListVie
             <div
               key={candidate.id}
               className={cn(
-                "grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1.5fr_auto] gap-4 px-4 items-center hover:bg-muted/40 transition-colors min-h-[56px] text-[14px]",
+                "grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1.5fr_auto] gap-4 px-4 items-center hover:bg-muted/40 transition-colors min-h-[56px] text-[14px] cursor-pointer",
                 i % 2 === 0 ? "" : "bg-muted/20"
               )}
+              onClick={() => onOpenProfile?.(candidate, candidate.columnId)}
             >
               {/* Name + experience */}
               <div className="flex items-center gap-3 min-w-0">
@@ -192,7 +193,7 @@ export function ListView({ columns, settings, onOpenProfile, onAction }: ListVie
 
               {/* Actions */}
               {settings.showActions && (
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                   {isDecisionStage ? (
                     <>
                       <Button variant="ghost" size="icon" className="h-7 w-7 text-success hover:bg-success/10" title="Принять" onClick={() => onAction?.(candidate.id, candidate.columnId, "advance")}>
