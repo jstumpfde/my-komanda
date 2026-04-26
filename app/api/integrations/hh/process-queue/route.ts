@@ -81,6 +81,21 @@ export async function POST(req: NextRequest) {
   const localVacancies = await db.select().from(vacancies).where(and(eq(vacancies.companyId, companyId), isNull(vacancies.deletedAt)))
   stopFlags.set(companyId, false)
 
+  // Карта остановленных кандидатов: skip auto-processing для них
+  const linkedCandidateIds = newResponses
+    .map(r => r.localCandidateId)
+    .filter((v): v is string => !!v)
+  const stoppedCandidateIds = new Set<string>()
+  if (linkedCandidateIds.length > 0) {
+    const stoppedRows = await db
+      .select({ id: candidates.id })
+      .from(candidates)
+      .where(eq(candidates.autoProcessingStopped, true))
+    for (const row of stoppedRows) {
+      if (linkedCandidateIds.includes(row.id)) stoppedCandidateIds.add(row.id)
+    }
+  }
+
   const results: Array<{
     id: string
     name: string | null
@@ -98,6 +113,12 @@ export async function POST(req: NextRequest) {
     if (stopFlags.get(companyId)) {
       results.push({ id: resp.hhResponseId, name: resp.candidateName, action: "stopped" })
       break
+    }
+
+    if (resp.localCandidateId && stoppedCandidateIds.has(resp.localCandidateId)) {
+      console.log(`Skipping candidate ${resp.localCandidateId}: auto-processing stopped`)
+      results.push({ id: resp.hhResponseId, name: resp.candidateName, action: "auto_stopped" })
+      continue
     }
 
     const localVac = localVacancies.find(v => v.hhVacancyId === resp.hhVacancyId) || null

@@ -43,9 +43,21 @@ export async function PUT(
       return apiError("Candidate not found", 404)
     }
 
+    const stopAutoProcessing = stage === "rejected"
+
     const [updated] = await db
       .update(candidates)
-      .set({ stage, updatedAt: new Date() })
+      .set({
+        stage,
+        updatedAt: new Date(),
+        ...(stopAutoProcessing
+          ? {
+              autoProcessingStopped: true,
+              autoProcessingStoppedReason: "manual_rejection",
+              autoProcessingStoppedAt: new Date(),
+            }
+          : {}),
+      })
       .where(eq(candidates.id, id))
       .returning()
 

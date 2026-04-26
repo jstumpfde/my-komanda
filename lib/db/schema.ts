@@ -302,6 +302,9 @@ export const candidates = pgTable("candidates", {
   aiDetails: jsonb("ai_details"), // [{question, score, comment}]
   stageHistory: jsonb("stage_history").default("[]"), // [{stage, date, note}]
   isFavorite: boolean("is_favorite").notNull().default(false),
+  autoProcessingStopped: boolean("auto_processing_stopped").notNull().default(false),
+  autoProcessingStoppedReason: text("auto_processing_stopped_reason"),
+  autoProcessingStoppedAt: timestamp("auto_processing_stopped_at", { withTimezone: true }),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 })
