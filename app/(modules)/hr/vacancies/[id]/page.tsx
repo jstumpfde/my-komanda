@@ -12,7 +12,6 @@ import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { KanbanBoard, type ViewMode } from "@/components/dashboard/kanban-board"
 import { CardSettings, type CardDisplaySettings } from "@/components/dashboard/card-settings"
 import { CandidateFilters, type FilterState } from "@/components/dashboard/candidate-filters"
-import { CandidateProfile } from "@/components/dashboard/candidate-profile"
 import { CandidateDrawer } from "@/components/candidates/candidate-drawer"
 import { AddCandidateDialog } from "@/components/dashboard/add-candidate-dialog"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
@@ -371,8 +370,6 @@ export default function VacancyPage() {
   const [viewMode, setViewMode] = useState<ViewMode>("kanban")
   const [cardSettings, setCardSettings] = useState(defaultSettings)
   const [filters, setFilters] = useState<FilterState>({ searchText: "", cities: [], salaryMin: 0, salaryMax: 250000, scoreMin: 0, sources: [], workFormats: [], relocation: "any", businessTrips: "any", experienceMin: 0, experienceMax: 20, funnelStatuses: [], demoProgress: [], dateRange: "", dateFrom: "", dateTo: "", ageMin: 18, ageMax: 65, education: [], languages: [], otherLanguages: [], skills: [], industries: [] })
-  const [profileCandidate, setProfileCandidate] = useState<Candidate | null>(null)
-  const [profileColumnId, setProfileColumnId] = useState<string | null>(null)
   const [drawerCandidateId, setDrawerCandidateId] = useState<string | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [addDialogOpen, setAddDialogOpen] = useState(false)
@@ -1573,9 +1570,6 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                     // Open the candidate drawer with real API data
                     setDrawerCandidateId(c.id)
                     setDrawerOpen(true)
-                    // Also keep profile state for CandidateProfile fallback
-                    setProfileCandidate(c)
-                    setProfileColumnId(colId)
                   }}
                   onAction={handleAction}
                   hideViewSwitcher
@@ -2526,22 +2520,6 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
         }}
       />
 
-      {/* Legacy CandidateProfile sheet (kept for backward compat) */}
-      {(() => {
-        const col = profileColumnId ? columns.find((c) => c.id === profileColumnId) : null
-        return (
-          <CandidateProfile
-            candidate={drawerOpen ? null : profileCandidate}
-            columnId={profileColumnId ?? undefined}
-            columnTitle={col?.title}
-            columnColorFrom={col?.colorFrom}
-            columnColorTo={col?.colorTo}
-            open={!drawerOpen && !!profileCandidate}
-            onOpenChange={(open) => { if (!open) { setProfileCandidate(null); setProfileColumnId(null) } }}
-            onAction={handleAction}
-          />
-        )
-      })()}
     </SidebarProvider>
   )
 }
