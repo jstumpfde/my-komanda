@@ -31,13 +31,12 @@ import { Slider } from "@/components/ui/slider"
 import { Input } from "@/components/ui/input"
 import { Plus, Clock, Pause, Play, Archive, RotateCcw, Trash2, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, Zap, Globe, AlertTriangle, TrendingUp, Calendar, MapPin, DollarSign, Filter, X, Link2, Copy, Save, Sparkles, Eye, Check, Loader2, Download, ExternalLink, ClipboardList, ChevronLeft, ChevronRight, ChevronDown, CheckCircle2, XCircle, Users, Phone, Upload, RefreshCw } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
 import { defaultColumnColors, type CandidateAction, getNextColumnId, PROGRESS_BY_COLUMN } from "@/lib/column-config"
 import type { Candidate } from "@/components/dashboard/candidate-card"
 import { HhVacancyBanner } from "@/components/vacancies/hh-vacancy-banner"
-import { VacancyPulse } from "@/components/vacancies/vacancy-pulse"
 import { AutomationSettings } from "@/components/vacancies/automation-settings"
 import { PublishTab } from "@/components/vacancies/publish-tab"
 import { MiniFormBuilder } from "@/components/vacancies/mini-form-builder"
@@ -1257,82 +1256,86 @@ export default function VacancyPage() {
                 />
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                {status === "draft" && <>
-                  <Button size="sm" className="h-8 gap-1.5 text-xs" onClick={() => { updateVacancyStatus("active"); toast.success("Вакансия запущена") }}><Play className="size-3.5" />Запустить</Button>
-                  <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs text-muted-foreground" onClick={() => { updateVacancyStatus("closed_cancelled"); toast("В архив") }}><Archive className="size-3.5" />В архив</Button>
-                </>}
-                {status === "active" && <>
-                  <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs text-destructive" onClick={() => { updateVacancyStatus("paused"); toast.warning("Вакансия приостановлена") }}><Pause className="size-3.5" />Остановить</Button>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs"><X className="size-3.5" />Закрыть вакансию<ChevronDown className="size-3 ml-0.5 opacity-50" /></Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => { updateVacancyStatus("closed_success"); toast.success("Вакансия закрыта — кандидат найден") }}><CheckCircle2 className="size-3.5 text-blue-600" />Кандидат найден</DropdownMenuItem>
-                      <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => { updateVacancyStatus("closed_cancelled"); toast.warning("Вакансия отменена") }}><XCircle className="size-3.5 text-red-600" />Отменить вакансию</DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </>}
-                {status === "paused" && <>
-                  <Button size="sm" className="h-8 gap-1.5 text-xs" onClick={() => { updateVacancyStatus("active"); toast.success("Вакансия запущена") }}><Play className="size-3.5" />Запустить</Button>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs"><X className="size-3.5" />Закрыть вакансию<ChevronDown className="size-3 ml-0.5 opacity-50" /></Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => { updateVacancyStatus("closed_success"); toast.success("Вакансия закрыта — кандидат найден") }}><CheckCircle2 className="size-3.5 text-blue-600" />Кандидат найден</DropdownMenuItem>
-                      <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => { updateVacancyStatus("closed_cancelled"); toast.warning("Вакансия отменена") }}><XCircle className="size-3.5 text-red-600" />Отменить вакансию</DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                  <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs text-muted-foreground" onClick={() => { updateVacancyStatus("closed_cancelled"); toast("В архив") }}><Archive className="size-3.5" />В архив</Button>
-                </>}
-                {(status === "closed_success" || status === "closed_cancelled") && null}
-                <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs text-muted-foreground" disabled={duplicating} onClick={handleDuplicate}>
-                  {duplicating ? <Loader2 className="size-3.5 animate-spin" /> : <Copy className="size-3.5" />}Создать похожую
-                </Button>
-                {apiCandidates.length > 0 && <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs text-muted-foreground" onClick={() => {
-                  const stageLabels: Record<string, string> = { new: "Новые", demo: "Демо", decision: "Решение", interview: "Интервью", final_decision: "Финал", hired: "Наняты", rejected: "Отказ" }
-                  const stageCounts: Record<string, number> = {}
-                  for (const c of apiCandidates) { const s = c.stage || "new"; stageCounts[s] = (stageCounts[s] || 0) + 1 }
-                  const topCandidates = apiCandidates.filter(c => c.aiScore != null).sort((a, b) => (b.aiScore ?? 0) - (a.aiScore ?? 0)).slice(0, 10)
-                  const html = `<html><head><title>Отчёт: ${vacancyTitle}</title><style>body{font-family:system-ui;max-width:800px;margin:40px auto;padding:0 20px;color:#1a1a1a}h1{font-size:22px}h2{font-size:16px;margin-top:24px}table{width:100%;border-collapse:collapse;margin:12px 0}td,th{border:1px solid #ddd;padding:8px;text-size:13px;text-align:left}th{background:#f5f5f5}.bar{height:16px;background:#6366f1;border-radius:4px}@media print{body{margin:20px}}</style></head><body>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs">
+                      Действия<ChevronDown className="size-3 ml-0.5 opacity-50" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    {status === "active" && (
+                      <DropdownMenuItem className="gap-2 cursor-pointer text-destructive focus:text-destructive" onClick={() => { updateVacancyStatus("paused"); toast.warning("Вакансия приостановлена") }}>
+                        <Pause className="size-3.5" />Остановить
+                      </DropdownMenuItem>
+                    )}
+                    {(status === "draft" || status === "paused") && (
+                      <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => { updateVacancyStatus("active"); toast.success("Вакансия запущена") }}>
+                        <Play className="size-3.5" />Запустить
+                      </DropdownMenuItem>
+                    )}
+                    {(status === "draft" || status === "paused") && (
+                      <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => { updateVacancyStatus("closed_cancelled"); toast("В архив") }}>
+                        <Archive className="size-3.5" />В архив
+                      </DropdownMenuItem>
+                    )}
+                    {(status === "active" || status === "draft" || status === "paused") && <DropdownMenuSeparator />}
+                    <DropdownMenuItem className="gap-2 cursor-pointer" disabled={duplicating} onClick={handleDuplicate}>
+                      {duplicating ? <Loader2 className="size-3.5 animate-spin" /> : <Copy className="size-3.5" />}Создать похожую
+                    </DropdownMenuItem>
+                    {apiCandidates.length > 0 && (
+                      <DropdownMenuItem className="gap-2 cursor-pointer" onClick={async () => {
+                        const XLSX = (await import("xlsx")).default
+                        const data = apiCandidates.map(c => ({
+                          "Имя": c.name,
+                          "Email": c.email || "",
+                          "Телефон": c.phone || "",
+                          "Город": c.city || "",
+                          "Источник": c.source || "",
+                          "Этап": c.stage || "",
+                          "AI-скор": c.aiScore ?? "",
+                          "Вердикт": c.aiScore != null ? (c.aiScore >= 70 ? "подходит" : c.aiScore >= 40 ? "возможно" : "не подходит") : "",
+                          "Дата": c.createdAt ? new Date(c.createdAt).toLocaleDateString("ru-RU") : "",
+                        }))
+                        const ws = XLSX.utils.json_to_sheet(data)
+                        const wb = XLSX.utils.book_new()
+                        XLSX.utils.book_append_sheet(wb, ws, "Кандидаты")
+                        XLSX.writeFile(wb, `кандидаты-${vacancyTitle}.xlsx`)
+                        toast.success("Экспорт готов")
+                      }}>
+                        <Download className="size-3.5" />Экспорт Excel
+                      </DropdownMenuItem>
+                    )}
+                    {apiCandidates.length > 0 && (
+                      <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => {
+                        const stageLabels: Record<string, string> = { new: "Новые", demo: "Демо", decision: "Решение", interview: "Интервью", final_decision: "Финал", hired: "Наняты", rejected: "Отказ" }
+                        const stageCounts: Record<string, number> = {}
+                        for (const c of apiCandidates) { const s = c.stage || "new"; stageCounts[s] = (stageCounts[s] || 0) + 1 }
+                        const topCandidates = apiCandidates.filter(c => c.aiScore != null).sort((a, b) => (b.aiScore ?? 0) - (a.aiScore ?? 0)).slice(0, 10)
+                        const html = `<html><head><title>Отчёт: ${vacancyTitle}</title><style>body{font-family:system-ui;max-width:800px;margin:40px auto;padding:0 20px;color:#1a1a1a}h1{font-size:22px}h2{font-size:16px;margin-top:24px}table{width:100%;border-collapse:collapse;margin:12px 0}td,th{border:1px solid #ddd;padding:8px;text-size:13px;text-align:left}th{background:#f5f5f5}.bar{height:16px;background:#6366f1;border-radius:4px}@media print{body{margin:20px}}</style></head><body>
 <h1>${vacancyTitle}</h1><p>Статус: ${status} | Город: ${apiVacancy?.city || "—"} | ЗП: ${apiVacancy?.salaryMin ? apiVacancy.salaryMin.toLocaleString("ru") : "—"} — ${apiVacancy?.salaryMax ? apiVacancy.salaryMax.toLocaleString("ru") : "—"} ₽</p>
 <h2>Воронка (${apiCandidates.length} кандидатов)</h2><table><tr><th>Этап</th><th>Кол-во</th></tr>${Object.entries(stageCounts).map(([s, n]) => `<tr><td>${stageLabels[s] || s}</td><td>${n}</td></tr>`).join("")}</table>
 ${topCandidates.length > 0 ? `<h2>Топ кандидаты</h2><table><tr><th>Имя</th><th>AI-скор</th><th>Этап</th><th>Источник</th></tr>${topCandidates.map(c => `<tr><td>${c.name}</td><td>${c.aiScore}</td><td>${stageLabels[c.stage || "new"] || c.stage}</td><td>${c.source || "—"}</td></tr>`).join("")}</table>` : ""}
 ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
 <p style="color:#999;font-size:11px;margin-top:40px">Сгенерировано Company24.pro</p></body></html>`
-                  const w = window.open("", "_blank")
-                  if (w) { w.document.write(html); w.document.close(); w.print() }
-                }}>
-                  <Download className="size-3.5" />Отчёт PDF
-                </Button>}
-                {apiCandidates.length > 0 && <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs text-muted-foreground" onClick={async () => {
-                  const XLSX = (await import("xlsx")).default
-                  const data = apiCandidates.map(c => ({
-                    "Имя": c.name,
-                    "Email": c.email || "",
-                    "Телефон": c.phone || "",
-                    "Город": c.city || "",
-                    "Источник": c.source || "",
-                    "Этап": c.stage || "",
-                    "AI-скор": c.aiScore ?? "",
-                    "Вердикт": c.aiScore != null ? (c.aiScore >= 70 ? "подходит" : c.aiScore >= 40 ? "возможно" : "не подходит") : "",
-                    "Дата": c.createdAt ? new Date(c.createdAt).toLocaleDateString("ru-RU") : "",
-                  }))
-                  const ws = XLSX.utils.json_to_sheet(data)
-                  const wb = XLSX.utils.book_new()
-                  XLSX.utils.book_append_sheet(wb, ws, "Кандидаты")
-                  XLSX.writeFile(wb, `кандидаты-${vacancyTitle}.xlsx`)
-                  toast.success("Экспорт готов")
-                }}>
-                  <Download className="size-3.5" />Экспорт Excel
-                </Button>}
+                        const w = window.open("", "_blank")
+                        if (w) { w.document.write(html); w.document.close(); w.print() }
+                      }}>
+                        <Download className="size-3.5" />Отчёт PDF
+                      </DropdownMenuItem>
+                    )}
+                    {(status === "active" || status === "paused") && <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem className="gap-2 cursor-pointer text-destructive focus:text-destructive" onClick={() => { updateVacancyStatus("closed_cancelled"); toast.warning("Вакансия отменена") }}>
+                        <X className="size-3.5" />Закрыть вакансию
+                      </DropdownMenuItem>
+                    </>}
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </div>
 
-            {/* ═══ Шапка: Пульт (active/paused/closed) или Готовность (draft) ══ */}
-            {status === "draft" ? (
-              healthScore !== null && (
+            {/* ═══ Шапка: Готовность (только для draft) ══ */}
+            {status === "draft" && healthScore !== null && (
               <div className="mb-4 rounded-lg border p-3">
                 <div className="flex items-center gap-3 mb-2">
                   <div className="flex-1">
@@ -1382,20 +1385,6 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                   </div>
                 )}
               </div>
-              )
-            ) : (
-              <VacancyPulse
-                vacancyId={id}
-                hhVacancyId={apiVacancy?.hhVacancyId ?? null}
-                vacancyTitle={apiVacancy?.title ?? ""}
-                createdAt={apiVacancy?.createdAt ?? null}
-                localCandidatesCount={totalCandidates}
-                inDemoCount={apiCandidates.filter(c => c.demoProgressJson != null).length}
-                connected={hhConnected}
-                hhMeta={hhSyncMeta}
-                pendingCount={hhPendingResponses}
-                onSyncDone={() => { refetchCandidates(); refetchVacancy() }}
-              />
             )}
 
             {/* ═══ ТАБЫ + ВИД в одной строке ══════════════════ */}
@@ -1612,6 +1601,14 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
 
                 {/* AI Screening toolbar */}
                 <div className="flex items-center gap-2 mb-3">
+                  <span className="text-sm text-muted-foreground shrink-0">
+                    <span className="font-medium text-foreground">{hhSyncMeta?.responsesCount ?? apiCandidates.length}</span> откликов
+                    <span className="mx-1.5">·</span>
+                    <span className={cn("font-medium", (hhPendingResponses ?? 0) > 0 ? "text-amber-700" : "text-foreground")}>{hhPendingResponses ?? 0}</span> необраб.
+                    <span className="mx-1.5">·</span>
+                    <span className="font-medium text-foreground">{apiCandidates.filter(c => c.demoProgressJson != null).length}</span> в демо
+                  </span>
+                  <div className="h-5 w-px bg-border mx-1 shrink-0" />
                   <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs" onClick={screenAllNew} disabled={bulkScreening}>
                     {bulkScreening ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
                     {bulkScreening ? "Скрининг..." : "AI-оценить новых"}
