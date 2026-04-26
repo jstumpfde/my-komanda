@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import type { CandidateAction } from "@/lib/column-config"
+import { applySortMode, type CandidateSortMode } from "@/lib/candidate-sort"
 import { MapPin, CheckCircle2, XCircle, ArrowRight, ThumbsUp, Clock, ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react"
 
 type SortKey = "score" | "salaryMin" | "city" | "columnTitle" | "source"
@@ -25,9 +26,10 @@ interface ListViewProps {
   settings: CardDisplaySettings
   onOpenProfile?: (candidate: Candidate, columnId: string) => void
   onAction?: (candidateId: string, columnId: string, action: CandidateAction) => void
+  sortMode?: CandidateSortMode
 }
 
-export function ListView({ columns, settings, onOpenProfile, onAction }: ListViewProps) {
+export function ListView({ columns, settings, onOpenProfile, onAction, sortMode = "date_desc" }: ListViewProps) {
   const [sortKey, setSortKey] = useState<SortKey | null>(null)
   const [sortDir, setSortDir] = useState<SortDir>("asc")
 
@@ -45,12 +47,12 @@ export function ListView({ columns, settings, onOpenProfile, onAction }: ListVie
     return sortDir === "asc" ? <ChevronUp className="size-3" /> : <ChevronDown className="size-3" />
   }
 
-  const rawCandidates = columns.flatMap((col) =>
+  const rawCandidates = useMemo(() => columns.flatMap((col) =>
     col.candidates.map((c) => ({ ...c, columnId: col.id, columnTitle: col.title, colorFrom: col.colorFrom, colorTo: col.colorTo }))
-  )
+  ), [columns])
 
   const allCandidates = useMemo(() => {
-    if (!sortKey) return rawCandidates
+    if (!sortKey) return applySortMode(rawCandidates, sortMode) as typeof rawCandidates
     return [...rawCandidates].sort((a, b) => {
       let aVal: string | number = ""
       let bVal: string | number = ""
@@ -67,7 +69,7 @@ export function ListView({ columns, settings, onOpenProfile, onAction }: ListVie
         ? String(aVal).localeCompare(String(bVal), "ru")
         : String(bVal).localeCompare(String(aVal), "ru")
     })
-  }, [rawCandidates, sortKey, sortDir])
+  }, [rawCandidates, sortKey, sortDir, sortMode])
 
   const getScoreColor = (score: number) => {
     if (score >= 80) return "bg-success/10 text-success border-success/20"

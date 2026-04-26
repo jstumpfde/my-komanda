@@ -7,7 +7,8 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import type { CandidateAction } from "@/lib/column-config"
-import { MapPin, Briefcase, Circle, CheckCircle2, XCircle, ArrowRight, ThumbsUp, Clock } from "lucide-react"
+import { applySortMode, type CandidateSortMode } from "@/lib/candidate-sort"
+import { MapPin, Briefcase, Circle, CheckCircle2, XCircle, ArrowRight, ThumbsUp } from "lucide-react"
 
 interface Column {
   id: string
@@ -22,6 +23,7 @@ interface TilesViewProps {
   settings: CardDisplaySettings
   onOpenProfile?: (candidate: Candidate, columnId: string) => void
   onAction?: (candidateId: string, columnId: string, action: CandidateAction) => void
+  sortMode?: CandidateSortMode
 }
 
 function formatTimeAgo(date: Date) {
@@ -52,20 +54,19 @@ function getSourceColor(source: string) {
   return colors[source] || "bg-muted text-muted-foreground border-border"
 }
 
-export function TilesView({ columns, settings, onOpenProfile, onAction }: TilesViewProps) {
+export function TilesView({ columns, settings, onOpenProfile, onAction, sortMode = "date_desc" }: TilesViewProps) {
   const allCandidates = useMemo(() => {
-    return columns
-      .flatMap((col) =>
-        col.candidates.map((c) => ({
-          ...c,
-          columnId: col.id,
-          columnTitle: col.title,
-          colorFrom: col.colorFrom,
-          colorTo: col.colorTo,
-        }))
-      )
-      .sort((a, b) => b.score - a.score) // Sort by AI score descending
-  }, [columns])
+    const flat = columns.flatMap((col) =>
+      col.candidates.map((c) => ({
+        ...c,
+        columnId: col.id,
+        columnTitle: col.title,
+        colorFrom: col.colorFrom,
+        colorTo: col.colorTo,
+      }))
+    )
+    return applySortMode(flat, sortMode) as typeof flat
+  }, [columns, sortMode])
 
   if (allCandidates.length === 0) {
     return (

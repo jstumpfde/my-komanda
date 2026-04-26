@@ -12,6 +12,8 @@ import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { KanbanBoard, type ViewMode } from "@/components/dashboard/kanban-board"
 import { CardSettings, type CardDisplaySettings } from "@/components/dashboard/card-settings"
 import { CandidateFilters, type FilterState } from "@/components/dashboard/candidate-filters"
+import { SortMenu } from "@/components/dashboard/sort-menu"
+import type { CandidateSortMode } from "@/lib/candidate-sort"
 import { CandidateDrawer } from "@/components/candidates/candidate-drawer"
 import { AddCandidateDialog } from "@/components/dashboard/add-candidate-dialog"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
@@ -377,6 +379,7 @@ export default function VacancyPage() {
     }))
   }, [apiCandidates])
   const [viewMode, setViewMode] = useState<ViewMode>("kanban")
+  const [sortMode, setSortMode] = useState<CandidateSortMode>("date_desc")
   const [cardSettings, setCardSettings] = useState(defaultSettings)
   const [filters, setFilters] = useState<FilterState>({ searchText: "", cities: [], salaryMin: 0, salaryMax: 250000, scoreMin: 0, sources: [], workFormats: [], relocation: "any", businessTrips: "any", experienceMin: 0, experienceMax: 20, funnelStatuses: [], demoProgress: [], dateRange: "", dateFrom: "", dateTo: "", ageMin: 18, ageMax: 65, education: [], languages: [], otherLanguages: [], skills: [], industries: [] })
   const [drawerCandidateId, setDrawerCandidateId] = useState<string | null>(null)
@@ -1425,6 +1428,7 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                 {activeTab === "candidates" && (
                   <div className="flex items-center gap-2 shrink-0">
                     <CandidateFilters filters={filters} onFiltersChange={setFilters} candidates={columns.flatMap((c) => c.candidates)} />
+                    <SortMenu sortMode={sortMode} onSortChange={setSortMode} />
                     <CardSettings settings={cardSettings} onSettingsChange={setCardSettings} />
                     <div className="flex items-center bg-muted rounded-lg p-0.5 gap-0.5">
                       {([
@@ -1673,6 +1677,7 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                   hideViewSwitcher
                   onAddCustomColumn={handleAddCustomColumn}
                   onRemoveColumn={handleRemoveColumn}
+                  sortMode={sortMode}
                 />
               </TabsContent>
 
