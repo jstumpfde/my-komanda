@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk"
 import { AI_SAFETY_PROMPT } from "@/lib/ai-safety"
+import { getClaudeApiUrl } from "@/lib/claude-proxy"
 
 export interface ScreeningResult {
   score: number
@@ -43,7 +44,7 @@ export interface ScreenInput {
   }
 }
 
-const client = new Anthropic()
+const client = new Anthropic({ baseURL: getClaudeApiUrl() })
 
 const SYSTEM_PROMPT = `Ты — AI-рекрутер. Сравни данные кандидата с требованиями вакансии и дай оценку.
 

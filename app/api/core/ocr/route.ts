@@ -2,6 +2,7 @@ import { NextRequest } from "next/server"
 import { db } from "@/lib/db"
 import { knowledgeArticles } from "@/lib/db/schema"
 import { apiError, apiSuccess, requireCompany } from "@/lib/api-helpers"
+import { getClaudeMessagesUrl } from "@/lib/claude-proxy"
 
 // POST /api/core/ocr
 //
@@ -34,7 +35,6 @@ const VALID_TARGETS: Set<TargetModule> = new Set([
 ])
 
 const CLAUDE_MODEL = "claude-sonnet-4-20250514"
-const CLAUDE_VISION_URL = "https://api.anthropic.com/v1/messages"
 
 const OCR_SYSTEM_PROMPT =
   "Извлеки весь текст из изображения. Сохрани структуру: заголовки, списки, таблицы. " +
@@ -101,7 +101,7 @@ async function callClaudeVision(
         },
       }
 
-  const res = await fetch(CLAUDE_VISION_URL, {
+  const res = await fetch(getClaudeMessagesUrl(), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

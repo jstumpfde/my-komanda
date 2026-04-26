@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server"
 import { apiError, apiSuccess, requireCompany } from "@/lib/api-helpers"
+import { getClaudeMessagesUrl } from "@/lib/claude-proxy"
 
 // POST /api/core/generate
 //
@@ -9,7 +10,6 @@ import { apiError, apiSuccess, requireCompany } from "@/lib/api-helpers"
 // components/editor/types.ts (Block[]).
 
 const CLAUDE_MODEL = "claude-sonnet-4-20250514"
-const CLAUDE_URL = "https://api.anthropic.com/v1/messages"
 
 type TargetModule = "knowledge" | "learning" | "hr" | "crm"
 const VALID_TARGETS: Set<TargetModule> = new Set([
@@ -51,7 +51,7 @@ async function callClaude(
     `Модуль назначения: ${targetModule || "общий"}\n\n` +
     `Запрос:\n${prompt}`
 
-  const res = await fetch(CLAUDE_URL, {
+  const res = await fetch(getClaudeMessagesUrl(), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
