@@ -25,6 +25,7 @@ import {
   Calendar,
   Loader2,
   Send,
+  MessageSquare,
   MessageSquarePlus,
   Clock,
   Sparkles,
@@ -415,10 +416,11 @@ export function CandidateDrawer({
 
           return (
             <Tabs defaultValue="contacts" className="flex-1 flex flex-col min-h-0">
-              <TabsList className="grid grid-cols-4 mx-6 mt-3 shrink-0">
+              <TabsList className="grid grid-cols-5 mx-6 mt-3 shrink-0">
                 <TabsTrigger value="contacts" className="text-xs">Контакты</TabsTrigger>
                 <TabsTrigger value="demo" className="text-xs">Демо</TabsTrigger>
                 <TabsTrigger value="answers" className="text-xs">Ответы</TabsTrigger>
+                <TabsTrigger value="chat" className="text-xs">Чат</TabsTrigger>
                 <TabsTrigger value="history" className="text-xs">История</TabsTrigger>
               </TabsList>
 
@@ -686,6 +688,81 @@ export function CandidateDrawer({
                       Кандидат не отвечал на вопросы
                     </p>
                   )}
+                </TabsContent>
+
+                {/* ── Чат ────────────────────────────────────────── */}
+                <TabsContent value="chat" className="px-6 py-4 mt-0">
+                  <div className="space-y-3">
+                    {/* hh-сообщения */}
+                    <div className="rounded-lg border border-border/60 p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-full bg-red-500/10 flex items-center justify-center text-red-500 text-xs font-semibold">hh</div>
+                          <div>
+                            <p className="text-sm font-medium text-foreground">HeadHunter</p>
+                            <p className="text-[11px] text-muted-foreground">Сообщения отклика</p>
+                          </div>
+                        </div>
+                        <span className="text-[10px] text-muted-foreground/60 px-2 py-0.5 rounded-full bg-muted/40">скоро</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground italic">Здесь будет переписка из hh.ru — отклик кандидата, ответы, приглашения и отказы</p>
+                    </div>
+
+                    {/* Telegram */}
+                    <div className="rounded-lg border border-border/60 p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-full bg-sky-500/10 flex items-center justify-center text-sky-500">
+                            <Send className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-foreground">Telegram</p>
+                            <p className="text-[11px] text-muted-foreground">Личное общение</p>
+                          </div>
+                        </div>
+                        <span className="text-[10px] text-muted-foreground/60 px-2 py-0.5 rounded-full bg-muted/40">скоро</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground italic">Когда кандидат напишет нам в Telegram — переписка появится здесь</p>
+                    </div>
+
+                    {/* WhatsApp */}
+                    <div className="rounded-lg border border-border/60 p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-500">
+                            <MessageSquare className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-foreground">WhatsApp</p>
+                            <p className="text-[11px] text-muted-foreground">Бизнес-чат</p>
+                          </div>
+                        </div>
+                        <span className="text-[10px] text-muted-foreground/60 px-2 py-0.5 rounded-full bg-muted/40">скоро</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground italic">WhatsApp Business API — для коротких уточнений и приглашений</p>
+                    </div>
+
+                    {/* Email */}
+                    <div className="rounded-lg border border-border/60 p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-full bg-blue-500/10 flex items-center justify-center text-blue-500">
+                            <Mail className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-foreground">Email</p>
+                            <p className="text-[11px] text-muted-foreground">Корпоративная почта</p>
+                          </div>
+                        </div>
+                        <span className="text-[10px] text-muted-foreground/60 px-2 py-0.5 rounded-full bg-muted/40">скоро</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground italic">Отправка офферов, документов и приглашений</p>
+                    </div>
+
+                    <p className="text-[11px] text-center text-muted-foreground/60 pt-2">
+                      Все каналы общения с кандидатом в одном месте
+                    </p>
+                  </div>
                 </TabsContent>
 
                 {/* ── История ──────────────────────────────────────── */}
