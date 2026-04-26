@@ -58,6 +58,7 @@ interface CandidateCardProps {
 export function CandidateCard({ candidate, settings, columnId, isLastColumn, onOpenProfile, onAction, onToggleFavorite }: CandidateCardProps) {
   const isDecisionColumn = columnId === "decision" || columnId === "final_decision"
   const isInterviewColumn = columnId === "interview"
+  const aiActuallyRan = candidate.aiScore != null && !!candidate.aiSummary
 
   const getScoreColor = (score: number) => {
     if (score >= 80) return "bg-success/10 text-success border-success/20"
@@ -95,14 +96,14 @@ export function CandidateCard({ candidate, settings, columnId, isLastColumn, onO
     >
       {/* Top-right cluster: ★ favorite + score badge */}
       <div className="absolute top-2 right-2 flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-        {settings.showScore && (
+        {settings.showScore && candidate.aiScore != null && (
           <span
             className={cn(
               "rounded-md px-1.5 h-5 text-xs font-bold inline-flex items-center justify-center",
-              getScoreColor(candidate.score)
+              aiActuallyRan ? getScoreColor(candidate.aiScore) : "text-muted-foreground/50 bg-muted/30"
             )}
           >
-            {candidate.score}
+            {aiActuallyRan ? candidate.aiScore : "—"}
           </span>
         )}
         {onToggleFavorite && (
@@ -128,24 +129,26 @@ export function CandidateCard({ candidate, settings, columnId, isLastColumn, onO
         (settings.showScore || onToggleFavorite) && "pr-14"
       )}>{candidate.name}</p>
 
-      {/* Demo progress bar */}
+      {/* Demo progress bar — always visible */}
       {(() => {
         const dp = candidate.demoProgressJson
-        if (!dp || !Array.isArray(dp.blocks)) return null
-        const completed = dp.blocks.filter((b) => b?.status === "completed").length
-        const total = dp.totalBlocks ?? dp.blocks.length
+        const hasData = dp && Array.isArray(dp.blocks)
+        const completed = hasData ? dp.blocks!.filter((b) => b?.status === "completed").length : 0
+        const total = hasData ? (dp.totalBlocks ?? dp.blocks!.length) : 0
         const pct = total > 0 ? Math.round((completed / total) * 100) : 0
-        const barColor =
-          pct === 0 ? "bg-muted-foreground/30"
+        const barColor = !hasData
+          ? "bg-muted-foreground/20"
+          : pct === 0 ? "bg-muted-foreground/30"
           : pct < 50 ? "bg-orange-500"
           : pct < 100 ? "bg-emerald-500"
           : "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]"
+        const label = !hasData ? "Не начато" : `${completed}/${total} · ${pct}%`
         return (
           <div className="mt-1.5 mb-1">
             <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
-              <div className={cn("h-full rounded-full transition-all", barColor)} style={{ width: `${pct}%` }} />
+              <div className={cn("h-full rounded-full transition-all", barColor)} style={{ width: hasData ? `${pct}%` : "0%" }} />
             </div>
-            <p className="text-xs text-muted-foreground mt-0.5">{completed}/{total} · {pct}%</p>
+            <p className="text-xs text-muted-foreground mt-0.5">{label}</p>
           </div>
         )
       })()}
