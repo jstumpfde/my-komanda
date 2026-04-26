@@ -38,6 +38,7 @@ import { toast } from "sonner"
 import { defaultColumnColors, type CandidateAction, getNextColumnId, PROGRESS_BY_COLUMN } from "@/lib/column-config"
 import type { Candidate } from "@/components/dashboard/candidate-card"
 import { HhVacancyBanner } from "@/components/vacancies/hh-vacancy-banner"
+import { VacancyPulse } from "@/components/vacancies/vacancy-pulse"
 import { AutomationSettings } from "@/components/vacancies/automation-settings"
 import { PublishTab } from "@/components/vacancies/publish-tab"
 import { MiniFormBuilder } from "@/components/vacancies/mini-form-builder"
@@ -1253,8 +1254,9 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
               </div>
             </div>
 
-            {/* ═══ Health check ══════════════════════════════ */}
-            {healthScore !== null && (
+            {/* ═══ Шапка: Пульт (active/paused/closed) или Готовность (draft) ══ */}
+            {status === "draft" ? (
+              healthScore !== null && (
               <div className="mb-4 rounded-lg border p-3">
                 <div className="flex items-center gap-3 mb-2">
                   <div className="flex-1">
@@ -1304,6 +1306,17 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                   </div>
                 )}
               </div>
+              )
+            ) : (
+              <VacancyPulse
+                vacancyId={id}
+                hhVacancyId={apiVacancy?.hhVacancyId ?? null}
+                vacancyTitle={apiVacancy?.title ?? ""}
+                createdAt={apiVacancy?.createdAt ?? null}
+                localCandidatesCount={totalCandidates}
+                inDemoCount={apiCandidates.filter(c => c.demoProgressJson != null).length}
+                onSyncDone={() => { refetchCandidates(); refetchVacancy() }}
+              />
             )}
 
             {/* ═══ ТАБЫ + ВИД в одной строке ══════════════════ */}
@@ -1497,12 +1510,6 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
               </TabsContent>
 
               <TabsContent value="candidates">
-                <HhVacancyBanner
-                  vacancyId={id}
-                  hhVacancyId={apiVacancy?.hhVacancyId ?? null}
-                  vacancyTitle={apiVacancy?.title ?? ""}
-                  onCandidatesUpdated={refetchCandidates}
-                />
                 {/* Talent Pool radar */}
                 {talentMatches.length > 0 && !talentRadarHidden && (
                   <div className="mb-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
@@ -1528,7 +1535,7 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                 <div className="flex items-center gap-2 mb-3">
                   <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs" onClick={screenAllNew} disabled={bulkScreening}>
                     {bulkScreening ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-                    {bulkScreening ? "Скрининг..." : "Разобрать все новые"}
+                    {bulkScreening ? "Скрининг..." : "AI-оценить новых"}
                   </Button>
                   <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs" onClick={handleCompare}>
                     <BarChart3 className="w-3.5 h-3.5" />Сравнить топ
