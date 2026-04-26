@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import {
   Sheet,
   SheetContent,
@@ -194,7 +194,7 @@ export function CandidateDrawer({
   const [hhMessages, setHhMessages] = useState<HhMessage[]>([])
   const [hhLoading, setHhLoading] = useState(false)
   const [hhError, setHhError] = useState<string | null>(null)
-  const [hhFetched, setHhFetched] = useState(false)
+  const hhFetchRef = useRef<string | null>(null)
 
   // ── Fetch candidate details ───────────────────────────────────────────────
 
@@ -232,7 +232,7 @@ export function CandidateDrawer({
       setNotes([])
       setHhMessages([])
       setHhError(null)
-      setHhFetched(false)
+      hhFetchRef.current = null
       setActiveTab("contacts")
       fetchCandidate(candidateId)
       fetchNotes(candidateId)
@@ -242,11 +242,14 @@ export function CandidateDrawer({
   // ── Lazy-load hh messages when chat tab opens ─────────────────────────────
   useEffect(() => {
     const hhResponseId = candidate?.hhResponseId
-    if (activeTab !== "chat" || !hhResponseId || hhFetched || hhLoading) return
+    if (activeTab !== "chat" || !hhResponseId) return
+    if (hhFetchRef.current === hhResponseId) return
 
+    hhFetchRef.current = hhResponseId
     let cancelled = false
     setHhLoading(true)
     setHhError(null)
+
     ;(async () => {
       try {
         const res = await fetch(`/api/integrations/hh/messages/${hhResponseId}`)
@@ -260,15 +263,12 @@ export function CandidateDrawer({
       } catch (err) {
         if (!cancelled) setHhError(err instanceof Error ? err.message : "Сетевая ошибка")
       } finally {
-        if (!cancelled) {
-          setHhLoading(false)
-          setHhFetched(true)
-        }
+        if (!cancelled) setHhLoading(false)
       }
     })()
 
     return () => { cancelled = true }
-  }, [activeTab, candidate?.hhResponseId, hhFetched, hhLoading])
+  }, [activeTab, candidate?.hhResponseId])
 
   // ── Stage change ─────────────────────────────────────────────────────────
 
