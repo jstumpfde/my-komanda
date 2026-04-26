@@ -2,7 +2,7 @@
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Calendar, ArrowRight, Check, GraduationCap, X, Archive, Clock, Users } from "lucide-react"
+import { Calendar, Check, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { CardDisplaySettings } from "./card-settings"
 import type { CandidateAction } from "@/lib/column-config"
@@ -33,6 +33,11 @@ export interface Candidate {
   workFormat?: "office" | "remote" | "hybrid"
   age?: number
   birthDate?: Date | string
+  demoProgressJson?: {
+    blocks?: Array<{ blockId: string; status: string; timeSpent?: number; answer?: unknown }>
+    totalBlocks?: number
+    completedAt?: string | null
+  } | null
 }
 
 interface CandidateCardProps {
@@ -99,6 +104,28 @@ export function CandidateCard({ candidate, settings, columnId, isLastColumn, onO
 
       {/* Row 1: ФИО */}
       <p className={cn("font-medium text-base text-foreground", settings.showScore && "pr-10")}>{candidate.name}</p>
+
+      {/* Demo progress bar */}
+      {(() => {
+        const dp = candidate.demoProgressJson
+        if (!dp || !Array.isArray(dp.blocks)) return null
+        const completed = dp.blocks.filter((b) => b?.status === "completed").length
+        const total = dp.totalBlocks ?? dp.blocks.length
+        const pct = total > 0 ? Math.round((completed / total) * 100) : 0
+        const barColor =
+          pct === 0 ? "bg-muted-foreground/30"
+          : pct < 50 ? "bg-orange-500"
+          : pct < 100 ? "bg-emerald-500"
+          : "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]"
+        return (
+          <div className="mt-1.5 mb-1">
+            <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+              <div className={cn("h-full rounded-full transition-all", barColor)} style={{ width: `${pct}%` }} />
+            </div>
+            <p className="text-xs text-muted-foreground mt-0.5">{completed}/{total} · {pct}%</p>
+          </div>
+        )
+      })()}
 
       {/* Row 2: Город + Источник */}
       {(settings.showCity || settings.showSource) && (
@@ -183,36 +210,37 @@ export function CandidateCard({ candidate, settings, columnId, isLastColumn, onO
         </div>
       )}
 
-      {/* Action icons row */}
-      <div className="flex items-center justify-between gap-1 w-full pt-2 mt-2 border-t" onClick={(e) => e.stopPropagation()}>
-        {columnId === "final_decision" && (
-          <Button variant="ghost" className="w-9 h-9 rounded-full p-0 text-green-600 bg-green-50 border border-green-200 hover:bg-green-100 dark:bg-green-950 dark:border-green-800 dark:hover:bg-green-900" title="Нанять" onClick={() => onAction?.(candidate.id, columnId, "hire")}>
-            <Check className="w-5 h-5" />
+      {/* Action buttons row */}
+      <div className="flex items-center gap-2 w-full pt-2 mt-2 border-t" onClick={(e) => e.stopPropagation()}>
+        {columnId === "final_decision" ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="flex-1 gap-1.5 text-emerald-500 hover:text-emerald-600 hover:bg-emerald-500/10"
+            onClick={() => onAction?.(candidate.id, columnId, "hire")}
+          >
+            <Check className="w-4 h-4" />
+            Нанять
+          </Button>
+        ) : !isLastColumn && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="flex-1 gap-1.5 text-emerald-500 hover:text-emerald-600 hover:bg-emerald-500/10"
+            onClick={() => onAction?.(candidate.id, columnId, "advance")}
+          >
+            <Check className="w-4 h-4" />
+            Далее
           </Button>
         )}
-        {columnId !== "final_decision" && !isLastColumn && (
-          <Button variant="ghost" className="w-9 h-9 rounded-full p-0 text-green-600 bg-green-50 border border-green-200 hover:bg-green-100 dark:bg-green-950 dark:border-green-800 dark:hover:bg-green-900" title="Следующий этап" onClick={() => onAction?.(candidate.id, columnId, "advance")}>
-            <ArrowRight className="w-5 h-5" />
-          </Button>
-        )}
-        {columnId === "hired" && (
-          <Button variant="ghost" className="w-8 h-8 rounded-full p-0 text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-950" title="Онбординг" onClick={() => onAction?.(candidate.id, columnId, "onboarding")}>
-            <GraduationCap className="w-4 h-4" />
-          </Button>
-        )}
-        <Button variant="ghost" className="w-9 h-9 rounded-full p-0 text-red-600 bg-red-50 border border-red-200 hover:bg-red-100 dark:bg-red-950 dark:border-red-800 dark:hover:bg-red-900" title="Отказать" onClick={() => onAction?.(candidate.id, columnId, "reject")}>
-          <X className="w-5 h-5" />
-        </Button>
-        <Button variant="ghost" className="w-8 h-8 rounded-full p-0 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950" title="Резерв" onClick={() => onAction?.(candidate.id, columnId, "reserve")}>
-          <Archive className="w-4 h-4" />
-        </Button>
-        {(columnId === "decision" || columnId === "interview" || columnId === "final_decision") && (
-          <Button variant="ghost" className="w-8 h-8 rounded-full p-0 text-gray-600 hover:bg-gray-50 dark:hover:bg-gray-950" title="Подумать" onClick={() => onAction?.(candidate.id, columnId, "think")}>
-            <Clock className="w-4 h-4" />
-          </Button>
-        )}
-        <Button variant="ghost" className="w-8 h-8 rounded-full p-0 text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-950" title="Talent Pool" onClick={() => onAction?.(candidate.id, columnId, "talent_pool")}>
-          <Users className="w-4 h-4" />
+        <Button
+          variant="ghost"
+          size="sm"
+          className="flex-1 gap-1.5 text-red-500 hover:text-red-600 hover:bg-red-500/10"
+          onClick={() => onAction?.(candidate.id, columnId, "reject")}
+        >
+          <X className="w-4 h-4" />
+          Отказать
         </Button>
       </div>
     </div>

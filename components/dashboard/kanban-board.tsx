@@ -7,7 +7,7 @@ import { FunnelView } from "./funnel-view"
 import { TilesView } from "./tiles-view"
 import { ColumnColorPicker } from "./column-color-picker"
 import type { CardDisplaySettings } from "./card-settings"
-import { LayoutGrid, List, TrendingDown, Grid3X3, Plus, Minus } from "lucide-react"
+import { LayoutGrid, List, TrendingDown, Grid3X3, Plus, Minus, MonitorPlay, Clock, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -144,6 +144,20 @@ export function KanbanBoard({ settings, viewMode, onViewModeChange, columns = []
                         />
                       </div>
                     </div>
+                    {(() => {
+                      const cands = column.candidates || []
+                      if (cands.length === 0) return null
+                      const completed = cands.filter((c) => c.demoProgressJson?.completedAt != null).length
+                      const inProgress = cands.filter((c) => c.demoProgressJson != null && !c.demoProgressJson?.completedAt).length
+                      const notStarted = cands.filter((c) => c.demoProgressJson == null).length
+                      return (
+                        <div className="mt-1.5 flex items-center justify-center gap-2 text-xs text-muted-foreground flex-wrap">
+                          <span className="inline-flex items-center gap-1"><MonitorPlay className="w-3 h-3" /> {completed}</span>
+                          <span className="inline-flex items-center gap-1"><Clock className="w-3 h-3" /> {inProgress}</span>
+                          <span className="inline-flex items-center gap-1"><X className="w-3 h-3" /> {notStarted}</span>
+                        </div>
+                      )
+                    })()}
                     {/* Minus & Plus buttons on manageable columns */}
                     {canManage && !isFirst && !isLast && (
                       <>

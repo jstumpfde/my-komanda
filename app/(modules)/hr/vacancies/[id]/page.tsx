@@ -107,6 +107,7 @@ function apiCandidateToCard(c: ApiCandidate, columnId: string): Candidate {
     aiScore: c.aiScore ?? undefined,
     aiSummary: c.aiSummary ?? undefined,
     aiVerdict: c.aiScore != null ? (c.aiScore >= 70 ? "подходит" : c.aiScore >= 40 ? "возможно" : "не подходит") : undefined,
+    demoProgressJson: c.demoProgressJson as Candidate["demoProgressJson"],
   }
 }
 
@@ -1624,13 +1625,24 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                     </Button>
                     <div className="h-5 w-px bg-border mx-1 shrink-0" />
                   </>)}
-                  <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs" onClick={screenAllNew} disabled={bulkScreening}>
-                    {bulkScreening ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-                    {bulkScreening ? "Скрининг..." : "AI-оценить новых"}
-                  </Button>
-                  <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs" onClick={handleCompare}>
-                    <BarChart3 className="w-3.5 h-3.5" />Сравнить топ
-                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs">
+                        Ещё
+                        <ChevronDown className="w-3.5 h-3.5" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-52">
+                      <DropdownMenuItem onClick={screenAllNew} disabled={bulkScreening}>
+                        {bulkScreening ? <Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" /> : <Sparkles className="w-3.5 h-3.5 mr-2" />}
+                        {bulkScreening ? "Скрининг..." : "AI-оценить новых"}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={handleCompare}>
+                        <BarChart3 className="w-3.5 h-3.5 mr-2" />
+                        Сравнить топ
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                   {bulkScreening && <span className="text-xs text-muted-foreground">AI анализирует кандидатов...</span>}
                 </div>
                 <KanbanBoard

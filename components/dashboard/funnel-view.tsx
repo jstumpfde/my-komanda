@@ -60,9 +60,12 @@ export function FunnelView({ columns, settings, onOpenProfile, onAction }: Funne
         <div className="space-y-1">
           {columns.map((col, i) => {
             const widthPct = Math.max(20, (col.count / maxCount) * 100)
-            const dropPct = i > 0 && columns[i - 1].count > 0
-              ? Math.round(((columns[i - 1].count - col.count) / columns[i - 1].count) * 100)
-              : i > 0 ? 0 : null
+            const prevCount = i > 0 ? columns[i - 1].count : null
+            const passPct = prevCount === null
+              ? null
+              : prevCount === 0
+                ? "empty"
+                : Math.round((col.count / prevCount) * 100)
 
             return (
               <div key={col.id}>
@@ -89,17 +92,22 @@ export function FunnelView({ columns, settings, onOpenProfile, onAction }: Funne
 
                     {/* Conversion */}
                     <div className="w-16 flex-shrink-0">
-                      {dropPct !== null ? (
-                        <div className="text-center">
-                          <span className={`text-[11px] font-semibold ${dropPct > 50 ? "text-destructive" : "text-success"}`}>
-                            -{dropPct}%
-                          </span>
-                          <p className="text-[10px] text-muted-foreground">отсев</p>
-                        </div>
-                      ) : (
+                      {passPct === null ? (
                         <div className="text-center">
                           <span className="text-[11px] font-semibold text-primary">100%</span>
                           <p className="text-[10px] text-muted-foreground">вход</p>
+                        </div>
+                      ) : passPct === "empty" ? (
+                        <div className="text-center">
+                          <span className="text-[11px] font-semibold text-muted-foreground">—</span>
+                          <p className="text-[10px] text-muted-foreground">прошло</p>
+                        </div>
+                      ) : (
+                        <div className="text-center">
+                          <span className="text-[11px] font-semibold text-emerald-500">
+                            {passPct}%
+                          </span>
+                          <p className="text-[10px] text-muted-foreground">прошло</p>
                         </div>
                       )}
                     </div>

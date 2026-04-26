@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Textarea } from "@/components/ui/textarea"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Phone,
   Mail,
@@ -29,6 +30,11 @@ import {
   Sparkles,
   ChevronDown,
   ChevronUp,
+  MonitorOff,
+  History as HistoryIcon,
+  CheckCircle,
+  SkipForward,
+  X,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
@@ -40,6 +46,30 @@ interface CandidateNote {
   text: string
   createdAt: string
   authorId?: string
+}
+
+interface StageHistoryEntry {
+  from?: string | null
+  to?: string
+  at?: string
+  reason?: string
+  movedBy?: string
+  comment?: string
+}
+
+interface DemoBlock {
+  blockId: string
+  status: string
+  timeSpent?: number
+  answer?: unknown
+  answerType?: "text" | "audio" | "video"
+  question?: string
+}
+
+interface DemoProgress {
+  blocks?: DemoBlock[]
+  totalBlocks?: number
+  completedAt?: string | null
 }
 
 // ─── Stage config ─────────────────────────────────────────────────────────────
@@ -321,260 +351,400 @@ export function CandidateDrawer({
           ) : null}
         </SheetHeader>
 
-        {/* ── Scrollable body ───────────────────────────────────────── */}
-        <ScrollArea className="flex-1">
-          <div className="px-6 py-4 space-y-5">
+        {/* ── Scrollable body with tabs ───────────────────────────── */}
+        {loadingCandidate ? (
+          <ScrollArea className="flex-1">
+            <div className="px-6 py-4 space-y-3 animate-pulse">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="h-8 bg-muted rounded" />
+              ))}
+            </div>
+          </ScrollArea>
+        ) : candidate ? (() => {
+          const demo = candidate.demoProgressJson as DemoProgress | null
+          const demoBlocks = demo?.blocks ?? []
+          const demoTotal = demo?.totalBlocks ?? demoBlocks.length
+          const demoCompleted = demoBlocks.filter((b) => b.status === "completed").length
+          const demoPct = demoTotal > 0 ? Math.round((demoCompleted / demoTotal) * 100) : 0
+          const stageHistory = ((candidate as ApiCandidate & { stageHistory?: StageHistoryEntry[] | null }).stageHistory) ?? []
+          const answers = candidate.anketaAnswers ?? []
 
-            {loadingCandidate ? (
-              <div className="space-y-3 animate-pulse">
-                {Array.from({ length: 6 }).map((_, i) => (
-                  <div key={i} className="h-8 bg-muted rounded" />
-                ))}
-              </div>
-            ) : candidate ? (
-              <>
-                {/* ── Contact info ─────────────────────────────────── */}
-                <section className="space-y-2">
-                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Контакты</h3>
-                  <div className="space-y-1.5">
-                    {candidate.phone ? (
-                      <a href={`tel:${candidate.phone}`} className="flex items-center gap-2 text-sm hover:text-primary transition-colors">
-                        <Phone className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                        {candidate.phone}
-                      </a>
-                    ) : (
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground/50">
-                        <Phone className="w-3.5 h-3.5 shrink-0" />
-                        Телефон не указан
-                      </div>
-                    )}
-                    {candidate.email ? (
-                      <a href={`mailto:${candidate.email}`} className="flex items-center gap-2 text-sm hover:text-primary transition-colors">
-                        <Mail className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                        {candidate.email}
-                      </a>
-                    ) : (
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground/50">
-                        <Mail className="w-3.5 h-3.5 shrink-0" />
-                        Email не указан
-                      </div>
-                    )}
-                    {candidate.city && (
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <MapPin className="w-3.5 h-3.5 shrink-0" />
-                        {candidate.city}
-                      </div>
-                    )}
-                  </div>
-                </section>
+          return (
+            <Tabs defaultValue="contacts" className="flex-1 flex flex-col min-h-0">
+              <TabsList className="grid grid-cols-4 mx-6 mt-3 shrink-0">
+                <TabsTrigger value="contacts" className="text-xs">Контакты</TabsTrigger>
+                <TabsTrigger value="demo" className="text-xs">Демо</TabsTrigger>
+                <TabsTrigger value="answers" className="text-xs">Ответы</TabsTrigger>
+                <TabsTrigger value="history" className="text-xs">История</TabsTrigger>
+              </TabsList>
 
-                <Separator />
+              <ScrollArea className="flex-1">
+                {/* ── Контакты ─────────────────────────────────────── */}
+                <TabsContent value="contacts" className="px-6 py-4 space-y-5 mt-0">
+                  <section className="space-y-2">
+                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Резюме</h3>
+                    <div className="space-y-1.5">
+                      {candidate.source && (
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <Calendar className="w-3.5 h-3.5 shrink-0" />
+                          Источник: <span className="text-foreground font-medium">{candidate.source}</span>
+                        </div>
+                      )}
+                      {candidate.experience && (
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <Briefcase className="w-3.5 h-3.5 shrink-0" />
+                          {candidate.experience}
+                        </div>
+                      )}
+                      {salary && (
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <DollarSign className="w-3.5 h-3.5 shrink-0" />
+                          {salary}
+                        </div>
+                      )}
+                      {candidate.createdAt && (
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <Clock className="w-3.5 h-3.5 shrink-0" />
+                          Добавлен: {new Date(candidate.createdAt).toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" })}
+                        </div>
+                      )}
+                    </div>
 
-                {/* ── Position info ─────────────────────────────────── */}
-                <section className="space-y-2">
-                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Резюме</h3>
-                  <div className="space-y-1.5">
-                    {candidate.source && (
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Calendar className="w-3.5 h-3.5 shrink-0" />
-                        Источник: <span className="text-foreground font-medium">{candidate.source}</span>
+                    {candidate.skills && candidate.skills.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 mt-2">
+                        {candidate.skills.map((skill) => (
+                          <Badge key={skill} variant="secondary" className="text-xs font-normal">
+                            {skill}
+                          </Badge>
+                        ))}
                       </div>
                     )}
-                    {candidate.experience && (
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Briefcase className="w-3.5 h-3.5 shrink-0" />
-                        {candidate.experience}
-                      </div>
-                    )}
-                    {salary && (
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <DollarSign className="w-3.5 h-3.5 shrink-0" />
-                        {salary}
-                      </div>
-                    )}
-                    {candidate.createdAt && (
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Clock className="w-3.5 h-3.5 shrink-0" />
-                        Добавлен: {new Date(candidate.createdAt).toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" })}
-                      </div>
-                    )}
-                  </div>
+                  </section>
 
-                  {candidate.skills && candidate.skills.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 mt-2">
-                      {candidate.skills.map((skill) => (
-                        <Badge key={skill} variant="secondary" className="text-xs font-normal">
-                          {skill}
-                        </Badge>
-                      ))}
+                  <Separator />
+
+                  <section className="space-y-2">
+                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Контакты</h3>
+                    <div className="space-y-1.5">
+                      {candidate.phone ? (
+                        <a href={`tel:${candidate.phone}`} className="flex items-center gap-2 text-sm hover:text-primary transition-colors">
+                          <Phone className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                          {candidate.phone}
+                        </a>
+                      ) : (
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground/50">
+                          <Phone className="w-3.5 h-3.5 shrink-0" />
+                          Телефон не указан
+                        </div>
+                      )}
+                      {candidate.email ? (
+                        <a href={`mailto:${candidate.email}`} className="flex items-center gap-2 text-sm hover:text-primary transition-colors">
+                          <Mail className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                          {candidate.email}
+                        </a>
+                      ) : (
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground/50">
+                          <Mail className="w-3.5 h-3.5 shrink-0" />
+                          Email не указан
+                        </div>
+                      )}
+                      {candidate.city && (
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <MapPin className="w-3.5 h-3.5 shrink-0" />
+                          {candidate.city}
+                        </div>
+                      )}
+                    </div>
+                  </section>
+
+                  {candidate.aiScore !== null && candidate.aiScore !== undefined && (
+                    <>
+                      <Separator />
+                      <section className="space-y-2">
+                        <button
+                          className="flex items-center justify-between w-full text-xs font-semibold text-muted-foreground uppercase tracking-wide hover:text-foreground transition-colors"
+                          onClick={() => setShowAiDetails(v => !v)}
+                        >
+                          <span className="flex items-center gap-1.5">
+                            <Sparkles className="w-3.5 h-3.5" />
+                            AI-оценка
+                          </span>
+                          {showAiDetails ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                        </button>
+
+                        {showAiDetails && (
+                          <div className="space-y-2">
+                            {candidate.aiSummary && (
+                              <p className="text-sm text-muted-foreground italic">{candidate.aiSummary}</p>
+                            )}
+                            {(candidate.aiDetails as { question: string; score: number; comment: string }[] | null)?.map((detail, i) => {
+                              const detailColor =
+                                detail.score >= 75 ? "text-emerald-600 dark:text-emerald-400" :
+                                detail.score >= 50 ? "text-amber-600 dark:text-amber-400" :
+                                "text-destructive"
+                              return (
+                                <div key={i} className="p-2 rounded-lg bg-muted/40 border border-border/60 space-y-1">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-xs font-medium text-foreground">{detail.question}</span>
+                                    <span className={cn("text-xs font-bold", detailColor)}>{detail.score}</span>
+                                  </div>
+                                  <p className="text-xs text-muted-foreground">{detail.comment}</p>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        )}
+                      </section>
+                    </>
+                  )}
+
+                  {isHired && (
+                    <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-200 dark:border-emerald-800 text-sm text-emerald-700 dark:text-emerald-400 font-medium text-center">
+                      🎉 Кандидат нанят
                     </div>
                   )}
-                </section>
 
-                <Separator />
+                  {isRejected && (
+                    <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-sm text-destructive font-medium text-center">
+                      Кандидат получил отказ
+                    </div>
+                  )}
 
-                {/* ── AI Scoring ────────────────────────────────────── */}
-                {candidate.aiScore !== null && candidate.aiScore !== undefined && (
-                  <section className="space-y-2">
-                    <button
-                      className="flex items-center justify-between w-full text-xs font-semibold text-muted-foreground uppercase tracking-wide hover:text-foreground transition-colors"
-                      onClick={() => setShowAiDetails(v => !v)}
-                    >
-                      <span className="flex items-center gap-1.5">
-                        <Sparkles className="w-3.5 h-3.5" />
-                        AI-оценка
-                      </span>
-                      {showAiDetails ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                    </button>
+                  <Separator />
 
-                    {showAiDetails && (
+                  <section className="space-y-3">
+                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+                      <MessageSquarePlus className="w-3.5 h-3.5" />
+                      Заметки
+                    </h3>
+
+                    {loadingNotes ? (
+                      <div className="space-y-2 animate-pulse">
+                        <div className="h-12 bg-muted rounded" />
+                        <div className="h-12 bg-muted rounded" />
+                      </div>
+                    ) : notes.length === 0 ? (
+                      <p className="text-xs text-muted-foreground py-2">Заметок пока нет</p>
+                    ) : (
                       <div className="space-y-2">
-                        {candidate.aiSummary && (
-                          <p className="text-sm text-muted-foreground italic">{candidate.aiSummary}</p>
-                        )}
-                        {(candidate.aiDetails as { question: string; score: number; comment: string }[] | null)?.map((detail, i) => {
-                          const detailColor =
-                            detail.score >= 75 ? "text-emerald-600 dark:text-emerald-400" :
-                            detail.score >= 50 ? "text-amber-600 dark:text-amber-400" :
-                            "text-destructive"
+                        {notes.map((note, i) => (
+                          <div key={i} className="p-3 rounded-lg bg-muted/40 border border-border/60 space-y-1">
+                            <p className="text-sm text-foreground whitespace-pre-wrap">{note.text}</p>
+                            <p className="text-[10px] text-muted-foreground">{formatNoteDate(note.createdAt)}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="space-y-2">
+                      <Textarea
+                        placeholder="Добавить заметку..."
+                        value={noteText}
+                        onChange={(e) => setNoteText(e.target.value)}
+                        className="text-sm resize-none min-h-[80px]"
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+                            e.preventDefault()
+                            handleAddNote()
+                          }
+                        }}
+                      />
+                      <Button
+                        size="sm"
+                        className="w-full gap-2"
+                        disabled={!noteText.trim() || savingNote}
+                        onClick={handleAddNote}
+                      >
+                        {savingNote ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                        Добавить заметку
+                        <span className="text-[10px] text-primary-foreground/60 ml-1">Ctrl+Enter</span>
+                      </Button>
+                    </div>
+                  </section>
+                </TabsContent>
+
+                {/* ── Демо ─────────────────────────────────────────── */}
+                <TabsContent value="demo" className="px-6 py-4 mt-0">
+                  {!demo || demoBlocks.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                      <MonitorOff className="w-10 h-10 mb-3 opacity-50" />
+                      <p className="text-sm text-center">Кандидат не открывал демонстрацию должности</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      <div className="p-3 rounded-lg bg-muted/40 border border-border/60 space-y-2">
+                        <p className="text-sm">
+                          Прошёл <span className="font-semibold text-foreground">{demoCompleted}</span> из <span className="font-semibold text-foreground">{demoTotal}</span> блоков · <span className="font-semibold text-foreground">{demoPct}%</span>
+                        </p>
+                        <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                          <div
+                            className={cn(
+                              "h-full rounded-full transition-all",
+                              demoPct === 0 ? "bg-muted-foreground/30"
+                              : demoPct < 50 ? "bg-orange-500"
+                              : demoPct < 100 ? "bg-emerald-500"
+                              : "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]"
+                            )}
+                            style={{ width: `${demoPct}%` }}
+                          />
+                        </div>
+                      </div>
+
+                      {demo.completedAt && (
+                        <div className="p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-700 dark:text-emerald-400 font-medium text-center">
+                          ✓ Завершено {new Date(demo.completedAt).toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" })}
+                        </div>
+                      )}
+
+                      <div className="space-y-1.5">
+                        {demoBlocks.map((b, i) => {
+                          const Icon = b.status === "completed" ? CheckCircle
+                            : b.status === "skipped" ? SkipForward
+                            : Clock
+                          const iconColor = b.status === "completed" ? "text-emerald-500"
+                            : b.status === "skipped" ? "text-muted-foreground"
+                            : "text-amber-500"
                           return (
-                            <div key={i} className="p-2 rounded-lg bg-muted/40 border border-border/60 space-y-1">
-                              <div className="flex items-center justify-between">
-                                <span className="text-xs font-medium text-foreground">{detail.question}</span>
-                                <span className={cn("text-xs font-bold", detailColor)}>{detail.score}</span>
+                            <div key={i} className="flex items-center gap-2.5 p-2 rounded-lg border border-border/60">
+                              <Icon className={cn("w-4 h-4 shrink-0", iconColor)} />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm text-foreground truncate">{b.blockId}</p>
+                                {b.timeSpent != null && (
+                                  <p className="text-[11px] text-muted-foreground">потратил {b.timeSpent} сек</p>
+                                )}
                               </div>
-                              <p className="text-xs text-muted-foreground">{detail.comment}</p>
                             </div>
                           )
                         })}
                       </div>
-                    )}
-                  </section>
-                )}
-
-                {candidate.aiScore !== null && candidate.aiScore !== undefined && <Separator />}
-
-                {/* ── Stage action buttons ──────────────────────────── */}
-                {!isHired && !isRejected && (
-                  <section className="space-y-2">
-                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Действия</h3>
-                    <div className="space-y-2">
-                      {candidate.stage !== "interview" && candidate.stage !== "final_decision" && candidate.stage !== "hired" && (
-                        <Button
-                          size="sm"
-                          className="w-full gap-2 bg-purple-600 hover:bg-purple-700 text-white"
-                          disabled={!!changingStage}
-                          onClick={() => handleStageChange("interview")}
-                        >
-                          {changingStage === "interview" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Calendar className="w-4 h-4" />}
-                          Пригласить на интервью
-                        </Button>
-                      )}
-                      {(candidate.stage === "interview" || candidate.stage === "final_decision") && (
-                        <Button
-                          size="sm"
-                          className="w-full gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
-                          disabled={!!changingStage}
-                          onClick={() => handleStageChange("hired")}
-                        >
-                          {changingStage === "hired" ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-                          Нанять
-                        </Button>
-                      )}
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="w-full gap-2 border-purple-300 dark:border-purple-700 text-purple-700 dark:text-purple-400 hover:bg-purple-500/10"
-                        disabled={scoringAi}
-                        onClick={handleAiScore}
-                      >
-                        {scoringAi ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                        {scoringAi ? "Оценка..." : "Оценить AI"}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="w-full gap-2 text-destructive border-destructive/30 hover:bg-destructive/10"
-                        disabled={!!changingStage}
-                        onClick={() => handleStageChange("rejected")}
-                      >
-                        {changingStage === "rejected" ? <Loader2 className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}
-                        Отказать
-                      </Button>
                     </div>
-                  </section>
-                )}
+                  )}
+                </TabsContent>
 
-                {isHired && (
-                  <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-200 dark:border-emerald-800 text-sm text-emerald-700 dark:text-emerald-400 font-medium text-center">
-                    🎉 Кандидат нанят
-                  </div>
-                )}
-
-                {isRejected && (
-                  <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-sm text-destructive font-medium text-center">
-                    Кандидат получил отказ
-                  </div>
-                )}
-
-                <Separator />
-
-                {/* ── Notes ─────────────────────────────────────────── */}
-                <section className="space-y-3">
-                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
-                    <MessageSquarePlus className="w-3.5 h-3.5" />
-                    Заметки
-                  </h3>
-
-                  {/* Existing notes */}
-                  {loadingNotes ? (
-                    <div className="space-y-2 animate-pulse">
-                      <div className="h-12 bg-muted rounded" />
-                      <div className="h-12 bg-muted rounded" />
-                    </div>
-                  ) : notes.length === 0 ? (
-                    <p className="text-xs text-muted-foreground py-2">Заметок пока нет</p>
-                  ) : (
-                    <div className="space-y-2">
-                      {notes.map((note, i) => (
-                        <div key={i} className="p-3 rounded-lg bg-muted/40 border border-border/60 space-y-1">
-                          <p className="text-sm text-foreground whitespace-pre-wrap">{note.text}</p>
-                          <p className="text-[10px] text-muted-foreground">{formatNoteDate(note.createdAt)}</p>
+                {/* ── Ответы ───────────────────────────────────────── */}
+                <TabsContent value="answers" className="px-6 py-4 mt-0">
+                  {/* TODO: render audio/video answers from demoProgressJson.blocks once schema includes media URLs */}
+                  {answers.length > 0 ? (
+                    <div className="space-y-3">
+                      {answers.map((a, i) => (
+                        <div key={i} className="p-3 rounded-lg border border-border/60 bg-muted/40 space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground">{a.question}</p>
+                          <p className="text-sm text-foreground whitespace-pre-wrap">{a.answer}</p>
                         </div>
                       ))}
                     </div>
+                  ) : demoBlocks.length > 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-12">
+                      Ответы появятся после прохождения демонстрации
+                    </p>
+                  ) : (
+                    <p className="text-sm text-muted-foreground text-center py-12">
+                      Кандидат не отвечал на вопросы
+                    </p>
                   )}
+                </TabsContent>
 
-                  {/* Add note form */}
+                {/* ── История ──────────────────────────────────────── */}
+                <TabsContent value="history" className="px-6 py-4 mt-0">
                   <div className="space-y-2">
-                    <Textarea
-                      placeholder="Добавить заметку..."
-                      value={noteText}
-                      onChange={(e) => setNoteText(e.target.value)}
-                      className="text-sm resize-none min-h-[80px]"
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
-                          e.preventDefault()
-                          handleAddNote()
-                        }
-                      }}
-                    />
-                    <Button
-                      size="sm"
-                      className="w-full gap-2"
-                      disabled={!noteText.trim() || savingNote}
-                      onClick={handleAddNote}
-                    >
-                      {savingNote ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-                      Добавить заметку
-                      <span className="text-[10px] text-primary-foreground/60 ml-1">Ctrl+Enter</span>
-                    </Button>
+                    {candidate.source === "hh" || candidate.source === "hh.ru" ? (
+                      <div className="flex items-start gap-2.5 p-2.5 rounded-lg border border-border/60">
+                        <HistoryIcon className="w-4 h-4 shrink-0 mt-0.5 text-blue-500" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-foreground">Импортирован с hh</p>
+                          {candidate.createdAt && (
+                            <p className="text-[11px] text-muted-foreground">
+                              {new Date(candidate.createdAt).toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" })}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {stageHistory.length === 0 ? (
+                      <p className="text-sm text-muted-foreground text-center py-8">Перемещений по этапам ещё не было</p>
+                    ) : (
+                      stageHistory.map((entry, i) => {
+                        const fromLabel = entry.from ? (STAGE_LABELS[entry.from]?.label ?? entry.from) : null
+                        const toLabel = entry.to ? (STAGE_LABELS[entry.to]?.label ?? entry.to) : null
+                        return (
+                          <div key={i} className="flex items-start gap-2.5 p-2.5 rounded-lg border border-border/60">
+                            <HistoryIcon className="w-4 h-4 shrink-0 mt-0.5 text-muted-foreground" />
+                            <div className="flex-1 min-w-0 space-y-0.5">
+                              <p className="text-sm text-foreground">
+                                {fromLabel ? <>{fromLabel} <span className="text-muted-foreground">→</span> {toLabel}</> : toLabel}
+                              </p>
+                              {entry.at && (
+                                <p className="text-[11px] text-muted-foreground">
+                                  {new Date(entry.at).toLocaleString("ru-RU")}
+                                </p>
+                              )}
+                              {entry.movedBy && (
+                                <p className="text-[11px] text-muted-foreground">Перевёл: {entry.movedBy}</p>
+                              )}
+                              {(entry.comment || entry.reason) && (
+                                <p className="text-xs text-muted-foreground italic">{entry.comment || entry.reason}</p>
+                              )}
+                            </div>
+                          </div>
+                        )
+                      })
+                    )}
                   </div>
-                </section>
-              </>
-            ) : null}
+                </TabsContent>
+              </ScrollArea>
+            </Tabs>
+          )
+        })() : null}
+
+        {/* ── Sticky footer with action buttons ───────────────────── */}
+        {candidate && !isHired && !isRejected && (
+          <div className="border-t bg-background px-6 py-3 shrink-0 space-y-2">
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-2 border-purple-300 dark:border-purple-700 text-purple-700 dark:text-purple-400 hover:bg-purple-500/10"
+                disabled={scoringAi}
+                onClick={handleAiScore}
+              >
+                {scoringAi ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                {scoringAi ? "Оценка..." : "Оценить AI"}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-2 text-destructive border-destructive/30 hover:bg-destructive/10"
+                disabled={!!changingStage}
+                onClick={() => handleStageChange("rejected")}
+              >
+                {changingStage === "rejected" ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4" />}
+                Отказать
+              </Button>
+            </div>
+            {candidate.stage !== "interview" && candidate.stage !== "final_decision" && candidate.stage !== "hired" ? (
+              <Button
+                size="sm"
+                className="w-full gap-2 bg-purple-600 hover:bg-purple-700 text-white"
+                disabled={!!changingStage}
+                onClick={() => handleStageChange("interview")}
+              >
+                {changingStage === "interview" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Calendar className="w-4 h-4" />}
+                Пригласить на интервью
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                className="w-full gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
+                disabled={!!changingStage}
+                onClick={() => handleStageChange("hired")}
+              >
+                {changingStage === "hired" ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                Нанять
+              </Button>
+            )}
           </div>
-        </ScrollArea>
+        )}
       </SheetContent>
     </Sheet>
   )
