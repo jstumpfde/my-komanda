@@ -153,7 +153,7 @@ export function CandidateDrawer({
   const fetchCandidate = useCallback(async (id: string) => {
     setLoadingCandidate(true)
     try {
-      const res = await fetch(`/api/candidates/${id}`)
+      const res = await fetch(`/api/modules/hr/candidates/${id}`)
       if (!res.ok) throw new Error("Not found")
       const data = await res.json() as ApiCandidate
       setCandidate(data)
@@ -167,7 +167,7 @@ export function CandidateDrawer({
   const fetchNotes = useCallback(async (id: string) => {
     setLoadingNotes(true)
     try {
-      const res = await fetch(`/api/candidates/${id}/notes`)
+      const res = await fetch(`/api/modules/hr/candidates/${id}/notes`)
       if (!res.ok) return
       const data = await res.json() as CandidateNote[]
       setNotes(data)
@@ -193,7 +193,7 @@ export function CandidateDrawer({
     if (!candidate || changingStage) return
     setChangingStage(newStage)
     try {
-      const res = await fetch(`/api/candidates/${candidate.id}/stage`, {
+      const res = await fetch(`/api/modules/hr/candidates/${candidate.id}/stage`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ stage: newStage }),
@@ -220,7 +220,7 @@ export function CandidateDrawer({
     if (!candidate || !noteText.trim() || savingNote) return
     setSavingNote(true)
     try {
-      const res = await fetch(`/api/candidates/${candidate.id}/notes`, {
+      const res = await fetch(`/api/modules/hr/candidates/${candidate.id}/notes`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: noteText.trim() }),
