@@ -256,12 +256,23 @@ function QuestionInput({
       <div className="space-y-2">
         <p className="font-medium text-gray-800">{question.text}{question.required && <span className="text-red-500"> *</span>}</p>
         <RadioGroup value={value} onValueChange={onChange}>
-          {question.options.map((opt, i) => (
-            <div key={i} className="flex items-center gap-2 rounded-lg border p-3 hover:bg-gray-50 transition-colors">
-              <RadioGroupItem value={opt} id={`${question.id}-${i}`} />
-              <Label htmlFor={`${question.id}-${i}`} className="flex-1 cursor-pointer">{opt}</Label>
-            </div>
-          ))}
+          {question.options.map((opt, i) => {
+            const isSelected = value === opt
+            return (
+              <Label
+                key={i}
+                htmlFor={`${question.id}-${i}`}
+                className={`flex items-center gap-2 rounded-lg border p-3 cursor-pointer transition-colors ${
+                  isSelected
+                    ? "border-blue-500 bg-blue-50"
+                    : "bg-white border-gray-300 hover:bg-gray-50"
+                }`}
+              >
+                <RadioGroupItem value={opt} id={`${question.id}-${i}`} className="[color-scheme:light] accent-blue-600" />
+                <span className="flex-1 text-gray-900">{opt}</span>
+              </Label>
+            )
+          })}
         </RadioGroup>
       </div>
     )
@@ -322,14 +333,14 @@ function QuestionInput({
         <p className="text-xs text-gray-500">Расставьте в правильном порядке</p>
         <div className="space-y-2">
           {order.map((opt, i) => (
-            <div key={opt} className="flex items-center gap-2 rounded-lg border p-3 bg-white">
-              <span className="text-sm font-semibold text-gray-500 w-6">{i + 1}.</span>
-              <span className="flex-1">{opt}</span>
+            <div key={opt} className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white p-3 text-gray-900 transition-colors hover:border-blue-400">
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-xs font-semibold text-white">{i + 1}</span>
+              <span className="flex-1 text-gray-900">{opt}</span>
               <button
                 type="button"
                 onClick={() => move(i, -1)}
                 disabled={i === 0}
-                className="h-8 w-8 rounded border border-gray-300 flex items-center justify-center hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed"
+                className="h-8 w-8 rounded border border-gray-300 bg-white text-gray-700 flex items-center justify-center hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed"
                 aria-label="Вверх"
               >
                 ▲
@@ -338,7 +349,7 @@ function QuestionInput({
                 type="button"
                 onClick={() => move(i, 1)}
                 disabled={i === order.length - 1}
-                className="h-8 w-8 rounded border border-gray-300 flex items-center justify-center hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed"
+                className="h-8 w-8 rounded border border-gray-300 bg-white text-gray-700 flex items-center justify-center hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed"
                 aria-label="Вниз"
               >
                 ▼
@@ -351,18 +362,34 @@ function QuestionInput({
   }
 
   if (type === "yesno") {
+    const yesSelected = value === "yes"
+    const noSelected = value === "no"
     return (
       <div className="space-y-2">
         <p className="font-medium text-gray-800">{question.text}{question.required && <span className="text-red-500"> *</span>}</p>
         <RadioGroup value={value} onValueChange={onChange}>
-          <div className="flex items-center gap-2 rounded-lg border p-3 hover:bg-gray-50 transition-colors">
-            <RadioGroupItem value="yes" id={`${question.id}-yes`} />
-            <Label htmlFor={`${question.id}-yes`} className="cursor-pointer">Да</Label>
-          </div>
-          <div className="flex items-center gap-2 rounded-lg border p-3 hover:bg-gray-50 transition-colors">
-            <RadioGroupItem value="no" id={`${question.id}-no`} />
-            <Label htmlFor={`${question.id}-no`} className="cursor-pointer">Нет</Label>
-          </div>
+          <Label
+            htmlFor={`${question.id}-yes`}
+            className={`flex items-center gap-2 rounded-lg border p-3 cursor-pointer transition-colors ${
+              yesSelected
+                ? "border-emerald-600 bg-emerald-600 text-white"
+                : "bg-white border-gray-300 text-gray-900 hover:bg-gray-50"
+            }`}
+          >
+            <RadioGroupItem value="yes" id={`${question.id}-yes`} className="[color-scheme:light] accent-blue-600" />
+            <span className="flex-1">Да</span>
+          </Label>
+          <Label
+            htmlFor={`${question.id}-no`}
+            className={`flex items-center gap-2 rounded-lg border p-3 cursor-pointer transition-colors ${
+              noSelected
+                ? "border-red-600 bg-red-600 text-white"
+                : "bg-white border-gray-300 text-gray-900 hover:bg-gray-50"
+            }`}
+          >
+            <RadioGroupItem value="no" id={`${question.id}-no`} className="[color-scheme:light] accent-blue-600" />
+            <span className="flex-1">Нет</span>
+          </Label>
         </RadioGroup>
       </div>
     )
@@ -1335,8 +1362,8 @@ function MediaBlock({
               </div>
             </div>
           ) : (
-            <div className="flex items-center justify-center h-32 rounded-xl bg-gray-900">
-              <div className="flex items-center gap-3 text-white">
+            <div className="flex items-center justify-center h-32 rounded-xl bg-gray-100 border border-gray-300">
+              <div className="flex items-center gap-3 text-gray-700">
                 <span className="h-4 w-4 rounded-full bg-red-500 animate-pulse" />
                 <Mic className="h-8 w-8" />
                 <span className="text-lg font-medium">Идёт запись</span>
