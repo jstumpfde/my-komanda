@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
@@ -13,8 +14,9 @@ import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth"
 import {
   Briefcase, Users, UserCheck, Clock, TrendingUp, Plus, ChevronRight,
-  AlertCircle, CheckCircle2, Timer, Star, Calendar, Sparkles,
+  AlertCircle, CheckCircle2, Timer, Star, Calendar, Sparkles, Activity,
 } from "lucide-react"
+import { CandidatesProgressList } from "@/components/candidates/candidates-progress-list"
 import {
   ResponsiveContainer, LineChart, Line, Area, XAxis, YAxis, CartesianGrid, Tooltip,
   PieChart, Pie, Cell, ComposedChart,
@@ -192,6 +194,23 @@ function DashboardContent() {
                   <p className="text-sm mt-1 text-white/90">{m.trend}</p>
                 </div>
               ))}
+            </div>
+
+            {/* ═══ Block: Live progress widget ═══ */}
+            <div className="border rounded-xl shadow-sm hover:shadow-md transition-shadow p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold flex items-center gap-2">
+                  <Activity className="w-4 h-4" style={{ color: C.green }} />
+                  Прогресс кандидатов сейчас
+                </h3>
+                <Link
+                  href="/hr/candidates/progress"
+                  className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+                >
+                  Все <ChevronRight className="w-3 h-3" />
+                </Link>
+              </div>
+              <CandidatesProgressList compact={true} limit={5} />
             </div>
 
             {/* ═══ Block 3: Funnel + Active Vacancies ═══ */}

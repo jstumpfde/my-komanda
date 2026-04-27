@@ -18,9 +18,20 @@ interface LessonShape {
 
 const ACTIVE_THRESHOLD_MS = 30 * 60 * 1000
 
-export async function GET(_req: NextRequest) {
+export async function GET(req: NextRequest) {
   try {
     const user = await requireCompany()
+
+    const url = new URL(req.url)
+    const vacancyId = url.searchParams.get("vacancy_id")
+
+    const conditions = [
+      eq(vacancies.companyId, user.companyId),
+      isNotNull(candidates.demoProgressJson),
+    ]
+    if (vacancyId) {
+      conditions.push(eq(candidates.vacancyId, vacancyId))
+    }
 
     const rows = await db
       .select({
@@ -34,12 +45,7 @@ export async function GET(_req: NextRequest) {
       })
       .from(candidates)
       .innerJoin(vacancies, eq(candidates.vacancyId, vacancies.id))
-      .where(
-        and(
-          eq(vacancies.companyId, user.companyId),
-          isNotNull(candidates.demoProgressJson),
-        ),
-      )
+      .where(and(...conditions))
 
     if (rows.length === 0) return apiSuccess([])
 

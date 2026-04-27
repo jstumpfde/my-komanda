@@ -15,6 +15,7 @@ import { CandidateFilters, type FilterState } from "@/components/dashboard/candi
 import { SortMenu } from "@/components/dashboard/sort-menu"
 import type { CandidateSortMode } from "@/lib/candidate-sort"
 import { CandidateDrawer } from "@/components/candidates/candidate-drawer"
+import { CandidatesProgressList } from "@/components/candidates/candidates-progress-list"
 import { AddCandidateDialog } from "@/components/dashboard/add-candidate-dialog"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
@@ -31,7 +32,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Checkbox } from "@/components/ui/checkbox"
 import { Slider } from "@/components/ui/slider"
 import { Input } from "@/components/ui/input"
-import { Plus, Clock, Pause, Play, Archive, RotateCcw, Trash2, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, Zap, Globe, AlertTriangle, TrendingUp, Calendar, MapPin, DollarSign, Filter, X, Link2, Copy, Save, Sparkles, Eye, Check, Loader2, Download, ExternalLink, ClipboardList, ChevronLeft, ChevronRight, ChevronDown, CheckCircle2, XCircle, Users, Phone, Upload, RefreshCw } from "lucide-react"
+import { Plus, Clock, Pause, Play, Archive, RotateCcw, Trash2, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, Zap, Globe, AlertTriangle, TrendingUp, Calendar, MapPin, DollarSign, Filter, X, Link2, Copy, Save, Sparkles, Eye, Check, Loader2, Download, ExternalLink, ClipboardList, ChevronLeft, ChevronRight, ChevronDown, CheckCircle2, XCircle, Users, Phone, Upload, RefreshCw, Activity } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Label } from "@/components/ui/label"
@@ -1408,6 +1409,7 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                   {(status === "active" || status === "closed_success" || status === "closed_cancelled" ? [
                     { value: "analytics", icon: BarChart3, label: "Аналитика" },
                     { value: "candidates", icon: Kanban, label: "Кандидаты" },
+                    { value: "progress", icon: Activity, label: "Прогресс" },
                     { value: "course", icon: BookOpen, label: "Демонстрация" },
                     { value: "anketa", icon: ClipboardList, label: "Анкета" },
                     { value: "automation", icon: Zap, label: "Автоматизация" },
@@ -1415,6 +1417,7 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                     { value: "anketa", icon: ClipboardList, label: "Анкета" },
                     { value: "course", icon: BookOpen, label: "Демонстрация" },
                     { value: "candidates", icon: Kanban, label: "Кандидаты" },
+                    { value: "progress", icon: Activity, label: "Прогресс" },
                     { value: "analytics", icon: BarChart3, label: "Аналитика" },
                     { value: "automation", icon: Zap, label: "Автоматизация" },
                   ]).map(tab => (
@@ -1698,6 +1701,10 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                   onRemoveColumn={handleRemoveColumn}
                   sortMode={sortMode}
                 />
+              </TabsContent>
+
+              <TabsContent value="progress">
+                <CandidatesProgressList vacancyId={id} />
               </TabsContent>
 
               <TabsContent value="course">
