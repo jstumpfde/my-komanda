@@ -2158,6 +2158,9 @@ function MediaEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch:
             <SelectItem value="30">30 секунд</SelectItem>
             <SelectItem value="60">60 секунд</SelectItem>
             <SelectItem value="120">2 минуты</SelectItem>
+            <SelectItem value="180">3 минуты</SelectItem>
+            <SelectItem value="240">4 минуты</SelectItem>
+            <SelectItem value="300">5 минут</SelectItem>
             <SelectItem value="none">Без лимита</SelectItem>
           </SelectContent>
         </Select>

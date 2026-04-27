@@ -1520,6 +1520,25 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                       </DropdownMenuContent>
                     </DropdownMenu>
                     <div className="w-px h-6 bg-border mx-1" />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5 text-xs h-8"
+                      onClick={async () => {
+                        if (!id) { toast.error("Сохраните вакансию"); return }
+                        try {
+                          const res = await fetch(`/api/modules/hr/vacancies/${id}/preview-link`)
+                          const json = await res.json()
+                          const url = json?.data?.url || json?.url
+                          if (url) window.open(url, "_blank", "noopener,noreferrer")
+                          else toast.error("Не удалось получить ссылку")
+                        } catch {
+                          toast.error("Ошибка получения ссылки")
+                        }
+                      }}
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />Посмотреть как кандидат
+                    </Button>
                     <div className="flex items-center">
                       <Button
                         variant="outline"

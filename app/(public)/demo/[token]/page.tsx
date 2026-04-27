@@ -745,40 +745,46 @@ export default function DemoPage() {
             {(() => {
               const inputClass = "h-10 bg-white border-gray-300 text-gray-900 placeholder:text-gray-400 focus-visible:border-blue-500 focus-visible:ring-blue-200"
               const labelClass = "text-xs text-gray-700"
+              const inputStyle = {
+                WebkitBoxShadow: "0 0 0 1000px white inset",
+                WebkitTextFillColor: "#111827",
+                color: "#111827",
+                backgroundColor: "#fff",
+              } as React.CSSProperties
               return (
                 <>
                   <div className="space-y-4">
                     <div className="space-y-1">
                       <Label className={labelClass}>Имя <span className="text-red-500">*</span></Label>
-                      <Input value={formFirst} onChange={e => setFormFirst(e.target.value)} placeholder="Иван" className={inputClass} />
+                      <Input value={formFirst} onChange={e => setFormFirst(e.target.value)} placeholder="Иван" className={inputClass} style={inputStyle} />
                     </div>
                     <div className="space-y-1">
                       <Label className={labelClass}>Фамилия <span className="text-red-500">*</span></Label>
-                      <Input value={formLast} onChange={e => setFormLast(e.target.value)} placeholder="Иванов" className={inputClass} />
+                      <Input value={formLast} onChange={e => setFormLast(e.target.value)} placeholder="Иванов" className={inputClass} style={inputStyle} />
                     </div>
                   </div>
                   <div className="space-y-1">
                     <Label className={labelClass}>Email <span className="text-red-500">*</span></Label>
-                    <Input value={formEmail} onChange={e => setFormEmail(e.target.value)} placeholder="ivan@mail.ru" type="email" className={inputClass} />
+                    <Input value={formEmail} onChange={e => setFormEmail(e.target.value)} placeholder="ivan@mail.ru" type="email" className={inputClass} style={inputStyle} />
                   </div>
                   <div className="space-y-4">
                     <div className="space-y-1">
                       <Label className={labelClass}>Телефон <span className="text-red-500">*</span></Label>
-                      <Input value={formPhone} onChange={e => setFormPhone(e.target.value)} placeholder="+7 (999) 123-45-67" className={inputClass} />
+                      <Input value={formPhone} onChange={e => setFormPhone(e.target.value)} placeholder="+7 (999) 123-45-67" className={inputClass} style={inputStyle} />
                     </div>
                     <div className="space-y-1">
                       <Label className={labelClass}>Telegram</Label>
-                      <Input value={formTelegram} onChange={e => setFormTelegram(e.target.value)} placeholder="@username" className={inputClass} />
+                      <Input value={formTelegram} onChange={e => setFormTelegram(e.target.value)} placeholder="@username" className={inputClass} style={inputStyle} />
                     </div>
                   </div>
                   <div className="space-y-4">
                     <div className="space-y-1">
                       <Label className={labelClass}>Дата рождения</Label>
-                      <Input value={formBirth} onChange={e => setFormBirth(e.target.value)} type="date" className={inputClass} />
+                      <Input value={formBirth} onChange={e => setFormBirth(e.target.value)} type="date" className={inputClass} style={inputStyle} />
                     </div>
                     <div className="space-y-1">
                       <Label className={labelClass}>Город</Label>
-                      <Input value={formCity} onChange={e => setFormCity(e.target.value)} placeholder="Москва" className={inputClass} />
+                      <Input value={formCity} onChange={e => setFormCity(e.target.value)} placeholder="Москва" className={inputClass} style={inputStyle} />
                     </div>
                   </div>
                 </>
