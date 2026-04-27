@@ -204,7 +204,7 @@ function DashboardContent() {
                   Прогресс кандидатов сейчас
                 </h3>
                 <Link
-                  href="/hr/candidates/progress"
+                  href="/hr/candidates"
                   className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
                 >
                   Все <ChevronRight className="w-3 h-3" />

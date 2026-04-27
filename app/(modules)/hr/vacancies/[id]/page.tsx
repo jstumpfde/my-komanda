@@ -1409,7 +1409,6 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                   {(status === "active" || status === "closed_success" || status === "closed_cancelled" ? [
                     { value: "analytics", icon: BarChart3, label: "Аналитика" },
                     { value: "candidates", icon: Kanban, label: "Кандидаты" },
-                    { value: "progress", icon: Activity, label: "Прогресс" },
                     { value: "course", icon: BookOpen, label: "Демонстрация" },
                     { value: "anketa", icon: ClipboardList, label: "Анкета" },
                     { value: "automation", icon: Zap, label: "Автоматизация" },
@@ -1417,7 +1416,6 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                     { value: "anketa", icon: ClipboardList, label: "Анкета" },
                     { value: "course", icon: BookOpen, label: "Демонстрация" },
                     { value: "candidates", icon: Kanban, label: "Кандидаты" },
-                    { value: "progress", icon: Activity, label: "Прогресс" },
                     { value: "analytics", icon: BarChart3, label: "Аналитика" },
                     { value: "automation", icon: Zap, label: "Автоматизация" },
                   ]).map(tab => (
@@ -1701,10 +1699,6 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                   onRemoveColumn={handleRemoveColumn}
                   sortMode={sortMode}
                 />
-              </TabsContent>
-
-              <TabsContent value="progress">
-                <CandidatesProgressList vacancyId={id} />
               </TabsContent>
 
               <TabsContent value="course">

@@ -31,6 +31,10 @@ interface Candidate {
   createdAt: string
   source: string | null
   city: string | null
+  demoTotalBlocks: number
+  demoCompletedBlocks: number
+  progressPercent: number | null
+  isActive: boolean
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -100,6 +104,14 @@ function avatarColor(id: string): string {
   let hash = 0
   for (let i = 0; i < id.length; i++) hash = ((hash << 5) - hash + id.charCodeAt(i)) | 0
   return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length]
+}
+
+function progressBadgeClass(percent: number, isActive: boolean): string {
+  if (percent === 0) return "bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300"
+  if (percent === 100) return "bg-emerald-500 text-white"
+  if (percent >= 71) return "bg-blue-500 text-white"
+  if (percent >= 31) return "bg-amber-500 text-white"
+  return cn("bg-red-500 text-white", isActive && "animate-pulse")
 }
 
 type ColumnSort = { column: string; dir: "asc" | "desc" } | null
@@ -191,6 +203,8 @@ export default function CandidatesPage() {
       if (colSort.column === "status") return mul * ((STATUS_ORDER[a.stage] ?? 9) - (STATUS_ORDER[b.stage] ?? 9))
       if (colSort.column === "date") return mul * (new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
       if (colSort.column === "source") return mul * (a.source ?? "").localeCompare(b.source ?? "", "ru")
+      if (colSort.column === "progress") return mul * ((a.progressPercent ?? -1) - (b.progressPercent ?? -1))
+      if (colSort.column === "blocks") return mul * (a.demoCompletedBlocks - b.demoCompletedBlocks)
       return 0
     })
 
@@ -275,6 +289,8 @@ export default function CandidatesPage() {
                       <th className="px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">ФИО</th>
                       <th className="px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Вакансия</th>
                       <th className="px-4 py-3"><SortableHeader label="Статус" column="status" current={colSort} onToggle={toggleColSort} /></th>
+                      <th className="px-4 py-3"><SortableHeader label="Прогресс" column="progress" current={colSort} onToggle={toggleColSort} /></th>
+                      <th className="px-4 py-3"><SortableHeader label="Блоки" column="blocks" current={colSort} onToggle={toggleColSort} /></th>
                       <th className="px-4 py-3"><SortableHeader label="Дата отклика" column="date" current={colSort} onToggle={toggleColSort} /></th>
                       <th className="px-4 py-3"><SortableHeader label="Источник" column="source" current={colSort} onToggle={toggleColSort} /></th>
                       <th className="px-4 py-3 w-[60px] text-xs font-medium text-muted-foreground uppercase tracking-wider">Действия</th>
@@ -308,6 +324,21 @@ export default function CandidatesPage() {
                           <Badge variant="outline" className={cn("border-0 text-xs", STATUS_COLORS[c.stage] ?? "bg-muted text-muted-foreground")}>
                             {STATUS_LABELS[c.stage] ?? c.stage}
                           </Badge>
+                        </td>
+                        <td className="px-4 py-3.5">
+                          {c.progressPercent === null || c.demoTotalBlocks === 0 ? (
+                            <span className="text-sm text-muted-foreground">—</span>
+                          ) : (
+                            <div className={cn(
+                              "inline-flex size-9 rounded-md items-center justify-center text-sm font-semibold leading-none",
+                              progressBadgeClass(c.progressPercent, c.isActive),
+                            )}>
+                              {c.progressPercent}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-4 py-3.5 text-sm text-muted-foreground tabular-nums whitespace-nowrap">
+                          {c.demoTotalBlocks === 0 ? "—" : `${c.demoCompletedBlocks} / ${c.demoTotalBlocks}`}
                         </td>
                         <td className="px-4 py-3.5 text-sm text-muted-foreground whitespace-nowrap">{formatDate(c.createdAt)}</td>
                         <td className="px-4 py-3.5 text-sm text-muted-foreground">{SOURCE_LABELS[c.source ?? ""] ?? c.source ?? "—"}</td>

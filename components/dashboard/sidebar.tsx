@@ -736,18 +736,18 @@ export function DashboardSidebar() {
 
                           <CollapsibleContent forceMount className="data-[state=closed]:hidden">
                             <SidebarMenu className="gap-0.5 mt-1">
-                              {group.items.filter((item) => isItemVisible(id, item.href)).flatMap((item) => {
+                              {group.items.filter((item) => isItemVisible(id, item.href)).map((item) => {
                                 if (item.divider) {
-                                  return [(
+                                  return (
                                     <div key={item.href} className="px-6 py-1.5 text-[10px] text-sidebar-foreground/30 font-medium tracking-wide select-none">
                                       {item.label}
                                     </div>
-                                  )]
+                                  )
                                 }
                                 const ItemIcon = getIcon(item.icon)
                                 const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
                                 const itemBadge = item.href === '/knowledge-v2/review' && reviewCount > 0 ? reviewCount : null
-                                const node = (
+                                return (
                                   <SidebarMenuItem key={item.href}>
                                     <SidebarMenuButton
                                       isActive={isActive}
@@ -769,29 +769,6 @@ export function DashboardSidebar() {
                                     </SidebarMenuButton>
                                   </SidebarMenuItem>
                                 )
-                                if (item.href === '/hr/candidates') {
-                                  const progressHref = '/hr/candidates/progress'
-                                  const progressActive = pathname === progressHref || pathname.startsWith(progressHref + '/')
-                                  return [
-                                    node,
-                                    (
-                                      <SidebarMenuItem key={progressHref}>
-                                        <SidebarMenuButton
-                                          isActive={progressActive}
-                                          onClick={() => router.push(progressHref)}
-                                          className={cn(
-                                            "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground h-9 pl-6",
-                                            "text-sidebar-foreground/90"
-                                          )}
-                                        >
-                                          <Activity className="size-4" />
-                                          <span className="flex-1 text-sm">Прогресс кандидатов</span>
-                                        </SidebarMenuButton>
-                                      </SidebarMenuItem>
-                                    )
-                                  ]
-                                }
-                                return [node]
                               })}
                             </SidebarMenu>
                           </CollapsibleContent>

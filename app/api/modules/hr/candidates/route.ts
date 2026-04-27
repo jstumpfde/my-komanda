@@ -1,9 +1,23 @@
 import { NextRequest } from "next/server"
-import { eq, and, inArray } from "drizzle-orm"
+import { eq, and, inArray, desc } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { candidates, vacancies } from "@/lib/db/schema"
+import { candidates, vacancies, demos } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { generateCandidateToken } from "@/lib/candidate-tokens"
+
+interface DemoBlockProgress {
+  blockId: string
+  status?: string
+  answeredAt?: string
+  timeSpent?: number
+}
+
+interface LessonShape {
+  id?: string
+  blocks?: { id?: string }[]
+}
+
+const ACTIVE_THRESHOLD_MS = 30 * 60 * 1000
 
 // GET /api/modules/hr/candidates?vacancy_id=...&stage=new,demo,...
 export async function GET(req: NextRequest) {
@@ -30,12 +44,78 @@ export async function GET(req: NextRequest) {
           vacancyTitle: vacancies.title,
           createdAt: candidates.createdAt,
           updatedAt: candidates.updatedAt,
+          demoProgressJson: candidates.demoProgressJson,
         })
         .from(candidates)
         .innerJoin(vacancies, eq(candidates.vacancyId, vacancies.id))
         .where(eq(vacancies.companyId, user.companyId))
 
-      return apiSuccess(rows)
+      const vacancyIds = [...new Set(rows.map((r) => r.vacancyId))]
+
+      const totalsByVacancy = new Map<string, number>()
+      if (vacancyIds.length > 0) {
+        const demoRows = await db
+          .select({
+            vacancyId: demos.vacancyId,
+            lessonsJson: demos.lessonsJson,
+            updatedAt: demos.updatedAt,
+          })
+          .from(demos)
+          .where(inArray(demos.vacancyId, vacancyIds))
+          .orderBy(desc(demos.updatedAt))
+
+        const latestByVacancy = new Map<string, unknown>()
+        for (const d of demoRows) {
+          if (!latestByVacancy.has(d.vacancyId)) {
+            latestByVacancy.set(d.vacancyId, d.lessonsJson)
+          }
+        }
+        for (const [vid, lessonsJson] of latestByVacancy.entries()) {
+          const lessons = Array.isArray(lessonsJson) ? (lessonsJson as LessonShape[]) : []
+          const total = lessons.reduce(
+            (sum, l) => sum + (Array.isArray(l?.blocks) ? l.blocks.length : 0),
+            0,
+          )
+          totalsByVacancy.set(vid, total)
+        }
+      }
+
+      const now = Date.now()
+
+      const enriched = rows.map((r) => {
+        const demoTotalBlocks = totalsByVacancy.get(r.vacancyId) ?? 0
+        const progress = r.demoProgressJson as { blocks?: DemoBlockProgress[] } | null
+        const blocks = Array.isArray(progress?.blocks) ? progress.blocks : []
+        const completed = blocks.filter((b) => b.status === "completed")
+        const demoCompletedBlocks = completed.length
+        const progressPercent =
+          demoTotalBlocks > 0
+            ? Math.round((demoCompletedBlocks / demoTotalBlocks) * 100)
+            : null
+
+        const stamps = completed
+          .map((b) => (b.answeredAt ? new Date(b.answeredAt).getTime() : NaN))
+          .filter((t) => !Number.isNaN(t))
+          .sort((a, b) => a - b)
+        const lastAnswerAt =
+          stamps.length > 0 ? new Date(stamps[stamps.length - 1]).toISOString() : null
+        const isActive = lastAnswerAt
+          ? now - new Date(lastAnswerAt).getTime() <= ACTIVE_THRESHOLD_MS
+          : false
+
+        // Strip demoProgressJson from response — too heavy, not needed by clients
+        const { demoProgressJson: _drop, ...rest } = r
+        void _drop
+        return {
+          ...rest,
+          demoTotalBlocks,
+          demoCompletedBlocks,
+          progressPercent,
+          isActive,
+        }
+      })
+
+      return apiSuccess(enriched)
     }
 
     // Verify ownership
