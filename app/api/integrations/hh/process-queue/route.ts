@@ -314,6 +314,9 @@ export async function POST(req: NextRequest) {
           aiSummary: screenResult.recommendation,
           aiDetails,
           token: candidateToken,
+          autoProcessingStopped: decision === "reject",
+          autoProcessingStoppedReason: decision === "reject" ? "AI auto-reject" : null,
+          autoProcessingStoppedAt: decision === "reject" ? new Date() : null,
         }).returning()
         if (newCand) candidateId = newCand.id
       } else if (candidateId) {
@@ -324,6 +327,11 @@ export async function POST(req: NextRequest) {
           aiSummary: screenResult.recommendation,
           aiDetails,
           updatedAt: new Date(),
+          ...(decision === "reject" ? {
+            autoProcessingStopped: true,
+            autoProcessingStoppedReason: "AI auto-reject",
+            autoProcessingStoppedAt: new Date(),
+          } : {}),
         }).where(eq(candidates.id, candidateId))
       }
 

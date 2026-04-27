@@ -1,11 +1,12 @@
 import { NextRequest } from "next/server"
 import Anthropic from "@anthropic-ai/sdk"
+import { getClaudeApiUrl } from "@/lib/claude-proxy"
 import { requireAuth, apiError, apiSuccess } from "@/lib/api-helpers"
 import { AI_SAFETY_PROMPT, checkAiRateLimit, handleAiError } from "@/lib/ai-safety"
 import { checkRateLimit } from "@/lib/rate-limit"
 import { findBenchmark, adjustBenchmark, assessSalary, formatSalary, suggestTitles, marketStats, type SalaryBenchmark } from "@/lib/salary-benchmarks"
 
-const client = new Anthropic()
+const client = new Anthropic({ baseURL: getClaudeApiUrl() })
 
 interface SectionAnalysis {
   id: string
