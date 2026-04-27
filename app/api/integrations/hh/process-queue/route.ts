@@ -254,6 +254,51 @@ export async function POST(req: NextRequest) {
       let candidateToken: string | null = null
       let candidateId: string | null = resp.localCandidateId ?? null
 
+      // Fallback: если localCandidateId пуст — ищем существующего по email/phone/name,
+      // чтобы не создавать дубликат (первичная синхронизация могла создать кандидата
+      // раньше, чем hh_response успел привязаться).
+      if (!candidateId && localVac) {
+        if (resp.candidateEmail) {
+          const [byEmail] = await db
+            .select({ id: candidates.id })
+            .from(candidates)
+            .where(and(
+              eq(candidates.vacancyId, localVac.id),
+              eq(candidates.email, resp.candidateEmail)
+            ))
+            .limit(1)
+          if (byEmail) candidateId = byEmail.id
+        }
+        if (!candidateId && resp.candidatePhone) {
+          const [byPhone] = await db
+            .select({ id: candidates.id })
+            .from(candidates)
+            .where(and(
+              eq(candidates.vacancyId, localVac.id),
+              eq(candidates.phone, resp.candidatePhone)
+            ))
+            .limit(1)
+          if (byPhone) candidateId = byPhone.id
+        }
+        if (!candidateId && resp.candidateName) {
+          const [byName] = await db
+            .select({ id: candidates.id })
+            .from(candidates)
+            .where(and(
+              eq(candidates.vacancyId, localVac.id),
+              eq(candidates.name, resp.candidateName)
+            ))
+            .limit(1)
+          if (byName) candidateId = byName.id
+        }
+        if (candidateId) {
+          await db.update(hhResponses)
+            .set({ localCandidateId: candidateId })
+            .where(eq(hhResponses.id, resp.id))
+          console.log("[PQ] linked existing candidate", resp.candidateName, "->", candidateId)
+        }
+      }
+
       if (!candidateId && localVac) {
         candidateToken = Math.random().toString(36).slice(2) + Date.now().toString(36)
         const [newCand] = await db.insert(candidates).values({
