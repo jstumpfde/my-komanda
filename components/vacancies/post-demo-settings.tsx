@@ -14,10 +14,35 @@ import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import {
   CheckCircle2, Calendar, Phone, Video, Building2, Save,
-  Sparkles, Clock, Play, XCircle, ChevronDown,
+  Sparkles, Clock, Play, XCircle, ChevronDown, ClipboardList,
 } from "lucide-react"
 
 type PostDemoMode = "auto" | "manual"
+
+type FormFieldKey = "firstName" | "lastName" | "email" | "phone" | "telegram" | "birthDate" | "city"
+type FormFieldsState = Record<FormFieldKey, { enabled: boolean; required: boolean }>
+
+const DEFAULT_FORM_FIELDS: FormFieldsState = {
+  firstName: { enabled: true, required: true },
+  lastName:  { enabled: true, required: true },
+  email:     { enabled: true, required: true },
+  phone:     { enabled: true, required: true },
+  telegram:  { enabled: true, required: false },
+  birthDate: { enabled: true, required: true },
+  city:      { enabled: true, required: false },
+}
+
+const FIELD_LABELS: Record<FormFieldKey, string> = {
+  firstName: "Имя",
+  lastName:  "Фамилия",
+  email:     "Email",
+  phone:     "Телефон",
+  telegram:  "Telegram",
+  birthDate: "Дата рождения",
+  city:      "Город",
+}
+
+const FIELD_ORDER: FormFieldKey[] = ["firstName", "lastName", "email", "phone", "telegram", "birthDate", "city"]
 
 interface PostDemoSettingsProps {
   vacancyId: string
@@ -52,6 +77,10 @@ export function PostDemoSettings({ vacancyId }: PostDemoSettingsProps) {
   const [manualTitle, setManualTitle] = useState("Отлично, [Имя]! Вы прошли демонстрацию 🎉")
   const [manualText, setManualText] = useState("Мы изучим ваши ответы и свяжемся с вами в ближайшее время")
   const [manualButton, setManualButton] = useState("Хорошо, жду!")
+  const [manualButtonEnabled, setManualButtonEnabled] = useState(true)
+
+  // Final form fields
+  const [formFields, setFormFields] = useState<FormFieldsState>(DEFAULT_FORM_FIELDS)
 
   // Preview
   const [previewScore, setPreviewScore] = useState(80)
@@ -85,6 +114,21 @@ export function PostDemoSettings({ vacancyId }: PostDemoSettingsProps) {
         if (typeof data.manualTitle === "string") setManualTitle(data.manualTitle)
         if (typeof data.manualText === "string") setManualText(data.manualText)
         if (typeof data.manualButton === "string") setManualButton(data.manualButton)
+        if (typeof data.manualButtonEnabled === "boolean") setManualButtonEnabled(data.manualButtonEnabled)
+        if (data.formFields && typeof data.formFields === "object") {
+          const merged: FormFieldsState = { ...DEFAULT_FORM_FIELDS }
+          for (const key of FIELD_ORDER) {
+            const f = (data.formFields as Record<string, unknown>)[key]
+            if (f && typeof f === "object") {
+              const ff = f as { enabled?: unknown; required?: unknown }
+              merged[key] = {
+                enabled: typeof ff.enabled === "boolean" ? ff.enabled : merged[key].enabled,
+                required: typeof ff.required === "boolean" ? ff.required : merged[key].required,
+              }
+            }
+          }
+          setFormFields(merged)
+        }
       })
       .catch(err => console.error("[post-demo load]", err))
     return () => { cancelled = true }
@@ -120,6 +164,8 @@ export function PostDemoSettings({ vacancyId }: PostDemoSettingsProps) {
         manualTitle,
         manualText,
         manualButton,
+        manualButtonEnabled,
+        formFields,
       }
       const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}/post-demo-settings`, {
         method: "PUT",
@@ -320,13 +366,79 @@ export function PostDemoSettings({ vacancyId }: PostDemoSettingsProps) {
                 <Label className="text-xs">Текст</Label>
                 <textarea className="w-full border rounded-lg p-2 text-sm resize-none h-16 bg-background focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none" value={manualText} onChange={e => setManualText(e.target.value)} />
               </div>
+              <div className="flex items-center justify-between gap-2 pt-1">
+                <div>
+                  <Label className="text-xs">Показывать кнопку</Label>
+                  <p className="text-[10px] text-muted-foreground">Если выключено — после текста ничего не показывается</p>
+                </div>
+                <Switch checked={manualButtonEnabled} onCheckedChange={setManualButtonEnabled} />
+              </div>
               <div className="space-y-2">
-                <Label className="text-xs">Текст кнопки</Label>
-                <Input value={manualButton} onChange={e => setManualButton(e.target.value)} className="h-8 text-sm" />
+                <Label className={cn("text-xs", !manualButtonEnabled && "text-muted-foreground/60")}>Текст кнопки</Label>
+                <Input
+                  value={manualButton}
+                  onChange={e => setManualButton(e.target.value)}
+                  disabled={!manualButtonEnabled}
+                  className={cn("h-8 text-sm", !manualButtonEnabled && "opacity-50")}
+                />
               </div>
             </div>
           )}
 
+          <div className="flex justify-end mt-4">
+            <Button size="sm" className="gap-1.5 h-8 text-xs" onClick={handleSave} disabled={saving}>
+              <Save className="w-4 h-4" /> {saving ? "Сохранение…" : "Сохранить настройки"}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Финальная анкета — настройка полей */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <ClipboardList className="w-4 h-4" />
+            Финальная анкета
+          </CardTitle>
+          <p className="text-xs text-muted-foreground mt-1">
+            Поля, которые видит кандидат после демо. Можно скрыть и/или сделать необязательными.
+          </p>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-2">
+            <div className="grid grid-cols-[1fr_auto_auto] gap-3 px-2 pb-1 text-[11px] text-muted-foreground">
+              <span>Поле</span>
+              <span className="w-20 text-center">Показывать</span>
+              <span className="w-24 text-center">Обязательное</span>
+            </div>
+            {FIELD_ORDER.map(key => {
+              const f = formFields[key]
+              return (
+                <div key={key} className="grid grid-cols-[1fr_auto_auto] items-center gap-3 p-2 rounded-lg border bg-background">
+                  <span className="text-sm">{FIELD_LABELS[key]}</span>
+                  <div className="w-20 flex justify-center">
+                    <Switch
+                      checked={f.enabled}
+                      onCheckedChange={v => setFormFields(prev => ({
+                        ...prev,
+                        [key]: { enabled: v, required: v ? prev[key].required : false },
+                      }))}
+                    />
+                  </div>
+                  <div className="w-24 flex justify-center">
+                    <Switch
+                      checked={f.required}
+                      disabled={!f.enabled}
+                      onCheckedChange={v => setFormFields(prev => ({
+                        ...prev,
+                        [key]: { ...prev[key], required: v },
+                      }))}
+                    />
+                  </div>
+                </div>
+              )
+            })}
+          </div>
           <div className="flex justify-end mt-4">
             <Button size="sm" className="gap-1.5 h-8 text-xs" onClick={handleSave} disabled={saving}>
               <Save className="w-4 h-4" /> {saving ? "Сохранение…" : "Сохранить настройки"}
@@ -397,9 +509,11 @@ export function PostDemoSettings({ vacancyId }: PostDemoSettingsProps) {
                   <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto" />
                   <h3 className="text-lg font-bold text-gray-900">{manualTitle.replace("[Имя]", "Иван")}</h3>
                   <p className="text-sm text-gray-500">{manualText}</p>
-                  <div className="h-9 rounded-lg bg-primary flex items-center justify-center text-white text-sm font-medium">
-                    {manualButton}
-                  </div>
+                  {manualButtonEnabled && (
+                    <div className="h-9 rounded-lg bg-primary flex items-center justify-center text-white text-sm font-medium">
+                      {manualButton}
+                    </div>
+                  )}
                 </>
               )}
               <p className="text-[10px] text-gray-300">Powered by Company24</p>

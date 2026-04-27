@@ -302,6 +302,30 @@ export interface PostDemoSettings {
   manualTitle?: string
   manualText?: string
   manualButton?: string
+  manualButtonEnabled?: boolean
+  greenButtonEnabled?: boolean
+  // Финальная анкета — настройка полей
+  formFields?: {
+    firstName?: { enabled: boolean; required: boolean }
+    lastName?: { enabled: boolean; required: boolean }
+    email?: { enabled: boolean; required: boolean }
+    phone?: { enabled: boolean; required: boolean }
+    telegram?: { enabled: boolean; required: boolean }
+    birthDate?: { enabled: boolean; required: boolean }
+    city?: { enabled: boolean; required: boolean }
+  }
+}
+
+export type FormFieldKey = "firstName" | "lastName" | "email" | "phone" | "telegram" | "birthDate" | "city"
+
+export const DEFAULT_FORM_FIELDS: Required<NonNullable<PostDemoSettings["formFields"]>> = {
+  firstName: { enabled: true, required: true },
+  lastName:  { enabled: true, required: true },
+  email:     { enabled: true, required: true },
+  phone:     { enabled: true, required: true },
+  telegram:  { enabled: true, required: false },
+  birthDate: { enabled: true, required: true },
+  city:      { enabled: true, required: false },
 }
 
 export const candidates = pgTable("candidates", {

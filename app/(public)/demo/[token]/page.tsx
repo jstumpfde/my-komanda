@@ -30,6 +30,33 @@ interface PostDemoSettings {
   manualTitle?: string
   manualText?: string
   manualButton?: string
+  manualButtonEnabled?: boolean
+  greenButtonEnabled?: boolean
+  formFields?: {
+    firstName?: { enabled: boolean; required: boolean }
+    lastName?: { enabled: boolean; required: boolean }
+    email?: { enabled: boolean; required: boolean }
+    phone?: { enabled: boolean; required: boolean }
+    telegram?: { enabled: boolean; required: boolean }
+    birthDate?: { enabled: boolean; required: boolean }
+    city?: { enabled: boolean; required: boolean }
+  }
+}
+
+type FormFieldKey = "firstName" | "lastName" | "email" | "phone" | "telegram" | "birthDate" | "city"
+
+const DEFAULT_FORM_FIELDS: Record<FormFieldKey, { enabled: boolean; required: boolean }> = {
+  firstName: { enabled: true, required: true },
+  lastName:  { enabled: true, required: true },
+  email:     { enabled: true, required: true },
+  phone:     { enabled: true, required: true },
+  telegram:  { enabled: true, required: false },
+  birthDate: { enabled: true, required: true },
+  city:      { enabled: true, required: false },
+}
+
+function resolveFormField(settings: PostDemoSettings, key: FormFieldKey) {
+  return settings.formFields?.[key] ?? DEFAULT_FORM_FIELDS[key]
 }
 
 interface DemoData {
@@ -674,22 +701,40 @@ export default function DemoPage() {
 
   // ─── Final screen: form + thank you ────────────────────────────────────────
 
+  const settingsForForm: PostDemoSettings = data.postDemoSettings ?? {}
+  const fieldFirst    = resolveFormField(settingsForForm, "firstName")
+  const fieldLast     = resolveFormField(settingsForForm, "lastName")
+  const fieldEmail    = resolveFormField(settingsForForm, "email")
+  const fieldPhone    = resolveFormField(settingsForForm, "phone")
+  const fieldTelegram = resolveFormField(settingsForForm, "telegram")
+  const fieldBirth    = resolveFormField(settingsForForm, "birthDate")
+  const fieldCity     = resolveFormField(settingsForForm, "city")
+
+  const isFormValid =
+    (!fieldFirst.enabled    || !fieldFirst.required    || formFirst.trim().length    > 0) &&
+    (!fieldLast.enabled     || !fieldLast.required     || formLast.trim().length     > 0) &&
+    (!fieldEmail.enabled    || !fieldEmail.required    || formEmail.trim().length    > 0) &&
+    (!fieldPhone.enabled    || !fieldPhone.required    || formPhone.trim().length    > 0) &&
+    (!fieldTelegram.enabled || !fieldTelegram.required || formTelegram.trim().length > 0) &&
+    (!fieldBirth.enabled    || !fieldBirth.required    || formBirth.length           > 0) &&
+    (!fieldCity.enabled     || !fieldCity.required     || formCity.trim().length     > 0)
+
   const handleFormSubmit = async () => {
-    if (!formFirst.trim() || !formLast.trim() || !formEmail.trim() || !formPhone.trim()) return
+    if (!isFormValid) return
     setFormSubmitting(true)
     try {
       await fetch(`/api/public/demo/${token}/apply`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          firstName: formFirst.trim(),
-          lastName: formLast.trim(),
-          email: formEmail.trim(),
-          phone: formPhone.trim(),
-          birthDate: formBirth || undefined,
-          city: formCity.trim() || undefined,
+          firstName: fieldFirst.enabled ? formFirst.trim() : "",
+          lastName:  fieldLast.enabled  ? formLast.trim()  : "",
+          email:     fieldEmail.enabled ? formEmail.trim() : "",
+          phone:     fieldPhone.enabled ? formPhone.trim() : "",
+          birthDate: fieldBirth.enabled && formBirth ? formBirth : undefined,
+          city:      fieldCity.enabled  ? (formCity.trim() || undefined) : undefined,
           anketa: {
-            telegram:             formTelegram.trim() || undefined,
+            telegram:             fieldTelegram.enabled ? (formTelegram.trim() || undefined) : undefined,
             experienceSummary:    formExperience.trim() || undefined,
             portfolioUrl:         formPortfolio.trim() || undefined,
             hhUrl:                formHh.trim() || undefined,
@@ -730,10 +775,19 @@ export default function DemoPage() {
       const firstName = data.candidateName?.split(" ")[0] || data.candidateName || ""
       const replaceName = (s: string) => s.replace(/\[Имя\]/g, firstName).replace(/\[имя\]/g, firstName)
 
+      const manualButtonEnabled = settings.manualButtonEnabled !== false
+
       return (
         <div className="flex min-h-screen items-center justify-center px-4 py-8" style={{ backgroundColor: bgColor }}>
           <div className="w-full max-w-md space-y-6">
             <div className="text-center space-y-4">
+              {data.companyLogo && (
+                <img
+                  src={data.companyLogo}
+                  alt={data.companyName}
+                  className="mx-auto h-12 w-auto object-contain mb-2"
+                />
+              )}
               <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full" style={{ backgroundColor: brandColor + "20" }}>
                 <CheckCircle2 className="h-10 w-10" style={{ color: brandColor }} />
               </div>
@@ -746,15 +800,17 @@ export default function DemoPage() {
                   <p className="text-gray-600">
                     {settings.manualText ?? "Мы изучим ваши ответы и свяжемся с вами в ближайшее время"}
                   </p>
-                  <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
-                    <button
-                      type="button"
-                      className="w-full h-10 rounded-lg text-white text-sm font-medium"
-                      style={{ backgroundColor: brandColor }}
-                    >
-                      {settings.manualButton ?? "Хорошо, жду!"}
-                    </button>
-                  </div>
+                  {manualButtonEnabled && (
+                    <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
+                      <button
+                        type="button"
+                        className="w-full h-10 rounded-lg text-white text-sm font-medium"
+                        style={{ backgroundColor: brandColor }}
+                      >
+                        {settings.manualButton ?? "Хорошо, жду!"}
+                      </button>
+                    </div>
+                  )}
                 </>
               )}
 
@@ -808,10 +864,6 @@ export default function DemoPage() {
                   </p>
                 </>
               )}
-
-              {data.companyLogo && (
-                <img src={data.companyLogo} alt={data.companyName} className="mx-auto h-10 object-contain opacity-60" />
-              )}
             </div>
           </div>
         </div>
@@ -860,41 +912,56 @@ export default function DemoPage() {
                 color: "#111827",
                 backgroundColor: "#fff",
               } as React.CSSProperties
+              const requiredMark = (req: boolean) => req ? <span className="text-red-500">*</span> : null
               return (
                 <>
                   <div className="space-y-4">
-                    <div className="space-y-1">
-                      <Label className={labelClass}>Имя <span className="text-red-500">*</span></Label>
-                      <Input value={formFirst} onChange={e => setFormFirst(e.target.value)} placeholder="Иван" className={inputClass} style={inputStyle} />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className={labelClass}>Фамилия <span className="text-red-500">*</span></Label>
-                      <Input value={formLast} onChange={e => setFormLast(e.target.value)} placeholder="Иванов" className={inputClass} style={inputStyle} />
-                    </div>
+                    {fieldFirst.enabled && (
+                      <div className="space-y-1">
+                        <Label className={labelClass}>Имя {requiredMark(fieldFirst.required)}</Label>
+                        <Input value={formFirst} onChange={e => setFormFirst(e.target.value)} placeholder="Иван" className={inputClass} style={inputStyle} />
+                      </div>
+                    )}
+                    {fieldLast.enabled && (
+                      <div className="space-y-1">
+                        <Label className={labelClass}>Фамилия {requiredMark(fieldLast.required)}</Label>
+                        <Input value={formLast} onChange={e => setFormLast(e.target.value)} placeholder="Иванов" className={inputClass} style={inputStyle} />
+                      </div>
+                    )}
                   </div>
-                  <div className="space-y-1">
-                    <Label className={labelClass}>Email <span className="text-red-500">*</span></Label>
-                    <Input value={formEmail} onChange={e => setFormEmail(e.target.value)} placeholder="ivan@mail.ru" type="email" className={inputClass} style={inputStyle} />
+                  {fieldEmail.enabled && (
+                    <div className="space-y-1">
+                      <Label className={labelClass}>Email {requiredMark(fieldEmail.required)}</Label>
+                      <Input value={formEmail} onChange={e => setFormEmail(e.target.value)} placeholder="ivan@mail.ru" type="email" className={inputClass} style={inputStyle} />
+                    </div>
+                  )}
+                  <div className="space-y-4">
+                    {fieldPhone.enabled && (
+                      <div className="space-y-1">
+                        <Label className={labelClass}>Телефон {requiredMark(fieldPhone.required)}</Label>
+                        <Input value={formPhone} onChange={e => setFormPhone(e.target.value)} placeholder="+7 (999) 123-45-67" className={inputClass} style={inputStyle} />
+                      </div>
+                    )}
+                    {fieldTelegram.enabled && (
+                      <div className="space-y-1">
+                        <Label className={labelClass}>Telegram {requiredMark(fieldTelegram.required)}</Label>
+                        <Input value={formTelegram} onChange={e => setFormTelegram(e.target.value)} placeholder="@username" className={inputClass} style={inputStyle} />
+                      </div>
+                    )}
                   </div>
                   <div className="space-y-4">
-                    <div className="space-y-1">
-                      <Label className={labelClass}>Телефон <span className="text-red-500">*</span></Label>
-                      <Input value={formPhone} onChange={e => setFormPhone(e.target.value)} placeholder="+7 (999) 123-45-67" className={inputClass} style={inputStyle} />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className={labelClass}>Telegram</Label>
-                      <Input value={formTelegram} onChange={e => setFormTelegram(e.target.value)} placeholder="@username" className={inputClass} style={inputStyle} />
-                    </div>
-                  </div>
-                  <div className="space-y-4">
-                    <div className="space-y-1">
-                      <Label className={labelClass}>Дата рождения</Label>
-                      <Input value={formBirth} onChange={e => setFormBirth(e.target.value)} type="date" className={inputClass} style={inputStyle} />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className={labelClass}>Город</Label>
-                      <Input value={formCity} onChange={e => setFormCity(e.target.value)} placeholder="Москва" className={inputClass} style={inputStyle} />
-                    </div>
+                    {fieldBirth.enabled && (
+                      <div className="space-y-1">
+                        <Label className={labelClass}>Дата рождения {requiredMark(fieldBirth.required)}</Label>
+                        <Input value={formBirth} onChange={e => setFormBirth(e.target.value)} type="date" className={inputClass} style={inputStyle} />
+                      </div>
+                    )}
+                    {fieldCity.enabled && (
+                      <div className="space-y-1">
+                        <Label className={labelClass}>Город {requiredMark(fieldCity.required)}</Label>
+                        <Input value={formCity} onChange={e => setFormCity(e.target.value)} placeholder="Москва" className={inputClass} style={inputStyle} />
+                      </div>
+                    )}
                   </div>
                 </>
               )
@@ -915,7 +982,7 @@ export default function DemoPage() {
             </label>
 
             <Button className="w-full h-11" style={{ backgroundColor: brandColor }} onClick={handleFormSubmit}
-              disabled={formSubmitting || !formFirst.trim() || !formLast.trim() || !formEmail.trim() || !formPhone.trim() || !formConsent}>
+              disabled={formSubmitting || !isFormValid || !formConsent}>
               {formSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               Отправить
             </Button>

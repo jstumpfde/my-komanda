@@ -90,6 +90,24 @@ export async function PUT(
     if (body.manualTitle !== undefined) settings.manualTitle = trim(body.manualTitle, 200)
     if (body.manualText !== undefined) settings.manualText = trim(body.manualText, 2000)
     if (body.manualButton !== undefined) settings.manualButton = trim(body.manualButton, 200)
+    if (body.manualButtonEnabled !== undefined) settings.manualButtonEnabled = Boolean(body.manualButtonEnabled)
+    if (body.greenButtonEnabled !== undefined) settings.greenButtonEnabled = Boolean(body.greenButtonEnabled)
+
+    if (body.formFields !== undefined && body.formFields && typeof body.formFields === "object") {
+      const allowed = ["firstName", "lastName", "email", "phone", "telegram", "birthDate", "city"] as const
+      const next: NonNullable<PostDemoSettings["formFields"]> = { ...(settings.formFields ?? {}) }
+      for (const key of allowed) {
+        const f = (body.formFields as Record<string, unknown>)[key]
+        if (f && typeof f === "object") {
+          const ff = f as { enabled?: unknown; required?: unknown }
+          next[key] = {
+            enabled: Boolean(ff.enabled),
+            required: Boolean(ff.required),
+          }
+        }
+      }
+      settings.formFields = next
+    }
 
     await db
       .update(demos)
