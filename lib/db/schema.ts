@@ -276,9 +276,33 @@ export const demos = pgTable("demos", {
   title: text("title").notNull(),
   status: text("status").default("draft"), // 'draft' | 'published'
   lessonsJson: jsonb("lessons_json").notNull().default("[]"),
+  postDemoSettings: jsonb("post_demo_settings").default({}),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 })
+
+export interface PostDemoSettings {
+  mode?: "auto" | "manual"
+  // Thresholds
+  upperThreshold?: number
+  lowerThreshold?: number
+  // Green level
+  greenTitle?: string
+  meetPhone?: boolean
+  meetOnline?: boolean
+  meetOffice?: boolean
+  officeAddress?: string
+  // Yellow level
+  yellowTitle?: string
+  yellowText?: string
+  // Red level
+  redTitle?: string
+  redText?: string
+  // Manual mode
+  manualTitle?: string
+  manualText?: string
+  manualButton?: string
+}
 
 export const candidates = pgTable("candidates", {
   id: uuid("id").primaryKey().defaultRandom(),

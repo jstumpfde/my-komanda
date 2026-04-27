@@ -14,6 +14,24 @@ import { resolveBrand } from "@/lib/brand-colors"
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
+interface PostDemoSettings {
+  mode?: "auto" | "manual"
+  upperThreshold?: number
+  lowerThreshold?: number
+  greenTitle?: string
+  meetPhone?: boolean
+  meetOnline?: boolean
+  meetOffice?: boolean
+  officeAddress?: string
+  yellowTitle?: string
+  yellowText?: string
+  redTitle?: string
+  redText?: string
+  manualTitle?: string
+  manualText?: string
+  manualButton?: string
+}
+
 interface DemoData {
   candidateName: string
   vacancyTitle: string
@@ -29,6 +47,8 @@ interface DemoData {
   lessons: Lesson[]
   progress: { currentBlock?: number } | null
   answers: { blockId: string; answer: any }[] | null
+  aiScore: number | null
+  postDemoSettings: PostDemoSettings
 }
 
 interface FlatLesson {
@@ -688,21 +708,111 @@ export default function DemoPage() {
   }
 
   if (finished) {
-    // Thank you after form submit
+    // Thank you after form submit — динамический блок из post-demo settings
     if (formSubmitted) {
+      const settings: PostDemoSettings = data.postDemoSettings ?? {}
+      const mode = settings.mode ?? "auto"
+      const aiScore = data.aiScore
+      const upper = settings.upperThreshold ?? 75
+      const lower = settings.lowerThreshold ?? 50
+
+      let finalBlock: "green" | "yellow" | "red" | "manual"
+      if (mode === "manual") {
+        finalBlock = "manual"
+      } else if (aiScore !== null && aiScore >= upper) {
+        finalBlock = "green"
+      } else if (aiScore !== null && aiScore >= lower) {
+        finalBlock = "yellow"
+      } else {
+        finalBlock = "red"
+      }
+
+      const firstName = data.candidateName?.split(" ")[0] || data.candidateName || ""
+      const replaceName = (s: string) => s.replace(/\[Имя\]/g, firstName).replace(/\[имя\]/g, firstName)
+
       return (
-        <div className="flex min-h-screen items-center justify-center px-4" style={{ backgroundColor: bgColor }}>
-          <div className="w-full max-w-md text-center space-y-6">
-            <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full" style={{ backgroundColor: brandColor + "20" }}>
-              <CheckCircle2 className="h-10 w-10" style={{ color: brandColor }} />
+        <div className="flex min-h-screen items-center justify-center px-4 py-8" style={{ backgroundColor: bgColor }}>
+          <div className="w-full max-w-md space-y-6">
+            <div className="text-center space-y-4">
+              <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full" style={{ backgroundColor: brandColor + "20" }}>
+                <CheckCircle2 className="h-10 w-10" style={{ color: brandColor }} />
+              </div>
+
+              {finalBlock === "manual" && (
+                <>
+                  <h1 className="text-2xl font-bold text-gray-900">
+                    {replaceName(settings.manualTitle ?? "Отлично, [Имя]! Вы прошли демонстрацию 🎉")}
+                  </h1>
+                  <p className="text-gray-600">
+                    {settings.manualText ?? "Мы изучим ваши ответы и свяжемся с вами в ближайшее время"}
+                  </p>
+                  <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
+                    <button
+                      type="button"
+                      className="w-full h-10 rounded-lg text-white text-sm font-medium"
+                      style={{ backgroundColor: brandColor }}
+                    >
+                      {settings.manualButton ?? "Хорошо, жду!"}
+                    </button>
+                  </div>
+                </>
+              )}
+
+              {finalBlock === "green" && (
+                <>
+                  <h1 className="text-2xl font-bold text-gray-900">
+                    {settings.greenTitle ?? "Отлично! Выберите удобное время для встречи"}
+                  </h1>
+                  <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 space-y-2 text-left">
+                    <p className="text-xs text-gray-500 text-center">Выберите тип встречи:</p>
+                    {settings.meetPhone && (
+                      <button type="button" className="w-full p-3 rounded-lg border border-gray-200 bg-white text-sm text-gray-900 flex items-center gap-2">
+                        📞 Звонок
+                      </button>
+                    )}
+                    {settings.meetOnline && (
+                      <button type="button" className="w-full p-3 rounded-lg border border-gray-200 bg-white text-sm text-gray-900 flex items-center gap-2">
+                        🎥 Онлайн
+                      </button>
+                    )}
+                    {settings.meetOffice && (
+                      <button type="button" className="w-full p-3 rounded-lg border border-gray-200 bg-white text-sm text-gray-900 flex items-center gap-2">
+                        🏢 Офис{settings.officeAddress ? ` (${settings.officeAddress})` : ""}
+                      </button>
+                    )}
+                    {!settings.meetPhone && !settings.meetOnline && !settings.meetOffice && (
+                      <p className="text-sm text-gray-500 text-center">Мы свяжемся с вами для согласования встречи.</p>
+                    )}
+                  </div>
+                </>
+              )}
+
+              {finalBlock === "yellow" && (
+                <>
+                  <h1 className="text-2xl font-bold text-gray-900">
+                    {settings.yellowTitle ?? "Спасибо за прохождение!"}
+                  </h1>
+                  <p className="text-gray-600">
+                    {settings.yellowText ?? "Мы рассмотрим вашу анкету и свяжемся с вами в ближайшее время"}
+                  </p>
+                </>
+              )}
+
+              {finalBlock === "red" && (
+                <>
+                  <h1 className="text-2xl font-bold text-gray-900">
+                    {settings.redTitle ?? "Спасибо за интерес к вакансии"}
+                  </h1>
+                  <p className="text-gray-600">
+                    {settings.redText ?? "К сожалению, ваш профиль не соответствует требованиям данной позиции. Мы сохраним ваши данные и свяжемся, если появится подходящая вакансия."}
+                  </p>
+                </>
+              )}
+
+              {data.companyLogo && (
+                <img src={data.companyLogo} alt={data.companyName} className="mx-auto h-10 object-contain opacity-60" />
+              )}
             </div>
-            <h1 className="text-2xl font-bold" style={{ color: textColor }}>Спасибо!</h1>
-            <p className="text-gray-600">
-              Мы рассмотрим вашу заявку на позицию &laquo;{data.vacancyTitle}&raquo; и свяжемся с вами в ближайшее время.
-            </p>
-            {data.companyLogo && (
-              <img src={data.companyLogo} alt={data.companyName} className="mx-auto h-10 object-contain opacity-60" />
-            )}
           </div>
         </div>
       )
@@ -731,7 +841,6 @@ export default function DemoPage() {
           </div>
 
           <div className="bg-blue-50 border border-blue-100 rounded-xl p-5 text-sm text-gray-700 space-y-3 leading-relaxed">
-            <p>Спасибо за заполнение анкеты и за время, которое вы инвестировали на демонстрацию.</p>
             <p className="font-medium text-gray-800">Заполните ваши данные!</p>
             <p>Мы разберём ваши ответы — в том числе ответы на вопросы — и свяжемся с вами.</p>
             <p>Если видим, что подходим друг другу — приглашаем на финальный созвон с CEO на 30–40 минут: уточняем детали, обсуждаем оффер, договариваемся о дате выхода.</p>

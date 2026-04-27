@@ -1931,7 +1931,7 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                     onSaved={() => refetchVacancy()}
                   />
                 </div>
-                <PostDemoSettings />
+                <PostDemoSettings vacancyId={id} />
               </TabsContent>
 
               <TabsContent value="settings">

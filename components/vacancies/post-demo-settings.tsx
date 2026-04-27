@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -19,7 +19,11 @@ import {
 
 type PostDemoMode = "auto" | "manual"
 
-export function PostDemoSettings() {
+interface PostDemoSettingsProps {
+  vacancyId: string
+}
+
+export function PostDemoSettings({ vacancyId }: PostDemoSettingsProps) {
   const [mode, setMode] = useState<PostDemoMode>("auto")
 
   // Thresholds
@@ -53,6 +57,39 @@ export function PostDemoSettings() {
   const [previewScore, setPreviewScore] = useState(80)
   const previewLevel = previewScore >= upperThreshold ? "green" : previewScore >= lowerThreshold ? "yellow" : "red"
 
+  // Saving state
+  const [saving, setSaving] = useState(false)
+
+  // Load saved settings on mount
+  useEffect(() => {
+    if (!vacancyId) return
+    let cancelled = false
+    fetch(`/api/modules/hr/vacancies/${vacancyId}/post-demo-settings`)
+      .then(r => r.ok ? r.json() : null)
+      .then(json => {
+        if (cancelled || !json) return
+        const data = json.settings ?? {}
+        if (!data || typeof data !== "object") return
+        if (data.mode === "auto" || data.mode === "manual") setMode(data.mode)
+        if (typeof data.upperThreshold === "number") setUpperThreshold(data.upperThreshold)
+        if (typeof data.lowerThreshold === "number") setLowerThreshold(data.lowerThreshold)
+        if (typeof data.greenTitle === "string") setGreenTitle(data.greenTitle)
+        if (typeof data.meetPhone === "boolean") setMeetPhone(data.meetPhone)
+        if (typeof data.meetOnline === "boolean") setMeetOnline(data.meetOnline)
+        if (typeof data.meetOffice === "boolean") setMeetOffice(data.meetOffice)
+        if (typeof data.officeAddress === "string") setOfficeAddress(data.officeAddress)
+        if (typeof data.yellowTitle === "string") setYellowTitle(data.yellowTitle)
+        if (typeof data.yellowText === "string") setYellowText(data.yellowText)
+        if (typeof data.redTitle === "string") setRedTitle(data.redTitle)
+        if (typeof data.redText === "string") setRedText(data.redText)
+        if (typeof data.manualTitle === "string") setManualTitle(data.manualTitle)
+        if (typeof data.manualText === "string") setManualText(data.manualText)
+        if (typeof data.manualButton === "string") setManualButton(data.manualButton)
+      })
+      .catch(err => console.error("[post-demo load]", err))
+    return () => { cancelled = true }
+  }, [vacancyId])
+
   // Keep thresholds in sync
   const handleUpperChange = (v: number) => {
     setUpperThreshold(v)
@@ -61,6 +98,42 @@ export function PostDemoSettings() {
   const handleLowerChange = (v: number) => {
     setLowerThreshold(v)
     if (v >= upperThreshold) setUpperThreshold(Math.min(100, v + 5))
+  }
+
+  const handleSave = async () => {
+    if (!vacancyId) return
+    setSaving(true)
+    try {
+      const payload = {
+        mode,
+        upperThreshold,
+        lowerThreshold,
+        greenTitle,
+        meetPhone,
+        meetOnline,
+        meetOffice,
+        officeAddress,
+        yellowTitle,
+        yellowText,
+        redTitle,
+        redText,
+        manualTitle,
+        manualText,
+        manualButton,
+      }
+      const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}/post-demo-settings`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+      if (!res.ok) throw new Error("save failed")
+      toast.success("Настройки сохранены")
+    } catch (err) {
+      console.error("[post-demo save]", err)
+      toast.error("Не удалось сохранить")
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -255,8 +328,8 @@ export function PostDemoSettings() {
           )}
 
           <div className="flex justify-end mt-4">
-            <Button size="sm" className="gap-1.5 h-8 text-xs" onClick={() => toast.success("Настройки сохранены")}>
-              <Save className="w-4 h-4" /> Сохранить настройки
+            <Button size="sm" className="gap-1.5 h-8 text-xs" onClick={handleSave} disabled={saving}>
+              <Save className="w-4 h-4" /> {saving ? "Сохранение…" : "Сохранить настройки"}
             </Button>
           </div>
         </CardContent>

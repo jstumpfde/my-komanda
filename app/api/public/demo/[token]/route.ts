@@ -19,6 +19,7 @@ export async function GET(
         vacancyId: candidates.vacancyId,
         anketaAnswers: candidates.anketaAnswers,
         demoProgressJson: candidates.demoProgressJson,
+        aiScore: candidates.aiScore,
       })
       .from(candidates)
       .where(eq(candidates.token, token))
@@ -69,6 +70,7 @@ export async function GET(
         id: demos.id,
         title: demos.title,
         lessonsJson: demos.lessonsJson,
+        postDemoSettings: demos.postDemoSettings,
       })
       .from(demos)
       .where(eq(demos.vacancyId, vacancy.id))
@@ -96,6 +98,8 @@ export async function GET(
       lessons: demo.lessonsJson,
       progress: candidate.demoProgressJson,
       answers: candidate.anketaAnswers,
+      aiScore: candidate.aiScore,
+      postDemoSettings: demo.postDemoSettings ?? {},
     })
   } catch (err) {
     if (err instanceof Response) return err
