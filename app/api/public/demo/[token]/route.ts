@@ -43,6 +43,7 @@ export async function GET(
         city: vacancies.city,
         format: vacancies.format,
         companyName: companies.name,
+        companyBrandName: companies.brandName,
         companyLogo: companies.logoUrl,
         brandPrimaryColor: companies.brandPrimaryColor,
         brandBgColor: companies.brandBgColor,
@@ -86,7 +87,7 @@ export async function GET(
     return apiSuccess({
       candidateName: candidate.name,
       vacancyTitle: vacancy.title,
-      companyName: vacancy.companyName,
+      companyName: vacancy.companyBrandName || vacancy.companyName,
       companyLogo: vacancy.companyLogo,
       brandPrimaryColor: vacancy.brandPrimaryColor,
       brandBgColor: vacancy.brandBgColor,

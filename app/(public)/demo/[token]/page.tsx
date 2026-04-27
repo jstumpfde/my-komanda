@@ -526,6 +526,7 @@ export default function DemoPage() {
   // Form state (must be declared before any conditional returns — React rules of hooks)
   const [formSubmitted, setFormSubmitted] = useState(false)
   const [formSubmitting, setFormSubmitting] = useState(false)
+  const [showFarewell, setShowFarewell] = useState(false)
   const [formFirst, setFormFirst] = useState("")
   const [formLast, setFormLast] = useState("")
   const [formEmail, setFormEmail] = useState("")
@@ -753,6 +754,28 @@ export default function DemoPage() {
   }
 
   if (finished) {
+    // Прощальный экран после клика «Хорошо, жду!» — закрытая вкладка для кандидата
+    if (showFarewell) {
+      return (
+        <div className="flex min-h-screen items-center justify-center px-4" style={{ backgroundColor: bgColor }}>
+          <div className="text-center max-w-md space-y-4">
+            {data.companyLogo && (
+              <img
+                src={data.companyLogo}
+                alt={data.companyName}
+                className="mx-auto h-16 w-auto object-contain mb-2"
+              />
+            )}
+            {data.companyName && (
+              <div className="text-sm font-medium text-gray-700">{data.companyName}</div>
+            )}
+            <h1 className="text-3xl font-bold text-gray-900">До скорой встречи! 👋</h1>
+            <p className="text-gray-600">Эту вкладку можно закрыть.</p>
+          </div>
+        </div>
+      )
+    }
+
     // Thank you after form submit — динамический блок из post-demo settings
     if (formSubmitted) {
       const settings: PostDemoSettings = data.postDemoSettings ?? {}
@@ -806,6 +829,7 @@ export default function DemoPage() {
                         type="button"
                         className="w-full h-10 rounded-lg text-white text-sm font-medium"
                         style={{ backgroundColor: brandColor }}
+                        onClick={() => setShowFarewell(true)}
                       >
                         {settings.manualButton ?? "Хорошо, жду!"}
                       </button>
@@ -883,6 +907,16 @@ export default function DemoPage() {
       <div className="flex min-h-screen items-center justify-center px-4 py-8" style={{ backgroundColor: bgColor }}>
         <div className="w-full max-w-xl space-y-6">
           <div className="text-center">
+            {data.companyLogo && (
+              <img
+                src={data.companyLogo}
+                alt={data.companyName}
+                className="mx-auto h-12 w-auto object-contain mb-3"
+              />
+            )}
+            {data.companyName && (
+              <div className="text-sm font-medium text-gray-700 mb-3">{data.companyName}</div>
+            )}
             <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full mb-4" style={{ backgroundColor: brandColor + "20" }}>
               <CheckCircle2 className="h-8 w-8" style={{ color: brandColor }} />
             </div>
@@ -988,9 +1022,6 @@ export default function DemoPage() {
             </Button>
           </div>
 
-          {data.companyLogo && (
-            <img src={data.companyLogo} alt={data.companyName} className="mx-auto h-8 object-contain opacity-40" />
-          )}
         </div>
       </div>
     )
