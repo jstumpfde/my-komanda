@@ -287,7 +287,7 @@ function QuestionInput({
                   type="checkbox"
                   checked={checked}
                   onChange={() => toggle(opt)}
-                  className="h-4 w-4 rounded border-gray-300 accent-blue-600 cursor-pointer"
+                  className="h-4 w-4 rounded border-gray-300 accent-blue-600 cursor-pointer [color-scheme:light]"
                 />
                 <span className="flex-1 text-gray-900">{opt}</span>
               </label>
@@ -377,7 +377,7 @@ function QuestionInput({
         onChange={(e) => onChange(e.target.value)}
         placeholder="Ваш ответ..."
         rows={type === "long" ? 5 : 3}
-        className="resize-none"
+        className="resize-none bg-white border-gray-300 text-gray-900 placeholder:text-gray-400 focus-visible:border-blue-500 focus-visible:ring-blue-200"
       />
     </div>
   )
