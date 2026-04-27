@@ -5,10 +5,33 @@ import type { Candidate } from "./candidate-card"
 import type { CardDisplaySettings } from "./card-settings"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 import type { CandidateAction } from "@/lib/column-config"
 import { applySortMode, type CandidateSortMode } from "@/lib/candidate-sort"
-import { MapPin, Briefcase, Circle, CheckCircle2, XCircle, ArrowRight, ThumbsUp } from "lucide-react"
+import {
+  MapPin,
+  Briefcase,
+  CheckCircle2,
+  XCircle,
+  Clock,
+  MoreHorizontal,
+  UserRound,
+  ArrowRightLeft,
+  Trash2,
+} from "lucide-react"
+import { DemoProgressBar } from "./demo-progress-bar"
+import { AiScoreBadge } from "./ai-score-badge"
 
 interface Column {
   id: string
@@ -23,7 +46,10 @@ interface TilesViewProps {
   settings: CardDisplaySettings
   onOpenProfile?: (candidate: Candidate, columnId: string) => void
   onAction?: (candidateId: string, columnId: string, action: CandidateAction) => void
+  onMoveToStage?: (candidateId: string, fromColumnId: string, toColumnId: string) => void
+  onDelete?: (candidateId: string, columnId: string) => void
   sortMode?: CandidateSortMode
+  groupBy?: "status" | "none"
 }
 
 function formatTimeAgo(date: Date) {
@@ -31,6 +57,7 @@ function formatTimeAgo(date: Date) {
   const diffMins = Math.floor(diffMs / 60000)
   const diffHours = Math.floor(diffMs / 3600000)
   const diffDays = Math.floor(diffMs / 86400000)
+  if (diffMins < 1) return "только что"
   if (diffMins < 60) return `${diffMins} мин. назад`
   if (diffHours < 24) return `${diffHours} ч. назад`
   if (diffDays === 1) return "вчера"
@@ -38,10 +65,14 @@ function formatTimeAgo(date: Date) {
   return `${Math.floor(diffDays / 7)} нед. назад`
 }
 
-function getScoreColor(score: number) {
-  if (score >= 80) return "bg-success/10 text-success border-success/20"
-  if (score >= 70) return "bg-warning/10 text-warning border-warning/20"
-  return "bg-destructive/10 text-destructive border-destructive/20"
+function formatFullDate(date: Date) {
+  return date.toLocaleString("ru-RU", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  })
 }
 
 function getSourceColor(source: string) {
@@ -54,7 +85,34 @@ function getSourceColor(source: string) {
   return colors[source] || "bg-muted text-muted-foreground border-border"
 }
 
-export function TilesView({ columns, settings, onOpenProfile, onAction, sortMode = "date_desc" }: TilesViewProps) {
+function getSourceLabel(source: string) {
+  const map: Record<string, string> = {
+    "hh.ru": "hh",
+    "Реферал": "реферал",
+    "Сайт": "сайт",
+  }
+  return map[source] || source
+}
+
+function getDateForCard(candidate: Candidate): Date {
+  if (candidate.createdAt) {
+    const d = new Date(candidate.createdAt)
+    if (!isNaN(d.getTime())) return d
+  }
+  if (candidate.lastSeen instanceof Date) return candidate.lastSeen
+  return candidate.addedAt
+}
+
+export function TilesView({
+  columns,
+  settings,
+  onOpenProfile,
+  onAction,
+  onMoveToStage,
+  onDelete,
+  sortMode = "date_desc",
+  groupBy = "none",
+}: TilesViewProps) {
   const allCandidates = useMemo(() => {
     const flat = columns.flatMap((col) =>
       col.candidates.map((c) => ({
@@ -68,6 +126,8 @@ export function TilesView({ columns, settings, onOpenProfile, onAction, sortMode
     return applySortMode(flat, sortMode) as typeof flat
   }, [columns, sortMode])
 
+  const showStatusBadge = groupBy !== "status"
+
   if (allCandidates.length === 0) {
     return (
       <div className="flex items-center justify-center h-40 rounded-xl border-2 border-dashed border-border/50 text-muted-foreground/40">
@@ -79,145 +139,174 @@ export function TilesView({ columns, settings, onOpenProfile, onAction, sortMode
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
       {allCandidates.map((candidate) => {
-        const isOnline = candidate.lastSeen === "online"
-        const isDecisionStage = candidate.columnId === "interview" || candidate.columnId === "offer"
+        const cardDate = getDateForCard(candidate)
+        const salaryUnknown = candidate.salaryMin === 0 && candidate.salaryMax === 0
+        const positionLabel = candidate.experience?.trim()
 
         return (
           <div
             key={candidate.id}
-            className="rounded-xl border border-border bg-card transition-all duration-200 overflow-hidden cursor-pointer hover:border-primary/40"
+            className="group rounded-xl border border-border bg-card transition-colors cursor-pointer hover:border-primary/40 hover:shadow-sm"
             onClick={() => onOpenProfile?.(candidate, candidate.columnId)}
           >
-            {/* Color bar */}
-            <div
-              className="h-1.5"
-              style={{ background: `linear-gradient(90deg, ${candidate.colorFrom}, ${candidate.colorTo})` }}
-            />
-
             <div className="p-4">
-              {/* Header */}
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex items-center gap-3">
-                  <div
-                    className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0"
-                    style={{ background: `linear-gradient(135deg, ${candidate.colorFrom}, ${candidate.colorTo})` }}
-                  >
-                    {candidate.name.charAt(0)}
-                  </div>
-                  <div>
-                    <h4 className="font-semibold text-foreground text-sm">{candidate.name}</h4>
-                    <div className="flex items-center gap-1.5 mt-0.5">
-                      {isOnline ? (
-                        <span className="flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400">
-                          <Circle className="w-2 h-2 fill-current" />
-                          онлайн
-                        </span>
-                      ) : (
-                        <span className="text-[10px] text-muted-foreground">
-                          {formatTimeAgo(candidate.lastSeen as Date)}
-                        </span>
-                      )}
-                    </div>
-                  </div>
+              {/* Header: avatar + name + score + menu */}
+              <div className="flex items-start gap-3 mb-2">
+                <div
+                  className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0"
+                  style={{ background: `linear-gradient(135deg, ${candidate.colorFrom}, ${candidate.colorTo})` }}
+                >
+                  {candidate.name.charAt(0)}
                 </div>
-                {settings.showScore && (() => {
-                  const aiActuallyRan = candidate.aiScore != null && !!candidate.aiSummary
-                  return (
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        "font-bold text-sm border",
-                        aiActuallyRan ? getScoreColor(candidate.aiScore!) : "text-muted-foreground/50 bg-muted/30 border-muted"
+                <div className="min-w-0 flex-1">
+                  <h4 className="font-semibold text-foreground text-sm leading-tight truncate">{candidate.name}</h4>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="inline-flex items-center gap-1 mt-0.5 text-[11px] text-muted-foreground">
+                        <Clock className="w-3 h-3" />
+                        <span>{formatTimeAgo(cardDate)}</span>
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent>{formatFullDate(cardDate)}</TooltipContent>
+                  </Tooltip>
+                </div>
+
+                <div className="flex items-center gap-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                  {settings.showScore && <AiScoreBadge score={candidate.aiScore} />}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                        aria-label="Действия"
+                      >
+                        <MoreHorizontal className="w-4 h-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-52">
+                      <DropdownMenuItem onClick={() => onOpenProfile?.(candidate, candidate.columnId)}>
+                        <UserRound className="w-4 h-4" />
+                        Открыть профиль
+                      </DropdownMenuItem>
+                      {onMoveToStage && columns.length > 1 && (
+                        <DropdownMenuSub>
+                          <DropdownMenuSubTrigger>
+                            <ArrowRightLeft className="w-4 h-4" />
+                            Перенести в этап
+                          </DropdownMenuSubTrigger>
+                          <DropdownMenuSubContent>
+                            {columns
+                              .filter((col) => col.id !== candidate.columnId)
+                              .map((col) => (
+                                <DropdownMenuItem
+                                  key={col.id}
+                                  onClick={() => onMoveToStage(candidate.id, candidate.columnId, col.id)}
+                                >
+                                  <span
+                                    className="w-2 h-2 rounded-full"
+                                    style={{ background: `linear-gradient(135deg, ${col.colorFrom}, ${col.colorTo})` }}
+                                  />
+                                  {col.title}
+                                </DropdownMenuItem>
+                              ))}
+                          </DropdownMenuSubContent>
+                        </DropdownMenuSub>
                       )}
-                    >
-                      {aiActuallyRan ? candidate.aiScore : "—"}
-                    </Badge>
-                  )
-                })()}
+                      <DropdownMenuItem
+                        onClick={() => onAction?.(candidate.id, candidate.columnId, "reject")}
+                        className="text-destructive focus:text-destructive"
+                      >
+                        <XCircle className="w-4 h-4" />
+                        Отказать
+                      </DropdownMenuItem>
+                      {onDelete && (
+                        <>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            onClick={() => onDelete(candidate.id, candidate.columnId)}
+                            className="text-destructive focus:text-destructive"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                            Удалить
+                          </DropdownMenuItem>
+                        </>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
               </div>
 
-              {/* Info */}
-              <div className="space-y-1.5 mb-3">
-                {settings.showCity && (
+              {/* Meta rows: city / position / salary */}
+              <div className="space-y-1 mb-3">
+                {settings.showCity && candidate.city && (
                   <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <MapPin className="w-3.5 h-3.5" />
-                    {candidate.city}
+                    <MapPin className="w-3.5 h-3.5 flex-shrink-0" />
+                    <span className="truncate">{candidate.city}</span>
                   </div>
                 )}
-                {settings.showExperience && (
+                {settings.showExperience && positionLabel && (
                   <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <Briefcase className="w-3.5 h-3.5" />
-                    {candidate.experience}
+                    <Briefcase className="w-3.5 h-3.5 flex-shrink-0" />
+                    <span className="truncate">{positionLabel}</span>
                   </div>
                 )}
                 {(settings.showSalary || settings.showSalaryFull) && (
-                  <p className="text-xs font-medium text-foreground">
-                    {settings.showSalaryFull
-                      ? `${candidate.salaryMin.toLocaleString("ru-RU")} – ${candidate.salaryMax.toLocaleString("ru-RU")} ₽`
-                      : `${Math.round(candidate.salaryMin / 1000)}-${Math.round(candidate.salaryMax / 1000)}k`
-                    }
-                  </p>
+                  salaryUnknown ? (
+                    <p className="text-[11px] text-muted-foreground/70 italic">Зарплата не указана</p>
+                  ) : (
+                    <p className="text-xs font-medium text-foreground">
+                      {settings.showSalaryFull
+                        ? `${candidate.salaryMin.toLocaleString("ru-RU")} – ${candidate.salaryMax.toLocaleString("ru-RU")} ₽`
+                        : `${Math.round(candidate.salaryMin / 1000)}-${Math.round(candidate.salaryMax / 1000)}k`}
+                    </p>
+                  )
                 )}
               </div>
 
-              {/* Skills */}
-              {settings.showSkills && candidate.skills.length > 0 && (
-                <div className="flex flex-wrap gap-1 mb-3">
-                  {candidate.skills.slice(0, 4).map((skill) => (
-                    <Badge key={skill} variant="secondary" className="text-[10px] px-1.5 py-0 h-5">{skill}</Badge>
-                  ))}
-                  {candidate.skills.length > 4 && (
-                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 text-muted-foreground">
-                      +{candidate.skills.length - 4}
-                    </Badge>
-                  )}
-                </div>
-              )}
+              {/* Demo progress */}
+              <DemoProgressBar progress={candidate.demoProgressJson} className="mb-3" />
 
-              {/* Stage + Source */}
+              {/* Status + source */}
               <div className="flex items-center gap-2 mb-3">
-                <span
-                  className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium text-white"
-                  style={{ background: `linear-gradient(135deg, ${candidate.colorFrom}, ${candidate.colorTo})` }}
-                >
-                  {candidate.columnTitle}
-                </span>
-                {settings.showSource && (
+                {showStatusBadge && (
+                  <span
+                    className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium text-white"
+                    style={{ background: `linear-gradient(135deg, ${candidate.colorFrom}, ${candidate.colorTo})` }}
+                  >
+                    {candidate.columnTitle}
+                  </span>
+                )}
+                {settings.showSource && candidate.source && (
                   <Badge variant="outline" className={cn("text-[10px] border", getSourceColor(candidate.source))}>
-                    {candidate.source}
+                    {getSourceLabel(candidate.source)}
                   </Badge>
                 )}
               </div>
 
               {/* Actions */}
               {settings.showActions && (
-                <div className="flex items-center gap-1 pt-2 border-t border-border/60" onClick={(e) => e.stopPropagation()}>
-                  {isDecisionStage ? (
-                    <>
-                      <Button variant="ghost" size="sm" className="flex-1 h-7 text-[11px] text-success hover:bg-success/10" onClick={() => onAction?.(candidate.id, candidate.columnId, "advance")}>
-                        <ThumbsUp className="w-3 h-3 mr-1" />Принять
-                      </Button>
-                      <Button variant="ghost" size="sm" className="flex-1 h-7 text-[11px] text-destructive hover:bg-destructive/10" onClick={() => onAction?.(candidate.id, candidate.columnId, "reject")}>
-                        <XCircle className="w-3 h-3 mr-1" />Отказать
-                      </Button>
-                    </>
-                  ) : (
-                    <>
-                      <Button variant="ghost" size="sm" className="flex-1 h-7 text-[11px] text-success hover:bg-success/10" onClick={() => onAction?.(candidate.id, candidate.columnId, "advance")}>
-                        <CheckCircle2 className="w-3 h-3 mr-1" />Далее
-                      </Button>
-                      <Button variant="ghost" size="sm" className="flex-1 h-7 text-[11px] text-destructive hover:bg-destructive/10" onClick={() => onAction?.(candidate.id, candidate.columnId, "reject")}>
-                        <XCircle className="w-3 h-3 mr-1" />Отказать
-                      </Button>
-                    </>
-                  )}
+                <div
+                  className="flex items-center gap-1 pt-2 border-t border-border/60"
+                  onClick={(e) => e.stopPropagation()}
+                >
                   <Button
                     variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 text-muted-foreground hover:text-primary hover:bg-primary/10"
-                    onClick={() => onOpenProfile?.(candidate, candidate.columnId)}
+                    size="sm"
+                    className="flex-1 h-7 text-[11px] text-success hover:bg-success/10"
+                    onClick={() => onAction?.(candidate.id, candidate.columnId, "advance")}
                   >
-                    <ArrowRight className="w-3.5 h-3.5" />
+                    <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
+                    Далее
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="flex-1 h-7 text-[11px] text-destructive hover:bg-destructive/10"
+                    onClick={() => onAction?.(candidate.id, candidate.columnId, "reject")}
+                  >
+                    <XCircle className="w-3.5 h-3.5 mr-1" />
+                    Отказать
                   </Button>
                 </div>
               )}
