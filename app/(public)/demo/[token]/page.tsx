@@ -282,14 +282,14 @@ function QuestionInput({
           {question.options.map((opt, i) => {
             const checked = selected.includes(opt)
             return (
-              <label key={i} className="flex items-center gap-2 rounded-lg border p-3 hover:bg-gray-50 transition-colors cursor-pointer">
+              <label key={i} className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white p-3 hover:bg-gray-50 transition-colors cursor-pointer">
                 <input
                   type="checkbox"
                   checked={checked}
                   onChange={() => toggle(opt)}
-                  className="h-4 w-4 rounded border-gray-300"
+                  className="h-4 w-4 rounded border-gray-300 accent-blue-600 cursor-pointer"
                 />
-                <span className="flex-1">{opt}</span>
+                <span className="flex-1 text-gray-900">{opt}</span>
               </label>
             )
           })}
@@ -715,40 +715,48 @@ export default function DemoPage() {
           <div className="bg-white rounded-xl p-6 shadow-sm space-y-4">
 
             {/* Основные данные */}
-            <div className="space-y-4">
-              <div className="space-y-1">
-                <Label className="text-xs">Имя <span className="text-red-500">*</span></Label>
-                <Input value={formFirst} onChange={e => setFormFirst(e.target.value)} placeholder="Иван" className="h-10" />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Фамилия <span className="text-red-500">*</span></Label>
-                <Input value={formLast} onChange={e => setFormLast(e.target.value)} placeholder="Иванов" className="h-10" />
-              </div>
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Email <span className="text-red-500">*</span></Label>
-              <Input value={formEmail} onChange={e => setFormEmail(e.target.value)} placeholder="ivan@mail.ru" type="email" className="h-10" />
-            </div>
-            <div className="space-y-4">
-              <div className="space-y-1">
-                <Label className="text-xs">Телефон <span className="text-red-500">*</span></Label>
-                <Input value={formPhone} onChange={e => setFormPhone(e.target.value)} placeholder="+7 (999) 123-45-67" className="h-10" />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Telegram</Label>
-                <Input value={formTelegram} onChange={e => setFormTelegram(e.target.value)} placeholder="@username" className="h-10" />
-              </div>
-            </div>
-            <div className="space-y-4">
-              <div className="space-y-1">
-                <Label className="text-xs">Дата рождения</Label>
-                <Input value={formBirth} onChange={e => setFormBirth(e.target.value)} type="date" className="h-10" />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Город</Label>
-                <Input value={formCity} onChange={e => setFormCity(e.target.value)} placeholder="Москва" className="h-10" />
-              </div>
-            </div>
+            {(() => {
+              const inputClass = "h-10 bg-white border-gray-300 text-gray-900 placeholder:text-gray-400 focus-visible:border-blue-500 focus-visible:ring-blue-200"
+              const labelClass = "text-xs text-gray-700"
+              return (
+                <>
+                  <div className="space-y-4">
+                    <div className="space-y-1">
+                      <Label className={labelClass}>Имя <span className="text-red-500">*</span></Label>
+                      <Input value={formFirst} onChange={e => setFormFirst(e.target.value)} placeholder="Иван" className={inputClass} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className={labelClass}>Фамилия <span className="text-red-500">*</span></Label>
+                      <Input value={formLast} onChange={e => setFormLast(e.target.value)} placeholder="Иванов" className={inputClass} />
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className={labelClass}>Email <span className="text-red-500">*</span></Label>
+                    <Input value={formEmail} onChange={e => setFormEmail(e.target.value)} placeholder="ivan@mail.ru" type="email" className={inputClass} />
+                  </div>
+                  <div className="space-y-4">
+                    <div className="space-y-1">
+                      <Label className={labelClass}>Телефон <span className="text-red-500">*</span></Label>
+                      <Input value={formPhone} onChange={e => setFormPhone(e.target.value)} placeholder="+7 (999) 123-45-67" className={inputClass} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className={labelClass}>Telegram</Label>
+                      <Input value={formTelegram} onChange={e => setFormTelegram(e.target.value)} placeholder="@username" className={inputClass} />
+                    </div>
+                  </div>
+                  <div className="space-y-4">
+                    <div className="space-y-1">
+                      <Label className={labelClass}>Дата рождения</Label>
+                      <Input value={formBirth} onChange={e => setFormBirth(e.target.value)} type="date" className={inputClass} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className={labelClass}>Город</Label>
+                      <Input value={formCity} onChange={e => setFormCity(e.target.value)} placeholder="Москва" className={inputClass} />
+                    </div>
+                  </div>
+                </>
+              )
+            })()}
 
             {/* Согласие */}
             <label className="flex items-start gap-2 text-xs text-gray-600 cursor-pointer select-none pt-1">
@@ -1250,7 +1258,7 @@ function MediaBlock({
             canRecordVideo ? (
               <button
                 onClick={() => startRecording("video")}
-                className={`${bigBtnBase} bg-gray-900 text-white hover:bg-gray-800`}
+                className={`${bigBtnBase} bg-blue-600 text-white hover:bg-blue-700`}
               >
                 <VideoIcon className={iconClass} />
                 Записать видео
@@ -1259,7 +1267,7 @@ function MediaBlock({
               <>
                 <button
                   onClick={() => document.getElementById(`${block.id}-videofile`)?.click()}
-                  className={`${bigBtnBase} bg-gray-900 text-white hover:bg-gray-800`}
+                  className={`${bigBtnBase} bg-blue-600 text-white hover:bg-blue-700`}
                 >
                   <Upload className={iconClass} />
                   Загрузить видео
@@ -1283,7 +1291,7 @@ function MediaBlock({
           {allowAudio && canRecordAudio && (
             <button
               onClick={() => startRecording("audio")}
-              className={`${bigBtnBase} bg-gray-900 text-white hover:bg-gray-800`}
+              className={`${bigBtnBase} bg-blue-600 text-white hover:bg-blue-700`}
             >
               <Mic className={iconClass} />
               Записать аудио
@@ -1294,7 +1302,7 @@ function MediaBlock({
             <>
               <button
                 onClick={() => photoInputRef.current?.click()}
-                className={`${bigBtnBase} bg-gray-900 text-white hover:bg-gray-800`}
+                className={`${bigBtnBase} bg-blue-600 text-white hover:bg-blue-700`}
               >
                 <Camera className={iconClass} />
                 Загрузить фото
