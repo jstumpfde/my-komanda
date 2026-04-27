@@ -1,0 +1,8 @@
+# Журнал сессий Company24.pro
+
+## 27.04.2026 — Финал post-demo + полировка демо-страницы (34 деплоя)
+Файл: docs/transcripts/2026-04-27-session-summary.md
+Ветка: feature/candidate-media-recording
+Состояние: PM2 #2857, post-demo settings полностью работают, готовы к боевому прогону
+
+## Предыдущие
