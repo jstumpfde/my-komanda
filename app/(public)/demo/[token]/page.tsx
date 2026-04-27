@@ -15,6 +15,7 @@ import { resolveBrand } from "@/lib/brand-colors"
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 interface PostDemoSettings {
+  enabled?: boolean
   mode?: "auto" | "manual"
   upperThreshold?: number
   lowerThreshold?: number
@@ -754,6 +755,29 @@ export default function DemoPage() {
   }
 
   if (finished) {
+    // Если HR выключил пост-демо блок — показываем стандартный экран «спасибо»
+    // вместо кастомного флоу (анкета + динамический финальный экран).
+    if (data.postDemoSettings?.enabled === false) {
+      return (
+        <div className="flex min-h-screen items-center justify-center px-4" style={{ backgroundColor: bgColor }}>
+          <div className="text-center max-w-md space-y-4">
+            {data.companyLogo && (
+              <img
+                src={data.companyLogo}
+                alt={data.companyName}
+                className="mx-auto h-16 w-auto object-contain mb-2"
+              />
+            )}
+            {data.companyName && (
+              <div className="text-sm font-medium text-gray-700">{data.companyName}</div>
+            )}
+            <h1 className="text-3xl font-bold text-gray-900">Спасибо за прохождение демонстрации!</h1>
+            <p className="text-gray-600">Мы рассмотрим ваши ответы и свяжемся с вами в ближайшее время.</p>
+          </div>
+        </div>
+      )
+    }
+
     // Прощальный экран после клика «Хорошо, жду!» — закрытая вкладка для кандидата
     if (showFarewell) {
       return (

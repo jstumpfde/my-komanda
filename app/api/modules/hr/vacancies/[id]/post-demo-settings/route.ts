@@ -67,6 +67,10 @@ export async function PUT(
     const current = (demo.postDemoSettings as PostDemoSettings | null) ?? {}
     const settings: PostDemoSettings = { ...current }
 
+    if (body.enabled !== undefined) {
+      settings.enabled = Boolean(body.enabled)
+    }
+
     if (body.mode !== undefined) {
       settings.mode = body.mode === "manual" ? "manual" : "auto"
     }
