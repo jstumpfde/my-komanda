@@ -54,7 +54,16 @@ export async function POST(
     const now = new Date().toISOString()
 
     // ── anketa_answers (legacy шаблон [{blockId, answer, ...}]) ──
-    const existingAnswers = (candidate.anketaAnswers as any[] | null) || []
+    // Нормализуем — БД может хранить как массив или как объект {"0":{...},"1":{...}}
+    const rawAnswers = candidate.anketaAnswers as unknown
+    let existingAnswers: any[]
+    if (Array.isArray(rawAnswers)) {
+      existingAnswers = rawAnswers
+    } else if (rawAnswers && typeof rawAnswers === 'object') {
+      existingAnswers = Object.values(rawAnswers as Record<string, any>)
+    } else {
+      existingAnswers = []
+    }
     const answerIndex = existingAnswers.findIndex((a: any) => a.blockId === blockId)
     const newAnswer = { blockId, answer, timeSpent: timeSpent || 0, answeredAt: now }
     if (answerIndex >= 0) {

@@ -906,7 +906,7 @@ export default function DemoPage() {
                 type="checkbox"
                 checked={formConsent}
                 onChange={e => setFormConsent(e.target.checked)}
-                className="mt-0.5 h-4 w-4 rounded border-gray-300 cursor-pointer flex-shrink-0"
+                className="mt-0.5 h-4 w-4 rounded border-gray-300 cursor-pointer flex-shrink-0 bg-white [color-scheme:light]"
                 style={{ accentColor: brandColor }}
               />
               <span>

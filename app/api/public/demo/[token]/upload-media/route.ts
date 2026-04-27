@@ -124,7 +124,16 @@ export async function POST(
     }
 
     // Записать в anketa_answers (append или replace по blockId)
-    const existing = (candidate.anketaAnswers as any[] | null) || []
+    // Нормализуем — БД может хранить как массив или как объект {"0":{...},"1":{...}}
+    const rawAnswers = candidate.anketaAnswers as unknown
+    let existing: any[]
+    if (Array.isArray(rawAnswers)) {
+      existing = rawAnswers
+    } else if (rawAnswers && typeof rawAnswers === 'object') {
+      existing = Object.values(rawAnswers as Record<string, any>)
+    } else {
+      existing = []
+    }
     const idx = existing.findIndex((a: any) => a?.blockId === blockId)
     const entry = { blockId, answer: answerObj, answeredAt: new Date().toISOString() }
     if (idx >= 0) {
