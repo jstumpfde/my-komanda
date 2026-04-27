@@ -49,6 +49,7 @@ interface PostDemoSettingsProps {
 }
 
 export function PostDemoSettings({ vacancyId }: PostDemoSettingsProps) {
+  const [enabled, setEnabled] = useState(true)
   const [mode, setMode] = useState<PostDemoMode>("auto")
 
   // Thresholds
@@ -99,6 +100,7 @@ export function PostDemoSettings({ vacancyId }: PostDemoSettingsProps) {
         if (cancelled || !json) return
         const data = json.settings ?? {}
         if (!data || typeof data !== "object") return
+        if (typeof data.enabled === "boolean") setEnabled(data.enabled)
         if (data.mode === "auto" || data.mode === "manual") setMode(data.mode)
         if (typeof data.upperThreshold === "number") setUpperThreshold(data.upperThreshold)
         if (typeof data.lowerThreshold === "number") setLowerThreshold(data.lowerThreshold)
@@ -149,6 +151,7 @@ export function PostDemoSettings({ vacancyId }: PostDemoSettingsProps) {
     setSaving(true)
     try {
       const payload = {
+        enabled,
         mode,
         upperThreshold,
         lowerThreshold,
@@ -186,12 +189,18 @@ export function PostDemoSettings({ vacancyId }: PostDemoSettingsProps) {
     <div className="space-y-6">
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Play className="w-4 h-4" />
-            После демонстрации
-          </CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Play className="w-4 h-4" />
+              После демонстрации
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">{enabled ? "Включено" : "Выключено"}</span>
+              <Switch checked={enabled} onCheckedChange={setEnabled} />
+            </div>
+          </div>
         </CardHeader>
-        <CardContent className="space-y-5">
+        <CardContent className={cn("space-y-5", !enabled && "opacity-50 pointer-events-none")}>
           {/* Mode selection */}
           <div className="space-y-2">
             <Label className="text-sm font-medium">Режим</Label>

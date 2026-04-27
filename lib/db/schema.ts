@@ -282,6 +282,7 @@ export const demos = pgTable("demos", {
 })
 
 export interface PostDemoSettings {
+  enabled?: boolean
   mode?: "auto" | "manual"
   // Thresholds
   upperThreshold?: number

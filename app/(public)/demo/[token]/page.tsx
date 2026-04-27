@@ -811,10 +811,6 @@ export default function DemoPage() {
                   className="mx-auto h-12 w-auto object-contain mb-2"
                 />
               )}
-              <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full" style={{ backgroundColor: brandColor + "20" }}>
-                <CheckCircle2 className="h-10 w-10" style={{ color: brandColor }} />
-              </div>
-
               {finalBlock === "manual" && (
                 <>
                   <h1 className="text-2xl font-bold text-gray-900">
@@ -917,10 +913,7 @@ export default function DemoPage() {
             {data.companyName && (
               <div className="text-sm font-medium text-gray-700 mb-3">{data.companyName}</div>
             )}
-            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full mb-4" style={{ backgroundColor: brandColor + "20" }}>
-              <CheckCircle2 className="h-8 w-8" style={{ color: brandColor }} />
-            </div>
-            <h1 className="text-xl font-bold" style={{ color: textColor }}>
+            <h1 className="text-xl font-bold mt-2" style={{ color: textColor }}>
               Анкета финального этапа
             </h1>
             <p className="text-sm text-gray-500 mt-1">Мы свяжемся с вами по поводу позиции &laquo;{data.vacancyTitle}&raquo;</p>
