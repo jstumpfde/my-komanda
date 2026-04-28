@@ -9,7 +9,7 @@ import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip
 import { cn } from "@/lib/utils"
 import type { CandidateAction } from "@/lib/column-config"
 import { applySortMode, type CandidateSortMode } from "@/lib/candidate-sort"
-import { MapPin, CheckCircle2, XCircle, ArrowRight, ThumbsUp, Clock, ChevronUp, ChevronDown, ChevronsUpDown, Star } from "lucide-react"
+import { MapPin, CheckCircle2, XCircle, ArrowRight, ThumbsUp, Clock, ArrowUp, ArrowDown, Star } from "lucide-react"
 
 export type ListSortKey = "favorite" | "aiScore" | "progress" | "salary" | "responseDate" | "status"
 export type ListSortDir = "asc" | "desc"
@@ -92,19 +92,25 @@ function SortHeader({
 }) {
   const active = sort?.key === sortKey
   const dir = active ? sort!.dir : null
+  const ariaSort = !active ? "none" : dir === "asc" ? "ascending" : "descending"
   return (
     <button
       type="button"
       onClick={() => onToggle(sortKey)}
+      aria-sort={ariaSort}
       className={cn(
-        "inline-flex items-center gap-1 hover:text-foreground transition-colors",
-        active ? "text-foreground" : "text-muted-foreground",
+        "inline-flex items-center gap-1 rounded-md px-1.5 -mx-1.5 py-0.5 hover:bg-accent/60 hover:text-foreground transition-colors",
+        active ? "text-primary font-semibold bg-primary/10" : "text-muted-foreground",
         align === "center" && "justify-center",
         align === "right" && "justify-end",
       )}
     >
       {label}
-      {dir === "asc" ? <ChevronUp className="size-3" /> : dir === "desc" ? <ChevronDown className="size-3" /> : <ChevronsUpDown className="size-3 opacity-40" />}
+      {dir === "asc" ? (
+        <ArrowUp className="size-3.5" strokeWidth={2.5} />
+      ) : dir === "desc" ? (
+        <ArrowDown className="size-3.5" strokeWidth={2.5} />
+      ) : null}
     </button>
   )
 }
@@ -209,10 +215,19 @@ export function ListView({
         <button
           type="button"
           onClick={() => handleSort("favorite")}
-          className="inline-flex items-center justify-center hover:text-foreground transition-colors"
+          aria-sort={sort?.key === "favorite" ? (sort.dir === "asc" ? "ascending" : "descending") : "none"}
+          className={cn(
+            "inline-flex items-center justify-center gap-0.5 rounded-md py-0.5 hover:bg-accent/60 transition-colors",
+            sort?.key === "favorite" && "bg-primary/10",
+          )}
           aria-label="Сортировать по избранному"
         >
           <Star className={cn("size-4", sort?.key === "favorite" ? "fill-amber-400 text-amber-400" : "")} />
+          {sort?.key === "favorite" && (
+            sort.dir === "asc"
+              ? <ArrowUp className="size-3 text-primary" strokeWidth={2.5} />
+              : <ArrowDown className="size-3 text-primary" strokeWidth={2.5} />
+          )}
         </button>
         <div>Кандидат</div>
         {showScore && <SortHeader label="AI скор" sortKey="aiScore" sort={sort} onToggle={handleSort} />}

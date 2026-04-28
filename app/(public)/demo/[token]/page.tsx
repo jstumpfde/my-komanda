@@ -524,6 +524,16 @@ export default function DemoPage() {
   const [saving, setSaving] = useState(false)
   const blockStartTime = useRef(Date.now())
 
+  // Режим директора: ?as=hr или preview-токен — ответы и аплоады не сохраняются
+  const isPreviewToken = typeof token === "string" && token.startsWith("test-demo-preview-")
+  const [hasAsHrParam, setHasAsHrParam] = useState(false)
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setHasAsHrParam(new URLSearchParams(window.location.search).get("as") === "hr")
+    }
+  }, [])
+  const isPreviewMode = hasAsHrParam || isPreviewToken
+
   // Form state (must be declared before any conditional returns — React rules of hooks)
   const [formSubmitted, setFormSubmitted] = useState(false)
   const [formSubmitting, setFormSubmitting] = useState(false)
@@ -601,6 +611,7 @@ export default function DemoPage() {
   const progressPercent = totalLessons > 0 ? ((currentIndex + 1) / totalLessons) * 100 : 0
 
   const saveAnswer = useCallback(async (blockId: string, answer: any) => {
+    if (isPreviewMode) return
     const timeSpent = Math.round((Date.now() - blockStartTime.current) / 1000)
     try {
       await fetch(`/api/public/demo/${token}/answer`, {
@@ -621,7 +632,7 @@ export default function DemoPage() {
     } catch {
       // silently fail — answers are best-effort
     }
-  }, [token, currentIndex, totalLessons])
+  }, [token, currentIndex, totalLessons, isPreviewMode])
 
   const handleNext = useCallback(async () => {
     if (!currentFlat) return
@@ -724,6 +735,11 @@ export default function DemoPage() {
   const handleFormSubmit = async () => {
     if (!isFormValid) return
     setFormSubmitting(true)
+    if (isPreviewMode) {
+      setFormSubmitted(true)
+      setFormSubmitting(false)
+      return
+    }
     try {
       await fetch(`/api/public/demo/${token}/apply`, {
         method: "POST",
@@ -1072,6 +1088,11 @@ export default function DemoPage() {
                 <img src={data.companyLogo} alt="" className="h-6 w-6 rounded object-contain flex-shrink-0" />
               )}
               <span className="text-sm font-medium text-gray-700 truncate">{data.companyName}</span>
+              {isPreviewMode && (
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-100 text-amber-800 border border-amber-200 flex-shrink-0">
+                  Режим директора — ответы не сохраняются
+                </span>
+              )}
             </div>
             <span className="text-sm text-gray-500 flex-shrink-0 ml-2">
               {currentIndex + 1} из {totalLessons}
@@ -1140,6 +1161,7 @@ export default function DemoPage() {
                     token={token}
                     brandColor={brandColor}
                     existing={mediaUploaded[block.id]}
+                    previewMode={isPreviewMode}
                     onUploaded={(ans) =>
                       setMediaUploaded((prev) => ({ ...prev, [block.id]: ans }))
                     }
@@ -1241,12 +1263,14 @@ function MediaBlock({
   token,
   brandColor,
   existing,
+  previewMode,
   onUploaded,
 }: {
   block: Block
   token: string
   brandColor: string
   existing?: MediaAnswer
+  previewMode?: boolean
   onUploaded: (ans: MediaAnswer) => void
 }) {
   const allowVideo = block.mediaAllowVideo ?? true
@@ -1435,6 +1459,24 @@ function MediaBlock({
     const fileObj = blob instanceof File
       ? blob
       : new File([blob], fileName, { type: mime })
+
+    // Режим директора — имитируем «загрузку», ничего не отправляем на сервер
+    if (previewMode) {
+      const localUrl = URL.createObjectURL(blob)
+      const answer: MediaAnswer = {
+        url: localUrl,
+        mediaType,
+        duration: mediaType !== "photo" ? Math.round(elapsed) : undefined,
+        size: blob.size,
+        mime,
+      }
+      setResult(answer)
+      onUploaded(answer)
+      if (previewUrl) URL.revokeObjectURL(previewUrl)
+      setPreviewUrl(null)
+      setMode("done")
+      return
+    }
 
     const fd = new FormData()
     fd.append("file", fileObj)

@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server"
-import { eq, and, inArray, asc, desc, sql, type SQL } from "drizzle-orm"
+import { eq, ne, and, inArray, asc, desc, or, isNull, sql, type SQL } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { candidates, vacancies, demos } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
@@ -78,7 +78,10 @@ export async function GET(req: NextRequest) {
         })
         .from(candidates)
         .innerJoin(vacancies, eq(candidates.vacancyId, vacancies.id))
-        .where(eq(vacancies.companyId, user.companyId))
+        .where(and(
+          eq(vacancies.companyId, user.companyId),
+          or(isNull(candidates.source), ne(candidates.source, "preview")),
+        ))
 
       const vacancyIds = [...new Set(rows.map((r) => r.vacancyId))]
 
@@ -164,9 +167,10 @@ export async function GET(req: NextRequest) {
     const dir: "asc" | "desc" = orderRaw === "asc" ? "asc" : "desc"
     const orderBy = buildOrderBy(sortRaw, dir)
 
+    const notPreview = or(isNull(candidates.source), ne(candidates.source, "preview"))
     const where = stages.length > 0
-      ? and(eq(candidates.vacancyId, vacancyId), inArray(candidates.stage, stages))
-      : eq(candidates.vacancyId, vacancyId)
+      ? and(eq(candidates.vacancyId, vacancyId), inArray(candidates.stage, stages), notPreview)
+      : and(eq(candidates.vacancyId, vacancyId), notPreview)
 
     let rows = await db.select().from(candidates).where(where).orderBy(...orderBy)
 

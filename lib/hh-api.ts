@@ -149,8 +149,15 @@ export interface HHNegotiationsResponse {
   pages: number
 }
 
-export async function getNegotiations(accessToken: string, page = 0): Promise<HHNegotiationsResponse> {
-  return hhFetch(`/negotiations?page=${page}&per_page=50`, accessToken)
+export async function getNegotiations(
+  accessToken: string,
+  opts: { vacancyId?: string; page?: number } = {},
+): Promise<HHNegotiationsResponse> {
+  const sp = new URLSearchParams()
+  sp.set("page", String(opts.page ?? 0))
+  sp.set("per_page", "50")
+  if (opts.vacancyId) sp.set("vacancy_id", opts.vacancyId)
+  return hhFetch(`/negotiations?${sp.toString()}`, accessToken)
 }
 
 export async function changeNegotiationState(
