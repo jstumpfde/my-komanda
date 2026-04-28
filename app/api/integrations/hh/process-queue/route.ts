@@ -6,14 +6,11 @@ import type { VacancyAiProcessSettings } from "@/lib/db/schema"
 import { and, eq, isNull } from "drizzle-orm"
 import { getValidToken } from "@/lib/hh-helpers"
 import { changeNegotiationState } from "@/lib/hh-api"
-import { screenCandidate } from "@/lib/ai-screen-candidate"
 import { generateCandidateShortId } from "@/lib/short-id"
 
 const stopFlags = new Map<string, boolean>()
 
 const DEMO_INVITE_MESSAGE = "Здравствуйте! Спасибо за отклик. Мы подготовили короткую демонстрацию должности — 15 минут, и вы узнаете всё о задачах, команде и доходе. Перейдите по ссылке: https://company24.pro/demo/invite"
-
-const SOFT_REJECT_MESSAGE = "Здравствуйте! Спасибо за интерес к нашей вакансии. К сожалению, на данный момент ваш опыт не совсем подходит под наши требования. Желаем удачи в поиске!"
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 
@@ -25,10 +22,13 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}))
   console.log("[PQ] start", { companyId, body })
   const limit = Math.min(Math.max(Number(body.limit) || 5, 1), 50)
-  const dryRun = !!body.dryRun
+  // dryRun / minScore / autoAction оставляем в типе body для совместимости со старыми вызовами,
+  // но AI-скоринг временно отключён — параметры игнорируются.
+  void body.dryRun
+  void body.minScore
+  void body.autoAction
   const localVacancyId: string | undefined = body.vacancyId
   const reqDelaySeconds = body.delaySeconds != null ? Number(body.delaySeconds) : undefined
-  const reqMinScore = body.minScore != null ? Number(body.minScore) : undefined
 
   const tokenResult = await getValidToken(companyId)
   if (!tokenResult) return NextResponse.json({ error: "hh.ru не подключён" }, { status: 400 })
@@ -54,15 +54,10 @@ export async function POST(req: NextRequest) {
     scopedAiSettings = (localVac.aiProcessSettings as VacancyAiProcessSettings | null) ?? {}
   }
 
-  // Эффективные настройки прогона
-  const effMinScore = Math.max(0, Math.min(100,
-    reqMinScore ?? scopedAiSettings.minScore ?? 70
-  ))
+  // Эффективные настройки прогона. AI временно отключён —
+  // используем только текст приглашения; порог/действие при низком скоре игнорируются.
   const effDelayMs = Math.max(0, (reqDelaySeconds ?? 30) * 1000)
   const effInviteMsg = scopedAiSettings.inviteMessage?.trim() || DEMO_INVITE_MESSAGE
-  const effRejectMsg = scopedAiSettings.rejectMessage?.trim() || SOFT_REJECT_MESSAGE
-  const effBelowAction: "reject" | "keep_new" =
-    scopedAiSettings.belowThresholdAction === "keep_new" ? "keep_new" : "reject"
 
   const newResponses = await db
     .select()
@@ -101,13 +96,9 @@ export async function POST(req: NextRequest) {
     id: string
     name: string | null
     action: string
-    score?: number
-    verdict?: string
     error?: string
   }> = []
   let invitedCount = 0
-  let rejectedCount = 0
-  let keptCount = 0
 
   for (let idx = 0; idx < newResponses.length; idx++) {
     const resp = newResponses[idx]
@@ -124,131 +115,21 @@ export async function POST(req: NextRequest) {
 
     const localVac = localVacancies.find(v => v.hhVacancyId === resp.hhVacancyId) || null
 
-    // Извлекаем данные кандидата из rawData
+    // Минимально нужные данные из rawData (city для нового кандидата) и descriptionJson вакансии
+    // (для шаблона firstMessageText). AI-входы убраны — скоринг временно отключён.
     const raw = resp.rawData as {
-      vacancy?: { name?: string }
-      resume?: {
-        id?: string
-        title?: string
-        skill_set?: string[]
-        experience?: Array<{ company?: string; position?: string; description?: string; start?: string; end?: string }>
-        total_experience?: { months?: number }
-        area?: { name?: string }
-        salary?: { amount?: number; currency?: string }
-      }
+      resume?: { id?: string; area?: { name?: string } }
     } | null
-
-    const resume = raw?.resume ?? null
-    const totalMonths = resume?.total_experience?.months
-    const expYears = totalMonths != null ? Math.round((totalMonths / 12) * 10) / 10 : null
-    const experienceLines = (resume?.experience ?? []).slice(0, 5).map(e => {
-      const period = [e.start, e.end || "по н.в."].filter(Boolean).join(" — ")
-      return `${e.position || ""} в ${e.company || ""} (${period}): ${e.description || ""}`.trim()
-    })
-    const resumeText = [
-      resp.resumeTitle ? `Должность в резюме: ${resp.resumeTitle}` : null,
-      expYears != null ? `Общий опыт: ${expYears} лет` : null,
-      experienceLines.length > 0 ? "Опыт работы:\n" + experienceLines.join("\n") : null,
-    ].filter(Boolean).join("\n")
-
-    const salaryStr = resume?.salary?.amount
-      ? `${resume.salary.amount} ${resume.salary.currency || "RUR"}`
-      : undefined
-
-    const candidateData = {
-      name: resp.candidateName ?? "",
-      resume: resumeText || resp.resumeTitle || "",
-      experience: expYears != null ? `${expYears} лет` : undefined,
-      skills: Array.isArray(resume?.skill_set) ? resume.skill_set : [],
-      city: resume?.area?.name ?? undefined,
-      salary: salaryStr,
-    }
-
-    // Извлекаем анкету вакансии из descriptionJson
+    const candidateCity = raw?.resume?.area?.name ?? undefined
     const dj = (localVac?.descriptionJson as Record<string, unknown> | null) ?? {}
-    const an = (dj.anketa as Record<string, unknown> | null) ?? {}
-    const vacancyAnketa = {
-      vacancyTitle: localVac?.title ?? raw?.vacancy?.name ?? "",
-      requirements: typeof an.requirements === "string" ? an.requirements : undefined,
-      responsibilities: typeof an.responsibilities === "string" ? an.responsibilities : undefined,
-      requiredSkills: Array.isArray(an.requiredSkills) ? an.requiredSkills.map(String) : undefined,
-      desiredSkills: Array.isArray(an.desiredSkills) ? an.desiredSkills.map(String) : undefined,
-      experienceMin: typeof an.experienceMin === "string" ? an.experienceMin : undefined,
-      positionCity: typeof an.positionCity === "string" ? an.positionCity : (localVac?.city ?? undefined),
-      aiIdealProfile: typeof an.aiIdealProfile === "string" ? an.aiIdealProfile : undefined,
-      aiStopFactors: Array.isArray(an.aiStopFactors) ? an.aiStopFactors.map(String) : undefined,
-      aiRequiredHardSkills: Array.isArray(an.aiRequiredHardSkills) ? an.aiRequiredHardSkills.map(String) : undefined,
-      aiWeights: (an.aiWeights && typeof an.aiWeights === "object")
-        ? (an.aiWeights as Record<string, string>) : undefined,
-      aiMinExperience: typeof an.aiMinExperience === "string" ? an.aiMinExperience : undefined,
-    }
 
-    let screenResult
-    try {
-      screenResult = await screenCandidate({ candidateData, vacancyAnketa })
-    } catch (err) {
-      console.error("[PQ] screenCandidate failed for", resp.candidateName, err instanceof Error ? err.message : err)
-      results.push({
-        id: resp.hhResponseId,
-        name: resp.candidateName,
-        action: "failed",
-        error: err instanceof Error ? err.message : String(err),
-      })
-      // Пауза даже при ошибке — щадим hh и AI API
-      if (idx < newResponses.length - 1) await sleep(effDelayMs)
-      continue
-    }
+    // AI-скоринг временно отключён — всем откликам отправляем приглашение на демо.
+    console.log("[PQ] candidate (no-AI)", { name: resp.candidateName })
 
-    console.log("[PQ] candidate", {
-      name: resp.candidateName,
-      score: screenResult.score,
-      verdict: screenResult.verdict,
-    })
-
-    // Уважаем autoAction='review' от AI — оставляем кандидата в "Новый" для ручной проверки
-    const aiSaysReview = screenResult.autoAction === "review" || screenResult.confidenceLevel === "low"
-    const passes = screenResult.score >= effMinScore
-
-    type Decision = "invite" | "reject" | "keep_new"
-    let decision: Decision
-    if (aiSaysReview) {
-      decision = "keep_new"
-    } else if (passes) {
-      decision = "invite"
-    } else {
-      decision = effBelowAction === "reject" ? "reject" : "keep_new"
-    }
-
-    if (dryRun) {
-      const dryAction = decision === "invite" ? "dry:invite"
-        : decision === "reject" ? "dry:reject" : "dry:keep_new"
-      results.push({
-        id: resp.hhResponseId,
-        name: resp.candidateName,
-        action: dryAction,
-        score: screenResult.score,
-        verdict: screenResult.verdict,
-      })
-      if (decision === "invite") invitedCount++
-      else if (decision === "reject") rejectedCount++
-      else keptCount++
-      if (idx < newResponses.length - 1) await sleep(effDelayMs)
-      continue
-    }
-
-    const targetStage = decision === "invite" ? "demo" : decision === "reject" ? "rejected" : "new"
-    const baseMessage = decision === "invite" ? effInviteMsg : decision === "reject" ? effRejectMsg : null
-    const hhAction = decision === "invite" ? "invitation" : decision === "reject" ? "discard" : null
-    const newStatus = decision === "invite" ? "invited" : decision === "reject" ? "discarded" : "kept"
-
-    const aiDetails = {
-      strengths: screenResult.strengths,
-      weaknesses: screenResult.weaknesses,
-      verdict: screenResult.verdict,
-      autoAction: screenResult.autoAction,
-      confidenceLevel: screenResult.confidenceLevel,
-      manipulationDetected: screenResult.manipulationDetected,
-    }
+    const targetStage = "demo"
+    const baseMessage = effInviteMsg
+    const hhAction = "invitation"
+    const newStatus = "invited"
 
     try {
       // Сохраняем / создаём кандидата
@@ -300,6 +181,8 @@ export async function POST(req: NextRequest) {
         }
       }
 
+      let newCandShortId: string | null = null
+
       if (!candidateId && localVac) {
         candidateToken = Math.random().toString(36).slice(2) + Date.now().toString(36)
         const newCand = await db.transaction(async (tx) => {
@@ -309,49 +192,46 @@ export async function POST(req: NextRequest) {
             name: resp.candidateName || "Кандидат с hh.ru",
             phone: resp.candidatePhone,
             email: resp.candidateEmail,
-            city: candidateData.city,
+            city: candidateCity,
             source: "hh",
             stage: targetStage,
-            score: Math.round(screenResult.score),
-            aiScore: Math.round(screenResult.score),
-            aiSummary: screenResult.recommendation,
-            aiDetails,
             token: candidateToken,
-            autoProcessingStopped: decision === "reject",
-            autoProcessingStoppedReason: decision === "reject" ? "AI auto-reject" : null,
-            autoProcessingStoppedAt: decision === "reject" ? new Date() : null,
             shortId: short?.shortId ?? null,
             sequenceNumber: short?.sequenceNumber ?? null,
           }).returning()
           return row
         })
-        if (newCand) candidateId = newCand.id
+        if (newCand) {
+          candidateId = newCand.id
+          newCandShortId = newCand.shortId ?? null
+        }
       } else if (candidateId) {
-        // Кандидат уже существует — обновляем AI-данные и стадию
+        // Кандидат уже существует — обновляем стадию (AI-поля больше не трогаем)
         await db.update(candidates).set({
           stage: targetStage,
-          aiScore: Math.round(screenResult.score),
-          aiSummary: screenResult.recommendation,
-          aiDetails,
           updatedAt: new Date(),
-          ...(decision === "reject" ? {
-            autoProcessingStopped: true,
-            autoProcessingStoppedReason: "AI auto-reject",
-            autoProcessingStoppedAt: new Date(),
-          } : {}),
         }).where(eq(candidates.id, candidateId))
       }
 
-      // Формируем итоговое сообщение из шаблона вакансии (только для invite)
+      // Формируем итоговое сообщение из шаблона вакансии — приглашение для всех
       let finalMessage: string | null = baseMessage
-      if (decision === "invite" && localVac) {
+      if (localVac) {
         const automation = (dj as { automation?: { firstMessageText?: string } }).automation
         const template = automation?.firstMessageText
         if (template && (candidateToken || candidateId)) {
           const nameParts = (resp.candidateName || "").trim().split(/\s+/)
           const candidateName = nameParts[1] || nameParts[0] || "Здравствуйте"
-          // Если токен новый — используем его, иначе нужен fetch (для простоты используем candidateId)
-          const tokenForUrl = candidateToken || candidateId
+          // Для нового кандидата уже знаем shortId, для существующего — подтягиваем из БД
+          let existingShortId: string | null = newCandShortId
+          if (!existingShortId && candidateId && !candidateToken) {
+            const [row] = await db
+              .select({ shortId: candidates.shortId })
+              .from(candidates)
+              .where(eq(candidates.id, candidateId))
+              .limit(1)
+            existingShortId = row?.shortId ?? null
+          }
+          const tokenForUrl = (newCandShortId ?? existingShortId ?? candidateToken ?? candidateId)
           const demoUrl = `https://company24.pro/demo/${tokenForUrl}`
           finalMessage = template
             .replaceAll("[Имя]", candidateName)
@@ -364,7 +244,7 @@ export async function POST(req: NextRequest) {
 
       // Шлём действие в hh, если нужно
       if (hhAction && finalMessage) {
-        const rawResume = (resp.rawData as { resume?: { id?: string } } | null)?.resume?.id
+        const rawResume = raw?.resume?.id
         try {
           await changeNegotiationState(
             tokenResult.accessToken,
@@ -390,16 +270,12 @@ export async function POST(req: NextRequest) {
       if (candidateId) updatePayload.localCandidateId = candidateId
       await db.update(hhResponses).set(updatePayload).where(eq(hhResponses.id, resp.id))
 
-      if (decision === "invite") invitedCount++
-      else if (decision === "reject") rejectedCount++
-      else keptCount++
+      invitedCount++
 
       results.push({
         id: resp.hhResponseId,
         name: resp.candidateName,
-        action: decision === "invite" ? "invited" : decision === "reject" ? "rejected" : "kept",
-        score: screenResult.score,
-        verdict: screenResult.verdict,
+        action: "invited",
       })
     } catch (err: unknown) {
       console.error("[PQ] FAIL", resp.candidateName, err instanceof Error ? err.message : err)
@@ -408,8 +284,6 @@ export async function POST(req: NextRequest) {
         name: resp.candidateName,
         action: "failed",
         error: err instanceof Error ? err.message : String(err),
-        score: screenResult.score,
-        verdict: screenResult.verdict,
       })
     }
 
@@ -421,11 +295,9 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({
     processed: results.length,
     invited: invitedCount,
-    rejected: rejectedCount,
-    kept: keptCount,
-    minScore: effMinScore,
+    rejected: 0,
+    kept: 0,
     delaySeconds: Math.round(effDelayMs / 1000),
-    dryRun,
     results,
   })
 }
