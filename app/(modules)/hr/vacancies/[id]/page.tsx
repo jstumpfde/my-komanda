@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils"
 import { useAuth, isPlatformRole } from "@/lib/auth"
 import { useVacancy } from "@/hooks/use-vacancies"
 import { useCandidates, type ApiCandidate } from "@/hooks/use-candidates"
+import { useUserPreferences } from "@/hooks/use-user-preferences"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
@@ -370,8 +371,10 @@ export default function VacancyPage() {
     if (apiVacancy?.status) {
       const s = apiVacancy.status as VacancyStatus
       setStatus(s)
-      const isPublished = s === "active" || s === "closed_success" || s === "closed_cancelled"
-      setActiveTab(prev => prev === "anketa" || prev === "analytics" ? (isPublished ? "analytics" : "anketa") : prev)
+      // Если URL не задаёт таб явно — переключаем дефолт по статусу при публикации
+      if (!urlTab) {
+        setActiveTab(prev => prev === "anketa" || prev === "analytics" ? (s === "active" ? "candidates" : "anketa") : prev)
+      }
     }
     // Load custom columns from description_json (skip hidden ones)
     const desc = apiVacancy?.descriptionJson as Record<string, unknown> | undefined
@@ -410,9 +413,29 @@ export default function VacancyPage() {
       return { ...col, candidates: colCandidates, count: colCandidates.length }
     }))
   }, [apiCandidates])
-  const [viewMode, setViewMode] = useState<ViewMode>("kanban")
+  const { prefs: userPrefs, loaded: userPrefsLoaded, setViewMode: persistViewMode, setColumns: persistColumns } = useUserPreferences()
+  const [viewMode, setViewModeLocal] = useState<ViewMode>("list")
   const [sortMode, setSortMode] = useState<CandidateSortMode>("date_desc")
-  const [cardSettings, setCardSettings] = useState(defaultSettings)
+  const [cardSettings, setCardSettingsLocal] = useState(defaultSettings)
+
+  // ─── При первой загрузке user-prefs — гидратируем UI ─────────────────────
+  useEffect(() => {
+    if (!userPrefsLoaded) return
+    setViewModeLocal(userPrefs.viewMode as ViewMode)
+    if (userPrefs.columns && Object.keys(userPrefs.columns).length > 0) {
+      setCardSettingsLocal((prev) => ({ ...prev, ...userPrefs.columns } as typeof prev))
+    }
+  }, [userPrefsLoaded]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const setViewMode = useCallback((mode: ViewMode) => {
+    setViewModeLocal(mode)
+    persistViewMode(mode)
+  }, [persistViewMode])
+
+  const setCardSettings = useCallback((next: CardDisplaySettings) => {
+    setCardSettingsLocal(next)
+    persistColumns(next as unknown as Record<string, boolean>)
+  }, [persistColumns])
   const [filters, setFilters] = useState<FilterState>({ searchText: "", cities: [], salaryMin: 0, salaryMax: 250000, scoreMin: 0, sources: [], workFormats: [], relocation: "any", businessTrips: "any", experienceMin: 0, experienceMax: 20, funnelStatuses: [], demoProgress: [], dateRange: "", dateFrom: "", dateTo: "", ageMin: 18, ageMax: 65, education: [], languages: [], otherLanguages: [], skills: [], industries: [] })
   const [drawerCandidateId, setDrawerCandidateId] = useState<string | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -479,8 +502,13 @@ export default function VacancyPage() {
   const [brandCustomDomain, setBrandCustomDomain] = useState("")
   const [editingSlug, setEditingSlug] = useState(false)
   const [brandSaving, setBrandSaving] = useState(false)
-  const defaultTab = (status === "active" || status === "closed_success" || status === "closed_cancelled") ? "analytics" : "anketa"
-  const [activeTab, setActiveTab] = useState(defaultTab)
+  const defaultTab = status === "active" ? "candidates" : "anketa"
+  const rawUrlTab = searchParams?.get("tab") ?? null
+  // Старая ссылка `?tab=automation` → новая `?tab=settings&section=automation`
+  const urlTab = rawUrlTab === "automation" ? "settings" : rawUrlTab
+  const urlSection = rawUrlTab === "automation" ? "automation" : (searchParams?.get("section") ?? null)
+  const [activeTab, setActiveTab] = useState(urlTab ?? defaultTab)
+  const [settingsSection, setSettingsSection] = useState<"general" | "automation">(urlSection === "automation" ? "automation" : "general")
   const [anPeriod, setAnPeriod] = useState("all")
   const [anSources, setAnSources] = useState<string[]>([])
   const [anCities, setAnCities] = useState<string[]>([])
@@ -1291,7 +1319,38 @@ export default function VacancyPage() {
                   <Badge variant="outline" className={statusCfg.color}>{statusCfg.label}</Badge>
                   {status === "active" && apiVacancy?.createdAt && <span className="flex items-center gap-1.5 text-xs text-muted-foreground"><Clock className="size-3.5" />{Math.floor((Date.now() - new Date(apiVacancy.createdAt).getTime()) / 86400000)} дн.</span>}
                 </div>
-                <p className="text-muted-foreground text-xs">{apiVacancy?.city ?? "Москва"}</p>
+                <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-muted-foreground">
+                  <span>{apiVacancy?.city ?? "Москва"}</span>
+                  {activeTab === "candidates" && <>
+                    <span>·</span>
+                    <span><span className="font-medium text-foreground">{hhSyncMeta?.responsesCount ?? apiCandidates.length}</span> откликов</span>
+                    <span>·</span>
+                    <span><span className="font-medium text-foreground">{apiCandidates.length}</span> кандидатов</span>
+                    <span>·</span>
+                    <span><span className={cn("font-medium", (hhPendingResponses ?? 0) > 0 ? "text-amber-700" : "text-foreground")}>{hhPendingResponses ?? 0}</span> необраб.</span>
+                    <span>·</span>
+                    <span><span className="font-medium text-foreground">{apiCandidates.filter(c => c.demoProgressJson != null).length}</span> в демо</span>
+                    {hhConnected === true && apiVacancy?.hhVacancyId && hhSyncMeta && (<>
+                      <span>·</span>
+                      <UITooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            onClick={handleHhSync}
+                            disabled={hhSyncing}
+                            aria-label="Синхронизировать с hh"
+                            className="inline-flex items-center justify-center w-5 h-5 rounded-full hover:bg-accent disabled:opacity-50 transition-colors"
+                          >
+                            {hhSyncing ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          Синхронизировать с hh • синх. {relativeHhSyncTime(hhSyncMeta.syncedAt)} назад
+                        </TooltipContent>
+                      </UITooltip>
+                    </>)}
+                  </>}
+                </div>
                 <input
                   ref={anketaFileInputRef}
                   type="file"
@@ -1437,18 +1496,16 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
             <Tabs value={activeTab} onValueChange={setActiveTab}>
               <div className="flex items-center justify-between gap-3 mb-3 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
                 <TabsList className="shrink-0">
-                  {(status === "active" || status === "closed_success" || status === "closed_cancelled" ? [
-                    { value: "analytics", icon: BarChart3, label: "Аналитика" },
+                  {(status === "active" ? [
                     { value: "candidates", icon: Kanban, label: "Кандидаты" },
+                    { value: "analytics", icon: BarChart3, label: "Аналитика" },
                     { value: "course", icon: BookOpen, label: "Демонстрация" },
                     { value: "anketa", icon: ClipboardList, label: "Анкета" },
-                    { value: "automation", icon: Zap, label: "Автоматизация" },
                   ] : [
                     { value: "anketa", icon: ClipboardList, label: "Анкета" },
-                    { value: "course", icon: BookOpen, label: "Демонстрация" },
-                    { value: "candidates", icon: Kanban, label: "Кандидаты" },
                     { value: "analytics", icon: BarChart3, label: "Аналитика" },
-                    { value: "automation", icon: Zap, label: "Автоматизация" },
+                    { value: "candidates", icon: Kanban, label: "Кандидаты" },
+                    { value: "course", icon: BookOpen, label: "Демонстрация" },
                   ]).map(tab => (
                     <TabsTrigger key={tab.value} value={tab.value} className="gap-1.5">
                       <tab.icon className="w-3.5 h-3.5" />{tab.label}
@@ -1457,6 +1514,45 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                   <TabsTrigger value="settings" className="gap-1.5"><Settings className="w-3.5 h-3.5" />Настройки</TabsTrigger>
                 </TabsList>
 
+                {activeTab === "candidates" && (
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {hhConnected === true && apiVacancy?.hhVacancyId && hhSyncMeta && (
+                      <HhAutoProcess
+                        vacancyId={id}
+                        defaultMinScore={
+                          ((apiVacancy?.aiProcessSettings as { minScore?: number } | null)?.minScore) ?? 70
+                        }
+                        onProcessed={() => { refetchCandidates(); handleHhSync() }}
+                      />
+                    )}
+                    <CandidateFilters filters={filters} onFiltersChange={setFilters} candidates={columns.flatMap((c) => c.candidates)} />
+                    <SortMenu sortMode={sortMode} onSortChange={setSortMode} />
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs">
+                          Ещё
+                          <ChevronDown className="w-3.5 h-3.5" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-52">
+                        <DropdownMenuItem onClick={screenAllNew} disabled={bulkScreening}>
+                          {bulkScreening ? <Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" /> : <Sparkles className="w-3.5 h-3.5 mr-2" />}
+                          {bulkScreening ? "Скрининг..." : "AI-оценить новых"}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={handleCompare}>
+                          <BarChart3 className="w-3.5 h-3.5 mr-2" />
+                          Сравнить топ
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                    <ViewSettings
+                      settings={cardSettings}
+                      onSettingsChange={setCardSettings}
+                      viewMode={viewMode}
+                      onViewModeChange={setViewMode}
+                    />
+                  </div>
+                )}
                 {activeTab === "anketa" && (
                   <div className="flex items-center gap-1.5 shrink-0">
                     <DropdownMenu>
@@ -1648,77 +1744,7 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                   </div>
                 )}
 
-                {/* Stats row */}
-                <div className="flex items-center gap-2 mb-2 flex-wrap">
-                  <span className="text-sm text-muted-foreground shrink-0">
-                    <span className="font-medium text-foreground">{hhSyncMeta?.responsesCount ?? apiCandidates.length}</span> откликов
-                    <span className="mx-1.5">·</span>
-                    <span className="font-medium text-foreground">{apiCandidates.length}</span> кандидатов
-                    <span className="mx-1.5">·</span>
-                    <span className={cn("font-medium", (hhPendingResponses ?? 0) > 0 ? "text-amber-700" : "text-foreground")}>{hhPendingResponses ?? 0}</span> необраб.
-                    <span className="mx-1.5">·</span>
-                    <span className="font-medium text-foreground">{apiCandidates.filter(c => c.demoProgressJson != null).length}</span> в демо
-                  </span>
-                  {hhConnected === true && apiVacancy?.hhVacancyId && hhSyncMeta && (
-                    <UITooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="h-7 w-7 rounded-full"
-                          onClick={handleHhSync}
-                          disabled={hhSyncing}
-                          aria-label="Синхронизировать с hh"
-                        >
-                          {hhSyncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        Синхронизировать с hh • синх. {relativeHhSyncTime(hhSyncMeta.syncedAt)} назад
-                      </TooltipContent>
-                    </UITooltip>
-                  )}
-                </div>
-
-                {/* Action row */}
-                <div className="flex items-center gap-2 mb-3 flex-wrap">
-                  {hhConnected === true && apiVacancy?.hhVacancyId && hhSyncMeta && (
-                    <HhAutoProcess
-                      vacancyId={id}
-                      defaultMinScore={
-                        ((apiVacancy?.aiProcessSettings as { minScore?: number } | null)?.minScore) ?? 70
-                      }
-                      onProcessed={() => { refetchCandidates(); handleHhSync() }}
-                    />
-                  )}
-                  <CandidateFilters filters={filters} onFiltersChange={setFilters} candidates={columns.flatMap((c) => c.candidates)} />
-                  <SortMenu sortMode={sortMode} onSortChange={setSortMode} />
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs">
-                        Ещё
-                        <ChevronDown className="w-3.5 h-3.5" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-52">
-                      <DropdownMenuItem onClick={screenAllNew} disabled={bulkScreening}>
-                        {bulkScreening ? <Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" /> : <Sparkles className="w-3.5 h-3.5 mr-2" />}
-                        {bulkScreening ? "Скрининг..." : "AI-оценить новых"}
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={handleCompare}>
-                        <BarChart3 className="w-3.5 h-3.5 mr-2" />
-                        Сравнить топ
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                  <ViewSettings
-                    settings={cardSettings}
-                    onSettingsChange={setCardSettings}
-                    viewMode={viewMode}
-                    onViewModeChange={setViewMode}
-                  />
-                  {bulkScreening && <span className="text-xs text-muted-foreground">AI анализирует кандидатов...</span>}
-                </div>
+                {bulkScreening && <div className="mb-3 text-xs text-muted-foreground">AI анализирует кандидатов...</div>}
                 <KanbanBoard
                   settings={cardSettings}
                   viewMode={viewMode}
@@ -1963,21 +1989,58 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                 })()}
               </TabsContent>
 
-              <TabsContent value="automation">
-                <AutomationSettings vacancyId={id} descriptionJson={apiVacancy?.descriptionJson} vacancyTitle={apiVacancy?.title} salaryFrom={apiVacancy?.salaryMin} salaryTo={apiVacancy?.salaryMax} />
-                <div className="mt-6">
-                  <VacancyAiProcessSettings
-                    vacancyId={id}
-                    initial={apiVacancy?.aiProcessSettings ?? null}
-                    onSaved={() => refetchVacancy()}
-                  />
-                </div>
-                <div className="mt-6">
-                  <PostDemoSettings vacancyId={id} />
-                </div>
-              </TabsContent>
-
               <TabsContent value="settings">
+                {/* Сабнав: Общие / Автоматизация */}
+                <div className="flex items-center gap-1 mb-4 border-b">
+                  {([
+                    { value: "general" as const, label: "Общие", icon: Settings },
+                    { value: "automation" as const, label: "Автоматизация", icon: Zap },
+                  ]).map((s) => {
+                    const Icon = s.icon
+                    const active = settingsSection === s.value
+                    return (
+                      <button
+                        key={s.value}
+                        type="button"
+                        onClick={() => {
+                          setSettingsSection(s.value)
+                          const sp = new URLSearchParams(window.location.search)
+                          sp.set("tab", "settings")
+                          if (s.value === "automation") sp.set("section", "automation")
+                          else sp.delete("section")
+                          router.replace(`${window.location.pathname}?${sp.toString()}`, { scroll: false })
+                        }}
+                        className={cn(
+                          "inline-flex items-center gap-1.5 px-3 py-2 text-sm border-b-2 -mb-px transition-colors",
+                          active
+                            ? "border-primary text-foreground font-medium"
+                            : "border-transparent text-muted-foreground hover:text-foreground"
+                        )}
+                      >
+                        <Icon className="w-3.5 h-3.5" />
+                        {s.label}
+                      </button>
+                    )
+                  })}
+                </div>
+
+                {settingsSection === "automation" && (
+                  <div>
+                    <AutomationSettings vacancyId={id} descriptionJson={apiVacancy?.descriptionJson} vacancyTitle={apiVacancy?.title} salaryFrom={apiVacancy?.salaryMin} salaryTo={apiVacancy?.salaryMax} />
+                    <div className="mt-6">
+                      <VacancyAiProcessSettings
+                        vacancyId={id}
+                        initial={apiVacancy?.aiProcessSettings ?? null}
+                        onSaved={() => refetchVacancy()}
+                      />
+                    </div>
+                    <div className="mt-6">
+                      <PostDemoSettings vacancyId={id} />
+                    </div>
+                  </div>
+                )}
+
+                {settingsSection === "general" && (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   {/* Левая колонка */}
                   <div className="space-y-6">
@@ -2310,15 +2373,16 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                     <UtmLinksSection vacancyId={id} vacancySlug={id} />
                   </div>
                 </div>
+                )}
               </TabsContent>
             </Tabs>
 
             {/* ═══ Bottom tab navigation ══════════════════ */}
             {(() => {
-              const tabOrder = (status === "active" || status === "closed_success" || status === "closed_cancelled")
-                ? ["analytics", "candidates", "course", "anketa", "automation", "settings"]
-                : ["anketa", "course", "candidates", "analytics", "automation", "settings"]
-              const tabLabels: Record<string, string> = { anketa: "Анкета", course: "Демонстрация", candidates: "Кандидаты", analytics: "Аналитика", automation: "Автоматизация", settings: "Настройки" }
+              const tabOrder = status === "active"
+                ? ["candidates", "analytics", "course", "anketa", "settings"]
+                : ["anketa", "analytics", "candidates", "course", "settings"]
+              const tabLabels: Record<string, string> = { anketa: "Анкета", course: "Демонстрация", candidates: "Кандидаты", analytics: "Аналитика", settings: "Настройки" }
               const idx = tabOrder.indexOf(activeTab)
               const prevTab = idx > 0 ? tabOrder[idx - 1] : null
               const nextTab = idx < tabOrder.length - 1 ? tabOrder[idx + 1] : null

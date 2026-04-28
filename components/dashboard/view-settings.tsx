@@ -49,12 +49,14 @@ export function ViewSettings({ settings, onSettingsChange, viewMode, onViewModeC
     onSettingsChange(next)
   }
 
+  const activeLabel = VIEW_MODES.find((m) => m.value === viewMode)?.label
+
   return (
     <Popover>
       <PopoverTrigger asChild>
         <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs">
           <Eye className="w-3.5 h-3.5" />
-          Вид
+          {activeLabel ? `Вид: ${activeLabel}` : "Вид"}
           <ChevronDown className="w-3 h-3 ml-0.5 opacity-50" />
         </Button>
       </PopoverTrigger>

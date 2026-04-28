@@ -159,6 +159,16 @@ export const users = pgTable("users", {
   createdAt: timestamp("created_at").defaultNow(),
 })
 
+// ─── Пер-юзерные настройки UI ──────────────────────────────────────────────────
+
+export const userPreferences = pgTable("user_preferences", {
+  userId: uuid("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  candidatesViewMode: text("candidates_view_mode").default("list"), // 'funnel' | 'list' | 'kanban' | 'tiles'
+  candidatesColumnsJson: jsonb("candidates_columns_json").default("{}"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+})
+
 // ─── Sales: CRM Компании ─────────────────────────────────────────────────────
 
 export const salesCompanies = pgTable("sales_companies", {
