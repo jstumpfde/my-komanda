@@ -216,9 +216,14 @@ export async function POST(req: NextRequest) {
       // Формируем итоговое сообщение из шаблона вакансии — приглашение для всех
       let finalMessage: string | null = baseMessage
       if (localVac) {
-        const automation = (dj as { automation?: { firstMessageText?: string } }).automation
-        const template = automation?.firstMessageText
-        if (template && (candidateToken || candidateId)) {
+        const automation = (dj as {
+          automation?: {
+            firstMessageText?: string;
+            inviteTemplate?: string
+          }
+        }).automation
+        const template = automation?.firstMessageText || automation?.inviteTemplate
+        if (candidateToken || candidateId) {
           const nameParts = (resp.candidateName || "").trim().split(/\s+/)
           const candidateName = nameParts[1] || nameParts[0] || "Здравствуйте"
           // Для нового кандидата уже знаем shortId, для существующего — подтягиваем из БД
@@ -233,12 +238,21 @@ export async function POST(req: NextRequest) {
           }
           const tokenForUrl = (newCandShortId ?? existingShortId ?? candidateToken ?? candidateId)
           const demoUrl = `https://company24.pro/demo/${tokenForUrl}`
-          finalMessage = template
-            .replaceAll("[Имя]", candidateName)
-            .replaceAll("[имя]", candidateName)
-            .replaceAll("[должность]", localVac.title || "")
-            .replaceAll("[компания]", "Company24")
-            .replaceAll("[ссылка]", demoUrl)
+          if (template) {
+            finalMessage = template
+              .replaceAll("[Имя]", candidateName)
+              .replaceAll("[имя]", candidateName)
+              .replaceAll("{имя}", candidateName)
+              .replaceAll("{Имя}", candidateName)
+              .replaceAll("[должность]", localVac.title || "")
+              .replaceAll("{должность}", localVac.title || "")
+              .replaceAll("[компания]", "Company24")
+              .replaceAll("{компания}", "Company24")
+              .replaceAll("[ссылка]", demoUrl)
+              .replaceAll("{ссылка}", demoUrl)
+          } else {
+            finalMessage = effInviteMsg + "\n\nСсылка на демонстрацию: " + demoUrl
+          }
         }
       }
 
