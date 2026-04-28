@@ -50,6 +50,7 @@ import { PublishTab } from "@/components/vacancies/publish-tab"
 import { MiniFormBuilder } from "@/components/vacancies/mini-form-builder"
 import { UtmLinksSection } from "@/components/vacancies/utm-links-section"
 import { PostDemoSettings } from "@/components/vacancies/post-demo-settings"
+import { PreviewLinkBlock } from "@/components/vacancies/preview-link-block"
 import { VacancyAiProcessSettings } from "@/components/vacancies/vacancy-ai-process-settings"
 import {
   ResponsiveContainer,
@@ -1631,75 +1632,6 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
-                    <div className="w-px h-6 bg-border mx-1" />
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="gap-1.5 text-xs h-8"
-                      onClick={async () => {
-                        if (!id) { toast.error("Сохраните вакансию"); return }
-                        try {
-                          const res = await fetch(`/api/modules/hr/vacancies/${id}/preview-link`)
-                          const json = await res.json()
-                          const url = json?.data?.url || json?.url
-                          if (url) window.open(url, "_blank", "noopener,noreferrer")
-                          else toast.error("Не удалось получить ссылку")
-                        } catch {
-                          toast.error("Ошибка получения ссылки")
-                        }
-                      }}
-                    >
-                      <ExternalLink className="w-3.5 h-3.5" />Посмотреть как кандидат
-                    </Button>
-                    <div className="flex items-center">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="gap-1.5 text-xs h-8 rounded-r-none border-r-0"
-                        onClick={async () => {
-                          if (!id) { toast.error("Сохраните вакансию"); return }
-                          try {
-                            const res = await fetch(`/api/modules/hr/vacancies/${id}/preview-link`)
-                            const json = await res.json()
-                            const url = json?.data?.url || json?.url
-                            if (url) window.open(url, "_blank", "noopener,noreferrer")
-                            else toast.error("Не удалось получить ссылку")
-                          } catch {
-                            toast.error("Ошибка получения ссылки")
-                          }
-                        }}
-                      >
-                        <Eye className="w-3.5 h-3.5" />Просмотр
-                      </Button>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="outline" size="sm" className="h-8 px-2 rounded-l-none">
-                            <ChevronDown className="w-3 h-3 opacity-50" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem className="gap-2 cursor-pointer" onClick={async () => {
-                            if (!id) { toast.error("Сохраните вакансию"); return }
-                            try {
-                              const res = await fetch(`/api/modules/hr/vacancies/${id}/preview-link`)
-                              const json = await res.json()
-                              const url = json?.data?.url || json?.url
-                              if (url) {
-                                const fullUrl = `${window.location.origin}${url}`
-                                await navigator.clipboard.writeText(fullUrl)
-                                toast.success("Ссылка скопирована")
-                              } else {
-                                toast.error("Не удалось получить ссылку")
-                              }
-                            } catch {
-                              toast.error("Ошибка получения ссылки")
-                            }
-                          }}>
-                            <Copy className="w-3.5 h-3.5" />Копировать ссылку
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
                   </div>
                 )}
                 {activeTab === "analytics" && (
@@ -1768,6 +1700,7 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
               </TabsContent>
 
               <TabsContent value="course">
+                <PreviewLinkBlock vacancyId={id} />
                 <CourseTab
                   vacancyId={id}
                   vacancyTitle={vacancyTitle}

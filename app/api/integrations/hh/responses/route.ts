@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { db } from "@/lib/db"
-import { hhIntegrations, hhResponses } from "@/lib/db/schema"
-import { eq } from "drizzle-orm"
+import { hhIntegrations, hhResponses, vacancies } from "@/lib/db/schema"
+import { and, eq, isNull } from "drizzle-orm"
 import { getValidToken } from "@/lib/hh-helpers"
-import { getNegotiations } from "@/lib/hh-api"
+import { getNegotiations, type HHNegotiationItem } from "@/lib/hh-api"
 
 export async function GET() {
   const session = await auth()
@@ -26,9 +26,33 @@ export async function GET() {
 
   try {
     const { accessToken, integration } = tokenResult
-    const data = await getNegotiations(accessToken)
 
-    for (const item of data.items) {
+    // HH API /negotiations требует vacancy_id (integer). Берём его из локальных вакансий
+    // компании. UUID наших vacancies.id для hh API не годится — нужен hh_vacancy_id.
+    const localVacs = await db
+      .select({ id: vacancies.id, hhVacancyId: vacancies.hhVacancyId })
+      .from(vacancies)
+      .where(and(eq(vacancies.companyId, companyId), isNull(vacancies.deletedAt)))
+
+    const allItems: HHNegotiationItem[] = []
+    for (const v of localVacs) {
+      if (!v.hhVacancyId) {
+        console.warn(`[hh/responses] skip vacancy ${v.id} — нет hh_vacancy_id`)
+        continue
+      }
+      if (!/^\d+$/.test(v.hhVacancyId)) {
+        console.warn(`[hh/responses] skip vacancy ${v.id} — hh_vacancy_id не integer: "${v.hhVacancyId}"`)
+        continue
+      }
+      try {
+        const data = await getNegotiations(accessToken, { vacancyId: v.hhVacancyId })
+        allItems.push(...data.items)
+      } catch (err) {
+        console.error(`[hh/responses] vacancy ${v.id} (hh ${v.hhVacancyId}) failed:`, err instanceof Error ? err.message : err)
+      }
+    }
+
+    for (const item of allItems) {
       const candidateName = [
         item.resume?.last_name,
         item.resume?.first_name,
