@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { CandidateCard, type Candidate } from "./candidate-card"
-import { ListView } from "./list-view"
+import { ListView, type ListSortState } from "./list-view"
 import { FunnelView } from "./funnel-view"
 import { TilesView } from "./tiles-view"
 import { ColumnColorPicker } from "./column-color-picker"
@@ -41,6 +41,8 @@ interface KanbanBoardProps {
   onAddCustomColumn?: (name: string, color: string, afterColumnId?: string) => void
   onRemoveColumn?: (columnId: string) => void
   sortMode?: CandidateSortMode
+  listSort?: ListSortState | null
+  onListSortChange?: (next: ListSortState | null) => void
 }
 
 const VIEW_BUTTONS: { mode: ViewMode; icon: React.ElementType; label: string }[] = [
@@ -52,7 +54,7 @@ const VIEW_BUTTONS: { mode: ViewMode; icon: React.ElementType; label: string }[]
 
 const PRESET_COLORS = ["#94a3b8", "#3b82f6", "#ef4444", "#8b5cf6", "#f97316", "#22c55e", "#ec4899", "#06b6d4", "#f59e0b", "#10b981"]
 
-export function KanbanBoard({ settings, viewMode, onViewModeChange, columns = [], onColumnsChange, onOpenProfile, onAction, onToggleFavorite, hideViewSwitcher, onAddCustomColumn, onRemoveColumn, sortMode = "date_desc" }: KanbanBoardProps) {
+export function KanbanBoard({ settings, viewMode, onViewModeChange, columns = [], onColumnsChange, onOpenProfile, onAction, onToggleFavorite, hideViewSwitcher, onAddCustomColumn, onRemoveColumn, sortMode = "date_desc", listSort, onListSortChange }: KanbanBoardProps) {
   const [addColOpen, setAddColOpen] = useState(false)
   const [newColName, setNewColName] = useState("")
   const [newColColor, setNewColColor] = useState("#3b82f6")
@@ -278,7 +280,16 @@ export function KanbanBoard({ settings, viewMode, onViewModeChange, columns = []
       </AlertDialog>
 
       {viewMode === "list" && (
-        <ListView columns={columns} settings={settings} onOpenProfile={onOpenProfile} onAction={onAction} sortMode={sortMode} />
+        <ListView
+          columns={columns}
+          settings={settings}
+          onOpenProfile={onOpenProfile}
+          onAction={onAction}
+          onToggleFavorite={onToggleFavorite}
+          sortMode={sortMode}
+          sort={listSort}
+          onSortChange={onListSortChange}
+        />
       )}
 
       {viewMode === "funnel" && (

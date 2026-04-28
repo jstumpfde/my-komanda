@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect, useCallback } from "react"
-import { useParams, useRouter } from "next/navigation"
+import { useParams, useRouter, useSearchParams } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { useAuth, isPlatformRole } from "@/lib/auth"
 import { useVacancy } from "@/hooks/use-vacancies"
@@ -10,9 +10,12 @@ import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { KanbanBoard, type ViewMode } from "@/components/dashboard/kanban-board"
-import { CardSettings, type CardDisplaySettings } from "@/components/dashboard/card-settings"
+import type { ListSortKey, ListSortState } from "@/components/dashboard/list-view"
+import { type CardDisplaySettings } from "@/components/dashboard/card-settings"
+import { ViewSettings } from "@/components/dashboard/view-settings"
 import { CandidateFilters, type FilterState } from "@/components/dashboard/candidate-filters"
 import { SortMenu } from "@/components/dashboard/sort-menu"
+import { Tooltip as UITooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip"
 import type { CandidateSortMode } from "@/lib/candidate-sort"
 import { CandidateDrawer } from "@/components/candidates/candidate-drawer"
 import { CandidatesProgressList } from "@/components/candidates/candidates-progress-list"
@@ -79,8 +82,9 @@ function emptyColumns(): ColumnData[] {
 }
 
 const defaultSettings: CardDisplaySettings = {
-  showSalary: false, showSalaryFull: true, showScore: true, showAge: true,
+  showSalary: false, showSalaryFull: true, showScore: true, showAge: false,
   showSource: true, showCity: true, showExperience: true, showSkills: true, showActions: true,
+  showProgress: true, showResponseDate: true,
 }
 
 
@@ -305,7 +309,34 @@ export default function VacancyPage() {
       setLibraryBusy(false)
     }
   }
-  const { candidates: apiCandidates, updateStage, refetch: refetchCandidates, toggleFavorite } = useCandidates(id)
+  const searchParams = useSearchParams()
+
+  // Сортировка списка кандидатов — состояние в URL, чтобы переживало refresh
+  const VALID_SORT_KEYS: ListSortKey[] = ["favorite", "aiScore", "progress", "salary", "responseDate", "status"]
+  const sortParam = searchParams?.get("sort") ?? null
+  const orderParam = searchParams?.get("order") ?? null
+  const listSort: ListSortState | null = sortParam && (VALID_SORT_KEYS as string[]).includes(sortParam)
+    ? { key: sortParam as ListSortKey, dir: orderParam === "asc" ? "asc" : "desc" }
+    : null
+
+  const setListSort = useCallback((next: ListSortState | null) => {
+    const sp = new URLSearchParams(window.location.search)
+    if (next) {
+      sp.set("sort", next.key)
+      sp.set("order", next.dir)
+    } else {
+      sp.delete("sort")
+      sp.delete("order")
+    }
+    const qs = sp.toString()
+    router.replace(`${window.location.pathname}${qs ? "?" + qs : ""}`, { scroll: false })
+  }, [router])
+
+  const { candidates: apiCandidates, updateStage, refetch: refetchCandidates, toggleFavorite } = useCandidates(
+    id,
+    undefined,
+    listSort ? { sort: listSort.key, order: listSort.dir } : undefined,
+  )
 
   const handleToggleFavorite = useCallback(async (candidateId: string, isFavorite: boolean) => {
     const ok = await toggleFavorite(candidateId, isFavorite)
@@ -1260,7 +1291,7 @@ export default function VacancyPage() {
                   <Badge variant="outline" className={statusCfg.color}>{statusCfg.label}</Badge>
                   {status === "active" && apiVacancy?.createdAt && <span className="flex items-center gap-1.5 text-xs text-muted-foreground"><Clock className="size-3.5" />{Math.floor((Date.now() - new Date(apiVacancy.createdAt).getTime()) / 86400000)} дн.</span>}
                 </div>
-                <p className="text-muted-foreground text-xs">{totalCandidates} кандидатов · {vacancyTitle} · {apiVacancy?.city ?? "Москва"}</p>
+                <p className="text-muted-foreground text-xs">{apiVacancy?.city ?? "Москва"}</p>
                 <input
                   ref={anketaFileInputRef}
                   type="file"
@@ -1426,22 +1457,6 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                   <TabsTrigger value="settings" className="gap-1.5"><Settings className="w-3.5 h-3.5" />Настройки</TabsTrigger>
                 </TabsList>
 
-                {activeTab === "candidates" && (
-                  <div className="flex items-center gap-2 shrink-0">
-                    <CandidateFilters filters={filters} onFiltersChange={setFilters} candidates={columns.flatMap((c) => c.candidates)} />
-                    <CardSettings settings={cardSettings} onSettingsChange={setCardSettings} />
-                    <div className="flex items-center bg-muted rounded-lg p-0.5 gap-0.5">
-                      {([
-                        { mode: "funnel" as const, label: "Воронка" },
-                        { mode: "list" as const, label: "Список" },
-                        { mode: "kanban" as const, label: "Канбан" },
-                        { mode: "tiles" as const, label: "Плитки" },
-                      ]).map(v => (
-                        <button key={v.mode} className={cn("h-7 px-2.5 rounded-md text-xs font-medium transition-all whitespace-nowrap", viewMode === v.mode ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground")} onClick={() => setViewMode(v.mode)}>{v.label}</button>
-                      ))}
-                    </div>
-                  </div>
-                )}
                 {activeTab === "anketa" && (
                   <div className="flex items-center gap-1.5 shrink-0">
                     <DropdownMenu>
@@ -1633,24 +1648,41 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                   </div>
                 )}
 
-                {/* AI Screening toolbar */}
-                <div className="flex items-center gap-2 mb-3">
+                {/* Stats row */}
+                <div className="flex items-center gap-2 mb-2 flex-wrap">
                   <span className="text-sm text-muted-foreground shrink-0">
                     <span className="font-medium text-foreground">{hhSyncMeta?.responsesCount ?? apiCandidates.length}</span> откликов
+                    <span className="mx-1.5">·</span>
+                    <span className="font-medium text-foreground">{apiCandidates.length}</span> кандидатов
                     <span className="mx-1.5">·</span>
                     <span className={cn("font-medium", (hhPendingResponses ?? 0) > 0 ? "text-amber-700" : "text-foreground")}>{hhPendingResponses ?? 0}</span> необраб.
                     <span className="mx-1.5">·</span>
                     <span className="font-medium text-foreground">{apiCandidates.filter(c => c.demoProgressJson != null).length}</span> в демо
                   </span>
-                  <div className="h-5 w-px bg-border mx-1 shrink-0" />
-                  {hhConnected === true && apiVacancy?.hhVacancyId && hhSyncMeta && (<>
-                    <span className="text-xs text-muted-foreground hidden sm:inline">
-                      ✓ Синх. {relativeHhSyncTime(hhSyncMeta.syncedAt)}
-                    </span>
-                    <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={handleHhSync} disabled={hhSyncing}>
-                      {hhSyncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-                      Синхронизировать
-                    </Button>
+                  {hhConnected === true && apiVacancy?.hhVacancyId && hhSyncMeta && (
+                    <UITooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-7 w-7 rounded-full"
+                          onClick={handleHhSync}
+                          disabled={hhSyncing}
+                          aria-label="Синхронизировать с hh"
+                        >
+                          {hhSyncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        Синхронизировать с hh • синх. {relativeHhSyncTime(hhSyncMeta.syncedAt)} назад
+                      </TooltipContent>
+                    </UITooltip>
+                  )}
+                </div>
+
+                {/* Action row */}
+                <div className="flex items-center gap-2 mb-3 flex-wrap">
+                  {hhConnected === true && apiVacancy?.hhVacancyId && hhSyncMeta && (
                     <HhAutoProcess
                       vacancyId={id}
                       defaultMinScore={
@@ -1658,8 +1690,9 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                       }
                       onProcessed={() => { refetchCandidates(); handleHhSync() }}
                     />
-                    <div className="h-5 w-px bg-border mx-1 shrink-0" />
-                  </>)}
+                  )}
+                  <CandidateFilters filters={filters} onFiltersChange={setFilters} candidates={columns.flatMap((c) => c.candidates)} />
+                  <SortMenu sortMode={sortMode} onSortChange={setSortMode} />
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs">
@@ -1678,7 +1711,12 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
-                  <SortMenu sortMode={sortMode} onSortChange={setSortMode} />
+                  <ViewSettings
+                    settings={cardSettings}
+                    onSettingsChange={setCardSettings}
+                    viewMode={viewMode}
+                    onViewModeChange={setViewMode}
+                  />
                   {bulkScreening && <span className="text-xs text-muted-foreground">AI анализирует кандидатов...</span>}
                 </div>
                 <KanbanBoard
@@ -1698,6 +1736,8 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                   onAddCustomColumn={handleAddCustomColumn}
                   onRemoveColumn={handleRemoveColumn}
                   sortMode={sortMode}
+                  listSort={listSort}
+                  onListSortChange={setListSort}
                 />
               </TabsContent>
 

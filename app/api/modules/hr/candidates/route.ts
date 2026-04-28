@@ -1,9 +1,38 @@
 import { NextRequest } from "next/server"
-import { eq, and, inArray, desc } from "drizzle-orm"
+import { eq, and, inArray, asc, desc, sql, type SQL } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { candidates, vacancies, demos } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { generateCandidateToken } from "@/lib/candidate-tokens"
+
+type SortKey = "favorite" | "aiScore" | "salary" | "responseDate" | "status" | "progress"
+
+const STAGE_ORDER_SQL = sql`CASE ${candidates.stage}
+  WHEN 'new' THEN 0
+  WHEN 'demo' THEN 1
+  WHEN 'scheduled' THEN 2
+  WHEN 'interview' THEN 3
+  WHEN 'interviewed' THEN 3
+  WHEN 'decision' THEN 4
+  WHEN 'offer' THEN 5
+  WHEN 'final_decision' THEN 6
+  WHEN 'hired' THEN 7
+  WHEN 'talent_pool' THEN 8
+  WHEN 'rejected' THEN 9
+  ELSE 99
+END`
+
+function buildOrderBy(key: SortKey | null, dir: "asc" | "desc"): SQL[] {
+  const wrap = (col: SQL | ReturnType<typeof asc>) => (dir === "asc" ? asc(col as SQL) : desc(col as SQL))
+  switch (key) {
+    case "favorite":     return [wrap(candidates.isFavorite), desc(candidates.createdAt)]
+    case "aiScore":      return [wrap(candidates.aiScore),    desc(candidates.createdAt)]
+    case "salary":       return [wrap(sql`COALESCE(${candidates.salaryMax}, ${candidates.salaryMin}, 0)`), desc(candidates.createdAt)]
+    case "responseDate": return [wrap(candidates.createdAt)]
+    case "status":       return [wrap(STAGE_ORDER_SQL), desc(candidates.createdAt)]
+    default:             return [desc(candidates.createdAt)]
+  }
+}
 
 interface DemoBlockProgress {
   blockId: string
@@ -130,11 +159,29 @@ export async function GET(req: NextRequest) {
 
     const stages = stageParam ? stageParam.split(",").filter(Boolean) : []
 
-    const rows = stages.length > 0
-      ? await db.select().from(candidates)
-          .where(and(eq(candidates.vacancyId, vacancyId), inArray(candidates.stage, stages)))
-      : await db.select().from(candidates)
-          .where(eq(candidates.vacancyId, vacancyId))
+    const sortRaw = url.searchParams.get("sort") as SortKey | null
+    const orderRaw = url.searchParams.get("order")
+    const dir: "asc" | "desc" = orderRaw === "asc" ? "asc" : "desc"
+    const orderBy = buildOrderBy(sortRaw, dir)
+
+    const where = stages.length > 0
+      ? and(eq(candidates.vacancyId, vacancyId), inArray(candidates.stage, stages))
+      : eq(candidates.vacancyId, vacancyId)
+
+    let rows = await db.select().from(candidates).where(where).orderBy(...orderBy)
+
+    if (sortRaw === "progress") {
+      const mul = dir === "asc" ? 1 : -1
+      const progressOf = (c: typeof rows[number]): number => {
+        const dp = c.demoProgressJson as { blocks?: { status?: string }[]; totalBlocks?: number } | null
+        if (!dp || !Array.isArray(dp.blocks)) return -1
+        const total = dp.totalBlocks ?? dp.blocks.length
+        if (!total) return -1
+        const completed = dp.blocks.filter(b => b?.status === "completed").length
+        return Math.round((completed / total) * 100)
+      }
+      rows = [...rows].sort((a, b) => mul * (progressOf(a) - progressOf(b)))
+    }
 
     return apiSuccess(rows)
   } catch (err) {
