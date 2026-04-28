@@ -156,13 +156,15 @@ let _negotiationsShapeLogged = false
 
 export async function getNegotiations(
   accessToken: string,
-  opts: { vacancyId?: string; page?: number } = {},
+  opts: { vacancyId: string; page?: number },
 ): Promise<HHNegotiationsResponse> {
+  // Правильный hh endpoint — /vacancies/{id}/negotiations. Старый вариант
+  // GET /negotiations?vacancy_id=… возвращает employer_states (схему статусов),
+  // а не список откликов.
   const sp = new URLSearchParams()
   sp.set("page", String(opts.page ?? 0))
   sp.set("per_page", "50")
-  if (opts.vacancyId) sp.set("vacancy_id", opts.vacancyId)
-  const response = await hhFetch<unknown>(`/negotiations?${sp.toString()}`, accessToken)
+  const response = await hhFetch<unknown>(`/vacancies/${opts.vacancyId}/negotiations?${sp.toString()}`, accessToken)
   if (!_negotiationsShapeLogged) {
     _negotiationsShapeLogged = true
     try {
