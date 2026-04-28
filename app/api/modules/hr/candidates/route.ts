@@ -45,6 +45,7 @@ export async function GET(req: NextRequest) {
           createdAt: candidates.createdAt,
           updatedAt: candidates.updatedAt,
           demoProgressJson: candidates.demoProgressJson,
+          isFavorite: candidates.isFavorite,
         })
         .from(candidates)
         .innerJoin(vacancies, eq(candidates.vacancyId, vacancies.id))

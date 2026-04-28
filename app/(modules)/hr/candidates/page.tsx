@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
+import { useRouter } from "next/navigation"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
@@ -11,9 +12,9 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select"
-import { Search, Users, ListFilter, MoreHorizontal, UserPlus, Archive, XCircle, Loader2 } from "lucide-react"
+import { Search, Users, ListFilter, MoreHorizontal, UserPlus, Archive, XCircle, Loader2, Star, Eye } from "lucide-react"
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
@@ -35,6 +36,7 @@ interface Candidate {
   demoCompletedBlocks: number
   progressPercent: number | null
   isActive: boolean
+  isFavorite: boolean
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -106,12 +108,12 @@ function avatarColor(id: string): string {
   return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length]
 }
 
-function progressBadgeClass(percent: number, isActive: boolean): string {
-  if (percent === 0) return "bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300"
-  if (percent === 100) return "bg-emerald-500 text-white"
-  if (percent >= 71) return "bg-blue-500 text-white"
-  if (percent >= 31) return "bg-amber-500 text-white"
-  return cn("bg-red-500 text-white", isActive && "animate-pulse")
+function progressTextClass(percent: number | null, isActive: boolean): string {
+  if (percent === null || percent === 0) return "text-muted-foreground"
+  if (percent === 100) return "text-emerald-500"
+  if (percent >= 71) return "text-blue-500"
+  if (percent >= 31) return "text-amber-600"
+  return cn("text-red-500", isActive && "animate-pulse")
 }
 
 type ColumnSort = { column: string; dir: "asc" | "desc" } | null
@@ -136,6 +138,7 @@ function SortableHeader({
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 export default function CandidatesPage() {
+  const router = useRouter()
   const [candidates, setCandidates] = useState<Candidate[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
@@ -164,6 +167,23 @@ export default function CandidatesPage() {
       setCandidates(prev => prev.map(c => c.id === candidateId ? { ...c, stage } : c))
       toast.success(`${candidateName}: ${STATUS_LABELS[stage] ?? stage}`)
     } catch { toast.error("Ошибка смены этапа") }
+  }
+
+  async function toggleFavorite(id: string) {
+    const target = candidates.find(c => c.id === id)
+    const next = !(target?.isFavorite ?? false)
+    setCandidates(prev => prev.map(c => c.id === id ? { ...c, isFavorite: next } : c))
+    try {
+      const res = await fetch(`/api/modules/hr/candidates/${id}/favorite`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isFavorite: next }),
+      })
+      if (!res.ok) throw new Error()
+    } catch {
+      setCandidates(prev => prev.map(c => c.id === id ? { ...c, isFavorite: !next } : c))
+      toast.error("Не удалось обновить избранное")
+    }
   }
 
   const toggleColSort = (column: string) => {
@@ -286,6 +306,7 @@ export default function CandidatesPage() {
                   <thead>
                     <tr className="bg-muted/50 border-b border-border">
                       <th className="pl-5 pr-2 py-3 w-10"><Checkbox checked={allSelected} onCheckedChange={toggleAll} /></th>
+                      <th className="px-2 py-3 w-[40px]"></th>
                       <th className="px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">ФИО</th>
                       <th className="px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Вакансия</th>
                       <th className="px-4 py-3"><SortableHeader label="Статус" column="status" current={colSort} onToggle={toggleColSort} /></th>
@@ -299,12 +320,26 @@ export default function CandidatesPage() {
                   <tbody>
                     {filtered.map((c, i) => (
                       <tr key={c.id}
+                        onClick={() => router.push(`/hr/candidates/${c.id}`)}
                         className={cn("transition-colors cursor-pointer hover:bg-accent/40",
                           selected.has(c.id) && "bg-primary/[0.04]",
                           i < filtered.length - 1 && "border-b border-border/60",
                         )}>
                         <td className="pl-5 pr-2 py-3.5" onClick={(e) => e.stopPropagation()}>
                           <Checkbox checked={selected.has(c.id)} onCheckedChange={() => toggleOne(c.id)} />
+                        </td>
+                        <td className="px-2 py-3.5" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              toggleFavorite(c.id)
+                            }}
+                            className="inline-flex items-center justify-center p-1 rounded hover:bg-accent/60 transition-colors"
+                            aria-label={c.isFavorite ? "Убрать из избранного" : "В избранное"}
+                          >
+                            <Star className={cn("size-4", c.isFavorite ? "fill-amber-400 text-amber-400" : "text-muted-foreground/40")} />
+                          </button>
                         </td>
                         <td className="px-4 py-3.5">
                           <div className="flex items-center gap-3">
@@ -314,7 +349,7 @@ export default function CandidatesPage() {
                               </AvatarFallback>
                             </Avatar>
                             <div>
-                              <Link href={`/hr/candidates/${c.id}`} className="text-sm font-medium text-foreground hover:text-primary hover:underline transition-colors">{c.name}</Link>
+                              <Link href={`/hr/candidates/${c.id}`} onClick={(e) => e.stopPropagation()} className="text-sm font-medium text-foreground hover:text-primary hover:underline transition-colors">{c.name}</Link>
                               <p className="text-xs text-muted-foreground">{c.city ?? ""}</p>
                             </div>
                           </div>
@@ -329,12 +364,9 @@ export default function CandidatesPage() {
                           {c.progressPercent === null || c.demoTotalBlocks === 0 ? (
                             <span className="text-sm text-muted-foreground">—</span>
                           ) : (
-                            <div className={cn(
-                              "inline-flex size-9 rounded-md items-center justify-center text-sm font-semibold leading-none",
-                              progressBadgeClass(c.progressPercent, c.isActive),
-                            )}>
-                              {c.progressPercent}
-                            </div>
+                            <span className={cn("text-sm font-medium tabular-nums", progressTextClass(c.progressPercent, c.isActive))}>
+                              {c.progressPercent}%
+                            </span>
                           )}
                         </td>
                         <td className="px-4 py-3.5 text-sm text-muted-foreground tabular-nums whitespace-nowrap">
@@ -350,6 +382,10 @@ export default function CandidatesPage() {
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
+                              <DropdownMenuItem className="gap-2 text-xs" onClick={() => router.push(`/hr/candidates/${c.id}`)}>
+                                <Eye className="w-3.5 h-3.5" />Открыть карточку
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
                               <DropdownMenuItem className="gap-2 text-xs" onClick={() => changeStage(c.id, "scheduled", c.name)}>
                                 <UserPlus className="w-3.5 h-3.5" />Пригласить на интервью
                               </DropdownMenuItem>
