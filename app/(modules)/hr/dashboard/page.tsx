@@ -16,7 +16,7 @@ import {
   Briefcase, Users, UserCheck, Clock, TrendingUp, Plus, ChevronRight,
   AlertCircle, CheckCircle2, Timer, Star, Calendar, Sparkles, Activity,
 } from "lucide-react"
-import { CandidatesProgressList } from "@/components/candidates/candidates-progress-list"
+import { CandidatesProgressMiniTable } from "@/components/candidates/candidates-progress-mini-table"
 import {
   ResponsiveContainer, LineChart, Line, Area, XAxis, YAxis, CartesianGrid, Tooltip,
   PieChart, Pie, Cell, ComposedChart,
@@ -210,7 +210,7 @@ function DashboardContent() {
                   Все <ChevronRight className="w-3 h-3" />
                 </Link>
               </div>
-              <CandidatesProgressList compact={true} limit={5} />
+              <CandidatesProgressMiniTable limit={5} />
             </div>
 
             {/* ═══ Block 3: Funnel + Active Vacancies ═══ */}
