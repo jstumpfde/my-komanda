@@ -367,6 +367,11 @@ export const candidates = pgTable("candidates", {
   autoProcessingStopped: boolean("auto_processing_stopped").notNull().default(false),
   autoProcessingStoppedReason: text("auto_processing_stopped_reason"),
   autoProcessingStoppedAt: timestamp("auto_processing_stopped_at", { withTimezone: true }),
+  // v5: AI-классификатор ответов в hh-чате может выставить паузу автоматизации
+  // (например, при rejection или wants_personal_contact).
+  automationPaused: boolean("automation_paused").notNull().default(false),
+  // v5: дубль по реферальной ссылке — какой short_id привёл этого кандидата.
+  referredByShortId: text("referred_by_short_id"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 })

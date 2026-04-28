@@ -28,6 +28,8 @@ export interface ApiCandidate {
   createdAt: string | null
   updatedAt: string | null
   hhResponseId?: string | null
+  shortId?: string | null
+  referredByShortId?: string | null
 }
 
 // ─── useCandidates ────────────────────────────────────────────────────────────

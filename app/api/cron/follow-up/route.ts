@@ -19,13 +19,16 @@ export async function POST(req: NextRequest) {
   let skipped = 0
 
   try {
-    // Кандидаты в статусе new, созданные более 48 часов назад
+    // Кандидаты в статусе new, созданные более 48 часов назад.
+    // v5: автоматизация пропускается, если AI-классификатор поставил automationPaused
+    // (например, кандидат уже отказался или попросил личный контакт).
     const stale = await db
       .select()
       .from(candidates)
       .where(and(
         inArray(candidates.stage, ["new"]),
         lt(candidates.createdAt, threshold),
+        eq(candidates.automationPaused, false),
       ))
 
     for (const candidate of stale) {
