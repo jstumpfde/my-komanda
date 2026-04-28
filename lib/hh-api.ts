@@ -158,13 +158,13 @@ export async function getNegotiations(
   accessToken: string,
   opts: { vacancyId: string; page?: number },
 ): Promise<HHNegotiationsResponse> {
-  // Правильный hh endpoint — /vacancies/{id}/negotiations. Старый вариант
-  // GET /negotiations?vacancy_id=… возвращает employer_states (схему статусов),
-  // а не список откликов.
+  // hh API: список откликов на вакансию — GET /negotiations/response?vacancy_id=…
+  // Возвращает { items, found, pages, page, per_page } с резюме кандидатов.
   const sp = new URLSearchParams()
+  sp.set("vacancy_id", opts.vacancyId)
   sp.set("page", String(opts.page ?? 0))
   sp.set("per_page", "50")
-  const response = await hhFetch<unknown>(`/vacancies/${opts.vacancyId}/negotiations?${sp.toString()}`, accessToken)
+  const response = await hhFetch<unknown>(`/negotiations/response?${sp.toString()}`, accessToken)
   if (!_negotiationsShapeLogged) {
     _negotiationsShapeLogged = true
     try {
