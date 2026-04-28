@@ -5,6 +5,7 @@ import { db } from "@/lib/db"
 import { vacancies } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { logActivity } from "@/lib/activity-log"
+import { generateVacancyShortCode } from "@/lib/short-id"
 
 // Transliterate Russian text to Latin for slug generation
 function transliterate(text: string): string {
@@ -106,12 +107,17 @@ export async function POST(req: NextRequest) {
     if (body.salary_max) insertValues.salaryMax = body.salary_max
     if (body.description_json) insertValues.descriptionJson = body.description_json
 
-    const [vacancy] = await db
-      .insert(vacancies)
-      .values(insertValues as typeof vacancies.$inferInsert)
-      .returning()
+    const vacancy = await db.transaction(async (tx) => {
+      const shortCode = await generateVacancyShortCode(tx, new Date())
+      insertValues.shortCode = shortCode
+      const [v] = await tx
+        .insert(vacancies)
+        .values(insertValues as typeof vacancies.$inferInsert)
+        .returning()
+      return v
+    })
 
-    console.log("[POST /api/modules/hr/vacancies] created:", vacancy.id)
+    console.log("[POST /api/modules/hr/vacancies] created:", vacancy.id, "short:", vacancy.shortCode)
     logActivity({ companyId: user.companyId, userId: user.id!, action: "create", entityType: "vacancy", entityId: vacancy.id, entityTitle: vacancy.title, module: "hr", request: req })
     return apiSuccess(vacancy, 201)
   } catch (err) {

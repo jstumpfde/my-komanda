@@ -3,6 +3,7 @@ import { eq, and, isNull, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { candidates, vacancies, demos, companies } from "@/lib/db/schema"
 import { apiError, apiSuccess } from "@/lib/api-helpers"
+import { isShortId } from "@/lib/short-id"
 
 export async function GET(
   _req: NextRequest,
@@ -11,7 +12,7 @@ export async function GET(
   try {
     const { token } = await params
 
-    // Find candidate by token
+    // Резолв: сначала по short_id, иначе по token (preview/nanoid/uuid).
     const candidateRows = await db
       .select({
         id: candidates.id,
@@ -22,7 +23,7 @@ export async function GET(
         aiScore: candidates.aiScore,
       })
       .from(candidates)
-      .where(eq(candidates.token, token))
+      .where(isShortId(token) ? eq(candidates.shortId, token) : eq(candidates.token, token))
       .limit(1)
 
     if (candidateRows.length === 0) {

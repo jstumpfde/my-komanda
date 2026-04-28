@@ -7,6 +7,7 @@ import { and, eq, isNull } from "drizzle-orm"
 import { getValidToken } from "@/lib/hh-helpers"
 import { changeNegotiationState } from "@/lib/hh-api"
 import { screenCandidate } from "@/lib/ai-screen-candidate"
+import { generateCandidateShortId } from "@/lib/short-id"
 
 const stopFlags = new Map<string, boolean>()
 
@@ -301,23 +302,29 @@ export async function POST(req: NextRequest) {
 
       if (!candidateId && localVac) {
         candidateToken = Math.random().toString(36).slice(2) + Date.now().toString(36)
-        const [newCand] = await db.insert(candidates).values({
-          vacancyId: localVac.id,
-          name: resp.candidateName || "Кандидат с hh.ru",
-          phone: resp.candidatePhone,
-          email: resp.candidateEmail,
-          city: candidateData.city,
-          source: "hh",
-          stage: targetStage,
-          score: Math.round(screenResult.score),
-          aiScore: Math.round(screenResult.score),
-          aiSummary: screenResult.recommendation,
-          aiDetails,
-          token: candidateToken,
-          autoProcessingStopped: decision === "reject",
-          autoProcessingStoppedReason: decision === "reject" ? "AI auto-reject" : null,
-          autoProcessingStoppedAt: decision === "reject" ? new Date() : null,
-        }).returning()
+        const newCand = await db.transaction(async (tx) => {
+          const short = await generateCandidateShortId(tx, localVac.id)
+          const [row] = await tx.insert(candidates).values({
+            vacancyId: localVac.id,
+            name: resp.candidateName || "Кандидат с hh.ru",
+            phone: resp.candidatePhone,
+            email: resp.candidateEmail,
+            city: candidateData.city,
+            source: "hh",
+            stage: targetStage,
+            score: Math.round(screenResult.score),
+            aiScore: Math.round(screenResult.score),
+            aiSummary: screenResult.recommendation,
+            aiDetails,
+            token: candidateToken,
+            autoProcessingStopped: decision === "reject",
+            autoProcessingStoppedReason: decision === "reject" ? "AI auto-reject" : null,
+            autoProcessingStoppedAt: decision === "reject" ? new Date() : null,
+            shortId: short?.shortId ?? null,
+            sequenceNumber: short?.sequenceNumber ?? null,
+          }).returning()
+          return row
+        })
         if (newCand) candidateId = newCand.id
       } else if (candidateId) {
         // Кандидат уже существует — обновляем AI-данные и стадию

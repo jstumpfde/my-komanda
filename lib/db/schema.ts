@@ -245,6 +245,7 @@ export const vacancies = pgTable("vacancies", {
   id: uuid("id").primaryKey().defaultRandom(),
   companyId: uuid("company_id").references(() => companies.id).notNull(),
   createdBy: uuid("created_by").references(() => users.id),
+  shortCode: text("short_code").unique(), // "2604V001" — YYMM(created_at) + 'V' + порядковый
   title: text("title").notNull(),
   description: text("description"),
   city: text("city"),
@@ -354,6 +355,8 @@ export const candidates = pgTable("candidates", {
   experience: text("experience"),
   skills: text("skills").array().default([]),
   token: text("token").unique().notNull(),
+  shortId: text("short_id").unique(),                 // "2604V0010042" — vacancy.short_code + LPAD(seq,4)
+  sequenceNumber: integer("sequence_number"),         // порядковый номер в рамках вакансии (0 = preview)
   demoProgressJson: jsonb("demo_progress_json"),
   anketaAnswers: jsonb("anketa_answers"), // [{question, answer}]
   aiScore: integer("ai_score"),

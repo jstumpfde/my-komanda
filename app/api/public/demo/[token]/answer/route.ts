@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { candidates } from "@/lib/db/schema"
 import { apiError, apiSuccess } from "@/lib/api-helpers"
+import { isShortId } from "@/lib/short-id"
 
 interface DemoBlock {
   blockId: string
@@ -43,7 +44,7 @@ export async function POST(
         demoProgressJson: candidates.demoProgressJson,
       })
       .from(candidates)
-      .where(eq(candidates.token, token))
+      .where(isShortId(token) ? eq(candidates.shortId, token) : eq(candidates.token, token))
       .limit(1)
 
     if (candidateRows.length === 0) {

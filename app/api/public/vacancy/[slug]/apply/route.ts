@@ -5,6 +5,7 @@ import { vacancies, candidates, vacancyUtmLinks } from "@/lib/db/schema"
 import { sql } from "drizzle-orm"
 import { apiError, apiSuccess } from "@/lib/api-helpers"
 import { generateCandidateToken } from "@/lib/candidate-tokens"
+import { generateCandidateShortId } from "@/lib/short-id"
 
 export async function POST(
   req: NextRequest,
@@ -67,18 +68,24 @@ export async function POST(
     const phone = contactType === "phone" ? contact.trim() : null
     const email = contactType === "telegram" ? contact.trim() : null
 
-    const [created] = await db
-      .insert(candidates)
-      .values({
-        vacancyId: vacancy.id,
-        name: name.trim(),
-        phone,
-        email, // telegram handle stored in email field
-        source,
-        stage: "new",
-        token: generateCandidateToken(),
-      })
-      .returning()
+    const created = await db.transaction(async (tx) => {
+      const short = await generateCandidateShortId(tx, vacancy.id)
+      const [row] = await tx
+        .insert(candidates)
+        .values({
+          vacancyId: vacancy.id,
+          name: name.trim(),
+          phone,
+          email, // telegram handle stored in email field
+          source,
+          stage: "new",
+          token: generateCandidateToken(),
+          shortId: short?.shortId ?? null,
+          sequenceNumber: short?.sequenceNumber ?? null,
+        })
+        .returning()
+      return row
+    })
 
     return apiSuccess({ ok: true, candidateId: created.id, token: created.token }, 201)
   } catch (err) {
