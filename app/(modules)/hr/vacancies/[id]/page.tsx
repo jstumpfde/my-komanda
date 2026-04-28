@@ -603,6 +603,59 @@ export default function VacancyPage() {
     finally { setHhSyncing(false) }
   }
 
+  // Live stats для карточки источника hh.ru на табе «Настройки»
+  const [hhStats, setHhStats] = useState<{ totalResponses: number; newResponses: number; lastSyncAt: string | null } | null>(null)
+  const loadHhStats = useCallback(async () => {
+    if (!apiVacancy?.hhVacancyId) { setHhStats(null); return }
+    try {
+      const res = await fetch(`/api/integrations/hh/vacancies/${id}/stats`)
+      if (!res.ok) return
+      const data = await res.json() as { totalResponses: number; newResponses: number; lastSyncAt: string | null }
+      setHhStats({ totalResponses: data.totalResponses, newResponses: data.newResponses, lastSyncAt: data.lastSyncAt })
+    } catch { /* silent */ }
+  }, [apiVacancy?.hhVacancyId, id])
+
+  useEffect(() => {
+    if (!apiVacancy?.hhVacancyId) { setHhStats(null); return }
+    loadHhStats()
+  }, [apiVacancy?.hhVacancyId, loadHhStats])
+
+  // Отвязка вакансии от hh.ru
+  const [hhUnlinkOpen, setHhUnlinkOpen] = useState(false)
+  const [hhUnlinking, setHhUnlinking] = useState(false)
+
+  const handleHhUnlink = async () => {
+    setHhUnlinking(true)
+    try {
+      const res = await fetch(`/api/integrations/hh/vacancies/${id}/unlink`, { method: "POST" })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({})) as { error?: string }
+        throw new Error(data.error || "Не удалось отвязать")
+      }
+      toast.success("Вакансия отвязана от hh.ru")
+      setHhUnlinkOpen(false)
+      setHhStats(null)
+      setHhSyncMeta(null)
+      setHhPendingResponses(null)
+      await refetchVacancy()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Ошибка отвязки")
+    } finally {
+      setHhUnlinking(false)
+    }
+  }
+
+  const formatHhSyncDate = (iso: string | null): string => {
+    if (!iso) return "—"
+    const d = new Date(iso)
+    if (Number.isNaN(d.getTime())) return "—"
+    const dd = String(d.getDate()).padStart(2, "0")
+    const mm = String(d.getMonth() + 1).padStart(2, "0")
+    const hh = String(d.getHours()).padStart(2, "0")
+    const mi = String(d.getMinutes()).padStart(2, "0")
+    return `${dd}.${mm} в ${hh}:${mi}`
+  }
+
   const relativeHhSyncTime = (date: string | null | undefined): string => {
     if (!date) return "—"
     const diff = Date.now() - new Date(date).getTime()
@@ -2266,18 +2319,45 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                       <p className="text-sm text-muted-foreground mb-3">Подключение сервисов для импорта откликов</p>
                       <div className="space-y-3">
                         {apiVacancy?.hhVacancyId ? (
-                          <div className="rounded-lg border bg-card p-4 flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-white text-[11px] font-bold" style={{ backgroundColor: "#D6001C" }}>hh</div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium">hh.ru</p>
-                              <p className="text-[11px] text-muted-foreground">Привязана к hh-вакансии {apiVacancy.hhVacancyId}</p>
+                          <div className="rounded-lg border bg-card p-4">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-white text-[11px] font-bold" style={{ backgroundColor: "#D6001C" }}>hh</div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium">hh.ru</p>
+                                <p className="text-[11px] text-muted-foreground">Привязана к hh-вакансии {apiVacancy.hhVacancyId}</p>
+                              </div>
+                              <Badge variant="outline" className="text-xs h-6 bg-emerald-500/10 text-emerald-700 border-emerald-200 shrink-0">Привязана</Badge>
+                              {apiVacancy.hhUrl && (
+                                <a href={apiVacancy.hhUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline shrink-0 flex items-center gap-1">
+                                  Открыть на hh.ru <ExternalLink className="w-3 h-3" />
+                                </a>
+                              )}
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 shrink-0"
+                                onClick={() => setHhUnlinkOpen(true)}
+                              >
+                                Отвязать
+                              </Button>
                             </div>
-                            <Badge variant="outline" className="text-xs h-6 bg-emerald-500/10 text-emerald-700 border-emerald-200 shrink-0">Привязана</Badge>
-                            {apiVacancy.hhUrl && (
-                              <a href={apiVacancy.hhUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline shrink-0 flex items-center gap-1">
-                                Открыть на hh.ru <ExternalLink className="w-3 h-3" />
-                              </a>
-                            )}
+                            <div className="mt-3 pt-3 border-t flex items-center gap-2 flex-wrap">
+                              <span className="inline-flex items-center gap-1.5 h-6 px-2 rounded-full bg-muted text-[11px] text-muted-foreground">
+                                <span aria-hidden>📥</span>
+                                <span>Откликов:</span>
+                                <span className="font-medium text-foreground">{hhStats ? (hhStats.totalResponses > 0 ? hhStats.totalResponses : "—") : "…"}</span>
+                              </span>
+                              <span className="inline-flex items-center gap-1.5 h-6 px-2 rounded-full bg-muted text-[11px] text-muted-foreground">
+                                <span aria-hidden>🆕</span>
+                                <span>Необраб.:</span>
+                                <span className="font-medium text-foreground">{hhStats ? (hhStats.newResponses > 0 ? hhStats.newResponses : "—") : "…"}</span>
+                              </span>
+                              <span className="inline-flex items-center gap-1.5 h-6 px-2 rounded-full bg-muted text-[11px] text-muted-foreground">
+                                <span aria-hidden>🔄</span>
+                                <span>Синк:</span>
+                                <span className="font-medium text-foreground">{hhStats ? formatHhSyncDate(hhStats.lastSyncAt) : "…"}</span>
+                              </span>
+                            </div>
                           </div>
                         ) : (
                           <div className="rounded-lg border bg-card p-4 flex items-center gap-3">
@@ -2540,6 +2620,28 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
               setTalentPoolDialogOpen(false)
             }}>
               Добавить в пул
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Подтверждение отвязки от hh.ru */}
+      <AlertDialog open={hhUnlinkOpen} onOpenChange={(o) => { if (!hhUnlinking) setHhUnlinkOpen(o) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Отвязать от hh-вакансии {apiVacancy?.hhVacancyId}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Все импортированные кандидаты останутся, но новые отклики не будут приходить.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={hhUnlinking}>Отмена</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={hhUnlinking}
+              onClick={(e) => { e.preventDefault(); handleHhUnlink() }}
+              className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
+            >
+              {hhUnlinking ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />Отвязка…</> : "Отвязать"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
