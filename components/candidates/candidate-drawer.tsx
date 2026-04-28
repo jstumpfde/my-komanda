@@ -485,6 +485,13 @@ export function CandidateDrawer({
                           Источник: <span className="text-foreground font-medium">{candidate.source}</span>
                         </div>
                       )}
+                      {candidate.referredByShortId && (
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <Calendar className="w-3.5 h-3.5 shrink-0" />
+                          Пришёл по рекомендации от{" "}
+                          <span className="text-foreground font-medium">{candidate.referredByShortId}</span>
+                        </div>
+                      )}
                       {candidate.experience && (
                         <div className="flex items-center gap-2 text-sm text-muted-foreground">
                           <Briefcase className="w-3.5 h-3.5 shrink-0" />

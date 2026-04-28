@@ -149,6 +149,11 @@ export interface HHNegotiationsResponse {
   pages: number
 }
 
+// Один раз за процесс логируем структуру ответа hh /negotiations — для диагностики
+// в проде (видели "r.items is not iterable"). В лог попадает только первый успешный
+// ответ, чтобы не засорять журнал.
+let _negotiationsShapeLogged = false
+
 export async function getNegotiations(
   accessToken: string,
   opts: { vacancyId?: string; page?: number } = {},
@@ -157,7 +162,17 @@ export async function getNegotiations(
   sp.set("page", String(opts.page ?? 0))
   sp.set("per_page", "50")
   if (opts.vacancyId) sp.set("vacancy_id", opts.vacancyId)
-  return hhFetch(`/negotiations?${sp.toString()}`, accessToken)
+  const response = await hhFetch<unknown>(`/negotiations?${sp.toString()}`, accessToken)
+  if (!_negotiationsShapeLogged) {
+    _negotiationsShapeLogged = true
+    try {
+      const sample = JSON.stringify(response).slice(0, 500)
+      console.log("[getNegotiations] response shape:", sample)
+    } catch {
+      console.log("[getNegotiations] response shape: <unserializable>")
+    }
+  }
+  return response as HHNegotiationsResponse
 }
 
 export async function changeNegotiationState(

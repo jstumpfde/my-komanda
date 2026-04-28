@@ -45,8 +45,21 @@ export async function GET() {
         continue
       }
       try {
-        const data = await getNegotiations(accessToken, { vacancyId: v.hhVacancyId })
-        allItems.push(...data.items)
+        const data = await getNegotiations(accessToken, { vacancyId: v.hhVacancyId }) as unknown
+        // Defensive resolution: hh API формат может отличаться (items / collection / голый массив).
+        // Пустой список — это не ошибка, а просто 0 откликов.
+        const r = data as { items?: unknown; collection?: unknown } | unknown[] | null | undefined
+        const items: HHNegotiationItem[] = Array.isArray((r as { items?: unknown })?.items)
+          ? ((r as { items: HHNegotiationItem[] }).items)
+          : Array.isArray((r as { collection?: unknown })?.collection)
+            ? ((r as { collection: HHNegotiationItem[] }).collection)
+            : Array.isArray(r)
+              ? (r as HHNegotiationItem[])
+              : []
+        if (items.length === 0) {
+          console.info(`[hh/responses] vacancy ${v.id} (hh ${v.hhVacancyId}): 0 откликов`)
+        }
+        allItems.push(...items)
       } catch (err) {
         console.error(`[hh/responses] vacancy ${v.id} (hh ${v.hhVacancyId}) failed:`, err instanceof Error ? err.message : err)
       }
