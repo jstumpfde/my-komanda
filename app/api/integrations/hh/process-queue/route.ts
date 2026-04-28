@@ -213,6 +213,16 @@ export async function POST(req: NextRequest) {
         }).where(eq(candidates.id, candidateId))
       }
 
+      console.log("[PQ:dbg]", resp.candidateName, "after-link", {
+        candidateId, candidateToken, hhAction, newStatus, targetStage,
+      })
+
+      console.log("[PQ:dbg]", resp.candidateName, "before-template", {
+        hasLocalVac: !!localVac,
+        baseMessage: !!baseMessage,
+        djHasAutomation: !!(dj as { automation?: unknown }).automation,
+      })
+
       // Формируем итоговое сообщение из шаблона вакансии — приглашение для всех
       let finalMessage: string | null = baseMessage
       if (localVac) {
@@ -256,8 +266,20 @@ export async function POST(req: NextRequest) {
         }
       }
 
+      console.log("[PQ:dbg]", resp.candidateName, "before-hh-send", {
+        hhAction,
+        hasFinalMessage: !!finalMessage,
+        finalMessageLength: finalMessage?.length ?? 0,
+        finalMessagePreview: finalMessage?.slice(0, 100) ?? null,
+      })
+
       // Шлём действие в hh, если нужно
       if (hhAction && finalMessage) {
+        console.log("[PQ:dbg]", resp.candidateName, "calling-hh", {
+          hhResponseId: resp.hhResponseId,
+          hhAction,
+          hhVacancyId: resp.hhVacancyId,
+        })
         const rawResume = raw?.resume?.id
         try {
           await changeNegotiationState(
@@ -268,6 +290,7 @@ export async function POST(req: NextRequest) {
             resp.hhVacancyId,
             rawResume,
           )
+          console.log("[PQ:dbg]", resp.candidateName, "hh-success")
         } catch (hhErr) {
           const msg = hhErr instanceof Error ? hhErr.message : String(hhErr)
           if (msg.includes("already_applied")) {
@@ -278,6 +301,8 @@ export async function POST(req: NextRequest) {
           }
         }
       }
+
+      console.log("[PQ:dbg]", resp.candidateName, "after-hh-block")
 
       // Обновляем статус hh-отклика и связь с кандидатом
       const updatePayload: { status: string; localCandidateId?: string } = { status: newStatus }
@@ -300,6 +325,10 @@ export async function POST(req: NextRequest) {
         error: err instanceof Error ? err.message : String(err),
       })
     }
+
+    console.log("[PQ:dbg]", resp.candidateName, "iteration-done", {
+      idx, total: newResponses.length, willSleep: idx < newResponses.length - 1,
+    })
 
     // Пауза перед следующим кандидатом — обязательна
     if (idx < newResponses.length - 1) await sleep(effDelayMs)
