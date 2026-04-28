@@ -20,6 +20,8 @@ export interface CardDisplaySettings {
   showExperience: boolean
   showSkills: boolean
   showActions: boolean
+  showProgress?: boolean
+  showResponseDate?: boolean
 }
 
 interface CardSettingsProps {

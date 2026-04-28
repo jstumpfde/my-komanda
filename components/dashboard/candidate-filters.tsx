@@ -191,10 +191,10 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [] }: 
         <Button
           variant={hasActiveFilters ? "default" : "outline"}
           size="sm"
-          className="h-9 gap-1.5"
+          className="h-8 gap-1.5 text-xs"
         >
           <Search className="size-3.5" />
-          Поиск
+          Фильтр
           {hasActiveFilters && (
             <Badge className="ml-1 h-5 w-5 rounded-full p-0 flex items-center justify-center text-xs bg-primary-foreground text-primary">
               {activeCount}

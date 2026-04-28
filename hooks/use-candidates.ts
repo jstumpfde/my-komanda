@@ -32,9 +32,15 @@ export interface ApiCandidate {
 
 // ─── useCandidates ────────────────────────────────────────────────────────────
 
+export interface CandidatesSortParams {
+  sort?: string
+  order?: "asc" | "desc"
+}
+
 export function useCandidates(
   vacancyId: string | null,
-  stageFilter?: string[]
+  stageFilter?: string[],
+  sortParams?: CandidatesSortParams,
 ) {
   const [candidates, setCandidates] = useState<ApiCandidate[]>([])
   const [loading, setLoading] = useState(false)
@@ -52,6 +58,10 @@ export function useCandidates(
       if (stageFilter && stageFilter.length > 0) {
         params.set("stage", stageFilter.join(","))
       }
+      if (sortParams?.sort) {
+        params.set("sort", sortParams.sort)
+        params.set("order", sortParams.order ?? "desc")
+      }
       const res = await fetch(`/api/modules/hr/candidates?${params.toString()}`)
       if (!res.ok) {
         const d = await res.json() as { error?: string }
@@ -64,7 +74,7 @@ export function useCandidates(
     } finally {
       setLoading(false)
     }
-  }, [vacancyId, stageFilter?.join(",")])  // eslint-disable-line react-hooks/exhaustive-deps
+  }, [vacancyId, stageFilter?.join(","), sortParams?.sort, sortParams?.order])  // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     fetch_()
