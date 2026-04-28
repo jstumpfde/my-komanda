@@ -4,6 +4,7 @@ import { db } from "@/lib/db"
 import { candidates, vacancies, demos } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { generateCandidateToken } from "@/lib/candidate-tokens"
+import { generateCandidateShortId } from "@/lib/short-id"
 
 type SortKey = "favorite" | "aiScore" | "salary" | "responseDate" | "status" | "progress"
 
@@ -218,16 +219,22 @@ export async function POST(req: NextRequest) {
 
     if (!vac) return apiError("Vacancy not found", 404)
 
-    const [created] = await db.insert(candidates).values({
-      vacancyId: body.vacancyId,
-      name: body.name,
-      phone: body.phone ?? null,
-      email: body.email ?? null,
-      city: body.city ?? null,
-      source: body.source ?? "manual",
-      stage: "new",
-      token: generateCandidateToken(),
-    }).returning()
+    const created = await db.transaction(async (tx) => {
+      const short = await generateCandidateShortId(tx, body.vacancyId)
+      const [row] = await tx.insert(candidates).values({
+        vacancyId: body.vacancyId,
+        name: body.name,
+        phone: body.phone ?? null,
+        email: body.email ?? null,
+        city: body.city ?? null,
+        source: body.source ?? "manual",
+        stage: "new",
+        token: generateCandidateToken(),
+        shortId: short?.shortId ?? null,
+        sequenceNumber: short?.sequenceNumber ?? null,
+      }).returning()
+      return row
+    })
 
     return apiSuccess(created, 201)
   } catch (err) {

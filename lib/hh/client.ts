@@ -2,6 +2,7 @@ import { db } from "@/lib/db"
 import { hhTokens, hhCandidates, candidates, vacancies, hhVacancies } from "@/lib/db/schema"
 import { eq } from "drizzle-orm"
 import { nanoid } from "nanoid"
+import { generateCandidateShortId } from "@/lib/short-id"
 
 export interface HHVacancy {
   id: string
@@ -181,26 +182,32 @@ export class HHClient {
       const phone = resume.contact?.find((c) => c.type?.id === "cell")?.value?.formatted ?? null
       const email = resume.contact?.find((c) => c.type?.id === "email")?.value?.email ?? null
 
-      const [newCandidate] = await db
-        .insert(candidates)
-        .values({
-          vacancyId,
-          name: fullName,
-          phone,
-          email,
-          city: resume.area?.name ?? null,
-          source: "hh",
-          stage: "new",
-          score: 50,
-          salaryMin: resume.salary?.amount ?? null,
-          salaryMax: resume.salary?.amount ?? null,
-          experience: resume.total_experience
-            ? `${Math.floor(resume.total_experience.months / 12)} лет`
-            : null,
-          skills: resume.skill_set ?? [],
-          token: nanoid(32),
-        })
-        .returning()
+      const newCandidate = await db.transaction(async (tx) => {
+        const short = await generateCandidateShortId(tx, vacancyId)
+        const [row] = await tx
+          .insert(candidates)
+          .values({
+            vacancyId,
+            name: fullName,
+            phone,
+            email,
+            city: resume.area?.name ?? null,
+            source: "hh",
+            stage: "new",
+            score: 50,
+            salaryMin: resume.salary?.amount ?? null,
+            salaryMax: resume.salary?.amount ?? null,
+            experience: resume.total_experience
+              ? `${Math.floor(resume.total_experience.months / 12)} лет`
+              : null,
+            skills: resume.skill_set ?? [],
+            token: nanoid(32),
+            shortId: short?.shortId ?? null,
+            sequenceNumber: short?.sequenceNumber ?? null,
+          })
+          .returning()
+        return row
+      })
 
       await db.insert(hhCandidates).values({
         candidateId: newCandidate.id,
@@ -238,21 +245,27 @@ export class HHMockClient {
     for (const name of mockNames) {
       const hhResumeId = `mock-resume-${nanoid(8)}`
 
-      const [newCandidate] = await db
-        .insert(candidates)
-        .values({
-          vacancyId,
-          name,
-          phone: null,
-          email: null,
-          city: "Москва",
-          source: "hh",
-          stage: "new",
-          score: Math.floor(Math.random() * 40) + 50,
-          skills: [],
-          token: nanoid(32),
-        })
-        .returning()
+      const newCandidate = await db.transaction(async (tx) => {
+        const short = await generateCandidateShortId(tx, vacancyId)
+        const [row] = await tx
+          .insert(candidates)
+          .values({
+            vacancyId,
+            name,
+            phone: null,
+            email: null,
+            city: "Москва",
+            source: "hh",
+            stage: "new",
+            score: Math.floor(Math.random() * 40) + 50,
+            skills: [],
+            token: nanoid(32),
+            shortId: short?.shortId ?? null,
+            sequenceNumber: short?.sequenceNumber ?? null,
+          })
+          .returning()
+        return row
+      })
 
       await db.insert(hhCandidates).values({
         candidateId: newCandidate.id,

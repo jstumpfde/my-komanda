@@ -3,6 +3,7 @@ import { eq, and, like } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { candidates, vacancies } from "@/lib/db/schema"
 import { apiError, apiSuccess } from "@/lib/api-helpers"
+import { generatePreviewCandidateShortId } from "@/lib/short-id"
 
 export async function GET(
   _req: NextRequest,
@@ -38,14 +39,19 @@ export async function GET(
 
     const token = `test-demo-preview-${Math.floor(Math.random() * 90000000 + 10000000)}`
 
-    await db.insert(candidates).values({
-      vacancyId: id,
-      companyId: vacancy.companyId,
-      name: "Тестовый кандидат",
-      token,
-      stage: "new",
-      source: "preview",
-    } as any)
+    await db.transaction(async (tx) => {
+      const previewShortId = await generatePreviewCandidateShortId(tx, id)
+      await tx.insert(candidates).values({
+        vacancyId: id,
+        companyId: vacancy.companyId,
+        name: "Тестовый кандидат",
+        token,
+        stage: "new",
+        source: "preview",
+        shortId: previewShortId,
+        sequenceNumber: previewShortId ? 0 : null,
+      } as any)
+    })
 
     return apiSuccess({ url: `/demo/${token}`, token })
   } catch (err) {

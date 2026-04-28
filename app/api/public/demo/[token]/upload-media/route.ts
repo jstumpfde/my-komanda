@@ -5,6 +5,7 @@ import path from "path"
 import { db } from "@/lib/db"
 import { candidates } from "@/lib/db/schema"
 import { apiError, apiSuccess } from "@/lib/api-helpers"
+import { isShortId } from "@/lib/short-id"
 
 export const runtime = "nodejs"
 export const maxDuration = 60
@@ -85,14 +86,14 @@ export async function POST(
       ? Math.max(0, Math.min(3600, Math.round(Number(durationRaw)) || 0))
       : undefined
 
-    // Найти кандидата
+    // Найти кандидата (short_id или token)
     const rows = await db
       .select({
         id: candidates.id,
         anketaAnswers: candidates.anketaAnswers,
       })
       .from(candidates)
-      .where(eq(candidates.token, token))
+      .where(isShortId(token) ? eq(candidates.shortId, token) : eq(candidates.token, token))
       .limit(1)
 
     if (rows.length === 0) {

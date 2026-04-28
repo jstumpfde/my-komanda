@@ -8,6 +8,7 @@ export interface ApiVacancy {
   id: string
   companyId: string
   createdBy: string
+  shortCode: string | null
   title: string
   description: string | null
   city: string | null

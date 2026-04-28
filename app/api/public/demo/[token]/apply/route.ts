@@ -4,6 +4,7 @@ import { nanoid } from "nanoid"
 import { db } from "@/lib/db"
 import { candidates, demos, vacancies } from "@/lib/db/schema"
 import { screenCandidate } from "@/lib/ai-screen-candidate"
+import { generateCandidateShortId, isShortId } from "@/lib/short-id"
 
 type AnketaPayload = {
   telegram?: string
@@ -55,7 +56,7 @@ export async function POST(
     if (body.birthDate) cleanAnketa.birthDate = body.birthDate
     cleanAnketa.submittedAt = new Date().toISOString()
 
-    // Find candidate by token
+    // Резолв: short_id или token.
     const [existing] = await db
       .select({
         id: candidates.id,
@@ -65,7 +66,7 @@ export async function POST(
         anketaAnswers: candidates.anketaAnswers,
       })
       .from(candidates)
-      .where(eq(candidates.token, token))
+      .where(isShortId(token) ? eq(candidates.shortId, token) : eq(candidates.token, token))
       .limit(1)
 
     if (existing) {
@@ -115,20 +116,26 @@ export async function POST(
       return NextResponse.json({ error: "Вакансия не найдена" }, { status: 404 })
     }
 
-    const [candidate] = await db
-      .insert(candidates)
-      .values({
-        vacancyId: demo.vacancyId,
-        name: `${body.firstName} ${body.lastName}`,
-        email: body.email,
-        phone: body.phone,
-        city: body.city || null,
-        source: "demo",
-        stage: "new",
-        token: nanoid(12),
-        anketaAnswers: cleanAnketa,
-      })
-      .returning()
+    const candidate = await db.transaction(async (tx) => {
+      const short = await generateCandidateShortId(tx, demo.vacancyId)
+      const [row] = await tx
+        .insert(candidates)
+        .values({
+          vacancyId: demo.vacancyId,
+          name: `${body.firstName} ${body.lastName}`,
+          email: body.email,
+          phone: body.phone,
+          city: body.city || null,
+          source: "demo",
+          stage: "new",
+          token: nanoid(12),
+          anketaAnswers: cleanAnketa,
+          shortId: short?.shortId ?? null,
+          sequenceNumber: short?.sequenceNumber ?? null,
+        })
+        .returning()
+      return row
+    })
 
     return NextResponse.json({ success: true, id: candidate.id }, { status: 201 })
   } catch (err) {

@@ -50,7 +50,6 @@ import { PublishTab } from "@/components/vacancies/publish-tab"
 import { MiniFormBuilder } from "@/components/vacancies/mini-form-builder"
 import { UtmLinksSection } from "@/components/vacancies/utm-links-section"
 import { PostDemoSettings } from "@/components/vacancies/post-demo-settings"
-import { PreviewLinkBlock } from "@/components/vacancies/preview-link-block"
 import { VacancyAiProcessSettings } from "@/components/vacancies/vacancy-ai-process-settings"
 import {
   ResponsiveContainer,
@@ -1319,6 +1318,35 @@ export default function VacancyPage() {
                   )}
                   <Badge variant="outline" className={statusCfg.color}>{statusCfg.label}</Badge>
                   {status === "active" && apiVacancy?.createdAt && <span className="flex items-center gap-1.5 text-xs text-muted-foreground"><Clock className="size-3.5" />{Math.floor((Date.now() - new Date(apiVacancy.createdAt).getTime()) / 86400000)} дн.</span>}
+                  <UITooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const code = apiVacancy?.shortCode
+                          if (code) {
+                            window.open(`${window.location.origin}/demo/${code}0000?as=hr`, "_blank", "noopener,noreferrer")
+                            return
+                          }
+                          try {
+                            const res = await fetch(`/api/modules/hr/vacancies/${id}/preview-link`)
+                            const json = await res.json()
+                            const path = json?.data?.url || json?.url
+                            if (!path) { toast.error("Не удалось открыть превью"); return }
+                            const sep = path.includes("?") ? "&" : "?"
+                            window.open(`${window.location.origin}${path}${sep}as=hr`, "_blank", "noopener,noreferrer")
+                          } catch {
+                            toast.error("Не удалось открыть превью")
+                          }
+                        }}
+                        aria-label="Открыть как директор"
+                        className="inline-flex items-center justify-center w-6 h-6 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                      >
+                        <Eye className="size-3.5" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent>Открыть как директор (ответы не сохраняются)</TooltipContent>
+                  </UITooltip>
                 </div>
                 <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-muted-foreground">
                   <span>{apiVacancy?.city ?? "Москва"}</span>
@@ -1700,7 +1728,6 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
               </TabsContent>
 
               <TabsContent value="course">
-                <PreviewLinkBlock vacancyId={id} />
                 <CourseTab
                   vacancyId={id}
                   vacancyTitle={vacancyTitle}
