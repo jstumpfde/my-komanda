@@ -2039,7 +2039,7 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
 
                 {settingsSection === "automation" && (
                   <div>
-                    <AutomationSettings vacancyId={id} descriptionJson={apiVacancy?.descriptionJson} vacancyTitle={apiVacancy?.title} salaryFrom={apiVacancy?.salaryMin} salaryTo={apiVacancy?.salaryMax} aiProcessSettings={apiVacancy?.aiProcessSettings as { inviteMessage?: string } | null | undefined} />
+                    <AutomationSettings vacancyId={id} descriptionJson={apiVacancy?.descriptionJson} vacancyTitle={apiVacancy?.title} salaryFrom={apiVacancy?.salaryMin} salaryTo={apiVacancy?.salaryMax} aiProcessSettings={apiVacancy?.aiProcessSettings as { inviteMessage?: string; reInviteMessage?: string } | null | undefined} />
                     <div className="mt-6">
                       <VacancyAiProcessSettings
                         vacancyId={id}

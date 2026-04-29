@@ -177,6 +177,27 @@ export async function getNegotiations(
   return response as HHNegotiationsResponse
 }
 
+// Сообщения переговоров — нужны для определения, отправляли ли работодателю уже
+// что-то по этому отклику (битые ссылки в прошлых прогонах).
+export interface HHNegotiationMessage {
+  id?: string
+  author?: { participant_type?: "employer" | "applicant" | string }
+  kind?: string
+  text?: string
+  created_at?: string
+}
+
+export async function getNegotiationMessages(
+  accessToken: string,
+  negotiationId: string,
+): Promise<HHNegotiationMessage[]> {
+  const data = await hhFetch<{ items?: HHNegotiationMessage[] }>(
+    `/negotiations/${negotiationId}/messages`,
+    accessToken,
+  )
+  return data?.items ?? []
+}
+
 export async function changeNegotiationState(
   accessToken: string,
   negotiationId: string,

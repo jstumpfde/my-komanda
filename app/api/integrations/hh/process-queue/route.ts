@@ -5,7 +5,7 @@ import { hhResponses, candidates, vacancies } from "@/lib/db/schema"
 import type { VacancyAiProcessSettings } from "@/lib/db/schema"
 import { and, eq, isNull } from "drizzle-orm"
 import { getValidToken } from "@/lib/hh-helpers"
-import { changeNegotiationState } from "@/lib/hh-api"
+import { changeNegotiationState, getNegotiationMessages } from "@/lib/hh-api"
 import { generateCandidateShortId } from "@/lib/short-id"
 
 const stopFlags = new Map<string, boolean>()
@@ -115,13 +115,12 @@ export async function POST(req: NextRequest) {
 
     const localVac = localVacancies.find(v => v.hhVacancyId === resp.hhVacancyId) || null
 
-    // Минимально нужные данные из rawData (city для нового кандидата) и descriptionJson вакансии
-    // (для шаблона firstMessageText). AI-входы убраны — скоринг временно отключён.
+    // Минимально нужные данные из rawData (city для нового кандидата).
+    // Шаблоны сообщений теперь живут в vacancies.ai_process_settings (см. ниже).
     const raw = resp.rawData as {
       resume?: { id?: string; area?: { name?: string } }
     } | null
     const candidateCity = raw?.resume?.area?.name ?? undefined
-    const dj = (localVac?.descriptionJson as Record<string, unknown> | null) ?? {}
 
     // AI-скоринг временно отключён — всем откликам отправляем приглашение на демо.
     console.log("[PQ] candidate (no-AI)", { name: resp.candidateName })
@@ -220,71 +219,84 @@ export async function POST(req: NextRequest) {
       console.log("[PQ:dbg]", resp.candidateName, "before-template", {
         hasLocalVac: !!localVac,
         baseMessage: !!baseMessage,
-        djHasAutomation: !!(dj as { automation?: unknown }).automation,
       })
 
-      // Формируем итоговое сообщение из шаблона вакансии — приглашение для всех
+      // Проверяем — отправляли ли работодателю уже что-то по этому отклику.
+      // Если да — это "повторная отправка" (исправление битой ссылки),
+      // используем reInviteMessage вместо стандартного inviteMessage.
+      let previouslyInvited = false
+      let employerMsgCount = 0
+      try {
+        const msgs = await getNegotiationMessages(tokenResult.accessToken, resp.hhResponseId)
+        employerMsgCount = msgs.filter(m => m?.author?.participant_type === "employer").length
+        previouslyInvited = employerMsgCount > 0
+      } catch (msgErr) {
+        console.warn("[PQ] getNegotiationMessages failed — fallback to inviteMessage:",
+          msgErr instanceof Error ? msgErr.message : msgErr)
+      }
+
+      // Формируем итоговое сообщение — единая логика для обоих веток.
       let finalMessage: string | null = baseMessage
-      if (localVac) {
-        const automation = (dj as {
-          automation?: {
-            firstMessageText?: string;
-            inviteTemplate?: string
-          }
-        }).automation
-        const template = automation?.firstMessageText || automation?.inviteTemplate
-        if (candidateToken || candidateId) {
-          const nameParts = (resp.candidateName || "").trim().split(/\s+/)
-          const candidateName = nameParts[1] || nameParts[0] || "Здравствуйте"
-          // Гарантируем что у кандидата есть shortId
-          let shortIdForUrl: string | null = newCandShortId
-          if (!shortIdForUrl && candidateId) {
-            const [existing] = await db
-              .select({ shortId: candidates.shortId })
-              .from(candidates)
-              .where(eq(candidates.id, candidateId))
-              .limit(1)
-            shortIdForUrl = existing?.shortId ?? null
-            // Если shortId нет — генерим и сохраняем
-            if (!shortIdForUrl && localVac) {
-              const newShort = await db.transaction(async (tx) => {
-                return await generateCandidateShortId(tx, localVac.id)
-              })
-              if (newShort?.shortId) {
-                await db.update(candidates)
-                  .set({
-                    shortId: newShort.shortId,
-                    sequenceNumber: newShort.sequenceNumber,
-                  })
-                  .where(eq(candidates.id, candidateId))
-                shortIdForUrl = newShort.shortId
-              }
+      if (localVac && (candidateToken || candidateId)) {
+        const nameParts = (resp.candidateName || "").trim().split(/\s+/)
+        const candidateName = nameParts[1] || nameParts[0] || "Здравствуйте"
+        // Гарантируем что у кандидата есть shortId
+        let shortIdForUrl: string | null = newCandShortId
+        if (!shortIdForUrl && candidateId) {
+          const [existing] = await db
+            .select({ shortId: candidates.shortId })
+            .from(candidates)
+            .where(eq(candidates.id, candidateId))
+            .limit(1)
+          shortIdForUrl = existing?.shortId ?? null
+          // Если shortId нет — генерим и сохраняем
+          if (!shortIdForUrl) {
+            const newShort = await db.transaction(async (tx) => {
+              return await generateCandidateShortId(tx, localVac.id)
+            })
+            if (newShort?.shortId) {
+              await db.update(candidates)
+                .set({
+                  shortId: newShort.shortId,
+                  sequenceNumber: newShort.sequenceNumber,
+                })
+                .where(eq(candidates.id, candidateId))
+              shortIdForUrl = newShort.shortId
             }
           }
-          // Финальный fallback на случай если совсем ничего не получилось
-          const tokenForUrl = shortIdForUrl ?? candidateId
-          const demoUrl = `https://company24.pro/demo/${tokenForUrl}`
-          console.log("[PQ:dbg]", resp.candidateName, "demo-url", {
-            shortIdForUrl,
-            tokenForUrl,
-            demoUrl,
-          })
-          if (template) {
-            finalMessage = template
-              .replaceAll("[Имя]", candidateName)
-              .replaceAll("[имя]", candidateName)
-              .replaceAll("{имя}", candidateName)
-              .replaceAll("{Имя}", candidateName)
-              .replaceAll("[должность]", localVac.title || "")
-              .replaceAll("{должность}", localVac.title || "")
-              .replaceAll("[компания]", "Company24")
-              .replaceAll("{компания}", "Company24")
-              .replaceAll("[ссылка]", demoUrl)
-              .replaceAll("{ссылка}", demoUrl)
-          } else {
-            finalMessage = effInviteMsg + "\n\nСсылка на демонстрацию: " + demoUrl
-          }
         }
+        // Финальный fallback на случай если совсем ничего не получилось
+        const tokenForUrl = shortIdForUrl ?? candidateId
+        const demoUrl = `https://company24.pro/demo/${tokenForUrl}`
+        console.log("[PQ:dbg]", resp.candidateName, "demo-url", {
+          shortIdForUrl,
+          tokenForUrl,
+          demoUrl,
+        })
+
+        const messageText = previouslyInvited
+          ? (scopedAiSettings.reInviteMessage?.trim() || scopedAiSettings.inviteMessage?.trim() || DEMO_INVITE_MESSAGE)
+          : (scopedAiSettings.inviteMessage?.trim() || DEMO_INVITE_MESSAGE)
+
+        console.log("[PQ:dbg]", resp.candidateName, "template-source", {
+          previouslyInvited,
+          hadEmployerMessages: employerMsgCount,
+          usedTemplate: previouslyInvited ? "reInviteMessage" : "inviteMessage",
+        })
+
+        const replaced = messageText
+          .replaceAll("[Имя]", candidateName)
+          .replaceAll("[имя]", candidateName)
+          .replaceAll("{имя}", candidateName)
+          .replaceAll("{Имя}", candidateName)
+          .replaceAll("[должность]", localVac.title || "")
+          .replaceAll("{должность}", localVac.title || "")
+          .replaceAll("[компания]", "Company24")
+          .replaceAll("{компания}", "Company24")
+          .replaceAll("[ссылка]", demoUrl)
+          .replaceAll("{ссылка}", demoUrl)
+
+        finalMessage = replaced.includes(demoUrl) ? replaced : replaced + "\n\n" + demoUrl
       }
 
       console.log("[PQ:dbg]", resp.candidateName, "before-hh-send", {

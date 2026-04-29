@@ -193,7 +193,7 @@ interface AutomationSettingsProps {
   vacancyTitle?: string
   salaryFrom?: number | null
   salaryTo?: number | null
-  aiProcessSettings?: { inviteMessage?: string } | null
+  aiProcessSettings?: { inviteMessage?: string; reInviteMessage?: string } | null
 }
 
 export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, salaryFrom, salaryTo, aiProcessSettings }: AutomationSettingsProps) {
@@ -228,6 +228,14 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
   const [savingInvite, setSavingInvite] = useState(false)
   const inviteDirty = firstMessageText !== savedInviteMessage
 
+  // Текст для повторной отправки (после исправления битой ссылки).
+  // Используется в hh process-queue, если по отклику уже было исходящее сообщение от работодателя.
+  const initialReInviteMessage = aiProcessSettings?.reInviteMessage || ""
+  const [reInviteText, setReInviteText] = useState(initialReInviteMessage)
+  const [savedReInviteMessage, setSavedReInviteMessage] = useState(initialReInviteMessage)
+  const [savingReInvite, setSavingReInvite] = useState(false)
+  const reInviteDirty = reInviteText !== savedReInviteMessage
+
   useEffect(() => {
     const next = aiProcessSettings?.inviteMessage
     if (typeof next === "string" && next.length > 0 && next !== savedInviteMessage) {
@@ -235,6 +243,14 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
       setFirstMessageText(next)
     }
   }, [aiProcessSettings, savedInviteMessage])
+
+  useEffect(() => {
+    const next = aiProcessSettings?.reInviteMessage
+    if (typeof next === "string" && next !== savedReInviteMessage) {
+      setSavedReInviteMessage(next)
+      setReInviteText(next)
+    }
+  }, [aiProcessSettings, savedReInviteMessage])
 
   const saveInviteMessage = useCallback(async () => {
     setSavingInvite(true)
@@ -253,6 +269,24 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
       setSavingInvite(false)
     }
   }, [vacancyId, firstMessageText])
+
+  const saveReInviteMessage = useCallback(async () => {
+    setSavingReInvite(true)
+    try {
+      const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}/ai-settings`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reInviteMessage: reInviteText }),
+      })
+      if (!res.ok) throw new Error("Ошибка сохранения")
+      setSavedReInviteMessage(reInviteText)
+      toast.success("Сохранено")
+    } catch {
+      toast.error("Не удалось сохранить")
+    } finally {
+      setSavingReInvite(false)
+    }
+  }, [vacancyId, reInviteText])
 
   // 1b. Рабочие часы
   const initialWH = (initialAutomation.workingHours as { enabled?: boolean; from?: string; to?: string }) || {}
@@ -605,6 +639,36 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
                 disabled={!inviteDirty || savingInvite}
               >
                 {savingInvite ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                Сохранить
+              </Button>
+            </div>
+          </div>
+
+          {/* Шаблон для повторной отправки */}
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Текст для повторной отправки (если ссылка была сломана)</Label>
+            <textarea
+              className="w-full border rounded-lg p-3 text-sm resize-none h-36 bg-background focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none leading-relaxed"
+              value={reInviteText}
+              onChange={(e) => setReInviteText(e.target.value)}
+              placeholder="Здравствуйте, [Имя]! Извините — в прошлом сообщении была неактуальная ссылка. Вот рабочая: [ссылка]"
+            />
+            <p className="text-[11px] text-muted-foreground">
+              Используется для кандидатов, которым уже отправлялось сообщение ранее (например, после исправления битых ссылок).
+            </p>
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div className="flex flex-wrap gap-1.5">
+                {["[Имя]", "[должность]", "[компания]", "[ссылка]"].map(v => (
+                  <Badge key={v} variant="outline" className="text-xs cursor-default">{v}</Badge>
+                ))}
+              </div>
+              <Button
+                size="sm"
+                className="h-8 text-xs gap-1.5"
+                onClick={saveReInviteMessage}
+                disabled={!reInviteDirty || savingReInvite}
+              >
+                {savingReInvite ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
                 Сохранить
               </Button>
             </div>

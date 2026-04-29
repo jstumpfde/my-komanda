@@ -42,6 +42,11 @@ export async function PUT(
         ? body.inviteMessage.slice(0, 2000)
         : undefined
     }
+    if (body.reInviteMessage !== undefined) {
+      settings.reInviteMessage = typeof body.reInviteMessage === "string"
+        ? body.reInviteMessage.slice(0, 2000)
+        : undefined
+    }
     if (body.rejectMessage !== undefined) {
       settings.rejectMessage = typeof body.rejectMessage === "string"
         ? body.rejectMessage.slice(0, 2000)
