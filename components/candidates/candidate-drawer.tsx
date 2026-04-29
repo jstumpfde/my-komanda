@@ -601,7 +601,7 @@ export function CandidateDrawer({
 
             <ScrollArea className="flex-1">
               {/* ── Контакты ─────────────────────────────────────── */}
-              <TabsContent value="contacts" className="px-6 py-4 space-y-5 mt-0">
+              <TabsContent value="contacts" className="px-6 py-4 space-y-5 mt-0 max-h-[calc(100vh-220px)] overflow-y-auto">
                 {candidate.hhRawData ? (
                   <HhResumeInfo
                     rawData={candidate.hhRawData}
