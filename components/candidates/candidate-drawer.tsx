@@ -399,6 +399,8 @@ export function CandidateDrawer({
   const [hhMessages, setHhMessages] = useState<HhMessage[]>([])
   const [hhLoading, setHhLoading] = useState(false)
   const [hhError, setHhError] = useState<string | null>(null)
+  const [hhDraft, setHhDraft] = useState("")
+  const [hhSending, setHhSending] = useState(false)
   const hhFetchRef = useRef<string | null>(null)
   const hhListRef = useRef<HTMLDivElement | null>(null)
 
@@ -436,12 +438,51 @@ export function CandidateDrawer({
       setNotes([])
       setHhMessages([])
       setHhError(null)
+      setHhDraft("")
       hhFetchRef.current = null
       setActiveTab("contacts")
       fetchCandidate(candidateId)
       fetchNotes(candidateId)
     }
   }, [open, candidateId, fetchCandidate, fetchNotes])
+
+  // ── Reload hh messages on demand (после отправки своего сообщения) ────────
+  const reloadHhMessages = useCallback(async (hhResponseId: string) => {
+    try {
+      const res = await fetch(`/api/integrations/hh/messages/${hhResponseId}`)
+      const data = await res.json() as { messages?: HhMessage[]; error?: string }
+      if (res.ok && Array.isArray(data.messages)) setHhMessages(data.messages)
+    } catch (err) {
+      console.error("[hh-chat] reload failed", err)
+    }
+  }, [])
+
+  const handleSendHhMessage = useCallback(async () => {
+    const hhResponseId = candidate?.hhResponseId
+    const text = hhDraft.trim()
+    if (!hhResponseId || !text || hhSending) return
+    setHhSending(true)
+    try {
+      const res = await fetch(`/api/integrations/hh/messages/${hhResponseId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: text }),
+      })
+      const data = await res.json() as { error?: string }
+      if (!res.ok) {
+        toast.error(data.error || "Не удалось отправить сообщение")
+        return
+      }
+      setHhDraft("")
+      toast.success("Сообщение отправлено")
+      await reloadHhMessages(hhResponseId)
+    } catch (err) {
+      console.error("[hh-chat] send failed", err)
+      toast.error("Сетевая ошибка")
+    } finally {
+      setHhSending(false)
+    }
+  }, [candidate?.hhResponseId, hhDraft, hhSending, reloadHhMessages])
 
   // ── Lazy-load hh messages when chat tab opens ─────────────────────────────
   useEffect(() => {
@@ -947,42 +988,76 @@ export function CandidateDrawer({
                     </div>
                   ) : hhError ? (
                     <p className="text-xs text-muted-foreground py-2">{hhError}</p>
-                  ) : hhMessages.length === 0 ? (
-                    <p className="text-xs text-muted-foreground italic py-2">Пока нет сообщений. Отправь приглашение или отказ — кандидат увидит в hh</p>
                   ) : (
-                    <div ref={hhListRef} className="space-y-2 pt-1 max-h-[60vh] overflow-y-auto pr-1 -mr-1">
-                      {hhMessages.map((m) => {
-                        const mine = m.authorType === "employer"
-                        return (
-                          <div key={m.id} className={cn("flex", mine ? "justify-end" : "justify-start")}>
-                            <div
-                              className={cn(
-                                "max-w-[80%] rounded-lg px-3 py-2 text-xs space-y-1",
-                                mine
-                                  ? "bg-indigo-500/10 text-foreground border border-indigo-500/20"
-                                  : "bg-muted/60 text-foreground border border-border/40"
-                              )}
-                            >
-                              <p className="whitespace-pre-wrap break-words">{m.text || <span className="italic text-muted-foreground">пустое сообщение</span>}</p>
-                              <div className="flex items-center justify-between gap-2 text-[10px] text-muted-foreground/80">
-                                <span>
-                                  {m.createdAt
-                                    ? new Date(m.createdAt).toLocaleString("ru-RU", {
-                                        day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
-                                      })
-                                    : ""}
-                                </span>
-                                {mine && (
-                                  <span title={m.viewedByOpponent ? "прочитано" : "не прочитано"}>
-                                    {m.viewedByOpponent ? "✓✓" : "✓"}
-                                  </span>
-                                )}
+                    <>
+                      {hhMessages.length === 0 ? (
+                        <p className="text-xs text-muted-foreground italic py-2">Пока нет сообщений. Отправь первое — кандидат увидит в hh</p>
+                      ) : (
+                        <div ref={hhListRef} className="space-y-2 pt-1 max-h-[50vh] overflow-y-auto pr-1 -mr-1">
+                          {hhMessages.map((m) => {
+                            const mine = m.authorType === "employer"
+                            return (
+                              <div key={m.id} className={cn("flex", mine ? "justify-end" : "justify-start")}>
+                                <div
+                                  className={cn(
+                                    "max-w-[80%] rounded-lg px-3 py-2 text-xs space-y-1",
+                                    mine
+                                      ? "bg-indigo-500/10 text-foreground border border-indigo-500/20"
+                                      : "bg-muted/60 text-foreground border border-border/40"
+                                  )}
+                                >
+                                  <p className="whitespace-pre-wrap break-words">{m.text}</p>
+                                  <div className="flex items-center justify-between gap-2 text-[10px] text-muted-foreground/80">
+                                    <span>
+                                      {m.createdAt
+                                        ? new Date(m.createdAt).toLocaleString("ru-RU", {
+                                            day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
+                                          })
+                                        : ""}
+                                    </span>
+                                    {mine && (
+                                      <span title={m.viewedByOpponent ? "прочитано" : "не прочитано"}>
+                                        {m.viewedByOpponent ? "✓✓" : "✓"}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
                               </div>
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
+                            )
+                          })}
+                        </div>
+                      )}
+
+                      {/* Input для отправки сообщения в hh */}
+                      <div className="pt-2 mt-1 border-t border-border/40 space-y-2">
+                        <Textarea
+                          value={hhDraft}
+                          onChange={(e) => setHhDraft(e.target.value)}
+                          placeholder="Написать кандидату..."
+                          rows={3}
+                          disabled={hhSending}
+                          className="text-sm resize-none min-h-[72px]"
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+                              e.preventDefault()
+                              handleSendHhMessage()
+                            }
+                          }}
+                        />
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[10px] text-muted-foreground">Ctrl+Enter — отправить</span>
+                          <Button
+                            size="sm"
+                            className="gap-2"
+                            disabled={!hhDraft.trim() || hhSending}
+                            onClick={handleSendHhMessage}
+                          >
+                            {hhSending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                            Отправить
+                          </Button>
+                        </div>
+                      </div>
+                    </>
                   )}
                 </div>
               </TabsContent>
