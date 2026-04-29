@@ -732,7 +732,10 @@ export function CandidateDrawer({
               <TabsTrigger value="history" className="text-[10px] px-1 py-1.5">История</TabsTrigger>
             </TabsList>
 
-            <ScrollArea className="flex-1">
+            <div
+              className="flex-1 min-h-0 overflow-y-auto"
+              style={{ maxHeight: "calc(100vh - 180px)" }}
+            >
               {/* ── Контакты ─────────────────────────────────────── */}
               <TabsContent value="contacts" className="px-6 py-4 pb-28 space-y-5 mt-0">
                 {candidate.hhRawData ? (
@@ -1220,7 +1223,7 @@ export function CandidateDrawer({
                   </ol>
                 )}
               </TabsContent>
-            </ScrollArea>
+            </div>
           </Tabs>
         ) : null}
 
