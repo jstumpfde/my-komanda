@@ -36,11 +36,11 @@ import {
   X,
   FileQuestion,
   Play,
-  ListChecks,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import type { ApiCandidate } from "@/hooks/use-candidates"
+import type { Lesson, Block } from "@/lib/course-types"
 import { AnswersTab } from "./answers-tab"
 import { HhResumeInfo } from "./hh-resume-info"
 
@@ -75,6 +75,57 @@ interface DemoBlock {
   status: string
   timeSpent?: number
   answeredAt?: string
+}
+
+interface BlockMeta {
+  title: string
+  lessonTitle: string
+  type?: string
+}
+
+function buildBlockMeta(lessons: unknown): Map<string, BlockMeta> {
+  const map = new Map<string, BlockMeta>()
+  if (!Array.isArray(lessons)) return map
+  for (const l of lessons as Lesson[]) {
+    if (!l || !Array.isArray(l.blocks)) continue
+    for (const b of l.blocks as Block[]) {
+      if (!b || typeof b.id !== "string") continue
+      const title =
+        b.taskTitle?.trim() ||
+        b.taskDescription?.trim().slice(0, 80) ||
+        b.imageTitleTop?.trim() ||
+        b.videoTitleTop?.trim() ||
+        b.audioTitleTop?.trim() ||
+        b.fileTitleTop?.trim() ||
+        (b.content ? b.content.replace(/<[^>]+>/g, "").trim().slice(0, 80) : "") ||
+        l.title?.trim() ||
+        ""
+      map.set(b.id, { title, lessonTitle: l.title ?? "", type: b.type })
+    }
+  }
+  return map
+}
+
+function formatTime(iso: string | undefined): string {
+  if (!iso) return ""
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return ""
+  return d.toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })
+}
+
+function formatTimeShort(iso: string | undefined): string {
+  if (!iso) return ""
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return ""
+  return d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })
+}
+
+function formatDuration(seconds: number | undefined): string {
+  if (!seconds || seconds <= 0) return ""
+  if (seconds < 60) return `${seconds} сек`
+  const m = Math.floor(seconds / 60)
+  const s = seconds % 60
+  return s === 0 ? `${m} мин` : `${m} мин ${s} сек`
 }
 
 interface DemoProgress {
@@ -202,9 +253,10 @@ function buildTimeline(args: {
   stageHistory: StageHistoryEntry[]
   demoBlocks: DemoBlock[]
   demoCompletedAt: string | null | undefined
+  blockMeta: Map<string, BlockMeta>
 }): TimelineEvent[] {
   const events: TimelineEvent[] = []
-  const { candidate, stageHistory, demoBlocks, demoCompletedAt } = args
+  const { candidate, stageHistory, demoBlocks, demoCompletedAt, blockMeta } = args
 
   if (candidate.createdAt) {
     const t = Date.parse(candidate.createdAt)
@@ -225,7 +277,16 @@ function buildTimeline(args: {
     if (isNaN(t)) continue
     const fromLabel = entry.from ? (STAGE_LABELS[entry.from]?.label ?? entry.from) : null
     const toLabel = entry.to ? (STAGE_LABELS[entry.to]?.label ?? entry.to) : null
-    const title = fromLabel ? `Перевод: ${fromLabel} → ${toLabel}` : `Стадия: ${toLabel}`
+    // Понятные заголовки для известных reason'ов — иначе fallback на "Перевод: A → B".
+    let title: string
+    switch (entry.reason) {
+      case "anketa_submitted": title = "Заполнил анкету полностью"; break
+      case "demo_started":     title = "Начал демонстрацию"; break
+      case "demo_completed":   title = "Завершил демонстрацию"; break
+      case "ai_classifier_rejection": title = "Кандидат отказался (AI-классификация)"; break
+      default:
+        title = fromLabel ? `Перевод: ${fromLabel} → ${toLabel}` : `Стадия: ${toLabel}`
+    }
     const isReject = entry.to === "rejected"
     const isHire = entry.to === "hired"
     events.push({
@@ -234,11 +295,11 @@ function buildTimeline(args: {
       icon: isReject ? XCircle : isHire ? CheckCircle2 : HistoryIcon,
       iconClass: isReject ? "text-destructive" : isHire ? "text-emerald-500" : "text-muted-foreground",
       title,
-      hint: entry.movedBy ? `Перевёл: ${entry.movedBy}` : entry.comment || entry.reason,
+      hint: entry.movedBy ? `Перевёл: ${entry.movedBy}` : entry.comment || (entry.reason ? undefined : undefined),
     })
   }
 
-  // Берём первый и последний ответ как «открыл» / «прошёл блок»
+  // По каждому сабмиченному блоку — отдельное событие с названием и временем.
   const sorted = [...demoBlocks].filter(b => b?.answeredAt).sort((a, b) =>
     Date.parse(a.answeredAt!) - Date.parse(b.answeredAt!)
   )
@@ -247,32 +308,52 @@ function buildTimeline(args: {
     const t = Date.parse(first.answeredAt!)
     if (!isNaN(t)) {
       events.push({
-        at: t, iso: first.answeredAt!,
+        at: t - 1, iso: first.answeredAt!,
         icon: Play, iconClass: "text-indigo-500",
         title: "Открыл демонстрацию",
       })
     }
-    if (sorted.length > 1) {
-      const last = sorted[sorted.length - 1]
-      const t2 = Date.parse(last.answeredAt!)
-      if (!isNaN(t2) && last.answeredAt !== first.answeredAt) {
-        events.push({
-          at: t2, iso: last.answeredAt!,
-          icon: ListChecks, iconClass: "text-indigo-500",
-          title: `Ответил на ${sorted.length} блока(ов)`,
-        })
-      }
-    }
+    sorted.forEach((b, i) => {
+      const t2 = Date.parse(b.answeredAt!)
+      if (isNaN(t2)) return
+      const meta = blockMeta.get(b.blockId)
+      const blockTitle = meta?.title?.trim() || `Блок ${i + 1}`
+      const dur = formatDuration(b.timeSpent)
+      events.push({
+        at: t2, iso: b.answeredAt!,
+        icon: CheckCircle, iconClass: "text-indigo-500",
+        title: `Прошёл блок «${blockTitle}»`,
+        hint: dur ? `Длительность: ${dur}` : undefined,
+      })
+    })
   }
 
   if (demoCompletedAt) {
     const t = Date.parse(demoCompletedAt)
     if (!isNaN(t)) {
       events.push({
-        at: t, iso: demoCompletedAt,
+        at: t + 1, iso: demoCompletedAt,
         icon: CheckCircle, iconClass: "text-emerald-500",
         title: "Завершил демонстрацию",
       })
+    }
+  }
+
+  // AI-оценка
+  const aiScore = candidate.aiScore
+  if (aiScore != null) {
+    // Используем updatedAt как приближённое время оценки
+    const updIso = candidate.updatedAt
+    if (updIso) {
+      const t = Date.parse(updIso)
+      if (!isNaN(t)) {
+        events.push({
+          at: t + 2, iso: updIso,
+          icon: Sparkles, iconClass: "text-purple-500",
+          title: `AI-оценка: ${aiScore}/100`,
+          hint: candidate.aiSummary ? candidate.aiSummary.slice(0, 120) : undefined,
+        })
+      }
     }
   }
 
@@ -512,12 +593,15 @@ export function CandidateDrawer({
     if (!candidate) return null
     const demo = candidate.demoProgressJson as DemoProgress | null
     const demoBlocks = (demo?.blocks ?? []).filter(b => b && typeof b.blockId === "string")
-    const demoTotal = demo?.totalBlocks ?? demoBlocks.length
-    const demoCompleted = demoBlocks.filter((b) => b.status === "completed").length
+    const blockMeta = buildBlockMeta(candidate.demoLessons)
+    // Сабмиченные блоки (не считая synthetic __complete__)
+    const realBlocks = demoBlocks.filter(b => b.blockId !== "__complete__")
+    const demoTotal = demo?.totalBlocks ?? realBlocks.length
+    const demoCompleted = realBlocks.filter((b) => b.status === "completed").length
     const demoPct = demoTotal > 0 ? Math.round((demoCompleted / demoTotal) * 100) : 0
     const stageHistory = (Array.isArray(candidate.stageHistory) ? candidate.stageHistory : []) as StageHistoryEntry[]
     const timeline = buildTimeline({
-      candidate, stageHistory, demoBlocks, demoCompletedAt: demo?.completedAt,
+      candidate, stageHistory, demoBlocks: realBlocks, demoCompletedAt: demo?.completedAt, blockMeta,
     })
     const hasAnswers = (() => {
       const raw = candidate.anketaAnswers
@@ -528,7 +612,7 @@ export function CandidateDrawer({
       if (typeof raw === "object") return Object.keys(raw).length > 0
       return false
     })()
-    return { demo, demoBlocks, demoTotal, demoCompleted, demoPct, stageHistory, timeline, hasAnswers }
+    return { demo, demoBlocks: realBlocks, demoTotal, demoCompleted, demoPct, stageHistory, timeline, hasAnswers, blockMeta }
   }, [candidate])
 
   return (
@@ -601,7 +685,7 @@ export function CandidateDrawer({
 
             <ScrollArea className="flex-1">
               {/* ── Контакты ─────────────────────────────────────── */}
-              <TabsContent value="contacts" className="px-6 py-4 space-y-5 mt-0">
+              <TabsContent value="contacts" className="px-6 py-4 space-y-5 mt-0 max-h-[calc(100vh-220px)] overflow-y-auto">
                 {candidate.hhRawData ? (
                   <HhResumeInfo
                     rawData={candidate.hhRawData}
@@ -788,14 +872,24 @@ export function CandidateDrawer({
                         const iconColor = b.status === "completed" ? "text-emerald-500"
                           : b.status === "skipped" ? "text-muted-foreground"
                           : "text-amber-500"
+                        const meta = derived.blockMeta.get(b.blockId)
+                        const blockTitle = meta?.title?.trim() || `Блок ${i + 1}`
+                        const endIso = b.answeredAt
+                        const endMs = endIso ? Date.parse(endIso) : NaN
+                        const startIso = !isNaN(endMs) && b.timeSpent && b.timeSpent > 0
+                          ? new Date(endMs - b.timeSpent * 1000).toISOString()
+                          : undefined
+                        const dur = formatDuration(b.timeSpent)
                         return (
-                          <div key={i} className="flex items-center gap-2.5 p-2 rounded-lg border border-border/60">
-                            <Icon className={cn("w-4 h-4 shrink-0", iconColor)} />
+                          <div key={i} className="flex items-start gap-2.5 p-2 rounded-lg border border-border/60">
+                            <Icon className={cn("w-4 h-4 shrink-0 mt-0.5", iconColor)} />
                             <div className="flex-1 min-w-0">
-                              <p className="text-sm text-foreground truncate">{b.blockId}</p>
-                              {b.timeSpent != null && (
-                                <p className="text-[11px] text-muted-foreground">потратил {b.timeSpent} сек</p>
-                              )}
+                              <p className="text-sm text-foreground break-words">{blockTitle}</p>
+                              <div className="text-[11px] text-muted-foreground space-x-2">
+                                {startIso && <span>Начал: {formatTimeShort(startIso)}</span>}
+                                {endIso && <span>Закончил: {formatTimeShort(endIso)}</span>}
+                                {dur && <span>· {dur}</span>}
+                              </div>
                             </div>
                           </div>
                         )

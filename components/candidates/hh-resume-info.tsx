@@ -2,7 +2,7 @@
 
 import {
   Phone, Mail, MapPin, Briefcase, GraduationCap, Globe2, Plane,
-  DollarSign, Calendar, ExternalLink,
+  DollarSign, Calendar, ExternalLink, Languages, Wrench,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 
@@ -29,6 +29,12 @@ interface HhEducation {
   year?: number | string
 }
 
+interface HhLanguage {
+  id?: string
+  name?: string
+  level?: { id?: string; name?: string }
+}
+
 interface HhResume {
   first_name?: string
   last_name?: string
@@ -42,12 +48,16 @@ interface HhResume {
   business_trip_readiness?: { id?: string; name?: string }
   total_experience?: { months?: number }
   experience?: HhExperience[]
-  education?: { primary?: HhEducation[]; level?: { id?: string; name?: string } }
+  education?: { primary?: HhEducation[]; additional?: HhEducation[]; level?: { id?: string; name?: string } }
   contact?: HhContact[]
   salary?: { amount?: number; currency?: string }
   alternate_url?: string
   schedules?: { id?: string; name?: string }[]
   employments?: { id?: string; name?: string }[]
+  language?: HhLanguage[]
+  skill_set?: string[]
+  skills?: string
+  title?: string
 }
 
 interface HhRawData {
@@ -122,19 +132,35 @@ function Row({ icon: Icon, children }: { icon: React.ComponentType<{ className?:
   )
 }
 
+function ExperienceCard({ exp }: { exp: HhExperience }) {
+  return (
+    <div className="p-2.5 rounded-lg border border-border/60 bg-muted/40 space-y-1">
+      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <Calendar className="w-3 h-3 shrink-0" />
+        <span>
+          {formatYearMonth(exp.start)} — {exp.end ? formatYearMonth(exp.end) : "по н.в."}
+        </span>
+      </div>
+      {exp.company && (
+        <p className="text-sm font-medium text-foreground break-words">{exp.company}</p>
+      )}
+      {exp.position && (
+        <p className="text-sm text-muted-foreground break-words">{exp.position}</p>
+      )}
+      {exp.description && (
+        <p className="text-xs text-muted-foreground whitespace-pre-wrap break-words line-clamp-6">
+          {exp.description.replace(/<[^>]+>/g, "").trim()}
+        </p>
+      )}
+    </div>
+  )
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 export function HhResumeInfo({ rawData, fallback }: HhResumeInfoProps) {
-  if (process.env.NODE_ENV !== "production") {
-    console.log("[HhResumeInfo] mounted", {
-      hasRawData: !!rawData,
-      hasResume: !!(rawData && typeof rawData === "object" && (rawData as HhRawData).resume),
-    })
-  }
-
   const raw = (rawData && typeof rawData === "object" ? rawData : {}) as HhRawData
-  // Иногда raw_data — это сам resume (без вложенного ключа resume). Терпимо
-  // обрабатываем оба варианта, чтобы не зависеть от формы ответа hh.
+  // Иногда raw_data — это сам resume (без вложенного ключа resume).
   const resume: HhResume | undefined = raw.resume
     ?? (raw && typeof raw === "object" && ("contact" in raw || "experience" in raw || "education" in raw)
       ? (raw as unknown as HhResume)
@@ -147,9 +173,10 @@ export function HhResumeInfo({ rawData, fallback }: HhResumeInfoProps) {
   const phone = getContact(resume?.contact, "cell") ?? fallback.phone
   const email = getContact(resume?.contact, "email") ?? fallback.email
   const totalExp = monthsToText(resume?.total_experience?.months) ?? fallback.experience
-  const lastExp = Array.isArray(resume?.experience) ? resume!.experience![0] : undefined
+  const allExperiences = Array.isArray(resume?.experience) ? resume!.experience! : []
   const educationLevel = resume?.education?.level?.name
   const primaryEducation = Array.isArray(resume?.education?.primary) ? resume!.education!.primary : []
+  const additionalEducation = Array.isArray(resume?.education?.additional) ? resume!.education!.additional : []
   const citizenship = Array.isArray(resume?.citizenship)
     ? resume!.citizenship!.map((c) => c?.name).filter(Boolean).join(", ")
     : ""
@@ -157,6 +184,11 @@ export function HhResumeInfo({ rawData, fallback }: HhResumeInfoProps) {
   const businessTrip = resume?.business_trip_readiness?.name
   const schedules = Array.isArray(resume?.schedules) ? resume!.schedules!.map((s) => s?.name).filter(Boolean) : []
   const employments = Array.isArray(resume?.employments) ? resume!.employments!.map((e) => e?.name).filter(Boolean) : []
+  const languages = Array.isArray(resume?.language) ? resume!.language!.filter(l => l?.name) : []
+  const skillSet = Array.isArray(resume?.skill_set) ? resume!.skill_set!.filter(Boolean) : []
+  const skillsText = typeof resume?.skills === "string" ? resume!.skills!.trim() : ""
+  const desiredPosition = typeof resume?.title === "string" ? resume!.title!.trim() : ""
+
   const salary = formatSalaryRange(
     resume?.salary?.amount ?? fallback.salaryMin,
     resume?.salary?.amount ?? fallback.salaryMax,
@@ -168,11 +200,14 @@ export function HhResumeInfo({ rawData, fallback }: HhResumeInfoProps) {
   return (
     <div className="space-y-5">
       {/* ── Личное ──────────────────────────────────────────────────────────── */}
-      {(fullName || age || gender || resume?.alternate_url) && (
+      {(fullName || age || gender || resume?.alternate_url || desiredPosition) && (
         <section className="space-y-1.5">
           <SectionHeader>Личное</SectionHeader>
           {fullName && (
-            <p className="text-sm font-medium text-foreground">{fullName}</p>
+            <p className="text-sm font-medium text-foreground break-words">{fullName}</p>
+          )}
+          {desiredPosition && (
+            <p className="text-xs text-muted-foreground break-words">Желаемая должность: {desiredPosition}</p>
           )}
           {(age != null || gender) && (
             <p className="text-xs text-muted-foreground">
@@ -200,13 +235,13 @@ export function HhResumeInfo({ rawData, fallback }: HhResumeInfoProps) {
         <section className="space-y-1.5">
           <SectionHeader>Контакты</SectionHeader>
           {phone && (
-            <a href={`tel:${phone}`} className="flex items-center gap-2 text-sm hover:text-primary transition-colors">
+            <a href={`tel:${phone}`} className="flex items-center gap-2 text-sm hover:text-primary transition-colors break-all">
               <Phone className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
               {phone}
             </a>
           )}
           {email && (
-            <a href={`mailto:${email}`} className="flex items-center gap-2 text-sm hover:text-primary transition-colors">
+            <a href={`mailto:${email}`} className="flex items-center gap-2 text-sm hover:text-primary transition-colors break-all">
               <Mail className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
               {email}
             </a>
@@ -215,8 +250,8 @@ export function HhResumeInfo({ rawData, fallback }: HhResumeInfoProps) {
         </section>
       )}
 
-      {/* ── Опыт ────────────────────────────────────────────────────────────── */}
-      {(totalExp || lastExp) && (
+      {/* ── Опыт работы (ВСЕ места) ─────────────────────────────────────────── */}
+      {(totalExp || allExperiences.length > 0) && (
         <section className="space-y-2">
           <SectionHeader>Опыт работы</SectionHeader>
           {totalExp && (
@@ -225,30 +260,18 @@ export function HhResumeInfo({ rawData, fallback }: HhResumeInfoProps) {
               <span className="text-muted-foreground"> · общий стаж</span>
             </Row>
           )}
-          {lastExp && (
-            <div className="p-2.5 rounded-lg border border-border/60 bg-muted/40 space-y-1">
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Calendar className="w-3 h-3 shrink-0" />
-                {formatYearMonth(lastExp.start)} — {lastExp.end ? formatYearMonth(lastExp.end) : "по н.в."}
-              </div>
-              {lastExp.company && (
-                <p className="text-sm font-medium text-foreground">{lastExp.company}</p>
-              )}
-              {lastExp.position && (
-                <p className="text-sm text-muted-foreground">{lastExp.position}</p>
-              )}
-              {lastExp.description && (
-                <p className="text-xs text-muted-foreground line-clamp-3 whitespace-pre-wrap">
-                  {lastExp.description.replace(/<[^>]+>/g, "")}
-                </p>
-              )}
+          {allExperiences.length > 0 && (
+            <div className="space-y-1.5">
+              {allExperiences.map((exp, i) => (
+                <ExperienceCard key={i} exp={exp} />
+              ))}
             </div>
           )}
         </section>
       )}
 
-      {/* ── Образование ─────────────────────────────────────────────────────── */}
-      {(educationLevel || primaryEducation.length > 0) && (
+      {/* ── Образование (всё) ──────────────────────────────────────────────── */}
+      {(educationLevel || primaryEducation.length > 0 || additionalEducation.length > 0) && (
         <section className="space-y-1.5">
           <SectionHeader>Образование</SectionHeader>
           {educationLevel && (
@@ -256,13 +279,62 @@ export function HhResumeInfo({ rawData, fallback }: HhResumeInfoProps) {
               <span className="text-foreground">{educationLevel}</span>
             </Row>
           )}
-          {primaryEducation.slice(0, 3).map((ed, i) => (
-            <div key={i} className="text-xs text-muted-foreground pl-5">
-              {ed.name ?? ed.organization}
+          {primaryEducation.map((ed, i) => (
+            <div key={`p-${i}`} className="text-xs text-muted-foreground pl-5 break-words">
+              <span className="text-foreground">{ed.name ?? ed.organization}</span>
               {ed.result ? ` · ${ed.result}` : ""}
               {ed.year ? ` (${ed.year})` : ""}
             </div>
           ))}
+          {additionalEducation.length > 0 && (
+            <div className="pl-5 pt-1 space-y-0.5">
+              <p className="text-[10px] uppercase text-muted-foreground/70 tracking-wide">Доп. образование</p>
+              {additionalEducation.map((ed, i) => (
+                <div key={`a-${i}`} className="text-xs text-muted-foreground break-words">
+                  <span className="text-foreground">{ed.name ?? ed.organization}</span>
+                  {ed.result ? ` · ${ed.result}` : ""}
+                  {ed.year ? ` (${ed.year})` : ""}
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* ── Языки ───────────────────────────────────────────────────────────── */}
+      {languages.length > 0 && (
+        <section className="space-y-1.5">
+          <SectionHeader>Языки</SectionHeader>
+          <div className="space-y-1">
+            {languages.map((l, i) => (
+              <div key={i} className="flex items-start gap-2 text-sm">
+                <Languages className="w-3.5 h-3.5 shrink-0 mt-0.5 text-muted-foreground" />
+                <div className="flex-1 min-w-0">
+                  <span className="text-foreground">{l.name}</span>
+                  {l.level?.name ? <span className="text-muted-foreground"> — {l.level.name}</span> : null}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ── Навыки ──────────────────────────────────────────────────────────── */}
+      {(skillSet.length > 0 || skillsText) && (
+        <section className="space-y-1.5">
+          <SectionHeader>Навыки</SectionHeader>
+          {skillSet.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {skillSet.map((s, i) => (
+                <Badge key={`${s}-${i}`} variant="secondary" className="text-[10px] font-normal break-words">{s}</Badge>
+              ))}
+            </div>
+          )}
+          {skillsText && (
+            <Row icon={Wrench}>
+              <span className="text-foreground whitespace-pre-wrap break-words">{skillsText}</span>
+            </Row>
+          )}
         </section>
       )}
 

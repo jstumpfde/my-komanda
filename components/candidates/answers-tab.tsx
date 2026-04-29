@@ -109,9 +109,13 @@ function TaskAnswerView({ block, answer }: { block: Block; answer: Record<string
     return (
       <div className="space-y-1.5">
         {Object.entries(answer).map(([k, v]) => (
-          <div key={k} className="text-sm">
+          <div key={k} className="text-sm break-words">
             <span className="text-muted-foreground">{k}: </span>
-            <span className="text-foreground whitespace-pre-wrap">{String(v ?? "")}</span>
+            {isMediaAnswer(v) ? (
+              <div className="mt-1"><MediaAnswerView media={v} /></div>
+            ) : (
+              <span className="text-foreground whitespace-pre-wrap break-words">{String(v ?? "")}</span>
+            )}
           </div>
         ))}
       </div>
@@ -121,12 +125,22 @@ function TaskAnswerView({ block, answer }: { block: Block; answer: Record<string
     <div className="space-y-3">
       {questions.map((q: Question) => {
         const v = answer[q.id]
-        const text = v == null ? "" : Array.isArray(v) ? v.join(", ") : String(v)
+        const isMedia = isMediaAnswer(v)
+        const text = !isMedia
+          ? (v == null ? "" : Array.isArray(v) ? v.join(", ") : typeof v === "object" ? "" : String(v))
+          : ""
         return (
           <div key={q.id} className="space-y-1">
-            <p className="text-xs font-medium text-foreground">{q.text || q.id}</p>
-            {text.trim() ? (
-              <p className="text-sm text-muted-foreground whitespace-pre-wrap">{text}</p>
+            <p className="text-xs font-medium text-foreground break-words">{q.text || q.id}</p>
+            {isMedia ? (
+              <div className="space-y-1">
+                <MediaAnswerView media={v} />
+                {v.duration ? (
+                  <p className="text-[10px] text-muted-foreground">{formatDuration(v.duration)}</p>
+                ) : null}
+              </div>
+            ) : text.trim() ? (
+              <p className="text-sm text-muted-foreground whitespace-pre-wrap break-words">{text}</p>
             ) : (
               <p className="text-xs text-muted-foreground/60 italic">Не отвечено</p>
             )}
@@ -141,15 +155,26 @@ function EntryCard({ entry, blockMap }: { entry: AnketaEntry; blockMap: Map<stri
   // legacy: { question, answer } plain pair
   if ("question" in entry && typeof (entry as { question?: unknown }).question === "string") {
     const e = entry as { question: string; answer: unknown }
+    const isMedia = isMediaAnswer(e.answer)
     return (
-      <div className="p-3 rounded-lg border border-border/60 bg-muted/40 space-y-1.5">
-        <div className="flex items-center gap-1.5 text-xs font-medium text-foreground">
-          <FileQuestion className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-          <span>{e.question}</span>
+      <div className="p-3 rounded-lg border border-border/60 bg-muted/40 space-y-1.5 min-w-0">
+        <div className="flex items-start gap-1.5 text-xs font-medium text-foreground">
+          <FileQuestion className="w-3.5 h-3.5 text-muted-foreground shrink-0 mt-0.5" />
+          <span className="break-words min-w-0">{e.question}</span>
         </div>
-        <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-          {typeof e.answer === "string" ? e.answer : JSON.stringify(e.answer)}
-        </p>
+        {isMedia ? (
+          <MediaAnswerView media={e.answer as MediaAnswer} />
+        ) : typeof e.answer === "string" ? (
+          e.answer.trim() ? (
+            <p className="text-sm text-muted-foreground whitespace-pre-wrap break-words">{e.answer}</p>
+          ) : (
+            <p className="text-xs text-muted-foreground/60 italic">Не отвечено</p>
+          )
+        ) : (
+          <p className="text-sm text-muted-foreground whitespace-pre-wrap break-words">
+            {JSON.stringify(e.answer)}
+          </p>
+        )}
       </div>
     )
   }
@@ -172,11 +197,11 @@ function EntryCard({ entry, blockMap }: { entry: AnketaEntry; blockMap: Map<stri
   const answeredLabel = formatAnsweredAt(e.answeredAt)
 
   return (
-    <div className="p-3 rounded-lg border border-border/60 bg-muted/40 space-y-2">
+    <div className="p-3 rounded-lg border border-border/60 bg-muted/40 space-y-2 min-w-0">
       <div className="flex items-start justify-between gap-2">
-        <div className="flex items-center gap-1.5 min-w-0">
-          <Icon className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-          <span className="text-xs font-medium text-foreground truncate">{headerTitle}</span>
+        <div className="flex items-start gap-1.5 min-w-0">
+          <Icon className="w-3.5 h-3.5 text-muted-foreground shrink-0 mt-0.5" />
+          <span className="text-xs font-medium text-foreground break-words min-w-0">{headerTitle}</span>
         </div>
         {answeredLabel && (
           <span className="text-[10px] text-muted-foreground shrink-0">{answeredLabel}</span>
@@ -192,12 +217,12 @@ function EntryCard({ entry, blockMap }: { entry: AnketaEntry; blockMap: Map<stri
         </div>
       ) : typeof ans === "string" ? (
         ans.trim() ? (
-          <p className="text-sm text-muted-foreground whitespace-pre-wrap">{ans}</p>
+          <p className="text-sm text-muted-foreground whitespace-pre-wrap break-words">{ans}</p>
         ) : (
           <p className="text-xs text-muted-foreground/60 italic">Не отвечено</p>
         )
       ) : ans && typeof ans === "object" ? (
-        block && block.type === "task"
+        block
           ? <TaskAnswerView block={block} answer={ans as Record<string, unknown>} />
           : (
             <pre className="text-xs text-muted-foreground whitespace-pre-wrap break-all">

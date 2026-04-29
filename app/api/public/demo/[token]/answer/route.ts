@@ -4,6 +4,7 @@ import { db } from "@/lib/db"
 import { candidates } from "@/lib/db/schema"
 import { apiError, apiSuccess } from "@/lib/api-helpers"
 import { isShortId } from "@/lib/short-id"
+import { scoreCandidateById } from "@/lib/ai-score-candidate"
 
 interface DemoBlock {
   blockId: string
@@ -38,10 +39,12 @@ export async function POST(
     const candidateRows = await db
       .select({
         id: candidates.id,
+        vacancyId: candidates.vacancyId,
         stage: candidates.stage,
         stageHistory: candidates.stageHistory,
         anketaAnswers: candidates.anketaAnswers,
         demoProgressJson: candidates.demoProgressJson,
+        aiScore: candidates.aiScore,
       })
       .from(candidates)
       .where(isShortId(token) ? eq(candidates.shortId, token) : eq(candidates.token, token))
@@ -127,6 +130,18 @@ export async function POST(
     }
 
     await db.update(candidates).set(updates).where(eq(candidates.id, candidate.id))
+
+    // Авто AI-скоринг при завершении демо (fire-and-forget). Не блокируем
+    // ответ кандидата. Не пере-оцениваем уже оценённых.
+    if (isComplete && candidate.aiScore == null) {
+      void scoreCandidateById({
+        candidateId: candidate.id,
+        vacancyId: candidate.vacancyId,
+        skipIfScored: true,
+      }).catch((err) => {
+        console.error("[demo answer] auto AI scoring failed:", err instanceof Error ? err.message : err)
+      })
+    }
 
     return apiSuccess({ ok: true, stage: newStage ?? currentStage })
   } catch (err) {
