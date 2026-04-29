@@ -311,6 +311,7 @@ export function CandidateDrawer({
   const [hhLoading, setHhLoading] = useState(false)
   const [hhError, setHhError] = useState<string | null>(null)
   const hhFetchRef = useRef<string | null>(null)
+  const hhListRef = useRef<HTMLDivElement | null>(null)
 
   const fetchCandidate = useCallback(async (id: string) => {
     setLoadingCandidate(true)
@@ -367,14 +368,18 @@ export function CandidateDrawer({
     ;(async () => {
       try {
         const res = await fetch(`/api/integrations/hh/messages/${hhResponseId}`)
-        const data = await res.json() as { messages?: HhMessage[]; error?: string }
+        const data = await res.json() as { messages?: HhMessage[]; error?: string; details?: string }
         if (cancelled) return
         if (!res.ok) {
+          console.error("[hh-chat] fetch failed", res.status, data)
           setHhError(data.error ?? `Ошибка ${res.status}`)
         } else {
-          setHhMessages(data.messages ?? [])
+          const msgs = data.messages ?? []
+          if (msgs.length === 0) console.warn("[hh-chat] empty messages list", { hhResponseId })
+          setHhMessages(msgs)
         }
       } catch (err) {
+        console.error("[hh-chat] network error", err)
         if (!cancelled) setHhError(err instanceof Error ? err.message : "Сетевая ошибка")
       } finally {
         if (!cancelled) setHhLoading(false)
@@ -383,6 +388,13 @@ export function CandidateDrawer({
 
     return () => { cancelled = true }
   }, [activeTab, candidate?.hhResponseId])
+
+  // ── Auto-scroll to last hh message when list updates ──────────────────────
+  useEffect(() => {
+    if (activeTab !== "chat" || hhMessages.length === 0) return
+    const el = hhListRef.current
+    if (el) el.scrollTop = el.scrollHeight
+  }, [activeTab, hhMessages])
 
   // ── Mutations ────────────────────────────────────────────────────────────
 
@@ -810,8 +822,8 @@ export function CandidateDrawer({
 
               {/* ── Чат (только hh) ──────────────────────────────── */}
               <TabsContent value="chat" className="px-6 py-4 mt-0">
-                <div className="rounded-lg border border-border/60 p-3 space-y-2 max-h-[70vh] overflow-y-auto">
-                  <div className="flex items-center justify-between sticky top-0 bg-background z-10 pb-2 border-b border-border/40">
+                <div className="rounded-lg border border-border/60 p-3 space-y-2">
+                  <div className="flex items-center justify-between pb-2 border-b border-border/40">
                     <div className="flex items-center gap-2">
                       <div className="w-8 h-8 rounded-full bg-red-500/10 flex items-center justify-center text-red-500 text-xs font-semibold">hh</div>
                       <div>
@@ -846,7 +858,7 @@ export function CandidateDrawer({
                   ) : hhMessages.length === 0 ? (
                     <p className="text-xs text-muted-foreground italic py-2">Пока нет сообщений. Отправь приглашение или отказ — кандидат увидит в hh</p>
                   ) : (
-                    <div className="space-y-2 pt-1">
+                    <div ref={hhListRef} className="space-y-2 pt-1 max-h-[60vh] overflow-y-auto pr-1 -mr-1">
                       {hhMessages.map((m) => {
                         const mine = m.authorType === "employer"
                         return (

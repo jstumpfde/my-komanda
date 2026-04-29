@@ -43,6 +43,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ hhRe
       items?: Array<{
         id: string
         text?: string
+        body?: string
         author_type?: "applicant" | "employer"
         author?: { participant_type?: string }
         created_at?: string
@@ -52,9 +53,16 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ hhRe
       found?: number
     }
 
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[hh/messages] items count:", data.items?.length ?? 0)
+      if (data.items?.[0]) {
+        console.log("[hh/messages] first item keys:", Object.keys(data.items[0]))
+      }
+    }
+
     const messages = (data.items ?? []).map(m => ({
       id: m.id,
-      text: m.text ?? "",
+      text: m.text ?? m.body ?? "",
       authorType: m.author_type ?? m.author?.participant_type ?? "unknown",
       createdAt: m.created_at ?? null,
       viewedByMe: m.viewed_by_me ?? false,
