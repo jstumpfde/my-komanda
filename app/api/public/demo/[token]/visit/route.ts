@@ -61,6 +61,28 @@ export async function GET(
     }
   }
 
+  // Если owner существует и cookie ещё не установлено — признать
+  // первого посетителя как самого owner-а. Так избегаем создания
+  // дублей "Новый кандидат" когда сам кандидат впервые кликает на
+  // свою же ссылку.
+  if (owner?.id && !cookieUuid) {
+    const ownerRedirect = new URL(
+      `/demo/${owner.shortId ?? token}?c=${owner.id}`,
+      req.url
+    )
+    const res = NextResponse.redirect(ownerRedirect)
+    res.cookies.set({
+      name: COOKIE_NAME,
+      value: owner.id,
+      maxAge: COOKIE_MAX_AGE_SECONDS,
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+    })
+    return res
+  }
+
   // Создаём нового кандидата.
   const utmSource = req.nextUrl.searchParams.get("utm_source")
   const source = detectSourceFromUtm(utmSource)
