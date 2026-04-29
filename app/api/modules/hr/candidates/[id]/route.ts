@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server"
 import { eq, and, desc } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { candidates, vacancies, hhResponses, demos } from "@/lib/db/schema"
+import { candidates, vacancies, hhResponses, hhCandidates, demos } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 
 // Helper: verify candidate belongs to user's company
@@ -22,7 +22,35 @@ async function getOwnedCandidate(candidateId: string, companyId: string) {
     .where(and(eq(candidates.id, candidateId), eq(vacancies.companyId, companyId)))
     .limit(1)
 
-  return row ?? null
+  if (!row) return null
+
+  // Fallback: hh_responses может быть не привязан напрямую к candidate (старый
+  // импорт через lib/hh/client). Доходим через hh_candidates.hhApplicationId.
+  if (!row.hhResponseId) {
+    const [link] = await db
+      .select({ hhApplicationId: hhCandidates.hhApplicationId })
+      .from(hhCandidates)
+      .where(eq(hhCandidates.candidateId, candidateId))
+      .limit(1)
+    if (link?.hhApplicationId) {
+      const [resp] = await db
+        .select({
+          hhResponseId: hhResponses.hhResponseId,
+          rawData: hhResponses.rawData,
+        })
+        .from(hhResponses)
+        .where(and(
+          eq(hhResponses.companyId, companyId),
+          eq(hhResponses.hhResponseId, link.hhApplicationId),
+        ))
+        .limit(1)
+      if (resp) {
+        return { ...row, hhResponseId: resp.hhResponseId, hhRawData: resp.rawData }
+      }
+    }
+  }
+
+  return row
 }
 
 export async function GET(

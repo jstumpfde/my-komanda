@@ -125,8 +125,20 @@ function Row({ icon: Icon, children }: { icon: React.ComponentType<{ className?:
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 export function HhResumeInfo({ rawData, fallback }: HhResumeInfoProps) {
+  if (process.env.NODE_ENV !== "production") {
+    console.log("[HhResumeInfo] mounted", {
+      hasRawData: !!rawData,
+      hasResume: !!(rawData && typeof rawData === "object" && (rawData as HhRawData).resume),
+    })
+  }
+
   const raw = (rawData && typeof rawData === "object" ? rawData : {}) as HhRawData
-  const resume = raw.resume
+  // Иногда raw_data — это сам resume (без вложенного ключа resume). Терпимо
+  // обрабатываем оба варианта, чтобы не зависеть от формы ответа hh.
+  const resume: HhResume | undefined = raw.resume
+    ?? (raw && typeof raw === "object" && ("contact" in raw || "experience" in raw || "education" in raw)
+      ? (raw as unknown as HhResume)
+      : undefined)
 
   const fullName = [resume?.last_name, resume?.first_name, resume?.middle_name].filter(Boolean).join(" ").trim()
   const age = resume?.age
@@ -150,6 +162,8 @@ export function HhResumeInfo({ rawData, fallback }: HhResumeInfoProps) {
     resume?.salary?.amount ?? fallback.salaryMax,
     resume?.salary?.currency,
   )
+
+  const hasContacts = !!(phone || email || city)
 
   return (
     <div className="space-y-5">
@@ -182,32 +196,24 @@ export function HhResumeInfo({ rawData, fallback }: HhResumeInfoProps) {
       )}
 
       {/* ── Контакты ─────────────────────────────────────────────────────────── */}
-      <section className="space-y-1.5">
-        <SectionHeader>Контакты</SectionHeader>
-        {phone ? (
-          <a href={`tel:${phone}`} className="flex items-center gap-2 text-sm hover:text-primary transition-colors">
-            <Phone className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-            {phone}
-          </a>
-        ) : (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground/50">
-            <Phone className="w-3.5 h-3.5 shrink-0" />
-            Телефон не указан
-          </div>
-        )}
-        {email ? (
-          <a href={`mailto:${email}`} className="flex items-center gap-2 text-sm hover:text-primary transition-colors">
-            <Mail className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-            {email}
-          </a>
-        ) : (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground/50">
-            <Mail className="w-3.5 h-3.5 shrink-0" />
-            Email не указан
-          </div>
-        )}
-        {city && <Row icon={MapPin}>{city}</Row>}
-      </section>
+      {hasContacts && (
+        <section className="space-y-1.5">
+          <SectionHeader>Контакты</SectionHeader>
+          {phone && (
+            <a href={`tel:${phone}`} className="flex items-center gap-2 text-sm hover:text-primary transition-colors">
+              <Phone className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+              {phone}
+            </a>
+          )}
+          {email && (
+            <a href={`mailto:${email}`} className="flex items-center gap-2 text-sm hover:text-primary transition-colors">
+              <Mail className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+              {email}
+            </a>
+          )}
+          {city && <Row icon={MapPin}>{city}</Row>}
+        </section>
+      )}
 
       {/* ── Опыт ────────────────────────────────────────────────────────────── */}
       {(totalExp || lastExp) && (
