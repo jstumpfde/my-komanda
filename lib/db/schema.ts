@@ -278,6 +278,7 @@ export interface VacancyAiProcessSettings {
   minScore?: number
   belowThresholdAction?: "reject" | "keep_new"
   inviteMessage?: string
+  reInviteMessage?: string
   rejectMessage?: string
 }
 
