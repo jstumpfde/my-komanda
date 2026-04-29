@@ -685,7 +685,7 @@ export function CandidateDrawer({
 
             <ScrollArea className="flex-1">
               {/* ── Контакты ─────────────────────────────────────── */}
-              <TabsContent value="contacts" className="px-6 py-4 space-y-5 mt-0 max-h-[calc(100vh-220px)] overflow-y-auto">
+              <TabsContent value="contacts" className="px-6 py-4 pb-28 space-y-5 mt-0">
                 {candidate.hhRawData ? (
                   <HhResumeInfo
                     rawData={candidate.hhRawData}
@@ -832,7 +832,7 @@ export function CandidateDrawer({
               </TabsContent>
 
               {/* ── Демо ─────────────────────────────────────────── */}
-              <TabsContent value="demo" className="px-6 py-4 mt-0">
+              <TabsContent value="demo" className="px-6 py-4 pb-28 mt-0">
                 {!derived.demo || derived.demoBlocks.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
                     <MonitorOff className="w-10 h-10 mb-3 opacity-50" />
@@ -900,12 +900,12 @@ export function CandidateDrawer({
               </TabsContent>
 
               {/* ── Ответы ───────────────────────────────────────── */}
-              <TabsContent value="answers" className="px-6 py-4 mt-0">
+              <TabsContent value="answers" className="px-6 py-4 pb-28 mt-0">
                 <AnswersTab answers={candidate.anketaAnswers} demoLessons={candidate.demoLessons} />
               </TabsContent>
 
               {/* ── Чат (только hh) ──────────────────────────────── */}
-              <TabsContent value="chat" className="px-6 py-4 mt-0">
+              <TabsContent value="chat" className="px-6 py-4 pb-28 mt-0">
                 <div className="rounded-lg border border-border/60 p-3 space-y-2">
                   <div className="flex items-center justify-between pb-2 border-b border-border/40">
                     <div className="flex items-center gap-2">
@@ -980,7 +980,7 @@ export function CandidateDrawer({
               </TabsContent>
 
               {/* ── AI-оценка ────────────────────────────────────── */}
-              <TabsContent value="ai" className="px-6 py-4 mt-0 space-y-4">
+              <TabsContent value="ai" className="px-6 py-4 pb-28 mt-0 space-y-4">
                 {candidate.aiScore != null ? (
                   <>
                     <div className="flex flex-col items-center gap-2 py-4">
@@ -1060,7 +1060,7 @@ export function CandidateDrawer({
               </TabsContent>
 
               {/* ── Другие каналы ────────────────────────────────── */}
-              <TabsContent value="channels" className="px-6 py-4 mt-0 space-y-3">
+              <TabsContent value="channels" className="px-6 py-4 pb-28 mt-0 space-y-3">
                 <div className="rounded-lg border border-border/60 p-3 space-y-2">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
@@ -1111,7 +1111,7 @@ export function CandidateDrawer({
               </TabsContent>
 
               {/* ── История ──────────────────────────────────────── */}
-              <TabsContent value="history" className="px-6 py-4 mt-0">
+              <TabsContent value="history" className="px-6 py-4 pb-28 mt-0">
                 {derived.timeline.length === 0 ? (
                   <p className="text-sm text-muted-foreground text-center py-12">Событий пока нет</p>
                 ) : (

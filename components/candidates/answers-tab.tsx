@@ -259,7 +259,7 @@ export function AnswersTab({ answers, demoLessons }: AnswersTabProps) {
   }
 
   return (
-    <div className="space-y-3 max-h-[calc(100vh-220px)] overflow-y-auto pr-1 -mr-1">
+    <div className="space-y-3">
       {visible.map((entry, i) => (
         <EntryCard key={i} entry={entry} blockMap={blockMap} />
       ))}
