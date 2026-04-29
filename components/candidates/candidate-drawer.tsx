@@ -277,7 +277,16 @@ function buildTimeline(args: {
     if (isNaN(t)) continue
     const fromLabel = entry.from ? (STAGE_LABELS[entry.from]?.label ?? entry.from) : null
     const toLabel = entry.to ? (STAGE_LABELS[entry.to]?.label ?? entry.to) : null
-    const title = fromLabel ? `Перевод: ${fromLabel} → ${toLabel}` : `Стадия: ${toLabel}`
+    // Понятные заголовки для известных reason'ов — иначе fallback на "Перевод: A → B".
+    let title: string
+    switch (entry.reason) {
+      case "anketa_submitted": title = "Заполнил анкету полностью"; break
+      case "demo_started":     title = "Начал демонстрацию"; break
+      case "demo_completed":   title = "Завершил демонстрацию"; break
+      case "ai_classifier_rejection": title = "Кандидат отказался (AI-классификация)"; break
+      default:
+        title = fromLabel ? `Перевод: ${fromLabel} → ${toLabel}` : `Стадия: ${toLabel}`
+    }
     const isReject = entry.to === "rejected"
     const isHire = entry.to === "hired"
     events.push({
@@ -286,7 +295,7 @@ function buildTimeline(args: {
       icon: isReject ? XCircle : isHire ? CheckCircle2 : HistoryIcon,
       iconClass: isReject ? "text-destructive" : isHire ? "text-emerald-500" : "text-muted-foreground",
       title,
-      hint: entry.movedBy ? `Перевёл: ${entry.movedBy}` : entry.comment || entry.reason,
+      hint: entry.movedBy ? `Перевёл: ${entry.movedBy}` : entry.comment || (entry.reason ? undefined : undefined),
     })
   }
 
