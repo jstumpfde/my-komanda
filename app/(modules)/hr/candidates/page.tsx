@@ -145,6 +145,7 @@ export default function CandidatesPage() {
   const [statusFilter, setStatusFilter] = useState("all")
   const [vacancyFilter, setVacancyFilter] = useState("all")
   const [sourceFilter, setSourceFilter] = useState("all")
+  const [favoriteOnly, setFavoriteOnly] = useState(false)
   const [colSort, setColSort] = useState<ColumnSort>({ column: "date", dir: "desc" })
   const [selected, setSelected] = useState<Set<string>>(new Set())
 
@@ -216,6 +217,9 @@ export default function CandidatesPage() {
     if (sourceFilter !== "all") {
       result = result.filter((c) => c.source === sourceFilter)
     }
+    if (favoriteOnly) {
+      result = result.filter((c) => c.isFavorite)
+    }
 
     result = [...result].sort((a, b) => {
       if (!colSort) return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
@@ -229,7 +233,7 @@ export default function CandidatesPage() {
     })
 
     return result
-  }, [candidates, search, statusFilter, vacancyFilter, sourceFilter, colSort])
+  }, [candidates, search, statusFilter, vacancyFilter, sourceFilter, favoriteOnly, colSort])
 
   const allSelected = filtered.length > 0 && filtered.every((c) => selected.has(c.id))
   const toggleOne = (id: string) => { setSelected((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n }) }
@@ -275,6 +279,21 @@ export default function CandidatesPage() {
                   {SOURCE_FILTER.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
                 </SelectContent>
               </Select>
+              <Button
+                type="button"
+                variant={favoriteOnly ? "default" : "outline"}
+                size="sm"
+                onClick={() => setFavoriteOnly((v) => !v)}
+                className={cn(
+                  "h-10 gap-2 shrink-0",
+                  favoriteOnly && "bg-amber-500 hover:bg-amber-600 text-white border-amber-500",
+                )}
+                aria-pressed={favoriteOnly}
+                title={favoriteOnly ? "Показать всех" : "Только избранные"}
+              >
+                <Star className={cn("size-4", favoriteOnly && "fill-current")} />
+                <span className="hidden lg:inline">Избранные</span>
+              </Button>
             </div>
 
             {selected.size > 0 && <div className="text-xs text-muted-foreground mb-2">Выбрано: {selected.size}</div>}

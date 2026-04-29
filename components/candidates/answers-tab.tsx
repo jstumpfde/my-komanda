@@ -124,6 +124,17 @@ function coerceMedia(v: unknown): MediaAnswer | MediaAnswer[] | null {
     if (items.length > 0) return items
   }
 
+  // Last-resort deep scan: рекурсивно идём по любым полям объекта в поисках
+  // распознаваемого URL. На случай нестандартных форматов из старых записей.
+  const collected: MediaAnswer[] = []
+  for (const val of Object.values(o)) {
+    const sub = coerceMedia(val)
+    if (!sub) continue
+    if (Array.isArray(sub)) collected.push(...sub)
+    else collected.push(sub)
+  }
+  if (collected.length > 0) return collected.length === 1 ? collected[0] : collected
+
   return null
 }
 
@@ -174,6 +185,8 @@ function MediaAnswerView({ media }: { media: MediaAnswer }) {
           preload="metadata"
           src={media.url}
           playsInline
+          onError={(e) => console.error("[answer-debug] video failed", media.url, e.currentTarget.error)}
+          onLoadedMetadata={() => console.log("[answer-debug] video loaded", media.url)}
           className="w-full rounded-md bg-black max-h-[400px] object-contain"
         />
         <a
@@ -182,13 +195,21 @@ function MediaAnswerView({ media }: { media: MediaAnswer }) {
           rel="noopener noreferrer"
           className="text-[10px] text-muted-foreground hover:text-primary underline-offset-2 hover:underline"
         >
-          Открыть в новой вкладке
+          Открыть в новой вкладке ({media.url})
         </a>
       </div>
     )
   }
   if (media.mediaType === "audio") {
-    return <audio controls preload="metadata" src={media.url} className="w-full" />
+    return (
+      <audio
+        controls
+        preload="metadata"
+        src={media.url}
+        onError={(e) => console.error("[answer-debug] audio failed", media.url, e.currentTarget.error)}
+        className="w-full"
+      />
+    )
   }
   return (
     // eslint-disable-next-line @next/next/no-img-element
@@ -379,6 +400,22 @@ export function AnswersTab({ answers, demoLessons }: AnswersTabProps) {
     return true
   })
 
+  // Debug: показать в браузере полную структуру ответов и распознанное медиа.
+  // Юрий смотрит DevTools, чтобы понимать как хранится answer и видит ли
+  // фронт видео-визитку. Не убирать без согласования.
+  if (typeof window !== "undefined") {
+    const summary = visible.map((e) => {
+      const ans = (e as { answer?: unknown }).answer
+      return {
+        blockId: (e as { blockId?: string }).blockId,
+        media: coerceMedia(ans),
+        rawType: ans === null ? "null" : Array.isArray(ans) ? "array" : typeof ans,
+        raw: ans,
+      }
+    })
+    console.log("[answer-debug] entries:", summary)
+  }
+
   if (visible.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
@@ -388,8 +425,10 @@ export function AnswersTab({ answers, demoLessons }: AnswersTabProps) {
     )
   }
 
+  // space-y-3 для отступов; min-w-0 чтобы длинный контент не растягивал
+  // ширину и не ломал вертикальный скролл родителя.
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 min-w-0">
       {visible.map((entry, i) => (
         <EntryCard key={i} entry={entry} blockMap={blockMap} />
       ))}

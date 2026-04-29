@@ -42,7 +42,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
@@ -403,6 +402,7 @@ export function CandidateDrawer({
   const [hhSending, setHhSending] = useState(false)
   const hhFetchRef = useRef<string | null>(null)
   const hhListRef = useRef<HTMLDivElement | null>(null)
+  const tabScrollRef = useRef<HTMLDivElement | null>(null)
 
   const fetchCandidate = useCallback(async (id: string) => {
     setLoadingCandidate(true)
@@ -525,6 +525,14 @@ export function CandidateDrawer({
     const el = hhListRef.current
     if (el) el.scrollTop = el.scrollHeight
   }, [activeTab, hhMessages])
+
+  // ── Reset tab scroll to top when switching tabs ──────────────────────────
+  // Без этого пользователь может открыть Ответы после прокрутки длинных
+  // Контактов и не увидеть верх — будет казаться, что таб не работает.
+  useEffect(() => {
+    const el = tabScrollRef.current
+    if (el) el.scrollTop = 0
+  }, [activeTab])
 
   // ── Mutations ────────────────────────────────────────────────────────────
 
@@ -732,7 +740,11 @@ export function CandidateDrawer({
               <TabsTrigger value="history" className="text-[10px] px-1 py-1.5">История</TabsTrigger>
             </TabsList>
 
-            <ScrollArea className="flex-1">
+            <div
+              ref={tabScrollRef}
+              className="flex-1 min-h-0 overflow-y-auto"
+              style={{ maxHeight: "calc(100vh - 180px)" }}
+            >
               {/* ── Контакты ─────────────────────────────────────── */}
               <TabsContent value="contacts" className="px-6 py-4 pb-28 space-y-5 mt-0">
                 {candidate.hhRawData ? (
@@ -1220,45 +1232,23 @@ export function CandidateDrawer({
                   </ol>
                 )}
               </TabsContent>
-            </ScrollArea>
+            </div>
           </Tabs>
         ) : null}
 
-        {/* ── Sticky footer: dropdown (secondary) + 1 primary action ───── */}
+        {/* ── Sticky footer: 2 equal buttons (Отказать + Пригласить) + ⋯ ─── */}
         {candidate && !isHired && !isRejected && (
           <div className="border-t bg-background px-6 py-3 shrink-0 flex items-center gap-2">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="shrink-0 px-2.5"
-                  aria-label="Дополнительные действия"
-                  disabled={scoringAi || !!changingStage}
-                >
-                  <MoreHorizontal className="w-4 h-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" side="top" className="w-56">
-                <DropdownMenuItem
-                  onSelect={(e) => { e.preventDefault(); handleAiScore() }}
-                  disabled={scoringAi}
-                  className="gap-2"
-                >
-                  {scoringAi ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4 text-purple-600 dark:text-purple-400" />}
-                  {candidate.aiScore != null ? "Переоценить AI" : "Оценить AI"}
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onSelect={(e) => { e.preventDefault(); handleStageChange("rejected") }}
-                  disabled={!!changingStage}
-                  className="gap-2 text-destructive focus:text-destructive"
-                >
-                  {changingStage === "rejected" ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4" />}
-                  Отказать
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <Button
+              size="sm"
+              variant="outline"
+              className="flex-1 gap-2 text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+              disabled={!!changingStage}
+              onClick={() => handleStageChange("rejected")}
+            >
+              {changingStage === "rejected" ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4" />}
+              Отказать
+            </Button>
 
             {candidate.stage !== "interview" && candidate.stage !== "final_decision" && candidate.stage !== "hired" ? (
               <Button
@@ -1281,6 +1271,30 @@ export function CandidateDrawer({
                 Нанять
               </Button>
             )}
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="shrink-0 px-2.5"
+                  aria-label="Дополнительные действия"
+                  disabled={scoringAi || !!changingStage}
+                >
+                  <MoreHorizontal className="w-4 h-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" side="top" className="w-56">
+                <DropdownMenuItem
+                  onSelect={(e) => { e.preventDefault(); handleAiScore() }}
+                  disabled={scoringAi}
+                  className="gap-2"
+                >
+                  {scoringAi ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4 text-purple-600 dark:text-purple-400" />}
+                  {candidate.aiScore != null ? "Переоценить AI" : "Оценить AI"}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         )}
       </SheetContent>

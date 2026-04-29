@@ -3,6 +3,7 @@
 import {
   Phone, Mail, MapPin, Briefcase, GraduationCap, Globe2, Plane,
   DollarSign, Calendar, ExternalLink, Languages, Wrench,
+  Car, Award, Link2, Clock,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 
@@ -37,6 +38,19 @@ interface HhLanguage {
   level?: { id?: string; name?: string }
 }
 
+interface HhRecommendation {
+  name?: string
+  organization?: string
+  position?: string
+  contact?: string
+}
+
+interface HhPortfolio {
+  small?: { path?: string }
+  medium?: { path?: string }
+  description?: string
+}
+
 interface HhResume {
   first_name?: string
   last_name?: string
@@ -46,7 +60,7 @@ interface HhResume {
   area?: { name?: string }
   citizenship?: { name?: string }[]
   travel_time?: { id?: string; name?: string }
-  relocation?: { type?: { id?: string; name?: string } }
+  relocation?: { type?: { id?: string; name?: string }; area?: { name?: string }[] }
   business_trip_readiness?: { id?: string; name?: string }
   total_experience?: { months?: number }
   experience?: HhExperience[]
@@ -60,6 +74,10 @@ interface HhResume {
   skill_set?: string[]
   skills?: string
   title?: string
+  driver_license_types?: { id?: string }[]
+  has_vehicle?: boolean
+  recommendation?: HhRecommendation[]
+  portfolio?: HhPortfolio[]
 }
 
 interface HhRawData {
@@ -216,6 +234,16 @@ export function HhResumeInfo({ rawData, fallback }: HhResumeInfoProps) {
   const skillSet = Array.isArray(resume?.skill_set) ? resume!.skill_set!.filter(Boolean) : []
   const skillsText = typeof resume?.skills === "string" ? resume!.skills!.trim() : ""
   const desiredPosition = typeof resume?.title === "string" ? resume!.title!.trim() : ""
+  const travelTime = resume?.travel_time?.name
+  const driverLicenses = Array.isArray(resume?.driver_license_types)
+    ? resume!.driver_license_types!.map((d) => d?.id).filter((s): s is string => typeof s === "string" && s.length > 0)
+    : []
+  const hasVehicle = resume?.has_vehicle === true
+  const recommendations = Array.isArray(resume?.recommendation) ? resume!.recommendation!.filter(Boolean) : []
+  const portfolio = Array.isArray(resume?.portfolio) ? resume!.portfolio!.filter(Boolean) : []
+  const relocationAreas = Array.isArray(resume?.relocation?.area)
+    ? resume!.relocation!.area!.map((a) => a?.name).filter((s): s is string => typeof s === "string" && s.length > 0)
+    : []
 
   const salary = formatSalaryRange(
     resume?.salary?.amount ?? fallback.salaryMin,
@@ -388,13 +416,85 @@ export function HhResumeInfo({ rawData, fallback }: HhResumeInfoProps) {
         </section>
       )}
 
-      {/* ── Прочее ──────────────────────────────────────────────────────────── */}
-      {(citizenship || relocation || businessTrip) && (
+      {/* ── Готовность к переезду / командировкам ────────────────────────── */}
+      {(citizenship || relocation || relocationAreas.length > 0 || businessTrip || travelTime) && (
         <section className="space-y-1.5">
-          <SectionHeader>Дополнительно</SectionHeader>
+          <SectionHeader>Готовность</SectionHeader>
           {citizenship && <Row icon={Globe2}>Гражданство: <span className="text-foreground">{citizenship}</span></Row>}
-          {relocation && <Row icon={MapPin}>Переезд: <span className="text-foreground">{relocation}</span></Row>}
+          {relocation && (
+            <Row icon={MapPin}>
+              Переезд: <span className="text-foreground">{relocation}</span>
+              {relocationAreas.length > 0 && (
+                <span className="text-muted-foreground"> · {relocationAreas.join(", ")}</span>
+              )}
+            </Row>
+          )}
           {businessTrip && <Row icon={Plane}>Командировки: <span className="text-foreground">{businessTrip}</span></Row>}
+          {travelTime && <Row icon={Clock}>Время в пути: <span className="text-foreground">{travelTime}</span></Row>}
+        </section>
+      )}
+
+      {/* ── Транспорт ───────────────────────────────────────────────────── */}
+      {(driverLicenses.length > 0 || hasVehicle) && (
+        <section className="space-y-1.5">
+          <SectionHeader>Транспорт</SectionHeader>
+          {driverLicenses.length > 0 && (
+            <Row icon={Car}>
+              Водительские права:{" "}
+              <span className="text-foreground">{driverLicenses.join(", ")}</span>
+            </Row>
+          )}
+          {hasVehicle && <Row icon={Car}>Есть личный автомобиль</Row>}
+        </section>
+      )}
+
+      {/* ── Рекомендации ────────────────────────────────────────────────── */}
+      {recommendations.length > 0 && (
+        <section className="space-y-1.5">
+          <SectionHeader>Рекомендации</SectionHeader>
+          <div className="space-y-1.5">
+            {recommendations.map((r, i) => {
+              const lines = [r.name, r.position, r.organization].filter(Boolean) as string[]
+              return (
+                <div key={i} className="flex items-start gap-2 text-sm">
+                  <Award className="w-3.5 h-3.5 shrink-0 mt-0.5 text-muted-foreground" />
+                  <div className="flex-1 min-w-0 break-words">
+                    {lines.length > 0 ? (
+                      <p className="text-foreground">{lines.join(" · ")}</p>
+                    ) : null}
+                    {r.contact && (
+                      <p className="text-xs text-muted-foreground break-all">{r.contact}</p>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </section>
+      )}
+
+      {/* ── Портфолио ───────────────────────────────────────────────────── */}
+      {portfolio.length > 0 && (
+        <section className="space-y-1.5">
+          <SectionHeader>Портфолио</SectionHeader>
+          <div className="flex flex-wrap gap-1.5">
+            {portfolio.map((p, i) => {
+              const path = p.medium?.path ?? p.small?.path
+              if (!path) return null
+              return (
+                <a
+                  key={i}
+                  href={path}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                >
+                  <Link2 className="w-3 h-3" />
+                  {p.description?.trim() || `Работа ${i + 1}`}
+                </a>
+              )
+            })}
+          </div>
         </section>
       )}
     </div>
