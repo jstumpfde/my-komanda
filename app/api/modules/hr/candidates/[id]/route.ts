@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server"
-import { eq, and } from "drizzle-orm"
+import { eq, and, desc } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { candidates, vacancies, hhResponses } from "@/lib/db/schema"
+import { candidates, vacancies, hhResponses, demos } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 
 // Helper: verify candidate belongs to user's company
@@ -11,6 +11,7 @@ async function getOwnedCandidate(candidateId: string, companyId: string) {
       candidate: candidates,
       vacancyTitle: vacancies.title,
       hhResponseId: hhResponses.hhResponseId,
+      hhRawData: hhResponses.rawData,
     })
     .from(candidates)
     .innerJoin(vacancies, eq(candidates.vacancyId, vacancies.id))
@@ -37,7 +38,22 @@ export async function GET(
       return apiError("Candidate not found", 404)
     }
 
-    return apiSuccess({ ...row.candidate, vacancyTitle: row.vacancyTitle, hhResponseId: row.hhResponseId ?? null })
+    // Latest demo lessons for the candidate's vacancy — used to render question
+    // text on the "Ответы" tab.
+    const [demoRow] = await db
+      .select({ lessonsJson: demos.lessonsJson })
+      .from(demos)
+      .where(eq(demos.vacancyId, row.candidate.vacancyId))
+      .orderBy(desc(demos.updatedAt))
+      .limit(1)
+
+    return apiSuccess({
+      ...row.candidate,
+      vacancyTitle: row.vacancyTitle,
+      hhResponseId: row.hhResponseId ?? null,
+      hhRawData: row.hhRawData ?? null,
+      demoLessons: demoRow?.lessonsJson ?? null,
+    })
   } catch (err) {
     if (err instanceof Response) return err
     return apiError("Internal server error", 500)

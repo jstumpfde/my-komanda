@@ -43,6 +43,7 @@ export const defaultColumnColors: Record<string, { from: string; to: string; lab
   interview:        { from: "#8b5cf6", to: "#7c3aed", label: "Собеседование" },
   final_decision:   { from: "#f97316", to: "#ea580c", label: "Оффер" },
   hired:            { from: "#22c55e", to: "#16a34a", label: "Нанят" },
+  rejected:         { from: "#ef4444", to: "#dc2626", label: "Отказ" },
 }
 
 // Колонки, где HR принимает решения (показываются кнопки действий)

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from "react"
+import { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import {
   Sheet,
   SheetContent,
@@ -29,17 +29,20 @@ import {
   MessageSquarePlus,
   Clock,
   Sparkles,
-  ChevronDown,
-  ChevronUp,
   MonitorOff,
   History as HistoryIcon,
   CheckCircle,
   SkipForward,
   X,
+  FileQuestion,
+  Play,
+  ListChecks,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import type { ApiCandidate } from "@/hooks/use-candidates"
+import { AnswersTab } from "./answers-tab"
+import { HhResumeInfo } from "./hh-resume-info"
 
 // ─── Note type ────────────────────────────────────────────────────────────────
 
@@ -71,9 +74,7 @@ interface DemoBlock {
   blockId: string
   status: string
   timeSpent?: number
-  answer?: unknown
-  answerType?: "text" | "audio" | "video"
-  question?: string
+  answeredAt?: string
 }
 
 interface DemoProgress {
@@ -87,7 +88,9 @@ interface DemoProgress {
 const STAGE_LABELS: Record<string, { label: string; color: string }> = {
   new: { label: "Новый", color: "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800" },
   demo: { label: "На демо", color: "bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800" },
+  decision: { label: "Решение", color: "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800" },
   scheduled: { label: "Интервью назначено", color: "bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-200 dark:border-purple-800" },
+  interview: { label: "Интервью", color: "bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-200 dark:border-purple-800" },
   interviewed: { label: "Прошёл интервью", color: "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800" },
   hired: { label: "Нанят", color: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800" },
   rejected: { label: "Отказ", color: "bg-destructive/10 text-destructive border-destructive/20" },
@@ -108,7 +111,6 @@ function AvatarInitials({ name, size = "md" }: { name: string; size?: "sm" | "md
     lg: "w-16 h-16 text-lg",
   }[size]
 
-  // Generate a consistent color from the name
   const colors = [
     "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300",
     "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300",
@@ -128,16 +130,18 @@ function AvatarInitials({ name, size = "md" }: { name: string; size?: "sm" | "md
 
 // ─── AI Score badge ──────────────────────────────────────────────────────────
 
+function aiScoreColor(score: number) {
+  if (score >= 70) return "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800"
+  if (score >= 40) return "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800"
+  return "bg-destructive/10 text-destructive border-destructive/20"
+}
+
 function AiScoreBadge({ score, onClick }: { score: number | null; onClick?: () => void }) {
   if (score === null) return null
-  const color =
-    score >= 75 ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800" :
-    score >= 50 ? "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800" :
-    "bg-destructive/10 text-destructive border-destructive/20"
   return (
     <Badge
       variant="outline"
-      className={cn("font-bold text-sm border cursor-pointer hover:opacity-80 transition-opacity", color)}
+      className={cn("font-bold text-sm border cursor-pointer hover:opacity-80 transition-opacity", aiScoreColor(score))}
       onClick={onClick}
     >
       <Sparkles className="w-3 h-3 mr-1" />
@@ -160,15 +164,128 @@ function ScoreBadge({ score }: { score: number | null }) {
   )
 }
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function isHhSource(src: string | null | undefined) {
+  return src === "hh" || src === "hh.ru"
+}
+
+function formatDateTime(iso: string) {
+  try {
+    return new Date(iso).toLocaleString("ru-RU", {
+      day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",
+    })
+  } catch {
+    return iso
+  }
+}
+
+function formatDate(iso: string) {
+  try {
+    return new Date(iso).toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" })
+  } catch {
+    return iso
+  }
+}
+
+interface TimelineEvent {
+  at: number              // millis для сортировки
+  iso: string             // отображаемая дата
+  icon: typeof HistoryIcon
+  iconClass: string
+  title: string
+  hint?: string
+}
+
+function buildTimeline(args: {
+  candidate: ApiCandidate
+  stageHistory: StageHistoryEntry[]
+  demoBlocks: DemoBlock[]
+  demoCompletedAt: string | null | undefined
+}): TimelineEvent[] {
+  const events: TimelineEvent[] = []
+  const { candidate, stageHistory, demoBlocks, demoCompletedAt } = args
+
+  if (candidate.createdAt) {
+    const t = Date.parse(candidate.createdAt)
+    if (!isNaN(t)) {
+      events.push({
+        at: t,
+        iso: candidate.createdAt,
+        icon: isHhSource(candidate.source) ? HistoryIcon : MessageSquarePlus,
+        iconClass: "text-blue-500",
+        title: isHhSource(candidate.source) ? "Импортирован отклик с hh.ru" : "Кандидат добавлен",
+      })
+    }
+  }
+
+  for (const entry of stageHistory) {
+    if (!entry?.at) continue
+    const t = Date.parse(entry.at)
+    if (isNaN(t)) continue
+    const fromLabel = entry.from ? (STAGE_LABELS[entry.from]?.label ?? entry.from) : null
+    const toLabel = entry.to ? (STAGE_LABELS[entry.to]?.label ?? entry.to) : null
+    const title = fromLabel ? `Перевод: ${fromLabel} → ${toLabel}` : `Стадия: ${toLabel}`
+    const isReject = entry.to === "rejected"
+    const isHire = entry.to === "hired"
+    events.push({
+      at: t,
+      iso: entry.at,
+      icon: isReject ? XCircle : isHire ? CheckCircle2 : HistoryIcon,
+      iconClass: isReject ? "text-destructive" : isHire ? "text-emerald-500" : "text-muted-foreground",
+      title,
+      hint: entry.movedBy ? `Перевёл: ${entry.movedBy}` : entry.comment || entry.reason,
+    })
+  }
+
+  // Берём первый и последний ответ как «открыл» / «прошёл блок»
+  const sorted = [...demoBlocks].filter(b => b?.answeredAt).sort((a, b) =>
+    Date.parse(a.answeredAt!) - Date.parse(b.answeredAt!)
+  )
+  if (sorted.length > 0) {
+    const first = sorted[0]
+    const t = Date.parse(first.answeredAt!)
+    if (!isNaN(t)) {
+      events.push({
+        at: t, iso: first.answeredAt!,
+        icon: Play, iconClass: "text-indigo-500",
+        title: "Открыл демонстрацию",
+      })
+    }
+    if (sorted.length > 1) {
+      const last = sorted[sorted.length - 1]
+      const t2 = Date.parse(last.answeredAt!)
+      if (!isNaN(t2) && last.answeredAt !== first.answeredAt) {
+        events.push({
+          at: t2, iso: last.answeredAt!,
+          icon: ListChecks, iconClass: "text-indigo-500",
+          title: `Ответил на ${sorted.length} блока(ов)`,
+        })
+      }
+    }
+  }
+
+  if (demoCompletedAt) {
+    const t = Date.parse(demoCompletedAt)
+    if (!isNaN(t)) {
+      events.push({
+        at: t, iso: demoCompletedAt,
+        icon: CheckCircle, iconClass: "text-emerald-500",
+        title: "Завершил демонстрацию",
+      })
+    }
+  }
+
+  return events.sort((a, b) => a.at - b.at)
+}
+
 // ─── Props ────────────────────────────────────────────────────────────────────
 
 export interface CandidateDrawerProps {
   candidateId: string | null
   open: boolean
   onOpenChange: (open: boolean) => void
-  /** Called after a successful stage change so the parent can update kanban */
   onStageChange?: (candidateId: string, newStage: string) => void
-  /** Toggle favorite from outside (kanban hook). Drawer optimistically updates local state too. */
   onToggleFavorite?: (candidateId: string, isFavorite: boolean) => void | Promise<void>
 }
 
@@ -189,14 +306,11 @@ export function CandidateDrawer({
   const [noteText, setNoteText] = useState("")
   const [savingNote, setSavingNote] = useState(false)
   const [scoringAi, setScoringAi] = useState(false)
-  const [showAiDetails, setShowAiDetails] = useState(false)
   const [activeTab, setActiveTab] = useState("contacts")
   const [hhMessages, setHhMessages] = useState<HhMessage[]>([])
   const [hhLoading, setHhLoading] = useState(false)
   const [hhError, setHhError] = useState<string | null>(null)
   const hhFetchRef = useRef<string | null>(null)
-
-  // ── Fetch candidate details ───────────────────────────────────────────────
 
   const fetchCandidate = useCallback(async (id: string) => {
     setLoadingCandidate(true)
@@ -270,12 +384,11 @@ export function CandidateDrawer({
     return () => { cancelled = true }
   }, [activeTab, candidate?.hhResponseId])
 
-  // ── Stage change ─────────────────────────────────────────────────────────
+  // ── Mutations ────────────────────────────────────────────────────────────
 
   const handleFavoriteToggle = async () => {
     if (!candidate) return
     const next = !candidate.isFavorite
-    // Локально обновляем сразу
     setCandidate(prev => prev ? { ...prev, isFavorite: next } : prev)
     if (onToggleFavorite) {
       try {
@@ -285,7 +398,6 @@ export function CandidateDrawer({
         toast.error("Не удалось обновить избранное")
       }
     } else {
-      // Fallback — пишем в API напрямую
       try {
         const res = await fetch(`/api/modules/hr/candidates/${candidate.id}/favorite`, {
           method: "PATCH",
@@ -325,8 +437,6 @@ export function CandidateDrawer({
     }
   }
 
-  // ── Add note ─────────────────────────────────────────────────────────────
-
   const handleAddNote = async () => {
     if (!candidate || !noteText.trim() || savingNote) return
     setSavingNote(true)
@@ -348,8 +458,6 @@ export function CandidateDrawer({
     }
   }
 
-  // ── AI Scoring ───────────────────────────────────────────────────────────
-
   const handleAiScore = async () => {
     if (!candidate || scoringAi) return
     setScoringAi(true)
@@ -365,7 +473,6 @@ export function CandidateDrawer({
       }
       const data = await res.json() as { score: number; summary: string; details: { question: string; score: number; comment: string }[] }
       setCandidate(prev => prev ? { ...prev, aiScore: data.score, aiSummary: data.summary, aiDetails: data.details } : prev)
-      setShowAiDetails(true)
       toast.success(`AI-скоринг: ${data.score}/100`)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Ошибка AI-скоринга")
@@ -383,20 +490,34 @@ export function CandidateDrawer({
     return `до ${max!.toLocaleString("ru-RU")} ₽`
   }
 
-  const formatNoteDate = (iso: string) => {
-    try {
-      const d = new Date(iso)
-      return d.toLocaleDateString("ru-RU", { day: "numeric", month: "short", year: "numeric" }) +
-        " " + d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })
-    } catch {
-      return iso
-    }
-  }
-
   const stageCfg = candidate?.stage ? STAGE_LABELS[candidate.stage] : null
   const salary = formatSalary(candidate?.salaryMin ?? null, candidate?.salaryMax ?? null)
   const isHired = candidate?.stage === "hired"
   const isRejected = candidate?.stage === "rejected"
+
+  // ── Derived: timeline / demo / answers (computed only when candidate loaded)
+  const derived = useMemo(() => {
+    if (!candidate) return null
+    const demo = candidate.demoProgressJson as DemoProgress | null
+    const demoBlocks = (demo?.blocks ?? []).filter(b => b && typeof b.blockId === "string")
+    const demoTotal = demo?.totalBlocks ?? demoBlocks.length
+    const demoCompleted = demoBlocks.filter((b) => b.status === "completed").length
+    const demoPct = demoTotal > 0 ? Math.round((demoCompleted / demoTotal) * 100) : 0
+    const stageHistory = (Array.isArray(candidate.stageHistory) ? candidate.stageHistory : []) as StageHistoryEntry[]
+    const timeline = buildTimeline({
+      candidate, stageHistory, demoBlocks, demoCompletedAt: demo?.completedAt,
+    })
+    const hasAnswers = (() => {
+      const raw = candidate.anketaAnswers
+      if (!raw) return false
+      if (Array.isArray(raw)) {
+        return raw.some(a => a && typeof a === "object" && (a as { blockId?: string }).blockId !== "__complete__")
+      }
+      if (typeof raw === "object") return Object.keys(raw).length > 0
+      return false
+    })()
+    return { demo, demoBlocks, demoTotal, demoCompleted, demoPct, stageHistory, timeline, hasAnswers }
+  }, [candidate])
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -438,7 +559,7 @@ export function CandidateDrawer({
                     </Badge>
                   )}
                   <ScoreBadge score={candidate.score} />
-                  <AiScoreBadge score={candidate.aiScore ?? null} onClick={() => setShowAiDetails(v => !v)} />
+                  <AiScoreBadge score={candidate.aiScore ?? null} onClick={() => setActiveTab("ai")} />
                 </div>
               </div>
             </div>
@@ -454,486 +575,475 @@ export function CandidateDrawer({
               ))}
             </div>
           </ScrollArea>
-        ) : candidate ? (() => {
-          const demo = candidate.demoProgressJson as DemoProgress | null
-          const demoBlocks = demo?.blocks ?? []
-          const demoTotal = demo?.totalBlocks ?? demoBlocks.length
-          const demoCompleted = demoBlocks.filter((b) => b.status === "completed").length
-          const demoPct = demoTotal > 0 ? Math.round((demoCompleted / demoTotal) * 100) : 0
-          const stageHistory = ((candidate as ApiCandidate & { stageHistory?: StageHistoryEntry[] | null }).stageHistory) ?? []
-          const answers = candidate.anketaAnswers ?? []
+        ) : candidate && derived ? (
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
+            <TabsList className="grid grid-cols-7 mx-3 mt-3 shrink-0 h-auto">
+              <TabsTrigger value="contacts" className="text-[10px] px-1 py-1.5">Контакты</TabsTrigger>
+              <TabsTrigger value="demo" className="text-[10px] px-1 py-1.5">Демо</TabsTrigger>
+              <TabsTrigger value="answers" className="text-[10px] px-1 py-1.5">Ответы</TabsTrigger>
+              <TabsTrigger value="chat" className="text-[10px] px-1 py-1.5">Чат hh</TabsTrigger>
+              <TabsTrigger value="ai" className="text-[10px] px-1 py-1.5">AI</TabsTrigger>
+              <TabsTrigger value="channels" className="text-[10px] px-1 py-1.5">Каналы</TabsTrigger>
+              <TabsTrigger value="history" className="text-[10px] px-1 py-1.5">История</TabsTrigger>
+            </TabsList>
 
-          return (
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
-              <TabsList className="grid grid-cols-5 mx-6 mt-3 shrink-0">
-                <TabsTrigger value="contacts" className="text-xs">Контакты</TabsTrigger>
-                <TabsTrigger value="demo" className="text-xs">Демо</TabsTrigger>
-                <TabsTrigger value="answers" className="text-xs">Ответы</TabsTrigger>
-                <TabsTrigger value="chat" className="text-xs">Чат</TabsTrigger>
-                <TabsTrigger value="history" className="text-xs">История</TabsTrigger>
-              </TabsList>
+            <ScrollArea className="flex-1">
+              {/* ── Контакты ─────────────────────────────────────── */}
+              <TabsContent value="contacts" className="px-6 py-4 space-y-5 mt-0">
+                {candidate.hhRawData ? (
+                  <HhResumeInfo
+                    rawData={candidate.hhRawData}
+                    fallback={{
+                      phone: candidate.phone,
+                      email: candidate.email,
+                      city: candidate.city,
+                      experience: candidate.experience,
+                      salaryMin: candidate.salaryMin,
+                      salaryMax: candidate.salaryMax,
+                    }}
+                  />
+                ) : (
+                  <>
+                    <section className="space-y-2">
+                      <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Контакты</h3>
+                      <div className="space-y-1.5">
+                        {candidate.phone ? (
+                          <a href={`tel:${candidate.phone}`} className="flex items-center gap-2 text-sm hover:text-primary transition-colors">
+                            <Phone className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                            {candidate.phone}
+                          </a>
+                        ) : (
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground/50">
+                            <Phone className="w-3.5 h-3.5 shrink-0" />
+                            Телефон не указан
+                          </div>
+                        )}
+                        {candidate.email ? (
+                          <a href={`mailto:${candidate.email}`} className="flex items-center gap-2 text-sm hover:text-primary transition-colors">
+                            <Mail className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                            {candidate.email}
+                          </a>
+                        ) : (
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground/50">
+                            <Mail className="w-3.5 h-3.5 shrink-0" />
+                            Email не указан
+                          </div>
+                        )}
+                        {candidate.city && (
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <MapPin className="w-3.5 h-3.5 shrink-0" />
+                            {candidate.city}
+                          </div>
+                        )}
+                        {candidate.experience && (
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <Briefcase className="w-3.5 h-3.5 shrink-0" />
+                            {candidate.experience}
+                          </div>
+                        )}
+                        {salary && (
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <DollarSign className="w-3.5 h-3.5 shrink-0" />
+                            {salary}
+                          </div>
+                        )}
+                      </div>
+                      {candidate.skills && candidate.skills.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 mt-2">
+                          {candidate.skills.map((skill) => (
+                            <Badge key={skill} variant="secondary" className="text-xs font-normal">{skill}</Badge>
+                          ))}
+                        </div>
+                      )}
+                    </section>
+                  </>
+                )}
 
-              <ScrollArea className="flex-1">
-                {/* ── Контакты ─────────────────────────────────────── */}
-                <TabsContent value="contacts" className="px-6 py-4 space-y-5 mt-0">
-                  <section className="space-y-2">
-                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Резюме</h3>
-                    <div className="space-y-1.5">
+                {(candidate.source || candidate.referredByShortId) && (
+                  <>
+                    <Separator />
+                    <section className="space-y-1.5">
+                      <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Источник</h3>
                       {candidate.source && (
                         <div className="flex items-center gap-2 text-sm text-muted-foreground">
                           <Calendar className="w-3.5 h-3.5 shrink-0" />
-                          Источник: <span className="text-foreground font-medium">{candidate.source}</span>
+                          <span className="text-foreground font-medium">{candidate.source}</span>
                         </div>
                       )}
                       {candidate.referredByShortId && (
                         <div className="flex items-center gap-2 text-sm text-muted-foreground">
                           <Calendar className="w-3.5 h-3.5 shrink-0" />
-                          Пришёл по рекомендации от{" "}
+                          По рекомендации от{" "}
                           <span className="text-foreground font-medium">{candidate.referredByShortId}</span>
                         </div>
                       )}
-                      {candidate.experience && (
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <Briefcase className="w-3.5 h-3.5 shrink-0" />
-                          {candidate.experience}
-                        </div>
-                      )}
-                      {salary && (
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <DollarSign className="w-3.5 h-3.5 shrink-0" />
-                          {salary}
-                        </div>
-                      )}
-                      {candidate.createdAt && (
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <Clock className="w-3.5 h-3.5 shrink-0" />
-                          Добавлен: {new Date(candidate.createdAt).toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" })}
-                        </div>
-                      )}
+                    </section>
+                  </>
+                )}
+
+                {isHired && (
+                  <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-200 dark:border-emerald-800 text-sm text-emerald-700 dark:text-emerald-400 font-medium text-center">
+                    🎉 Кандидат нанят
+                  </div>
+                )}
+                {isRejected && (
+                  <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-sm text-destructive font-medium text-center">
+                    Кандидат получил отказ
+                  </div>
+                )}
+
+                <Separator />
+
+                <section className="space-y-3">
+                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+                    <MessageSquarePlus className="w-3.5 h-3.5" />
+                    Заметки
+                  </h3>
+
+                  {loadingNotes ? (
+                    <div className="space-y-2 animate-pulse">
+                      <div className="h-12 bg-muted rounded" />
+                      <div className="h-12 bg-muted rounded" />
                     </div>
-
-                    {candidate.skills && candidate.skills.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5 mt-2">
-                        {candidate.skills.map((skill) => (
-                          <Badge key={skill} variant="secondary" className="text-xs font-normal">
-                            {skill}
-                          </Badge>
-                        ))}
-                      </div>
-                    )}
-                  </section>
-
-                  <Separator />
-
-                  <section className="space-y-2">
-                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Контакты</h3>
-                    <div className="space-y-1.5">
-                      {candidate.phone ? (
-                        <a href={`tel:${candidate.phone}`} className="flex items-center gap-2 text-sm hover:text-primary transition-colors">
-                          <Phone className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                          {candidate.phone}
-                        </a>
-                      ) : (
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground/50">
-                          <Phone className="w-3.5 h-3.5 shrink-0" />
-                          Телефон не указан
-                        </div>
-                      )}
-                      {candidate.email ? (
-                        <a href={`mailto:${candidate.email}`} className="flex items-center gap-2 text-sm hover:text-primary transition-colors">
-                          <Mail className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                          {candidate.email}
-                        </a>
-                      ) : (
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground/50">
-                          <Mail className="w-3.5 h-3.5 shrink-0" />
-                          Email не указан
-                        </div>
-                      )}
-                      {candidate.city && (
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <MapPin className="w-3.5 h-3.5 shrink-0" />
-                          {candidate.city}
-                        </div>
-                      )}
-                    </div>
-                  </section>
-
-                  {candidate.aiScore !== null && candidate.aiScore !== undefined && (
-                    <>
-                      <Separator />
-                      <section className="space-y-2">
-                        <button
-                          className="flex items-center justify-between w-full text-xs font-semibold text-muted-foreground uppercase tracking-wide hover:text-foreground transition-colors"
-                          onClick={() => setShowAiDetails(v => !v)}
-                        >
-                          <span className="flex items-center gap-1.5">
-                            <Sparkles className="w-3.5 h-3.5" />
-                            AI-оценка
-                          </span>
-                          {showAiDetails ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                        </button>
-
-                        {showAiDetails && (
-                          <div className="space-y-2">
-                            {candidate.aiSummary && (
-                              <p className="text-sm text-muted-foreground italic">{candidate.aiSummary}</p>
-                            )}
-                            {(candidate.aiDetails as { question: string; score: number; comment: string }[] | null)?.map((detail, i) => {
-                              const detailColor =
-                                detail.score >= 75 ? "text-emerald-600 dark:text-emerald-400" :
-                                detail.score >= 50 ? "text-amber-600 dark:text-amber-400" :
-                                "text-destructive"
-                              return (
-                                <div key={i} className="p-2 rounded-lg bg-muted/40 border border-border/60 space-y-1">
-                                  <div className="flex items-center justify-between">
-                                    <span className="text-xs font-medium text-foreground">{detail.question}</span>
-                                    <span className={cn("text-xs font-bold", detailColor)}>{detail.score}</span>
-                                  </div>
-                                  <p className="text-xs text-muted-foreground">{detail.comment}</p>
-                                </div>
-                              )
-                            })}
-                          </div>
-                        )}
-                      </section>
-                    </>
-                  )}
-
-                  {isHired && (
-                    <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-200 dark:border-emerald-800 text-sm text-emerald-700 dark:text-emerald-400 font-medium text-center">
-                      🎉 Кандидат нанят
-                    </div>
-                  )}
-
-                  {isRejected && (
-                    <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-sm text-destructive font-medium text-center">
-                      Кандидат получил отказ
-                    </div>
-                  )}
-
-                  <Separator />
-
-                  <section className="space-y-3">
-                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
-                      <MessageSquarePlus className="w-3.5 h-3.5" />
-                      Заметки
-                    </h3>
-
-                    {loadingNotes ? (
-                      <div className="space-y-2 animate-pulse">
-                        <div className="h-12 bg-muted rounded" />
-                        <div className="h-12 bg-muted rounded" />
-                      </div>
-                    ) : notes.length === 0 ? (
-                      <p className="text-xs text-muted-foreground py-2">Заметок пока нет</p>
-                    ) : (
-                      <div className="space-y-2">
-                        {notes.map((note, i) => (
-                          <div key={i} className="p-3 rounded-lg bg-muted/40 border border-border/60 space-y-1">
-                            <p className="text-sm text-foreground whitespace-pre-wrap">{note.text}</p>
-                            <p className="text-[10px] text-muted-foreground">{formatNoteDate(note.createdAt)}</p>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    <div className="space-y-2">
-                      <Textarea
-                        placeholder="Добавить заметку..."
-                        value={noteText}
-                        onChange={(e) => setNoteText(e.target.value)}
-                        className="text-sm resize-none min-h-[80px]"
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
-                            e.preventDefault()
-                            handleAddNote()
-                          }
-                        }}
-                      />
-                      <Button
-                        size="sm"
-                        className="w-full gap-2"
-                        disabled={!noteText.trim() || savingNote}
-                        onClick={handleAddNote}
-                      >
-                        {savingNote ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-                        Добавить заметку
-                        <span className="text-[10px] text-primary-foreground/60 ml-1">Ctrl+Enter</span>
-                      </Button>
-                    </div>
-                  </section>
-                </TabsContent>
-
-                {/* ── Демо ─────────────────────────────────────────── */}
-                <TabsContent value="demo" className="px-6 py-4 mt-0">
-                  {!demo || demoBlocks.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-                      <MonitorOff className="w-10 h-10 mb-3 opacity-50" />
-                      <p className="text-sm text-center">Кандидат не открывал демонстрацию должности</p>
-                    </div>
+                  ) : notes.length === 0 ? (
+                    <p className="text-xs text-muted-foreground py-2">Заметок пока нет</p>
                   ) : (
-                    <div className="space-y-4">
-                      <div className="p-3 rounded-lg bg-muted/40 border border-border/60 space-y-2">
-                        <p className="text-sm">
-                          Прошёл <span className="font-semibold text-foreground">{demoCompleted}</span> из <span className="font-semibold text-foreground">{demoTotal}</span> блоков · <span className="font-semibold text-foreground">{demoPct}%</span>
-                        </p>
-                        <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
-                          <div
-                            className={cn(
-                              "h-full rounded-full transition-all",
-                              demoPct === 0 ? "bg-muted-foreground/30"
-                              : demoPct < 50 ? "bg-orange-500"
-                              : demoPct < 100 ? "bg-emerald-500"
-                              : "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]"
-                            )}
-                            style={{ width: `${demoPct}%` }}
-                          />
-                        </div>
-                      </div>
-
-                      {demo.completedAt && (
-                        <div className="p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-700 dark:text-emerald-400 font-medium text-center">
-                          ✓ Завершено {new Date(demo.completedAt).toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" })}
-                        </div>
-                      )}
-
-                      <div className="space-y-1.5">
-                        {demoBlocks.map((b, i) => {
-                          const Icon = b.status === "completed" ? CheckCircle
-                            : b.status === "skipped" ? SkipForward
-                            : Clock
-                          const iconColor = b.status === "completed" ? "text-emerald-500"
-                            : b.status === "skipped" ? "text-muted-foreground"
-                            : "text-amber-500"
-                          return (
-                            <div key={i} className="flex items-center gap-2.5 p-2 rounded-lg border border-border/60">
-                              <Icon className={cn("w-4 h-4 shrink-0", iconColor)} />
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm text-foreground truncate">{b.blockId}</p>
-                                {b.timeSpent != null && (
-                                  <p className="text-[11px] text-muted-foreground">потратил {b.timeSpent} сек</p>
-                                )}
-                              </div>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  )}
-                </TabsContent>
-
-                {/* ── Ответы ───────────────────────────────────────── */}
-                <TabsContent value="answers" className="px-6 py-4 mt-0">
-                  {/* TODO: render audio/video answers from demoProgressJson.blocks once schema includes media URLs */}
-                  {answers.length > 0 ? (
-                    <div className="space-y-3">
-                      {answers.map((a, i) => (
-                        <div key={i} className="p-3 rounded-lg border border-border/60 bg-muted/40 space-y-1">
-                          <p className="text-xs font-medium text-muted-foreground">{a.question}</p>
-                          <p className="text-sm text-foreground whitespace-pre-wrap">{a.answer}</p>
+                    <div className="space-y-2">
+                      {notes.map((note, i) => (
+                        <div key={i} className="p-3 rounded-lg bg-muted/40 border border-border/60 space-y-1">
+                          <p className="text-sm text-foreground whitespace-pre-wrap">{note.text}</p>
+                          <p className="text-[10px] text-muted-foreground">{formatDateTime(note.createdAt)}</p>
                         </div>
                       ))}
                     </div>
-                  ) : demoBlocks.length > 0 ? (
-                    <p className="text-sm text-muted-foreground text-center py-12">
-                      Ответы появятся после прохождения демонстрации
-                    </p>
-                  ) : (
-                    <p className="text-sm text-muted-foreground text-center py-12">
-                      Кандидат не отвечал на вопросы
-                    </p>
                   )}
-                </TabsContent>
 
-                {/* ── Чат ────────────────────────────────────────── */}
-                <TabsContent value="chat" className="px-6 py-4 mt-0">
-                  <div className="space-y-3">
-                    {/* hh-сообщения */}
-                    <div className="rounded-lg border border-border/60 p-3 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 rounded-full bg-red-500/10 flex items-center justify-center text-red-500 text-xs font-semibold">hh</div>
-                          <div>
-                            <p className="text-sm font-medium text-foreground">HeadHunter</p>
-                            <p className="text-[11px] text-muted-foreground">Сообщения отклика</p>
-                          </div>
-                        </div>
-                        {candidate.hhResponseId ? (
-                          hhLoading ? (
-                            <span className="text-[10px] text-muted-foreground/70 px-2 py-0.5 rounded-full bg-muted/40 flex items-center gap-1">
-                              <Loader2 className="w-3 h-3 animate-spin" /> загрузка
-                            </span>
-                          ) : (
-                            <span className="text-[10px] text-muted-foreground/70 px-2 py-0.5 rounded-full bg-muted/40 tabular-nums">
-                              {hhMessages.length} сообщ.
-                            </span>
-                          )
-                        ) : (
-                          <span className="text-[10px] text-muted-foreground/60 px-2 py-0.5 rounded-full bg-muted/40">нет связи</span>
-                        )}
-                      </div>
-
-                      {!candidate.hhResponseId ? (
-                        <p className="text-xs text-muted-foreground italic">У этого кандидата нет связанного отклика hh</p>
-                      ) : hhLoading ? (
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground italic py-2">
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          Загружаю переписку из hh...
-                        </div>
-                      ) : hhError ? (
-                        <p className="text-xs text-muted-foreground">{hhError}</p>
-                      ) : hhMessages.length === 0 ? (
-                        <p className="text-xs text-muted-foreground italic">Пока нет сообщений. Отправь приглашение или отказ — кандидат увидит в hh</p>
-                      ) : (
-                        <div className="space-y-2 pt-1">
-                          {hhMessages.map((m) => {
-                            const mine = m.authorType === "employer"
-                            return (
-                              <div key={m.id} className={cn("flex", mine ? "justify-end" : "justify-start")}>
-                                <div
-                                  className={cn(
-                                    "max-w-[80%] rounded-lg px-3 py-2 text-xs space-y-1",
-                                    mine
-                                      ? "bg-indigo-500/10 text-foreground border border-indigo-500/20"
-                                      : "bg-muted/60 text-foreground border border-border/40"
-                                  )}
-                                >
-                                  <p className="whitespace-pre-wrap break-words">{m.text || <span className="italic text-muted-foreground">пустое сообщение</span>}</p>
-                                  <div className="flex items-center justify-between gap-2 text-[10px] text-muted-foreground/80">
-                                    <span>
-                                      {m.createdAt
-                                        ? new Date(m.createdAt).toLocaleString("ru-RU", {
-                                            day: "2-digit",
-                                            month: "2-digit",
-                                            hour: "2-digit",
-                                            minute: "2-digit",
-                                          })
-                                        : ""}
-                                    </span>
-                                    {mine && (
-                                      <span title={m.viewedByOpponent ? "прочитано" : "не прочитано"}>
-                                        {m.viewedByOpponent ? "✓✓" : "✓"}
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-                            )
-                          })}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Telegram */}
-                    <div className="rounded-lg border border-border/60 p-3 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 rounded-full bg-sky-500/10 flex items-center justify-center text-sky-500">
-                            <Send className="w-4 h-4" />
-                          </div>
-                          <div>
-                            <p className="text-sm font-medium text-foreground">Telegram</p>
-                            <p className="text-[11px] text-muted-foreground">Личное общение</p>
-                          </div>
-                        </div>
-                        <span className="text-[10px] text-muted-foreground/60 px-2 py-0.5 rounded-full bg-muted/40">скоро</span>
-                      </div>
-                      <p className="text-xs text-muted-foreground italic">Когда кандидат напишет нам в Telegram — переписка появится здесь</p>
-                    </div>
-
-                    {/* WhatsApp */}
-                    <div className="rounded-lg border border-border/60 p-3 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-500">
-                            <MessageSquare className="w-4 h-4" />
-                          </div>
-                          <div>
-                            <p className="text-sm font-medium text-foreground">WhatsApp</p>
-                            <p className="text-[11px] text-muted-foreground">Бизнес-чат</p>
-                          </div>
-                        </div>
-                        <span className="text-[10px] text-muted-foreground/60 px-2 py-0.5 rounded-full bg-muted/40">скоро</span>
-                      </div>
-                      <p className="text-xs text-muted-foreground italic">WhatsApp Business API — для коротких уточнений и приглашений</p>
-                    </div>
-
-                    {/* Email */}
-                    <div className="rounded-lg border border-border/60 p-3 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 rounded-full bg-blue-500/10 flex items-center justify-center text-blue-500">
-                            <Mail className="w-4 h-4" />
-                          </div>
-                          <div>
-                            <p className="text-sm font-medium text-foreground">Email</p>
-                            <p className="text-[11px] text-muted-foreground">Корпоративная почта</p>
-                          </div>
-                        </div>
-                        <span className="text-[10px] text-muted-foreground/60 px-2 py-0.5 rounded-full bg-muted/40">скоро</span>
-                      </div>
-                      <p className="text-xs text-muted-foreground italic">Отправка офферов, документов и приглашений</p>
-                    </div>
-
-                    <p className="text-[11px] text-center text-muted-foreground/60 pt-2">
-                      Все каналы общения с кандидатом в одном месте
-                    </p>
-                  </div>
-                </TabsContent>
-
-                {/* ── История ──────────────────────────────────────── */}
-                <TabsContent value="history" className="px-6 py-4 mt-0">
                   <div className="space-y-2">
-                    {candidate.source === "hh" || candidate.source === "hh.ru" ? (
-                      <div className="flex items-start gap-2.5 p-2.5 rounded-lg border border-border/60">
-                        <HistoryIcon className="w-4 h-4 shrink-0 mt-0.5 text-blue-500" />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm text-foreground">Импортирован с hh</p>
-                          {candidate.createdAt && (
-                            <p className="text-[11px] text-muted-foreground">
-                              {new Date(candidate.createdAt).toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" })}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    ) : null}
+                    <Textarea
+                      placeholder="Добавить заметку..."
+                      value={noteText}
+                      onChange={(e) => setNoteText(e.target.value)}
+                      className="text-sm resize-none min-h-[80px]"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+                          e.preventDefault()
+                          handleAddNote()
+                        }
+                      }}
+                    />
+                    <Button
+                      size="sm"
+                      className="w-full gap-2"
+                      disabled={!noteText.trim() || savingNote}
+                      onClick={handleAddNote}
+                    >
+                      {savingNote ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                      Добавить заметку
+                      <span className="text-[10px] text-primary-foreground/60 ml-1">Ctrl+Enter</span>
+                    </Button>
+                  </div>
+                </section>
+              </TabsContent>
 
-                    {stageHistory.length === 0 ? (
-                      <p className="text-sm text-muted-foreground text-center py-8">Перемещений по этапам ещё не было</p>
-                    ) : (
-                      stageHistory.map((entry, i) => {
-                        const fromLabel = entry.from ? (STAGE_LABELS[entry.from]?.label ?? entry.from) : null
-                        const toLabel = entry.to ? (STAGE_LABELS[entry.to]?.label ?? entry.to) : null
+              {/* ── Демо ─────────────────────────────────────────── */}
+              <TabsContent value="demo" className="px-6 py-4 mt-0">
+                {!derived.demo || derived.demoBlocks.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                    <MonitorOff className="w-10 h-10 mb-3 opacity-50" />
+                    <p className="text-sm text-center">Кандидат не открывал демонстрацию должности</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="p-3 rounded-lg bg-muted/40 border border-border/60 space-y-2">
+                      <p className="text-sm">
+                        Прошёл <span className="font-semibold text-foreground">{derived.demoCompleted}</span> из <span className="font-semibold text-foreground">{derived.demoTotal}</span> блоков · <span className="font-semibold text-foreground">{derived.demoPct}%</span>
+                      </p>
+                      <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                        <div
+                          className={cn(
+                            "h-full rounded-full transition-all",
+                            derived.demoPct === 0 ? "bg-muted-foreground/30"
+                            : derived.demoPct < 50 ? "bg-orange-500"
+                            : derived.demoPct < 100 ? "bg-emerald-500"
+                            : "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]"
+                          )}
+                          style={{ width: `${derived.demoPct}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    {derived.demo.completedAt && (
+                      <div className="p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-700 dark:text-emerald-400 font-medium text-center">
+                        ✓ Завершено {formatDate(derived.demo.completedAt)}
+                      </div>
+                    )}
+
+                    <div className="space-y-1.5">
+                      {derived.demoBlocks.map((b, i) => {
+                        const Icon = b.status === "completed" ? CheckCircle
+                          : b.status === "skipped" ? SkipForward
+                          : Clock
+                        const iconColor = b.status === "completed" ? "text-emerald-500"
+                          : b.status === "skipped" ? "text-muted-foreground"
+                          : "text-amber-500"
                         return (
-                          <div key={i} className="flex items-start gap-2.5 p-2.5 rounded-lg border border-border/60">
-                            <HistoryIcon className="w-4 h-4 shrink-0 mt-0.5 text-muted-foreground" />
-                            <div className="flex-1 min-w-0 space-y-0.5">
-                              <p className="text-sm text-foreground">
-                                {fromLabel ? <>{fromLabel} <span className="text-muted-foreground">→</span> {toLabel}</> : toLabel}
-                              </p>
-                              {entry.at && (
-                                <p className="text-[11px] text-muted-foreground">
-                                  {new Date(entry.at).toLocaleString("ru-RU")}
-                                </p>
-                              )}
-                              {entry.movedBy && (
-                                <p className="text-[11px] text-muted-foreground">Перевёл: {entry.movedBy}</p>
-                              )}
-                              {(entry.comment || entry.reason) && (
-                                <p className="text-xs text-muted-foreground italic">{entry.comment || entry.reason}</p>
+                          <div key={i} className="flex items-center gap-2.5 p-2 rounded-lg border border-border/60">
+                            <Icon className={cn("w-4 h-4 shrink-0", iconColor)} />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm text-foreground truncate">{b.blockId}</p>
+                              {b.timeSpent != null && (
+                                <p className="text-[11px] text-muted-foreground">потратил {b.timeSpent} сек</p>
                               )}
                             </div>
                           </div>
                         )
-                      })
+                      })}
+                    </div>
+                  </div>
+                )}
+              </TabsContent>
+
+              {/* ── Ответы ───────────────────────────────────────── */}
+              <TabsContent value="answers" className="px-6 py-4 mt-0">
+                <AnswersTab answers={candidate.anketaAnswers} demoLessons={candidate.demoLessons} />
+              </TabsContent>
+
+              {/* ── Чат (только hh) ──────────────────────────────── */}
+              <TabsContent value="chat" className="px-6 py-4 mt-0">
+                <div className="rounded-lg border border-border/60 p-3 space-y-2 max-h-[70vh] overflow-y-auto">
+                  <div className="flex items-center justify-between sticky top-0 bg-background z-10 pb-2 border-b border-border/40">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-full bg-red-500/10 flex items-center justify-center text-red-500 text-xs font-semibold">hh</div>
+                      <div>
+                        <p className="text-sm font-medium text-foreground">HeadHunter</p>
+                        <p className="text-[11px] text-muted-foreground">Сообщения отклика</p>
+                      </div>
+                    </div>
+                    {candidate.hhResponseId ? (
+                      hhLoading ? (
+                        <span className="text-[10px] text-muted-foreground/70 px-2 py-0.5 rounded-full bg-muted/40 flex items-center gap-1">
+                          <Loader2 className="w-3 h-3 animate-spin" /> загрузка
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-muted-foreground/70 px-2 py-0.5 rounded-full bg-muted/40 tabular-nums">
+                          {hhMessages.length} сообщ.
+                        </span>
+                      )
+                    ) : (
+                      <span className="text-[10px] text-muted-foreground/60 px-2 py-0.5 rounded-full bg-muted/40">нет связи</span>
                     )}
                   </div>
-                </TabsContent>
-              </ScrollArea>
-            </Tabs>
-          )
-        })() : null}
+
+                  {!candidate.hhResponseId ? (
+                    <p className="text-xs text-muted-foreground italic py-2">У этого кандидата нет связанного отклика hh</p>
+                  ) : hhLoading ? (
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground italic py-2">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      Загружаю переписку из hh...
+                    </div>
+                  ) : hhError ? (
+                    <p className="text-xs text-muted-foreground py-2">{hhError}</p>
+                  ) : hhMessages.length === 0 ? (
+                    <p className="text-xs text-muted-foreground italic py-2">Пока нет сообщений. Отправь приглашение или отказ — кандидат увидит в hh</p>
+                  ) : (
+                    <div className="space-y-2 pt-1">
+                      {hhMessages.map((m) => {
+                        const mine = m.authorType === "employer"
+                        return (
+                          <div key={m.id} className={cn("flex", mine ? "justify-end" : "justify-start")}>
+                            <div
+                              className={cn(
+                                "max-w-[80%] rounded-lg px-3 py-2 text-xs space-y-1",
+                                mine
+                                  ? "bg-indigo-500/10 text-foreground border border-indigo-500/20"
+                                  : "bg-muted/60 text-foreground border border-border/40"
+                              )}
+                            >
+                              <p className="whitespace-pre-wrap break-words">{m.text || <span className="italic text-muted-foreground">пустое сообщение</span>}</p>
+                              <div className="flex items-center justify-between gap-2 text-[10px] text-muted-foreground/80">
+                                <span>
+                                  {m.createdAt
+                                    ? new Date(m.createdAt).toLocaleString("ru-RU", {
+                                        day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
+                                      })
+                                    : ""}
+                                </span>
+                                {mine && (
+                                  <span title={m.viewedByOpponent ? "прочитано" : "не прочитано"}>
+                                    {m.viewedByOpponent ? "✓✓" : "✓"}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              </TabsContent>
+
+              {/* ── AI-оценка ────────────────────────────────────── */}
+              <TabsContent value="ai" className="px-6 py-4 mt-0 space-y-4">
+                {candidate.aiScore != null ? (
+                  <>
+                    <div className="flex flex-col items-center gap-2 py-4">
+                      <div
+                        className={cn(
+                          "w-24 h-24 rounded-full flex items-center justify-center text-4xl font-bold border-4",
+                          aiScoreColor(candidate.aiScore),
+                        )}
+                      >
+                        {candidate.aiScore}
+                      </div>
+                      <p className="text-xs text-muted-foreground">из 100</p>
+                    </div>
+
+                    {candidate.aiSummary && (
+                      <div className="p-3 rounded-lg bg-muted/40 border border-border/60">
+                        <p className="text-sm text-foreground whitespace-pre-wrap">{candidate.aiSummary}</p>
+                      </div>
+                    )}
+
+                    {Array.isArray(candidate.aiDetails) && candidate.aiDetails.length > 0 && (
+                      <section className="space-y-2">
+                        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Детали</h3>
+                        {candidate.aiDetails.map((detail, i) => {
+                          const detailColor =
+                            detail.score >= 70 ? "text-emerald-600 dark:text-emerald-400" :
+                            detail.score >= 40 ? "text-amber-600 dark:text-amber-400" :
+                            "text-destructive"
+                          return (
+                            <div key={i} className="p-2.5 rounded-lg bg-muted/40 border border-border/60 space-y-1">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-xs font-medium text-foreground">{detail.question}</span>
+                                <span className={cn("text-xs font-bold", detailColor)}>{detail.score}</span>
+                              </div>
+                              {detail.comment && (
+                                <p className="text-xs text-muted-foreground">{detail.comment}</p>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </section>
+                    )}
+
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="w-full gap-2"
+                      disabled={scoringAi}
+                      onClick={handleAiScore}
+                    >
+                      {scoringAi ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                      Переоценить
+                    </Button>
+                  </>
+                ) : derived.hasAnswers ? (
+                  <div className="flex flex-col items-center justify-center py-12 gap-3 text-center">
+                    <Sparkles className="w-10 h-10 text-muted-foreground opacity-50" />
+                    <p className="text-sm text-muted-foreground">Кандидат ещё не оценён</p>
+                    <Button
+                      size="sm"
+                      className="gap-2 bg-purple-600 hover:bg-purple-700 text-white"
+                      disabled={scoringAi}
+                      onClick={handleAiScore}
+                    >
+                      {scoringAi ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                      Оценить сейчас
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-12 gap-3 text-center">
+                    <FileQuestion className="w-10 h-10 text-muted-foreground opacity-50" />
+                    <p className="text-sm text-muted-foreground">
+                      Нет ответов на анкету — оценивать пока нечего
+                    </p>
+                  </div>
+                )}
+              </TabsContent>
+
+              {/* ── Другие каналы ────────────────────────────────── */}
+              <TabsContent value="channels" className="px-6 py-4 mt-0 space-y-3">
+                <div className="rounded-lg border border-border/60 p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-full bg-sky-500/10 flex items-center justify-center text-sky-500">
+                        <Send className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-foreground">Telegram</p>
+                        <p className="text-[11px] text-muted-foreground">Личное общение</p>
+                      </div>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground/60 px-2 py-0.5 rounded-full bg-muted/40">скоро</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground italic">Когда кандидат напишет нам в Telegram — переписка появится здесь</p>
+                </div>
+
+                <div className="rounded-lg border border-border/60 p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-500">
+                        <MessageSquare className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-foreground">WhatsApp</p>
+                        <p className="text-[11px] text-muted-foreground">Бизнес-чат</p>
+                      </div>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground/60 px-2 py-0.5 rounded-full bg-muted/40">скоро</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground italic">WhatsApp Business API — для коротких уточнений и приглашений</p>
+                </div>
+
+                <div className="rounded-lg border border-border/60 p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-full bg-blue-500/10 flex items-center justify-center text-blue-500">
+                        <Mail className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-foreground">Email</p>
+                        <p className="text-[11px] text-muted-foreground">Корпоративная почта</p>
+                      </div>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground/60 px-2 py-0.5 rounded-full bg-muted/40">скоро</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground italic">Отправка офферов, документов и приглашений</p>
+                </div>
+              </TabsContent>
+
+              {/* ── История ──────────────────────────────────────── */}
+              <TabsContent value="history" className="px-6 py-4 mt-0">
+                {derived.timeline.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-12">Событий пока нет</p>
+                ) : (
+                  <ol className="relative space-y-3 border-l border-border/60 ml-2 pl-4">
+                    {derived.timeline.map((ev, i) => {
+                      const Icon = ev.icon
+                      return (
+                        <li key={i} className="relative">
+                          <span className="absolute -left-[22px] top-1 w-3 h-3 rounded-full bg-background border border-border" />
+                          <div className="flex items-start gap-2">
+                            <Icon className={cn("w-4 h-4 shrink-0 mt-0.5", ev.iconClass)} />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm text-foreground">{ev.title}</p>
+                              <p className="text-[11px] text-muted-foreground">{formatDateTime(ev.iso)}</p>
+                              {ev.hint && (
+                                <p className="text-[11px] text-muted-foreground italic mt-0.5">{ev.hint}</p>
+                              )}
+                            </div>
+                          </div>
+                        </li>
+                      )
+                    })}
+                  </ol>
+                )}
+              </TabsContent>
+            </ScrollArea>
+          </Tabs>
+        ) : null}
 
         {/* ── Sticky footer with action buttons ───────────────────── */}
         {candidate && !isHired && !isRejected && (

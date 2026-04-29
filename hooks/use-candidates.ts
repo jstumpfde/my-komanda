@@ -20,7 +20,9 @@ export interface ApiCandidate {
   skills: string[] | null
   token: string
   demoProgressJson: unknown
-  anketaAnswers: { question: string; answer: string }[] | null
+  // Реальный формат в БД — массив [{ blockId, answer, ... }] или legacy [{ question, answer }].
+  // Внутренние тулзы рендеринга нормализуют тип, поэтому здесь — `unknown`.
+  anketaAnswers: unknown
   aiScore: number | null
   aiSummary: string | null
   aiDetails: { question: string; score: number; comment: string }[] | null
@@ -28,6 +30,9 @@ export interface ApiCandidate {
   createdAt: string | null
   updatedAt: string | null
   hhResponseId?: string | null
+  hhRawData?: unknown
+  demoLessons?: unknown
+  stageHistory?: unknown
   shortId?: string | null
   referredByShortId?: string | null
 }
