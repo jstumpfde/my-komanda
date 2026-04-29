@@ -610,7 +610,7 @@ export default function DemoPage() {
   const currentFlat = flatLessons[currentIndex]
   const progressPercent = totalLessons > 0 ? ((currentIndex + 1) / totalLessons) * 100 : 0
 
-  const saveAnswer = useCallback(async (blockId: string, answer: any) => {
+  const saveAnswer = async (blockId: string, answer: any) => {
     if (isPreviewMode) return
     const timeSpent = Math.round((Date.now() - blockStartTime.current) / 1000)
     try {
@@ -632,9 +632,9 @@ export default function DemoPage() {
     } catch {
       // silently fail — answers are best-effort
     }
-  }, [token, currentIndex, totalLessons, isPreviewMode])
+  }
 
-  const handleNext = useCallback(async () => {
+  const handleNext = async () => {
     if (!currentFlat) return
 
     // Собираем все task-блоки внутри текущего урока
@@ -663,6 +663,8 @@ export default function DemoPage() {
           const answers = taskAnswers[tb.id] || {}
           await saveAnswer(tb.id, answers)
         }
+      } catch (err) {
+        console.error("[Demo] saveAnswer failed:", err)
       } finally {
         setSaving(false)
       }
@@ -684,7 +686,7 @@ export default function DemoPage() {
         window.scrollTo({ top: 0, behavior: "smooth" })
       }
     }
-  }, [currentFlat, currentIndex, totalLessons, taskAnswers, mediaUploaded, saveAnswer])
+  }
 
   // ─── Loading state ──────────────────────────────────────────────────────────
 
