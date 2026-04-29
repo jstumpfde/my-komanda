@@ -193,9 +193,10 @@ interface AutomationSettingsProps {
   vacancyTitle?: string
   salaryFrom?: number | null
   salaryTo?: number | null
+  aiProcessSettings?: { inviteMessage?: string } | null
 }
 
-export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, salaryFrom, salaryTo }: AutomationSettingsProps) {
+export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, salaryFrom, salaryTo, aiProcessSettings }: AutomationSettingsProps) {
   // Parse initial scenario from descriptionJson
   const initialScenario = (() => {
     if (descriptionJson && typeof descriptionJson === "object" && descriptionJson !== null) {
@@ -219,9 +220,39 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
   // 1. Первое сообщение
   const [tone, setTone] = useState<MessageTone>((initialAutomation.tone as MessageTone) || "casual")
   const [firstMessageDelay, setFirstMessageDelay] = useState(String(initialAutomation.delayMinutes ?? "3"))
-  const [firstMessageText, setFirstMessageText] = useState(
-    (initialAutomation.firstMessageText as string) || DEFAULT_FIRST_MESSAGE
-  )
+  // Шаблон сообщения хранится в vacancies.ai_process_settings.inviteMessage —
+  // его читает hh process-queue при отправке приглашения на демо.
+  const initialInviteMessage = aiProcessSettings?.inviteMessage || DEFAULT_FIRST_MESSAGE
+  const [firstMessageText, setFirstMessageText] = useState(initialInviteMessage)
+  const [savedInviteMessage, setSavedInviteMessage] = useState(initialInviteMessage)
+  const [savingInvite, setSavingInvite] = useState(false)
+  const inviteDirty = firstMessageText !== savedInviteMessage
+
+  useEffect(() => {
+    const next = aiProcessSettings?.inviteMessage
+    if (typeof next === "string" && next.length > 0 && next !== savedInviteMessage) {
+      setSavedInviteMessage(next)
+      setFirstMessageText(next)
+    }
+  }, [aiProcessSettings, savedInviteMessage])
+
+  const saveInviteMessage = useCallback(async () => {
+    setSavingInvite(true)
+    try {
+      const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}/ai-settings`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ inviteMessage: firstMessageText }),
+      })
+      if (!res.ok) throw new Error("Ошибка сохранения")
+      setSavedInviteMessage(firstMessageText)
+      toast.success("Сохранено")
+    } catch {
+      toast.error("Не удалось сохранить")
+    } finally {
+      setSavingInvite(false)
+    }
+  }, [vacancyId, firstMessageText])
 
   // 1b. Рабочие часы
   const initialWH = (initialAutomation.workingHours as { enabled?: boolean; from?: string; to?: string }) || {}
@@ -379,16 +410,10 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
   const activeTouchCount = PRESET_TOUCH_COUNTS[followUpPreset]
   const visibleTouches = touchPoints.slice(0, activeTouchCount)
 
-  const getMessageByTone = (t: MessageTone) => {
-    if (t === "official") return OFFICIAL_TEMPLATE
-    if (t === "casual") return DEFAULT_FIRST_MESSAGE
-    return firstMessageText
-  }
-
-  const handleToneChange = (t: MessageTone) => {
-    setTone(t)
-    if (t !== "custom") setFirstMessageText(getMessageByTone(t))
-  }
+  // Тоны временно в разработке — не меняют текст рассылки.
+  void OFFICIAL_TEMPLATE
+  void tone
+  void setTone
 
   const handleScenarioChange = (s: ScenarioType) => {
     setScenarioType(s)
@@ -415,8 +440,6 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
         : {}
 
       const automationData = {
-        tone,
-        firstMessageText,
         delayMinutes: Number(firstMessageDelay),
         workingHours: {
           enabled: workingHoursEnabled,
@@ -462,7 +485,7 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
     } finally {
       setSaving(false)
     }
-  }, [vacancyId, scenarioType, descriptionJson, tone, firstMessageText, firstMessageDelay, workingHoursEnabled, workingHoursFrom, workingHoursTo, includeWeekends, responseReaction, followUpEnabled, followUpPreset, stopOnNo, stopOnClose, pipelinePreset, pipelineStages, autoInvite, autoReject, notifyManager, rejectTemplate, inviteTemplate, messageTemplates, dialerEnabled, dialerScriptId, dialerTrigger, completenessEnabled, completenessThreshold, completenessChannel, completenessDelay])
+  }, [vacancyId, scenarioType, descriptionJson, firstMessageDelay, workingHoursEnabled, workingHoursFrom, workingHoursTo, includeWeekends, responseReaction, followUpEnabled, followUpPreset, stopOnNo, stopOnClose, pipelinePreset, pipelineStages, autoInvite, autoReject, notifyManager, rejectTemplate, inviteTemplate, messageTemplates, dialerEnabled, dialerScriptId, dialerTrigger, completenessEnabled, completenessThreshold, completenessChannel, completenessDelay])
 
   return (
     <div className="space-y-6">
@@ -475,10 +498,13 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-5">
-          {/* Тон */}
+          {/* Тон — пока не подключён к рассылке */}
           <div className="space-y-2">
-            <Label className="text-sm font-medium">Тон сообщения</Label>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <Label className="text-sm font-medium">Тон сообщения</Label>
+              <Badge variant="outline" className="text-[10px] h-4 px-1.5">Скоро</Badge>
+            </div>
+            <div className="flex flex-wrap gap-2 opacity-60 pointer-events-none select-none" aria-disabled="true">
               {([
                 { value: "official" as const, label: "Официальный", icon: FileText },
                 { value: "casual" as const, label: "Живой", icon: Sparkles },
@@ -486,19 +512,16 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
               ]).map(opt => (
                 <button
                   key={opt.value}
-                  className={cn(
-                    "flex items-center gap-2 px-4 py-2.5 rounded-lg border text-sm font-medium transition-all",
-                    tone === opt.value
-                      ? "border-primary bg-primary/5 text-primary ring-2 ring-primary/20"
-                      : "border-border hover:border-primary/30 text-foreground"
-                  )}
-                  onClick={() => handleToneChange(opt.value)}
+                  type="button"
+                  disabled
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-lg border border-border text-sm font-medium text-muted-foreground"
                 >
                   <opt.icon className="w-4 h-4" />
                   {opt.label}
                 </button>
               ))}
             </div>
+            <p className="text-[11px] text-muted-foreground">Функция в разработке. Сейчас рассылается текст ниже.</p>
           </div>
 
           {/* Задержка */}
@@ -564,18 +587,26 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
           <div className="space-y-2">
             <Label className="text-sm font-medium">Шаблон сообщения</Label>
             <textarea
-              className={cn(
-                "w-full border rounded-lg p-3 text-sm resize-none h-36 bg-background focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none leading-relaxed",
-                tone !== "custom" && "opacity-70"
-              )}
+              className="w-full border rounded-lg p-3 text-sm resize-none h-36 bg-background focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none leading-relaxed"
               value={firstMessageText}
-              onChange={(e) => { setFirstMessageText(e.target.value); if (tone !== "custom") setTone("custom") }}
+              onChange={(e) => setFirstMessageText(e.target.value)}
               placeholder="Текст первого сообщения..."
             />
-            <div className="flex flex-wrap gap-1.5">
-              {["[Имя]", "[должность]", "[компания]", "[ссылка]"].map(v => (
-                <Badge key={v} variant="outline" className="text-xs cursor-default">{v}</Badge>
-              ))}
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div className="flex flex-wrap gap-1.5">
+                {["[Имя]", "[должность]", "[компания]", "[ссылка]"].map(v => (
+                  <Badge key={v} variant="outline" className="text-xs cursor-default">{v}</Badge>
+                ))}
+              </div>
+              <Button
+                size="sm"
+                className="h-8 text-xs gap-1.5"
+                onClick={saveInviteMessage}
+                disabled={!inviteDirty || savingInvite}
+              >
+                {savingInvite ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                Сохранить
+              </Button>
             </div>
           </div>
         </CardContent>
