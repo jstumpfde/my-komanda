@@ -2799,12 +2799,12 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
         onStageChange={(candidateId, newStage) => {
           // Sync kanban columns when stage changes in drawer
           setColumns((prev) => {
-            const targetStage = newStage === "rejected" ? null : newStage
+            const targetStage = newStage
             return prev.map((col) => {
               // Remove from old column
               const filtered = col.candidates.filter((c) => c.id !== candidateId)
-              // Add to new column (if not rejected)
-              if (targetStage && col.id === targetStage) {
+              // Add to new column
+              if (col.id === targetStage) {
                 const moved = prev
                   .flatMap((c) => c.candidates)
                   .find((c) => c.id === candidateId)
