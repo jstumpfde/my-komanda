@@ -66,6 +66,13 @@ export async function GET() {
     }
 
     for (const item of allItems) {
+      // Защитная проверка: hh иногда отдаёт item без vacancy/id — пропускаем,
+      // иначе падает весь батч на TypeError "Cannot read properties of undefined".
+      if (!item?.vacancy?.id || !item?.id) {
+        console.warn("[hh/responses] skip item — missing vacancy.id or item.id")
+        continue
+      }
+
       const candidateName = [
         item.resume?.last_name,
         item.resume?.first_name,
