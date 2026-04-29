@@ -403,6 +403,7 @@ export function CandidateDrawer({
   const [hhSending, setHhSending] = useState(false)
   const hhFetchRef = useRef<string | null>(null)
   const hhListRef = useRef<HTMLDivElement | null>(null)
+  const tabScrollRef = useRef<HTMLDivElement | null>(null)
 
   const fetchCandidate = useCallback(async (id: string) => {
     setLoadingCandidate(true)
@@ -525,6 +526,14 @@ export function CandidateDrawer({
     const el = hhListRef.current
     if (el) el.scrollTop = el.scrollHeight
   }, [activeTab, hhMessages])
+
+  // ── Reset tab scroll to top when switching tabs ──────────────────────────
+  // Без этого пользователь может открыть Ответы после прокрутки длинных
+  // Контактов и не увидеть верх — будет казаться, что таб не работает.
+  useEffect(() => {
+    const el = tabScrollRef.current
+    if (el) el.scrollTop = 0
+  }, [activeTab])
 
   // ── Mutations ────────────────────────────────────────────────────────────
 
@@ -733,6 +742,7 @@ export function CandidateDrawer({
             </TabsList>
 
             <div
+              ref={tabScrollRef}
               className="flex-1 min-h-0 overflow-y-auto"
               style={{ maxHeight: "calc(100vh - 180px)" }}
             >

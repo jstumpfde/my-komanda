@@ -388,8 +388,10 @@ export function AnswersTab({ answers, demoLessons }: AnswersTabProps) {
     )
   }
 
+  // space-y-3 для отступов; min-w-0 чтобы длинный контент не растягивал
+  // ширину и не ломал вертикальный скролл родителя.
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 min-w-0">
       {visible.map((entry, i) => (
         <EntryCard key={i} entry={entry} blockMap={blockMap} />
       ))}
