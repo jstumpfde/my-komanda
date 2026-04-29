@@ -177,8 +177,8 @@ export function ListView({
   }
 
   const getScoreColor = (score: number) => {
-    if (score >= 80) return "bg-success/10 text-success border-success/20"
-    if (score >= 70) return "bg-warning/10 text-warning border-warning/20"
+    if (score > 70) return "bg-success/10 text-success border-success/20"
+    if (score >= 40) return "bg-warning/10 text-warning border-warning/20"
     return "bg-destructive/10 text-destructive border-destructive/20"
   }
 
@@ -194,8 +194,8 @@ export function ListView({
 
   const cols: string[] = ["40px"] // ★
   cols.push("minmax(180px, 2fr)")  // Кандидат
-  if (showScore) cols.push("90px")
   if (showProgress) cols.push("110px")
+  if (showScore) cols.push("90px")
   if (showSalary) cols.push("140px")
   if (showCity) cols.push("120px")
   if (showResponseDate) cols.push("110px")
@@ -230,8 +230,8 @@ export function ListView({
           )}
         </button>
         <div>Кандидат</div>
-        {showScore && <SortHeader label="AI скор" sortKey="aiScore" sort={sort} onToggle={handleSort} />}
         {showProgress && <SortHeader label="Прогресс" sortKey="progress" sort={sort} onToggle={handleSort} />}
+        {showScore && <SortHeader label="AI-оценка" sortKey="aiScore" sort={sort} onToggle={handleSort} />}
         {showSalary && <SortHeader label="Зарплата" sortKey="salary" sort={sort} onToggle={handleSort} />}
         {showCity && <div>Город</div>}
         {showResponseDate && <SortHeader label="Дата отклика" sortKey="responseDate" sort={sort} onToggle={handleSort} />}
@@ -285,7 +285,14 @@ export function ListView({
                 </div>
               </div>
 
-              {/* Score */}
+              {/* Progress */}
+              {showProgress && (
+                <div className={cn("text-sm font-medium tabular-nums", progressTextClass(progress))}>
+                  {progress === null ? "—" : `${progress}%`}
+                </div>
+              )}
+
+              {/* AI score */}
               {showScore && (
                 <div>
                   <Badge
@@ -297,13 +304,6 @@ export function ListView({
                   >
                     {aiActuallyRan ? candidate.aiScore : "—"}
                   </Badge>
-                </div>
-              )}
-
-              {/* Progress */}
-              {showProgress && (
-                <div className={cn("text-sm font-medium tabular-nums", progressTextClass(progress))}>
-                  {progress === null ? "—" : `${progress}%`}
                 </div>
               )}
 
