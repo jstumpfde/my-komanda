@@ -22,7 +22,16 @@ interface HhExperience {
   area?: { name?: string }
   industry?: { name?: string }
   industries?: { name?: string }[]
+  // hh API основное поле — description (HTML с <li>/<p>/<br>),
+  // но в исторических импортах и ручных дампах встречаются альтернативы
   description?: string
+  responsibility?: string
+  responsibilities?: string
+  achievements?: string
+  tasks?: string
+  content?: string
+  body?: string
+  text?: string
 }
 
 interface HhEducation {
@@ -155,8 +164,22 @@ function Row({ icon: Icon, children }: { icon: React.ComponentType<{ className?:
 function ExperienceCard({ exp }: { exp: HhExperience }) {
   // hh возвращает HTML с <li>, <p>, <br>. Разворачиваем в plain-text
   // с переносами строк, чтобы whitespace-pre-wrap отрисовал список.
-  const cleanDescription = exp.description
-    ? exp.description
+  // Поле описания в свежем hh API — description, но у части кандидатов
+  // (ручной импорт, старая версия sync-а) текст лежит в responsibility,
+  // achievements, tasks или generic content/body/text. Берём первый
+  // непустой источник.
+  const rawDesc =
+    exp.description ||
+    exp.responsibility ||
+    exp.responsibilities ||
+    exp.achievements ||
+    exp.tasks ||
+    exp.content ||
+    exp.body ||
+    exp.text ||
+    ""
+  const cleanDescription = rawDesc
+    ? rawDesc
         .replace(/<\/?(p|div|li|ul|ol|h[1-6])[^>]*>/gi, "\n")
         .replace(/<br\s*\/?\s*>/gi, "\n")
         .replace(/<[^>]+>/g, "")
