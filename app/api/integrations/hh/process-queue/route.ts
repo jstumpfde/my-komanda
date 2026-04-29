@@ -236,18 +236,39 @@ export async function POST(req: NextRequest) {
         if (candidateToken || candidateId) {
           const nameParts = (resp.candidateName || "").trim().split(/\s+/)
           const candidateName = nameParts[1] || nameParts[0] || "Здравствуйте"
-          // Для нового кандидата уже знаем shortId, для существующего — подтягиваем из БД
-          let existingShortId: string | null = newCandShortId
-          if (!existingShortId && candidateId && !candidateToken) {
-            const [row] = await db
+          // Гарантируем что у кандидата есть shortId
+          let shortIdForUrl: string | null = newCandShortId
+          if (!shortIdForUrl && candidateId) {
+            const [existing] = await db
               .select({ shortId: candidates.shortId })
               .from(candidates)
               .where(eq(candidates.id, candidateId))
               .limit(1)
-            existingShortId = row?.shortId ?? null
+            shortIdForUrl = existing?.shortId ?? null
+            // Если shortId нет — генерим и сохраняем
+            if (!shortIdForUrl && localVac) {
+              const newShort = await db.transaction(async (tx) => {
+                return await generateCandidateShortId(tx, localVac.id)
+              })
+              if (newShort?.shortId) {
+                await db.update(candidates)
+                  .set({
+                    shortId: newShort.shortId,
+                    sequenceNumber: newShort.sequenceNumber,
+                  })
+                  .where(eq(candidates.id, candidateId))
+                shortIdForUrl = newShort.shortId
+              }
+            }
           }
-          const tokenForUrl = (newCandShortId ?? existingShortId ?? candidateToken ?? candidateId)
+          // Финальный fallback на случай если совсем ничего не получилось
+          const tokenForUrl = shortIdForUrl ?? candidateId
           const demoUrl = `https://company24.pro/demo/${tokenForUrl}`
+          console.log("[PQ:dbg]", resp.candidateName, "demo-url", {
+            shortIdForUrl,
+            tokenForUrl,
+            demoUrl,
+          })
           if (template) {
             finalMessage = template
               .replaceAll("[Имя]", candidateName)
