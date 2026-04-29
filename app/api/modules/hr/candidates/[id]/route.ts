@@ -3,6 +3,7 @@ import { eq, and, desc } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { candidates, vacancies, hhResponses, hhCandidates, demos } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
+import { deriveCandidateName } from "@/lib/candidate-name"
 
 // Helper: verify candidate belongs to user's company
 async function getOwnedCandidate(candidateId: string, companyId: string) {
@@ -77,6 +78,8 @@ export async function GET(
 
     return apiSuccess({
       ...row.candidate,
+      // Имя: fallback на anketa_answers если name пустой/«Новый кандидат»
+      name: deriveCandidateName(row.candidate.name, row.candidate.anketaAnswers),
       vacancyTitle: row.vacancyTitle,
       hhResponseId: row.hhResponseId ?? null,
       hhRawData: row.hhRawData ?? null,

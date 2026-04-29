@@ -5,6 +5,7 @@ import { candidates, vacancies, demos } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { generateCandidateToken } from "@/lib/candidate-tokens"
 import { generateCandidateShortId } from "@/lib/short-id"
+import { deriveCandidateName } from "@/lib/candidate-name"
 
 type SortKey = "favorite" | "aiScore" | "salary" | "responseDate" | "status" | "progress"
 
@@ -75,6 +76,7 @@ export async function GET(req: NextRequest) {
           createdAt: candidates.createdAt,
           updatedAt: candidates.updatedAt,
           demoProgressJson: candidates.demoProgressJson,
+          anketaAnswers: candidates.anketaAnswers,
           isFavorite: candidates.isFavorite,
           referredByShortId: candidates.referredByShortId,
         })
@@ -138,11 +140,15 @@ export async function GET(req: NextRequest) {
           ? now - new Date(lastAnswerAt).getTime() <= ACTIVE_THRESHOLD_MS
           : false
 
-        // Strip demoProgressJson from response — too heavy, not needed by clients
-        const { demoProgressJson: _drop, ...rest } = r
-        void _drop
+        // Имя: fallback на anketa_answers если name пустой/«Новый кандидат»
+        const displayName = deriveCandidateName(r.name, r.anketaAnswers)
+
+        // Strip demoProgressJson + anketaAnswers — слишком тяжёлые, не нужны клиенту
+        const { demoProgressJson: _drop1, anketaAnswers: _drop2, ...rest } = r
+        void _drop1; void _drop2
         return {
           ...rest,
+          name: displayName,
           demoTotalBlocks,
           demoCompletedBlocks,
           progressPercent,
@@ -189,7 +195,13 @@ export async function GET(req: NextRequest) {
       rows = [...rows].sort((a, b) => mul * (progressOf(a) - progressOf(b)))
     }
 
-    return apiSuccess(rows)
+    // Имя: fallback на anketa_answers если name пустой/«Новый кандидат»
+    const withDisplayName = rows.map((r) => ({
+      ...r,
+      name: deriveCandidateName(r.name, r.anketaAnswers),
+    }))
+
+    return apiSuccess(withDisplayName)
   } catch (err) {
     if (err instanceof Response) return err
     return apiError("Internal server error", 500)
