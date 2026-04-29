@@ -36,7 +36,15 @@ import {
   X,
   FileQuestion,
   Play,
+  MoreHorizontal,
 } from "lucide-react"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import type { ApiCandidate } from "@/hooks/use-candidates"
@@ -391,6 +399,8 @@ export function CandidateDrawer({
   const [hhMessages, setHhMessages] = useState<HhMessage[]>([])
   const [hhLoading, setHhLoading] = useState(false)
   const [hhError, setHhError] = useState<string | null>(null)
+  const [hhDraft, setHhDraft] = useState("")
+  const [hhSending, setHhSending] = useState(false)
   const hhFetchRef = useRef<string | null>(null)
   const hhListRef = useRef<HTMLDivElement | null>(null)
 
@@ -428,12 +438,51 @@ export function CandidateDrawer({
       setNotes([])
       setHhMessages([])
       setHhError(null)
+      setHhDraft("")
       hhFetchRef.current = null
       setActiveTab("contacts")
       fetchCandidate(candidateId)
       fetchNotes(candidateId)
     }
   }, [open, candidateId, fetchCandidate, fetchNotes])
+
+  // ── Reload hh messages on demand (после отправки своего сообщения) ────────
+  const reloadHhMessages = useCallback(async (hhResponseId: string) => {
+    try {
+      const res = await fetch(`/api/integrations/hh/messages/${hhResponseId}`)
+      const data = await res.json() as { messages?: HhMessage[]; error?: string }
+      if (res.ok && Array.isArray(data.messages)) setHhMessages(data.messages)
+    } catch (err) {
+      console.error("[hh-chat] reload failed", err)
+    }
+  }, [])
+
+  const handleSendHhMessage = useCallback(async () => {
+    const hhResponseId = candidate?.hhResponseId
+    const text = hhDraft.trim()
+    if (!hhResponseId || !text || hhSending) return
+    setHhSending(true)
+    try {
+      const res = await fetch(`/api/integrations/hh/messages/${hhResponseId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: text }),
+      })
+      const data = await res.json() as { error?: string }
+      if (!res.ok) {
+        toast.error(data.error || "Не удалось отправить сообщение")
+        return
+      }
+      setHhDraft("")
+      toast.success("Сообщение отправлено")
+      await reloadHhMessages(hhResponseId)
+    } catch (err) {
+      console.error("[hh-chat] send failed", err)
+      toast.error("Сетевая ошибка")
+    } finally {
+      setHhSending(false)
+    }
+  }, [candidate?.hhResponseId, hhDraft, hhSending, reloadHhMessages])
 
   // ── Lazy-load hh messages when chat tab opens ─────────────────────────────
   useEffect(() => {
@@ -685,7 +734,7 @@ export function CandidateDrawer({
 
             <ScrollArea className="flex-1">
               {/* ── Контакты ─────────────────────────────────────── */}
-              <TabsContent value="contacts" className="px-6 py-4 space-y-5 mt-0 max-h-[calc(100vh-220px)] overflow-y-auto">
+              <TabsContent value="contacts" className="px-6 py-4 pb-28 space-y-5 mt-0">
                 {candidate.hhRawData ? (
                   <HhResumeInfo
                     rawData={candidate.hhRawData}
@@ -832,7 +881,7 @@ export function CandidateDrawer({
               </TabsContent>
 
               {/* ── Демо ─────────────────────────────────────────── */}
-              <TabsContent value="demo" className="px-6 py-4 mt-0">
+              <TabsContent value="demo" className="px-6 py-4 pb-28 mt-0">
                 {!derived.demo || derived.demoBlocks.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
                     <MonitorOff className="w-10 h-10 mb-3 opacity-50" />
@@ -900,12 +949,12 @@ export function CandidateDrawer({
               </TabsContent>
 
               {/* ── Ответы ───────────────────────────────────────── */}
-              <TabsContent value="answers" className="px-6 py-4 mt-0">
+              <TabsContent value="answers" className="px-6 py-4 pb-28 mt-0">
                 <AnswersTab answers={candidate.anketaAnswers} demoLessons={candidate.demoLessons} />
               </TabsContent>
 
               {/* ── Чат (только hh) ──────────────────────────────── */}
-              <TabsContent value="chat" className="px-6 py-4 mt-0">
+              <TabsContent value="chat" className="px-6 py-4 pb-28 mt-0">
                 <div className="rounded-lg border border-border/60 p-3 space-y-2">
                   <div className="flex items-center justify-between pb-2 border-b border-border/40">
                     <div className="flex items-center gap-2">
@@ -939,48 +988,82 @@ export function CandidateDrawer({
                     </div>
                   ) : hhError ? (
                     <p className="text-xs text-muted-foreground py-2">{hhError}</p>
-                  ) : hhMessages.length === 0 ? (
-                    <p className="text-xs text-muted-foreground italic py-2">Пока нет сообщений. Отправь приглашение или отказ — кандидат увидит в hh</p>
                   ) : (
-                    <div ref={hhListRef} className="space-y-2 pt-1 max-h-[60vh] overflow-y-auto pr-1 -mr-1">
-                      {hhMessages.map((m) => {
-                        const mine = m.authorType === "employer"
-                        return (
-                          <div key={m.id} className={cn("flex", mine ? "justify-end" : "justify-start")}>
-                            <div
-                              className={cn(
-                                "max-w-[80%] rounded-lg px-3 py-2 text-xs space-y-1",
-                                mine
-                                  ? "bg-indigo-500/10 text-foreground border border-indigo-500/20"
-                                  : "bg-muted/60 text-foreground border border-border/40"
-                              )}
-                            >
-                              <p className="whitespace-pre-wrap break-words">{m.text || <span className="italic text-muted-foreground">пустое сообщение</span>}</p>
-                              <div className="flex items-center justify-between gap-2 text-[10px] text-muted-foreground/80">
-                                <span>
-                                  {m.createdAt
-                                    ? new Date(m.createdAt).toLocaleString("ru-RU", {
-                                        day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
-                                      })
-                                    : ""}
-                                </span>
-                                {mine && (
-                                  <span title={m.viewedByOpponent ? "прочитано" : "не прочитано"}>
-                                    {m.viewedByOpponent ? "✓✓" : "✓"}
-                                  </span>
-                                )}
+                    <>
+                      {hhMessages.length === 0 ? (
+                        <p className="text-xs text-muted-foreground italic py-2">Пока нет сообщений. Отправь первое — кандидат увидит в hh</p>
+                      ) : (
+                        <div ref={hhListRef} className="space-y-2 pt-1 max-h-[50vh] overflow-y-auto pr-1 -mr-1">
+                          {hhMessages.map((m) => {
+                            const mine = m.authorType === "employer"
+                            return (
+                              <div key={m.id} className={cn("flex", mine ? "justify-end" : "justify-start")}>
+                                <div
+                                  className={cn(
+                                    "max-w-[80%] rounded-lg px-3 py-2 text-xs space-y-1",
+                                    mine
+                                      ? "bg-indigo-500/10 text-foreground border border-indigo-500/20"
+                                      : "bg-muted/60 text-foreground border border-border/40"
+                                  )}
+                                >
+                                  <p className="whitespace-pre-wrap break-words">{m.text}</p>
+                                  <div className="flex items-center justify-between gap-2 text-[10px] text-muted-foreground/80">
+                                    <span>
+                                      {m.createdAt
+                                        ? new Date(m.createdAt).toLocaleString("ru-RU", {
+                                            day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
+                                          })
+                                        : ""}
+                                    </span>
+                                    {mine && (
+                                      <span title={m.viewedByOpponent ? "прочитано" : "не прочитано"}>
+                                        {m.viewedByOpponent ? "✓✓" : "✓"}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
                               </div>
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
+                            )
+                          })}
+                        </div>
+                      )}
+
+                      {/* Input для отправки сообщения в hh */}
+                      <div className="pt-2 mt-1 border-t border-border/40 space-y-2">
+                        <Textarea
+                          value={hhDraft}
+                          onChange={(e) => setHhDraft(e.target.value)}
+                          placeholder="Написать кандидату..."
+                          rows={3}
+                          disabled={hhSending}
+                          className="text-sm resize-none min-h-[72px]"
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+                              e.preventDefault()
+                              handleSendHhMessage()
+                            }
+                          }}
+                        />
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[10px] text-muted-foreground">Ctrl+Enter — отправить</span>
+                          <Button
+                            size="sm"
+                            className="gap-2"
+                            disabled={!hhDraft.trim() || hhSending}
+                            onClick={handleSendHhMessage}
+                          >
+                            {hhSending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                            Отправить
+                          </Button>
+                        </div>
+                      </div>
+                    </>
                   )}
                 </div>
               </TabsContent>
 
               {/* ── AI-оценка ────────────────────────────────────── */}
-              <TabsContent value="ai" className="px-6 py-4 mt-0 space-y-4">
+              <TabsContent value="ai" className="px-6 py-4 pb-28 mt-0 space-y-4">
                 {candidate.aiScore != null ? (
                   <>
                     <div className="flex flex-col items-center gap-2 py-4">
@@ -1060,7 +1143,7 @@ export function CandidateDrawer({
               </TabsContent>
 
               {/* ── Другие каналы ────────────────────────────────── */}
-              <TabsContent value="channels" className="px-6 py-4 mt-0 space-y-3">
+              <TabsContent value="channels" className="px-6 py-4 pb-28 mt-0 space-y-3">
                 <div className="rounded-lg border border-border/60 p-3 space-y-2">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
@@ -1111,7 +1194,7 @@ export function CandidateDrawer({
               </TabsContent>
 
               {/* ── История ──────────────────────────────────────── */}
-              <TabsContent value="history" className="px-6 py-4 mt-0">
+              <TabsContent value="history" className="px-6 py-4 pb-28 mt-0">
                 {derived.timeline.length === 0 ? (
                   <p className="text-sm text-muted-foreground text-center py-12">Событий пока нет</p>
                 ) : (
@@ -1141,35 +1224,46 @@ export function CandidateDrawer({
           </Tabs>
         ) : null}
 
-        {/* ── Sticky footer with action buttons ───────────────────── */}
+        {/* ── Sticky footer: dropdown (secondary) + 1 primary action ───── */}
         {candidate && !isHired && !isRejected && (
-          <div className="border-t bg-background px-6 py-3 shrink-0 space-y-2">
-            <div className="grid grid-cols-2 gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                className="gap-2 border-purple-300 dark:border-purple-700 text-purple-700 dark:text-purple-400 hover:bg-purple-500/10"
-                disabled={scoringAi}
-                onClick={handleAiScore}
-              >
-                {scoringAi ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                {scoringAi ? "Оценка..." : "Оценить AI"}
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="gap-2 text-destructive border-destructive/30 hover:bg-destructive/10"
-                disabled={!!changingStage}
-                onClick={() => handleStageChange("rejected")}
-              >
-                {changingStage === "rejected" ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4" />}
-                Отказать
-              </Button>
-            </div>
+          <div className="border-t bg-background px-6 py-3 shrink-0 flex items-center gap-2">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="shrink-0 px-2.5"
+                  aria-label="Дополнительные действия"
+                  disabled={scoringAi || !!changingStage}
+                >
+                  <MoreHorizontal className="w-4 h-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" side="top" className="w-56">
+                <DropdownMenuItem
+                  onSelect={(e) => { e.preventDefault(); handleAiScore() }}
+                  disabled={scoringAi}
+                  className="gap-2"
+                >
+                  {scoringAi ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4 text-purple-600 dark:text-purple-400" />}
+                  {candidate.aiScore != null ? "Переоценить AI" : "Оценить AI"}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onSelect={(e) => { e.preventDefault(); handleStageChange("rejected") }}
+                  disabled={!!changingStage}
+                  className="gap-2 text-destructive focus:text-destructive"
+                >
+                  {changingStage === "rejected" ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4" />}
+                  Отказать
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
             {candidate.stage !== "interview" && candidate.stage !== "final_decision" && candidate.stage !== "hired" ? (
               <Button
                 size="sm"
-                className="w-full gap-2 bg-purple-600 hover:bg-purple-700 text-white"
+                className="flex-1 gap-2 bg-purple-600 hover:bg-purple-700 text-white"
                 disabled={!!changingStage}
                 onClick={() => handleStageChange("interview")}
               >
@@ -1179,7 +1273,7 @@ export function CandidateDrawer({
             ) : (
               <Button
                 size="sm"
-                className="w-full gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
+                className="flex-1 gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
                 disabled={!!changingStage}
                 onClick={() => handleStageChange("hired")}
               >
