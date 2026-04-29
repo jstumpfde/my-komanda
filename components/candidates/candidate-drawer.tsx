@@ -42,7 +42,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
@@ -1237,41 +1236,19 @@ export function CandidateDrawer({
           </Tabs>
         ) : null}
 
-        {/* ── Sticky footer: dropdown (secondary) + 1 primary action ───── */}
+        {/* ── Sticky footer: 2 equal buttons (Отказать + Пригласить) + ⋯ ─── */}
         {candidate && !isHired && !isRejected && (
           <div className="border-t bg-background px-6 py-3 shrink-0 flex items-center gap-2">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="shrink-0 px-2.5"
-                  aria-label="Дополнительные действия"
-                  disabled={scoringAi || !!changingStage}
-                >
-                  <MoreHorizontal className="w-4 h-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" side="top" className="w-56">
-                <DropdownMenuItem
-                  onSelect={(e) => { e.preventDefault(); handleAiScore() }}
-                  disabled={scoringAi}
-                  className="gap-2"
-                >
-                  {scoringAi ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4 text-purple-600 dark:text-purple-400" />}
-                  {candidate.aiScore != null ? "Переоценить AI" : "Оценить AI"}
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onSelect={(e) => { e.preventDefault(); handleStageChange("rejected") }}
-                  disabled={!!changingStage}
-                  className="gap-2 text-destructive focus:text-destructive"
-                >
-                  {changingStage === "rejected" ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4" />}
-                  Отказать
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <Button
+              size="sm"
+              variant="outline"
+              className="flex-1 gap-2 text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+              disabled={!!changingStage}
+              onClick={() => handleStageChange("rejected")}
+            >
+              {changingStage === "rejected" ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4" />}
+              Отказать
+            </Button>
 
             {candidate.stage !== "interview" && candidate.stage !== "final_decision" && candidate.stage !== "hired" ? (
               <Button
@@ -1294,6 +1271,30 @@ export function CandidateDrawer({
                 Нанять
               </Button>
             )}
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="shrink-0 px-2.5"
+                  aria-label="Дополнительные действия"
+                  disabled={scoringAi || !!changingStage}
+                >
+                  <MoreHorizontal className="w-4 h-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" side="top" className="w-56">
+                <DropdownMenuItem
+                  onSelect={(e) => { e.preventDefault(); handleAiScore() }}
+                  disabled={scoringAi}
+                  className="gap-2"
+                >
+                  {scoringAi ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4 text-purple-600 dark:text-purple-400" />}
+                  {candidate.aiScore != null ? "Переоценить AI" : "Оценить AI"}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         )}
       </SheetContent>
