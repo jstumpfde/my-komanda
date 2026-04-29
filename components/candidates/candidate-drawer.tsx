@@ -36,7 +36,15 @@ import {
   X,
   FileQuestion,
   Play,
+  MoreHorizontal,
 } from "lucide-react"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import type { ApiCandidate } from "@/hooks/use-candidates"
@@ -1141,35 +1149,46 @@ export function CandidateDrawer({
           </Tabs>
         ) : null}
 
-        {/* ── Sticky footer with action buttons ───────────────────── */}
+        {/* ── Sticky footer: dropdown (secondary) + 1 primary action ───── */}
         {candidate && !isHired && !isRejected && (
-          <div className="border-t bg-background px-6 py-3 shrink-0 space-y-2">
-            <div className="grid grid-cols-2 gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                className="gap-2 border-purple-300 dark:border-purple-700 text-purple-700 dark:text-purple-400 hover:bg-purple-500/10"
-                disabled={scoringAi}
-                onClick={handleAiScore}
-              >
-                {scoringAi ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                {scoringAi ? "Оценка..." : "Оценить AI"}
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="gap-2 text-destructive border-destructive/30 hover:bg-destructive/10"
-                disabled={!!changingStage}
-                onClick={() => handleStageChange("rejected")}
-              >
-                {changingStage === "rejected" ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4" />}
-                Отказать
-              </Button>
-            </div>
+          <div className="border-t bg-background px-6 py-3 shrink-0 flex items-center gap-2">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="shrink-0 px-2.5"
+                  aria-label="Дополнительные действия"
+                  disabled={scoringAi || !!changingStage}
+                >
+                  <MoreHorizontal className="w-4 h-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" side="top" className="w-56">
+                <DropdownMenuItem
+                  onSelect={(e) => { e.preventDefault(); handleAiScore() }}
+                  disabled={scoringAi}
+                  className="gap-2"
+                >
+                  {scoringAi ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4 text-purple-600 dark:text-purple-400" />}
+                  {candidate.aiScore != null ? "Переоценить AI" : "Оценить AI"}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onSelect={(e) => { e.preventDefault(); handleStageChange("rejected") }}
+                  disabled={!!changingStage}
+                  className="gap-2 text-destructive focus:text-destructive"
+                >
+                  {changingStage === "rejected" ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4" />}
+                  Отказать
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
             {candidate.stage !== "interview" && candidate.stage !== "final_decision" && candidate.stage !== "hired" ? (
               <Button
                 size="sm"
-                className="w-full gap-2 bg-purple-600 hover:bg-purple-700 text-white"
+                className="flex-1 gap-2 bg-purple-600 hover:bg-purple-700 text-white"
                 disabled={!!changingStage}
                 onClick={() => handleStageChange("interview")}
               >
@@ -1179,7 +1198,7 @@ export function CandidateDrawer({
             ) : (
               <Button
                 size="sm"
-                className="w-full gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
+                className="flex-1 gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
                 disabled={!!changingStage}
                 onClick={() => handleStageChange("hired")}
               >
