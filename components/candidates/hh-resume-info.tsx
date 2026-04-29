@@ -18,6 +18,8 @@ interface HhExperience {
   end?: string | null
   company?: string
   position?: string
+  area?: { name?: string }
+  industry?: { name?: string }
   industries?: { name?: string }[]
   description?: string
 }
@@ -133,6 +135,27 @@ function Row({ icon: Icon, children }: { icon: React.ComponentType<{ className?:
 }
 
 function ExperienceCard({ exp }: { exp: HhExperience }) {
+  // hh возвращает HTML с <li>, <p>, <br>. Разворачиваем в plain-text
+  // с переносами строк, чтобы whitespace-pre-wrap отрисовал список.
+  const cleanDescription = exp.description
+    ? exp.description
+        .replace(/<\/?(p|div|li|ul|ol|h[1-6])[^>]*>/gi, "\n")
+        .replace(/<br\s*\/?\s*>/gi, "\n")
+        .replace(/<[^>]+>/g, "")
+        .replace(/&nbsp;/g, " ")
+        .replace(/&amp;/g, "&")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim()
+    : ""
+  const areaName = exp.area?.name
+  const industryNames = [
+    exp.industry?.name,
+    ...(Array.isArray(exp.industries) ? exp.industries.map((i) => i?.name) : []),
+  ].filter((s): s is string => typeof s === "string" && s.length > 0)
+  const uniqueIndustries = Array.from(new Set(industryNames))
+
   return (
     <div className="p-2.5 rounded-lg border border-border/60 bg-muted/40 space-y-1">
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -147,9 +170,14 @@ function ExperienceCard({ exp }: { exp: HhExperience }) {
       {exp.position && (
         <p className="text-sm text-muted-foreground break-words">{exp.position}</p>
       )}
-      {exp.description && (
-        <p className="text-xs text-muted-foreground whitespace-pre-wrap break-words line-clamp-6">
-          {exp.description.replace(/<[^>]+>/g, "").trim()}
+      {(areaName || uniqueIndustries.length > 0) && (
+        <p className="text-[11px] text-muted-foreground/80 break-words">
+          {[areaName, ...uniqueIndustries].filter(Boolean).join(" · ")}
+        </p>
+      )}
+      {cleanDescription && (
+        <p className="text-xs text-muted-foreground whitespace-pre-wrap break-words pt-1">
+          {cleanDescription}
         </p>
       )}
     </div>
