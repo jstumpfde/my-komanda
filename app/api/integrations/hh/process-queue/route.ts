@@ -212,15 +212,6 @@ export async function POST(req: NextRequest) {
         }).where(eq(candidates.id, candidateId))
       }
 
-      console.log("[PQ:dbg]", resp.candidateName, "after-link", {
-        candidateId, candidateToken, hhAction, newStatus, targetStage,
-      })
-
-      console.log("[PQ:dbg]", resp.candidateName, "before-template", {
-        hasLocalVac: !!localVac,
-        baseMessage: !!baseMessage,
-      })
-
       // Проверяем — отправляли ли работодателю уже что-то по этому отклику.
       // Если да — это "повторная отправка" (исправление битой ссылки),
       // используем reInviteMessage вместо стандартного inviteMessage.
@@ -268,21 +259,10 @@ export async function POST(req: NextRequest) {
         // Финальный fallback на случай если совсем ничего не получилось
         const tokenForUrl = shortIdForUrl ?? candidateId
         const demoUrl = `https://company24.pro/demo/${tokenForUrl}`
-        console.log("[PQ:dbg]", resp.candidateName, "demo-url", {
-          shortIdForUrl,
-          tokenForUrl,
-          demoUrl,
-        })
 
         const messageText = previouslyInvited
           ? (scopedAiSettings.reInviteMessage?.trim() || scopedAiSettings.inviteMessage?.trim() || DEMO_INVITE_MESSAGE)
           : (scopedAiSettings.inviteMessage?.trim() || DEMO_INVITE_MESSAGE)
-
-        console.log("[PQ:dbg]", resp.candidateName, "template-source", {
-          previouslyInvited,
-          hadEmployerMessages: employerMsgCount,
-          usedTemplate: previouslyInvited ? "reInviteMessage" : "inviteMessage",
-        })
 
         const replaced = messageText
           .replaceAll("[Имя]", candidateName)
@@ -299,20 +279,8 @@ export async function POST(req: NextRequest) {
         finalMessage = replaced.includes(demoUrl) ? replaced : replaced + "\n\n" + demoUrl
       }
 
-      console.log("[PQ:dbg]", resp.candidateName, "before-hh-send", {
-        hhAction,
-        hasFinalMessage: !!finalMessage,
-        finalMessageLength: finalMessage?.length ?? 0,
-        finalMessagePreview: finalMessage?.slice(0, 100) ?? null,
-      })
-
       // Шлём действие в hh, если нужно
       if (hhAction && finalMessage) {
-        console.log("[PQ:dbg]", resp.candidateName, "calling-hh", {
-          hhResponseId: resp.hhResponseId,
-          hhAction,
-          hhVacancyId: resp.hhVacancyId,
-        })
         const rawResume = raw?.resume?.id
         try {
           await changeNegotiationState(
@@ -323,7 +291,6 @@ export async function POST(req: NextRequest) {
             resp.hhVacancyId,
             rawResume,
           )
-          console.log("[PQ:dbg]", resp.candidateName, "hh-success")
         } catch (hhErr) {
           const msg = hhErr instanceof Error ? hhErr.message : String(hhErr)
           if (msg.includes("already_applied")) {
@@ -334,8 +301,6 @@ export async function POST(req: NextRequest) {
           }
         }
       }
-
-      console.log("[PQ:dbg]", resp.candidateName, "after-hh-block")
 
       // Обновляем статус hh-отклика и связь с кандидатом
       const updatePayload: { status: string; localCandidateId?: string } = { status: newStatus }
@@ -358,10 +323,6 @@ export async function POST(req: NextRequest) {
         error: err instanceof Error ? err.message : String(err),
       })
     }
-
-    console.log("[PQ:dbg]", resp.candidateName, "iteration-done", {
-      idx, total: newResponses.length, willSleep: idx < newResponses.length - 1,
-    })
 
     // Пауза перед следующим кандидатом — обязательна
     if (idx < newResponses.length - 1) await sleep(effDelayMs)
