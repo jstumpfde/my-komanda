@@ -46,6 +46,7 @@ import type { Candidate } from "@/components/dashboard/candidate-card"
 import { HhVacancyBanner } from "@/components/vacancies/hh-vacancy-banner"
 import { HhAutoProcess } from "@/components/hh/hh-auto-process"
 import { AutomationSettings } from "@/components/vacancies/automation-settings"
+import { VacancyScheduleSettings } from "@/components/vacancies/vacancy-schedule-settings"
 import { PublishTab } from "@/components/vacancies/publish-tab"
 import { MiniFormBuilder } from "@/components/vacancies/mini-form-builder"
 import { UtmLinksSection } from "@/components/vacancies/utm-links-section"
@@ -2051,6 +2052,9 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                     </div>
                     <div className="mt-6">
                       <VacancyFollowupSettings vacancyId={id} />
+                    </div>
+                    <div className="mt-6 space-y-3">
+                      <VacancyScheduleSettings vacancyId={id} />
                     </div>
                     <div className="mt-6">
                       <PostDemoSettings vacancyId={id} />

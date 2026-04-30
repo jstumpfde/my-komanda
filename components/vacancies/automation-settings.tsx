@@ -288,12 +288,10 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
     }
   }, [vacancyId, reInviteText])
 
-  // 1b. Рабочие часы
-  const initialWH = (initialAutomation.workingHours as { enabled?: boolean; from?: string; to?: string }) || {}
-  const [workingHoursEnabled, setWorkingHoursEnabled] = useState(initialWH.enabled ?? false)
-  const [workingHoursFrom, setWorkingHoursFrom] = useState(initialWH.from || "09:00")
-  const [workingHoursTo, setWorkingHoursTo] = useState(initialWH.to || "20:00")
-  const [includeWeekends, setIncludeWeekends] = useState((initialWH as Record<string, unknown>).includeWeekends as boolean ?? false)
+  // 1b. Рабочие часы — переехали в отдельный компонент VacancyScheduleSettings.
+  // Здесь старые поля больше не редактируются, но описание_json мы при сохранении
+  // не трогаем (старое значение остаётся в automation.workingHours для архива
+  // и обратной совместимости, но cron'ы уже его не читают).
 
   // 2. Обработка ответа
   const [responseReaction, setResponseReaction] = useState<ResponseReaction>(
@@ -473,14 +471,12 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
         ? descriptionJson as Record<string, unknown>
         : {}
 
+      // workingHours переехали в schedule_* колонки и редактируются через
+      // /api/modules/hr/vacancies/[id]/schedule-settings; здесь не сохраняем.
+      const previousWorkingHours = (currentJson.automation as Record<string, unknown> | undefined)?.workingHours
       const automationData = {
         delayMinutes: Number(firstMessageDelay),
-        workingHours: {
-          enabled: workingHoursEnabled,
-          from: workingHoursFrom,
-          to: workingHoursTo,
-          includeWeekends,
-        },
+        ...(previousWorkingHours ? { workingHours: previousWorkingHours } : {}),
         responseReaction,
         followUpEnabled,
         followUpPreset,
@@ -519,7 +515,7 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
     } finally {
       setSaving(false)
     }
-  }, [vacancyId, scenarioType, descriptionJson, firstMessageDelay, workingHoursEnabled, workingHoursFrom, workingHoursTo, includeWeekends, responseReaction, followUpEnabled, followUpPreset, stopOnNo, stopOnClose, pipelinePreset, pipelineStages, autoInvite, autoReject, notifyManager, rejectTemplate, inviteTemplate, messageTemplates, dialerEnabled, dialerScriptId, dialerTrigger, completenessEnabled, completenessThreshold, completenessChannel, completenessDelay])
+  }, [vacancyId, scenarioType, descriptionJson, firstMessageDelay, responseReaction, followUpEnabled, followUpPreset, stopOnNo, stopOnClose, pipelinePreset, pipelineStages, autoInvite, autoReject, notifyManager, rejectTemplate, inviteTemplate, messageTemplates, dialerEnabled, dialerScriptId, dialerTrigger, completenessEnabled, completenessThreshold, completenessChannel, completenessDelay])
 
   return (
     <div className="space-y-6">
@@ -581,41 +577,8 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
             </Select>
           </div>
 
-          {/* Рабочие часы */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label className="text-sm font-medium">Рабочие часы</Label>
-                <p className="text-xs text-muted-foreground">Отправлять сообщения только в рабочее время</p>
-              </div>
-              <Switch checked={workingHoursEnabled} onCheckedChange={setWorkingHoursEnabled} />
-            </div>
-            {workingHoursEnabled && (
-              <div className="space-y-2.5 pl-1">
-                <div className="flex items-center gap-2">
-                  <Label className="text-sm text-muted-foreground shrink-0">с</Label>
-                  <Input
-                    type="time"
-                    value={workingHoursFrom}
-                    onChange={(e) => setWorkingHoursFrom(e.target.value)}
-                    className="w-[120px] h-9"
-                  />
-                  <Label className="text-sm text-muted-foreground shrink-0">до</Label>
-                  <Input
-                    type="time"
-                    value={workingHoursTo}
-                    onChange={(e) => setWorkingHoursTo(e.target.value)}
-                    className="w-[120px] h-9"
-                  />
-                </div>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <Checkbox checked={includeWeekends} onCheckedChange={(v) => setIncludeWeekends(!!v)} />
-                  <span className="text-sm">Включая выходные</span>
-                </label>
-                <p className="text-xs text-muted-foreground">Если кандидат откликнулся в нерабочее время — сообщение уйдёт в начале следующего рабочего дня</p>
-              </div>
-            )}
-          </div>
+          {/* Рабочие часы и нерабочие дни редактируются в отдельной секции
+              «Расписание» под цепочкой дожима — см. VacancyScheduleSettings. */}
 
           {/* Шаблон */}
           <div className="space-y-2">
