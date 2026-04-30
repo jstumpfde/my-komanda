@@ -164,7 +164,7 @@ export function getVisibleSections(role: UserRole) {
 // Settings items visible per role
 export function getVisibleSettings(role: UserRole): string[] {
   switch (role) {
-    case "platform_admin": return ["company", "profile", "team", "integrations", "schedule", "notifications", "billing"]
+    case "platform_admin": return ["company", "profile", "team", "integrations", "schedule", "notifications", "billing", "legal"]
     case "platform_manager": return ["profile", "notifications"]
     case "director": return ["company", "profile", "team", "integrations", "schedule", "notifications", "billing"]
     case "hr_lead": return ["company", "profile", "team", "integrations", "schedule", "notifications"]

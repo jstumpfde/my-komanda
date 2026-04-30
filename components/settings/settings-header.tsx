@@ -4,16 +4,17 @@ import { useEffect, useState } from "react"
 import { useTheme } from "next-themes"
 import { useSidebar } from "@/components/ui/sidebar"
 import { Button } from "@/components/ui/button"
-import { Sun, Moon, Coffee, PanelLeftClose, PanelLeft, Bell, Building2, CreditCard, Users, Plug, Clock, User, LogOut, Palette, Sparkles } from "lucide-react"
+import { Sun, Moon, Coffee, PanelLeftClose, PanelLeft, Bell, Building2, CreditCard, Users, Plug, Clock, User, LogOut, Palette, Sparkles, ScrollText } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth"
+import type { UserRole } from "@/lib/auth"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 
-const navItems = [
+const navItems: { href: string; label: string; icon: typeof Building2; roles?: UserRole[] }[] = [
   { href: "/settings/company",       label: "Компания",    icon: Building2 },
   { href: "/settings/profile",       label: "Профиль",     icon: User },
   { href: "/settings/team",          label: "Команда",     icon: Users },
@@ -23,6 +24,7 @@ const navItems = [
   { href: "/settings/notifications", label: "Уведомления", icon: Bell },
   { href: "/settings/branding",      label: "Брендинг",    icon: Palette },
   { href: "/settings/demo-profile",  label: "Профиль для демо", icon: Sparkles },
+  { href: "/settings/legal",         label: "Юр. документы", icon: ScrollText, roles: ["platform_admin"] },
 ]
 
 const NOTIFICATIONS = [
@@ -36,7 +38,8 @@ export function SettingsHeader() {
   const { theme, setTheme } = useTheme()
   const { state, toggleSidebar } = useSidebar()
   const pathname = usePathname()
-  const { user } = useAuth()
+  const { user, role } = useAuth()
+  const visibleNav = navItems.filter(item => !item.roles || item.roles.includes(role))
   const [mounted, setMounted] = useState(false)
   const [notifications, setNotifications] = useState(NOTIFICATIONS)
 
@@ -134,7 +137,7 @@ export function SettingsHeader() {
       {/* Row 2: Settings tabs */}
       <div className="border-b border-border overflow-x-auto">
         <nav className="flex items-center gap-0.5" style={{ paddingLeft: 56, paddingRight: 56 }}>
-          {navItems.map(({ href, label, icon: Icon }) => (
+          {visibleNav.map(({ href, label, icon: Icon }) => (
             <Link
               key={href}
               href={href}
