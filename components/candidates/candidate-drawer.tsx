@@ -388,9 +388,11 @@ export function CandidateDrawer({
   onToggleFavorite,
 }: CandidateDrawerProps) {
   const [candidate, setCandidate] = useState<ApiCandidate | null>(null)
+  // Notes хранятся в demo_progress_json у самого кандидата — отдельный
+  // /notes-запрос сделал бы тот же select, поэтому держим notes как локальное
+  // состояние, инициализируемое из candidate.demoProgressJson.notes.
   const [notes, setNotes] = useState<CandidateNote[]>([])
   const [loadingCandidate, setLoadingCandidate] = useState(false)
-  const [loadingNotes, setLoadingNotes] = useState(false)
   const [changingStage, setChangingStage] = useState<string | null>(null)
   const [noteText, setNoteText] = useState("")
   const [savingNote, setSavingNote] = useState(false)
@@ -412,24 +414,13 @@ export function CandidateDrawer({
       if (!res.ok) throw new Error("Not found")
       const data = await res.json() as ApiCandidate
       setCandidate(data)
+      // Инициализация notes из тех же данных — без отдельного round-trip.
+      const dp = data.demoProgressJson as { notes?: CandidateNote[] } | null
+      setNotes(Array.isArray(dp?.notes) ? dp.notes : [])
     } catch {
       toast.error("Не удалось загрузить данные кандидата")
     } finally {
       setLoadingCandidate(false)
-    }
-  }, [])
-
-  const fetchNotes = useCallback(async (id: string) => {
-    setLoadingNotes(true)
-    try {
-      const res = await fetch(`/api/modules/hr/candidates/${id}/notes`)
-      if (!res.ok) return
-      const data = await res.json() as CandidateNote[]
-      setNotes(data)
-    } catch {
-      // silently fail
-    } finally {
-      setLoadingNotes(false)
     }
   }, [])
 
@@ -443,9 +434,8 @@ export function CandidateDrawer({
       hhFetchRef.current = null
       setActiveTab("contacts")
       fetchCandidate(candidateId)
-      fetchNotes(candidateId)
     }
-  }, [open, candidateId, fetchCandidate, fetchNotes])
+  }, [open, candidateId, fetchCandidate])
 
   // ── Reload hh messages on demand (после отправки своего сообщения) ────────
   const reloadHhMessages = useCallback(async (hhResponseId: string) => {
@@ -856,12 +846,7 @@ export function CandidateDrawer({
                     Заметки
                   </h3>
 
-                  {loadingNotes ? (
-                    <div className="space-y-2 animate-pulse">
-                      <div className="h-12 bg-muted rounded" />
-                      <div className="h-12 bg-muted rounded" />
-                    </div>
-                  ) : notes.length === 0 ? (
+                  {notes.length === 0 ? (
                     <p className="text-xs text-muted-foreground py-2">Заметок пока нет</p>
                   ) : (
                     <div className="space-y-2">

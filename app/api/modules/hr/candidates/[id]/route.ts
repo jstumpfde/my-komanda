@@ -1,11 +1,14 @@
 import { NextRequest } from "next/server"
-import { eq, and, desc } from "drizzle-orm"
+import { eq, and, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { candidates, vacancies, hhResponses, hhCandidates, demos } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { deriveCandidateName } from "@/lib/candidate-name"
 
-// Helper: verify candidate belongs to user's company
+// Helper: verify candidate belongs to user's company.
+// За один SQL-запрос подтягиваем кандидата + вакансию + связку hh_responses
+// (если есть) + lessons_json последнего demo для этой вакансии (коррелированный
+// subquery — вся работа в одном round-trip).
 async function getOwnedCandidate(candidateId: string, companyId: string) {
   const [row] = await db
     .select({
@@ -14,6 +17,13 @@ async function getOwnedCandidate(candidateId: string, companyId: string) {
       hhResponseId: hhResponses.hhResponseId,
       hhRawData: hhResponses.rawData,
       hhCandidateName: hhResponses.candidateName,
+      demoLessons: sql<unknown>`(
+        SELECT ${demos.lessonsJson}
+        FROM ${demos}
+        WHERE ${demos.vacancyId} = ${candidates.vacancyId}
+        ORDER BY ${demos.updatedAt} DESC
+        LIMIT 1
+      )`,
     })
     .from(candidates)
     .innerJoin(vacancies, eq(candidates.vacancyId, vacancies.id))
@@ -69,15 +79,6 @@ export async function GET(
       return apiError("Candidate not found", 404)
     }
 
-    // Latest demo lessons for the candidate's vacancy — used to render question
-    // text on the "Ответы" tab.
-    const [demoRow] = await db
-      .select({ lessonsJson: demos.lessonsJson })
-      .from(demos)
-      .where(eq(demos.vacancyId, row.candidate.vacancyId))
-      .orderBy(desc(demos.updatedAt))
-      .limit(1)
-
     return apiSuccess({
       ...row.candidate,
       // Имя: fallback на anketa_answers, затем на hh_responses.candidate_name
@@ -85,7 +86,7 @@ export async function GET(
       vacancyTitle: row.vacancyTitle,
       hhResponseId: row.hhResponseId ?? null,
       hhRawData: row.hhRawData ?? null,
-      demoLessons: demoRow?.lessonsJson ?? null,
+      demoLessons: row.demoLessons ?? null,
     })
   } catch (err) {
     if (err instanceof Response) return err
