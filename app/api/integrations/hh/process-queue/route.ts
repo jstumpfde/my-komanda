@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { db } from "@/lib/db"
-import { hhResponses, candidates, vacancies } from "@/lib/db/schema"
+import { hhResponses, candidates, vacancies, followUpCampaigns, followUpMessages } from "@/lib/db/schema"
 import type { VacancyAiProcessSettings } from "@/lib/db/schema"
 import { and, eq, isNull } from "drizzle-orm"
 import { getValidToken } from "@/lib/hh-helpers"
@@ -9,6 +9,9 @@ import { changeNegotiationState, getNegotiationMessages } from "@/lib/hh-api"
 import { generateCandidateShortId } from "@/lib/short-id"
 import { screenCandidate, type ScreeningResult } from "@/lib/ai-screen-candidate"
 import { logAiAction } from "@/lib/ai-audit"
+import { generateTouchSchedule } from "@/lib/followup/schedule"
+import { DEFAULT_FOLLOWUP_MESSAGES } from "@/lib/followup/default-messages"
+import { isFollowUpPreset } from "@/lib/followup/presets"
 
 const stopFlags = new Map<string, boolean>()
 
@@ -363,6 +366,35 @@ export async function POST(req: NextRequest) {
       const updatePayload: { status: string; localCandidateId?: string } = { status: newStatus }
       if (candidateId) updatePayload.localCandidateId = candidateId
       await db.update(hhResponses).set(updatePayload).where(eq(hhResponses.id, resp.id))
+
+      // Триггер старта воронки дожима (TZ-5/4): если у вакансии включена
+      // активная кампания — расписываем pending-касания в follow_up_messages.
+      if (candidateId && localVac) {
+        try {
+          const [campaign] = await db
+            .select()
+            .from(followUpCampaigns)
+            .where(and(
+              eq(followUpCampaigns.vacancyId, localVac.id),
+              eq(followUpCampaigns.enabled, true),
+            ))
+            .limit(1)
+          if (campaign && isFollowUpPreset(campaign.preset) && campaign.preset !== "off") {
+            const messages = (campaign.customMessages && campaign.customMessages.length > 0)
+              ? campaign.customMessages
+              : DEFAULT_FOLLOWUP_MESSAGES
+            const touches = generateTouchSchedule(
+              campaign.id, candidateId, campaign.preset, new Date(), messages,
+            )
+            if (touches.length > 0) {
+              await db.insert(followUpMessages).values(touches)
+            }
+          }
+        } catch (followUpErr) {
+          console.error("[PQ] schedule follow-up failed:",
+            followUpErr instanceof Error ? followUpErr.message : followUpErr)
+        }
+      }
 
       invitedCount++
 
