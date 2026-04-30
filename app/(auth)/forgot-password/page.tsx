@@ -29,9 +29,24 @@ export default function ForgotPasswordPage() {
     if (!email.trim()) { setError("Введите email"); return }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) { setError("Некорректный формат email"); return }
     setLoading(true)
-    await new Promise(r => setTimeout(r, 1000))
-    setLoading(false)
-    setSent(true)
+    try {
+      const res = await fetch("/api/auth/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim().toLowerCase() }),
+      })
+      // Бэкенд намеренно отвечает одинаково независимо от существования email,
+      // поэтому показываем успех в любом случае.
+      if (!res.ok && res.status !== 200) {
+        setError("Ошибка отправки. Попробуйте позже.")
+        return
+      }
+      setSent(true)
+    } catch {
+      setError("Ошибка отправки. Попробуйте позже.")
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -93,12 +108,12 @@ export default function ForgotPasswordPage() {
                   </div>
                 </div>
                 <div>
-                  <h2 className="text-lg font-semibold text-foreground">Письмо отправлено</h2>
+                  <h2 className="text-lg font-semibold text-foreground">Если такой email зарегистрирован, мы отправили письмо</h2>
                   <p className="text-sm text-muted-foreground mt-1">
-                    Проверьте <span className="font-medium text-foreground">{email}</span> — там ссылка для сброса пароля
+                    Проверьте почту <span className="font-medium text-foreground">{email}</span>, в том числе папку «Спам».
                   </p>
                 </div>
-                <p className="text-xs text-muted-foreground">Письмо может прийти в течение нескольких минут. Проверьте папку «Спам».</p>
+                <p className="text-xs text-muted-foreground">Ссылка в письме действует 1 час.</p>
               </div>
             )}
 

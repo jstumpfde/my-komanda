@@ -92,9 +92,7 @@ function LoginForm() {
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <Label htmlFor="password" className="text-sm font-medium">Пароль</Label>
-                  {false && (
-                    <Link href="/forgot-password" className="text-xs text-primary hover:underline">Забыли пароль?</Link>
-                  )}
+                  <Link href="/forgot-password" className="text-xs text-primary hover:underline">Забыли пароль?</Link>
                 </div>
                 <div className="relative">
                   <Input
