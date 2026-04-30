@@ -16,7 +16,9 @@ const PUBLIC_PREFIXES = [
   "/ref/",
   "/v/",
   "/join/",
-  "/api/auth",
+  "/api/auth",          // sign-in/out + forgot-password/reset-password
+  "/api/cron/",         // cron-эндпоинты — защищены X-Cron-Secret в самом роуте,
+                        // а не сессией NextAuth.
   "/api/access-requests",
   "/api/visit-log",
   "/api/modules",
