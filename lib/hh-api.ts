@@ -131,6 +131,7 @@ export interface HHNegotiationItem {
   state: { id: string; name: string }
   vacancy: { id: string; name: string }
   resume?: {
+    id?: string
     title?: string
     alternate_url?: string
     first_name?: string
