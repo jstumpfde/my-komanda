@@ -1711,3 +1711,34 @@ export const passwordResetTokens = pgTable("password_reset_tokens", {
   userAgent:  text("user_agent"),
   createdAt:  timestamp("created_at").defaultNow().notNull(),
 })
+
+// ─── Follow-up Campaigns (Воронка дожима) ────────────────────────────────────
+// Цепочка автоматических напоминаний кандидату с hh.ru, если он не открыл
+// демо или не допрошёл его до конца. Настраивается на уровне вакансии:
+// один из 4 пресетов (off/soft/standard/aggressive) и кастомные тексты.
+
+export const followUpCampaigns = pgTable("follow_up_campaigns", {
+  id:                  uuid("id").defaultRandom().primaryKey(),
+  vacancyId:           uuid("vacancy_id").notNull().references(() => vacancies.id, { onDelete: "cascade" }),
+  preset:              text("preset").notNull().default("off"), // 'off' | 'soft' | 'standard' | 'aggressive'
+  enabled:             boolean("enabled").notNull().default(false),
+  stopOnReply:         boolean("stop_on_reply").notNull().default(true),
+  stopOnVacancyClosed: boolean("stop_on_vacancy_closed").notNull().default(true),
+  customMessages:      jsonb("custom_messages").$type<string[] | null>(),
+  createdAt:           timestamp("created_at").defaultNow().notNull(),
+  updatedAt:           timestamp("updated_at").defaultNow().notNull(),
+})
+
+export const followUpMessages = pgTable("follow_up_messages", {
+  id:           uuid("id").defaultRandom().primaryKey(),
+  campaignId:   uuid("campaign_id").notNull().references(() => followUpCampaigns.id, { onDelete: "cascade" }),
+  candidateId:  uuid("candidate_id").notNull().references(() => candidates.id, { onDelete: "cascade" }),
+  scheduledAt:  timestamp("scheduled_at").notNull(),
+  sentAt:       timestamp("sent_at"),
+  touchNumber:  integer("touch_number").notNull(),
+  channel:      text("channel").notNull(), // 'hh' | 'email' | 'telegram'
+  messageText:  text("message_text").notNull(),
+  status:       text("status").notNull().default("pending"), // 'pending' | 'sent' | 'failed' | 'cancelled'
+  errorMessage: text("error_message"),
+  createdAt:    timestamp("created_at").defaultNow().notNull(),
+})
