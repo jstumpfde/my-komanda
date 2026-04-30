@@ -1681,3 +1681,16 @@ export const goals = pgTable("goals", {
   createdAt:      timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt:      timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 })
+
+// ─── Legal Documents ─────────────────────────────────────────────────────────
+// Юридические документы (политика конфиденциальности, оферта и др.) —
+// редактируются через /settings/legal только администратором платформы,
+// рендерятся на публичных страницах вроде /politicahr2026.
+
+export const legalDocuments = pgTable("legal_documents", {
+  id:          uuid("id").primaryKey().defaultRandom(),
+  slug:        text("slug").notNull().unique(),       // 'privacy_policy', 'terms_of_use', ...
+  title:       text("title").notNull(),
+  contentHtml: text("content_html").notNull(),
+  updatedAt:   timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+})
