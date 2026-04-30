@@ -51,6 +51,7 @@ import { MiniFormBuilder } from "@/components/vacancies/mini-form-builder"
 import { UtmLinksSection } from "@/components/vacancies/utm-links-section"
 import { PostDemoSettings } from "@/components/vacancies/post-demo-settings"
 import { VacancyAiProcessSettings } from "@/components/vacancies/vacancy-ai-process-settings"
+import { VacancyFollowupSettings } from "@/components/vacancies/vacancy-followup-settings"
 import {
   ResponsiveContainer,
   BarChart,
@@ -2047,6 +2048,9 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                         initialAiScoringEnabled={apiVacancy?.aiScoringEnabled ?? true}
                         onSaved={() => refetchVacancy()}
                       />
+                    </div>
+                    <div className="mt-6">
+                      <VacancyFollowupSettings vacancyId={id} />
                     </div>
                     <div className="mt-6">
                       <PostDemoSettings vacancyId={id} />
