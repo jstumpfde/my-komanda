@@ -16,7 +16,7 @@ import { logAiAction } from "@/lib/ai-audit"
 import { generateTouchSchedule } from "@/lib/followup/schedule"
 import { DEFAULT_FOLLOWUP_MESSAGES } from "@/lib/followup/default-messages"
 import { isFollowUpPreset } from "@/lib/followup/presets"
-import { canSendNow } from "@/lib/working-hours"
+import { canSendNow } from "@/lib/schedule/can-send-now"
 
 const DEMO_INVITE_MESSAGE = "Здравствуйте! Спасибо за отклик. Мы подготовили короткую демонстрацию должности — 15 минут, и вы узнаете всё о задачах, команде и доходе. Перейдите по ссылке: https://company24.pro/demo/invite"
 
@@ -144,12 +144,19 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
 
     const localVac = localVacancies.find(v => v.hhVacancyId === resp.hhVacancyId) || null
 
-    // Проверка рабочих часов — для cron'а: если нерабочее время — оставляем
-    // status='response', следующий cron подберёт.
-    if (respectWorkingHours && localVac && !canSendNow(localVac)) {
-      deferredOffHours++
-      results.push({ id: resp.hhResponseId, name: resp.candidateName, action: "deferred_off_hours" })
-      continue
+    // Проверка расписания — для cron'а: если нерабочее время / выходной /
+    // праздник — оставляем status='response', следующий cron подберёт.
+    if (respectWorkingHours && localVac) {
+      const check = canSendNow(localVac)
+      if (!check.allowed) {
+        deferredOffHours++
+        results.push({
+          id:     resp.hhResponseId,
+          name:   resp.candidateName,
+          action: `deferred_${check.reason ?? "off_hours"}`,
+        })
+        continue
+      }
     }
 
     const raw = resp.rawData as { resume?: { id?: string; area?: { name?: string } } } | null

@@ -5,7 +5,7 @@ import { vacancies, candidates, companies, followUpMessages, followUpCampaigns, 
 import { sendMail } from "@/lib/mail"
 import { getValidToken } from "@/lib/hh-helpers"
 import { shouldStopFollowUp } from "@/lib/followup/should-stop"
-import { canSendNow } from "@/lib/working-hours"
+import { canSendNow } from "@/lib/schedule/can-send-now"
 import { checkCronAuth } from "@/lib/cron/auth"
 
 // POST /api/cron/follow-up
@@ -64,9 +64,10 @@ export async function POST(req: NextRequest) {
         .where(eq(companies.id, vacancy.companyId))
         .limit(1)
 
-      // Проверка рабочих часов вакансии. Если сейчас вне окна — НЕ помечаем
-      // как failed, просто пропускаем. Следующий cron в рабочее время подберёт.
-      if (!canSendNow(vacancy, now)) {
+      // Проверка расписания вакансии. Если сейчас вне окна / выходной /
+      // праздник — НЕ помечаем как failed, просто пропускаем. Следующий
+      // cron в рабочее время подберёт.
+      if (!canSendNow(vacancy, now).allowed) {
         skipped++
         continue
       }
@@ -158,13 +159,29 @@ async function processCampaignTouches(now: Date) {
     }
 
     const [vacancy] = await db
-      .select({ companyId: vacancies.companyId, title: vacancies.title })
+      .select({
+        companyId:                  vacancies.companyId,
+        title:                      vacancies.title,
+        scheduleEnabled:            vacancies.scheduleEnabled,
+        scheduleStart:              vacancies.scheduleStart,
+        scheduleEnd:                vacancies.scheduleEnd,
+        scheduleTimezone:           vacancies.scheduleTimezone,
+        scheduleWorkingDays:        vacancies.scheduleWorkingDays,
+        scheduleExcludedHolidayIds: vacancies.scheduleExcludedHolidayIds,
+        scheduleCustomHolidays:     vacancies.scheduleCustomHolidays,
+      })
       .from(vacancies)
       .where(eq(vacancies.id, campaign.vacancyId))
       .limit(1)
     if (!vacancy) {
       await db.update(followUpMessages).set({ status: "cancelled", errorMessage: "vacancy_missing" }).where(eq(followUpMessages.id, msg.id))
       touchCancelled++
+      continue
+    }
+
+    // Проверка расписания: если сейчас вне окна — оставляем pending,
+    // следующий cron в рабочее время подберёт. НЕ помечаем как failed.
+    if (!canSendNow(vacancy, now).allowed) {
       continue
     }
 

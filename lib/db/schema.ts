@@ -273,12 +273,21 @@ export const vacancies = pgTable("vacancies", {
   hhSyncedAt: timestamp("hh_synced_at"),
   aiProcessSettings: jsonb("ai_process_settings").default({}),
   aiScoringEnabled: boolean("ai_scoring_enabled").notNull().default(true),
-  // Рабочие часы — окно отправки сообщений (демо-приглашения и follow-up).
-  // Логика и fallback на descriptionJson.automation.workingHours — в lib/working-hours.ts.
-  workingHoursEnabled:  boolean("working_hours_enabled").notNull().default(false),
-  workingHoursStart:    text("working_hours_start").notNull().default("09:00"),
-  workingHoursEnd:      text("working_hours_end").notNull().default("19:55"),
-  workingHoursTimezone: text("working_hours_timezone").notNull().default("Europe/Moscow"),
+  // Расписание отправки сообщений (часы + дни + праздники).
+  // Логика — lib/schedule/can-send-now.ts.
+  scheduleEnabled:            boolean("schedule_enabled").notNull().default(false),
+  scheduleStart:              text("schedule_start").notNull().default("09:00"),
+  scheduleEnd:                text("schedule_end").notNull().default("19:55"),
+  scheduleTimezone:           text("schedule_timezone").notNull().default("Europe/Moscow"),
+  // 1=Пн ... 7=Вс. Default — Пн-Пт.
+  scheduleWorkingDays:        jsonb("schedule_working_days").$type<number[]>().notNull().default([1, 2, 3, 4, 5]),
+  // Идентификаторы из RU_HOLIDAYS — даты, в которые блокируется отправка.
+  scheduleExcludedHolidayIds: jsonb("schedule_excluded_holiday_ids").$type<string[]>().notNull().default([
+    "dec_31", "jan_1", "jan_2", "jan_3", "jan_4", "jan_5", "jan_6", "jan_7", "jan_8",
+    "feb_23", "mar_8", "may_1", "may_9", "jun_12", "nov_4",
+  ]),
+  // Кастомные периоды (например, корпоративные отпуска). { from: "YYYY-MM-DD", to, label }.
+  scheduleCustomHolidays:     jsonb("schedule_custom_holidays").$type<{ from: string; to: string; label: string }[]>().notNull().default([]),
   deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
