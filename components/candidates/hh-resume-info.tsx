@@ -426,7 +426,13 @@ export function HhResumeInfo({ rawData, fallback }: HhResumeInfoProps) {
   const age = resume?.age ?? ageFromBirth
   const gender = resume?.gender?.name
   const desiredPosition = pickStr(resume, "title", "position", "должность")
-  const photoUrl = resume?.photo?.["100"] || resume?.photo?.medium || resume?.photo?.["240"] || resume?.photo?.small
+  // Для большого фото предпочитаем 240px > medium > 100 > small
+  const photoUrl = resume?.photo?.["240"] || resume?.photo?.medium || resume?.photo?.["100"] || resume?.photo?.small
+  const initials = fullName
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((p) => p[0]?.toUpperCase() ?? "")
+    .join("") || "?"
   const citizenship = Array.isArray(resume?.citizenship)
     ? resume!.citizenship!.map((c) => c?.name).filter((s): s is string => !!s)
     : []
@@ -548,33 +554,43 @@ export function HhResumeInfo({ rawData, fallback }: HhResumeInfoProps) {
     <div className="space-y-5">
       {/* ── Личное ──────────────────────────────────────────────────────────── */}
       {hasPersonal && (
-        <section className="space-y-1.5">
+        <section className="space-y-2">
           <SectionHeader>Личное</SectionHeader>
-          <div className="flex items-start gap-3">
-            {photoUrl && (
+          <div className="flex items-start gap-4">
+            {photoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={photoUrl}
                 alt={fullName || "Фото"}
-                className="w-14 h-14 rounded-full object-cover shrink-0 border border-border/40"
+                className="w-48 h-48 rounded-lg object-cover shrink-0 border border-border/40 bg-muted"
               />
+            ) : (
+              <div
+                className="w-48 h-48 rounded-lg shrink-0 border border-border/40 bg-muted flex items-center justify-center text-muted-foreground text-4xl font-semibold select-none"
+                aria-label={fullName || "Фото отсутствует"}
+              >
+                {initials}
+              </div>
             )}
-            <div className="flex-1 min-w-0 space-y-1">
+            <div className="flex-1 min-w-0 space-y-1.5 pt-1">
               {fullName && (
-                <p className="text-sm font-medium text-foreground break-words">{fullName}</p>
+                <h2 className="text-lg font-semibold text-foreground break-words leading-tight">{fullName}</h2>
               )}
-              {desiredPosition && (
-                <p className="text-xs text-muted-foreground break-words">
-                  Желаемая должность: <span className="text-foreground">{desiredPosition}</span>
+              {(age != null || gender) && (
+                <p className="text-sm text-muted-foreground">
+                  {age != null ? `${age} ${ageWord(age)}` : ""}
+                  {age != null && gender ? " · " : ""}
+                  {gender ?? ""}
                 </p>
               )}
-              {(age != null || gender || birthDate) && (
+              {birthDate && (
                 <p className="text-xs text-muted-foreground">
-                  {age != null ? `${age} ${ageWord(age)}` : ""}
-                  {age != null && (gender || birthDate) ? " · " : ""}
-                  {gender ?? ""}
-                  {gender && birthDate ? " · " : !gender && birthDate ? "" : ""}
-                  {birthDate ? formatYear(birthDate) : ""}
+                  Дата рождения: <span className="text-foreground">{formatYear(birthDate)}</span>
+                </p>
+              )}
+              {desiredPosition && (
+                <p className="text-sm text-foreground break-words">
+                  {desiredPosition}
                 </p>
               )}
             </div>
