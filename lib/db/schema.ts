@@ -364,6 +364,7 @@ export const candidates = pgTable("candidates", {
   aiScore: integer("ai_score"),
   aiSummary: text("ai_summary"),
   aiDetails: jsonb("ai_details"), // [{question, score, comment}]
+  aiScoredAt: timestamp("ai_scored_at"),
   stageHistory: jsonb("stage_history").default("[]"), // [{stage, date, note}]
   isFavorite: boolean("is_favorite").notNull().default(false),
   autoProcessingStopped: boolean("auto_processing_stopped").notNull().default(false),
@@ -1694,4 +1695,19 @@ export const legalDocuments = pgTable("legal_documents", {
   title:       text("title").notNull(),
   contentHtml: text("content_html").notNull(),
   updatedAt:   timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+})
+
+// ─── Password reset tokens ───────────────────────────────────────────────────
+// Сброс пароля по email. Токен хешируется (SHA-256) перед записью в БД,
+// сам токен присылается пользователю в ссылке. TTL — 1 час.
+
+export const passwordResetTokens = pgTable("password_reset_tokens", {
+  id:         uuid("id").primaryKey().defaultRandom(),
+  userId:     uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  tokenHash:  text("token_hash").notNull().unique(),
+  expiresAt:  timestamp("expires_at").notNull(),
+  usedAt:     timestamp("used_at"),
+  ipAddress:  text("ip_address"),
+  userAgent:  text("user_agent"),
+  createdAt:  timestamp("created_at").defaultNow().notNull(),
 })

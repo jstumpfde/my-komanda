@@ -7,6 +7,8 @@ import { and, eq, isNull } from "drizzle-orm"
 import { getValidToken } from "@/lib/hh-helpers"
 import { changeNegotiationState, getNegotiationMessages } from "@/lib/hh-api"
 import { generateCandidateShortId } from "@/lib/short-id"
+import { screenCandidate, type ScreeningResult } from "@/lib/ai-screen-candidate"
+import { logAiAction } from "@/lib/ai-audit"
 
 const stopFlags = new Map<string, boolean>()
 
@@ -122,8 +124,10 @@ export async function POST(req: NextRequest) {
     } | null
     const candidateCity = raw?.resume?.area?.name ?? undefined
 
-    // AI-скоринг временно отключён — всем откликам отправляем приглашение на демо.
-    console.log("[PQ] candidate (no-AI)", { name: resp.candidateName })
+    // AI-скоринг (выполняется ниже после создания/связывания candidateId,
+    // если у вакансии включен тумблер aiScoringEnabled). Сейчас всем откликам
+    // отправляем приглашение на демо — низкий скор не блокирует приглашение.
+    console.log("[PQ] candidate", { name: resp.candidateName, aiEnabled: localVac?.aiScoringEnabled !== false })
 
     const targetStage = "demo"
     const baseMessage = effInviteMsg
@@ -205,11 +209,64 @@ export async function POST(req: NextRequest) {
           newCandShortId = newCand.shortId ?? null
         }
       } else if (candidateId) {
-        // Кандидат уже существует — обновляем стадию (AI-поля больше не трогаем)
+        // Кандидат уже существует — обновляем стадию
         await db.update(candidates).set({
           stage: targetStage,
           updatedAt: new Date(),
         }).where(eq(candidates.id, candidateId))
+      }
+
+      // AI-скоринг (гейт по тумблеру vacancy.aiScoringEnabled).
+      // Скоринг не блокирует приглашение — приглашение шлётся всем,
+      // а скор сохраняется в кандидате для последующего ручного ревью.
+      if (candidateId && localVac && localVac.aiScoringEnabled !== false) {
+        try {
+          const dj = (localVac.descriptionJson as Record<string, unknown> | null) ?? {}
+          const an = (dj.anketa as Record<string, unknown> | null) ?? {}
+          const aiResult: ScreeningResult = await screenCandidate({
+            candidateData: {
+              name: resp.candidateName ?? undefined,
+              city: candidateCity,
+              resume: [
+                resp.resumeTitle ? `Заголовок резюме: ${resp.resumeTitle}` : null,
+                resp.resumeUrl ? `Ссылка: ${resp.resumeUrl}` : null,
+              ].filter(Boolean).join("\n") || undefined,
+            },
+            vacancyAnketa: {
+              vacancyTitle: localVac.title ?? undefined,
+              requirements: typeof an.requirements === "string" ? an.requirements : undefined,
+              responsibilities: typeof an.responsibilities === "string" ? an.responsibilities : undefined,
+              requiredSkills: Array.isArray(an.requiredSkills) ? an.requiredSkills.map(String) : undefined,
+              desiredSkills: Array.isArray(an.desiredSkills) ? an.desiredSkills.map(String) : undefined,
+              experienceMin: typeof an.experienceMin === "string" ? an.experienceMin : undefined,
+              positionCity: localVac.city ?? undefined,
+              aiIdealProfile: typeof an.aiIdealProfile === "string" ? an.aiIdealProfile : undefined,
+              aiStopFactors: Array.isArray(an.aiStopFactors) ? an.aiStopFactors.map(String) : undefined,
+              aiRequiredHardSkills: Array.isArray(an.aiRequiredHardSkills) ? an.aiRequiredHardSkills.map(String) : undefined,
+              aiMinExperience: typeof an.aiMinExperience === "string" ? an.aiMinExperience : undefined,
+            },
+          })
+          await db.update(candidates).set({
+            aiScore: aiResult.score,
+            aiSummary: aiResult.recommendation,
+            aiDetails: [
+              ...aiResult.strengths.map(s => ({ question: "Сильная сторона", score: 1, comment: s })),
+              ...aiResult.weaknesses.map(w => ({ question: "Слабая сторона", score: 0, comment: w })),
+            ],
+            aiScoredAt: new Date(),
+            updatedAt: new Date(),
+          }).where(eq(candidates.id, candidateId))
+          await logAiAction({
+            tenantId: companyId,
+            action: "screen_candidate",
+            vacancyId: localVac.id,
+            candidateId,
+            inputSummary: `${resp.candidateName ?? "?"} → ${localVac.title ?? "?"}`,
+            outputSummary: `score=${aiResult.score} verdict=${aiResult.verdict} action=${aiResult.autoAction}`,
+          })
+        } catch (err) {
+          console.error("[PQ] AI scoring failed:", err instanceof Error ? err.message : err)
+        }
       }
 
       // Проверяем — отправляли ли работодателю уже что-то по этому отклику.
