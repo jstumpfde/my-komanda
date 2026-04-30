@@ -12,7 +12,8 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select"
-import { Search, Users, ListFilter, MoreHorizontal, UserPlus, Archive, XCircle, Loader2, Star, Eye } from "lucide-react"
+import { Search, Users, ListFilter, MoreHorizontal, UserPlus, Archive, XCircle, Loader2, Star, Eye, ChevronDown } from "lucide-react"
+import { useDebounce } from "@/hooks/use-debounce"
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
@@ -141,7 +142,12 @@ export default function CandidatesPage() {
   const router = useRouter()
   const [candidates, setCandidates] = useState<Candidate[]>([])
   const [loading, setLoading] = useState(true)
+  const [page, setPage] = useState(1)
+  const [hasMore, setHasMore] = useState(false)
+  const [total, setTotal] = useState(0)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [search, setSearch] = useState("")
+  const debouncedSearch = useDebounce(search, 300)
   const [statusFilter, setStatusFilter] = useState("all")
   const [vacancyFilter, setVacancyFilter] = useState("all")
   const [sourceFilter, setSourceFilter] = useState("all")
@@ -149,13 +155,50 @@ export default function CandidatesPage() {
   const [colSort, setColSort] = useState<ColumnSort>({ column: "date", dir: "desc" })
   const [selected, setSelected] = useState<Set<string>>(new Set())
 
+  const PAGE_SIZE = 50
+
   useEffect(() => {
-    fetch("/api/modules/hr/candidates")
+    let cancelled = false
+    setLoading(true)
+    fetch(`/api/modules/hr/candidates?page=1&pageSize=${PAGE_SIZE}`)
       .then(r => r.ok ? r.json() : Promise.reject())
-      .then(data => setCandidates(Array.isArray(data) ? data : []))
-      .catch(() => setCandidates([]))
-      .finally(() => setLoading(false))
+      .then((data: { items?: Candidate[]; total?: number; hasMore?: boolean }) => {
+        if (cancelled) return
+        setCandidates(Array.isArray(data.items) ? data.items : [])
+        setTotal(data.total ?? 0)
+        setHasMore(!!data.hasMore)
+        setPage(1)
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setCandidates([])
+          setTotal(0)
+          setHasMore(false)
+        }
+      })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
   }, [])
+
+  const loadMore = async () => {
+    if (loadingMore || !hasMore) return
+    setLoadingMore(true)
+    try {
+      const nextPage = page + 1
+      const res = await fetch(`/api/modules/hr/candidates?page=${nextPage}&pageSize=${PAGE_SIZE}`)
+      if (!res.ok) throw new Error()
+      const data = await res.json() as { items?: Candidate[]; total?: number; hasMore?: boolean }
+      const items = Array.isArray(data.items) ? data.items : []
+      setCandidates(prev => [...prev, ...items])
+      setTotal(data.total ?? total)
+      setHasMore(!!data.hasMore)
+      setPage(nextPage)
+    } catch {
+      toast.error("Не удалось загрузить следующую страницу")
+    } finally {
+      setLoadingMore(false)
+    }
+  }
 
   const changeStage = async (candidateId: string, stage: string, candidateName: string) => {
     try {
@@ -204,8 +247,8 @@ export default function CandidatesPage() {
   const filtered = useMemo(() => {
     let result = candidates
 
-    if (search.trim()) {
-      const q = search.trim().toLowerCase()
+    if (debouncedSearch.trim()) {
+      const q = debouncedSearch.trim().toLowerCase()
       result = result.filter((c) => c.name.toLowerCase().includes(q))
     }
     if (statusFilter !== "all") {
@@ -233,7 +276,7 @@ export default function CandidatesPage() {
     })
 
     return result
-  }, [candidates, search, statusFilter, vacancyFilter, sourceFilter, favoriteOnly, colSort])
+  }, [candidates, debouncedSearch, statusFilter, vacancyFilter, sourceFilter, favoriteOnly, colSort])
 
   const allSelected = filtered.length > 0 && filtered.every((c) => selected.has(c.id))
   const toggleOne = (id: string) => { setSelected((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n }) }
@@ -250,7 +293,10 @@ export default function CandidatesPage() {
             <div className="flex items-center justify-between mb-5">
               <div>
                 <h1 className="text-xl font-semibold text-foreground">Кандидаты</h1>
-                <p className="text-sm text-muted-foreground mt-0.5">{filtered.length} из {candidates.length} кандидатов</p>
+                <p className="text-sm text-muted-foreground mt-0.5">
+                  {filtered.length} из {candidates.length}
+                  {total > candidates.length ? ` (всего ${total})` : ""} кандидатов
+                </p>
               </div>
             </div>
 
@@ -421,6 +467,26 @@ export default function CandidatesPage() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+            )}
+
+            {/* Load more — серверная пагинация по 50 строк */}
+            {!loading && hasMore && (
+              <div className="flex justify-center mt-4">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={loadMore}
+                  disabled={loadingMore}
+                  className="gap-2"
+                >
+                  {loadingMore ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <ChevronDown className="size-4" />
+                  )}
+                  Загрузить ещё ({total - candidates.length})
+                </Button>
               </div>
             )}
           </div>

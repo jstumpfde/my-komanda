@@ -58,9 +58,38 @@ export async function GET(req: NextRequest) {
     const vacancyId = url.searchParams.get("vacancy_id")
     const stageParam = url.searchParams.get("stage")
 
-    // If no vacancy_id — return ALL candidates for this company with vacancy title
+    // If no vacancy_id — return candidates for this company with vacancy title.
+    // Опциональная пагинация по ?page=N&pageSize=M (default 50, max 100):
+    //   • без ?page — возвращаем массив (старый формат, обратная совместимость
+    //     с mini-table и любым кодом, который ждёт array).
+    //   • с ?page — возвращаем { items, total, page, pageSize, hasMore }.
     if (!vacancyId) {
-      const rows = await db
+      const pageParam     = url.searchParams.get("page")
+      const pageSizeParam = url.searchParams.get("pageSize")
+      const paginated     = pageParam !== null
+      const page          = Math.max(1, Number.parseInt(pageParam ?? "1", 10) || 1)
+      const pageSize      = Math.min(100, Math.max(1, Number.parseInt(pageSizeParam ?? "50", 10) || 50))
+      const offset        = (page - 1) * pageSize
+
+      const whereExpr = and(
+        eq(vacancies.companyId, user.companyId),
+        or(isNull(candidates.source), ne(candidates.source, "preview")),
+      )
+
+      let total = 0
+      if (paginated) {
+        const [{ cnt }] = await db
+          .select({ cnt: sql<number>`count(*)::int` })
+          .from(candidates)
+          .innerJoin(vacancies, eq(candidates.vacancyId, vacancies.id))
+          .where(whereExpr)
+        total = cnt ?? 0
+      }
+
+      // demoProgressJson и anketaAnswers нужны server-side для вычисления
+      // progressPercent и displayName — без них теряем колонку «Прогресс»
+      // и фолбэк имени из анкеты. Из ответа клиенту они вырезаются (см. ниже).
+      const baseQuery = db
         .select({
           id: candidates.id,
           name: candidates.name,
@@ -87,10 +116,12 @@ export async function GET(req: NextRequest) {
           eq(hhResponses.localCandidateId, candidates.id),
           eq(hhResponses.companyId, user.companyId),
         ))
-        .where(and(
-          eq(vacancies.companyId, user.companyId),
-          or(isNull(candidates.source), ne(candidates.source, "preview")),
-        ))
+        .where(whereExpr)
+        .orderBy(desc(candidates.createdAt))
+
+      const rows = paginated
+        ? await baseQuery.limit(pageSize).offset(offset)
+        : await baseQuery
 
       const vacancyIds = [...new Set(rows.map((r) => r.vacancyId))]
 
@@ -167,6 +198,11 @@ export async function GET(req: NextRequest) {
           isActive,
         }
       })
+
+      if (paginated) {
+        const hasMore = offset + enriched.length < total
+        return apiSuccess({ items: enriched, total, page, pageSize, hasMore })
+      }
 
       return apiSuccess(enriched)
     }
