@@ -1,9 +1,35 @@
 import { NextRequest } from "next/server"
 import { eq, and, isNull, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { candidates, vacancies, demos, companies } from "@/lib/db/schema"
+import { candidates, vacancies, demos, companies, hhResponses } from "@/lib/db/schema"
 import { apiError, apiSuccess } from "@/lib/api-helpers"
 import { isShortId } from "@/lib/short-id"
+
+// Достаём first/last/city из hh resume. У части записей raw_data — это сам
+// resume, у других обёрнут в { resume: ... }. Альтернативные ключи
+// (firstName/lastName/имя) тоже встречаются — повторяем подход
+// deriveCandidateName в lib/candidate-name.ts.
+function pickStr(o: unknown, ...keys: string[]): string | null {
+  if (!o || typeof o !== "object") return null
+  const obj = o as Record<string, unknown>
+  for (const k of keys) {
+    const v = obj[k]
+    if (typeof v === "string" && v.trim().length > 0) return v.trim()
+  }
+  return null
+}
+
+function extractHhPrefill(rawData: unknown): { first_name: string | null; last_name: string | null; city: string | null } {
+  const raw = (rawData && typeof rawData === "object") ? rawData as Record<string, unknown> : {}
+  const resume = (raw.resume && typeof raw.resume === "object")
+    ? raw.resume as Record<string, unknown>
+    : raw
+  const first_name = pickStr(resume, "first_name", "firstName", "имя")
+  const last_name  = pickStr(resume, "last_name", "lastName", "фамилия")
+  const area       = (resume.area && typeof resume.area === "object") ? resume.area as Record<string, unknown> : null
+  const city       = pickStr(area ?? {}, "name") ?? pickStr(resume, "city", "город")
+  return { first_name, last_name, city }
+}
 
 export async function GET(
   _req: NextRequest,
@@ -85,6 +111,15 @@ export async function GET(
 
     const demo = demoRows[0]
 
+    // hh prefill — если кандидат пришёл с hh.ru, достаём имя/город из resume.
+    // Реферальные/прямые кандидаты hh-записи не имеют — prefill будет null.
+    const [hhRow] = await db
+      .select({ rawData: hhResponses.rawData })
+      .from(hhResponses)
+      .where(eq(hhResponses.localCandidateId, candidate.id))
+      .limit(1)
+    const prefill = hhRow ? extractHhPrefill(hhRow.rawData) : { first_name: null, last_name: null, city: null }
+
     return apiSuccess({
       candidateName: candidate.name,
       vacancyTitle: vacancy.title,
@@ -102,6 +137,7 @@ export async function GET(
       answers: candidate.anketaAnswers,
       aiScore: candidate.aiScore,
       postDemoSettings: demo.postDemoSettings ?? {},
+      prefill,
     })
   } catch (err) {
     if (err instanceof Response) return err
