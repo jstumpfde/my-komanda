@@ -742,8 +742,12 @@ export function CandidateDrawer({
 
             <div
               ref={tabScrollRef}
-              className="flex-1 min-h-0 overflow-y-auto"
-              style={{ maxHeight: "calc(100vh - 180px)" }}
+              className="flex-1 min-h-0 overflow-y-auto overscroll-contain"
+              // 100dvh, а не 100vh — на iOS Safari 100vh учитывает
+              // скрытую URL-bar и даёт высоту больше визуальной области,
+              // из-за чего последние блоки длинного списка ответов не
+              // были видны (cap maxHeight срабатывал с лагом).
+              style={{ maxHeight: "calc(100dvh - 180px)" }}
             >
               {/* ── Контакты ─────────────────────────────────────── */}
               <TabsContent value="contacts" className="px-6 py-4 pb-28 space-y-5 mt-0">
@@ -961,7 +965,11 @@ export function CandidateDrawer({
               </TabsContent>
 
               {/* ── Ответы ───────────────────────────────────────── */}
-              <TabsContent value="answers" className="px-6 py-4 pb-28 mt-0">
+              {/* pb-40 (а не pb-28 как у соседних табов) — длинные ответы
+                  с видео/аудио рендерятся высоко (max-h-[400px] на видео),
+                  и стандартного буфера 7rem не хватало чтобы последний блок
+                  был полностью виден над sticky-футером. */}
+              <TabsContent value="answers" className="px-6 py-4 pb-40 mt-0">
                 <AnswersTab answers={candidate.anketaAnswers} demoLessons={candidate.demoLessons} />
               </TabsContent>
 
