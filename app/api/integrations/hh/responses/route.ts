@@ -65,7 +65,14 @@ export async function GET() {
         if (items.length === 0) {
           console.info(`[hh/responses] vacancy ${v.id} (hh ${v.hhVacancyId}): 0 откликов`)
         }
-        allItems.push(...items)
+        // hh при фильтре по vacancy_id не возвращает поле vacancy на каждом item
+        // (все они и так относятся к запрошенной вакансии). Восстанавливаем привязку
+        // из контекста цикла, иначе ниже отвалится проверка !item.vacancy?.id.
+        const hhVacancyId = v.hhVacancyId
+        const itemsWithVacancy: HHNegotiationItem[] = items.map((item) =>
+          item.vacancy?.id ? item : { ...item, vacancy: { id: hhVacancyId, name: item.vacancy?.name ?? "" } },
+        )
+        allItems.push(...itemsWithVacancy)
       } catch (err) {
         console.error(`[hh/responses] vacancy ${v.id} (hh ${v.hhVacancyId}) failed:`, err instanceof Error ? err.message : err)
       }
@@ -73,14 +80,6 @@ export async function GET() {
 
     for (let idx = 0; idx < allItems.length; idx++) {
       const item = allItems[idx]
-      console.warn("[hh/responses:debug] item structure:",
-        JSON.stringify({
-          has_vacancy: !!item.vacancy,
-          vacancy_keys: item.vacancy ? Object.keys(item.vacancy) : null,
-          has_id: !!item.id,
-          item_keys: Object.keys(item),
-          sample: JSON.stringify(item).slice(0, 300)
-        }))
       // Защитная проверка: hh иногда отдаёт item без vacancy/id — пропускаем,
       // иначе падает весь батч на TypeError "Cannot read properties of undefined".
       if (!item?.vacancy?.id || !item?.id) {
