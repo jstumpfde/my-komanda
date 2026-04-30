@@ -6,6 +6,7 @@ import {
   SheetContent,
   SheetHeader,
   SheetTitle,
+  SheetDescription,
 } from "@/components/ui/sheet"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -675,6 +676,15 @@ export function CandidateDrawer({
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="w-full sm:max-w-lg p-0 flex flex-col">
+        {/* sr-only title/description: гарантируют наличие aria-labelledby
+            и aria-describedby у Radix Dialog даже когда candidate ещё грузится
+            или не найден — иначе библиотека пишет варнинги в консоль. */}
+        <SheetTitle className="sr-only">
+          Карточка кандидата{candidate?.name ? ` ${candidate.name}` : ""}
+        </SheetTitle>
+        <SheetDescription className="sr-only">
+          Подробная информация о кандидате
+        </SheetDescription>
         {/* ── Header ─────────────────────────────────────────────────── */}
         <SheetHeader className="px-6 pt-6 pb-4 border-b border-border shrink-0">
           {loadingCandidate ? (
@@ -689,7 +699,7 @@ export function CandidateDrawer({
             <div className="flex items-start gap-4">
               <AvatarInitials name={candidate.name} size="md" />
               <div className="flex-1 min-w-0">
-                <SheetTitle className="text-base font-semibold leading-tight mb-1 flex items-center gap-2">
+                <div className="text-base font-semibold leading-tight mb-1 flex items-center gap-2">
                   <span className="truncate">{candidate.name}</span>
                   <button
                     type="button"
@@ -704,7 +714,7 @@ export function CandidateDrawer({
                   >
                     <Star className={cn("w-4 h-4", candidate.isFavorite && "fill-current")} />
                   </button>
-                </SheetTitle>
+                </div>
                 <div className="flex flex-wrap items-center gap-2">
                   {stageCfg && (
                     <Badge variant="outline" className={cn("text-xs border", stageCfg.color)}>

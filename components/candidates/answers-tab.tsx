@@ -185,8 +185,6 @@ function MediaAnswerView({ media }: { media: MediaAnswer }) {
           preload="metadata"
           src={media.url}
           playsInline
-          onError={(e) => console.error("[answer-debug] video failed", media.url, e.currentTarget.error)}
-          onLoadedMetadata={() => console.log("[answer-debug] video loaded", media.url)}
           className="w-full rounded-md bg-black max-h-[400px] object-contain"
         />
         <a
@@ -206,7 +204,6 @@ function MediaAnswerView({ media }: { media: MediaAnswer }) {
         controls
         preload="metadata"
         src={media.url}
-        onError={(e) => console.error("[answer-debug] audio failed", media.url, e.currentTarget.error)}
         className="w-full"
       />
     )
@@ -399,22 +396,6 @@ export function AnswersTab({ answers, demoLessons }: AnswersTabProps) {
     if ("blockId" in e && (e as { blockId?: string }).blockId === "__complete__") return false
     return true
   })
-
-  // Debug: показать в браузере полную структуру ответов и распознанное медиа.
-  // Юрий смотрит DevTools, чтобы понимать как хранится answer и видит ли
-  // фронт видео-визитку. Не убирать без согласования.
-  if (typeof window !== "undefined") {
-    const summary = visible.map((e) => {
-      const ans = (e as { answer?: unknown }).answer
-      return {
-        blockId: (e as { blockId?: string }).blockId,
-        media: coerceMedia(ans),
-        rawType: ans === null ? "null" : Array.isArray(ans) ? "array" : typeof ans,
-        raw: ans,
-      }
-    })
-    console.log("[answer-debug] entries:", summary)
-  }
 
   if (visible.length === 0) {
     return (

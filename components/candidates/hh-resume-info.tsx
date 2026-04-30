@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import {
   Phone, Mail, MapPin, Briefcase, GraduationCap, Globe2, Plane,
   DollarSign, Calendar, ExternalLink, Languages, Wrench,
@@ -302,6 +303,43 @@ function cleanHtml(raw: string | undefined): string {
 
 // ─── Sections ─────────────────────────────────────────────────────────────────
 
+// Большое фото 192×192 с фолбэком: при onError или отсутствии photoUrl
+// рендерим div-плейсхолдер с инициалами (URL hh.ru может быть просрочен,
+// картинки могут быть закрыты hotlink protection или вернуть 404).
+function ProfilePhoto({
+  photoUrl,
+  fullName,
+  initials,
+}: {
+  photoUrl: string | undefined
+  fullName: string
+  initials: string
+}) {
+  const [imgError, setImgError] = useState(false)
+  const showImg = photoUrl && !imgError
+
+  if (showImg) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={photoUrl}
+        alt={fullName || "Фото"}
+        onError={() => setImgError(true)}
+        className="w-48 h-48 rounded-lg object-cover shrink-0 border border-border/40 bg-muted"
+      />
+    )
+  }
+
+  return (
+    <div
+      className="w-48 h-48 rounded-lg shrink-0 border border-border/40 bg-muted flex items-center justify-center text-muted-foreground text-4xl font-semibold select-none"
+      aria-label={fullName || "Фото отсутствует"}
+    >
+      {initials}
+    </div>
+  )
+}
+
 function SectionHeader({ children }: { children: React.ReactNode }) {
   return (
     <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide pb-1 border-b border-border/40">
@@ -557,21 +595,7 @@ export function HhResumeInfo({ rawData, fallback }: HhResumeInfoProps) {
         <section className="space-y-2">
           <SectionHeader>Личное</SectionHeader>
           <div className="flex items-start gap-4">
-            {photoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={photoUrl}
-                alt={fullName || "Фото"}
-                className="w-48 h-48 rounded-lg object-cover shrink-0 border border-border/40 bg-muted"
-              />
-            ) : (
-              <div
-                className="w-48 h-48 rounded-lg shrink-0 border border-border/40 bg-muted flex items-center justify-center text-muted-foreground text-4xl font-semibold select-none"
-                aria-label={fullName || "Фото отсутствует"}
-              >
-                {initials}
-              </div>
-            )}
+            <ProfilePhoto photoUrl={photoUrl} fullName={fullName} initials={initials} />
             <div className="flex-1 min-w-0 space-y-1.5 pt-1">
               {fullName && (
                 <h2 className="text-lg font-semibold text-foreground break-words leading-tight">{fullName}</h2>
