@@ -1,10 +1,14 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { flightRiskScores, notifications } from "@/lib/db/schema"
 import { eq, and, sql, inArray } from "drizzle-orm"
+import { checkCronAuth } from "@/lib/cron/auth"
 
 // POST /api/cron/flight-risk-alerts — detect risk level transitions
-export async function POST() {
+// Protected by X-Cron-Secret header.
+export async function POST(req: NextRequest) {
+  const auth = checkCronAuth(req)
+  if (!auth.ok) return auth.response
   try {
     // Find employees with high/critical risk that don't have a recent notification
     const highRisk = await db

@@ -1,11 +1,14 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { pulseResponses, pulseSurveys, notifications, companies } from "@/lib/db/schema"
 import { eq, and, avg, sql, desc, lt } from "drizzle-orm"
+import { checkCronAuth } from "@/lib/cron/auth"
 
 // POST /api/cron/pulse-alerts — scan recent pulse responses for low scores
-// Called by external CRON or manually
-export async function POST() {
+// Protected by X-Cron-Secret header.
+export async function POST(req: NextRequest) {
+  const auth = checkCronAuth(req)
+  if (!auth.ok) return auth.response
   try {
     // Find all tenants with pulse surveys sent in last 7 days
     const recentSurveys = await db

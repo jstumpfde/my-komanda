@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import {
   flightRiskScores, pulseResponses, pulseSurveys,
@@ -6,10 +6,14 @@ import {
   companies,
 } from "@/lib/db/schema"
 import { eq, and, avg, sql, desc, count } from "drizzle-orm"
+import { checkCronAuth } from "@/lib/cron/auth"
 
 // POST /api/cron/recalculate-flight-risk
-// Recalculates flight risk scores for all employees based on available data
-export async function POST() {
+// Recalculates flight risk scores for all employees based on available data.
+// Protected by X-Cron-Secret header.
+export async function POST(req: NextRequest) {
+  const auth = checkCronAuth(req)
+  if (!auth.ok) return auth.response
   try {
     // Get all existing flight risk entries
     const allScores = await db.select().from(flightRiskScores)

@@ -1,9 +1,15 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { companies } from "@/lib/db/schema"
 import { and, eq, lt } from "drizzle-orm"
+import { checkCronAuth } from "@/lib/cron/auth"
 
-export async function GET() {
+// POST /api/cron/check-subscriptions — отмечаем компании с истекшим триалом.
+// Protected by X-Cron-Secret header.
+export async function POST(req: NextRequest) {
+  const auth = checkCronAuth(req)
+  if (!auth.ok) return auth.response
+
   const now = new Date()
 
   // Find trial companies where trial has expired

@@ -9,7 +9,9 @@ import {
   users,
 } from "@/lib/db/schema"
 
-// GET /api/cron/knowledge-progress?secret=CRON_SECRET
+import { checkCronAuth } from "@/lib/cron/auth"
+
+// POST /api/cron/knowledge-progress — Protected by X-Cron-Secret header.
 // Weekly: для каждого тенанта — сводка по прогрессу обучения (завершили /
 // отстают / просрочили). Уведомление директору + hr_lead через notifications
 // + Telegram.
@@ -48,14 +50,9 @@ function progressPercent(progress: unknown, materials: unknown): number {
   return Math.round((done / total) * 100)
 }
 
-export async function GET(req: NextRequest) {
-  const expected = process.env.CRON_SECRET
-  const provided =
-    req.nextUrl.searchParams.get("secret") ??
-    req.headers.get("authorization")?.replace(/^Bearer\s+/i, "")
-  if (!expected || provided !== expected) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-  }
+export async function POST(req: NextRequest) {
+  const auth = checkCronAuth(req)
+  if (!auth.ok) return auth.response
 
   const now = new Date()
   const in7Days = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)

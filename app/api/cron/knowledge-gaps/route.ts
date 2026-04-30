@@ -8,8 +8,9 @@ import {
   users,
 } from "@/lib/db/schema"
 import { getClaudeMessagesUrl } from "@/lib/claude-proxy"
+import { checkCronAuth } from "@/lib/cron/auth"
 
-// GET /api/cron/knowledge-gaps?secret=CRON_SECRET
+// POST /api/cron/knowledge-gaps — Protected by X-Cron-Secret header.
 // Weekly: для каждого тенанта находит топ-10 неотвеченных вопросов за 7 дней,
 // просит Claude порекомендовать какие материалы создать, и отправляет сводку
 // директору/hr_lead через notifications + Telegram.
@@ -82,14 +83,9 @@ async function askClaudeRecommendations(
   }
 }
 
-export async function GET(req: NextRequest) {
-  const expected = process.env.CRON_SECRET
-  const provided =
-    req.nextUrl.searchParams.get("secret") ??
-    req.headers.get("authorization")?.replace(/^Bearer\s+/i, "")
-  if (!expected || provided !== expected) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-  }
+export async function POST(req: NextRequest) {
+  const auth = checkCronAuth(req)
+  if (!auth.ok) return auth.response
 
   const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
 

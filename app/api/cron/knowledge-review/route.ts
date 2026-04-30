@@ -3,9 +3,11 @@ import { and, eq, lt, or, isNotNull, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { knowledgeArticles, demoTemplates, users } from "@/lib/db/schema"
 
+import { checkCronAuth } from "@/lib/cron/auth"
+
+// POST /api/cron/knowledge-review — Protected by X-Cron-Secret header.
 // Cron endpoint that flags knowledge materials needing review.
 // Call daily from an external scheduler (Timeweb cron, uptimerobot, etc.).
-// Protect with CRON_SECRET: pass as ?secret=... or Authorization: Bearer ...
 
 const REVIEW_DAYS: Record<string, number> = {
   "1m": 30,
@@ -26,15 +28,9 @@ interface ReviewItem {
   cycle: string | null
 }
 
-export async function GET(req: NextRequest) {
-  const expected = process.env.CRON_SECRET
-  if (expected) {
-    const provided = req.nextUrl.searchParams.get("secret")
-      ?? req.headers.get("authorization")?.replace(/^Bearer\s+/i, "")
-    if (provided !== expected) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-    }
-  }
+export async function POST(req: NextRequest) {
+  const auth = checkCronAuth(req)
+  if (!auth.ok) return auth.response
 
   const now = new Date()
   const in7Days = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)

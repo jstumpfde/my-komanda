@@ -9,9 +9,10 @@ import {
   users,
 } from "@/lib/db/schema"
 
-// GET /api/cron/knowledge-freshness?secret=CRON_SECRET
+// POST /api/cron/knowledge-freshness — Protected by X-Cron-Secret header.
 // Scans knowledge base materials, updates stale/expired status, and notifies
 // each tenant's director / hr_lead (DB notification + Telegram, if connected).
+import { checkCronAuth } from "@/lib/cron/auth"
 
 const REVIEW_DAYS: Record<string, number> = {
   "1m": 30,
@@ -49,14 +50,9 @@ async function sendTelegram(token: string, chatId: string, text: string) {
   }
 }
 
-export async function GET(req: NextRequest) {
-  const expected = process.env.CRON_SECRET
-  const provided =
-    req.nextUrl.searchParams.get("secret") ??
-    req.headers.get("authorization")?.replace(/^Bearer\s+/i, "")
-  if (!expected || provided !== expected) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-  }
+export async function POST(req: NextRequest) {
+  const auth = checkCronAuth(req)
+  if (!auth.ok) return auth.response
 
   const now = new Date()
   const in7Days = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)

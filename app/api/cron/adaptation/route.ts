@@ -2,14 +2,12 @@ import { NextRequest, NextResponse } from "next/server"
 import { eq, and, isNull, inArray } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { adaptationAssignments, adaptationSteps, stepCompletions, adaptationPlans } from "@/lib/db/schema"
+import { checkCronAuth } from "@/lib/cron/auth"
 
-// POST /api/cron/adaptation
-// Protected by X-Cron-Secret header
+// POST /api/cron/adaptation — Protected by X-Cron-Secret header.
 export async function POST(req: NextRequest) {
-  const secret = req.headers.get("X-Cron-Secret")
-  if (!secret || secret !== process.env.CRON_SECRET) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-  }
+  const auth = checkCronAuth(req)
+  if (!auth.ok) return auth.response
 
   const now = new Date()
   let sent = 0

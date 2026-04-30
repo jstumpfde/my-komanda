@@ -9,7 +9,9 @@ import {
   users,
 } from "@/lib/db/schema"
 
-// GET /api/cron/knowledge-reminders?secret=CRON_SECRET
+import { checkCronAuth } from "@/lib/cron/auth"
+
+// POST /api/cron/knowledge-reminders — Protected by X-Cron-Secret header.
 // Ежедневно: находит активные назначения с дедлайном < 3 дней
 // и шлёт напоминание сотруднику (notification + Telegram).
 
@@ -39,14 +41,9 @@ function countRemainingLessons(progress: unknown, materials: unknown): number {
   return Math.max(0, totalMaterials - done)
 }
 
-export async function GET(req: NextRequest) {
-  const expected = process.env.CRON_SECRET
-  const provided =
-    req.nextUrl.searchParams.get("secret") ??
-    req.headers.get("authorization")?.replace(/^Bearer\s+/i, "")
-  if (!expected || provided !== expected) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-  }
+export async function POST(req: NextRequest) {
+  const auth = checkCronAuth(req)
+  if (!auth.ok) return auth.response
 
   const now = new Date()
   const in3Days = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000)

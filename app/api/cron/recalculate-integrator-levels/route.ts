@@ -2,12 +2,12 @@ import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { integrators, integratorClients, integratorLevels } from "@/lib/db/schema"
 import { eq, count, asc } from "drizzle-orm"
+import { checkCronAuth } from "@/lib/cron/auth"
 
+// POST /api/cron/recalculate-integrator-levels — Protected by X-Cron-Secret header.
 export async function POST(req: NextRequest) {
-  const cronSecret = req.headers.get("x-cron-secret")
-  if (cronSecret !== process.env.CRON_SECRET) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  }
+  const auth = checkCronAuth(req)
+  if (!auth.ok) return auth.response
 
   const allIntegrators = await db.select().from(integrators)
   const levels = await db.select().from(integratorLevels)
