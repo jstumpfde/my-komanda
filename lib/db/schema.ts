@@ -126,6 +126,9 @@ export const companies = pgTable("companies", {
   telegramBotToken:    text("telegram_bot_token"),
   telegramBotUsername: text("telegram_bot_username"),
   telegramWebhookSet:  boolean("telegram_webhook_set").default(false),
+  // Privacy policy (per-company, ФЗ-152) — null = используется дефолтный шаблон
+  privacyPolicyHtml:        text("privacy_policy_html"),
+  privacyPolicyUpdatedAt:   timestamp("privacy_policy_updated_at"),
   createdAt:          timestamp("created_at").defaultNow(),
   updatedAt:          timestamp("updated_at").defaultNow(),
 })
