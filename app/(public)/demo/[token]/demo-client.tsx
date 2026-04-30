@@ -973,7 +973,7 @@ export default function DemoPage() {
 
             {/* Основные данные */}
             {(() => {
-              const inputClass = "h-10 bg-white border-gray-300 text-gray-900 placeholder:text-gray-400 focus-visible:border-blue-500 focus-visible:ring-blue-200"
+              const inputClass = "h-10 bg-white border-gray-300 text-gray-900 placeholder:text-slate-300 placeholder:font-normal focus-visible:border-blue-500 focus-visible:ring-blue-200"
               const labelClass = "text-xs text-gray-700"
               const inputStyle = {
                 WebkitBoxShadow: "0 0 0 1000px white inset",
