@@ -60,32 +60,17 @@ function resolveFormField(settings: PostDemoSettings, key: FormFieldKey) {
   return settings.formFields?.[key] ?? DEFAULT_FORM_FIELDS[key]
 }
 
-// Маска дд.мм.гггг — берём только цифры, точки расставляем автоматически.
-function maskBirthDateInput(raw: string): string {
-  const digits = raw.replace(/\D/g, "").slice(0, 8)
-  if (digits.length <= 2) return digits
-  if (digits.length <= 4) return `${digits.slice(0, 2)}.${digits.slice(2)}`
-  return `${digits.slice(0, 2)}.${digits.slice(2, 4)}.${digits.slice(4)}`
-}
-
-// Валидация дд.мм.гггг с проверкой реальной даты и диапазона года.
+// Валидация ISO YYYY-MM-DD (формат нативного <input type="date" />)
+// с проверкой реальной даты и диапазона года.
 function isValidBirthDate(s: string): boolean {
-  const m = s.match(/^(\d{2})\.(\d{2})\.(\d{4})$/)
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/)
   if (!m) return false
-  const day = +m[1], month = +m[2], year = +m[3]
+  const year = +m[1], month = +m[2], day = +m[3]
   if (year < 1920 || year > 2010) return false
   if (month < 1 || month > 12) return false
   if (day < 1 || day > 31) return false
-  // Проверка валидности через Date (отлавливает 31 февраля и т.п.)
   const d = new Date(year, month - 1, day)
   return d.getFullYear() === year && d.getMonth() === month - 1 && d.getDate() === day
-}
-
-// Преобразование дд.мм.гггг → yyyy-mm-dd (ISO) для БД.
-function birthDateToIso(s: string): string {
-  const m = s.match(/^(\d{2})\.(\d{2})\.(\d{4})$/)
-  if (!m) return s
-  return `${m[3]}-${m[2]}-${m[1]}`
 }
 
 interface DemoData {
@@ -552,6 +537,7 @@ export default function DemoPage() {
   const [mediaUploaded, setMediaUploaded] = useState<Record<string, MediaAnswer>>({})
   const [saving, setSaving] = useState(false)
   const blockStartTime = useRef(Date.now())
+  const handleNextRef = useRef(false)
 
   // Режим директора: ?as=hr или preview-токен — ответы и аплоады не сохраняются
   const isPreviewToken = typeof token === "string" && token.startsWith("test-demo-preview-")
@@ -669,55 +655,63 @@ export default function DemoPage() {
 
   const handleNext = async () => {
     if (!currentFlat) return
+    // Синхронный guard от двойного клика — disabled={saving} срабатывает
+    // только после ре-рендера, успевают пройти 2 клика подряд.
+    if (handleNextRef.current) return
+    handleNextRef.current = true
 
-    // Собираем все task-блоки внутри текущего урока
-    const taskBlocks = currentFlat.blocks.filter(
-      (b) => b.type === "task" && b.questions.length > 0,
-    )
+    try {
+      // Собираем все task-блоки внутри текущего урока
+      const taskBlocks = currentFlat.blocks.filter(
+        (b) => b.type === "task" && b.questions.length > 0,
+      )
 
-    // Валидация обязательных вопросов по всем task-блокам урока
-    for (const tb of taskBlocks) {
-      const answers = taskAnswers[tb.id] || {}
-      const missing = tb.questions.some((q) => q.required && !answers[q.id]?.trim())
-      if (missing) return
-    }
+      // Валидация обязательных вопросов по всем task-блокам урока
+      for (const tb of taskBlocks) {
+        const answers = taskAnswers[tb.id] || {}
+        const missing = tb.questions.some((q) => q.required && !answers[q.id]?.trim())
+        if (missing) return
+      }
 
-    // Валидация обязательных media-блоков урока
-    const mediaBlocks = currentFlat.blocks.filter((b) => b.type === "media")
-    for (const mb of mediaBlocks) {
-      if (mb.mediaRequired && !mediaUploaded[mb.id]) return
-    }
+      // Валидация обязательных media-блоков урока
+      const mediaBlocks = currentFlat.blocks.filter((b) => b.type === "media")
+      for (const mb of mediaBlocks) {
+        if (mb.mediaRequired && !mediaUploaded[mb.id]) return
+      }
 
-    // Сохраняем ответы по каждому task-блоку отдельно
-    if (taskBlocks.length > 0) {
-      setSaving(true)
-      try {
-        for (const tb of taskBlocks) {
-          const answers = taskAnswers[tb.id] || {}
-          await saveAnswer(tb.id, answers)
+      // Сохраняем ответы по каждому task-блоку отдельно
+      if (taskBlocks.length > 0) {
+        setSaving(true)
+        try {
+          for (const tb of taskBlocks) {
+            const answers = taskAnswers[tb.id] || {}
+            await saveAnswer(tb.id, answers)
+          }
+        } catch (err) {
+          console.error("[Demo] saveAnswer failed:", err)
+        } finally {
+          setSaving(false)
         }
-      } catch (err) {
-        console.error("[Demo] saveAnswer failed:", err)
-      } finally {
-        setSaving(false)
       }
-    }
 
-    blockStartTime.current = Date.now()
+      blockStartTime.current = Date.now()
 
-    if (currentIndex < totalLessons - 1) {
-      setCurrentIndex((i) => i + 1)
-      // Скролл наверх при переходе к новому уроку
-      if (typeof window !== "undefined") {
-        window.scrollTo({ top: 0, behavior: "smooth" })
+      if (currentIndex < totalLessons - 1) {
+        setCurrentIndex((i) => i + 1)
+        // Скролл наверх при переходе к новому уроку
+        if (typeof window !== "undefined") {
+          window.scrollTo({ top: 0, behavior: "smooth" })
+        }
+      } else {
+        setFinished(true)
+        // Save final progress
+        await saveAnswer("__complete__", { completed: true })
+        if (typeof window !== "undefined") {
+          window.scrollTo({ top: 0, behavior: "smooth" })
+        }
       }
-    } else {
-      setFinished(true)
-      // Save final progress
-      await saveAnswer("__complete__", { completed: true })
-      if (typeof window !== "undefined") {
-        window.scrollTo({ top: 0, behavior: "smooth" })
-      }
+    } finally {
+      handleNextRef.current = false
     }
   }
 
@@ -784,7 +778,7 @@ export default function DemoPage() {
           lastName:  fieldLast.enabled  ? formLast.trim()  : "",
           email:     fieldEmail.enabled ? formEmail.trim() : "",
           phone:     fieldPhone.enabled ? formPhone.trim() : "",
-          birthDate: fieldBirth.enabled && isValidBirthDate(formBirth) ? birthDateToIso(formBirth) : undefined,
+          birthDate: fieldBirth.enabled && isValidBirthDate(formBirth) ? formBirth : undefined,
           city:      fieldCity.enabled  ? (formCity.trim() || undefined) : undefined,
           anketa: {
             telegram:             fieldTelegram.enabled ? (formTelegram.trim() || undefined) : undefined,
@@ -1006,7 +1000,7 @@ export default function DemoPage() {
 
             {/* Основные данные */}
             {(() => {
-              const inputClass = "h-10 bg-white border-gray-300 text-gray-900 placeholder:text-slate-300 placeholder:font-normal focus-visible:border-blue-500 focus-visible:ring-blue-200"
+              const inputClass = "h-10 bg-white border-gray-300 text-gray-900 placeholder:text-slate-400 placeholder:font-normal placeholder:[-webkit-text-fill-color:#94a3b8] focus-visible:border-blue-500 focus-visible:ring-blue-200"
               const labelClass = "text-xs text-gray-700"
               const inputStyle = {
                 WebkitBoxShadow: "0 0 0 1000px white inset",
@@ -1057,11 +1051,10 @@ export default function DemoPage() {
                         <Label className={labelClass}>Дата рождения {requiredMark(fieldBirth.required)}</Label>
                         <Input
                           value={formBirth}
-                          onChange={e => setFormBirth(maskBirthDateInput(e.target.value))}
-                          type="text"
-                          inputMode="numeric"
-                          maxLength={10}
-                          placeholder="дд.мм.гггг"
+                          onChange={e => setFormBirth(e.target.value)}
+                          type="date"
+                          min="1920-01-01"
+                          max="2010-12-31"
                           className={inputClass}
                           style={inputStyle}
                         />

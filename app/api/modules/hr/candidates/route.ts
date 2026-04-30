@@ -126,12 +126,18 @@ export async function GET(req: NextRequest) {
 
       const enriched = rows.map((r) => {
         const demoTotalBlocks = totalsByVacancy.get(r.vacancyId) ?? 0
-        const progress = r.demoProgressJson as { blocks?: DemoBlockProgress[] } | null
+        const progress = r.demoProgressJson as { blocks?: DemoBlockProgress[]; completedAt?: string | null } | null
         const blocks = Array.isArray(progress?.blocks) ? progress.blocks : []
         const completed = blocks.filter((b) => b.status === "completed")
         const demoCompletedBlocks = completed.length
-        const progressPercent =
-          demoTotalBlocks > 0
+        // Если демо завершено (completedAt или блок __complete__) — 100%.
+        // Иначе формула даёт ~19% даже на финале: completed-записи генерят
+        // только task/media, а total включает и статичные блоки.
+        const isDemoComplete = !!progress?.completedAt
+          || blocks.some((b) => b.blockId === "__complete__")
+        const progressPercent = isDemoComplete
+          ? 100
+          : demoTotalBlocks > 0
             ? Math.round((demoCompletedBlocks / demoTotalBlocks) * 100)
             : null
 

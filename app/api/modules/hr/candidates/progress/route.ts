@@ -83,13 +83,21 @@ export async function GET(req: NextRequest) {
     const result = rows.map((r) => {
       const demoTotalBlocks = totalsByVacancy.get(r.vacancyId) ?? 0
 
-      const progress = r.demoProgressJson as { blocks?: DemoBlockProgress[] } | null
+      const progress = r.demoProgressJson as { blocks?: DemoBlockProgress[]; completedAt?: string | null } | null
       const blocks = Array.isArray(progress?.blocks) ? progress.blocks : []
       const completed = blocks.filter((b) => b.status === "completed")
       const demoCompletedBlocks = completed.length
+      // Демо считается завершённым если есть completedAt в progress
+      // или специальный блок __complete__ в completed (см. demo/[token]/answer).
+      // В обоих случаях фиксируем 100% независимо от формулы — статичные блоки
+      // (text/image/video/info) тоже идут в total, но completed-записи генерят
+      // только task/media, поэтому формула даёт ~19% даже на финале.
+      const isDemoComplete = !!progress?.completedAt
+        || blocks.some((b) => b.blockId === "__complete__")
 
-      const progressPercent =
-        demoTotalBlocks > 0
+      const progressPercent = isDemoComplete
+        ? 100
+        : demoTotalBlocks > 0
           ? Math.round((demoCompletedBlocks / demoTotalBlocks) * 100)
           : 0
 
