@@ -7,34 +7,30 @@ import { Badge } from "@/components/ui/badge"
 import { Slider } from "@/components/ui/slider"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { Switch } from "@/components/ui/switch"
 import { Loader2, Save, Sparkles } from "lucide-react"
 import { toast } from "sonner"
-import { cn } from "@/lib/utils"
 import type { VacancyAiProcessSettings as Settings } from "@/lib/db/schema"
 
 interface Props {
   vacancyId: string
   initial?: Settings | null
-  onSaved?: (settings: Settings) => void
+  initialAiScoringEnabled?: boolean
+  onSaved?: (settings: Settings, aiScoringEnabled: boolean) => void
 }
 
 const DEFAULT_INVITE = "Здравствуйте! Спасибо за отклик. Мы подготовили короткую демонстрацию должности — 15 минут, и вы узнаете всё о задачах, команде и доходе. Перейдите по ссылке: https://company24.pro/demo/invite"
 const DEFAULT_REJECT = "Здравствуйте! Спасибо за интерес к нашей вакансии. К сожалению, на данный момент ваш опыт не совсем подходит под наши требования. Желаем удачи в поиске!"
 
-// Тумблер AI-скоринга временно заблокирован: в проде ловили слишком много ложных
-// отказов, поэтому пока «Разобрать» отправляет демо всем без AI. Возвращаем после
-// настройки промпта.
-const AI_SCORING_DISABLED = true
-
-export function VacancyAiProcessSettings({ vacancyId, initial, onSaved }: Props) {
+export function VacancyAiProcessSettings({ vacancyId, initial, initialAiScoringEnabled, onSaved }: Props) {
   const [minScore, setMinScore] = useState<number>(initial?.minScore ?? 70)
   const [belowAction, setBelowAction] = useState<"reject" | "keep_new">(
     initial?.belowThresholdAction ?? "reject",
   )
   const [inviteMessage, setInviteMessage] = useState<string>(initial?.inviteMessage ?? DEFAULT_INVITE)
   const [rejectMessage, setRejectMessage] = useState<string>(initial?.rejectMessage ?? DEFAULT_REJECT)
+  const [aiScoringEnabled, setAiScoringEnabled] = useState<boolean>(initialAiScoringEnabled ?? true)
   const [saving, setSaving] = useState(false)
-  const disabled = AI_SCORING_DISABLED
 
   useEffect(() => {
     if (!initial) return
@@ -48,6 +44,10 @@ export function VacancyAiProcessSettings({ vacancyId, initial, onSaved }: Props)
     }
   }, [initial])
 
+  useEffect(() => {
+    if (typeof initialAiScoringEnabled === "boolean") setAiScoringEnabled(initialAiScoringEnabled)
+  }, [initialAiScoringEnabled])
+
   const handleSave = async () => {
     setSaving(true)
     try {
@@ -59,12 +59,13 @@ export function VacancyAiProcessSettings({ vacancyId, initial, onSaved }: Props)
           belowThresholdAction: belowAction,
           inviteMessage,
           rejectMessage,
-        } satisfies Settings),
+          aiScoringEnabled,
+        }),
       })
-      const data = await res.json() as { ok?: boolean; settings?: Settings; error?: string }
+      const data = await res.json() as { ok?: boolean; settings?: Settings; aiScoringEnabled?: boolean; error?: string }
       if (!res.ok || !data.ok) throw new Error(data.error || "Не удалось сохранить")
       toast.success("Настройки AI-обработки сохранены")
-      if (data.settings) onSaved?.(data.settings)
+      if (data.settings) onSaved?.(data.settings, data.aiScoringEnabled ?? aiScoringEnabled)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Ошибка сохранения")
     } finally {
@@ -82,13 +83,21 @@ export function VacancyAiProcessSettings({ vacancyId, initial, onSaved }: Props)
         <p className="text-xs text-muted-foreground">
           Настройки прогона «Разобрать» — порог приглашения, действие при низком скоре и тексты сообщений.
         </p>
-        {disabled && (
-          <div className="mt-2 rounded-md border border-amber-300/50 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-500/40 dark:bg-amber-950/40 dark:text-amber-200">
-            Функция в разработке. Скоро будет доступна.
-          </div>
-        )}
       </CardHeader>
-      <CardContent className={cn("space-y-5", disabled && "opacity-60 pointer-events-none select-none")} aria-disabled={disabled}>
+      <CardContent className="space-y-5">
+        <div className="flex items-center justify-between py-3 border-b">
+          <div>
+            <div className="font-medium text-sm">AI-скоринг при разборе</div>
+            <div className="text-xs text-muted-foreground mt-0.5">
+              AI оценивает каждого кандидата перед отправкой демо. Выключите если хотите экономить токены и слать всем подряд.
+            </div>
+          </div>
+          <Switch
+            checked={aiScoringEnabled}
+            onCheckedChange={setAiScoringEnabled}
+          />
+        </div>
+
         <div>
           <div className="flex items-center justify-between mb-2">
             <Label className="text-xs font-medium">Минимальный AI-скор для приглашения на демо</Label>
@@ -100,7 +109,7 @@ export function VacancyAiProcessSettings({ vacancyId, initial, onSaved }: Props)
             max={95}
             step={5}
             onValueChange={v => setMinScore(v[0] ?? 70)}
-            disabled={disabled}
+            disabled={!aiScoringEnabled}
           />
           <div className="flex justify-between text-[10px] text-muted-foreground mt-1">
             <span>0 (без фильтра)</span>
@@ -118,7 +127,7 @@ export function VacancyAiProcessSettings({ vacancyId, initial, onSaved }: Props)
                 checked={belowAction === "reject"}
                 onChange={() => setBelowAction("reject")}
                 className="mt-0.5"
-                disabled={disabled}
+                disabled={!aiScoringEnabled}
               />
               <span>
                 <span className="font-medium">Перевести в «Отказ» + отправить текст отказа</span>
@@ -134,7 +143,7 @@ export function VacancyAiProcessSettings({ vacancyId, initial, onSaved }: Props)
                 checked={belowAction === "keep_new"}
                 onChange={() => setBelowAction("keep_new")}
                 className="mt-0.5"
-                disabled={disabled}
+                disabled={!aiScoringEnabled}
               />
               <span>
                 <span className="font-medium">Оставить в «Новый» для ручного разбора</span>
@@ -154,7 +163,6 @@ export function VacancyAiProcessSettings({ vacancyId, initial, onSaved }: Props)
             rows={4}
             placeholder={DEFAULT_INVITE}
             className="text-sm resize-y"
-            disabled={disabled}
           />
           <p className="text-[10px] text-muted-foreground mt-1">
             Можно использовать [Имя], [должность], [компания], [ссылка] — будут подставлены автоматически.
@@ -169,12 +177,12 @@ export function VacancyAiProcessSettings({ vacancyId, initial, onSaved }: Props)
             rows={4}
             placeholder={DEFAULT_REJECT}
             className="text-sm resize-y"
-            disabled={disabled}
+            disabled={!aiScoringEnabled}
           />
         </div>
 
         <div className="flex justify-end pt-1">
-          <Button onClick={handleSave} disabled={saving || disabled} size="sm" className="gap-1.5">
+          <Button onClick={handleSave} disabled={saving} size="sm" className="gap-1.5">
             {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
             Сохранить
           </Button>

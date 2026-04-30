@@ -23,7 +23,9 @@ export async function PUT(
 
     if (!existing) return apiError("Vacancy not found", 404)
 
-    const body = await req.json().catch(() => ({})) as Partial<VacancyAiProcessSettings>
+    const body = await req.json().catch(() => ({})) as Partial<VacancyAiProcessSettings> & {
+      aiScoringEnabled?: boolean
+    }
     const current = (existing.current as VacancyAiProcessSettings | null) ?? {}
 
     const settings: VacancyAiProcessSettings = {
@@ -53,12 +55,24 @@ export async function PUT(
         : undefined
     }
 
+    const updates: Record<string, unknown> = {
+      aiProcessSettings: settings,
+      updatedAt: new Date(),
+    }
+    if (typeof body.aiScoringEnabled === "boolean") {
+      updates.aiScoringEnabled = body.aiScoringEnabled
+    }
+
     await db
       .update(vacancies)
-      .set({ aiProcessSettings: settings, updatedAt: new Date() })
+      .set(updates)
       .where(eq(vacancies.id, id))
 
-    return apiSuccess({ ok: true, settings })
+    return apiSuccess({
+      ok: true,
+      settings,
+      aiScoringEnabled: typeof body.aiScoringEnabled === "boolean" ? body.aiScoringEnabled : undefined,
+    })
   } catch (err) {
     if (err instanceof Response) return err
     return apiError("Internal server error", 500)

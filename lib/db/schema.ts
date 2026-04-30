@@ -269,6 +269,7 @@ export const vacancies = pgTable("vacancies", {
   hhUrl: text("hh_url"),
   hhSyncedAt: timestamp("hh_synced_at"),
   aiProcessSettings: jsonb("ai_process_settings").default({}),
+  aiScoringEnabled: boolean("ai_scoring_enabled").notNull().default(true),
   deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),

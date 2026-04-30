@@ -35,6 +35,7 @@ export interface ApiVacancy {
     inviteMessage?: string
     rejectMessage?: string
   } | null
+  aiScoringEnabled: boolean
   deletedAt: string | null
   createdAt: string | null
   updatedAt: string | null

@@ -2044,6 +2044,7 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                       <VacancyAiProcessSettings
                         vacancyId={id}
                         initial={apiVacancy?.aiProcessSettings ?? null}
+                        initialAiScoringEnabled={apiVacancy?.aiScoringEnabled ?? true}
                         onSaved={() => refetchVacancy()}
                       />
                     </div>
