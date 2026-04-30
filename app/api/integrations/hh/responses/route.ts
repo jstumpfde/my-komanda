@@ -4,7 +4,13 @@ import { db } from "@/lib/db"
 import { hhIntegrations, hhResponses, vacancies } from "@/lib/db/schema"
 import { and, eq, isNull } from "drizzle-orm"
 import { getValidToken } from "@/lib/hh-helpers"
-import { getNegotiations, type HHNegotiationItem } from "@/lib/hh-api"
+import { getNegotiations, fetchHhResume, type HHNegotiationItem } from "@/lib/hh-api"
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
+
+// Пауза между запросами /resumes/{id} — hh лимитирует ~200 запросов/час с токена.
+// 200мс даёт ~5 rps, что заведомо безопасно даже при пиковых батчах.
+const RESUME_FETCH_DELAY_MS = 200
 
 export async function GET() {
   const session = await auth()
@@ -65,7 +71,8 @@ export async function GET() {
       }
     }
 
-    for (const item of allItems) {
+    for (let idx = 0; idx < allItems.length; idx++) {
+      const item = allItems[idx]
       // Защитная проверка: hh иногда отдаёт item без vacancy/id — пропускаем,
       // иначе падает весь батч на TypeError "Cannot read properties of undefined".
       if (!item?.vacancy?.id || !item?.id) {
@@ -79,6 +86,31 @@ export async function GET() {
         item.resume?.middle_name,
       ].filter(Boolean).join(" ") || null
 
+      // Полное резюме (/resumes/{id}) — содержит контакты, языки, навыки,
+      // портфолио, релокацию и т.д. Если получили — заменяем preview-резюме
+      // полным; preview-поля (first_name/last_name/title/photo) присутствуют
+      // в обоих форматах, поэтому замена безопасна. Если резюме приватное (403)
+      // или удалено (404) — fetchHhResume вернёт null, оставляем preview как было.
+      const resumePreview = (item.resume ?? null) as Record<string, unknown> | null
+      const resumeId = item.resume?.id ?? null
+
+      let mergedResume: Record<string, unknown> | null = resumePreview
+      if (resumeId) {
+        const full = await fetchHhResume(accessToken, resumeId)
+        if (full) {
+          // Полные данные приоритетны, но preview-поля сохраняем как fallback
+          // на случай если hh в /resumes пропустит какое-то поле, что было в /negotiations.
+          mergedResume = { ...(resumePreview ?? {}), ...full }
+        }
+        // Пауза между resume-запросами — защита от rate limit hh (200/час).
+        if (idx < allItems.length - 1) await sleep(RESUME_FETCH_DELAY_MS)
+      }
+
+      const itemRaw = item as unknown as Record<string, unknown>
+      const rawData: Record<string, unknown> = mergedResume
+        ? { ...itemRaw, resume: mergedResume }
+        : itemRaw
+
       const values = {
         companyId,
         hhVacancyId: item.vacancy.id,
@@ -89,7 +121,7 @@ export async function GET() {
         resumeTitle: item.resume?.title ?? null,
         resumeUrl: item.resume?.alternate_url ?? null,
         status: item.state.id,
-        rawData: item as unknown as Record<string, unknown>,
+        rawData,
         syncedAt: new Date(),
       }
 

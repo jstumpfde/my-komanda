@@ -131,6 +131,7 @@ export interface HHNegotiationItem {
   state: { id: string; name: string }
   vacancy: { id: string; name: string }
   resume?: {
+    id?: string
     title?: string
     alternate_url?: string
     first_name?: string
@@ -196,6 +197,102 @@ export async function getNegotiationMessages(
     accessToken,
   )
   return data?.items ?? []
+}
+
+// ─── Полное резюме (/resumes/{id}) ──────────────────────────────────────────
+//
+// /negotiations возвращает только preview-резюме (без контактов, языков, навыков
+// и т.д.). Полные данные доступны только работодателю через /resumes/{id}.
+// Если резюме скрыто работодателем (приватное) — hh отдаёт 403, и это нормальная
+// ситуация: кандидат остаётся синхронизированным, просто без расширенных полей.
+
+export interface HHFullResume {
+  id?: string
+  first_name?: string
+  last_name?: string
+  middle_name?: string
+  birth_date?: string
+  age?: number
+  gender?: { id?: string; name?: string }
+  area?: { id?: string; name?: string }
+  metro?: { id?: string; name?: string; line?: { name?: string } }
+  citizenship?: { id?: string; name?: string }[]
+  work_ticket?: { id?: string; name?: string }[]
+  travel_time?: { id?: string; name?: string }
+  relocation?: unknown
+  business_trip_readiness?: { id?: string; name?: string }
+  contact?: unknown[]
+  site?: unknown[]
+  language?: unknown[]
+  skill_set?: string[]
+  skills?: string
+  recommendation?: unknown[]
+  portfolio?: unknown[]
+  certificate?: unknown[]
+  education?: { attestation?: unknown[] } & Record<string, unknown>
+  has_vehicle?: boolean
+  driver_license_types?: { id?: string }[]
+  preferred_communication_method?: { id?: string; name?: string }
+  experience?: unknown[]
+  total_experience?: { months?: number }
+  salary?: { amount?: number; currency?: string }
+  photo?: Record<string, unknown> | null
+  alternate_url?: string
+  // hh добавляет ещё много полей — оставляем расширяемым
+  [key: string]: unknown
+}
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
+
+// Возвращает полное резюме либо null. Не бросает на 403/404/429/5xx —
+// это штатные «не получилось», синк не должен из-за них падать.
+export async function fetchHhResume(
+  accessToken: string,
+  resumeId: string,
+): Promise<HHFullResume | null> {
+  const url = `${HH_API_BASE}/resumes/${encodeURIComponent(resumeId)}`
+  for (let attempt = 0; attempt < 2; attempt++) {
+    let res: Response
+    try {
+      res = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "User-Agent": USER_AGENT,
+        },
+      })
+    } catch (err) {
+      console.warn(`[hh:resume:network] ${resumeId}`, err instanceof Error ? err.message : err)
+      return null
+    }
+
+    if (res.ok) {
+      try {
+        return (await res.json()) as HHFullResume
+      } catch (err) {
+        console.warn(`[hh:resume:parse] ${resumeId}`, err instanceof Error ? err.message : err)
+        return null
+      }
+    }
+
+    if (res.status === 403) {
+      console.info(`[hh:resume:forbidden] ${resumeId} — резюме приватное или недоступно`)
+      return null
+    }
+    if (res.status === 404) {
+      console.info(`[hh:resume:not_found] ${resumeId} — резюме удалено`)
+      return null
+    }
+    if (res.status === 429 && attempt === 0) {
+      console.warn(`[hh:resume:rate_limit] ${resumeId} — пауза 60с и повтор`)
+      await sleep(60_000)
+      continue
+    }
+
+    const text = await res.text().catch(() => "")
+    console.warn(`[hh:resume:http_${res.status}] ${resumeId} ${text.slice(0, 200)}`)
+    return null
+  }
+  return null
 }
 
 export async function changeNegotiationState(
