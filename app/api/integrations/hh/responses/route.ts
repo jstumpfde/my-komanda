@@ -73,6 +73,14 @@ export async function GET() {
 
     for (let idx = 0; idx < allItems.length; idx++) {
       const item = allItems[idx]
+      console.log("[hh/responses:debug] item structure:",
+        JSON.stringify({
+          has_vacancy: !!item.vacancy,
+          vacancy_keys: item.vacancy ? Object.keys(item.vacancy) : null,
+          has_id: !!item.id,
+          item_keys: Object.keys(item),
+          sample: JSON.stringify(item).slice(0, 300)
+        }))
       // Защитная проверка: hh иногда отдаёт item без vacancy/id — пропускаем,
       // иначе падает весь батч на TypeError "Cannot read properties of undefined".
       if (!item?.vacancy?.id || !item?.id) {
