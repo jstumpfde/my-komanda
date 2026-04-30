@@ -73,7 +73,7 @@ export async function GET() {
 
     for (let idx = 0; idx < allItems.length; idx++) {
       const item = allItems[idx]
-      console.log("[hh/responses:debug] item structure:",
+      console.warn("[hh/responses:debug] item structure:",
         JSON.stringify({
           has_vacancy: !!item.vacancy,
           vacancy_keys: item.vacancy ? Object.keys(item.vacancy) : null,
