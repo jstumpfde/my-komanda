@@ -5,15 +5,15 @@ import { vacancies, candidates, companies, followUpMessages, followUpCampaigns, 
 import { sendMail } from "@/lib/mail"
 import { getValidToken } from "@/lib/hh-helpers"
 import { shouldStopFollowUp } from "@/lib/followup/should-stop"
+import { canSendNow } from "@/lib/working-hours"
+import { checkCronAuth } from "@/lib/cron/auth"
 
 // POST /api/cron/follow-up
-// Отправляет одно повторное сообщение кандидатам в статусе new/awaiting_response старше 48 часов
-// Protected by X-Cron-Secret header
+// Отправляет одно повторное сообщение кандидатам в статусе new/awaiting_response старше 48 часов.
+// Protected by X-Cron-Secret header — см. checkCronAuth в lib/cron/auth.ts.
 export async function POST(req: NextRequest) {
-  const secret = req.headers.get("X-Cron-Secret")
-  if (!secret || secret !== process.env.CRON_SECRET) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-  }
+  const auth = checkCronAuth(req)
+  if (!auth.ok) return auth.response
 
   const now = new Date()
   const threshold = new Date(now.getTime() - 48 * 60 * 60 * 1000) // 48 часов назад
@@ -64,22 +64,11 @@ export async function POST(req: NextRequest) {
         .where(eq(companies.id, vacancy.companyId))
         .limit(1)
 
-      // Читаем настройки автоматизации
-      const descJson = vacancy.descriptionJson as Record<string, unknown> | null
-      const automation = descJson?.automation as Record<string, unknown> | undefined
-
-      // Проверяем рабочие часы
-      const wh = automation?.workingHours as { enabled: boolean; from: string; to: string } | undefined
-      if (wh?.enabled) {
-        const hours = now.getHours()
-        const minutes = now.getMinutes()
-        const current = hours * 60 + minutes
-        const [fH, fM] = (wh.from || "09:00").split(":").map(Number)
-        const [tH, tM] = (wh.to || "20:00").split(":").map(Number)
-        if (current < fH * 60 + fM || current > tH * 60 + tM) {
-          skipped++
-          continue
-        }
+      // Проверка рабочих часов вакансии. Если сейчас вне окна — НЕ помечаем
+      // как failed, просто пропускаем. Следующий cron в рабочее время подберёт.
+      if (!canSendNow(vacancy, now)) {
+        skipped++
+        continue
       }
 
       const candidateToken = candidate.token || candidate.id

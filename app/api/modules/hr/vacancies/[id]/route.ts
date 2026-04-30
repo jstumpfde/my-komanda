@@ -80,7 +80,20 @@ export async function PUT(
     if (body.salary_min !== undefined) updates.salaryMin = body.salary_min
     if (body.salary_max !== undefined) updates.salaryMax = body.salary_max
     if (body.status !== undefined) updates.status = body.status
-    if (body.description_json !== undefined) updates.descriptionJson = body.description_json
+    if (body.description_json !== undefined) {
+      updates.descriptionJson = body.description_json
+      // Зеркалим description_json.automation.workingHours в выделенные колонки
+      // — их использует canSendNow() в cron-эндпоинтах. UI продолжает писать
+      // в descriptionJson; legacy fallback в lib/working-hours.ts работает.
+      const dj = body.description_json as { automation?: { workingHours?: { enabled?: boolean; from?: string; to?: string; timezone?: string } } } | null
+      const wh = dj?.automation?.workingHours
+      if (wh) {
+        if (typeof wh.enabled === "boolean") updates.workingHoursEnabled = wh.enabled
+        if (typeof wh.from === "string" && wh.from) updates.workingHoursStart = wh.from
+        if (typeof wh.to === "string" && wh.to) updates.workingHoursEnd = wh.to
+        if (typeof wh.timezone === "string" && wh.timezone) updates.workingHoursTimezone = wh.timezone
+      }
+    }
     if (body.experience !== undefined) updates.experience = body.experience
     if (body.schedule !== undefined) updates.schedule = body.schedule
     if (body.description !== undefined) updates.description = body.description

@@ -273,6 +273,12 @@ export const vacancies = pgTable("vacancies", {
   hhSyncedAt: timestamp("hh_synced_at"),
   aiProcessSettings: jsonb("ai_process_settings").default({}),
   aiScoringEnabled: boolean("ai_scoring_enabled").notNull().default(true),
+  // Рабочие часы — окно отправки сообщений (демо-приглашения и follow-up).
+  // Логика и fallback на descriptionJson.automation.workingHours — в lib/working-hours.ts.
+  workingHoursEnabled:  boolean("working_hours_enabled").notNull().default(false),
+  workingHoursStart:    text("working_hours_start").notNull().default("09:00"),
+  workingHoursEnd:      text("working_hours_end").notNull().default("19:55"),
+  workingHoursTimezone: text("working_hours_timezone").notNull().default("Europe/Moscow"),
   deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
