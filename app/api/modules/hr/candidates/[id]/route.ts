@@ -13,6 +13,7 @@ async function getOwnedCandidate(candidateId: string, companyId: string) {
       vacancyTitle: vacancies.title,
       hhResponseId: hhResponses.hhResponseId,
       hhRawData: hhResponses.rawData,
+      hhCandidateName: hhResponses.candidateName,
     })
     .from(candidates)
     .innerJoin(vacancies, eq(candidates.vacancyId, vacancies.id))
@@ -38,6 +39,7 @@ async function getOwnedCandidate(candidateId: string, companyId: string) {
         .select({
           hhResponseId: hhResponses.hhResponseId,
           rawData: hhResponses.rawData,
+          candidateName: hhResponses.candidateName,
         })
         .from(hhResponses)
         .where(and(
@@ -46,7 +48,7 @@ async function getOwnedCandidate(candidateId: string, companyId: string) {
         ))
         .limit(1)
       if (resp) {
-        return { ...row, hhResponseId: resp.hhResponseId, hhRawData: resp.rawData }
+        return { ...row, hhResponseId: resp.hhResponseId, hhRawData: resp.rawData, hhCandidateName: resp.candidateName }
       }
     }
   }
@@ -78,8 +80,8 @@ export async function GET(
 
     return apiSuccess({
       ...row.candidate,
-      // Имя: fallback на anketa_answers если name пустой/«Новый кандидат»
-      name: deriveCandidateName(row.candidate.name, row.candidate.anketaAnswers),
+      // Имя: fallback на anketa_answers, затем на hh_responses.candidate_name
+      name: deriveCandidateName(row.candidate.name, row.candidate.anketaAnswers, row.hhCandidateName ?? null),
       vacancyTitle: row.vacancyTitle,
       hhResponseId: row.hhResponseId ?? null,
       hhRawData: row.hhRawData ?? null,

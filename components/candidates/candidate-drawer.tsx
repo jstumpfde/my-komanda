@@ -742,12 +742,7 @@ export function CandidateDrawer({
 
             <div
               ref={tabScrollRef}
-              className="flex-1 min-h-0 overflow-y-auto overscroll-contain"
-              // 100dvh, а не 100vh — на iOS Safari 100vh учитывает
-              // скрытую URL-bar и даёт высоту больше визуальной области,
-              // из-за чего последние блоки длинного списка ответов не
-              // были видны (cap maxHeight срабатывал с лагом).
-              style={{ maxHeight: "calc(100dvh - 180px)" }}
+              className="flex-1 min-h-0 h-full overflow-y-auto overscroll-contain"
             >
               {/* ── Контакты ─────────────────────────────────────── */}
               <TabsContent value="contacts" className="px-6 py-4 pb-28 space-y-5 mt-0">

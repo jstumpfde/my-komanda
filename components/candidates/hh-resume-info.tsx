@@ -397,9 +397,10 @@ function ExperienceCard({ exp }: { exp: HhExperience }) {
         </p>
       )}
       {cleanDescription && (
-        <p className="text-xs text-muted-foreground whitespace-pre-wrap break-words pt-1">
-          {cleanDescription}
-        </p>
+        <div
+          className="text-xs text-muted-foreground break-words pt-1 [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4 [&_li]:mb-0.5 [&_p]:mb-1 [&_a]:text-primary [&_a]:underline"
+          dangerouslySetInnerHTML={{ __html: cleanDescription }}
+        />
       )}
     </div>
   )

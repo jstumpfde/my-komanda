@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server"
 import { eq, ne, and, inArray, asc, desc, or, isNull, sql, type SQL } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { candidates, vacancies, demos } from "@/lib/db/schema"
+import { candidates, vacancies, demos, hhResponses } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { generateCandidateToken } from "@/lib/candidate-tokens"
 import { generateCandidateShortId } from "@/lib/short-id"
@@ -79,9 +79,14 @@ export async function GET(req: NextRequest) {
           anketaAnswers: candidates.anketaAnswers,
           isFavorite: candidates.isFavorite,
           referredByShortId: candidates.referredByShortId,
+          hhCandidateName: hhResponses.candidateName,
         })
         .from(candidates)
         .innerJoin(vacancies, eq(candidates.vacancyId, vacancies.id))
+        .leftJoin(hhResponses, and(
+          eq(hhResponses.localCandidateId, candidates.id),
+          eq(hhResponses.companyId, user.companyId),
+        ))
         .where(and(
           eq(vacancies.companyId, user.companyId),
           or(isNull(candidates.source), ne(candidates.source, "preview")),
@@ -140,12 +145,13 @@ export async function GET(req: NextRequest) {
           ? now - new Date(lastAnswerAt).getTime() <= ACTIVE_THRESHOLD_MS
           : false
 
-        // Имя: fallback на anketa_answers если name пустой/«Новый кандидат»
-        const displayName = deriveCandidateName(r.name, r.anketaAnswers)
+        // Имя: fallback на anketa_answers, затем на hh_responses.candidate_name
+        // если name пустой/«Новый кандидат»
+        const displayName = deriveCandidateName(r.name, r.anketaAnswers, r.hhCandidateName)
 
-        // Strip demoProgressJson + anketaAnswers — слишком тяжёлые, не нужны клиенту
-        const { demoProgressJson: _drop1, anketaAnswers: _drop2, ...rest } = r
-        void _drop1; void _drop2
+        // Strip demoProgressJson + anketaAnswers + hhCandidateName — не нужны клиенту
+        const { demoProgressJson: _drop1, anketaAnswers: _drop2, hhCandidateName: _drop3, ...rest } = r
+        void _drop1; void _drop2; void _drop3
         return {
           ...rest,
           name: displayName,
@@ -195,10 +201,29 @@ export async function GET(req: NextRequest) {
       rows = [...rows].sort((a, b) => mul * (progressOf(a) - progressOf(b)))
     }
 
-    // Имя: fallback на anketa_answers если name пустой/«Новый кандидат»
+    // Подтягиваем candidate_name из hh_responses как третий fallback к
+    // deriveCandidateName (см. lib/candidate-name.ts).
+    const candidateIds = rows.map(r => r.id)
+    const hhNameByCandidateId = new Map<string, string>()
+    if (candidateIds.length > 0) {
+      const hhRows = await db
+        .select({ candidateId: hhResponses.localCandidateId, candidateName: hhResponses.candidateName })
+        .from(hhResponses)
+        .where(and(
+          eq(hhResponses.companyId, user.companyId),
+          inArray(hhResponses.localCandidateId, candidateIds),
+        ))
+      for (const h of hhRows) {
+        if (h.candidateId && h.candidateName && !hhNameByCandidateId.has(h.candidateId)) {
+          hhNameByCandidateId.set(h.candidateId, h.candidateName)
+        }
+      }
+    }
+
+    // Имя: fallback на anketa_answers, затем на hh_responses.candidate_name
     const withDisplayName = rows.map((r) => ({
       ...r,
-      name: deriveCandidateName(r.name, r.anketaAnswers),
+      name: deriveCandidateName(r.name, r.anketaAnswers, hhNameByCandidateId.get(r.id) ?? null),
     }))
 
     return apiSuccess(withDisplayName)

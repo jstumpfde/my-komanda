@@ -23,6 +23,7 @@ function pickString(obj: Record<string, unknown>, ...keys: string[]): string {
 export function deriveCandidateName(
   rawName: string | null | undefined,
   anketaAnswers: unknown,
+  hhCandidateName?: string | null | undefined,
 ): string {
   const name = (rawName ?? "").trim()
   if (name && name !== PLACEHOLDER_NAME) return name
@@ -50,6 +51,13 @@ export function deriveCandidateName(
     const whole = pickString(flat, "name", "fullName", "full_name", "ФИО", "фио")
     if (whole) return whole
   }
+
+  // Fallback на hh_responses.candidate_name — заполняется при синке откликов
+  // ("Last First Middle"). Кандидат, созданный из hh-отклика, может иметь
+  // candidates.name = "Новый кандидат"/empty, если процесс импорта прервался
+  // до записи имени. В hh_responses имя есть всегда.
+  const hhName = (hhCandidateName ?? "").trim()
+  if (hhName && hhName !== PLACEHOLDER_NAME) return hhName
 
   return name || PLACEHOLDER_NAME
 }
