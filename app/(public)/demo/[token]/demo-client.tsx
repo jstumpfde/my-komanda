@@ -60,6 +60,34 @@ function resolveFormField(settings: PostDemoSettings, key: FormFieldKey) {
   return settings.formFields?.[key] ?? DEFAULT_FORM_FIELDS[key]
 }
 
+// Маска дд.мм.гггг — берём только цифры, точки расставляем автоматически.
+function maskBirthDateInput(raw: string): string {
+  const digits = raw.replace(/\D/g, "").slice(0, 8)
+  if (digits.length <= 2) return digits
+  if (digits.length <= 4) return `${digits.slice(0, 2)}.${digits.slice(2)}`
+  return `${digits.slice(0, 2)}.${digits.slice(2, 4)}.${digits.slice(4)}`
+}
+
+// Валидация дд.мм.гггг с проверкой реальной даты и диапазона года.
+function isValidBirthDate(s: string): boolean {
+  const m = s.match(/^(\d{2})\.(\d{2})\.(\d{4})$/)
+  if (!m) return false
+  const day = +m[1], month = +m[2], year = +m[3]
+  if (year < 1920 || year > 2010) return false
+  if (month < 1 || month > 12) return false
+  if (day < 1 || day > 31) return false
+  // Проверка валидности через Date (отлавливает 31 февраля и т.п.)
+  const d = new Date(year, month - 1, day)
+  return d.getFullYear() === year && d.getMonth() === month - 1 && d.getDate() === day
+}
+
+// Преобразование дд.мм.гггг → yyyy-mm-dd (ISO) для БД.
+function birthDateToIso(s: string): string {
+  const m = s.match(/^(\d{2})\.(\d{2})\.(\d{4})$/)
+  if (!m) return s
+  return `${m[3]}-${m[2]}-${m[1]}`
+}
+
 interface DemoData {
   candidateName: string
   vacancyTitle: string
@@ -731,7 +759,7 @@ export default function DemoPage() {
     (!fieldEmail.enabled    || !fieldEmail.required    || formEmail.trim().length    > 0) &&
     (!fieldPhone.enabled    || !fieldPhone.required    || formPhone.trim().length    > 0) &&
     (!fieldTelegram.enabled || !fieldTelegram.required || formTelegram.trim().length > 0) &&
-    (!fieldBirth.enabled    || !fieldBirth.required    || formBirth.length           > 0) &&
+    (!fieldBirth.enabled    || (fieldBirth.required ? isValidBirthDate(formBirth) : (formBirth.length === 0 || isValidBirthDate(formBirth)))) &&
     (!fieldCity.enabled     || !fieldCity.required     || formCity.trim().length     > 0)
 
   const handleFormSubmit = async () => {
@@ -751,7 +779,7 @@ export default function DemoPage() {
           lastName:  fieldLast.enabled  ? formLast.trim()  : "",
           email:     fieldEmail.enabled ? formEmail.trim() : "",
           phone:     fieldPhone.enabled ? formPhone.trim() : "",
-          birthDate: fieldBirth.enabled && formBirth ? formBirth : undefined,
+          birthDate: fieldBirth.enabled && isValidBirthDate(formBirth) ? birthDateToIso(formBirth) : undefined,
           city:      fieldCity.enabled  ? (formCity.trim() || undefined) : undefined,
           anketa: {
             telegram:             fieldTelegram.enabled ? (formTelegram.trim() || undefined) : undefined,
@@ -1022,7 +1050,16 @@ export default function DemoPage() {
                     {fieldBirth.enabled && (
                       <div className="space-y-1">
                         <Label className={labelClass}>Дата рождения {requiredMark(fieldBirth.required)}</Label>
-                        <Input value={formBirth} onChange={e => setFormBirth(e.target.value)} type="date" className={inputClass} style={inputStyle} />
+                        <Input
+                          value={formBirth}
+                          onChange={e => setFormBirth(maskBirthDateInput(e.target.value))}
+                          type="text"
+                          inputMode="numeric"
+                          maxLength={10}
+                          placeholder="дд.мм.гггг"
+                          className={inputClass}
+                          style={inputStyle}
+                        />
                       </div>
                     )}
                     {fieldCity.enabled && (
