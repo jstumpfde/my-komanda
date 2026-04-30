@@ -105,6 +105,7 @@ interface DemoData {
   answers: { blockId: string; answer: any }[] | null
   aiScore: number | null
   postDemoSettings: PostDemoSettings
+  prefill?: { first_name: string | null; last_name: string | null; city: string | null }
 }
 
 interface FlatLesson {
@@ -623,13 +624,17 @@ export default function DemoPage() {
       .finally(() => setLoading(false))
   }, [token])
 
-  // Initialize form fields when data arrives
+  // Initialize form fields when data arrives.
+  // hh-кандидаты: prefill из resume (last_name/first_name/area.name) — кандидат
+  // увидит уже заполненные поля и сможет поправить опечатки в hh.
+  // Остальные источники (referral/прямой) — fallback на candidates.name (split)
+  // и vacancy.city (поведение до prefill).
   useEffect(() => {
     if (data) {
       const parts = data.candidateName?.split(" ") || []
-      setFormFirst(parts[0] || "")
-      setFormLast(parts.slice(1).join(" ") || "")
-      setFormCity(data.city || "")
+      setFormFirst(data.prefill?.first_name || parts[0] || "")
+      setFormLast(data.prefill?.last_name || parts.slice(1).join(" ") || "")
+      setFormCity(data.prefill?.city || data.city || "")
     }
   }, [data])
 
