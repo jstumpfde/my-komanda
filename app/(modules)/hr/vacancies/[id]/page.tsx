@@ -2324,15 +2324,28 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                             <div className="flex items-center gap-3">
                               <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-white text-[11px] font-bold" style={{ backgroundColor: "#D6001C" }}>hh</div>
                               <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium">hh.ru</p>
-                                <p className="text-[11px] text-muted-foreground">Привязана к hh-вакансии {apiVacancy.hhVacancyId}</p>
+                                <p className="text-sm font-medium">Интеграция с hh.ru</p>
+                                <p className="text-[11px] text-muted-foreground">
+                                  ID вакансии:{" "}
+                                  <a
+                                    href={apiVacancy.hhUrl ?? `https://hh.ru/vacancy/${apiVacancy.hhVacancyId}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-primary hover:underline font-mono"
+                                  >
+                                    {apiVacancy.hhVacancyId}
+                                  </a>
+                                </p>
                               </div>
-                              <Badge variant="outline" className="text-xs h-6 bg-emerald-500/10 text-emerald-700 border-emerald-200 shrink-0">Привязана</Badge>
-                              {apiVacancy.hhUrl && (
-                                <a href={apiVacancy.hhUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline shrink-0 flex items-center gap-1">
-                                  Открыть на hh.ru <ExternalLink className="w-3 h-3" />
-                                </a>
-                              )}
+                              <Badge variant="outline" className="text-xs h-6 bg-emerald-500/10 text-emerald-700 border-emerald-200 shrink-0">Подключено</Badge>
+                              <a
+                                href={apiVacancy.hhUrl ?? `https://hh.ru/vacancy/${apiVacancy.hhVacancyId}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs text-primary hover:underline shrink-0 flex items-center gap-1"
+                              >
+                                Открыть на hh.ru <ExternalLink className="w-3 h-3" />
+                              </a>
                               <Button
                                 variant="ghost"
                                 size="sm"
@@ -2352,6 +2365,11 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                                 <span aria-hidden>🆕</span>
                                 <span>Необраб.:</span>
                                 <span className="font-medium text-foreground">{hhStats ? (hhStats.newResponses > 0 ? hhStats.newResponses : "—") : "…"}</span>
+                              </span>
+                              <span className="inline-flex items-center gap-1.5 h-6 px-2 rounded-full bg-muted text-[11px] text-muted-foreground">
+                                <span aria-hidden>🔗</span>
+                                <span>Подключена:</span>
+                                <span className="font-medium text-foreground">{hhSyncMeta?.createdAt ? formatHhSyncDate(hhSyncMeta.createdAt) : "—"}</span>
                               </span>
                               <span className="inline-flex items-center gap-1.5 h-6 px-2 rounded-full bg-muted text-[11px] text-muted-foreground">
                                 <span aria-hidden>🔄</span>
