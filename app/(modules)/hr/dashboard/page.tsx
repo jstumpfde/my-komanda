@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
@@ -111,8 +111,22 @@ function DashboardContent() {
   const [vacancyFilter, setVacancyFilter] = useState("all")
   const [periodFilter, setPeriodFilter] = useState("month")
   const [dynamicsPeriod, setDynamicsPeriod] = useState<"7" | "30" | "90">("30")
+  const [activeVacanciesCount, setActiveVacanciesCount] = useState<number | null>(null)
 
   const dynamicsData = dynamicsPeriod === "7" ? DYNAMICS_30D.slice(-7) : dynamicsPeriod === "90" ? DYNAMICS_30D : DYNAMICS_30D
+
+  useEffect(() => {
+    let cancelled = false
+    fetch("/api/modules/hr/dashboard/stats")
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => {
+        if (cancelled) return
+        const n = d?.kpi?.activeVacancies
+        if (typeof n === "number") setActiveVacanciesCount(n)
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [])
 
   return (
     <SidebarProvider defaultOpen={true}>
@@ -147,6 +161,19 @@ function DashboardContent() {
                     <SelectItem value="year">Год</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+            </div>
+
+            {/* ═══ Widget: Active Vacancies (live count) ═══ */}
+            <div className="border rounded-xl shadow-sm hover:shadow-md transition-shadow p-4 inline-flex items-center gap-3 w-fit">
+              <div className="w-10 h-10 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 flex items-center justify-center shrink-0">
+                <Briefcase className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+              </div>
+              <div className="flex flex-col">
+                <span className="text-xs text-muted-foreground leading-none">Активные вакансии</span>
+                <span className="text-2xl font-bold leading-tight mt-1">
+                  {activeVacanciesCount === null ? "…" : activeVacanciesCount}
+                </span>
               </div>
             </div>
 
