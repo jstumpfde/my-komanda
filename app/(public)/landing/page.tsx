@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
+import FooterBadge from "@/components/footer-badge"
 import { cn } from "@/lib/utils"
 import {
   Users, Megaphone, DollarSign, Truck, Brain, MessageSquare, BarChart3,
@@ -1797,6 +1798,9 @@ export default function LandingPage() {
 
       {/* ── FOOTER ── */}
       <footer id="about" className="bg-gray-950 border-t border-gray-800 text-gray-400 py-20">
+        <div className="flex justify-center mb-4">
+          <FooterBadge />
+        </div>
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
           <div className="grid md:grid-cols-4 gap-10 mb-14">
             <div>
