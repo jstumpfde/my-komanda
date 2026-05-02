@@ -1,6 +1,6 @@
-import { Bot } from "lucide-react"
+import { Bot, CheckCircle2, DollarSign, Clock } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
-import { Card } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
@@ -92,6 +92,54 @@ export default function AgentsPage() {
                 </TableBody>
               </Table>
             </Card>
+
+            {/* Статистика 24 часа */}
+            <div className="mt-8">
+              <h2 className="text-lg font-semibold tracking-tight mb-4">
+                Статистика 24 часа
+              </h2>
+              <div className="grid grid-cols-3 gap-4">
+                <Card>
+                  <CardContent className="pt-5 pb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center justify-center size-9 rounded-lg bg-emerald-50 dark:bg-emerald-900/30">
+                        <CheckCircle2 className="size-4 text-emerald-600 dark:text-emerald-400" />
+                      </div>
+                      <div>
+                        <p className="text-2xl font-bold">0</p>
+                        <p className="text-xs text-muted-foreground">Задач выполнено</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-5 pb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center justify-center size-9 rounded-lg bg-blue-50 dark:bg-blue-900/30">
+                        <DollarSign className="size-4 text-blue-600 dark:text-blue-400" />
+                      </div>
+                      <div>
+                        <p className="text-2xl font-bold">$0.00</p>
+                        <p className="text-xs text-muted-foreground">Стоимость</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-5 pb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center justify-center size-9 rounded-lg bg-purple-50 dark:bg-purple-900/30">
+                        <Clock className="size-4 text-purple-600 dark:text-purple-400" />
+                      </div>
+                      <div>
+                        <p className="text-2xl font-bold">0с</p>
+                        <p className="text-xs text-muted-foreground">Среднее время</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
           </div>
         </main>
       </SidebarInset>
