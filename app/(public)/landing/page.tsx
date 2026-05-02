@@ -1651,7 +1651,10 @@ export default function LandingPage() {
                       <h3 className="font-bold text-white text-lg">Базовая платформа</h3>
                       <p className="text-sm text-gray-400">Личный кабинет, настройки, роли, аналитика</p>
                     </div>
-                    <span className="text-emerald-400 font-bold text-lg shrink-0">9 900 ₽/мес</span>
+                    <div className="flex flex-col items-end shrink-0">
+                      <span className="text-emerald-400 font-bold text-lg">9 900 ₽/мес</span>
+                      <p className="text-xs text-gray-400">(включая все обновления)</p>
+                    </div>
                   </div>
                   <div className="flex items-center gap-4">
                     <span className="text-sm text-gray-400">Пользователи</span>
@@ -1711,6 +1714,7 @@ export default function LandingPage() {
                           <h4 className="font-semibold text-white text-sm mb-0.5">{m.label}</h4>
                           <p className="text-xs text-gray-500 mb-2">{m.desc}</p>
                           <p className={cn("text-sm font-bold", selected ? colors.text : "text-gray-400")}>+{fmt(m.price)} ₽/мес</p>
+                          <p className="text-xs text-gray-400">(включая все обновления)</p>
                         </button>
                       )
                     })}
@@ -1742,6 +1746,7 @@ export default function LandingPage() {
                     <div className="text-right">
                       <span className="text-3xl font-bold text-indigo-400">{fmt(total)} ₽</span>
                       <span className="text-sm text-gray-500">/мес</span>
+                      <p className="text-xs text-gray-400">(включая все обновления)</p>
                     </div>
                   </div>
                   <p className="text-xs text-gray-500 mb-4">{fmt(perUser)} ₽ за пользователя</p>
