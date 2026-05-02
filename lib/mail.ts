@@ -18,6 +18,11 @@ interface SendMailOptions {
 }
 
 export async function sendMail({ to, subject, text, html }: SendMailOptions) {
+  if (process.env.INTEGRATIONS_DISABLED === "true") {
+    console.log("[INTEGRATIONS_DISABLED] sendMail skipped:", to)
+    return { messageId: "disabled", accepted: [], rejected: [] }
+  }
+
   const from = process.env.SMTP_FROM || "admin@mycomanda24.ru"
 
   const info = await transporter.sendMail({
