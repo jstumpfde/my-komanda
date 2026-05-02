@@ -861,7 +861,7 @@ export default function LandingPage() {
               <Link href="/login">Войти</Link>
             </Button>
 <Button size="sm" className="bg-gradient-to-r from-indigo-500 to-violet-500 hover:from-indigo-600 hover:to-violet-600 shadow-lg shadow-indigo-500/20 text-white" asChild>
-              <Link href="/register">Запросить демо</Link>
+              <Link href="/register">Попробовать бесплатно</Link>
             </Button>
           </div>
 
@@ -934,7 +934,7 @@ export default function LandingPage() {
 
               <div className="flex flex-wrap gap-4 mb-8">
                 <Button size="lg" className="bg-gradient-to-r from-indigo-500 to-violet-500 hover:from-indigo-600 hover:to-violet-600 h-14 px-10 text-base shadow-xl shadow-indigo-500/30 transition-all hover:shadow-2xl hover:shadow-indigo-500/40 hover:scale-[1.02] text-white rounded-2xl" asChild>
-                  <Link href="/register">Запросить демо <ArrowRight className="w-5 h-5 ml-2" /></Link>
+                  <Link href="/register">Попробовать бесплатно <ArrowRight className="w-5 h-5 ml-2" /></Link>
                 </Button>
                 <Button variant="outline" size="lg" className="h-14 px-10 text-base rounded-2xl border-gray-700 text-gray-300 hover:bg-gray-800 hover:border-indigo-500 hover:text-indigo-400 transition-all">
                   <Play className="w-4 h-4 mr-2" /> Смотреть демо
