@@ -17,6 +17,7 @@ import {
   AlertCircle, CheckCircle2, Timer, Star, Calendar, Sparkles, Activity,
 } from "lucide-react"
 import { CandidatesProgressMiniTable } from "@/components/candidates/candidates-progress-mini-table"
+import { Greeting } from "./_components/greeting"
 import {
   ResponsiveContainer, LineChart, Line, Area, XAxis, YAxis, CartesianGrid, Tooltip,
   PieChart, Pie, Cell, ComposedChart,
@@ -182,6 +183,9 @@ function DashboardContent() {
                 </Select>
               </div>
             </div>
+
+            {/* ═══ Greeting ═══ */}
+            <Greeting />
 
             {/* ═══ Widget: Active Vacancies + Candidates In Work (live count) ═══ */}
             <div className="flex flex-wrap gap-3">
