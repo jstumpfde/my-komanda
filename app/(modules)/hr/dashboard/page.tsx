@@ -101,6 +101,16 @@ function getGreeting(): string {
   return "Добрый вечер"
 }
 
+function getDateString(): string {
+  const formatted = new Date().toLocaleDateString("ru-RU", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  })
+  // toLocaleDateString возвращает: "понедельник, 9 июня"
+  return "Сегодня: " + formatted.charAt(0).toUpperCase() + formatted.slice(1)
+}
+
 const tooltipStyle = { backgroundColor: "var(--popover)", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "12px" }
 
 // ─── Page ───────────────────────────────────────────────────────────────────
@@ -143,6 +153,9 @@ function DashboardContent() {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
                 <h1 className="text-xl font-semibold">{getGreeting()}, {user.name.split(" ")[0]}!</h1>
+                <p className="text-sm text-muted-foreground" suppressHydrationWarning>
+                  {getDateString()}
+                </p>
                 <p className="text-sm text-muted-foreground mt-0.5">
                   Сегодня 3 интервью · 24 новых отклика · {MOCK_VACANCIES.length} вакансий в работе
                 </p>
