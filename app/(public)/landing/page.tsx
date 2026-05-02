@@ -276,7 +276,7 @@ const COUNTER_METRICS = [
 const FOOTER_COLS: { title: string; links: { label: string; href: string }[] }[] = [
   { title: "Продукт", links: [{ label: "Возможности", href: "#" }, { label: "Модули", href: "#" }, { label: "Тарифы", href: "#" }, { label: "API", href: "#" }] },
   { title: "Компания", links: [{ label: "О нас", href: "/about" }, { label: "Блог", href: "#" }, { label: "Карьера", href: "#" }, { label: "Контакты", href: "#" }] },
-  { title: "Юридическое", links: [{ label: "Политика конфиденциальности", href: "#" }, { label: "Условия использования", href: "#" }, { label: "Оферта", href: "#" }, { label: "О нас", href: "/about" }] },
+  { title: "Юридическое", links: [{ label: "Политика конфиденциальности", href: "#" }, { label: "Условия использования", href: "#" }, { label: "Оферта", href: "#" }, { label: "О нас", href: "/about" }, { label: "Политика конфиденциальности", href: "/privacy" }, { label: "Условия", href: "/terms" }] },
 ]
 
 // ─── Role cards data ────────────────────────────────────────────────────────
