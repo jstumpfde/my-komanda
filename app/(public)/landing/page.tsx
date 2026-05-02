@@ -1842,6 +1842,7 @@ export default function LandingPage() {
             &copy; 2026 Company24.pro. Все права защищены. · Powered by Company24 Agents (4 успешных деплоя)
             <p className="text-xs text-gray-500 text-center mt-1">Версия {VERSION} · Build {BUILD_DATE}</p>
             <p className="text-xs text-emerald-400 text-center">QA-проверено</p>
+            <p className="text-xs text-blue-400 text-center">Reviewed by Sonnet</p>
           </div>
         </div>
       </footer>
