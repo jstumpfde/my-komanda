@@ -1826,7 +1826,7 @@ export default function LandingPage() {
             ))}
           </div>
           <div className="border-t border-gray-800 pt-8 text-center text-xs text-gray-600">
-            &copy; 2026 Company24.pro. Все права защищены. · Powered by Company24 Agents
+            &copy; 2026 Company24.pro. Все права защищены. · Powered by Company24.PRO
           </div>
         </div>
       </footer>

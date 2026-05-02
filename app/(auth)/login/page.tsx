@@ -148,7 +148,7 @@ function LoginForm() {
         </Card>
 
         <p className="text-center text-xs text-muted-foreground">
-          © 2026 Company24. Все права защищены. · Powered by Company24 Agents
+          © 2026 Company24. Все права защищены. · Powered by Company24.PRO
         </p>
       </div>
     </div>
