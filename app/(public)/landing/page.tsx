@@ -924,6 +924,8 @@ export default function LandingPage() {
                 AI Business OS
               </div>
 
+              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-purple-950/30 border border-purple-500/30 text-purple-200 text-sm mx-auto mb-4">🚀 Беспрецедентно: 100% разработка AI-агентами на Opus 4.7</div>
+
               <h1 className="text-4xl md:text-5xl lg:text-[56px] font-bold tracking-tight leading-[1.08] mb-5 text-white">
                 AI-система, которая ведёт бизнес{" "}
                 <span className="bg-gradient-to-r from-indigo-500 to-violet-500 bg-clip-text text-transparent">24/7</span>
