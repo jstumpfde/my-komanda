@@ -1843,6 +1843,7 @@ export default function LandingPage() {
             <p className="text-xs text-gray-500 text-center mt-1">Версия {VERSION} · Build {BUILD_DATE}</p>
             <p className="text-xs text-emerald-400 text-center">QA-проверено</p>
             <p className="text-xs text-blue-400 text-center">Reviewed by Sonnet</p>
+            <p className="text-xs text-amber-400 text-center">Watchman: 🦅</p>
           </div>
         </div>
       </footer>
