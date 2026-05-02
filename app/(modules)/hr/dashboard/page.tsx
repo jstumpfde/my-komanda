@@ -112,6 +112,7 @@ function DashboardContent() {
   const [periodFilter, setPeriodFilter] = useState("month")
   const [dynamicsPeriod, setDynamicsPeriod] = useState<"7" | "30" | "90">("30")
   const [activeVacanciesCount, setActiveVacanciesCount] = useState<number | null>(null)
+  const [candidatesInWorkCount, setCandidatesInWorkCount] = useState<number | null>(null)
 
   const dynamicsData = dynamicsPeriod === "7" ? DYNAMICS_30D.slice(-7) : dynamicsPeriod === "90" ? DYNAMICS_30D : DYNAMICS_30D
 
@@ -123,6 +124,8 @@ function DashboardContent() {
         if (cancelled) return
         const n = d?.kpi?.activeVacancies
         if (typeof n === "number") setActiveVacanciesCount(n)
+        const c = d?.kpi?.candidatesInWork
+        if (typeof c === "number") setCandidatesInWorkCount(c)
       })
       .catch(() => {})
     return () => { cancelled = true }
@@ -164,16 +167,30 @@ function DashboardContent() {
               </div>
             </div>
 
-            {/* ═══ Widget: Active Vacancies (live count) ═══ */}
-            <div className="border rounded-xl shadow-sm hover:shadow-md transition-shadow p-4 inline-flex items-center gap-3 w-fit">
-              <div className="w-10 h-10 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 flex items-center justify-center shrink-0">
-                <Briefcase className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+            {/* ═══ Widget: Active Vacancies + Candidates In Work (live count) ═══ */}
+            <div className="flex flex-wrap gap-3">
+              <div className="border rounded-xl shadow-sm hover:shadow-md transition-shadow p-4 inline-flex items-center gap-3 w-fit">
+                <div className="w-10 h-10 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 flex items-center justify-center shrink-0">
+                  <Briefcase className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-xs text-muted-foreground leading-none">Активные вакансии</span>
+                  <span className="text-2xl font-bold leading-tight mt-1">
+                    {activeVacanciesCount === null ? "…" : activeVacanciesCount}
+                  </span>
+                </div>
               </div>
-              <div className="flex flex-col">
-                <span className="text-xs text-muted-foreground leading-none">Активные вакансии</span>
-                <span className="text-2xl font-bold leading-tight mt-1">
-                  {activeVacanciesCount === null ? "…" : activeVacanciesCount}
-                </span>
+
+              <div className="border rounded-xl shadow-sm hover:shadow-md transition-shadow p-4 inline-flex items-center gap-3 w-fit">
+                <div className="w-10 h-10 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 flex items-center justify-center shrink-0">
+                  <Users className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-xs text-muted-foreground leading-none">Кандидатов в работе</span>
+                  <span className="text-2xl font-bold leading-tight mt-1">
+                    {candidatesInWorkCount === null ? "…" : candidatesInWorkCount}
+                  </span>
+                </div>
               </div>
             </div>
 
