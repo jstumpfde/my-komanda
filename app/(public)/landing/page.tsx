@@ -1651,6 +1651,7 @@ export default function LandingPage() {
                 <div className="bg-gray-900 rounded-2xl border border-gray-800 p-6">
                   <div className="flex items-start justify-between mb-5">
                     <div>
+                      <span className="text-xs uppercase tracking-wider text-emerald-400">Старт</span>
                       <h3 className="font-bold text-white text-lg">Базовая платформа</h3>
                       <p className="text-sm text-gray-400">Личный кабинет, настройки, роли, аналитика</p>
                     </div>
