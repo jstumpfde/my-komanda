@@ -21,3 +21,4 @@ node_modules/
 .claude/my-komanda
 ecosystem.config.js
 tsconfig.tsbuildinfo
+node_modules
