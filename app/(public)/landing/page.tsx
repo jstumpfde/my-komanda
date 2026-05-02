@@ -5,6 +5,7 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import FooterBadge from "@/components/footer-badge"
 import { cn } from "@/lib/utils"
+import { VERSION, BUILD_DATE } from "@/lib/version"
 import {
   Users, Megaphone, DollarSign, Truck, Brain, MessageSquare, BarChart3,
   Target, Zap, ArrowRight, Check, X, Minus,
@@ -1839,7 +1840,7 @@ export default function LandingPage() {
           </div>
           <div className="border-t border-gray-800 pt-8 text-center text-xs text-gray-600">
             &copy; 2026 Company24.pro. Все права защищены. · Powered by Company24 Agents (4 успешных деплоя)
-            <p className="text-xs text-gray-500 text-center mt-1">Версия 0.1.0 · Build 2026-05-02</p>
+            <p className="text-xs text-gray-500 text-center mt-1">Версия {VERSION} · Build {BUILD_DATE}</p>
           </div>
         </div>
       </footer>
