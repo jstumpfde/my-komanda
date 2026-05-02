@@ -926,6 +926,7 @@ export default function LandingPage() {
                 AI-система, которая ведёт бизнес{" "}
                 <span className="bg-gradient-to-r from-indigo-500 to-violet-500 bg-clip-text text-transparent">24/7</span>
               </h1>
+              <p className="text-sm text-purple-200 text-center mt-2">Запущено ИИ-агентами в Москве</p>
 
               <p className="text-lg text-gray-400 mb-10 max-w-xl leading-relaxed">
                 Company24.pro автоматизирует HR, маркетинг, продажи и логистику. AI-агенты берут на себя 80% рутины. Снижаем затраты и увеличиваем эффективность.
