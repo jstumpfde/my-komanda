@@ -273,10 +273,10 @@ const COUNTER_METRICS = [
   { end: 4, suffix: "x", prefix: "ROI ", label: "за 3 месяца", icon: Award },
 ]
 
-const FOOTER_COLS = [
-  { title: "Продукт", links: ["Возможности", "Модули", "Тарифы", "API"] },
-  { title: "Компания", links: ["О нас", "Блог", "Карьера", "Контакты"] },
-  { title: "Юридическое", links: ["Политика конфиденциальности", "Условия использования", "Оферта"] },
+const FOOTER_COLS: { title: string; links: { label: string; href: string }[] }[] = [
+  { title: "Продукт", links: [{ label: "Возможности", href: "#" }, { label: "Модули", href: "#" }, { label: "Тарифы", href: "#" }, { label: "API", href: "#" }] },
+  { title: "Компания", links: [{ label: "О нас", href: "/about" }, { label: "Блог", href: "#" }, { label: "Карьера", href: "#" }, { label: "Контакты", href: "#" }] },
+  { title: "Юридическое", links: [{ label: "Политика конфиденциальности", href: "#" }, { label: "Условия использования", href: "#" }, { label: "Оферта", href: "#" }, { label: "О нас", href: "/about" }] },
 ]
 
 // ─── Role cards data ────────────────────────────────────────────────────────
@@ -1825,8 +1825,8 @@ export default function LandingPage() {
                 <h4 className="font-semibold text-white text-sm mb-5">{col.title}</h4>
                 <ul className="space-y-3">
                   {col.links.map((l) => (
-                    <li key={l}>
-                      <a href="#" className="text-sm hover:text-white transition-colors">{l}</a>
+                    <li key={l.label}>
+                      <a href={l.href} className="text-sm hover:text-white transition-colors">{l.label}</a>
                     </li>
                   ))}
                 </ul>
