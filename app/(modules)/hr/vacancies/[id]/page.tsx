@@ -16,7 +16,6 @@ import { type CardDisplaySettings } from "@/components/dashboard/card-settings"
 import { ViewSettings } from "@/components/dashboard/view-settings"
 import { CandidateFilters, type FilterState } from "@/components/dashboard/candidate-filters"
 import { SortMenu } from "@/components/dashboard/sort-menu"
-import { Tooltip as UITooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip"
 import type { CandidateSortMode } from "@/lib/candidate-sort"
 import { CandidateDrawer } from "@/components/candidates/candidate-drawer"
 import { CandidatesProgressList } from "@/components/candidates/candidates-progress-list"
@@ -36,7 +35,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Checkbox } from "@/components/ui/checkbox"
 import { Slider } from "@/components/ui/slider"
 import { Input } from "@/components/ui/input"
-import { Plus, Clock, Pause, Play, Archive, RotateCcw, Trash2, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, Zap, Globe, AlertTriangle, TrendingUp, Calendar, MapPin, DollarSign, Filter, X, Link2, Copy, Save, Sparkles, Eye, Check, Loader2, Download, ExternalLink, ClipboardList, ChevronLeft, ChevronRight, ChevronDown, CheckCircle2, XCircle, Users, Phone, Upload, RefreshCw, Activity } from "lucide-react"
+import { Plus, Pause, Play, Archive, RotateCcw, Trash2, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, Zap, Globe, AlertTriangle, TrendingUp, Calendar, MapPin, DollarSign, Filter, X, Link2, Copy, Save, Sparkles, Check, Loader2, Download, ExternalLink, ClipboardList, ChevronLeft, ChevronRight, ChevronDown, CheckCircle2, XCircle, Users, Phone, Upload, RefreshCw, Activity } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Label } from "@/components/ui/label"
@@ -1372,68 +1371,7 @@ export default function VacancyPage() {
                     </button>
                   )}
                   <Badge variant="outline" className={statusCfg.color}>{statusCfg.label}</Badge>
-                  {status === "active" && apiVacancy?.createdAt && <span className="flex items-center gap-1.5 text-xs text-muted-foreground"><Clock className="size-3.5" />{Math.floor((Date.now() - new Date(apiVacancy.createdAt).getTime()) / 86400000)} дн.</span>}
-                  <UITooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          const code = apiVacancy?.shortCode
-                          if (code) {
-                            window.open(`${window.location.origin}/demo/${code}0000?as=hr`, "_blank", "noopener,noreferrer")
-                            return
-                          }
-                          try {
-                            const res = await fetch(`/api/modules/hr/vacancies/${id}/preview-link`)
-                            const json = await res.json()
-                            const path = json?.data?.url || json?.url
-                            if (!path) { toast.error("Не удалось открыть превью"); return }
-                            const sep = path.includes("?") ? "&" : "?"
-                            window.open(`${window.location.origin}${path}${sep}as=hr`, "_blank", "noopener,noreferrer")
-                          } catch {
-                            toast.error("Не удалось открыть превью")
-                          }
-                        }}
-                        aria-label="Открыть как директор"
-                        className="inline-flex items-center justify-center w-6 h-6 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-                      >
-                        <Eye className="size-3.5" />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent>Открыть как директор (ответы не сохраняются)</TooltipContent>
-                  </UITooltip>
-                </div>
-                <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-muted-foreground">
-                  <span>{apiVacancy?.city ?? "Москва"}</span>
-                  {activeTab === "candidates" && <>
-                    <span>·</span>
-                    <span><span className="font-medium text-foreground">{hhSyncMeta?.responsesCount ?? apiCandidates.length}</span> откликов</span>
-                    <span>·</span>
-                    <span><span className="font-medium text-foreground">{apiCandidates.length}</span> кандидатов</span>
-                    <span>·</span>
-                    <span><span className={cn("font-medium", (hhPendingResponses ?? 0) > 0 ? "text-amber-700" : "text-foreground")}>{hhPendingResponses ?? 0}</span> необраб.</span>
-                    <span>·</span>
-                    <span><span className="font-medium text-foreground">{apiCandidates.filter(c => c.demoProgressJson != null).length}</span> в демо</span>
-                    {hhConnected === true && apiVacancy?.hhVacancyId && hhSyncMeta && (<>
-                      <span>·</span>
-                      <UITooltip>
-                        <TooltipTrigger asChild>
-                          <button
-                            type="button"
-                            onClick={handleHhSync}
-                            disabled={hhSyncing}
-                            aria-label="Синхронизировать с hh"
-                            className="inline-flex items-center justify-center w-5 h-5 rounded-full hover:bg-accent disabled:opacity-50 transition-colors"
-                          >
-                            {hhSyncing ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
-                          </button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          Синхронизировать с hh • синх. {relativeHhSyncTime(hhSyncMeta.syncedAt)} назад
-                        </TooltipContent>
-                      </UITooltip>
-                    </>)}
-                  </>}
+                  {apiVacancy?.createdAt && <span className="text-xs text-muted-foreground">{Math.floor((Date.now() - new Date(apiVacancy.createdAt).getTime()) / 86400000)} дней</span>}
                 </div>
                 <input
                   ref={anketaFileInputRef}
