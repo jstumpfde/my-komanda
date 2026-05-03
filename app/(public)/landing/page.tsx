@@ -944,8 +944,6 @@ export default function LandingPage() {
               <p className="text-sm text-gray-500">
                 Покажем платформу и подберём модули под ваш бизнес
               </p>
-
-              <p className="text-xs text-purple-300 text-center mt-2">🚀 Powered by AI агентами 24/7</p>
             </div>
 
             <HeroDashboard />

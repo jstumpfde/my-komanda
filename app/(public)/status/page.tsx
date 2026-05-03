@@ -7,7 +7,6 @@ export const metadata: Metadata = {
 const statuses = [
   "✅ API: операционный",
   "✅ База данных: операционный",
-  "✅ AI-агенты: 24/7 активны",
 ]
 
 export default function StatusPage() {
