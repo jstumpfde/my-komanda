@@ -54,7 +54,7 @@ export function ColumnColorPicker({ colorFrom, colorTo, onColorChange, title, on
         <Button
           variant="ghost"
           size="icon"
-          className="h-5 w-5 rounded-md hover:bg-white/20 ml-1"
+          className="h-5 w-5 rounded-md hover:bg-white/20 ml-1 opacity-0 transition-opacity duration-150 group-hover/header:opacity-100 data-[state=open]:opacity-100"
           title="Изменить цвет"
         >
           <Pipette className="w-3 h-3 text-white/60" />
