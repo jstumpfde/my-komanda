@@ -14,11 +14,6 @@ type ChangelogEntry = {
 
 const ENTRIES: ChangelogEntry[] = [
   {
-    version: "v0.5.0",
-    date: "2026-05-02",
-    description: "Запуск AI-агентов 24/7",
-  },
-  {
     version: "v0.4.0",
     date: "2026-04-18",
     description: "Модуль ОКК и оценка звонков",

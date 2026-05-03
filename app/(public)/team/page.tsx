@@ -1,5 +1,5 @@
 import type { Metadata } from "next"
-import { Bot, Sparkles, User, type LucideIcon } from "lucide-react"
+import { Sparkles, User, type LucideIcon } from "lucide-react"
 
 import {
   Card,
@@ -36,14 +36,6 @@ const teammates: Teammate[] = [
     role: "MarketRadar Lead",
     description:
       "Ведёт продукт MarketRadar и формирует стратегию роста на рынке.",
-  },
-  {
-    icon: Bot,
-    iconColor: "text-emerald-400",
-    name: "AI Агенты",
-    role: "24/7 разработка",
-    description:
-      "Автономные агенты, которые пишут код, тестируют и деплоят круглосуточно.",
   },
 ]
 
