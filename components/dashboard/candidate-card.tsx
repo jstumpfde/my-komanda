@@ -6,6 +6,7 @@ import { Calendar, Check, X, Star } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { CardDisplaySettings } from "./card-settings"
 import type { CandidateAction } from "@/lib/column-config"
+import { DemoProgressBar, calcDemoPercent } from "@/components/hr/demo-progress-bar"
 
 export interface Candidate {
   id: string
@@ -131,25 +132,14 @@ export function CandidateCard({ candidate, settings, columnId, isLastColumn, onO
 
       {/* Demo progress bar — always visible */}
       {(() => {
-        const dp = candidate.demoProgressJson
-        const hasData = dp && Array.isArray(dp.blocks)
-        const completed = hasData ? dp.blocks!.filter((b) => b?.status === "completed").length : 0
-        const total = hasData ? (dp.totalBlocks ?? dp.blocks!.length) : 0
-        const pct = total > 0 ? Math.round((completed / total) * 100) : 0
-        const barColor = !hasData
-          ? "bg-muted-foreground/20"
-          : pct === 0 ? "bg-muted-foreground/30"
-          : pct < 50 ? "bg-orange-500"
-          : pct < 100 ? "bg-emerald-500"
-          : "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]"
-        const label = !hasData ? "Не начато" : `${completed}/${total} · ${pct}%`
+        const { percent, completed, total } = calcDemoPercent(candidate.demoProgressJson)
         return (
-          <div className="mt-1.5 mb-1">
-            <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
-              <div className={cn("h-full rounded-full transition-all", barColor)} style={{ width: hasData ? `${pct}%` : "0%" }} />
-            </div>
-            <p className="text-xs text-muted-foreground mt-0.5">{label}</p>
-          </div>
+          <DemoProgressBar
+            variant="kanban"
+            progressPercent={percent}
+            completedBlocks={completed}
+            totalBlocks={total}
+          />
         )
       })()}
 

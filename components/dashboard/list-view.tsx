@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils"
 import type { CandidateAction } from "@/lib/column-config"
 import { applySortMode, type CandidateSortMode } from "@/lib/candidate-sort"
 import { MapPin, CheckCircle2, XCircle, ArrowRight, ThumbsUp, Clock, ArrowUp, ArrowDown, Star } from "lucide-react"
+import { DemoProgressBar, calcDemoPercent } from "@/components/hr/demo-progress-bar"
 
 export type ListSortKey = "favorite" | "aiScore" | "progress" | "salary" | "responseDate" | "status"
 export type ListSortDir = "asc" | "desc"
@@ -47,21 +48,9 @@ const DEFAULT_DIR: Record<ListSortKey, ListSortDir> = {
   status:       "asc",
 }
 
+/** Возвращает 0..100 либо null (не приступал). Использует общий хелпер. */
 function progressPercentOf(c: Candidate): number | null {
-  const dp = c.demoProgressJson
-  if (!dp || !Array.isArray(dp.blocks)) return null
-  const total = dp.totalBlocks ?? dp.blocks.length
-  if (!total) return null
-  const completed = dp.blocks.filter((b) => b?.status === "completed").length
-  return Math.round((completed / total) * 100)
-}
-
-function progressTextClass(p: number | null): string {
-  if (p === null) return "text-muted-foreground"
-  if (p >= 85) return "text-emerald-500"
-  if (p >= 50) return "text-blue-500"
-  if (p >= 25) return "text-yellow-500"
-  return "text-zinc-500"
+  return calcDemoPercent(c.demoProgressJson).percent
 }
 
 function formatResponseDate(d: Date | string | null | undefined): { short: string; full: string } | null {
@@ -194,12 +183,12 @@ export function ListView({
 
   const cols: string[] = ["40px"] // ★
   cols.push("minmax(180px, 2fr)")  // Кандидат
-  if (showProgress) cols.push("110px")
   if (showScore) cols.push("90px")
   if (showSalary) cols.push("140px")
   if (showCity) cols.push("120px")
   if (showResponseDate) cols.push("110px")
   cols.push("130px") // Статус
+  if (showProgress) cols.push("160px") // Демо
   if (showSource) cols.push("110px")
   if (showActions) cols.push("auto")
 
@@ -230,12 +219,12 @@ export function ListView({
           )}
         </button>
         <div>Кандидат</div>
-        {showProgress && <SortHeader label="Прогресс" sortKey="progress" sort={sort} onToggle={handleSort} />}
         {showScore && <SortHeader label="AI-оценка" sortKey="aiScore" sort={sort} onToggle={handleSort} />}
         {showSalary && <SortHeader label="Зарплата" sortKey="salary" sort={sort} onToggle={handleSort} />}
         {showCity && <div>Город</div>}
         {showResponseDate && <SortHeader label="Дата отклика" sortKey="responseDate" sort={sort} onToggle={handleSort} />}
         <SortHeader label="Статус" sortKey="status" sort={sort} onToggle={handleSort} />
+        {showProgress && <SortHeader label="Демо" sortKey="progress" sort={sort} onToggle={handleSort} />}
         {showSource && <div>Источник</div>}
         {showActions && <div>Действия</div>}
       </div>
@@ -284,13 +273,6 @@ export function ListView({
                   )}
                 </div>
               </div>
-
-              {/* Progress */}
-              {showProgress && (
-                <div className={cn("text-sm font-medium tabular-nums", progressTextClass(progress))}>
-                  {progress === null ? "—" : `${progress}%`}
-                </div>
-              )}
 
               {/* AI score */}
               {showScore && (
@@ -348,6 +330,11 @@ export function ListView({
                   {candidate.columnTitle}
                 </span>
               </div>
+
+              {/* Demo progress */}
+              {showProgress && (
+                <DemoProgressBar variant="list" progressPercent={progress} />
+              )}
 
               {/* Source */}
               {showSource && (
