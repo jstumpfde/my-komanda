@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -380,15 +380,65 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
   }
 
   // 6. Авто-действия
-  const [autoInvite, setAutoInvite] = useState<boolean>((initialAutomation.autoInvite as boolean) ?? false)
-  const [autoReject, setAutoReject] = useState<boolean>((initialAutomation.autoReject as boolean) ?? false)
-  const [notifyManager, setNotifyManager] = useState<boolean>((initialAutomation.notifyManager as boolean) ?? false)
+  // Дефолты: autoInvite/autoReject включены, notifyManager выключен (см. ТЗ).
+  const DEFAULT_REJECT_TEMPLATE = "Здравствуйте, {имя}! Благодарим за интерес к позиции {должность}. К сожалению, на данный момент мы остановились на других кандидатах. Желаем удачи в поиске!"
+  const DEFAULT_INVITE_TEMPLATE = "Здравствуйте, {имя}! Мы рассмотрели ваш отклик на позицию {должность} и хотели бы пригласить вас на следующий этап. {ссылка_на_демонстрацию}"
+  const [autoInvite, setAutoInvite] = useState<boolean>(
+    typeof initialAutomation.autoInvite === "boolean" ? (initialAutomation.autoInvite as boolean) : true
+  )
+  const [autoReject, setAutoReject] = useState<boolean>(
+    typeof initialAutomation.autoReject === "boolean" ? (initialAutomation.autoReject as boolean) : true
+  )
+  const [notifyManager, setNotifyManager] = useState<boolean>(
+    typeof initialAutomation.notifyManager === "boolean" ? (initialAutomation.notifyManager as boolean) : false
+  )
   const [rejectTemplate, setRejectTemplate] = useState<string>(
-    (initialAutomation.rejectTemplate as string) || "Здравствуйте, {имя}! Благодарим за интерес к позиции {должность}. К сожалению, на данный момент мы остановились на других кандидатах. Желаем удачи в поиске!"
+    (initialAutomation.rejectTemplate as string) || DEFAULT_REJECT_TEMPLATE
   )
   const [inviteTemplate, setInviteTemplate] = useState<string>(
-    (initialAutomation.inviteTemplate as string) || "Здравствуйте, {имя}! Мы рассмотрели ваш отклик на позицию {должность} и хотели бы пригласить вас на следующий этап. {ссылка_на_демонстрацию}"
+    (initialAutomation.inviteTemplate as string) || DEFAULT_INVITE_TEMPLATE
   )
+
+  // Дебаунсированное сохранение блока «Автоматические действия» через PATCH.
+  // Полная сборка автоматизации всё ещё доступна через нижнюю кнопку «Сохранить настройки» (PUT) —
+  // оба пути сходятся в descriptionJson.automation благодаря merge'у на сервере.
+  const automationDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const automationMountRef = useRef(true)
+  const [automationSaving, setAutomationSaving] = useState(false)
+  useEffect(() => {
+    if (automationMountRef.current) {
+      automationMountRef.current = false
+      return
+    }
+    if (automationDebounceRef.current) clearTimeout(automationDebounceRef.current)
+    automationDebounceRef.current = setTimeout(async () => {
+      try {
+        setAutomationSaving(true)
+        const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            automation: {
+              autoInvite,
+              autoReject,
+              notifyManager,
+              rejectTemplate,
+              inviteTemplate,
+            },
+          }),
+        })
+        if (!res.ok) throw new Error("save failed")
+        toast.success("Настройки авто-действий сохранены", { duration: 1500 })
+      } catch {
+        toast.error("Не удалось сохранить авто-действия")
+      } finally {
+        setAutomationSaving(false)
+      }
+    }, 700)
+    return () => {
+      if (automationDebounceRef.current) clearTimeout(automationDebounceRef.current)
+    }
+  }, [vacancyId, autoInvite, autoReject, notifyManager, rejectTemplate, inviteTemplate])
 
   // 9. Дозапрос данных
   const initialCompleteness = (initialAutomation.completenessCheck as { enabled?: boolean; threshold?: number; channel?: string; delay?: string }) || {}
@@ -952,55 +1002,84 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
       {/* ═══ 6. Автоматические действия ═══════════════════════ */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Zap className="w-4 h-4" />
-            Автоматические действия
-          </CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Zap className="w-4 h-4" />
+              Автоматические действия
+            </CardTitle>
+            {automationSaving && (
+              <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                <Loader2 className="w-3 h-3 animate-spin" />
+                Сохранение…
+              </span>
+            )}
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="space-y-3">
-            <div className="flex items-center justify-between py-2">
-              <div>
-                <p className="text-sm font-medium">Авто-приглашение подходящих</p>
-                <p className="text-xs text-muted-foreground">AI-скор &ge; 70 — автоматическое приглашение на следующий этап</p>
+          <div className="space-y-4">
+            <label className="flex items-start gap-3 cursor-pointer py-1">
+              <Checkbox
+                id="auto-invite"
+                checked={autoInvite}
+                onCheckedChange={(v) => setAutoInvite(v === true)}
+                className="mt-0.5"
+              />
+              <div className="flex-1">
+                <p className="text-sm font-medium">Авто-приглашение подходящих (AI-скор ≥ 70)</p>
+                <p className="text-xs text-muted-foreground">Автоматическое приглашение на следующий этап</p>
               </div>
-              <Switch checked={autoInvite} onCheckedChange={setAutoInvite} />
-            </div>
-            {autoInvite && (
-              <div className="ml-4 space-y-1.5">
-                <Label className="text-xs">Шаблон приглашения</Label>
-                <Textarea value={inviteTemplate} onChange={e => setInviteTemplate(e.target.value)}
-                  rows={3} className="text-sm resize-none bg-[var(--input-bg)] border border-input" />
-                <p className="text-[11px] text-muted-foreground">Переменные: {"{имя}"}, {"{должность}"}, {"{ссылка_на_демонстрацию}"}</p>
+            </label>
+
+            <label className="flex items-start gap-3 cursor-pointer py-1">
+              <Checkbox
+                id="auto-reject"
+                checked={autoReject}
+                onCheckedChange={(v) => setAutoReject(v === true)}
+                className="mt-0.5"
+              />
+              <div className="flex-1">
+                <p className="text-sm font-medium">Авто-отказ неподходящим (AI-скор &lt; 40)</p>
+                <p className="text-xs text-muted-foreground">Автоматический вежливый отказ</p>
               </div>
-            )}
+            </label>
 
-            <Separator />
-
-            <div className="flex items-center justify-between py-2">
-              <div>
-                <p className="text-sm font-medium">Авто-отказ неподходящим</p>
-                <p className="text-xs text-muted-foreground">AI-скор &lt; 40 — автоматический вежливый отказ</p>
-              </div>
-              <Switch checked={autoReject} onCheckedChange={setAutoReject} />
-            </div>
-            {autoReject && (
-              <div className="ml-4 space-y-1.5">
-                <Label className="text-xs">Шаблон отказа</Label>
-                <Textarea value={rejectTemplate} onChange={e => setRejectTemplate(e.target.value)}
-                  rows={3} className="text-sm resize-none bg-[var(--input-bg)] border border-input" />
-                <p className="text-[11px] text-muted-foreground">Переменные: {"{имя}"}, {"{должность}"}</p>
-              </div>
-            )}
-
-            <Separator />
-
-            <div className="flex items-center justify-between py-2">
-              <div>
-                <p className="text-sm font-medium">Уведомлять менеджера</p>
+            <label className="flex items-start gap-3 cursor-pointer py-1">
+              <Checkbox
+                id="notify-manager"
+                checked={notifyManager}
+                onCheckedChange={(v) => setNotifyManager(v === true)}
+                className="mt-0.5"
+              />
+              <div className="flex-1">
+                <p className="text-sm font-medium">Уведомлять менеджера о каждом действии</p>
                 <p className="text-xs text-muted-foreground">Получать уведомление при каждом авто-действии</p>
               </div>
-              <Switch checked={notifyManager} onCheckedChange={setNotifyManager} />
+            </label>
+
+            <Separator />
+
+            <div className="space-y-1.5">
+              <Label htmlFor="reject-template" className="text-xs">Шаблон сообщения отказа</Label>
+              <Textarea
+                id="reject-template"
+                value={rejectTemplate}
+                onChange={e => setRejectTemplate(e.target.value)}
+                rows={3}
+                className="text-sm resize-none bg-[var(--input-bg)] border border-input"
+              />
+              <p className="text-[11px] text-muted-foreground">Переменные: {"{имя}"}, {"{должность}"}</p>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="invite-template" className="text-xs">Шаблон приглашения</Label>
+              <Textarea
+                id="invite-template"
+                value={inviteTemplate}
+                onChange={e => setInviteTemplate(e.target.value)}
+                rows={3}
+                className="text-sm resize-none bg-[var(--input-bg)] border border-input"
+              />
+              <p className="text-[11px] text-muted-foreground">Переменные: {"{имя}"}, {"{должность}"}, {"{ссылка_на_демонстрацию}"}</p>
             </div>
           </div>
         </CardContent>
