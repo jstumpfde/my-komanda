@@ -16,6 +16,8 @@ import {
   Rocket, Clock, Briefcase, LayoutDashboard, Video, CalendarDays, Loader2,
 } from "lucide-react"
 
+import { CandidateProgressWidget } from "./_components/CandidateProgressWidget"
+
 // Lazy load heavy interview content
 const InterviewsContent = lazy(() => import("./interviews-content"))
 
@@ -177,6 +179,9 @@ function DashboardTab() {
               ))}
             </CardContent>
           </Card>
+
+          {/* Candidate progress widget */}
+          <CandidateProgressWidget />
         </div>
 
         {/* Activity feed */}
