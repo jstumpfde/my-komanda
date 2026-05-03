@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils"
 import type { CardDisplaySettings } from "./card-settings"
 import type { CandidateAction } from "@/lib/column-config"
 import { DemoProgressBar, calcDemoPercent } from "@/components/hr/demo-progress-bar"
+import { getDemoProgressGroup, getDemoProgressPercent } from "@/lib/demo-progress-groups"
 
 export interface Candidate {
   id: string
@@ -60,6 +61,8 @@ export function CandidateCard({ candidate, settings, columnId, isLastColumn, onO
   const isDecisionColumn = columnId === "decision" || columnId === "final_decision"
   const isInterviewColumn = columnId === "interview"
   const aiActuallyRan = candidate.aiScore != null && !!candidate.aiSummary
+  const demoPercent = getDemoProgressPercent(candidate.demoProgressJson)
+  const demoGroup = getDemoProgressGroup(demoPercent)
 
   const getScoreColor = (score: number) => {
     if (score >= 80) return "bg-success/10 text-success border-success/20"
@@ -95,8 +98,17 @@ export function CandidateCard({ candidate, settings, columnId, isLastColumn, onO
       className="relative p-3.5 rounded-lg border bg-card cursor-pointer transition"
       onClick={() => onOpenProfile?.(candidate)}
     >
-      {/* Top-right cluster: ★ favorite + score badge */}
+      {/* Top-right cluster: demo progress + ★ favorite + score badge */}
       <div className="absolute top-2 right-2 flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+        <span
+          className={cn(
+            "rounded-md px-1.5 h-5 text-[10px] font-semibold inline-flex items-center justify-center border",
+            demoGroup.badgeClass,
+          )}
+          title={`Демо: ${demoGroup.label}`}
+        >
+          {demoGroup.label}
+        </span>
         {settings.showScore && candidate.aiScore != null && (
           <span
             className={cn(
@@ -126,8 +138,7 @@ export function CandidateCard({ candidate, settings, columnId, isLastColumn, onO
 
       {/* Row 1: ФИО */}
       <p className={cn(
-        "font-medium text-base text-foreground",
-        (settings.showScore || onToggleFavorite) && "pr-14"
+        "font-medium text-base text-foreground pr-24"
       )}>{candidate.name}</p>
 
       {/* Demo progress bar — always visible */}
