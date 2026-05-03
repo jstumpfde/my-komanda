@@ -346,6 +346,11 @@ export default function VacanciesPage() {
   const [trashItems, setTrashItems] = useState<ApiVacancy[]>([])
   const [trashLoading, setTrashLoading] = useState(false)
   const [permanentDeleteTarget, setPermanentDeleteTarget] = useState<ApiVacancy | null>(null)
+  // Bulk trash actions
+  const [trashSelectedIds, setTrashSelectedIds] = useState<Set<string>>(new Set())
+  const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false)
+  const [clearAllDialogOpen, setClearAllDialogOpen] = useState(false)
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false)
   // Create vacancy — быстрое создание пустой анкеты
   const [creating, setCreating] = useState(false)
 
@@ -390,6 +395,7 @@ export default function VacanciesPage() {
       const res = await fetch(`/api/modules/hr/vacancies/${v.id}`, { method: "PATCH" })
       if (!res.ok) throw new Error()
       toast.success("Вакансия восстановлена")
+      setTrashSelectedIds((prev) => { const n = new Set(prev); n.delete(v.id); return n })
       fetchTrash()
       refetch()
     } catch { toast.error("Не удалось восстановить") }
@@ -401,10 +407,57 @@ export default function VacanciesPage() {
       const res = await fetch(`/api/modules/hr/vacancies/${permanentDeleteTarget.id}/permanent`, { method: "DELETE" })
       if (!res.ok) throw new Error()
       toast.success("Вакансия удалена навсегда")
+      setTrashSelectedIds((prev) => { const n = new Set(prev); n.delete(permanentDeleteTarget.id); return n })
       fetchTrash()
     } catch { toast.error("Не удалось удалить") }
     finally { setPermanentDeleteTarget(null) }
   }, [permanentDeleteTarget, fetchTrash])
+
+  // Bulk trash handlers
+  const toggleTrashSelect = useCallback((id: string) => {
+    setTrashSelectedIds((prev) => {
+      const n = new Set(prev)
+      if (n.has(id)) n.delete(id); else n.add(id)
+      return n
+    })
+  }, [])
+
+  const toggleTrashSelectAll = useCallback(() => {
+    setTrashSelectedIds((prev) => {
+      if (prev.size === trashItems.length && trashItems.length > 0) return new Set()
+      return new Set(trashItems.map((v) => v.id))
+    })
+  }, [trashItems])
+
+  const handleBulkDelete = useCallback(async (target: string[] | "all") => {
+    if (isBulkDeleting) return
+    setIsBulkDeleting(true)
+    try {
+      const body = target === "all" ? { all: true } : { ids: target }
+      const res = await fetch("/api/modules/hr/vacancies/trash/bulk-permanent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) throw new Error()
+      const data = (await res.json().catch(() => ({}))) as { deletedCount?: number }
+      const n = data.deletedCount ?? (target === "all" ? trashItems.length : target.length)
+      toast.success(`Удалено безвозвратно: ${n}`)
+      if (target === "all") {
+        setTrashItems([])
+      } else {
+        const removeSet = new Set(target)
+        setTrashItems((prev) => prev.filter((v) => !removeSet.has(v.id)))
+      }
+      setTrashSelectedIds(new Set())
+      setBulkDeleteDialogOpen(false)
+      setClearAllDialogOpen(false)
+    } catch {
+      toast.error("Не удалось удалить выбранные элементы")
+    } finally {
+      setIsBulkDeleting(false)
+    }
+  }, [isBulkDeleting, trashItems.length])
 
   // Open trash panel
   const openTrash = useCallback(() => {
@@ -714,18 +767,110 @@ export default function VacanciesPage() {
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* Bulk delete (selected) confirmation */}
+      <AlertDialog open={bulkDeleteDialogOpen} onOpenChange={(open) => !isBulkDeleting && setBulkDeleteDialogOpen(open)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Удалить выбранные?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Удалить безвозвратно {trashSelectedIds.size} элементов? Это действие нельзя отменить.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isBulkDeleting}>Отмена</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isBulkDeleting}
+              onClick={(e) => { e.preventDefault(); handleBulkDelete([...trashSelectedIds]) }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isBulkDeleting ? <><Loader2 className="size-4 mr-1.5 animate-spin" />Удаление...</> : "Удалить навсегда"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Clear all trash confirmation */}
+      <AlertDialog open={clearAllDialogOpen} onOpenChange={(open) => !isBulkDeleting && setClearAllDialogOpen(open)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Очистить корзину?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Удалить безвозвратно {trashItems.length} элементов? Это действие нельзя отменить.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isBulkDeleting}>Отмена</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isBulkDeleting}
+              onClick={(e) => { e.preventDefault(); handleBulkDelete("all") }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isBulkDeleting ? <><Loader2 className="size-4 mr-1.5 animate-spin" />Удаление...</> : "Очистить всё"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Trash panel */}
-      <Sheet open={trashOpen} onOpenChange={setTrashOpen}>
+      <Sheet open={trashOpen} onOpenChange={(open) => {
+        setTrashOpen(open)
+        if (!open) setTrashSelectedIds(new Set())
+      }}>
         <SheetContent className="w-[560px] sm:w-[640px] flex flex-col">
           <SheetHeader>
-            <SheetTitle className="flex items-center gap-2">
-              <Trash2 className="size-5" />
-              Корзина
+            <div className="flex items-center justify-between gap-2">
+              <SheetTitle className="flex items-center gap-2">
+                <Trash2 className="size-5" />
+                Корзина
+                {trashItems.length > 0 && (
+                  <Badge variant="secondary" className="text-xs">{trashItems.length}</Badge>
+                )}
+              </SheetTitle>
               {trashItems.length > 0 && (
-                <Badge variant="secondary" className="text-xs">{trashItems.length}</Badge>
+                <div className="flex items-center gap-3 shrink-0">
+                  <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
+                    <Checkbox
+                      checked={
+                        trashSelectedIds.size === trashItems.length && trashItems.length > 0
+                          ? true
+                          : trashSelectedIds.size > 0
+                            ? "indeterminate"
+                            : false
+                      }
+                      onCheckedChange={() => toggleTrashSelectAll()}
+                      className="shrink-0"
+                    />
+                    Выбрать все
+                  </label>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    className="h-8 gap-1.5 text-xs shrink-0"
+                    onClick={() => setClearAllDialogOpen(true)}
+                    disabled={isBulkDeleting}
+                  >
+                    <Trash2 className="size-3.5" />
+                    Очистить всё
+                  </Button>
+                </div>
               )}
-            </SheetTitle>
+            </div>
           </SheetHeader>
+          {trashSelectedIds.size > 0 && (
+            <div className="flex items-center justify-between gap-1.5 px-3 py-1.5 mt-3 bg-destructive/10 rounded-md">
+              <span className="text-xs text-destructive">Выбрано: {trashSelectedIds.size}</span>
+              <Button
+                variant="destructive"
+                size="sm"
+                className="h-8 gap-1.5 text-xs shrink-0"
+                onClick={() => setBulkDeleteDialogOpen(true)}
+                disabled={isBulkDeleting}
+              >
+                <Trash2 className="size-3.5" />
+                Удалить выбранные ({trashSelectedIds.size})
+              </Button>
+            </div>
+          )}
           <div className="flex-1 overflow-auto mt-4">
             {trashLoading && (
               <div className="space-y-3">
@@ -742,6 +887,11 @@ export default function VacanciesPage() {
               <div className="space-y-2">
                 {trashItems.map((v) => (
                   <div key={v.id} className="flex items-center gap-3 p-3 rounded-lg border border-border bg-card">
+                    <Checkbox
+                      checked={trashSelectedIds.has(v.id)}
+                      onCheckedChange={() => toggleTrashSelect(v.id)}
+                      className="shrink-0"
+                    />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-foreground truncate">{v.title}</p>
                       <p className="text-xs text-muted-foreground mt-0.5">
