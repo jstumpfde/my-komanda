@@ -1405,9 +1405,7 @@ export default function VacancyPage() {
                   </UITooltip>
                 </div>
                 <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-muted-foreground">
-                  <span>{apiVacancy?.city ?? "Москва"}</span>
                   {activeTab === "candidates" && <>
-                    <span>·</span>
                     <span><span className="font-medium text-foreground">{hhSyncMeta?.responsesCount ?? apiCandidates.length}</span> откликов</span>
                     <span>·</span>
                     <span><span className="font-medium text-foreground">{apiCandidates.length}</span> кандидатов</span>
