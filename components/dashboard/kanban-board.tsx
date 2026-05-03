@@ -132,7 +132,7 @@ export function KanbanBoard({ settings, viewMode, onViewModeChange, columns = []
                   className="flex flex-col rounded-xl min-w-0"
                 >
                   {/* Column Header */}
-                  <div className="mb-3 rounded-lg overflow-visible group relative">
+                  <div className="mb-3 rounded-lg overflow-visible group/header relative">
                     <div
                       className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg w-full relative"
                       style={{ background: `linear-gradient(135deg, ${column.colorFrom}, ${column.colorTo})` }}
@@ -169,7 +169,7 @@ export function KanbanBoard({ settings, viewMode, onViewModeChange, columns = []
                         {onRemoveColumn && (
                           <button
                             type="button"
-                            className="absolute left-[-10px] top-1/2 -translate-y-1/2 z-10 w-5 h-5 rounded-full bg-background border border-border shadow-sm hover:bg-red-50 hover:border-red-200 flex items-center justify-center transition-all opacity-0 group-hover:opacity-100"
+                            className="absolute left-[-10px] top-1/2 -translate-y-1/2 z-10 w-5 h-5 rounded-full bg-background border border-border shadow-sm hover:bg-red-50 hover:border-red-200 flex items-center justify-center transition-all opacity-0 group-hover/header:opacity-100"
                             title="Удалить этап"
                             onClick={() => setRemoveColId(column.id)}
                           >
@@ -179,7 +179,7 @@ export function KanbanBoard({ settings, viewMode, onViewModeChange, columns = []
                         {onAddCustomColumn && (
                           <button
                             type="button"
-                            className="absolute right-[-10px] top-1/2 -translate-y-1/2 z-10 w-5 h-5 rounded-full bg-background border border-border shadow-sm hover:bg-green-50 hover:border-green-200 flex items-center justify-center transition-all opacity-0 group-hover:opacity-100"
+                            className="absolute right-[-10px] top-1/2 -translate-y-1/2 z-10 w-5 h-5 rounded-full bg-background border border-border shadow-sm hover:bg-green-50 hover:border-green-200 flex items-center justify-center transition-all opacity-0 group-hover/header:opacity-100"
                             title="Добавить этап после"
                             onClick={() => { setInsertAfterColId(column.id); setAddColOpen(true) }}
                           >
