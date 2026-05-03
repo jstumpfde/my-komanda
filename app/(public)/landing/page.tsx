@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
-import FooterBadge from "@/components/footer-badge"
 import { cn } from "@/lib/utils"
 import { VERSION, BUILD_DATE } from "@/lib/version"
 import {
@@ -278,7 +277,7 @@ const COUNTER_METRICS = [
 const FOOTER_COLS: { title: string; links: { label: string; href: string }[] }[] = [
   { title: "Продукт", links: [{ label: "Возможности", href: "#" }, { label: "Модули", href: "#" }, { label: "Тарифы", href: "#" }, { label: "API", href: "#" }] },
   { title: "Компания", links: [{ label: "О нас", href: "/about" }, { label: "Блог", href: "#" }, { label: "Карьера", href: "#" }, { label: "Контакты", href: "#" }] },
-  { title: "Юридическое", links: [{ label: "Политика конфиденциальности", href: "#" }, { label: "Условия использования", href: "#" }, { label: "Оферта", href: "#" }, { label: "О нас", href: "/about" }, { label: "Политика конфиденциальности", href: "/privacy" }, { label: "Условия", href: "/terms" }, { label: "Контакты", href: "/contact" }] },
+  { title: "Юридическое", links: [{ label: "Политика конфиденциальности", href: "#" }, { label: "Условия использования", href: "#" }, { label: "Оферта", href: "#" }] },
 ]
 
 // ─── Role cards data ────────────────────────────────────────────────────────
@@ -923,8 +922,6 @@ export default function LandingPage() {
                 </span>
                 AI Business OS
               </div>
-
-              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-purple-950/30 border border-purple-500/30 text-purple-200 text-sm mx-auto mb-4">🚀 Беспрецедентно: 100% разработка AI-агентами на Opus 4.7</div>
 
               <h1 className="text-4xl md:text-5xl lg:text-[56px] font-bold tracking-tight leading-[1.08] mb-5 text-white">
                 AI-система, которая ведёт бизнес{" "}
@@ -1802,9 +1799,6 @@ export default function LandingPage() {
 
       {/* ── FOOTER ── */}
       <footer id="about" className="bg-gray-950 border-t border-gray-800 text-gray-400 py-20">
-        <div className="flex justify-center mb-4">
-          <FooterBadge />
-        </div>
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
           <div className="grid md:grid-cols-4 gap-10 mb-14">
             <div>
@@ -1842,7 +1836,7 @@ export default function LandingPage() {
             ))}
           </div>
           <div className="border-t border-gray-800 pt-8 text-center text-xs text-gray-600">
-            &copy; 2026 Company24.pro. Все права защищены. · Powered by Company24 Agents (4 успешных деплоя)
+            &copy; 2026 Company24.pro. Все права защищены. · Powered by Company24 Agents
             <p className="text-xs text-gray-500 text-center mt-1">Версия {VERSION} · Build {BUILD_DATE}</p>
           </div>
         </div>
