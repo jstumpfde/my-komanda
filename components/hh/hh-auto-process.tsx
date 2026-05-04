@@ -9,7 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
 import {
-  Play, Square, Loader2, Settings2, Zap, Shield, Gauge,
+  Play, Square, Loader2, Settings2, Zap, Shield, Gauge, AlertTriangle, Info,
 } from "lucide-react"
 
 interface ProcessQueueResponse {
@@ -37,7 +37,8 @@ const SPEED_OPTIONS: Array<{ value: SpeedPreset; seconds: number; label: string;
   { value: "fast",     seconds: 5,  label: "Быстро (5 сек, риск 429 от hh)", icon: Zap },
 ]
 
-const LIMIT_OPTIONS = [5, 10, 25, 50]
+const LIMIT_OPTIONS: Array<number | "all"> = [5, 10, 25, 50, "all"]
+const LIMIT_FALLBACK_MAX = 999
 
 export function HhAutoProcess({
   vacancyId,
@@ -50,7 +51,7 @@ export function HhAutoProcess({
   const [stopping, setStopping] = useState(false)
   const [open, setOpen] = useState(false)
 
-  const [limit, setLimit] = useState<number>(5)
+  const [limit, setLimit] = useState<number | "all">(5)
   const [speed, setSpeed] = useState<SpeedPreset>("safe")
   const [minScore, setMinScore] = useState<number>(defaultMinScore)
   const [dryRun, setDryRun] = useState(false)
@@ -60,7 +61,11 @@ export function HhAutoProcess({
     [speed],
   )
 
-  const estimatedMinutes = Math.max(1, Math.ceil((limit * delaySeconds) / 60))
+  const isAll = limit === "all"
+  const effectiveLimit = isAll
+    ? (pendingCount && pendingCount > 0 ? pendingCount : LIMIT_FALLBACK_MAX)
+    : limit
+  const estimatedMinutes = Math.max(1, Math.ceil((effectiveLimit * delaySeconds) / 60))
 
   const run = async () => {
     setRunning(true)
@@ -70,7 +75,7 @@ export function HhAutoProcess({
       const res = await fetch("/api/integrations/hh/process-queue", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ limit, vacancyId, dryRun, delaySeconds, minScore }),
+        body: JSON.stringify({ limit: effectiveLimit, vacancyId, dryRun, delaySeconds, minScore }),
       })
       const data = await res.json() as ProcessQueueResponse
       if (!res.ok) throw new Error(data.error || "Ошибка")
@@ -108,9 +113,16 @@ export function HhAutoProcess({
     }
   }
 
-  const labelButton = pendingCount != null && pendingCount > 0
-    ? `Разобрать ${pendingCount > limit ? limit : pendingCount}`
-    : `Разобрать ${limit}`
+  const labelButton = (() => {
+    if (isAll) {
+      return pendingCount != null && pendingCount > 0
+        ? `Разобрать всё (${pendingCount})`
+        : "Разобрать всё"
+    }
+    return pendingCount != null && pendingCount > 0
+      ? `Разобрать ${pendingCount > limit ? limit : pendingCount}`
+      : `Разобрать ${limit}`
+  })()
 
   const settingsContent = (
     <div className="space-y-4">
@@ -119,13 +131,13 @@ export function HhAutoProcess({
         <div className="flex gap-1.5">
           {LIMIT_OPTIONS.map(n => (
             <Button
-              key={n}
+              key={String(n)}
               size="sm"
               variant={limit === n ? "default" : "outline"}
               className="h-7 text-xs px-3 flex-1"
               onClick={() => setLimit(n)}
             >
-              {n}
+              {n === "all" ? "Все" : n}
             </Button>
           ))}
         </div>
@@ -186,8 +198,22 @@ export function HhAutoProcess({
         </Label>
       </div>
 
+      {dryRun ? (
+        <div className="flex items-start gap-2 rounded border border-blue-200 bg-blue-50 px-2.5 py-2 text-[11px] leading-snug text-blue-900 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-200">
+          <Info className="w-3.5 h-3.5 shrink-0 mt-px" />
+          <span>Тестовый прогон, сообщения <strong>НЕ отправляются</strong>.</span>
+        </div>
+      ) : isAll ? (
+        <div className="flex items-start gap-2 rounded border border-red-300 bg-red-50 px-2.5 py-2 text-[11px] leading-snug text-red-900 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
+          <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-px" />
+          <span>
+            ⚠️ Будет отправлено сообщений: <strong>{effectiveLimit}</strong>. Действие необратимое.
+          </span>
+        </div>
+      ) : null}
+
       <div className="text-[11px] text-muted-foreground border-t pt-2">
-        Расчётное время: ~{estimatedMinutes} мин ({limit} × {delaySeconds}с)
+        Расчётное время: ~{estimatedMinutes} мин ({effectiveLimit} × {delaySeconds}с)
       </div>
     </div>
   )
