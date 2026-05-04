@@ -5,15 +5,21 @@
 //   1. Тянет до LIMIT откликов (FIFO по last_check_at NULLS FIRST)
 //      со status IN ('invited','response') и last_check_at < NOW()-14min OR NULL.
 //   2. Для каждого: GET /negotiations/{id}/messages?with_text=true.
-//   3. Берёт applicant-сообщения новее last_seen_message_id.
-//   4. Двухступенчатая классификация:
-//      a. regex по STOP_WORDS → если совпало, сразу stage='rejected',
-//         automationPaused=true, отправляем прощальное сообщение,
-//         отменяем pending touches.
-//      b. Если стоп-слов нет — вызываем classifyCandidateResponse (AI):
-//         rejection → как (a) выше, wants_personal_contact → stage='wants_contact'
-//         + automationPaused, остальное — лог.
-//   5. Обновляем last_seen_message_id (max id), last_check_at = NOW().
+//   3. При lastSeenMessageId === null — пропускаем cover letter
+//      (первое applicant-сообщение в чате это, как правило, отклик
+//      кандидата на вакансию, а не ответ на наше приглашение).
+//      Записываем id самого свежего applicant-сообщения как seen,
+//      классификацию НЕ запускаем. Следующий прогон сработает только
+//      на сообщениях НОВЕЕ cover letter.
+//   4. Иначе — берём applicant-сообщения новее last_seen_message_id.
+//   5. Двухступенчатая классификация:
+//      a. regex по STOP_WORDS с word-boundaries → если совпало, сразу
+//         stage='rejected', automationPaused=true, прощальное сообщение,
+//         отмена pending touches, запись в stage_history.
+//      b. Если стоп-слов нет — classifyCandidateResponse (AI Haiku):
+//         rejection → как (a), wants_personal_contact → stage='wants_contact'
+//         + automationPaused + stage_history, остальное — только лог.
+//   6. Обновляем last_seen_message_id (max id), last_check_at = NOW().
 
 import { and, asc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
@@ -21,9 +27,15 @@ import { hhResponses, candidates, followUpMessages } from "@/lib/db/schema"
 import { getValidToken } from "@/lib/hh-helpers"
 import { STOP_WORDS } from "@/lib/followup/should-stop"
 import { classifyCandidateResponse } from "@/lib/ai/classify-candidate-response"
-import { logAiAction } from "@/lib/ai-audit"
 
 const FAREWELL_MESSAGE = "Спасибо за отклик. Желаем удачи!"
+
+interface StageHistoryEntry {
+  from:   string
+  to:     string
+  at:     string
+  reason: string
+}
 
 interface HHMsg {
   id?: string
@@ -47,9 +59,26 @@ function extractAuthorType(m: HHMsg): string {
   return m.author_type ?? m.author?.participant_type ?? m.author?.type ?? "unknown"
 }
 
+// Word-boundaries регекс по стоп-словам. Раньше использовался
+// .includes(w), что давало false positives на substring'ах: «интернет»
+// содержит «нет», «внеплановый» содержит «не», и т.п. После инцидента
+// 04.05.2026 (19 кандидатов ошибочно в rejected) — только полные слова
+// или точные многословные фразы, ограниченные whitespace.
 function matchStopWord(text: string): boolean {
-  const lower = text.toLowerCase()
-  return STOP_WORDS.some(w => lower.includes(w))
+  // Нормализация: вся пунктуация → пробел, схлопываем пробелы.
+  const norm = text
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+  if (!norm) return false
+  for (const w of STOP_WORDS) {
+    // Внутренние пробелы фразы становятся \s+ для устойчивости к множественным пробелам.
+    const escaped = w.toLowerCase().replace(/\s+/g, "\\s+")
+    const re = new RegExp(`(^|\\s)${escaped}(\\s|$)`, "u")
+    if (re.test(norm)) return true
+  }
+  return false
 }
 
 async function fetchNewApplicantMessages(
@@ -106,6 +135,32 @@ async function sendFarewell(
   }
 }
 
+// Дописывает запись в stage_history кандидата. Делается одним
+// SELECT+UPDATE — гонок при последовательной обработке cron'ом нет.
+async function appendStageHistory(
+  candidateId: string,
+  fromStage: string,
+  toStage: string,
+  reason: string,
+): Promise<void> {
+  const [row] = await db
+    .select({ stageHistory: candidates.stageHistory })
+    .from(candidates)
+    .where(eq(candidates.id, candidateId))
+    .limit(1)
+  const history = (row?.stageHistory as StageHistoryEntry[] | null) ?? []
+  const entry: StageHistoryEntry = {
+    from:   fromStage,
+    to:     toStage,
+    at:     new Date().toISOString(),
+    reason,
+  }
+  await db
+    .update(candidates)
+    .set({ stageHistory: [...history, entry] })
+    .where(eq(candidates.id, candidateId))
+}
+
 async function applyRejection(args: {
   candidateId: string
   reason: string
@@ -114,6 +169,15 @@ async function applyRejection(args: {
   sendFarewellFlag: boolean
 }): Promise<boolean> {
   const { candidateId, reason, hhResponseId, accessToken, sendFarewellFlag } = args
+
+  // Текущий стейдж нужен для записи в stage_history.
+  const [prev] = await db
+    .select({ stage: candidates.stage })
+    .from(candidates)
+    .where(eq(candidates.id, candidateId))
+    .limit(1)
+  const fromStage = prev?.stage ?? "unknown"
+
   await db.update(candidates).set({
     stage: "rejected",
     automationPaused: true,
@@ -122,6 +186,8 @@ async function applyRejection(args: {
     autoProcessingStoppedAt: new Date(),
     updatedAt: new Date(),
   }).where(eq(candidates.id, candidateId))
+
+  await appendStageHistory(candidateId, fromStage, "rejected", reason)
 
   // Отменяем pending-касания.
   await db.update(followUpMessages).set({
@@ -139,11 +205,20 @@ async function applyRejection(args: {
 }
 
 async function applyWantsContact(candidateId: string): Promise<void> {
+  const [prev] = await db
+    .select({ stage: candidates.stage })
+    .from(candidates)
+    .where(eq(candidates.id, candidateId))
+    .limit(1)
+  const fromStage = prev?.stage ?? "unknown"
+
   await db.update(candidates).set({
     stage: "wants_contact",
     automationPaused: true,
     updatedAt: new Date(),
   }).where(eq(candidates.id, candidateId))
+
+  await appendStageHistory(candidateId, fromStage, "wants_contact", "wants_contact_ai")
 
   await db.update(followUpMessages).set({
     status: "cancelled",
@@ -226,6 +301,26 @@ export async function scanIncomingMessages(opts: {
       continue
     }
 
+    // First-run guard: при lastSeenMessageId === null это первый прогон
+    // для данного отклика. Самое раннее applicant-сообщение в чате —
+    // cover letter (отклик кандидата на вакансию), а не ответ на наше
+    // приглашение. Классифицировать его как rejection/wants_contact
+    // некорректно: длинный текст резюме часто содержит «не», «нет»
+    // в составе других слов или фраз («не имею опыта», «нет проблем»),
+    // а Haiku может ошибочно прочитать формальный текст как отказ.
+    // Поэтому: записываем id самого свежего applicant-сообщения как
+    // seen, ничего не классифицируем, выходим. На следующих прогонах
+    // классифицируем только сообщения новее cover letter.
+    if (!resp.lastSeenMessageId) {
+      const lastId = newMsgs[newMsgs.length - 1].id ?? null
+      await db.update(hhResponses).set({
+        lastSeenMessageId: lastId,
+        lastCheckAt: new Date(),
+      }).where(eq(hhResponses.id, resp.id))
+      console.info(`[scan-incoming] first-run skip ${resp.hhResponseId}: marked ${newMsgs.length} message(s) as seen, no classification`)
+      continue
+    }
+
     result.newMessages += newMsgs.length
 
     // Ищем привязанного кандидата.
@@ -250,6 +345,8 @@ export async function scanIncomingMessages(opts: {
       if (!text) continue
       if (rejected || wantsContact) break
 
+      const preview = text.slice(0, 120).replace(/\s+/g, " ")
+
       // Шаг 1: regex.
       if (matchStopWord(text)) {
         const sent = await applyRejection({
@@ -261,13 +358,7 @@ export async function scanIncomingMessages(opts: {
         })
         result.rejectedRegex++
         rejected = true
-        await logAiAction({
-          tenantId:      resp.companyId,
-          action:        "classify_incoming",
-          candidateId,
-          inputSummary:  text.slice(0, 200),
-          outputSummary: `regex_stop_word; farewell_sent=${sent}`,
-        }).catch(() => {})
+        console.info(`[scan-incoming] ${candidateId} regex_stop_word farewell=${sent} text="${preview}"`)
         break
       }
 
@@ -292,33 +383,15 @@ export async function scanIncomingMessages(opts: {
         })
         result.rejectedAi++
         rejected = true
-        await logAiAction({
-          tenantId:      resp.companyId,
-          action:        "classify_incoming",
-          candidateId,
-          inputSummary:  text.slice(0, 200),
-          outputSummary: `ai_rejection conf=${cls.confidence} farewell_sent=${sent}`,
-        }).catch(() => {})
+        console.info(`[scan-incoming] ${candidateId} ai_rejection conf=${cls.confidence} farewell=${sent} text="${preview}"`)
       } else if (cls.intent === "wants_personal_contact") {
         await applyWantsContact(candidateId)
         result.wantsContact++
         wantsContact = true
-        await logAiAction({
-          tenantId:      resp.companyId,
-          action:        "classify_incoming",
-          candidateId,
-          inputSummary:  text.slice(0, 200),
-          outputSummary: `wants_contact conf=${cls.confidence}`,
-        }).catch(() => {})
+        console.info(`[scan-incoming] ${candidateId} wants_contact conf=${cls.confidence} text="${preview}"`)
       } else {
         // busy_later / agreement / unclear — только лог, без действий.
-        await logAiAction({
-          tenantId:      resp.companyId,
-          action:        "classify_incoming",
-          candidateId,
-          inputSummary:  text.slice(0, 200),
-          outputSummary: `${cls.intent} conf=${cls.confidence}`,
-        }).catch(() => {})
+        console.info(`[scan-incoming] ${candidateId} ${cls.intent} conf=${cls.confidence} text="${preview}"`)
       }
     }
 
