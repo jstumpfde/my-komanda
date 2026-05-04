@@ -7,7 +7,7 @@
 import { db } from "@/lib/db"
 import { hhResponses, candidates, vacancies, followUpCampaigns, followUpMessages } from "@/lib/db/schema"
 import type { VacancyAiProcessSettings } from "@/lib/db/schema"
-import { and, eq, isNull } from "drizzle-orm"
+import { and, asc, eq, isNull } from "drizzle-orm"
 import { getValidToken } from "@/lib/hh-helpers"
 import { changeNegotiationState, getNegotiationMessages } from "@/lib/hh-api"
 import { generateCandidateShortId } from "@/lib/short-id"
@@ -100,6 +100,7 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
         ? and(eq(hhResponses.companyId, companyId), eq(hhResponses.status, "response"), eq(hhResponses.hhVacancyId, hhVacancyFilter))
         : and(eq(hhResponses.companyId, companyId), eq(hhResponses.status, "response"))
     )
+    .orderBy(asc(hhResponses.createdAt))
     .limit(limit)
 
   if (newResponses.length === 0) {
