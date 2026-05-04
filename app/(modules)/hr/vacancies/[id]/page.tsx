@@ -1309,7 +1309,7 @@ export default function VacancyPage() {
           {/* ═══ Fixed header: появляется только при скролле (под DashboardHeader) ═══ */}
           <div
             className={cn(
-              "fixed top-14 right-0 z-40 bg-background/95 backdrop-blur-sm border-b shadow-sm py-2 transition-all duration-200",
+              "fixed top-14 right-0 z-40 bg-background border-b shadow-sm py-2 transition-all duration-200",
               showStickyHeader ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-2 pointer-events-none"
             )}
             style={{ left: "var(--sidebar-width, 16rem)", paddingLeft: 56, paddingRight: 56 }}
