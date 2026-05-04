@@ -182,15 +182,15 @@ export function ListView({
   }
 
   const cols: string[] = ["40px"] // ★
-  cols.push("minmax(280px, 2fr)")  // Кандидат
-  if (showScore) cols.push("70px")        // AI-оценка
-  if (showSalary) cols.push("110px")      // Зарплата
-  if (showCity) cols.push("140px")        // Город
-  if (showResponseDate) cols.push("100px") // Дата отклика
+  cols.push("minmax(280px, 2fr)")          // Кандидат
+  if (showProgress) cols.push("110px")     // Демо
+  if (showScore) cols.push("70px")         // AI-оценка
+  if (showSalary) cols.push("110px")       // Зарплата
+  if (showCity) cols.push("140px")         // Город
+  if (showResponseDate) cols.push("100px") // Дата
   cols.push("90px")                        // Статус
-  if (showProgress) cols.push("110px")    // Демо
-  if (showSource) cols.push("60px")       // Источник
-  if (showActions) cols.push("60px")      // Действия
+  if (showSource) cols.push("60px")        // Источник
+  if (showActions) cols.push("80px")       // Действия
 
   const gridStyle = { gridTemplateColumns: cols.join(" ") }
 
@@ -219,12 +219,12 @@ export function ListView({
           )}
         </button>
         <div className="text-left">Кандидат</div>
+        {showProgress && <SortHeader label="Демо" sortKey="progress" sort={sort} onToggle={handleSort} align="center" />}
         {showScore && <SortHeader label="AI-оценка" sortKey="aiScore" sort={sort} onToggle={handleSort} align="center" />}
         {showSalary && <SortHeader label="Зарплата" sortKey="salary" sort={sort} onToggle={handleSort} align="center" />}
         {showCity && <div className="text-center">Город</div>}
-        {showResponseDate && <SortHeader label="Дата отклика" sortKey="responseDate" sort={sort} onToggle={handleSort} align="center" />}
+        {showResponseDate && <SortHeader label="Дата" sortKey="responseDate" sort={sort} onToggle={handleSort} align="center" />}
         <SortHeader label="Статус" sortKey="status" sort={sort} onToggle={handleSort} align="center" />
-        {showProgress && <SortHeader label="Демо" sortKey="progress" sort={sort} onToggle={handleSort} align="center" />}
         {showSource && <div className="text-center">Источник</div>}
         {showActions && <div className="text-center">Действия</div>}
       </div>
@@ -274,6 +274,13 @@ export function ListView({
                 </div>
               </div>
 
+              {/* Demo progress */}
+              {showProgress && (
+                <div className="flex items-center justify-center">
+                  <DemoProgressBar variant="list" progressPercent={progress} />
+                </div>
+              )}
+
               {/* AI score */}
               {showScore && (
                 <div className="text-center">
@@ -289,27 +296,27 @@ export function ListView({
                 </div>
               )}
 
-              {/* Salary */}
-              {showSalary && (
-                <div className="text-center text-[14px] font-medium text-foreground whitespace-nowrap">
-                  {settings.showSalaryFull
-                    ? `${candidate.salaryMin.toLocaleString("ru-RU")} — ${candidate.salaryMax.toLocaleString("ru-RU")} ₽`
-                    : `${Math.round(candidate.salaryMin / 1000)}-${Math.round(candidate.salaryMax / 1000)}k`
-                  }
-                </div>
-              )}
+              {/* Salary — single expected value */}
+              {showSalary && (() => {
+                const salary = candidate.salaryMax || candidate.salaryMin
+                return (
+                  <div className="text-center text-[14px] font-medium text-foreground whitespace-nowrap">
+                    {salary ? `${salary.toLocaleString("ru-RU")} ₽` : "—"}
+                  </div>
+                )
+              })()}
 
               {/* City */}
               {showCity && (
-                <div className="flex items-center justify-center gap-1 text-[14px] text-muted-foreground min-w-0">
+                <div className="flex items-center gap-1 text-[14px] text-muted-foreground min-w-0">
                   <MapPin className="w-3.5 h-3.5 flex-shrink-0" />
                   <span className="truncate">{candidate.city}</span>
                 </div>
               )}
 
-              {/* Response Date */}
+              {/* Date */}
               {showResponseDate && (
-                <div className="text-center text-sm text-muted-foreground tabular-nums whitespace-nowrap">
+                <div className="text-left text-sm text-muted-foreground tabular-nums whitespace-nowrap">
                   {dt ? (
                     <Tooltip>
                       <TooltipTrigger asChild>
@@ -331,13 +338,6 @@ export function ListView({
                 </span>
               </div>
 
-              {/* Demo progress */}
-              {showProgress && (
-                <div className="flex items-center justify-center">
-                  <DemoProgressBar variant="list" progressPercent={progress} />
-                </div>
-              )}
-
               {/* Source */}
               {showSource && (
                 <div className="text-center">
@@ -347,38 +347,65 @@ export function ListView({
                 </div>
               )}
 
-              {/* Actions */}
+              {/* Actions — 3 full-height click zones */}
               {showActions && (
-                <div className="flex gap-0.5 justify-center items-center" onClick={(e) => e.stopPropagation()}>
+                <div
+                  className="self-stretch grid grid-cols-3"
+                  onClick={(e) => e.stopPropagation()}
+                >
                   {isDecisionStage ? (
                     <>
-                      <Button variant="ghost" size="icon" className="h-6 w-6 p-0 text-success hover:bg-success/10" title="Принять" onClick={() => onAction?.(candidate.id, candidate.columnId, "advance")}>
-                        <ThumbsUp className="w-3 h-3" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="h-6 w-6 p-0 text-destructive hover:bg-destructive/10" title="Отказать" onClick={() => onAction?.(candidate.id, candidate.columnId, "reject")}>
-                        <XCircle className="w-3 h-3" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="h-6 w-6 p-0 text-warning hover:bg-warning/10" title="В резерв" onClick={() => onAction?.(candidate.id, candidate.columnId, "reserve")}>
-                        <Clock className="w-3 h-3" />
-                      </Button>
+                      <button
+                        type="button"
+                        title="Принять"
+                        className="h-full flex items-center justify-center text-success hover:bg-success/10 transition-colors"
+                        onClick={() => onAction?.(candidate.id, candidate.columnId, "advance")}
+                      >
+                        <ThumbsUp className="w-4 h-4" />
+                      </button>
+                      <button
+                        type="button"
+                        title="Отказать"
+                        className="h-full flex items-center justify-center text-destructive hover:bg-destructive/10 transition-colors"
+                        onClick={() => onAction?.(candidate.id, candidate.columnId, "reject")}
+                      >
+                        <XCircle className="w-4 h-4" />
+                      </button>
+                      <button
+                        type="button"
+                        title="В резерв"
+                        className="h-full flex items-center justify-center text-warning hover:bg-warning/10 transition-colors"
+                        onClick={() => onAction?.(candidate.id, candidate.columnId, "reserve")}
+                      >
+                        <Clock className="w-4 h-4" />
+                      </button>
                     </>
                   ) : (
                     <>
-                      <Button variant="ghost" size="icon" className="h-6 w-6 p-0 text-success hover:bg-success/10" title="Пригласить" onClick={() => onAction?.(candidate.id, candidate.columnId, "advance")}>
-                        <CheckCircle2 className="w-3 h-3" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="h-6 w-6 p-0 text-destructive hover:bg-destructive/10" title="Отказать" onClick={() => onAction?.(candidate.id, candidate.columnId, "reject")}>
-                        <XCircle className="w-3 h-3" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6 p-0 text-muted-foreground hover:text-primary hover:bg-primary/10"
+                      <button
+                        type="button"
+                        title="Пригласить"
+                        className="h-full flex items-center justify-center text-success hover:bg-success/10 transition-colors"
+                        onClick={() => onAction?.(candidate.id, candidate.columnId, "advance")}
+                      >
+                        <CheckCircle2 className="w-4 h-4" />
+                      </button>
+                      <button
+                        type="button"
+                        title="Отказать"
+                        className="h-full flex items-center justify-center text-destructive hover:bg-destructive/10 transition-colors"
+                        onClick={() => onAction?.(candidate.id, candidate.columnId, "reject")}
+                      >
+                        <XCircle className="w-4 h-4" />
+                      </button>
+                      <button
+                        type="button"
                         title="Открыть"
+                        className="h-full flex items-center justify-center text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
                         onClick={() => onOpenProfile?.(candidate, candidate.columnId)}
                       >
-                        <ArrowRight className="w-3 h-3" />
-                      </Button>
+                        <ArrowRight className="w-4 h-4" />
+                      </button>
                     </>
                   )}
                 </div>
