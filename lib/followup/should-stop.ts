@@ -60,7 +60,14 @@ export async function shouldStopFollowUp(
   // Демо пройдено до конца — completedAt в demoProgressJson или стадия дальше demo
   const progress = candidate.demoProgressJson as { completedAt?: string | null } | null
   if (progress?.completedAt) return { stop: true, reason: "demo_completed" }
-  if (["scheduled", "interviewed", "hired"].includes(candidate.stage ?? "")) {
+  // Любая стадия после demo_opened считается «продвинулся дальше», дожим больше не нужен.
+  // decision, anketa_filled, ai_screening, interview, final_decision, scheduled, interviewed, hired.
+  const ADVANCED_STAGES = new Set([
+    "decision", "anketa_filled", "ai_screening",
+    "interview", "final_decision",
+    "scheduled", "interviewed", "hired",
+  ])
+  if (ADVANCED_STAGES.has(candidate.stage ?? "")) {
     return { stop: true, reason: "demo_completed" }
   }
 

@@ -168,7 +168,11 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
     const candidateCity = raw?.resume?.area?.name ?? undefined
     const candidateSalary = raw?.resume?.salary?.amount ?? null
 
-    const targetStage = "demo"
+    // После отправки приглашения через hh API кандидат сразу попадает в
+    // 'primary_contact' (приглашение отправлено, но не открыто). Переход
+    // в 'demo_opened' произойдёт в /api/public/demo/[token]/visit когда
+    // владелец первый раз откроет страницу.
+    const targetStage = "primary_contact"
     const baseMessage = effInviteMsg
     const hhAction = "invitation"
     const newStatus = "invited"

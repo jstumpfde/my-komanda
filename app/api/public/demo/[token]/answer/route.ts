@@ -102,14 +102,19 @@ export async function POST(
     let newStage: string | null = null
     let stageReason: string | null = null
 
+    // Стадии, из которых первый ответ переводит в demo_opened.
+    const PRE_OPENED = new Set(["new", "primary_contact", "demo"])
+    // Стадии, из которых полное прохождение демо переводит в decision.
+    const PRE_COMPLETED = new Set(["new", "primary_contact", "demo", "demo_opened"])
+
     if (!FINAL_STAGES.has(currentStage)) {
-      // F2.A: первый ответ + stage='new' → demo
-      if (currentStage === "new" && prevBlocks.length === 0 && !isComplete) {
-        newStage = "demo"
+      // F2.A: первый ответ из ранних стадий → demo_opened
+      if (PRE_OPENED.has(currentStage) && prevBlocks.length === 0 && !isComplete) {
+        newStage = "demo_opened"
         stageReason = "demo_started"
       }
-      // F2.B: финальный шаг → decision (только из new/demo, чтобы не регрессить)
-      if (isComplete && (currentStage === "new" || currentStage === "demo")) {
+      // F2.B: финальный шаг → decision («Демо пройдено»)
+      if (isComplete && PRE_COMPLETED.has(currentStage)) {
         newStage = "decision"
         stageReason = "demo_completed"
       }
