@@ -15,6 +15,7 @@ import type { ListSortKey, ListSortState } from "@/components/dashboard/list-vie
 import { type CardDisplaySettings } from "@/components/dashboard/card-settings"
 import { ViewSettings } from "@/components/dashboard/view-settings"
 import { CandidateFilters, type FilterState } from "@/components/dashboard/candidate-filters"
+import { applyCandidateFilters } from "@/lib/candidate-filter"
 import { SortMenu } from "@/components/dashboard/sort-menu"
 import { Tooltip as UITooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip"
 import type { CandidateSortMode } from "@/lib/candidate-sort"
@@ -103,6 +104,9 @@ const STATUS_CONFIG: Record<VacancyStatus, { label: string; color: string }> = {
 // Map ApiCandidate → Candidate (for the kanban card)
 function apiCandidateToCard(c: ApiCandidate, columnId: string): Candidate {
   const progress = PROGRESS_BY_COLUMN[columnId] ?? 10
+  const wf = c.workFormat
+  const workFormat: Candidate["workFormat"] =
+    wf === "office" || wf === "hybrid" || wf === "remote" ? wf : undefined
   return {
     id: c.id,
     name: c.name,
@@ -116,13 +120,22 @@ function apiCandidateToCard(c: ApiCandidate, columnId: string): Candidate {
     skills: c.skills ?? [],
     addedAt: c.createdAt ? new Date(c.createdAt) : new Date(),
     lastSeen: c.updatedAt ? new Date(c.updatedAt) : new Date(),
-    workFormat: "office" as const,
+    workFormat,
     aiScore: c.aiScore ?? undefined,
     aiSummary: c.aiSummary ?? undefined,
     aiVerdict: c.aiScore != null ? (c.aiScore >= 70 ? "подходит" : c.aiScore >= 40 ? "возможно" : "не подходит") : undefined,
     demoProgressJson: c.demoProgressJson as Candidate["demoProgressJson"],
     isFavorite: c.isFavorite ?? false,
     createdAt: c.createdAt,
+    // HR-020: фильтр-поля
+    birthDate: c.birthDate ?? undefined,
+    experienceYears: c.experienceYears ?? null,
+    educationLevel: c.educationLevel ?? null,
+    languages: c.languages ?? null,
+    keySkills: c.keySkills ?? null,
+    industry: c.industry ?? null,
+    relocationReady: c.relocationReady ?? null,
+    businessTripsReady: c.businessTripsReady ?? null,
   }
 }
 
@@ -958,18 +971,7 @@ export default function VacancyPage() {
     toast.success(`${candidate.name} добавлен`)
   }
 
-  const filteredColumns = columns.map((col) => {
-    const filtered = col.candidates.filter((c) => {
-      if (filters.searchText && !c.name.toLowerCase().includes(filters.searchText.toLowerCase())) return false
-      if (filters.cities.length > 0 && !filters.cities.includes(c.city)) return false
-      if (c.score < filters.scoreMin) return false
-      if (filters.sources.length > 0 && !filters.sources.includes(c.source)) return false
-      if (filters.workFormats.length > 0 && !(c as any).workFormat && !filters.workFormats.includes("office")) return false
-      if (filters.workFormats.length > 0 && (c as any).workFormat && !filters.workFormats.includes((c as any).workFormat)) return false
-      return true
-    })
-    return { ...col, candidates: filtered, count: filtered.length }
-  })
+  const filteredColumns = applyCandidateFilters(columns, filters)
 
   // ─── Unified 6-stage metrics (single source of truth) ───
   const allCandidates = columns.flatMap((c) => c.candidates)

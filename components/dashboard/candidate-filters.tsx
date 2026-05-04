@@ -78,12 +78,18 @@ const DATE_PRESETS = [
   { id: "month", label: "Месяц" },
 ]
 
-const EDUCATION_OPTIONS = [
-  "Среднее", "Среднее специальное", "Высшее", "MBA/Магистратура",
+const EDUCATION_OPTIONS: Array<{ id: string; label: string }> = [
+  { id: "secondary",   label: "Среднее" },
+  { id: "specialized", label: "Среднее специальное" },
+  { id: "higher",      label: "Высшее" },
+  { id: "mba",         label: "MBA/Магистратура" },
 ]
 
-const LANGUAGE_OPTIONS = [
-  "Русский", "Английский", "Немецкий", "Другие",
+const LANGUAGE_OPTIONS: Array<{ id: string; label: string }> = [
+  { id: "russian", label: "Русский" },
+  { id: "english", label: "Английский" },
+  { id: "german",  label: "Немецкий" },
+  { id: "other",   label: "Другие" },
 ]
 
 const OTHER_LANGUAGES = [
@@ -464,13 +470,13 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [] }: 
             <label className="text-xs font-medium text-muted-foreground">Образование</label>
             <div className="space-y-1">
               {EDUCATION_OPTIONS.map((e) => (
-                <div key={e} className="flex items-center gap-2">
+                <div key={e.id} className="flex items-center gap-2">
                   <Checkbox
-                    id={`edu-${e}`}
-                    checked={filters.education.includes(e)}
-                    onCheckedChange={() => onFiltersChange({ ...filters, education: toggleArray(filters.education, e) })}
+                    id={`edu-${e.id}`}
+                    checked={filters.education.includes(e.id)}
+                    onCheckedChange={() => onFiltersChange({ ...filters, education: toggleArray(filters.education, e.id) })}
                   />
-                  <label htmlFor={`edu-${e}`} className="text-sm cursor-pointer">{e}</label>
+                  <label htmlFor={`edu-${e.id}`} className="text-sm cursor-pointer">{e.label}</label>
                 </div>
               ))}
             </div>
@@ -481,24 +487,24 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [] }: 
             <label className="text-xs font-medium text-muted-foreground">Языки</label>
             <div className="space-y-1">
               {LANGUAGE_OPTIONS.map((l) => (
-                <div key={l} className="flex items-center gap-2">
+                <div key={l.id} className="flex items-center gap-2">
                   <Checkbox
-                    id={`lang-${l}`}
-                    checked={filters.languages.includes(l)}
+                    id={`lang-${l.id}`}
+                    checked={filters.languages.includes(l.id)}
                     onCheckedChange={() => {
-                      const next = toggleArray(filters.languages, l)
-                      if (l === "Другие" && filters.languages.includes("Другие")) {
+                      const next = toggleArray(filters.languages, l.id)
+                      if (l.id === "other" && filters.languages.includes("other")) {
                         onFiltersChange({ ...filters, languages: next, otherLanguages: [] })
                       } else {
                         onFiltersChange({ ...filters, languages: next })
                       }
                     }}
                   />
-                  <label htmlFor={`lang-${l}`} className="text-sm cursor-pointer">{l}</label>
+                  <label htmlFor={`lang-${l.id}`} className="text-sm cursor-pointer">{l.label}</label>
                 </div>
               ))}
             </div>
-            {filters.languages.includes("Другие") && (
+            {filters.languages.includes("other") && (
               <div className="pl-5 pt-1 space-y-1.5">
                 {(filters.otherLanguages?.length ?? 0) > 0 && (
                   <div className="flex flex-wrap gap-1.5">

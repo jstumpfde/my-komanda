@@ -18,6 +18,16 @@ export interface ApiCandidate {
   salaryMax: number | null
   experience: string | null
   skills: string[] | null
+  // HR-020: новые поля для рабочих фильтров списка кандидатов.
+  birthDate?: string | null
+  experienceYears?: number | null
+  workFormat?: string | null            // 'office'|'hybrid'|'remote'
+  educationLevel?: string | null        // 'secondary'|'specialized'|'higher'|'mba'
+  languages?: string[] | null
+  keySkills?: string[] | null
+  industry?: string | null
+  relocationReady?: boolean | null
+  businessTripsReady?: boolean | null
   token: string
   demoProgressJson: unknown
   // Реальный формат в БД — массив [{ blockId, answer, ... }] или legacy [{ question, answer }].

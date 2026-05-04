@@ -35,6 +35,14 @@ export interface Candidate {
   workFormat?: "office" | "remote" | "hybrid"
   age?: number
   birthDate?: Date | string
+  // HR-020: filterable fields
+  experienceYears?: number | null
+  educationLevel?: string | null
+  languages?: string[] | null
+  keySkills?: string[] | null
+  industry?: string | null
+  relocationReady?: boolean | null
+  businessTripsReady?: boolean | null
   demoProgressJson?: {
     blocks?: Array<{ blockId: string; status: string; timeSpent?: number; answer?: unknown }>
     totalBlocks?: number
