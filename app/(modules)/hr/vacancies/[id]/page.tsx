@@ -42,7 +42,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
-import { defaultColumnColors, type CandidateAction, getNextColumnId, PROGRESS_BY_COLUMN } from "@/lib/column-config"
+import { defaultColumnColors, COLUMN_ORDER, type CandidateAction, getNextColumnId, PROGRESS_BY_COLUMN } from "@/lib/column-config"
 import type { Candidate } from "@/components/dashboard/candidate-card"
 import { HhVacancyBanner } from "@/components/vacancies/hh-vacancy-banner"
 import { HhAutoProcess } from "@/components/hh/hh-auto-process"
@@ -80,10 +80,22 @@ interface ColumnData {
 
 type VacancyStatus = "draft" | "active" | "paused" | "closed_success" | "closed_cancelled"
 
+// Источник правды — COLUMN_ORDER из lib/column-config.ts. Object.entries
+// над defaultColumnColors не гарантирует порядок и включает rejected
+// (терминальный стейдж, не нужен в kanban). COLUMN_ORDER даёт явный порядок
+// и исключает rejected/wants_contact.
 function emptyColumns(): ColumnData[] {
-  return Object.entries(defaultColumnColors).map(([id, c]) => ({
-    id, title: c.label, count: 0, colorFrom: c.from, colorTo: c.to, candidates: [],
-  }))
+  return COLUMN_ORDER.map((id) => {
+    const c = defaultColumnColors[id]
+    return {
+      id,
+      title: c?.label ?? id,
+      count: 0,
+      colorFrom: c?.from ?? "#94a3b8",
+      colorTo:   c?.to   ?? "#64748b",
+      candidates: [],
+    }
+  })
 }
 
 const defaultSettings: CardDisplaySettings = {
@@ -363,20 +375,41 @@ export default function VacancyPage() {
   const [status, setStatus] = useState<VacancyStatus>("draft")
   const [columns, setColumns] = useState<ColumnData[]>(emptyColumns())
 
-  // Load funnel stages from API
+  // Load funnel stages from API. Таблица funnel_stages в БД может быть
+  // устаревшей (после расширения воронки в drizzle/0083 в ней нет
+  // primary_contact/demo_opened/anketa_filled). Поэтому всегда дополняем
+  // ответ API недостающими системными стейджами из COLUMN_ORDER —
+  // иначе кандидаты с этими стейджами теряются (filter c.stage===col.id
+  // не находит совпадения).
   useEffect(() => {
     fetch("/api/funnel-stages")
       .then(r => r.ok ? r.json() : Promise.reject())
       .then((stages: Array<{ slug: string; title: string; color: string; sortOrder: number }>) => {
         if (stages.length > 0) {
-          setColumns(stages.map(s => ({
+          const apiCols: ColumnData[] = stages.map(s => ({
             id: s.slug,
             title: s.title,
             count: 0,
             colorFrom: s.color,
             colorTo: s.color,
             candidates: [],
-          })))
+          }))
+          const existing = new Set(apiCols.map(c => c.id))
+          const missing: ColumnData[] = COLUMN_ORDER
+            .filter(id => !existing.has(id))
+            .map(id => {
+              const c = defaultColumnColors[id]
+              return {
+                id,
+                title: c?.label ?? id,
+                count: 0,
+                colorFrom: c?.from ?? "#94a3b8",
+                colorTo:   c?.to   ?? "#64748b",
+                candidates: [],
+              }
+            })
+          // Сливаем: сначала API-порядок, потом недостающие в порядке COLUMN_ORDER.
+          setColumns([...apiCols, ...missing])
         }
       })
       .catch(() => {})
