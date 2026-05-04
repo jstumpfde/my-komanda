@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server"
-import { eq, desc } from "drizzle-orm"
+import { eq, and, desc } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { vacancyIntakes } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
@@ -33,10 +33,13 @@ export async function PATCH(req: NextRequest) {
         status: body.status,
         ...(body.vacancyId ? { vacancyId: body.vacancyId } : {}),
       })
-      .where(eq(vacancyIntakes.id, body.id))
+      .where(and(
+        eq(vacancyIntakes.id, body.id),
+        eq(vacancyIntakes.tenantId, user.companyId),
+      ))
       .returning()
 
-    if (!updated) return apiError("Заявка не найдена", 404)
+    if (!updated) return apiError("Intake not found or not yours", 404)
     return apiSuccess(updated)
   } catch (err) {
     if (err instanceof Response) return err

@@ -2,7 +2,7 @@ import { NextRequest } from "next/server"
 import { eq, and, like } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { candidates, vacancies } from "@/lib/db/schema"
-import { apiError, apiSuccess } from "@/lib/api-helpers"
+import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { generatePreviewCandidateShortId } from "@/lib/short-id"
 
 export async function GET(
@@ -10,16 +10,17 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
+    const user = await requireCompany()
     const { id } = await params
 
     const vacancyRows = await db
       .select({ id: vacancies.id, companyId: vacancies.companyId })
       .from(vacancies)
-      .where(eq(vacancies.id, id))
+      .where(and(eq(vacancies.id, id), eq(vacancies.companyId, user.companyId)))
       .limit(1)
 
     if (vacancyRows.length === 0) {
-      return apiError("Вакансия не найдена", 404)
+      return apiError("Vacancy not found", 404)
     }
 
     const vacancy = vacancyRows[0]
@@ -55,6 +56,7 @@ export async function GET(
 
     return apiSuccess({ url: `/demo/${token}`, token })
   } catch (err) {
+    if (err instanceof Response) return err
     console.error("GET preview-link error", err)
     return apiError("Internal server error", 500)
   }
