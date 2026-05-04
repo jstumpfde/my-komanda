@@ -12,12 +12,6 @@ export async function POST(req: NextRequest) {
   const companyId = session.user.companyId
   const body = await req.json().catch(() => ({}))
 
-  // dryRun / minScore / autoAction оставлены ради совместимости со старыми вызовами,
-  // но AI-скоринг временно гейтится тумблером vacancy.aiScoringEnabled — параметры игнорируются.
-  void body.dryRun
-  void body.minScore
-  void body.autoAction
-
   const result = await processHhQueue({
     companyId,
     localVacancyId:      typeof body.vacancyId === "string" ? body.vacancyId : undefined,
