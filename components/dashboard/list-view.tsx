@@ -85,6 +85,26 @@ function SortHeader({
   const dir = active ? sort!.dir : null
   const ariaSort = !active ? "none" : dir === "asc" ? "ascending" : "descending"
   const Icon = dir === "asc" ? ArrowUp : ArrowDown
+  const stateColor = active ? "text-primary font-semibold" : "text-muted-foreground hover:text-foreground"
+
+  // Для center: иконка absolute, чтобы текст центровался строго по центру
+  // ячейки независимо от наличия иконки. Для left/right — обычный inline-flex.
+  if (align === "center") {
+    return (
+      <button
+        type="button"
+        onClick={() => onToggle(sortKey)}
+        aria-sort={ariaSort}
+        className={cn("relative w-full text-center cursor-pointer transition-colors", stateColor)}
+      >
+        <span>{label}</span>
+        {active && (
+          <Icon className="absolute right-0 top-1/2 -translate-y-1/2 size-3" strokeWidth={2.5} />
+        )}
+      </button>
+    )
+  }
+
   return (
     <button
       type="button"
@@ -92,8 +112,7 @@ function SortHeader({
       aria-sort={ariaSort}
       className={cn(
         "inline-flex items-center gap-1 cursor-pointer transition-colors",
-        active ? "text-primary font-semibold" : "text-muted-foreground hover:text-foreground",
-        align === "center" && "justify-center w-full",
+        stateColor,
         align === "right" && "justify-end w-full",
       )}
     >
@@ -226,11 +245,11 @@ export function ListView({
         <div className="text-left">Кандидат</div>
         {showProgress && <SortHeader label="Демо" sortKey="progress" sort={sort} onToggle={handleSort} />}
         {showScore && <SortHeader label="AI-оценка" sortKey="aiScore" sort={sort} onToggle={handleSort} align="center" />}
-        {showSalary && <SortHeader label="Зарплата" sortKey="salary" sort={sort} onToggle={handleSort} />}
+        {showSalary && <SortHeader label="Зарплата" sortKey="salary" sort={sort} onToggle={handleSort} align="center" />}
         {showCity && <SortHeader label="Город" sortKey="city" sort={sort} onToggle={handleSort} />}
-        {showResponseDate && <SortHeader label="Дата отклика" sortKey="responseDate" sort={sort} onToggle={handleSort} />}
+        {showResponseDate && <SortHeader label="Дата отклика" sortKey="responseDate" sort={sort} onToggle={handleSort} align="center" />}
         <SortHeader label="Статус" sortKey="status" sort={sort} onToggle={handleSort} />
-        {showSource && <SortHeader label="Источник" sortKey="source" sort={sort} onToggle={handleSort} />}
+        {showSource && <SortHeader label="Источник" sortKey="source" sort={sort} onToggle={handleSort} align="center" />}
         {showActions && <div className="text-center">Действия</div>}
       </div>
 
@@ -301,7 +320,7 @@ export function ListView({
 
               {/* Salary */}
               {showSalary && (
-                <div className="text-[14px] font-medium text-foreground whitespace-nowrap">
+                <div className="flex justify-center text-[14px] font-medium text-foreground whitespace-nowrap">
                   {settings.showSalaryFull
                     ? `${candidate.salaryMin.toLocaleString("ru-RU")} — ${candidate.salaryMax.toLocaleString("ru-RU")} ₽`
                     : `${Math.round(candidate.salaryMin / 1000)}-${Math.round(candidate.salaryMax / 1000)}k`
@@ -319,7 +338,7 @@ export function ListView({
 
               {/* Response Date */}
               {showResponseDate && (
-                <div className="text-sm text-muted-foreground tabular-nums whitespace-nowrap">
+                <div className="flex justify-center text-sm text-muted-foreground tabular-nums whitespace-nowrap">
                   {dt ? (
                     <Tooltip>
                       <TooltipTrigger asChild>
@@ -343,7 +362,7 @@ export function ListView({
 
               {/* Source */}
               {showSource && (
-                <div>
+                <div className="flex justify-center">
                   <Badge variant="outline" className={cn("text-[10px] border", getSourceColor(candidate.source))}>
                     {candidate.source}
                   </Badge>
@@ -352,7 +371,7 @@ export function ListView({
 
               {/* Actions */}
               {showActions && (
-                <div className="flex items-center justify-center gap-0.5" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center justify-center gap-0" onClick={(e) => e.stopPropagation()}>
                   {isDecisionStage ? (
                     <>
                       <Button variant="ghost" size="icon" className="h-7 w-7 text-success hover:bg-success/10" title="Принять" onClick={() => onAction?.(candidate.id, candidate.columnId, "advance")}>
