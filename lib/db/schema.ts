@@ -368,7 +368,11 @@ export const candidates = pgTable("candidates", {
   email: text("email"),
   city: text("city"),
   source: text("source"), // 'hh' | 'avito' | 'telegram' | 'site' | 'referral' | 'manual'
-  stage: text("stage").default("new"), // 'new' | 'demo' | 'scheduled' | 'interviewed' | 'hired' | 'rejected'
+  // Воронка: 'new' | 'primary_contact' | 'demo_opened' | 'demo' (legacy)
+  // | 'decision' (= «Демо пройдено» в UI) | 'anketa_filled'
+  // | 'ai_screening' | 'interview' | 'final_decision' | 'scheduled'
+  // | 'interviewed' | 'hired' | 'rejected' | 'wants_contact'
+  stage: text("stage").default("new"),
   score: integer("score"),
   salaryMin: integer("salary_min"),
   salaryMax: integer("salary_max"),
@@ -385,6 +389,9 @@ export const candidates = pgTable("candidates", {
   aiScoredAt: timestamp("ai_scored_at"),
   stageHistory: jsonb("stage_history").default("[]"), // [{stage, date, note}]
   isFavorite: boolean("is_favorite").notNull().default(false),
+  // Момент первого открытия страницы /demo/<shortId> владельцем-кандидатом.
+  // NULL = ещё не открывал (стейдж = primary_contact).
+  demoOpenedAt: timestamp("demo_opened_at"),
   autoProcessingStopped: boolean("auto_processing_stopped").notNull().default(false),
   autoProcessingStoppedReason: text("auto_processing_stopped_reason"),
   autoProcessingStoppedAt: timestamp("auto_processing_stopped_at", { withTimezone: true }),

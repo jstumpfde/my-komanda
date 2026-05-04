@@ -4,6 +4,7 @@ import { db } from "@/lib/db"
 import { candidates } from "@/lib/db/schema"
 import { isShortId, generateCandidateShortId } from "@/lib/short-id"
 import { generateCandidateToken } from "@/lib/candidate-tokens"
+import { markDemoOpened } from "@/lib/candidates/mark-demo-opened"
 
 const COOKIE_NAME = "myk_candidate_uuid"
 const COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 90 // 90 дней
@@ -49,6 +50,8 @@ export async function GET(
   const cookieUuid = req.cookies.get(COOKIE_NAME)?.value
   if (cookieUuid && UUID_RE.test(cookieUuid)) {
     if (cookieUuid === owner.id) {
+      // Owner кликнул на свою ссылку — фиксируем первый просмотр демо.
+      await markDemoOpened(owner.id)
       return NextResponse.redirect(new URL(`/demo/${token}?c=${owner.id}`, req.url))
     }
     const [existing] = await db
@@ -57,6 +60,9 @@ export async function GET(
       .where(eq(candidates.id, cookieUuid))
       .limit(1)
     if (existing && existing.shortId) {
+      // Существующий кандидат заходит на чужую ссылку — фиксируем его
+      // собственное открытие демо (не owner'а).
+      await markDemoOpened(existing.id)
       return NextResponse.redirect(new URL(`/demo/${existing.shortId}?c=${existing.id}`, req.url))
     }
   }
@@ -66,6 +72,7 @@ export async function GET(
   // дублей "Новый кандидат" когда сам кандидат впервые кликает на
   // свою же ссылку.
   if (owner?.id && !cookieUuid) {
+    await markDemoOpened(owner.id)
     const ownerRedirect = new URL(
       `/demo/${owner.shortId ?? token}?c=${owner.id}`,
       req.url

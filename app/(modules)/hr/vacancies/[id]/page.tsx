@@ -1458,7 +1458,7 @@ export default function VacancyPage() {
                     {(status === "draft" || status === "paused") && <DropdownMenuSeparator />}
                     {apiCandidates.length > 0 && (
                       <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => {
-                        const stageLabels: Record<string, string> = { new: "Новые", demo: "Демо", decision: "Решение", interview: "Интервью", final_decision: "Финал", hired: "Наняты", rejected: "Отказ" }
+                        const stageLabels: Record<string, string> = { new: "Новые", primary_contact: "Первичный контакт", demo: "Демо", demo_opened: "Демо открыто", decision: "Демо пройдено", anketa_filled: "Анкета", ai_screening: "AI-скрининг", interview: "Интервью", final_decision: "Финал", hired: "Наняты", rejected: "Отказ" }
                         const stageCounts: Record<string, number> = {}
                         for (const c of apiCandidates) { const s = c.stage || "new"; stageCounts[s] = (stageCounts[s] || 0) + 1 }
                         const topCandidates = apiCandidates.filter(c => c.aiScore != null).sort((a, b) => (b.aiScore ?? 0) - (a.aiScore ?? 0)).slice(0, 10)

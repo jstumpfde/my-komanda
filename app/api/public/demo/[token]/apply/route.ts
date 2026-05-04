@@ -24,7 +24,15 @@ interface StageHistoryEntry {
 }
 
 const FINAL_STAGES = new Set(["hired", "rejected"])
-const ANKETA_ELIGIBLE = new Set(["new", "demo", "decision"])
+// Стейджи, из которых заполнение анкеты переводит в anketa_filled.
+// Включает все ранние стадии (на случай регресса) и текущую decision.
+const ANKETA_ELIGIBLE = new Set([
+  "new",
+  "primary_contact",
+  "demo",
+  "demo_opened",
+  "decision",
+])
 
 export async function POST(
   req: NextRequest,
@@ -87,12 +95,14 @@ export async function POST(
         updatedAt: new Date(),
       }
 
-      // F2.C: → ai_screening (только из new/demo/decision, без регресса)
+      // F2.C: → anketa_filled (после расширения воронки промежуточный
+      // стейдж между «Демо пройдено» и «AI-скрининг»). AI-скрининг
+      // теперь — отдельный HR-шаг, не авто.
       if (!FINAL_STAGES.has(currentStage) && ANKETA_ELIGIBLE.has(currentStage)) {
-        updates.stage = "ai_screening"
+        updates.stage = "anketa_filled"
         updates.stageHistory = [
           ...stageHistory,
-          { from: currentStage, to: "ai_screening", at: now, reason: "anketa_submitted" },
+          { from: currentStage, to: "anketa_filled", at: now, reason: "anketa_submitted" },
         ]
       }
 
