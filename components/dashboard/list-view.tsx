@@ -230,7 +230,7 @@ export function ListView({
         </button>
         <div>Кандидат</div>
         {showProgress && <SortHeader label="Демо" sortKey="progress" sort={sort} onToggle={handleSort} />}
-        {showScore && <SortHeader label="AI-оценка" sortKey="aiScore" sort={sort} onToggle={handleSort} />}
+        {showScore && <SortHeader label="AI-оценка" sortKey="aiScore" sort={sort} onToggle={handleSort} align="center" />}
         {showSalary && <SortHeader label="Зарплата" sortKey="salary" sort={sort} onToggle={handleSort} />}
         {showCity && <SortHeader label="Город" sortKey="city" sort={sort} onToggle={handleSort} />}
         {showResponseDate && <SortHeader label="Дата отклика" sortKey="responseDate" sort={sort} onToggle={handleSort} />}
@@ -291,7 +291,7 @@ export function ListView({
 
               {/* AI score */}
               {showScore && (
-                <div>
+                <div className="flex justify-center">
                   <Badge
                     variant="outline"
                     className={cn(
@@ -357,7 +357,7 @@ export function ListView({
 
               {/* Actions */}
               {showActions && (
-                <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
                   {isDecisionStage ? (
                     <>
                       <Button variant="ghost" size="icon" className="h-7 w-7 text-success hover:bg-success/10" title="Принять" onClick={() => onAction?.(candidate.id, candidate.columnId, "advance")}>
