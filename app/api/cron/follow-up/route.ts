@@ -1,117 +1,26 @@
 import { NextRequest, NextResponse } from "next/server"
-import { eq, and, inArray, lt, isNull, lte } from "drizzle-orm"
+import { eq, and, lte } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { vacancies, candidates, companies, followUpMessages, followUpCampaigns, hhResponses } from "@/lib/db/schema"
-import { sendMail } from "@/lib/mail"
+import { vacancies, candidates, followUpMessages, followUpCampaigns, hhResponses } from "@/lib/db/schema"
 import { getValidToken } from "@/lib/hh-helpers"
 import { shouldStopFollowUp } from "@/lib/followup/should-stop"
 import { canSendNow } from "@/lib/schedule/can-send-now"
 import { checkCronAuth } from "@/lib/cron/auth"
 
 // POST /api/cron/follow-up
-// Отправляет одно повторное сообщение кандидатам в статусе new/awaiting_response старше 48 часов.
-// Protected by X-Cron-Secret header — см. checkCronAuth в lib/cron/auth.ts.
+// Отправляет очередную порцию касаний из follow_up_messages кандидатам
+// в hh-чат. Protected by X-Cron-Secret header.
+//
+// Старый email-блок (48-часовое напоминание через sendMail) удалён —
+// теперь дожим идёт только через цепочку касаний follow_up_messages.
 export async function POST(req: NextRequest) {
   const auth = checkCronAuth(req)
   if (!auth.ok) return auth.response
 
   const now = new Date()
-  const threshold = new Date(now.getTime() - 48 * 60 * 60 * 1000) // 48 часов назад
-  let sent = 0
-  let skipped = 0
-
   try {
-    // Кандидаты в статусе new, созданные более 48 часов назад.
-    // v5: автоматизация пропускается, если AI-классификатор поставил automationPaused
-    // (например, кандидат уже отказался или попросил личный контакт).
-    const stale = await db
-      .select()
-      .from(candidates)
-      .where(and(
-        inArray(candidates.stage, ["new"]),
-        lt(candidates.createdAt, threshold),
-        eq(candidates.automationPaused, false),
-      ))
-
-    for (const candidate of stale) {
-      // Проверяем follow_up_sent в demoProgressJson (используем как общий json-store)
-      const progressJson = candidate.demoProgressJson as Record<string, unknown> | null
-      if (progressJson?.follow_up_sent) {
-        skipped++
-        continue
-      }
-
-      if (!candidate.email) {
-        skipped++
-        continue
-      }
-
-      // Загружаем вакансию и компанию
-      const [vacancy] = await db
-        .select()
-        .from(vacancies)
-        .where(eq(vacancies.id, candidate.vacancyId))
-        .limit(1)
-
-      if (!vacancy || vacancy.status === "closed" || vacancy.deletedAt) {
-        skipped++
-        continue
-      }
-
-      const [company] = await db
-        .select({ name: companies.name })
-        .from(companies)
-        .where(eq(companies.id, vacancy.companyId))
-        .limit(1)
-
-      // Проверка расписания вакансии. Если сейчас вне окна / выходной /
-      // праздник — НЕ помечаем как failed, просто пропускаем. Следующий
-      // cron в рабочее время подберёт.
-      if (!canSendNow(vacancy, now).allowed) {
-        skipped++
-        continue
-      }
-
-      const candidateToken = candidate.token || candidate.id
-      const firstName = candidate.name.split(" ")[0]
-      const link = `${process.env.NEXTAUTH_URL || "https://mycomanda24.ru"}/candidate/${candidateToken}`
-
-      const text = `${firstName}, добрый день! Вчера отправляли вам обзор должности ${vacancy.title}. Может, не дошло? Вот ссылка: ${link} — займёт всего 15 мин :)`
-
-      try {
-        await sendMail({
-          to: candidate.email,
-          subject: `Напоминание: ${vacancy.title} — ${company?.name || "Моя Команда"}`,
-          text,
-        })
-
-        // Помечаем follow_up_sent = true
-        await db
-          .update(candidates)
-          .set({
-            demoProgressJson: { ...(progressJson || {}), follow_up_sent: true },
-            updatedAt: now,
-          })
-          .where(eq(candidates.id, candidate.id))
-
-        sent++
-      } catch (mailErr) {
-        console.error(`[cron/follow-up] Failed to send to ${candidate.email}:`, mailErr)
-        skipped++
-      }
-    }
-
-    // ───── Воронка дожима (TZ-5/4): касания follow_up_messages ─────
-    const campaignResult = await processCampaignTouches(now)
-
-    return NextResponse.json({
-      ok: true,
-      processed: stale.length,
-      sent,
-      skipped,
-      campaign: campaignResult,
-      ts: now.toISOString(),
-    })
+    const campaign = await processCampaignTouches(now)
+    return NextResponse.json({ ok: true, campaign, ts: now.toISOString() })
   } catch (err) {
     console.error("[cron/follow-up]", err)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
