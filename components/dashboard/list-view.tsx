@@ -183,15 +183,18 @@ export function ListView({
 
   // Пропорциональное растяжение: разные fr-коэффициенты задают доли свободного
   // места. ★/Источник/Действия — фиксированной ширины (без fr), не растут.
-  // Кандидат (6fr) получает наибольшую долю при скрытии других колонок.
+  // Балансировка после расширения воронки (drizzle/0083): новые badge'и
+  // длиннее («Первичный контакт» ~17 симв, «Анкета заполнена» ~16 симв),
+  // поэтому Статус получает больше места (min 140 / 1.8fr), а Кандидат —
+  // меньше избыточного простора (с 6fr → 3fr, max-w на имя 240px).
   const cols: string[] = ["40px"]                       // ★ — фикс
-  cols.push("minmax(240px, 6fr)")                       // Кандидат
-  if (showProgress) cols.push("minmax(110px, 2fr)")     // Демо
+  cols.push("minmax(180px, 3fr)")                       // Кандидат
+  if (showProgress) cols.push("minmax(110px, 1.5fr)")   // Демо
   if (showScore) cols.push("minmax(70px, 1fr)")         // AI-оценка
-  if (showSalary) cols.push("minmax(110px, 2fr)")       // Зарплата
-  if (showCity) cols.push("minmax(120px, 3fr)")         // Город
+  if (showSalary) cols.push("minmax(110px, 1.5fr)")     // Зарплата
+  if (showCity) cols.push("minmax(120px, 2fr)")         // Город
   if (showResponseDate) cols.push("minmax(80px, 1fr)")  // Дата
-  cols.push("minmax(90px, 1fr)")                        // Статус
+  cols.push("minmax(140px, 1.8fr)")                     // Статус
   if (showSource) cols.push("60px")                     // Источник — фикс
   if (showActions) cols.push("80px")                    // Действия — фикс
 
@@ -271,14 +274,14 @@ export function ListView({
                 </div>
                 <div className="min-w-0">
                   <p
-                    className="text-[15px] font-medium text-foreground truncate max-w-[260px]"
+                    className="text-[15px] font-medium text-foreground truncate max-w-[240px]"
                     title={candidate.name}
                   >
                     {candidate.name}
                   </p>
                   {settings.showExperience && (
                     <p
-                      className="text-[13px] text-muted-foreground truncate max-w-[260px]"
+                      className="text-[13px] text-muted-foreground truncate max-w-[240px]"
                       title={candidate.experience}
                     >
                       {candidate.experience}
