@@ -26,9 +26,13 @@ interface FunnelViewProps {
 }
 
 function getScoreColor(score: number) {
-  if (score >= 80) return "border-green-300 text-green-700 bg-green-50 dark:bg-green-950 dark:text-green-400"
-  if (score >= 60) return "border-yellow-300 text-yellow-700 bg-yellow-50 dark:bg-yellow-950 dark:text-yellow-400"
-  return "border-red-300 text-red-700 bg-red-50 dark:bg-red-950 dark:text-red-400"
+  if (score >= 70) return "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-900"
+  if (score >= 40) return "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-900"
+  return "bg-red-50 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-400 dark:border-red-900"
+}
+
+function hasSalaryDefined(salaryMin?: number | null, salaryMax?: number | null) {
+  return (typeof salaryMin === "number" && salaryMin > 0) || (typeof salaryMax === "number" && salaryMax > 0)
 }
 
 function getSourceColor(source: string) {
@@ -246,10 +250,13 @@ export function FunnelView({ columns, settings, onOpenProfile, onAction }: Funne
                         {/* Salary */}
                         {(settings?.showSalary || settings?.showSalaryFull) !== false && (
                           <div className="text-[14px] font-medium text-foreground">
-                            {settings?.showSalaryFull
-                              ? `${candidate.salaryMin.toLocaleString("ru-RU")} — ${candidate.salaryMax.toLocaleString("ru-RU")} ₽`
-                              : `${Math.round(candidate.salaryMin / 1000)}-${Math.round(candidate.salaryMax / 1000)}k`
-                            }
+                            {hasSalaryDefined(candidate.salaryMin, candidate.salaryMax) ? (
+                              settings?.showSalaryFull
+                                ? `${candidate.salaryMin.toLocaleString("ru-RU")} — ${candidate.salaryMax.toLocaleString("ru-RU")} ₽`
+                                : `${Math.round(candidate.salaryMin / 1000)}-${Math.round(candidate.salaryMax / 1000)}k`
+                            ) : (
+                              <span className="text-muted-foreground">Зарплата не указана</span>
+                            )}
                           </div>
                         )}
 
