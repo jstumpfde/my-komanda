@@ -1599,7 +1599,7 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
 
                 {activeTab === "candidates" && (
                   <div className="flex items-center gap-1.5 shrink-0">
-                    {hhConnected === true && apiVacancy?.hhVacancyId && hhSyncMeta && (
+                    {activeTab === "candidates" && hhConnected === true && apiVacancy?.hhVacancyId && hhSyncMeta && (
                       <HhAutoProcess
                         vacancyId={id}
                         defaultMinScore={
