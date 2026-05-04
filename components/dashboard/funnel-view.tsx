@@ -25,6 +25,18 @@ interface FunnelViewProps {
   onAction?: (candidateId: string, columnId: string, action: CandidateAction) => void
 }
 
+/** Ширины ступеней воронки (в процентах) — от 100% (1-я колонка) до 60% и далее. */
+const STEP_WIDTHS = [100, 90, 80, 70, 60]
+const MIN_STEP_WIDTH = 60
+function getStepWidth(i: number): number {
+  return i < STEP_WIDTHS.length ? STEP_WIDTHS[i] : MIN_STEP_WIDTH
+}
+
+/** "Отказ" — терминальный статус, не часть основной последовательности воронки. */
+function isRejected(col: { id: string; title: string }) {
+  return col.id === "rejected" || col.title === "Отказ"
+}
+
 function getScoreColor(score: number) {
   if (score >= 80) return "border-green-300 text-green-700 bg-green-50 dark:bg-green-950 dark:text-green-400"
   if (score >= 60) return "border-yellow-300 text-yellow-700 bg-yellow-50 dark:bg-yellow-950 dark:text-yellow-400"
@@ -44,7 +56,10 @@ function getSourceColor(source: string) {
 
 export function FunnelView({ columns, settings, onOpenProfile, onAction }: FunnelViewProps) {
   const [expandedCardId, setExpandedCardId] = useState<string | null>(null)
-  const maxCount = Math.max(1, ...columns.map((c) => c.count))
+
+  // Делим колонки: основная последовательность воронки vs терминальный статус "Отказ".
+  const mainColumns = columns.filter((c) => !isRejected(c))
+  const rejectedColumn = columns.find(isRejected)
 
   const conversionRates = columns.map((col, i) => {
     if (columns[0].count === 0) return 0
@@ -54,69 +69,91 @@ export function FunnelView({ columns, settings, onOpenProfile, onAction }: Funne
 
   return (
     <div className="space-y-6">
-      {/* Funnel Visual */}
-      <div className="bg-card border border-border rounded-xl p-6">
-        <h3 className="text-sm font-semibold text-foreground mb-6">Воронка найма</h3>
-        <div className="space-y-1">
-          {columns.map((col, i) => {
-            const widthPct = Math.max(20, (col.count / maxCount) * 100)
-            const prevCount = i > 0 ? columns[i - 1].count : null
-            const passPct = prevCount === null
-              ? null
-              : prevCount === 0
-                ? "empty"
-                : Math.round((col.count / prevCount) * 100)
+      {/* Funnel Visual + Rejected sidebar */}
+      <div className="flex flex-row gap-4">
+        <div className="flex-1 bg-card border border-border rounded-xl p-6">
+          <h3 className="text-sm font-semibold text-foreground mb-6">Воронка найма</h3>
+          <div className="flex flex-col gap-1">
+            {mainColumns.map((col, i) => {
+              const stepWidth = getStepWidth(i)
+              const prevCount = i > 0 ? mainColumns[i - 1].count : null
+              const passPct = prevCount === null
+                ? null
+                : prevCount === 0
+                  ? "empty"
+                  : Math.round((col.count / prevCount) * 100)
 
-            return (
-              <div key={col.id}>
-                {/* Row */}
-                <div className="flex items-center gap-4 group py-1">
-                  {/* Stage label */}
-                  <div className="w-28 flex-shrink-0 text-right">
-                    <span className="text-xs font-medium text-foreground">{col.title}</span>
-                  </div>
-
-                  {/* Bar */}
-                  <div className="flex-1 flex items-center gap-3">
-                    <div className="flex-1 h-10 bg-muted/40 rounded-lg overflow-hidden relative">
-                      <div
-                        className="h-full rounded-lg flex items-center justify-end pr-3 transition-all duration-500 group-hover:brightness-110"
-                        style={{
-                          width: `${widthPct}%`,
-                          background: `linear-gradient(135deg, ${col.colorFrom}, ${col.colorTo})`,
-                        }}
-                      >
-                        <span className="text-white text-xs font-bold">{col.count}</span>
-                      </div>
+              return (
+                <div
+                  key={col.id}
+                  className="mx-auto"
+                  style={{ maxWidth: `${stepWidth}%`, width: "100%" }}
+                >
+                  {/* Row */}
+                  <div className="flex items-center gap-4 group py-1">
+                    {/* Stage label */}
+                    <div className="w-28 flex-shrink-0 text-right">
+                      <span className="text-xs font-medium text-foreground">{col.title}</span>
                     </div>
 
-                    {/* Conversion */}
-                    <div className="w-16 flex-shrink-0">
-                      {passPct === null ? (
-                        <div className="text-center">
-                          <span className="text-[11px] font-semibold text-primary">100%</span>
-                          <p className="text-[10px] text-muted-foreground">вход</p>
+                    {/* Bar */}
+                    <div className="flex-1 flex items-center gap-3">
+                      <div className="flex-1 h-10 bg-muted/40 rounded-lg overflow-hidden relative">
+                        <div
+                          className="h-full w-full rounded-lg flex items-center justify-end pr-3 transition-all duration-500 group-hover:brightness-110"
+                          style={{
+                            background: `linear-gradient(135deg, ${col.colorFrom}, ${col.colorTo})`,
+                          }}
+                        >
+                          <span className="text-white text-xs font-bold">{col.count}</span>
                         </div>
-                      ) : passPct === "empty" ? (
-                        <div className="text-center">
-                          <span className="text-[11px] font-semibold text-muted-foreground">—</span>
-                          <p className="text-[10px] text-muted-foreground">прошло</p>
-                        </div>
-                      ) : (
-                        <div className="text-center">
-                          <span className="text-[11px] font-semibold text-emerald-500">
-                            {passPct}%
-                          </span>
-                          <p className="text-[10px] text-muted-foreground">прошло</p>
-                        </div>
-                      )}
+                      </div>
+
+                      {/* Conversion */}
+                      <div className="w-16 flex-shrink-0">
+                        {passPct === null ? (
+                          <div className="text-center">
+                            <span className="text-[11px] font-semibold text-primary">100%</span>
+                            <p className="text-[10px] text-muted-foreground">вход</p>
+                          </div>
+                        ) : passPct === "empty" ? (
+                          <div className="text-center">
+                            <span className="text-[11px] font-semibold text-muted-foreground">—</span>
+                            <p className="text-[10px] text-muted-foreground">прошло</p>
+                          </div>
+                        ) : (
+                          <div className="text-center">
+                            <span className="text-[11px] font-semibold text-emerald-500">
+                              {passPct}%
+                            </span>
+                            <p className="text-[10px] text-muted-foreground">прошло</p>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            )
-          })}
+              )
+            })}
+          </div>
         </div>
+
+        {/* Rejected — terminal status, separate block on the right */}
+        {rejectedColumn && (
+          <div className="flex-shrink-0 w-64 bg-card border border-border rounded-xl p-6 flex flex-col">
+            <h3 className="text-sm font-semibold text-foreground mb-6">{rejectedColumn.title}</h3>
+            <div
+              className="rounded-lg p-6 text-center"
+              style={{
+                background: `linear-gradient(135deg, ${rejectedColumn.colorFrom}, ${rejectedColumn.colorTo})`,
+              }}
+            >
+              <div className="text-3xl font-bold text-white">{rejectedColumn.count}</div>
+              <p className="text-xs text-white/80 mt-1">кандидатов</p>
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-3 text-center">Терминальный статус</p>
+          </div>
+        )}
       </div>
 
       {/* Stats Grid */}
@@ -180,6 +217,20 @@ export function FunnelView({ columns, settings, onOpenProfile, onAction }: Funne
       {expandedCardId && (() => {
         const col = columns.find(c => c.id === expandedCardId)
         if (!col) return null
+        // Расширяем кандидатов полями колонки (паттерн из list-view.tsx),
+        // т.к. сам тип Candidate не содержит columnId/columnTitle/colorFrom/colorTo.
+        const expandedCandidates: Array<Candidate & {
+          columnId: string
+          columnTitle: string
+          colorFrom: string
+          colorTo: string
+        }> = col.candidates.map((c) => ({
+          ...c,
+          columnId: col.id,
+          columnTitle: col.title,
+          colorFrom: col.colorFrom,
+          colorTo: col.colorTo,
+        }))
         return (
           <div className="rounded-xl border border-border overflow-hidden bg-card">
             <div
@@ -191,7 +242,7 @@ export function FunnelView({ columns, settings, onOpenProfile, onAction }: Funne
               <span className="text-xs text-muted-foreground">{col.count} кандидатов</span>
             </div>
 
-            {col.candidates.length === 0 ? (
+            {expandedCandidates.length === 0 ? (
               <p className="text-sm text-muted-foreground p-4">Нет кандидатов на этом этапе</p>
             ) : (
               <>
@@ -208,7 +259,7 @@ export function FunnelView({ columns, settings, onOpenProfile, onAction }: Funne
 
                 {/* Rows */}
                 <div className="divide-y divide-border">
-                  {col.candidates.map((candidate, i) => {
+                  {expandedCandidates.map((candidate, i) => {
                     const isDecisionStage = candidate.columnId === "interview" || candidate.columnId === "offer"
                     return (
                       <div
