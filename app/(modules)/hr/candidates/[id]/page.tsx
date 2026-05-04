@@ -63,7 +63,7 @@ interface Candidate {
 
 const STAGE_CONFIG: Record<string, { label: string; cls: string }> = {
   new:          { label: "Новый",              cls: "bg-sky-500/15 text-sky-700" },
-  demo:         { label: "Демонстрация",       cls: "bg-violet-500/15 text-violet-700" },
+  demo:         { label: "Демо",                cls: "bg-violet-500/15 text-violet-700" },
   scheduled:    { label: "Интервью назначено",  cls: "bg-amber-500/15 text-amber-700" },
   interviewed:  { label: "Интервью пройдено",   cls: "bg-orange-500/15 text-orange-700" },
   hired:        { label: "Нанят",              cls: "bg-emerald-500/15 text-emerald-700" },

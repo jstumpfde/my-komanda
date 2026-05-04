@@ -208,8 +208,8 @@ export function ListView({
   const cols: string[] = ["40px"] // ★
   cols.push("minmax(180px, 2fr)")        // Кандидат
   if (showProgress) cols.push("160px")   // Демо
-  if (showScore) cols.push("90px")       // AI-оценка
-  if (showSalary) cols.push("140px")     // Зарплата
+  if (showScore) cols.push("70px")       // AI-оценка
+  if (showSalary) cols.push("110px")     // Зарплата
   if (showCity) cols.push("120px")       // Город
   if (showResponseDate) cols.push("110px") // Дата отклика
   cols.push("130px")                     // Статус

@@ -88,7 +88,7 @@ export async function GET(
     // Build funnel stats
     const stageNames: Record<string, string> = {
       new: "Новые",
-      demo: "Демонстрация",
+      demo: "Демо",
       decision: "Решение",
       interview: "Интервью",
       final_decision: "Финал",

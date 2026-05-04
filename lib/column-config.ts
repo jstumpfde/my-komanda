@@ -37,7 +37,7 @@ export interface ColumnConfig {
 
 export const defaultColumnColors: Record<string, { from: string; to: string; label: string }> = {
   new:              { from: "#94a3b8", to: "#64748b", label: "Отклик" },
-  demo:             { from: "#3b82f6", to: "#2563eb", label: "Демо-курс" },
+  demo:             { from: "#3b82f6", to: "#2563eb", label: "Демо" },
   decision:         { from: "#f59e0b", to: "#d97706", label: "Анкета" },
   ai_screening:     { from: "#06b6d4", to: "#0891b2", label: "AI-скрининг" },
   interview:        { from: "#8b5cf6", to: "#7c3aed", label: "Собеседование" },

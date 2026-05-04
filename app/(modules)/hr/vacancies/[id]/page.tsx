@@ -987,7 +987,7 @@ export default function VacancyPage() {
 
   const funnelStages = [
     { stage: "Новый", count: totalCandidates, color: "#94a3b8" },
-    { stage: "Демо-курс", count: totalCandidates - (newCol?.candidates.length || 0), color: "#3b82f6" },
+    { stage: "Демо", count: totalCandidates - (newCol?.candidates.length || 0), color: "#3b82f6" },
     { stage: "Решение", count: (decisionCol?.candidates.length || 0) + afterDecision, color: "#ef4444" },
     { stage: "Интервью", count: (interviewCol?.candidates.length || 0) + (finalDecisionCol?.candidates.length || 0) + (hiredCol?.candidates.length || 0), color: "#8b5cf6" },
     { stage: "Финальное решение", count: (finalDecisionCol?.candidates.length || 0) + (hiredCol?.candidates.length || 0), color: "#f97316" },

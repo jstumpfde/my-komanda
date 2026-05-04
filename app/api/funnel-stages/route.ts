@@ -6,7 +6,7 @@ import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 
 const DEFAULT_STAGES = [
   { title: "Новый",              slug: "new",          sortOrder: 0, color: "#3B82F6", isTerminal: false, isDefault: true },
-  { title: "Демонстрация",      slug: "demo",         sortOrder: 1, color: "#8B5CF6", isTerminal: false, isDefault: false },
+  { title: "Демо",               slug: "demo",         sortOrder: 1, color: "#8B5CF6", isTerminal: false, isDefault: false },
   { title: "Интервью назначено", slug: "scheduled",    sortOrder: 2, color: "#EAB308", isTerminal: false, isDefault: false },
   { title: "Интервью пройдено",  slug: "interviewed",  sortOrder: 3, color: "#F97316", isTerminal: false, isDefault: false },
   { title: "Нанят",             slug: "hired",         sortOrder: 4, color: "#22C55E", isTerminal: true,  isDefault: false },
