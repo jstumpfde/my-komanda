@@ -168,37 +168,51 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
     try {
       let candidateToken: string | null = null
       let candidateId: string | null = resp.localCandidateId ?? null
+      // Существующая запись (если найдена) — для защитного backfill
+      // пустых полей (city/name/phone/email) при апдейте.
+      let existingCand: { id: string; city: string | null; name: string; phone: string | null; email: string | null } | null = null
 
       if (!candidateId && localVac) {
+        const cols = { id: candidates.id, city: candidates.city, name: candidates.name, phone: candidates.phone, email: candidates.email }
         if (resp.candidateEmail) {
           const [byEmail] = await db
-            .select({ id: candidates.id })
+            .select(cols)
             .from(candidates)
             .where(and(eq(candidates.vacancyId, localVac.id), eq(candidates.email, resp.candidateEmail)))
             .limit(1)
-          if (byEmail) candidateId = byEmail.id
+          if (byEmail) { candidateId = byEmail.id; existingCand = byEmail }
         }
         if (!candidateId && resp.candidatePhone) {
           const [byPhone] = await db
-            .select({ id: candidates.id })
+            .select(cols)
             .from(candidates)
             .where(and(eq(candidates.vacancyId, localVac.id), eq(candidates.phone, resp.candidatePhone)))
             .limit(1)
-          if (byPhone) candidateId = byPhone.id
+          if (byPhone) { candidateId = byPhone.id; existingCand = byPhone }
         }
         if (!candidateId && resp.candidateName) {
           const [byName] = await db
-            .select({ id: candidates.id })
+            .select(cols)
             .from(candidates)
             .where(and(eq(candidates.vacancyId, localVac.id), eq(candidates.name, resp.candidateName)))
             .limit(1)
-          if (byName) candidateId = byName.id
+          if (byName) { candidateId = byName.id; existingCand = byName }
         }
         if (candidateId) {
           await db.update(hhResponses)
             .set({ localCandidateId: candidateId })
             .where(eq(hhResponses.id, resp.id))
         }
+      }
+      // Если запись была привязана через resp.localCandidateId — подтянем
+      // её сейчас, чтобы тоже применить защитный backfill.
+      if (candidateId && !existingCand) {
+        const [row] = await db
+          .select({ id: candidates.id, city: candidates.city, name: candidates.name, phone: candidates.phone, email: candidates.email })
+          .from(candidates)
+          .where(eq(candidates.id, candidateId))
+          .limit(1)
+        if (row) existingCand = row
       }
 
       let newCandShortId: string | null = null
@@ -227,10 +241,23 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
           newCandShortId = newCand.shortId ?? null
         }
       } else if (candidateId) {
-        await db.update(candidates).set({
+        // Защитный backfill: заполняем только пустые поля, заполненные не трогаем.
+        const isEmpty = (s: string | null | undefined) => !s || s.trim() === ""
+        const setFields: Record<string, unknown> = {
           stage: targetStage,
           updatedAt: new Date(),
-        }).where(eq(candidates.id, candidateId))
+        }
+        if (existingCand) {
+          if (isEmpty(existingCand.city) && candidateCity) setFields.city = candidateCity
+          if (isEmpty(existingCand.email) && resp.candidateEmail) setFields.email = resp.candidateEmail
+          if (isEmpty(existingCand.phone) && resp.candidatePhone) setFields.phone = resp.candidatePhone
+          // Имя «Кандидат с hh.ru» — это исторический placeholder, тоже считаем пустым
+          const namePlaceholder = existingCand.name === "Кандидат с hh.ru"
+          if ((isEmpty(existingCand.name) || namePlaceholder) && resp.candidateName) {
+            setFields.name = resp.candidateName
+          }
+        }
+        await db.update(candidates).set(setFields).where(eq(candidates.id, candidateId))
       }
 
       // AI-скоринг при импорте hh-откликов отключён — оценка теперь
