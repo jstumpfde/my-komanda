@@ -374,6 +374,16 @@ export const candidates = pgTable("candidates", {
   salaryMax: integer("salary_max"),
   experience: text("experience"),
   skills: text("skills").array().default([]),
+  // HR-020: новые поля для рабочих фильтров списка кандидатов.
+  birthDate: date("birth_date"),
+  experienceYears: integer("experience_years"),
+  workFormat: text("work_format"),                              // 'office'|'hybrid'|'remote'
+  educationLevel: text("education_level"),                      // 'secondary'|'specialized'|'higher'|'mba'
+  languages: text("languages").array().default([]),
+  keySkills: text("key_skills").array().default([]),
+  industry: text("industry"),
+  relocationReady: boolean("relocation_ready"),
+  businessTripsReady: boolean("business_trips_ready"),
   token: text("token").unique().notNull(),
   shortId: text("short_id").unique(),                 // "2604V0010042" — vacancy.short_code + LPAD(seq,4)
   sequenceNumber: integer("sequence_number"),         // порядковый номер в рамках вакансии (0 = preview)

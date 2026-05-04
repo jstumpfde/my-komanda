@@ -224,9 +224,95 @@ export async function GET(req: NextRequest) {
     const orderBy = buildOrderBy(sortRaw, dir)
 
     const notPreview = or(isNull(candidates.source), ne(candidates.source, "preview"))
-    const where = stages.length > 0
-      ? and(eq(candidates.vacancyId, vacancyId), inArray(candidates.stage, stages), notPreview)
-      : and(eq(candidates.vacancyId, vacancyId), notPreview)
+
+    // HR-020: серверные фильтры (опциональные query-параметры).
+    // Если параметр не задан — фильтр не применяется. Если у кандидата
+    // соответствующее поле NULL — он включается (фильтр «не блокирует»).
+    const filterConds: SQL[] = []
+
+    const minAge = url.searchParams.get("minAge")
+    const maxAge = url.searchParams.get("maxAge")
+    if (minAge && Number.isFinite(Number(minAge))) {
+      // age >= minAge → birth_date <= today - minAge years
+      const yrs = Math.max(0, Math.floor(Number(minAge)))
+      filterConds.push(sql`(${candidates.birthDate} IS NULL OR ${candidates.birthDate} <= (CURRENT_DATE - make_interval(years => ${yrs})))`)
+    }
+    if (maxAge && Number.isFinite(Number(maxAge))) {
+      const yrs = Math.max(0, Math.floor(Number(maxAge)) + 1)
+      filterConds.push(sql`(${candidates.birthDate} IS NULL OR ${candidates.birthDate} >= (CURRENT_DATE - make_interval(years => ${yrs})))`)
+    }
+
+    const minExp = url.searchParams.get("minExperience")
+    const maxExp = url.searchParams.get("maxExperience")
+    if (minExp) {
+      filterConds.push(sql`(${candidates.experienceYears} IS NULL OR ${candidates.experienceYears} >= ${Number(minExp)})`)
+    }
+    if (maxExp) {
+      filterConds.push(sql`(${candidates.experienceYears} IS NULL OR ${candidates.experienceYears} <= ${Number(maxExp)})`)
+    }
+
+    const workFormatsParam = url.searchParams.get("workFormat")
+    if (workFormatsParam) {
+      const list = workFormatsParam.split(",").filter(Boolean)
+      if (list.length > 0) {
+        filterConds.push(or(isNull(candidates.workFormat), inArray(candidates.workFormat, list)) as SQL)
+      }
+    }
+
+    const eduParam = url.searchParams.get("educationLevel")
+    if (eduParam) {
+      const list = eduParam.split(",").filter(Boolean)
+      if (list.length > 0) {
+        filterConds.push(or(isNull(candidates.educationLevel), inArray(candidates.educationLevel, list)) as SQL)
+      }
+    }
+
+    // Текстовый литерал PG-массива: '{"a","b"}'. Значения — строго коды/whitelist.
+    const toPgTextArrayLiteral = (arr: string[]) =>
+      "{" + arr.map((v) => `"${v.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`).join(",") + "}"
+
+    const langParam = url.searchParams.get("languages")
+    if (langParam) {
+      const list = langParam.split(",").filter(Boolean)
+      if (list.length > 0) {
+        filterConds.push(sql`(COALESCE(array_length(${candidates.languages}, 1), 0) = 0 OR ${candidates.languages} && ${toPgTextArrayLiteral(list)}::text[])`)
+      }
+    }
+
+    const skillsParam = url.searchParams.get("keySkills")
+    if (skillsParam) {
+      const list = skillsParam.split(",").filter(Boolean)
+      if (list.length > 0) {
+        filterConds.push(sql`(COALESCE(array_length(${candidates.keySkills}, 1), 0) = 0 OR ${candidates.keySkills} && ${toPgTextArrayLiteral(list)}::text[])`)
+      }
+    }
+
+    const industryParam = url.searchParams.get("industry")
+    if (industryParam) {
+      const list = industryParam.split(",").filter(Boolean)
+      if (list.length > 0) {
+        filterConds.push(or(isNull(candidates.industry), inArray(candidates.industry, list)) as SQL)
+      }
+    }
+
+    const relocParam = url.searchParams.get("relocationReady")
+    if (relocParam === "true" || relocParam === "false") {
+      const want = relocParam === "true"
+      filterConds.push(sql`(${candidates.relocationReady} IS NULL OR ${candidates.relocationReady} = ${want})`)
+    }
+
+    const tripsParam = url.searchParams.get("businessTripsReady")
+    if (tripsParam === "true" || tripsParam === "false") {
+      const want = tripsParam === "true"
+      filterConds.push(sql`(${candidates.businessTripsReady} IS NULL OR ${candidates.businessTripsReady} = ${want})`)
+    }
+
+    const baseConds: SQL[] = [
+      eq(candidates.vacancyId, vacancyId) as SQL,
+      notPreview as SQL,
+    ]
+    if (stages.length > 0) baseConds.push(inArray(candidates.stage, stages) as SQL)
+    const where = and(...baseConds, ...filterConds)
 
     let rows = await db.select().from(candidates).where(where).orderBy(...orderBy)
 
