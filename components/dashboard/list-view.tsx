@@ -181,16 +181,19 @@ export function ListView({
     return colors[source] || "bg-muted text-muted-foreground border-border"
   }
 
-  const cols: string[] = ["40px"] // ★
-  cols.push("minmax(280px, 2fr)")          // Кандидат
-  if (showProgress) cols.push("110px")     // Демо
-  if (showScore) cols.push("70px")         // AI-оценка
-  if (showSalary) cols.push("110px")       // Зарплата
-  if (showCity) cols.push("140px")         // Город
-  if (showResponseDate) cols.push("100px") // Дата
-  cols.push("90px")                        // Статус
-  if (showSource) cols.push("60px")        // Источник
-  if (showActions) cols.push("80px")       // Действия
+  // Адаптивная сетка: minmax(min-px, 1fr) — оставшиеся колонки делят свободное
+  // место равномерно при скрытии любой через тумблер видимости.
+  // Кандидат — flex 2fr, чтобы получить большую долю при равном растяжении.
+  const cols: string[] = ["minmax(40px, 0.4fr)"]      // ★
+  cols.push("minmax(240px, 2fr)")                      // Кандидат
+  if (showProgress) cols.push("minmax(110px, 1fr)")    // Демо
+  if (showScore) cols.push("minmax(70px, 0.7fr)")      // AI-оценка
+  if (showSalary) cols.push("minmax(110px, 1fr)")      // Зарплата
+  if (showCity) cols.push("minmax(120px, 1fr)")        // Город
+  if (showResponseDate) cols.push("minmax(80px, 0.8fr)") // Дата
+  cols.push("minmax(90px, 0.9fr)")                     // Статус
+  if (showSource) cols.push("minmax(60px, 0.6fr)")     // Источник
+  if (showActions) cols.push("minmax(80px, 0.8fr)")    // Действия
 
   const gridStyle = { gridTemplateColumns: cols.join(" ") }
 
@@ -198,7 +201,7 @@ export function ListView({
     <div className="rounded-xl border border-border overflow-hidden bg-card">
       {/* Table Header */}
       <div
-        className="grid gap-3 px-4 py-2.5 bg-muted/60 border-b border-border text-[13px] font-medium text-muted-foreground tracking-normal items-center"
+        className="grid gap-4 px-4 py-2.5 bg-muted/60 border-b border-border text-[13px] font-medium text-muted-foreground tracking-normal items-center"
         style={gridStyle}
       >
         <button
@@ -240,7 +243,7 @@ export function ListView({
             <div
               key={candidate.id}
               className={cn(
-                "grid gap-3 px-4 items-center hover:bg-muted/40 transition-colors min-h-[56px] text-[14px] cursor-pointer",
+                "grid gap-4 px-4 items-center hover:bg-muted/40 transition-colors min-h-[56px] text-[14px] cursor-pointer",
                 i % 2 === 0 ? "" : "bg-muted/20"
               )}
               style={gridStyle}
@@ -267,9 +270,19 @@ export function ListView({
                   {candidate.name.charAt(0)}
                 </div>
                 <div className="min-w-0">
-                  <p className="text-[15px] font-medium text-foreground truncate">{candidate.name}</p>
+                  <p
+                    className="text-[15px] font-medium text-foreground truncate max-w-[260px]"
+                    title={candidate.name}
+                  >
+                    {candidate.name}
+                  </p>
                   {settings.showExperience && (
-                    <p className="text-[13px] text-muted-foreground truncate">{candidate.experience}</p>
+                    <p
+                      className="text-[13px] text-muted-foreground truncate max-w-[260px]"
+                      title={candidate.experience}
+                    >
+                      {candidate.experience}
+                    </p>
                   )}
                 </div>
               </div>
