@@ -9,7 +9,7 @@ import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip
 import { cn } from "@/lib/utils"
 import type { CandidateAction } from "@/lib/column-config"
 import { applySortMode, type CandidateSortMode } from "@/lib/candidate-sort"
-import { MapPin, CheckCircle2, XCircle, ArrowRight, ThumbsUp, Clock, ArrowUp, ArrowDown, Star } from "lucide-react"
+import { MapPin, CheckCircle2, XCircle, ArrowRight, ThumbsUp, Clock, ArrowUp, ArrowDown, ChevronsUpDown, Star } from "lucide-react"
 import { DemoProgressBar, calcDemoPercent } from "@/components/hr/demo-progress-bar"
 
 export type ListSortKey = "favorite" | "aiScore" | "progress" | "salary" | "responseDate" | "status" | "city" | "source"
@@ -101,7 +101,9 @@ function SortHeader({
         <ArrowUp className="size-3.5" strokeWidth={2.5} />
       ) : dir === "desc" ? (
         <ArrowDown className="size-3.5" strokeWidth={2.5} />
-      ) : null}
+      ) : (
+        <ChevronsUpDown className="size-3.5 opacity-40" strokeWidth={2} />
+      )}
     </button>
   )
 }
