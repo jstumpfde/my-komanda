@@ -42,6 +42,36 @@ function getSourceColor(source: string) {
   return colors[source] || "bg-muted text-muted-foreground border-border"
 }
 
+// Маппинг ширин для режима воронки.
+// Поддерживает как "пользовательские" русские заголовки из задачи,
+// так и стандартные дефолтные заголовки из defaultColumnColors.
+const FUNNEL_WIDTH_BY_TITLE: Record<string, string> = {
+  "Новый": "100%",
+  "Отклик": "100%",
+  "Демонстрация": "90%",
+  "Демо-курс": "90%",
+  "Интервью назначено": "80%",
+  "Анкета": "80%",
+  "AI-скрининг": "70%",
+  "Интервью пройдено": "70%",
+  "Собеседование": "70%",
+  "Оффер": "65%",
+  "Нанят": "60%",
+}
+
+// Позиционный фолбэк (если заголовок не совпадает с маппингом —
+// например, после ручного переименования колонки пользователем).
+const FUNNEL_WIDTH_BY_INDEX = ["100%", "90%", "80%", "70%", "60%", "55%", "50%", "45%"]
+
+function getFunnelMaxWidth(title: string, idx: number): string {
+  return FUNNEL_WIDTH_BY_TITLE[title] || FUNNEL_WIDTH_BY_INDEX[idx] || "45%"
+}
+
+// "Отказ" — терминальный статус, рендерится отдельным блоком справа.
+function isRejectedColumn(col: Column): boolean {
+  return col.id === "rejected" || col.title === "Отказ"
+}
+
 export function FunnelView({ columns, settings, onOpenProfile, onAction }: FunnelViewProps) {
   const [expandedCardId, setExpandedCardId] = useState<string | null>(null)
   const maxCount = Math.max(1, ...columns.map((c) => c.count))
@@ -51,6 +81,71 @@ export function FunnelView({ columns, settings, onOpenProfile, onAction }: Funne
     if (i === 0) return 100
     return Math.round((col.count / columns[0].count) * 100)
   })
+
+  // Конверсия по id — чтобы корректно доставать значения,
+  // когда мы рендерим колонки в отфильтрованных списках (без "Отказа").
+  const conversionRateById: Record<string, number> = {}
+  columns.forEach((col, i) => {
+    conversionRateById[col.id] = conversionRates[i]
+  })
+
+  // Основные колонки воронки (без терминального "Отказа").
+  const mainColumns = columns.filter((c) => !isRejectedColumn(c))
+  const rejectedColumn = columns.find(isRejectedColumn)
+
+  // Карточка-статистика — единый рендер для главных колонок и для "Отказа".
+  const renderStatCard = (col: Column) => {
+    const rate = conversionRateById[col.id] ?? 0
+    const isCardExpanded = expandedCardId === col.id
+    return (
+      <div
+        className="bg-card border border-border rounded-xl overflow-hidden cursor-pointer w-full"
+        onClick={() => setExpandedCardId(isCardExpanded ? null : col.id)}
+      >
+        <div
+          className="h-1"
+          style={{ background: `linear-gradient(90deg, ${col.colorFrom}, ${col.colorTo})` }}
+        />
+        <div className="p-4">
+          <div className="flex items-center justify-between">
+            <p className="text-[11px] text-muted-foreground mb-1 truncate">{col.title}</p>
+            <ChevronDown
+              className="size-3.5 text-muted-foreground transition-transform duration-200"
+              style={{ transform: isCardExpanded ? "rotate(180deg)" : "rotate(0deg)" }}
+            />
+          </div>
+          <p
+            className="text-2xl font-bold"
+            style={{ backgroundImage: `linear-gradient(135deg, ${col.colorFrom}, ${col.colorTo})`, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}
+          >
+            {col.count}
+          </p>
+          <div className="mt-2 flex items-center gap-1.5">
+            <div className="flex-1 h-1 bg-muted rounded-full overflow-hidden">
+              <div
+                className="h-full rounded-full"
+                style={{
+                  width: `${rate}%`,
+                  background: `linear-gradient(90deg, ${col.colorFrom}, ${col.colorTo})`,
+                }}
+              />
+            </div>
+            <span className="text-[10px] text-muted-foreground">{rate}%</span>
+          </div>
+          {col.candidates.length > 0 && (
+            <div className="mt-2 space-y-1">
+              {col.candidates.slice(0, 2).map((c) => (
+                <p key={c.id} className="text-[10px] text-muted-foreground truncate">• {c.name}</p>
+              ))}
+              {col.candidates.length > 2 && (
+                <p className="text-[10px] text-muted-foreground">+{col.candidates.length - 2} ещё</p>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -119,61 +214,36 @@ export function FunnelView({ columns, settings, onOpenProfile, onAction }: Funne
         </div>
       </div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-        {columns.map((col, i) => {
-          const rate = conversionRates[i]
-          const isCardExpanded = expandedCardId === col.id
-          return (
-            <div
-              key={col.id}
-              className="bg-card border border-border rounded-xl overflow-hidden cursor-pointer"
-              onClick={() => setExpandedCardId(isCardExpanded ? null : col.id)}
-            >
+      {/* Stats — tapered funnel + rejected sidecar */}
+      <div className="flex flex-col lg:flex-row items-start gap-4">
+        {/* Основные колонки воронки — вертикальный таппер по центру.
+            Ширины убывают сверху вниз: 100% → 90% → 80% → 70% → 60%. */}
+        <div className="flex-1 flex flex-col gap-3 items-center w-full min-w-0">
+          {mainColumns.map((col, i) => {
+            const maxWidth = getFunnelMaxWidth(col.title, i)
+            return (
               <div
-                className="h-1"
-                style={{ background: `linear-gradient(90deg, ${col.colorFrom}, ${col.colorTo})` }}
-              />
-              <div className="p-4">
-                <div className="flex items-center justify-between">
-                  <p className="text-[11px] text-muted-foreground mb-1 truncate">{col.title}</p>
-                  <ChevronDown
-                    className="size-3.5 text-muted-foreground transition-transform duration-200"
-                    style={{ transform: isCardExpanded ? "rotate(180deg)" : "rotate(0deg)" }}
-                  />
-                </div>
-                <p
-                  className="text-2xl font-bold"
-                  style={{ backgroundImage: `linear-gradient(135deg, ${col.colorFrom}, ${col.colorTo})`, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}
-                >
-                  {col.count}
-                </p>
-                <div className="mt-2 flex items-center gap-1.5">
-                  <div className="flex-1 h-1 bg-muted rounded-full overflow-hidden">
-                    <div
-                      className="h-full rounded-full"
-                      style={{
-                        width: `${rate}%`,
-                        background: `linear-gradient(90deg, ${col.colorFrom}, ${col.colorTo})`,
-                      }}
-                    />
-                  </div>
-                  <span className="text-[10px] text-muted-foreground">{rate}%</span>
-                </div>
-                {col.candidates.length > 0 && (
-                  <div className="mt-2 space-y-1">
-                    {col.candidates.slice(0, 2).map((c) => (
-                      <p key={c.id} className="text-[10px] text-muted-foreground truncate">• {c.name}</p>
-                    ))}
-                    {col.candidates.length > 2 && (
-                      <p className="text-[10px] text-muted-foreground">+{col.candidates.length - 2} ещё</p>
-                    )}
-                  </div>
-                )}
+                key={col.id}
+                className="w-full transition-[max-width] duration-300"
+                style={{ maxWidth }}
+              >
+                {renderStatCard(col)}
               </div>
+            )
+          })}
+        </div>
+
+        {/* "Отказ" — терминальный статус, отдельным блоком справа */}
+        {rejectedColumn && (
+          <div className="w-full lg:w-56 flex-shrink-0 lg:self-start">
+            <div className="lg:sticky lg:top-4">
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2 px-1">
+                Терминальный
+              </p>
+              {renderStatCard(rejectedColumn)}
             </div>
-          )
-        })}
+          </div>
+        )}
       </div>
 
       {/* Expanded card — full table */}
