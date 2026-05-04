@@ -18,6 +18,7 @@ import {
 } from "lucide-react"
 import { CandidatesProgressMiniTable } from "@/components/candidates/candidates-progress-mini-table"
 import { Greeting } from "./_components/greeting"
+import { CandidatesProgressWidget } from "./_components/candidates-progress-widget"
 import {
   ResponsiveContainer, LineChart, Line, Area, XAxis, YAxis, CartesianGrid, Tooltip,
   PieChart, Pie, Cell, ComposedChart,
@@ -288,6 +289,9 @@ function DashboardContent() {
               </div>
               <CandidatesProgressMiniTable limit={5} />
             </div>
+
+            {/* ═══ Block: Candidates progress per vacancy (HR-010) ═══ */}
+            <CandidatesProgressWidget />
 
             {/* ═══ Block 3: Funnel + Active Vacancies ═══ */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
