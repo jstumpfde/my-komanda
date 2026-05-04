@@ -159,8 +159,15 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
       }
     }
 
-    const raw = resp.rawData as { resume?: { id?: string; area?: { name?: string } } } | null
+    const raw = resp.rawData as {
+      resume?: {
+        id?: string
+        area?: { name?: string }
+        salary?: { amount?: number; currency?: string }
+      }
+    } | null
     const candidateCity = raw?.resume?.area?.name ?? undefined
+    const candidateSalary = raw?.resume?.salary?.amount ?? null
 
     const targetStage = "demo"
     const baseMessage = effInviteMsg
@@ -218,6 +225,8 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
             city:           candidateCity,
             source:         "hh",
             stage:          targetStage,
+            salaryMin:      candidateSalary,
+            salaryMax:      candidateSalary,
             token:          newToken,
             shortId:        short?.shortId ?? null,
             sequenceNumber: short?.sequenceNumber ?? null,
