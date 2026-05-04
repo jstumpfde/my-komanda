@@ -12,7 +12,7 @@ import { getValidToken } from "@/lib/hh-helpers"
 import { changeNegotiationState, getNegotiationMessages } from "@/lib/hh-api"
 import { generateCandidateShortId } from "@/lib/short-id"
 import { generateTouchSchedule } from "@/lib/followup/schedule"
-import { DEFAULT_FOLLOWUP_MESSAGES } from "@/lib/followup/default-messages"
+import { DEFAULT_FOLLOWUP_NOT_OPENED } from "@/lib/followup/default-messages"
 import { isFollowUpPreset } from "@/lib/followup/presets"
 import { canSendNow } from "@/lib/schedule/can-send-now"
 
@@ -378,9 +378,10 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
           if (campaign && isFollowUpPreset(campaign.preset) && campaign.preset !== "off") {
             const messages = (campaign.customMessages && campaign.customMessages.length > 0)
               ? campaign.customMessages
-              : DEFAULT_FOLLOWUP_MESSAGES
+              : DEFAULT_FOLLOWUP_NOT_OPENED
+            // Свежий отклик — кандидат ещё не открыл демо, ставим ветку А.
             const touches = generateTouchSchedule(
-              campaign.id, candidateId, campaign.preset, new Date(), messages,
+              campaign.id, candidateId, campaign.preset, new Date(), messages, "not_opened",
             )
             if (touches.length > 0) {
               await db.insert(followUpMessages).values(touches)
