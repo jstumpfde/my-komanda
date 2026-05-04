@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils"
 import type { Candidate } from "./candidate-card"
 import type { CardDisplaySettings } from "./card-settings"
 import type { CandidateAction } from "@/lib/column-config"
+import { AiScoreBadge } from "./ai-score-badge"
 
 interface Column {
   id: string
@@ -35,12 +36,6 @@ function getStepWidth(i: number): number {
 /** "Отказ" — терминальный статус, не часть основной последовательности воронки. */
 function isRejected(col: { id: string; title: string }) {
   return col.id === "rejected" || col.title === "Отказ"
-}
-
-function getScoreColor(score: number) {
-  if (score >= 80) return "border-green-300 text-green-700 bg-green-50 dark:bg-green-950 dark:text-green-400"
-  if (score >= 60) return "border-yellow-300 text-yellow-700 bg-yellow-50 dark:bg-yellow-950 dark:text-yellow-400"
-  return "border-red-300 text-red-700 bg-red-50 dark:bg-red-950 dark:text-red-400"
 }
 
 function getSourceColor(source: string) {
@@ -288,21 +283,26 @@ export function FunnelView({ columns, settings, onOpenProfile, onAction }: Funne
                         {/* Score */}
                         {settings?.showScore !== false && (
                           <div>
-                            <Badge variant="outline" className={cn("text-[14px] border font-semibold", getScoreColor(candidate.score))}>
-                              {candidate.score}
-                            </Badge>
+                            <AiScoreBadge score={candidate.aiScore ?? candidate.score} />
                           </div>
                         )}
 
                         {/* Salary */}
-                        {(settings?.showSalary || settings?.showSalaryFull) !== false && (
-                          <div className="text-[14px] font-medium text-foreground">
-                            {settings?.showSalaryFull
-                              ? `${candidate.salaryMin.toLocaleString("ru-RU")} — ${candidate.salaryMax.toLocaleString("ru-RU")} ₽`
-                              : `${Math.round(candidate.salaryMin / 1000)}-${Math.round(candidate.salaryMax / 1000)}k`
-                            }
-                          </div>
-                        )}
+                        {(settings?.showSalary || settings?.showSalaryFull) !== false && (() => {
+                          const hasSalary =
+                            (typeof candidate.salaryMin === "number" && candidate.salaryMin > 0) ||
+                            (typeof candidate.salaryMax === "number" && candidate.salaryMax > 0)
+                          return hasSalary ? (
+                            <div className="text-[14px] font-medium text-foreground">
+                              {settings?.showSalaryFull
+                                ? `${candidate.salaryMin.toLocaleString("ru-RU")} — ${candidate.salaryMax.toLocaleString("ru-RU")} ₽`
+                                : `${Math.round(candidate.salaryMin / 1000)}-${Math.round(candidate.salaryMax / 1000)}k`
+                              }
+                            </div>
+                          ) : (
+                            <div className="text-[13px] text-muted-foreground italic">Зарплата не указана</div>
+                          )
+                        })()}
 
                         {/* City */}
                         {settings?.showCity !== false && (
