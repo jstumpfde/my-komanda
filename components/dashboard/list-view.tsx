@@ -181,19 +181,19 @@ export function ListView({
     return colors[source] || "bg-muted text-muted-foreground border-border"
   }
 
-  // Адаптивная сетка: minmax(min-px, 1fr) — оставшиеся колонки делят свободное
-  // место равномерно при скрытии любой через тумблер видимости.
-  // Кандидат — flex 2fr, чтобы получить большую долю при равном растяжении.
-  const cols: string[] = ["minmax(40px, 0.4fr)"]      // ★
-  cols.push("minmax(240px, 2fr)")                      // Кандидат
-  if (showProgress) cols.push("minmax(110px, 1fr)")    // Демо
-  if (showScore) cols.push("minmax(70px, 0.7fr)")      // AI-оценка
-  if (showSalary) cols.push("minmax(110px, 1fr)")      // Зарплата
-  if (showCity) cols.push("minmax(120px, 1fr)")        // Город
-  if (showResponseDate) cols.push("minmax(80px, 0.8fr)") // Дата
-  cols.push("minmax(90px, 0.9fr)")                     // Статус
-  if (showSource) cols.push("minmax(60px, 0.6fr)")     // Источник
-  if (showActions) cols.push("minmax(80px, 0.8fr)")    // Действия
+  // Пропорциональное растяжение: разные fr-коэффициенты задают доли свободного
+  // места. ★/Источник/Действия — фиксированной ширины (без fr), не растут.
+  // Кандидат (6fr) получает наибольшую долю при скрытии других колонок.
+  const cols: string[] = ["40px"]                       // ★ — фикс
+  cols.push("minmax(240px, 6fr)")                       // Кандидат
+  if (showProgress) cols.push("minmax(110px, 2fr)")     // Демо
+  if (showScore) cols.push("minmax(70px, 1fr)")         // AI-оценка
+  if (showSalary) cols.push("minmax(110px, 2fr)")       // Зарплата
+  if (showCity) cols.push("minmax(120px, 3fr)")         // Город
+  if (showResponseDate) cols.push("minmax(80px, 1fr)")  // Дата
+  cols.push("minmax(90px, 1fr)")                        // Статус
+  if (showSource) cols.push("60px")                     // Источник — фикс
+  if (showActions) cols.push("80px")                    // Действия — фикс
 
   const gridStyle = { gridTemplateColumns: cols.join(" ") }
 
@@ -360,10 +360,10 @@ export function ListView({
                 </div>
               )}
 
-              {/* Actions — 3 full-height click zones */}
+              {/* Actions — компактные иконки, full-height клик-зоны */}
               {showActions && (
                 <div
-                  className="self-stretch grid grid-cols-3"
+                  className="self-stretch flex gap-1 justify-center items-center h-full"
                   onClick={(e) => e.stopPropagation()}
                 >
                   {isDecisionStage ? (
@@ -371,7 +371,7 @@ export function ListView({
                       <button
                         type="button"
                         title="Принять"
-                        className="h-full flex items-center justify-center text-success hover:bg-success/10 transition-colors"
+                        className="w-7 h-full flex items-center justify-center rounded text-success hover:bg-success/10 transition-colors"
                         onClick={() => onAction?.(candidate.id, candidate.columnId, "advance")}
                       >
                         <ThumbsUp className="w-4 h-4" />
@@ -379,7 +379,7 @@ export function ListView({
                       <button
                         type="button"
                         title="Отказать"
-                        className="h-full flex items-center justify-center text-destructive hover:bg-destructive/10 transition-colors"
+                        className="w-7 h-full flex items-center justify-center rounded text-destructive hover:bg-destructive/10 transition-colors"
                         onClick={() => onAction?.(candidate.id, candidate.columnId, "reject")}
                       >
                         <XCircle className="w-4 h-4" />
@@ -387,7 +387,7 @@ export function ListView({
                       <button
                         type="button"
                         title="В резерв"
-                        className="h-full flex items-center justify-center text-warning hover:bg-warning/10 transition-colors"
+                        className="w-7 h-full flex items-center justify-center rounded text-warning hover:bg-warning/10 transition-colors"
                         onClick={() => onAction?.(candidate.id, candidate.columnId, "reserve")}
                       >
                         <Clock className="w-4 h-4" />
@@ -398,7 +398,7 @@ export function ListView({
                       <button
                         type="button"
                         title="Пригласить"
-                        className="h-full flex items-center justify-center text-success hover:bg-success/10 transition-colors"
+                        className="w-7 h-full flex items-center justify-center rounded text-success hover:bg-success/10 transition-colors"
                         onClick={() => onAction?.(candidate.id, candidate.columnId, "advance")}
                       >
                         <CheckCircle2 className="w-4 h-4" />
@@ -406,7 +406,7 @@ export function ListView({
                       <button
                         type="button"
                         title="Отказать"
-                        className="h-full flex items-center justify-center text-destructive hover:bg-destructive/10 transition-colors"
+                        className="w-7 h-full flex items-center justify-center rounded text-destructive hover:bg-destructive/10 transition-colors"
                         onClick={() => onAction?.(candidate.id, candidate.columnId, "reject")}
                       >
                         <XCircle className="w-4 h-4" />
@@ -414,7 +414,7 @@ export function ListView({
                       <button
                         type="button"
                         title="Открыть"
-                        className="h-full flex items-center justify-center text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+                        className="w-7 h-full flex items-center justify-center rounded text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
                         onClick={() => onOpenProfile?.(candidate, candidate.columnId)}
                       >
                         <ArrowRight className="w-4 h-4" />
