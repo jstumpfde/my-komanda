@@ -247,10 +247,10 @@ export function ListView({
         {showScore && <SortHeader label="AI-оценка" sortKey="aiScore" sort={sort} onToggle={handleSort} align="center" />}
         {showSalary && <SortHeader label="Зарплата" sortKey="salary" sort={sort} onToggle={handleSort} align="center" />}
         {showCity && <SortHeader label="Город" sortKey="city" sort={sort} onToggle={handleSort} />}
-        {showResponseDate && <SortHeader label="Дата отклика" sortKey="responseDate" sort={sort} onToggle={handleSort} align="center" />}
+        {showResponseDate && <SortHeader label="Дата отклика" sortKey="responseDate" sort={sort} onToggle={handleSort} />}
         <SortHeader label="Статус" sortKey="status" sort={sort} onToggle={handleSort} />
-        {showSource && <SortHeader label="Источник" sortKey="source" sort={sort} onToggle={handleSort} align="center" />}
-        {showActions && <div className="text-center">Действия</div>}
+        {showSource && <SortHeader label="Источник" sortKey="source" sort={sort} onToggle={handleSort} />}
+        {showActions && <div>Действия</div>}
       </div>
 
       {/* Rows */}
@@ -338,7 +338,7 @@ export function ListView({
 
               {/* Response Date */}
               {showResponseDate && (
-                <div className="flex justify-center text-sm text-muted-foreground tabular-nums whitespace-nowrap">
+                <div className="text-sm text-muted-foreground tabular-nums whitespace-nowrap">
                   {dt ? (
                     <Tooltip>
                       <TooltipTrigger asChild>
@@ -362,7 +362,7 @@ export function ListView({
 
               {/* Source */}
               {showSource && (
-                <div className="flex justify-center">
+                <div>
                   <Badge variant="outline" className={cn("text-[10px] border", getSourceColor(candidate.source))}>
                     {candidate.source}
                   </Badge>
@@ -371,7 +371,7 @@ export function ListView({
 
               {/* Actions */}
               {showActions && (
-                <div className="flex items-center justify-center gap-0" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center gap-0" onClick={(e) => e.stopPropagation()}>
                   {isDecisionStage ? (
                     <>
                       <Button variant="ghost" size="icon" className="h-7 w-7 text-success hover:bg-success/10" title="Принять" onClick={() => onAction?.(candidate.id, candidate.columnId, "advance")}>
