@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/popover"
 import { Eye, ChevronDown } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useAuth, isPlatformRole } from "@/lib/auth"
 import type { CardDisplaySettings } from "./card-settings"
 import type { ViewMode } from "./kanban-board"
 
@@ -42,6 +43,9 @@ const DISPLAY_TOGGLES: Array<{ key: keyof CardDisplaySettings; label: string }> 
 ]
 
 export function ViewSettings({ settings, onSettingsChange, viewMode, onViewModeChange }: ViewSettingsProps) {
+  const { role } = useAuth()
+  const showAllViews = isPlatformRole(role)
+
   const handleToggle = (key: keyof CardDisplaySettings) => {
     const next = { ...settings, [key]: !settings[key] }
     if (key === "showSalaryFull" && next.showSalaryFull) next.showSalary = false
@@ -65,7 +69,7 @@ export function ViewSettings({ settings, onSettingsChange, viewMode, onViewModeC
           <div className="space-y-2">
             <h4 className="font-medium text-sm">Режим отображения</h4>
             <div className="space-y-1">
-              {VIEW_MODES.map(({ value, label }) => (
+              {VIEW_MODES.filter(({ value }) => value === "list" || showAllViews).map(({ value, label }) => (
                 <label
                   key={value}
                   className={cn(

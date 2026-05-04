@@ -12,7 +12,7 @@ import { applySortMode, type CandidateSortMode } from "@/lib/candidate-sort"
 import { MapPin, CheckCircle2, XCircle, ArrowRight, ThumbsUp, Clock, ArrowUp, ArrowDown, Star } from "lucide-react"
 import { DemoProgressBar, calcDemoPercent } from "@/components/hr/demo-progress-bar"
 
-export type ListSortKey = "favorite" | "aiScore" | "progress" | "salary" | "responseDate" | "status"
+export type ListSortKey = "favorite" | "aiScore" | "progress" | "salary" | "responseDate" | "status" | "city" | "source"
 export type ListSortDir = "asc" | "desc"
 export interface ListSortState {
   key: ListSortKey
@@ -46,6 +46,8 @@ const DEFAULT_DIR: Record<ListSortKey, ListSortDir> = {
   salary:       "desc",
   responseDate: "desc",
   status:       "asc",
+  city:         "asc",
+  source:       "asc",
 }
 
 /** Возвращает 0..100 либо null (не приступал). Использует общий хелпер. */
@@ -148,6 +150,12 @@ export function ListView({
         case "status": {
           return mul * ((STAGE_ORDER[a.columnId] ?? 99) - (STAGE_ORDER[b.columnId] ?? 99))
         }
+        case "city": {
+          return mul * (a.city ?? "").localeCompare(b.city ?? "", "ru")
+        }
+        case "source": {
+          return mul * (a.source ?? "").localeCompare(b.source ?? "", "ru")
+        }
       }
       return 0
     })
@@ -182,15 +190,15 @@ export function ListView({
   }
 
   const cols: string[] = ["40px"] // ★
-  cols.push("minmax(180px, 2fr)")  // Кандидат
-  if (showScore) cols.push("90px")
-  if (showSalary) cols.push("140px")
-  if (showCity) cols.push("120px")
-  if (showResponseDate) cols.push("110px")
-  cols.push("130px") // Статус
-  if (showProgress) cols.push("160px") // Демо
-  if (showSource) cols.push("110px")
-  if (showActions) cols.push("auto")
+  cols.push("minmax(180px, 2fr)")        // Кандидат
+  if (showProgress) cols.push("160px")   // Демо
+  if (showScore) cols.push("90px")       // AI-оценка
+  if (showSalary) cols.push("140px")     // Зарплата
+  if (showCity) cols.push("120px")       // Город
+  if (showResponseDate) cols.push("110px") // Дата отклика
+  cols.push("130px")                     // Статус
+  if (showSource) cols.push("110px")     // Источник
+  if (showActions) cols.push("auto")     // Действия
 
   const gridStyle = { gridTemplateColumns: cols.join(" ") }
 
@@ -219,13 +227,13 @@ export function ListView({
           )}
         </button>
         <div>Кандидат</div>
+        {showProgress && <SortHeader label="Демо" sortKey="progress" sort={sort} onToggle={handleSort} />}
         {showScore && <SortHeader label="AI-оценка" sortKey="aiScore" sort={sort} onToggle={handleSort} />}
         {showSalary && <SortHeader label="Зарплата" sortKey="salary" sort={sort} onToggle={handleSort} />}
-        {showCity && <div>Город</div>}
+        {showCity && <SortHeader label="Город" sortKey="city" sort={sort} onToggle={handleSort} />}
         {showResponseDate && <SortHeader label="Дата отклика" sortKey="responseDate" sort={sort} onToggle={handleSort} />}
         <SortHeader label="Статус" sortKey="status" sort={sort} onToggle={handleSort} />
-        {showProgress && <SortHeader label="Демо" sortKey="progress" sort={sort} onToggle={handleSort} />}
-        {showSource && <div>Источник</div>}
+        {showSource && <SortHeader label="Источник" sortKey="source" sort={sort} onToggle={handleSort} />}
         {showActions && <div>Действия</div>}
       </div>
 
@@ -273,6 +281,11 @@ export function ListView({
                   )}
                 </div>
               </div>
+
+              {/* Demo progress */}
+              {showProgress && (
+                <DemoProgressBar variant="list" progressPercent={progress} />
+              )}
 
               {/* AI score */}
               {showScore && (
@@ -330,11 +343,6 @@ export function ListView({
                   {candidate.columnTitle}
                 </span>
               </div>
-
-              {/* Demo progress */}
-              {showProgress && (
-                <DemoProgressBar variant="list" progressPercent={progress} />
-              )}
 
               {/* Source */}
               {showSource && (
