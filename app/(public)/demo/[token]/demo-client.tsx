@@ -86,7 +86,14 @@ interface DemoData {
   city: string | null
   format: string | null
   lessons: Lesson[]
-  progress: { currentBlock?: number } | null
+  progress: {
+    schemaVersion?: number
+    currentBlock?: number
+    totalBlocks?: number
+    currentLesson?: number
+    hasVideoVizitka?: boolean
+    blocks?: { blockId: string; status: "completed" | "skipped"; timeSpent?: number; answeredAt?: string }[]
+  } | null
   answers: { blockId: string; answer: any }[] | null
   aiScore: number | null
   postDemoSettings: PostDemoSettings
@@ -133,6 +140,67 @@ function flattenLessons(lessons: Lesson[]): FlatLesson[] {
     lessonEmoji: lesson.emoji,
     blocks:      lesson.blocks,
   }))
+}
+
+function flattenBlocks(lessons: Lesson[]): Block[] {
+  return lessons.flatMap((l) => l.blocks)
+}
+
+// Возвращает статус блока по типу + текущему состоянию ответов/загрузок.
+// "completed" — блок реально пройден; "skipped" — опциональный медиа,
+// который кандидат явно пропустил; "pending" — ещё не пройден.
+function isBlockCompleted(
+  block: Block,
+  taskAnswer: Record<string, string> | undefined,
+  mediaAnswer: MediaAnswer | undefined,
+  isSkipped: boolean,
+  viewed: boolean,
+): "completed" | "skipped" | "pending" {
+  if (block.type === "task") {
+    if (!block.questions || block.questions.length === 0) return viewed ? "completed" : "pending"
+    const a = taskAnswer || {}
+    const allAnswered = block.questions.every((q) => (a[q.id] ?? "").trim().length > 0)
+    return allAnswered ? "completed" : "pending"
+  }
+  if (block.type === "media") {
+    if (mediaAnswer?.url) return "completed"
+    if (block.mediaRequired === false && isSkipped) return "skipped"
+    return "pending"
+  }
+  // text/info/image/video/audio/file/button — completed после показа (handleNext)
+  return viewed ? "completed" : "pending"
+}
+
+interface ProgressTotals {
+  completed: number
+  skipped: number
+  total: number
+  percent: number
+}
+
+function getProgress(
+  allBlocks: Block[],
+  taskAnswers: Record<string, Record<string, string>>,
+  mediaUploaded: Record<string, MediaAnswer>,
+  mediaSkipped: Record<string, boolean>,
+  viewedBlockIds: Set<string>,
+): ProgressTotals {
+  let completed = 0
+  let skipped = 0
+  for (const b of allBlocks) {
+    const s = isBlockCompleted(
+      b,
+      taskAnswers[b.id],
+      mediaUploaded[b.id],
+      !!mediaSkipped[b.id],
+      viewedBlockIds.has(b.id),
+    )
+    if (s === "completed") completed++
+    else if (s === "skipped") skipped++
+  }
+  const total = allBlocks.length
+  const percent = total > 0 ? (completed / total) * 100 : 0
+  return { completed, skipped, total, percent }
 }
 
 // ─── Block Renderers ─────────────────────────────────────────────────────────
@@ -535,6 +603,8 @@ export default function DemoPage() {
   const [finished, setFinished] = useState(false)
   const [taskAnswers, setTaskAnswers] = useState<Record<string, Record<string, string>>>({})
   const [mediaUploaded, setMediaUploaded] = useState<Record<string, MediaAnswer>>({})
+  const [mediaSkipped, setMediaSkipped] = useState<Record<string, boolean>>({})
+  const [viewedBlockIds, setViewedBlockIds] = useState<Set<string>>(() => new Set())
   const [saving, setSaving] = useState(false)
   const blockStartTime = useRef(Date.now())
   const handleNextRef = useRef(false)
@@ -578,15 +648,28 @@ export default function DemoPage() {
           setError(d.error)
         } else {
           setData(d)
-          // Restore progress — теперь currentBlock в БД означает «индекс урока».
-          // Для старых записей, где сохранялся индекс блока, значение может
-          // оказаться больше числа уроков — клампим к диапазону.
-          // Для токенов test-demo-preview-* (предпросмотр) прогресс не восстанавливаем —
-          // HR всегда хочет видеть демо с начала.
+          // Restore progress.
+          // schemaVersion=2: используем currentLesson и blocks[] со статусами.
+          // Для legacy-записей (без schemaVersion) currentBlock мог означать
+          // индекс урока — но мы ему не доверяем и начинаем с урока 0.
+          // Для preview-токенов прогресс не восстанавливаем.
           const isPreviewToken = typeof token === "string" && token.startsWith("test-demo-preview-")
-          if (!isPreviewToken && typeof d.progress?.currentBlock === "number" && d.progress.currentBlock > 0) {
+          if (!isPreviewToken && d.progress?.schemaVersion === 2) {
             const maxLessonIdx = Math.max(0, (d.lessons?.length || 1) - 1)
-            setCurrentIndex(Math.min(d.progress.currentBlock, maxLessonIdx))
+            if (typeof d.progress.currentLesson === "number" && d.progress.currentLesson > 0) {
+              setCurrentIndex(Math.min(d.progress.currentLesson, maxLessonIdx))
+            }
+            if (Array.isArray(d.progress.blocks)) {
+              const viewed = new Set<string>()
+              const skipped: Record<string, boolean> = {}
+              for (const b of d.progress.blocks) {
+                if (b.blockId === "__complete__") continue
+                if (b.status === "completed") viewed.add(b.blockId)
+                else if (b.status === "skipped") skipped[b.blockId] = true
+              }
+              setViewedBlockIds(viewed)
+              setMediaSkipped(skipped)
+            }
           }
           // Restore answers
           if (Array.isArray(d.answers)) {
@@ -627,29 +710,29 @@ export default function DemoPage() {
   const flatLessons = data ? flattenLessons(data.lessons) : []
   const totalLessons = flatLessons.length
   const currentFlat = flatLessons[currentIndex]
-  const progressPercent = totalLessons > 0 ? ((currentIndex + 1) / totalLessons) * 100 : 0
+  const allBlocks = data ? flattenBlocks(data.lessons) : []
+  const progress = getProgress(allBlocks, taskAnswers, mediaUploaded, mediaSkipped, viewedBlockIds)
+  const progressPercent = progress.percent
 
-  const saveAnswer = async (blockId: string, answer: any) => {
-    if (isPreviewMode) return
-    const timeSpent = Math.round((Date.now() - blockStartTime.current) / 1000)
+  // Single-block POST. Используется только для финального "__complete__".
+  // Прогресс по уроку отправляется батчем через postLessonBatch.
+  const postCompleteMarker = async (): Promise<boolean> => {
+    if (isPreviewMode) return true
     try {
-      await fetch(`/api/public/demo/${token}/answer`, {
+      const res = await fetch(`/api/public/demo/${token}/answer`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          blockId,
-          answer,
-          timeSpent,
-          // Теперь индекс — это индекс УРОКА, а total — количество уроков.
-          // Поле API называется currentBlock/totalBlocks исторически;
-          // семантика изменилась, формат JSON — нет (обратная совместимость
-          // по структуре сохранения прогресса).
-          currentBlock: currentIndex,
-          totalBlocks:  totalLessons,
+          blockId: "__complete__",
+          answer: { completed: true },
+          status: "completed",
+          currentLesson: currentIndex,
+          totalBlocks: allBlocks.length,
         }),
       })
+      return res.ok
     } catch {
-      // silently fail — answers are best-effort
+      return false
     }
   }
 
@@ -679,33 +762,80 @@ export default function DemoPage() {
         if (mb.mediaRequired && !mediaUploaded[mb.id]) return
       }
 
-      // Сохраняем ответы по каждому task-блоку отдельно
-      if (taskBlocks.length > 0) {
+      // Собираем batch — все блоки урока, которые прошли через handleNext.
+      // Опциональный media без upload и без skip не попадает (нет события).
+      const passiveTypes = new Set(["text", "info", "image", "video", "audio", "file", "button"])
+      const timeSpent = Math.round((Date.now() - blockStartTime.current) / 1000)
+      type Outgoing = { blockId: string; answer: any; status: "completed" | "skipped"; timeSpent: number }
+      const batch: Outgoing[] = []
+      const nowViewed = new Set(viewedBlockIds)
+      for (const b of currentFlat.blocks) {
+        if (passiveTypes.has(b.type)) {
+          batch.push({ blockId: b.id, answer: { viewed: true }, status: "completed", timeSpent })
+          nowViewed.add(b.id)
+        } else if (b.type === "task") {
+          if ((b.questions?.length ?? 0) === 0) {
+            batch.push({ blockId: b.id, answer: { viewed: true }, status: "completed", timeSpent })
+            nowViewed.add(b.id)
+          } else {
+            batch.push({ blockId: b.id, answer: taskAnswers[b.id] || {}, status: "completed", timeSpent })
+          }
+        } else if (b.type === "media") {
+          if (mediaUploaded[b.id]) {
+            // ping чтобы сервер пересчитал hasVideoVizitka и положил блок в completed
+            batch.push({ blockId: b.id, answer: { viewed: true }, status: "completed", timeSpent })
+          } else if (mediaSkipped[b.id]) {
+            batch.push({ blockId: b.id, answer: { skipped: true }, status: "skipped", timeSpent })
+          }
+        }
+      }
+
+      // Отправка батчем — один POST, одна транзакция на сервере.
+      let success = true
+      if (batch.length > 0 && !isPreviewMode) {
         setSaving(true)
         try {
-          for (const tb of taskBlocks) {
-            const answers = taskAnswers[tb.id] || {}
-            await saveAnswer(tb.id, answers)
-          }
+          const res = await fetch(`/api/public/demo/${token}/answer`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              lessonId: currentFlat.lessonId,
+              blocks: batch,
+              currentLesson: currentIndex,
+              totalBlocks: allBlocks.length,
+            }),
+          })
+          success = res.ok
+          if (!success) console.error("[Demo] batch saveAnswer non-200:", res.status)
+          // Помечаем viewed локально только при успехе — иначе при retry
+          // локальное и серверное состояния разойдутся.
+          if (success) setViewedBlockIds(nowViewed)
         } catch (err) {
-          console.error("[Demo] saveAnswer failed:", err)
+          console.error("[Demo] batch saveAnswer failed:", err)
+          success = false
         } finally {
           setSaving(false)
         }
+      } else {
+        // preview-mode или пустой batch — обновляем visualно, не идём в сеть
+        setViewedBlockIds(nowViewed)
       }
+
+      if (!success) return
 
       blockStartTime.current = Date.now()
 
       if (currentIndex < totalLessons - 1) {
         setCurrentIndex((i) => i + 1)
-        // Скролл наверх при переходе к новому уроку
         if (typeof window !== "undefined") {
           window.scrollTo({ top: 0, behavior: "smooth" })
         }
       } else {
         setFinished(true)
-        // Save final progress
-        await saveAnswer("__complete__", { completed: true })
+        // Финальный маркер — отдельным single-POST. Если упадёт — completedAt
+        // не проставится, кандидат увидит финальный экран, но HR может
+        // не получить decision-стейдж до retry.
+        await postCompleteMarker()
         if (typeof window !== "undefined") {
           window.scrollTo({ top: 0, behavior: "smooth" })
         }
@@ -1132,10 +1262,13 @@ export default function DemoPage() {
               )}
             </div>
             <span className="text-sm text-gray-500 flex-shrink-0 ml-2">
-              {currentIndex + 1} из {totalLessons}
+              Урок {currentIndex + 1} из {totalLessons}
             </span>
           </div>
           <Progress value={progressPercent} className="h-2" />
+          <div className="mt-1 text-[11px] text-gray-400 text-right">
+            {progress.completed} из {progress.total} блоков пройдено
+          </div>
         </div>
       </div>
 
@@ -1199,8 +1332,28 @@ export default function DemoPage() {
                     brandColor={brandColor}
                     existing={mediaUploaded[block.id]}
                     previewMode={isPreviewMode}
-                    onUploaded={(ans) =>
+                    skipped={!!mediaSkipped[block.id]}
+                    onUploaded={(ans) => {
                       setMediaUploaded((prev) => ({ ...prev, [block.id]: ans }))
+                      // Если кандидат сначала пропустил, а потом всё-таки загрузил —
+                      // снимаем пометку «skipped».
+                      setMediaSkipped((prev) => {
+                        if (!prev[block.id]) return prev
+                        const next = { ...prev }
+                        delete next[block.id]
+                        return next
+                      })
+                    }}
+                    onSkip={() =>
+                      setMediaSkipped((prev) => ({ ...prev, [block.id]: true }))
+                    }
+                    onUnskip={() =>
+                      setMediaSkipped((prev) => {
+                        if (!prev[block.id]) return prev
+                        const next = { ...prev }
+                        delete next[block.id]
+                        return next
+                      })
                     }
                   />
                 )}
@@ -1301,19 +1454,26 @@ function MediaBlock({
   brandColor,
   existing,
   previewMode,
+  skipped,
   onUploaded,
+  onSkip,
+  onUnskip,
 }: {
   block: Block
   token: string
   brandColor: string
   existing?: MediaAnswer
   previewMode?: boolean
+  skipped?: boolean
   onUploaded: (ans: MediaAnswer) => void
+  onSkip?: () => void
+  onUnskip?: () => void
 }) {
   const allowVideo = block.mediaAllowVideo ?? true
   const allowAudio = block.mediaAllowAudio ?? false
   const allowPhoto = block.mediaAllowPhoto ?? false
   const maxDuration = block.mediaMaxDuration === undefined ? 60 : block.mediaMaxDuration
+  const isOptional = block.mediaRequired === false
 
   const [mode, setMode] = useState<MediaBlockMode>(existing ? "done" : "idle")
   const [recType, setRecType] = useState<"video" | "audio" | null>(null)
@@ -1582,80 +1742,116 @@ function MediaBlock({
         <p className="text-sm text-gray-600 whitespace-pre-wrap">{block.mediaInstruction}</p>
       )}
 
+      {/* Опциональное видео-визитка: мотивирующий баннер */}
+      {isOptional && allowVideo && mode === "idle" && !skipped && (
+        <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900 leading-relaxed">
+          <p>
+            💡 С видео-визиткой ваши шансы выше — рекрутер увидит вас живым человеком.
+            Запишите 1–2 минуты, это сильно выделит вас среди других кандидатов.
+          </p>
+        </div>
+      )}
+
       {errMsg && (
         <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
           {errMsg}
         </div>
       )}
 
-      {mode === "idle" && (
-        <div className="flex flex-wrap gap-3">
-          {allowVideo && (
-            canRecordVideo ? (
-              <button
-                onClick={() => startRecording("video")}
-                className={`${bigBtnBase} bg-blue-600 text-white hover:bg-blue-700`}
-              >
-                <VideoIcon className={iconClass} />
-                Записать видео
-              </button>
-            ) : (
-              <>
+      {/* Опциональный media, который кандидат пометил как «пропущен» */}
+      {mode === "idle" && skipped && isOptional && (
+        <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 space-y-3">
+          <p className="text-sm text-gray-700">Видео пропущено. Вы можете передумать и записать его до завершения курса.</p>
+          <button
+            onClick={() => onUnskip?.()}
+            className={`${bigBtnBase} border border-gray-300 bg-white text-gray-800 hover:bg-gray-100`}
+          >
+            <RotateCcw className={iconClass} />
+            Передумать, записать
+          </button>
+        </div>
+      )}
+
+      {mode === "idle" && !skipped && (
+        <div className="space-y-3">
+          <div className="flex flex-wrap gap-3">
+            {allowVideo && (
+              canRecordVideo ? (
                 <button
-                  onClick={() => document.getElementById(`${block.id}-videofile`)?.click()}
+                  onClick={() => startRecording("video")}
                   className={`${bigBtnBase} bg-blue-600 text-white hover:bg-blue-700`}
                 >
-                  <Upload className={iconClass} />
-                  Загрузить видео
+                  <VideoIcon className={iconClass} />
+                  Записать видео
+                </button>
+              ) : (
+                <>
+                  <button
+                    onClick={() => document.getElementById(`${block.id}-videofile`)?.click()}
+                    className={`${bigBtnBase} bg-blue-600 text-white hover:bg-blue-700`}
+                  >
+                    <Upload className={iconClass} />
+                    Загрузить видео
+                  </button>
+                  <input
+                    id={`${block.id}-videofile`}
+                    type="file"
+                    accept="video/*"
+                    capture="user"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0]
+                      if (f) pickVideoFile(f)
+                      e.target.value = ""
+                    }}
+                  />
+                </>
+              )
+            )}
+
+            {allowAudio && canRecordAudio && (
+              <button
+                onClick={() => startRecording("audio")}
+                className={`${bigBtnBase} bg-blue-600 text-white hover:bg-blue-700`}
+              >
+                <Mic className={iconClass} />
+                Записать аудио
+              </button>
+            )}
+
+            {allowPhoto && (
+              <>
+                <button
+                  onClick={() => photoInputRef.current?.click()}
+                  className={`${bigBtnBase} bg-blue-600 text-white hover:bg-blue-700`}
+                >
+                  <Camera className={iconClass} />
+                  Загрузить фото
                 </button>
                 <input
-                  id={`${block.id}-videofile`}
+                  ref={photoInputRef}
                   type="file"
-                  accept="video/*"
-                  capture="user"
+                  accept="image/*"
+                  capture="environment"
                   className="hidden"
                   onChange={(e) => {
                     const f = e.target.files?.[0]
-                    if (f) pickVideoFile(f)
+                    if (f) pickPhoto(f)
                     e.target.value = ""
                   }}
                 />
               </>
-            )
-          )}
+            )}
+          </div>
 
-          {allowAudio && canRecordAudio && (
+          {/* Кнопка «Пропустить и завершить» — только для опциональных media */}
+          {isOptional && onSkip && (
             <button
-              onClick={() => startRecording("audio")}
-              className={`${bigBtnBase} bg-blue-600 text-white hover:bg-blue-700`}
+              onClick={() => onSkip()}
+              className="text-xs text-gray-500 hover:text-gray-700 underline underline-offset-2"
             >
-              <Mic className={iconClass} />
-              Записать аудио
+              Пропустить и завершить
             </button>
-          )}
-
-          {allowPhoto && (
-            <>
-              <button
-                onClick={() => photoInputRef.current?.click()}
-                className={`${bigBtnBase} bg-blue-600 text-white hover:bg-blue-700`}
-              >
-                <Camera className={iconClass} />
-                Загрузить фото
-              </button>
-              <input
-                ref={photoInputRef}
-                type="file"
-                accept="image/*"
-                capture="environment"
-                className="hidden"
-                onChange={(e) => {
-                  const f = e.target.files?.[0]
-                  if (f) pickPhoto(f)
-                  e.target.value = ""
-                }}
-              />
-            </>
           )}
         </div>
       )}
