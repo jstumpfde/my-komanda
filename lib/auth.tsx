@@ -16,10 +16,11 @@ export type UserRole =
   | "hr_manager"
   | "department_head"
   | "observer"
+  | "tester_hr"
   | "employee"
 
 export const PLATFORM_ROLES: UserRole[] = ["platform_admin", "platform_manager"]
-export const CLIENT_ROLES: UserRole[] = ["director", "hr_lead", "hr_manager", "department_head", "observer"]
+export const CLIENT_ROLES: UserRole[] = ["director", "hr_lead", "hr_manager", "department_head", "observer", "tester_hr"]
 
 export function isPlatformRole(role: UserRole): boolean {
   return PLATFORM_ROLES.includes(role)
@@ -125,6 +126,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   hr_manager: "HR-менеджер",
   department_head: "Руководитель отдела",
   observer: "Наблюдатель",
+  tester_hr: "Тестировщик HR",
   employee: "Сотрудник",
 }
 
@@ -136,6 +138,7 @@ export const ROLE_ICONS: Record<UserRole, string> = {
   hr_manager: "🏢",
   department_head: "👥",
   observer: "👁️",
+  tester_hr: "🧪",
   employee: "👤",
 }
 
@@ -156,6 +159,8 @@ export function getVisibleSections(role: UserRole) {
       return { main: true, hiring: false, tools: false, settings: false, admin: false }
     case "observer":
       return { main: true, hiring: false, tools: false, settings: false, admin: false }
+    case "tester_hr":
+      return { main: true, hiring: true, tools: false, settings: false, admin: false }
     case "employee":
       return { main: false, hiring: false, tools: false, settings: false, admin: false }
   }
@@ -171,6 +176,7 @@ export function getVisibleSettings(role: UserRole): string[] {
     case "hr_manager": return ["profile", "notifications"]
     case "department_head": return ["profile", "notifications"]
     case "observer": return ["profile"]
+    case "tester_hr": return ["profile"]
     case "employee": return ["profile"]
   }
 }
