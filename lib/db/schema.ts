@@ -1432,20 +1432,24 @@ export const hhVacancies = pgTable("hh_vacancies", {
 ])
 
 export const hhResponses = pgTable("hh_responses", {
-  id:               uuid("id").primaryKey().defaultRandom(),
-  companyId:        uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
-  hhVacancyId:      text("hh_vacancy_id").notNull(),
-  hhResponseId:     text("hh_response_id").notNull(),
-  candidateName:    text("candidate_name"),
-  candidatePhone:   text("candidate_phone"),
-  candidateEmail:   text("candidate_email"),
-  resumeTitle:      text("resume_title"),
-  resumeUrl:        text("resume_url"),
-  status:           text("status").notNull().default("new"),
-  rawData:          jsonb("raw_data"),
-  localCandidateId: uuid("local_candidate_id"),
-  syncedAt:         timestamp("synced_at").defaultNow(),
-  createdAt:        timestamp("created_at").defaultNow(),
+  id:                 uuid("id").primaryKey().defaultRandom(),
+  companyId:          uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  hhVacancyId:        text("hh_vacancy_id").notNull(),
+  hhResponseId:       text("hh_response_id").notNull(),
+  candidateName:      text("candidate_name"),
+  candidatePhone:     text("candidate_phone"),
+  candidateEmail:     text("candidate_email"),
+  resumeTitle:        text("resume_title"),
+  resumeUrl:          text("resume_url"),
+  status:             text("status").notNull().default("new"),
+  rawData:            jsonb("raw_data"),
+  localCandidateId:   uuid("local_candidate_id"),
+  // Cron /api/cron/hh-incoming-messages: ID последнего обработанного
+  // applicant-сообщения и момент последней проверки.
+  lastSeenMessageId:  text("last_seen_message_id"),
+  lastCheckAt:        timestamp("last_check_at"),
+  syncedAt:           timestamp("synced_at").defaultNow(),
+  createdAt:          timestamp("created_at").defaultNow(),
 }, (t) => [
   unique("uq_hh_responses_company_response").on(t.companyId, t.hhResponseId),
 ])
