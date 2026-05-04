@@ -53,6 +53,7 @@ import { UtmLinksSection } from "@/components/vacancies/utm-links-section"
 import { PostDemoSettings } from "@/components/vacancies/post-demo-settings"
 import { VacancyAiProcessSettings } from "@/components/vacancies/vacancy-ai-process-settings"
 import { VacancyFollowupSettings } from "@/components/vacancies/vacancy-followup-settings"
+import { BestPublicationTimeBlock } from "./components/BestPublicationTimeBlock"
 import {
   ResponsiveContainer,
   BarChart,
@@ -1308,7 +1309,7 @@ export default function VacancyPage() {
           {/* ═══ Fixed header: появляется только при скролле (под DashboardHeader) ═══ */}
           <div
             className={cn(
-              "fixed top-14 right-0 z-40 bg-background/95 backdrop-blur-sm border-b shadow-sm py-2 transition-all duration-200",
+              "fixed top-14 right-0 z-40 bg-background border-b shadow-sm py-2 transition-all duration-200",
               showStickyHeader ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-2 pointer-events-none"
             )}
             style={{ left: "var(--sidebar-width, 16rem)", paddingLeft: 56, paddingRight: 56 }}
@@ -1404,9 +1405,7 @@ export default function VacancyPage() {
                   </UITooltip>
                 </div>
                 <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-muted-foreground">
-                  <span>{apiVacancy?.city ?? "Москва"}</span>
                   {activeTab === "candidates" && <>
-                    <span>·</span>
                     <span><span className="font-medium text-foreground">{hhSyncMeta?.responsesCount ?? apiCandidates.length}</span> откликов</span>
                     <span>·</span>
                     <span><span className="font-medium text-foreground">{apiCandidates.length}</span> кандидатов</span>
@@ -1600,7 +1599,7 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
 
                 {activeTab === "candidates" && (
                   <div className="flex items-center gap-1.5 shrink-0">
-                    {hhConnected === true && apiVacancy?.hhVacancyId && hhSyncMeta && (
+                    {activeTab === "candidates" && hhConnected === true && apiVacancy?.hhVacancyId && hhSyncMeta && (
                       <HhAutoProcess
                         vacancyId={id}
                         defaultMinScore={
@@ -1734,6 +1733,9 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
               </div>
 
               <TabsContent value="anketa">
+                <div className="mb-4">
+                  <BestPublicationTimeBlock vacancy={{ title: internalName || vacancyTitle }} />
+                </div>
                 <AnketaTab vacancyId={id} descriptionJson={apiVacancy?.descriptionJson} onTitleChange={(t) => { if (t) setInternalName(t) }} onNavigateTab={(tab) => { setActiveTab(tab); window.scrollTo({ top: 0, behavior: "smooth" }) }} onScoreChange={setAdvisorScore} />
               </TabsContent>
 

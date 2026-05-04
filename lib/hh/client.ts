@@ -61,12 +61,18 @@ export class HHClient {
   }
 
   private async refreshToken(refreshToken: string): Promise<string> {
+    const url = `${HH_API}/oauth/token`
+    if (process.env.INTEGRATIONS_DISABLED === "true") {
+      console.log("[INTEGRATIONS_DISABLED] hh.ru call skipped:", url)
+      throw new Error("hh.ru disabled on staging")
+    }
+
     const clientId = process.env.HH_CLIENT_ID
     const clientSecret = process.env.HH_CLIENT_SECRET
 
     if (!clientId || !clientSecret) throw new Error("hh.ru не настроен")
 
-    const res = await fetch(`${HH_API}/oauth/token`, {
+    const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
@@ -95,8 +101,14 @@ export class HHClient {
   }
 
   private async apiGet<T>(path: string): Promise<T> {
+    const url = `${HH_API}${path}`
+    if (process.env.INTEGRATIONS_DISABLED === "true") {
+      console.log("[INTEGRATIONS_DISABLED] hh.ru call skipped:", url)
+      throw new Error("hh.ru disabled on staging")
+    }
+
     const token = await this.getToken()
-    const res = await fetch(`${HH_API}${path}`, {
+    const res = await fetch(url, {
       headers: { Authorization: `Bearer ${token}` },
     })
     if (!res.ok) throw new Error(`HH API error: ${res.status} ${path}`)
@@ -104,8 +116,14 @@ export class HHClient {
   }
 
   private async apiPost<T>(path: string, body: unknown): Promise<T> {
+    const url = `${HH_API}${path}`
+    if (process.env.INTEGRATIONS_DISABLED === "true") {
+      console.log("[INTEGRATIONS_DISABLED] hh.ru call skipped:", url)
+      throw new Error("hh.ru disabled on staging")
+    }
+
     const token = await this.getToken()
-    const res = await fetch(`${HH_API}${path}`, {
+    const res = await fetch(url, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${token}`,

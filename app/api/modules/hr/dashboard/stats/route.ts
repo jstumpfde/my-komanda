@@ -1,4 +1,4 @@
-import { eq, and, count, isNull, gte, sql } from "drizzle-orm"
+import { eq, and, count, isNull, gte, inArray, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { vacancies, candidates } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
@@ -15,6 +15,8 @@ export async function GET() {
     const [
       [activeVacanciesResult],
       [totalCandidatesResult],
+      [candidatesInWorkResult],
+      [candidatesTodayResult],
       [hiredThisMonthResult],
       stageCounts,
       vacancyRows,
@@ -35,6 +37,26 @@ export async function GET() {
         .where(and(
           eq(vacancies.companyId, companyId),
           isNull(vacancies.deletedAt),
+        )),
+
+      // 2b. Candidates currently "in work" (not hired and not rejected)
+      db.select({ value: count() })
+        .from(candidates)
+        .innerJoin(vacancies, eq(candidates.vacancyId, vacancies.id))
+        .where(and(
+          eq(vacancies.companyId, companyId),
+          isNull(vacancies.deletedAt),
+          inArray(candidates.stage, ["new", "demo", "scheduled", "interviewed"]),
+        )),
+
+      // 2c. Candidates created today (Europe/Moscow timezone)
+      db.select({ value: count() })
+        .from(candidates)
+        .innerJoin(vacancies, eq(candidates.vacancyId, vacancies.id))
+        .where(and(
+          eq(vacancies.companyId, companyId),
+          isNull(vacancies.deletedAt),
+          sql`${candidates.createdAt} >= (date_trunc('day', now() AT TIME ZONE 'Europe/Moscow') AT TIME ZONE 'Europe/Moscow')`,
         )),
 
       // 3. Hired this month
@@ -87,6 +109,8 @@ export async function GET() {
 
     const activeVacancies = activeVacanciesResult?.value ?? 0
     const totalCandidates = totalCandidatesResult?.value ?? 0
+    const candidatesInWork = candidatesInWorkResult?.value ?? 0
+    const candidatesToday = candidatesTodayResult?.value ?? 0
     const hiredThisMonth = hiredThisMonthResult?.value ?? 0
     const conversionRate = totalCandidates > 0
       ? Math.round((hiredThisMonth / totalCandidates) * 1000) / 10
@@ -104,7 +128,7 @@ export async function GET() {
     }
 
     return apiSuccess({
-      kpi: { activeVacancies, totalCandidates, hiredThisMonth, conversionRate },
+      kpi: { activeVacancies, totalCandidates, candidatesInWork, candidatesToday, hiredThisMonth, conversionRate },
       vacancies: vacancyRows,
       funnel: { totals: funnelTotals, byVacancy: funnelByVacancy },
     })

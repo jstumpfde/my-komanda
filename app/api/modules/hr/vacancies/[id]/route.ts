@@ -109,15 +109,100 @@ export async function PUT(
   }
 }
 
-// PATCH — restore from trash (clears deleted_at)
+// Тип для блока автоматических действий, хранится в descriptionJson.automation
+export interface VacancyAutomationSettings {
+  autoInvite?: boolean
+  autoReject?: boolean
+  notifyManager?: boolean
+  rejectTemplate?: string
+  inviteTemplate?: string
+}
+
+// PATCH — двойное назначение:
+//   • Без тела (или пустое тело) — восстанавливает вакансию из корзины (clears deleted_at).
+//     Так вызывается из app/(modules)/hr/vacancies/page.tsx → handleRestore.
+//   • С полем `automation` — мерджит настройки авто-действий в descriptionJson.automation
+//     (используется блоком «Автоматические действия» в табе «Автоматизация»).
 export async function PATCH(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await requireCompany()
     const { id } = await params
 
+    // Аккуратно достаём тело — для restore-вызовов оно может отсутствовать
+    let body: { automation?: VacancyAutomationSettings } = {}
+    try {
+      const text = await req.text()
+      if (text && text.trim().length > 0) {
+        body = JSON.parse(text) as { automation?: VacancyAutomationSettings }
+      }
+    } catch {
+      // Тело не JSON — считаем как пустое (восстановление)
+      body = {}
+    }
+
+    // Ветка 1: обновление настроек автоматизации
+    if (body.automation && typeof body.automation === "object") {
+      // Получаем существующий descriptionJson чтобы сделать merge, а не перезатереть
+      const [existing] = await db
+        .select({ id: vacancies.id, descriptionJson: vacancies.descriptionJson })
+        .from(vacancies)
+        .where(and(eq(vacancies.id, id), eq(vacancies.companyId, user.companyId)))
+        .limit(1)
+
+      if (!existing) {
+        return apiError("Vacancy not found", 404)
+      }
+
+      const currentJson = (existing.descriptionJson && typeof existing.descriptionJson === "object" && existing.descriptionJson !== null)
+        ? existing.descriptionJson as Record<string, unknown>
+        : {}
+      const currentAutomation = (currentJson.automation && typeof currentJson.automation === "object" && currentJson.automation !== null)
+        ? currentJson.automation as Record<string, unknown>
+        : {}
+
+      // Валидируем поля автоматизации — пропускаем только разрешённые
+      const incoming = body.automation
+      const sanitized: Record<string, unknown> = { ...currentAutomation }
+      if (typeof incoming.autoInvite === "boolean") sanitized.autoInvite = incoming.autoInvite
+      if (typeof incoming.autoReject === "boolean") sanitized.autoReject = incoming.autoReject
+      if (typeof incoming.notifyManager === "boolean") sanitized.notifyManager = incoming.notifyManager
+      if (typeof incoming.rejectTemplate === "string") sanitized.rejectTemplate = incoming.rejectTemplate
+      if (typeof incoming.inviteTemplate === "string") sanitized.inviteTemplate = incoming.inviteTemplate
+
+      const nextJson = {
+        ...currentJson,
+        automation: sanitized,
+      }
+
+      const [updated] = await db
+        .update(vacancies)
+        .set({ descriptionJson: nextJson, updatedAt: new Date() })
+        .where(and(eq(vacancies.id, id), eq(vacancies.companyId, user.companyId)))
+        .returning()
+
+      if (!updated) {
+        return apiError("Vacancy not found", 404)
+      }
+
+      logActivity({
+        companyId: user.companyId,
+        userId: user.id!,
+        action: "update",
+        entityType: "vacancy",
+        entityId: id,
+        entityTitle: updated.title,
+        module: "hr",
+        details: { changedFields: ["automation"] },
+        request: req,
+      })
+
+      return apiSuccess(updated)
+    }
+
+    // Ветка 2: классическое восстановление из корзины
     const [restored] = await db
       .update(vacancies)
       .set({ deletedAt: null, updatedAt: new Date() })

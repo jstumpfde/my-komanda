@@ -136,6 +136,10 @@ function LoginForm() {
                   </span>
                 )}
               </Button>
+
+              <p className="text-xs text-muted-foreground text-center mt-4">
+                <a href="mailto:hello@company24.pro">Нужна помощь?</a>
+              </p>
             </form>
 
             <p className="text-center text-sm text-muted-foreground">

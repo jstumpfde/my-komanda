@@ -273,10 +273,10 @@ const COUNTER_METRICS = [
   { end: 4, suffix: "x", prefix: "ROI ", label: "за 3 месяца", icon: Award },
 ]
 
-const FOOTER_COLS = [
-  { title: "Продукт", links: ["Возможности", "Модули", "Тарифы", "API"] },
-  { title: "Компания", links: ["О нас", "Блог", "Карьера", "Контакты"] },
-  { title: "Юридическое", links: ["Политика конфиденциальности", "Условия использования", "Оферта"] },
+const FOOTER_COLS: { title: string; links: { label: string; href: string }[] }[] = [
+  { title: "Продукт", links: [{ label: "Возможности", href: "#" }, { label: "Модули", href: "#" }, { label: "Тарифы", href: "#" }, { label: "API", href: "#" }] },
+  { title: "Компания", links: [{ label: "О нас", href: "/about" }, { label: "Блог", href: "#" }, { label: "Карьера", href: "#" }, { label: "Контакты", href: "#" }] },
+  { title: "Юридическое", links: [{ label: "Политика конфиденциальности", href: "#" }, { label: "Условия использования", href: "#" }, { label: "Оферта", href: "#" }] },
 ]
 
 // ─── Role cards data ────────────────────────────────────────────────────────
@@ -425,10 +425,10 @@ const AI_AGENTS_EXPANDED = [
   { name: "Отчёт-агент", desc: "Генерирует PDF по расписанию", group: "Аналитика", color: "blue" },
   { name: "AI-инсайты", desc: "Автоматические выводы и рекомендации", group: "Аналитика", color: "blue" },
   // Communications (purple)
-  { name: "Telegram-бот", desc: "Рассылки, автоответы, мини-формы", group: "Коммуникации", color: "violet" },
+  { name: "🤖 Telegram-бот", desc: "Рассылки, автоответы, мини-формы", group: "Коммуникации", color: "violet" },
   { name: "WhatsApp-агент", desc: "Шаблоны, очередь, статусы", group: "Коммуникации", color: "violet" },
   { name: "Email-конструктор", desc: "Drag-and-drop письма", group: "Коммуникации", color: "violet" },
-  { name: "Напоминание-агент", desc: "SMS/Telegram за 24ч и 2ч до встречи", group: "Коммуникации", color: "violet" },
+  { name: "Напоминание-агент", desc: "SMS/🤖 Telegram за 24ч и 2ч до встречи", group: "Коммуникации", color: "violet" },
   { name: "VK-агент", desc: "Рассылки через сообщества", group: "Коммуникации", color: "violet" },
 ]
 
@@ -861,7 +861,7 @@ export default function LandingPage() {
               <Link href="/login">Войти</Link>
             </Button>
 <Button size="sm" className="bg-gradient-to-r from-indigo-500 to-violet-500 hover:from-indigo-600 hover:to-violet-600 shadow-lg shadow-indigo-500/20 text-white" asChild>
-              <Link href="/register">Запросить демо</Link>
+              <Link href="/register">Попробовать бесплатно</Link>
             </Button>
           </div>
 
@@ -932,8 +932,8 @@ export default function LandingPage() {
               </p>
 
               <div className="flex flex-wrap gap-4 mb-8">
-                <Button size="lg" className="bg-gradient-to-r from-indigo-500 to-violet-500 hover:from-indigo-600 hover:to-violet-600 h-14 px-10 text-base shadow-xl shadow-indigo-500/30 transition-all hover:shadow-2xl hover:shadow-indigo-500/40 hover:scale-[1.02] text-white rounded-2xl" asChild>
-                  <Link href="/register">Запросить демо <ArrowRight className="w-5 h-5 ml-2" /></Link>
+                <Button size="lg" aria-label="Запросить бесплатное демо Company24" className="bg-gradient-to-r from-indigo-500 to-violet-500 hover:from-indigo-600 hover:to-violet-600 h-14 px-10 text-base shadow-xl shadow-indigo-500/30 transition-all hover:shadow-2xl hover:shadow-indigo-500/40 hover:scale-[1.02] text-white rounded-2xl" asChild>
+                  <Link href="/register">Попробовать бесплатно <ArrowRight className="w-5 h-5 ml-2" /></Link>
                 </Button>
                 <Button variant="outline" size="lg" className="h-14 px-10 text-base rounded-2xl border-gray-700 text-gray-300 hover:bg-gray-800 hover:border-indigo-500 hover:text-indigo-400 transition-all">
                   <Play className="w-4 h-4 mr-2" /> Смотреть демо
@@ -1646,10 +1646,14 @@ export default function LandingPage() {
                 <div className="bg-gray-900 rounded-2xl border border-gray-800 p-6">
                   <div className="flex items-start justify-between mb-5">
                     <div>
+                      <span className="text-xs uppercase tracking-wider text-emerald-400">Старт</span>
                       <h3 className="font-bold text-white text-lg">Базовая платформа</h3>
                       <p className="text-sm text-gray-400">Личный кабинет, настройки, роли, аналитика</p>
                     </div>
-                    <span className="text-emerald-400 font-bold text-lg shrink-0">9 900 ₽/мес</span>
+                    <div className="flex flex-col items-end shrink-0">
+                      <span className="text-emerald-400 font-bold text-lg">9 900 ₽/мес</span>
+                      <p className="text-xs text-gray-400">(включая все обновления)</p>
+                    </div>
                   </div>
                   <div className="flex items-center gap-4">
                     <span className="text-sm text-gray-400">Пользователи</span>
@@ -1709,6 +1713,7 @@ export default function LandingPage() {
                           <h4 className="font-semibold text-white text-sm mb-0.5">{m.label}</h4>
                           <p className="text-xs text-gray-500 mb-2">{m.desc}</p>
                           <p className={cn("text-sm font-bold", selected ? colors.text : "text-gray-400")}>+{fmt(m.price)} ₽/мес</p>
+                          <p className="text-xs text-gray-400">(включая все обновления)</p>
                         </button>
                       )
                     })}
@@ -1740,6 +1745,7 @@ export default function LandingPage() {
                     <div className="text-right">
                       <span className="text-3xl font-bold text-indigo-400">{fmt(total)} ₽</span>
                       <span className="text-sm text-gray-500">/мес</span>
+                      <p className="text-xs text-gray-400">(включая все обновления)</p>
                     </div>
                   </div>
                   <p className="text-xs text-gray-500 mb-4">{fmt(perUser)} ₽ за пользователя</p>
@@ -1800,7 +1806,7 @@ export default function LandingPage() {
               </div>
               <p className="text-sm leading-relaxed mb-6">AI-операционная система для бизнеса. Автоматизация HR, маркетинга, продаж и логистики.</p>
               <div className="flex gap-3">
-                <a href="#" className="w-9 h-9 rounded-lg bg-gray-800 hover:bg-gray-700 flex items-center justify-center transition-colors" aria-label="Telegram">
+                <a href="#" className="w-9 h-9 rounded-lg bg-gray-800 hover:bg-gray-700 flex items-center justify-center transition-colors" aria-label="🤖 Telegram">
                   <svg viewBox="0 0 24 24" className="w-4.5 h-4.5 fill-gray-400">
                     <path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z" />
                   </svg>
@@ -1817,8 +1823,8 @@ export default function LandingPage() {
                 <h4 className="font-semibold text-white text-sm mb-5">{col.title}</h4>
                 <ul className="space-y-3">
                   {col.links.map((l) => (
-                    <li key={l}>
-                      <a href="#" className="text-sm hover:text-white transition-colors">{l}</a>
+                    <li key={l.label}>
+                      <a href={l.href} className="text-sm hover:text-white transition-colors">{l.label}</a>
                     </li>
                   ))}
                 </ul>

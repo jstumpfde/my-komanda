@@ -34,6 +34,11 @@ export interface SendEmailResult {
 // Если SMTP_PASSWORD не задан — НЕ падаем, логируем и возвращаем ok.
 // Это позволяет тестировать форму без настроенного SMTP-провайдера.
 export async function sendEmail(params: SendEmailParams): Promise<SendEmailResult> {
+  if (process.env.INTEGRATIONS_DISABLED === "true") {
+    console.log("[INTEGRATIONS_DISABLED] sendMail skipped:", params.to)
+    return { ok: true, simulated: true, messageId: "disabled" }
+  }
+
   const password = process.env.SMTP_PASSWORD || process.env.SMTP_PASS
   if (!password) {
     console.log("[EMAIL] SMTP_PASSWORD not set — would send to", params.to, ":", params.subject)

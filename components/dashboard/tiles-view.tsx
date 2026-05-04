@@ -30,7 +30,7 @@ import {
   ArrowRightLeft,
   Trash2,
 } from "lucide-react"
-import { DemoProgressBar } from "./demo-progress-bar"
+import { calcDemoPercent } from "@/components/hr/demo-progress-bar"
 import { AiScoreBadge } from "./ai-score-badge"
 
 interface Column {
@@ -140,8 +140,24 @@ export function TilesView({
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
       {allCandidates.map((candidate) => {
         const cardDate = getDateForCard(candidate)
-        const salaryUnknown = candidate.salaryMin === 0 && candidate.salaryMax === 0
+        const cityLabel = candidate.city?.trim()
         const positionLabel = candidate.experience?.trim()
+        const hasSalary =
+          (typeof candidate.salaryMin === "number" && candidate.salaryMin > 0) ||
+          (typeof candidate.salaryMax === "number" && candidate.salaryMax > 0)
+        const showAiScore = settings.showScore && candidate.aiScore != null
+        const { percent: demoPercent } = calcDemoPercent(candidate.demoProgressJson)
+        const demoBarColor =
+          demoPercent === null
+            ? "bg-muted-foreground/20"
+            : demoPercent === 0
+              ? "bg-muted-foreground/30"
+              : demoPercent < 50
+                ? "bg-orange-500"
+                : demoPercent < 100
+                  ? "bg-emerald-500"
+                  : "bg-emerald-400"
+        const demoBarWidth = demoPercent === null || demoPercent === 0 ? "0%" : `${demoPercent}%`
 
         return (
           <div
@@ -151,7 +167,7 @@ export function TilesView({
           >
             <div className="p-4">
               {/* Header: avatar + name + score + menu */}
-              <div className="flex items-start gap-3 mb-2">
+              <div className="flex items-start gap-2 mb-2">
                 <div
                   className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0"
                   style={{ background: `linear-gradient(135deg, ${candidate.colorFrom}, ${candidate.colorTo})` }}
@@ -160,9 +176,23 @@ export function TilesView({
                 </div>
                 <div className="min-w-0 flex-1">
                   <h4 className="font-semibold text-foreground text-sm leading-tight truncate">{candidate.name}</h4>
+                  {/* Demo progress bar (тонкая 4px шкала по логике HR-003) */}
+                  <div
+                    className="mt-1 h-1 w-full rounded-full bg-muted overflow-hidden"
+                    aria-label={
+                      demoPercent === null
+                        ? "Демо не начато"
+                        : `Прогресс демо ${demoPercent}%`
+                    }
+                  >
+                    <div
+                      className={cn("h-full rounded-full transition-all", demoBarColor)}
+                      style={{ width: demoBarWidth }}
+                    />
+                  </div>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <div className="inline-flex items-center gap-1 mt-0.5 text-[11px] text-muted-foreground">
+                      <div className="inline-flex items-center gap-1 mt-1 text-[11px] text-muted-foreground">
                         <Clock className="w-3 h-3" />
                         <span>{formatTimeAgo(cardDate)}</span>
                       </div>
@@ -172,7 +202,7 @@ export function TilesView({
                 </div>
 
                 <div className="flex items-center gap-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-                  {settings.showScore && <AiScoreBadge score={candidate.aiScore} />}
+                  {showAiScore && <AiScoreBadge score={candidate.aiScore} />}
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button
@@ -238,11 +268,11 @@ export function TilesView({
               </div>
 
               {/* Meta rows: city / position / salary */}
-              <div className="space-y-1 mb-3">
-                {settings.showCity && candidate.city && (
+              <div className="space-y-1 mb-2">
+                {settings.showCity && cityLabel && (
                   <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                     <MapPin className="w-3.5 h-3.5 flex-shrink-0" />
-                    <span className="truncate">{candidate.city}</span>
+                    <span className="truncate">{cityLabel}</span>
                   </div>
                 )}
                 {settings.showExperience && positionLabel && (
@@ -252,23 +282,20 @@ export function TilesView({
                   </div>
                 )}
                 {(settings.showSalary || settings.showSalaryFull) && (
-                  salaryUnknown ? (
-                    <p className="text-[11px] text-muted-foreground/70 italic">Зарплата не указана</p>
-                  ) : (
+                  hasSalary ? (
                     <p className="text-xs font-medium text-foreground">
                       {settings.showSalaryFull
                         ? `${candidate.salaryMin.toLocaleString("ru-RU")} – ${candidate.salaryMax.toLocaleString("ru-RU")} ₽`
                         : `${Math.round(candidate.salaryMin / 1000)}-${Math.round(candidate.salaryMax / 1000)}k`}
                     </p>
+                  ) : (
+                    <p className="text-[11px] text-muted-foreground/60 italic">Зарплата не указана</p>
                   )
                 )}
               </div>
 
-              {/* Demo progress */}
-              <DemoProgressBar progress={candidate.demoProgressJson} className="mb-3" />
-
               {/* Status + source */}
-              <div className="flex items-center gap-2 mb-3">
+              <div className="flex items-center gap-2 mb-2">
                 {showStatusBadge && (
                   <span
                     className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium text-white"

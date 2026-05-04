@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
@@ -17,6 +17,7 @@ import {
   AlertCircle, CheckCircle2, Timer, Star, Calendar, Sparkles, Activity,
 } from "lucide-react"
 import { CandidatesProgressMiniTable } from "@/components/candidates/candidates-progress-mini-table"
+import { Greeting } from "./_components/greeting"
 import {
   ResponsiveContainer, LineChart, Line, Area, XAxis, YAxis, CartesianGrid, Tooltip,
   PieChart, Pie, Cell, ComposedChart,
@@ -101,6 +102,16 @@ function getGreeting(): string {
   return "Добрый вечер"
 }
 
+function getDateString(): string {
+  const formatted = new Date().toLocaleDateString("ru-RU", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  })
+  // toLocaleDateString возвращает: "понедельник, 9 июня"
+  return "Сегодня: " + formatted.charAt(0).toUpperCase() + formatted.slice(1)
+}
+
 const tooltipStyle = { backgroundColor: "var(--popover)", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "12px" }
 
 // ─── Page ───────────────────────────────────────────────────────────────────
@@ -111,8 +122,28 @@ function DashboardContent() {
   const [vacancyFilter, setVacancyFilter] = useState("all")
   const [periodFilter, setPeriodFilter] = useState("month")
   const [dynamicsPeriod, setDynamicsPeriod] = useState<"7" | "30" | "90">("30")
+  const [activeVacanciesCount, setActiveVacanciesCount] = useState<number | null>(null)
+  const [candidatesInWorkCount, setCandidatesInWorkCount] = useState<number | null>(null)
+  const [candidatesTodayCount, setCandidatesTodayCount] = useState<number | null>(null)
 
   const dynamicsData = dynamicsPeriod === "7" ? DYNAMICS_30D.slice(-7) : dynamicsPeriod === "90" ? DYNAMICS_30D : DYNAMICS_30D
+
+  useEffect(() => {
+    let cancelled = false
+    fetch("/api/modules/hr/dashboard/stats")
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => {
+        if (cancelled) return
+        const n = d?.kpi?.activeVacancies
+        if (typeof n === "number") setActiveVacanciesCount(n)
+        const c = d?.kpi?.candidatesInWork
+        if (typeof c === "number") setCandidatesInWorkCount(c)
+        const t = d?.kpi?.candidatesToday
+        if (typeof t === "number") setCandidatesTodayCount(t)
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [])
 
   return (
     <SidebarProvider defaultOpen={true}>
@@ -126,6 +157,9 @@ function DashboardContent() {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
                 <h1 className="text-xl font-semibold">{getGreeting()}, {user.name.split(" ")[0]}!</h1>
+                <p className="text-sm text-muted-foreground" suppressHydrationWarning>
+                  {getDateString()}
+                </p>
                 <p className="text-sm text-muted-foreground mt-0.5">
                   Сегодня 3 интервью · 24 новых отклика · {MOCK_VACANCIES.length} вакансий в работе
                 </p>
@@ -147,6 +181,48 @@ function DashboardContent() {
                     <SelectItem value="year">Год</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+            </div>
+
+            {/* ═══ Greeting ═══ */}
+            <Greeting />
+
+            {/* ═══ Widget: Active Vacancies + Candidates In Work (live count) ═══ */}
+            <div className="flex flex-wrap gap-3">
+              <div className="border rounded-xl shadow-sm hover:shadow-md transition-shadow p-4 inline-flex items-center gap-3 w-fit">
+                <div className="w-10 h-10 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 flex items-center justify-center shrink-0">
+                  <Briefcase className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-xs text-muted-foreground leading-none">Активные вакансии</span>
+                  <span className="text-2xl font-bold leading-tight mt-1">
+                    {activeVacanciesCount === null ? "…" : activeVacanciesCount}
+                  </span>
+                </div>
+              </div>
+
+              <div className="border rounded-xl shadow-sm hover:shadow-md transition-shadow p-4 inline-flex items-center gap-3 w-fit">
+                <div className="w-10 h-10 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 flex items-center justify-center shrink-0">
+                  <Users className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-xs text-muted-foreground leading-none">Кандидатов сегодня</span>
+                  <span className="text-2xl font-bold leading-tight mt-1">
+                    {candidatesTodayCount === null ? "…" : candidatesTodayCount}
+                  </span>
+                </div>
+              </div>
+
+              <div className="border rounded-xl shadow-sm hover:shadow-md transition-shadow p-4 inline-flex items-center gap-3 w-fit">
+                <div className="w-10 h-10 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 flex items-center justify-center shrink-0">
+                  <Users className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-xs text-muted-foreground leading-none">Кандидатов в работе</span>
+                  <span className="text-2xl font-bold leading-tight mt-1">
+                    {candidatesInWorkCount === null ? "…" : candidatesInWorkCount}
+                  </span>
+                </div>
               </div>
             </div>
 

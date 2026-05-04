@@ -6,6 +6,8 @@ import { Calendar, Check, X, Star } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { CardDisplaySettings } from "./card-settings"
 import type { CandidateAction } from "@/lib/column-config"
+import { DemoProgressBar, calcDemoPercent } from "@/components/hr/demo-progress-bar"
+import { getDemoProgressGroup, getDemoProgressPercent } from "@/lib/demo-progress-groups"
 
 export interface Candidate {
   id: string
@@ -59,6 +61,8 @@ export function CandidateCard({ candidate, settings, columnId, isLastColumn, onO
   const isDecisionColumn = columnId === "decision" || columnId === "final_decision"
   const isInterviewColumn = columnId === "interview"
   const aiActuallyRan = candidate.aiScore != null && !!candidate.aiSummary
+  const demoPercent = getDemoProgressPercent(candidate.demoProgressJson)
+  const demoGroup = getDemoProgressGroup(demoPercent)
 
   const getScoreColor = (score: number) => {
     if (score >= 80) return "bg-success/10 text-success border-success/20"
@@ -94,8 +98,17 @@ export function CandidateCard({ candidate, settings, columnId, isLastColumn, onO
       className="relative p-3.5 rounded-lg border bg-card cursor-pointer transition"
       onClick={() => onOpenProfile?.(candidate)}
     >
-      {/* Top-right cluster: ★ favorite + score badge */}
+      {/* Top-right cluster: demo progress + ★ favorite + score badge */}
       <div className="absolute top-2 right-2 flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+        <span
+          className={cn(
+            "rounded-md px-1.5 h-5 text-[10px] font-semibold inline-flex items-center justify-center border",
+            demoGroup.badgeClass,
+          )}
+          title={`Демо: ${demoGroup.label}`}
+        >
+          {demoGroup.label}
+        </span>
         {settings.showScore && candidate.aiScore != null && (
           <span
             className={cn(
@@ -125,31 +138,19 @@ export function CandidateCard({ candidate, settings, columnId, isLastColumn, onO
 
       {/* Row 1: ФИО */}
       <p className={cn(
-        "font-medium text-base text-foreground",
-        (settings.showScore || onToggleFavorite) && "pr-14"
+        "font-medium text-base text-foreground pr-24"
       )}>{candidate.name}</p>
 
       {/* Demo progress bar — always visible */}
       {(() => {
-        const dp = candidate.demoProgressJson
-        const hasData = dp && Array.isArray(dp.blocks)
-        const completed = hasData ? dp.blocks!.filter((b) => b?.status === "completed").length : 0
-        const total = hasData ? (dp.totalBlocks ?? dp.blocks!.length) : 0
-        const pct = total > 0 ? Math.round((completed / total) * 100) : 0
-        const barColor = !hasData
-          ? "bg-muted-foreground/20"
-          : pct === 0 ? "bg-muted-foreground/30"
-          : pct < 50 ? "bg-orange-500"
-          : pct < 100 ? "bg-emerald-500"
-          : "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]"
-        const label = !hasData ? "Не начато" : `${completed}/${total} · ${pct}%`
+        const { percent, completed, total } = calcDemoPercent(candidate.demoProgressJson)
         return (
-          <div className="mt-1.5 mb-1">
-            <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
-              <div className={cn("h-full rounded-full transition-all", barColor)} style={{ width: hasData ? `${pct}%` : "0%" }} />
-            </div>
-            <p className="text-xs text-muted-foreground mt-0.5">{label}</p>
-          </div>
+          <DemoProgressBar
+            variant="kanban"
+            progressPercent={percent}
+            completedBlocks={completed}
+            totalBlocks={total}
+          />
         )
       })()}
 

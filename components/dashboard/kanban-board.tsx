@@ -7,7 +7,12 @@ import { FunnelView } from "./funnel-view"
 import { TilesView } from "./tiles-view"
 import { ColumnColorPicker } from "./column-color-picker"
 import type { CardDisplaySettings } from "./card-settings"
-import { LayoutGrid, List, TrendingDown, Grid3X3, Plus, Minus, MonitorPlay, Clock, X } from "lucide-react"
+import { LayoutGrid, List, TrendingDown, Grid3X3, Plus, Minus } from "lucide-react"
+import {
+  DEMO_PROGRESS_GROUP_ORDER,
+  getDemoProgressGroup,
+  groupCandidatesByProgress,
+} from "@/lib/demo-progress-groups"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -132,7 +137,7 @@ export function KanbanBoard({ settings, viewMode, onViewModeChange, columns = []
                   className="flex flex-col rounded-xl min-w-0"
                 >
                   {/* Column Header */}
-                  <div className="mb-3 rounded-lg overflow-visible group relative">
+                  <div className="mb-3 rounded-lg overflow-visible group/header relative">
                     <div
                       className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg w-full relative"
                       style={{ background: `linear-gradient(135deg, ${column.colorFrom}, ${column.colorTo})` }}
@@ -152,14 +157,23 @@ export function KanbanBoard({ settings, viewMode, onViewModeChange, columns = []
                     {(() => {
                       const cands = column.candidates || []
                       if (cands.length === 0) return null
-                      const completed = cands.filter((c) => c.demoProgressJson?.completedAt != null).length
-                      const inProgress = cands.filter((c) => c.demoProgressJson != null && !c.demoProgressJson?.completedAt).length
-                      const notStarted = cands.filter((c) => c.demoProgressJson == null).length
+                      const counts = groupCandidatesByProgress(cands)
                       return (
                         <div className="mt-1.5 flex items-center justify-center gap-2 text-xs text-muted-foreground flex-wrap">
-                          <span className="inline-flex items-center gap-1"><MonitorPlay className="w-3 h-3" /> {completed}</span>
-                          <span className="inline-flex items-center gap-1"><Clock className="w-3 h-3" /> {inProgress}</span>
-                          <span className="inline-flex items-center gap-1"><X className="w-3 h-3" /> {notStarted}</span>
+                          {DEMO_PROGRESS_GROUP_ORDER.map((key) => {
+                            const sample = key === "none" ? 0 : key === "low" ? 1 : key === "mid" ? 30 : key === "high" ? 70 : 100
+                            const meta = getDemoProgressGroup(sample)
+                            return (
+                              <span
+                                key={key}
+                                className="inline-flex items-center gap-1 tabular-nums"
+                                title={`${meta.label}: ${counts[key]}`}
+                              >
+                                <span className={cn("inline-block w-1.5 h-1.5 rounded-full", meta.dotColor)} />
+                                {counts[key]}
+                              </span>
+                            )
+                          })}
                         </div>
                       )
                     })()}
@@ -169,7 +183,7 @@ export function KanbanBoard({ settings, viewMode, onViewModeChange, columns = []
                         {onRemoveColumn && (
                           <button
                             type="button"
-                            className="absolute left-[-10px] top-1/2 -translate-y-1/2 z-10 w-5 h-5 rounded-full bg-background border border-border shadow-sm hover:bg-red-50 hover:border-red-200 flex items-center justify-center transition-all opacity-0 group-hover:opacity-100"
+                            className="absolute left-[-10px] top-1/2 -translate-y-1/2 z-10 w-5 h-5 rounded-full bg-background border border-border shadow-sm hover:bg-red-50 hover:border-red-200 flex items-center justify-center transition-all opacity-0 group-hover/header:opacity-100"
                             title="Удалить этап"
                             onClick={() => setRemoveColId(column.id)}
                           >
@@ -179,7 +193,7 @@ export function KanbanBoard({ settings, viewMode, onViewModeChange, columns = []
                         {onAddCustomColumn && (
                           <button
                             type="button"
-                            className="absolute right-[-10px] top-1/2 -translate-y-1/2 z-10 w-5 h-5 rounded-full bg-background border border-border shadow-sm hover:bg-green-50 hover:border-green-200 flex items-center justify-center transition-all opacity-0 group-hover:opacity-100"
+                            className="absolute right-[-10px] top-1/2 -translate-y-1/2 z-10 w-5 h-5 rounded-full bg-background border border-border shadow-sm hover:bg-green-50 hover:border-green-200 flex items-center justify-center transition-all opacity-0 group-hover/header:opacity-100"
                             title="Добавить этап после"
                             onClick={() => { setInsertAfterColId(column.id); setAddColOpen(true) }}
                           >
