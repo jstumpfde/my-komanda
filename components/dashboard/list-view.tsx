@@ -182,15 +182,15 @@ export function ListView({
   }
 
   const cols: string[] = ["40px"] // ★
-  cols.push("minmax(180px, 2fr)")  // Кандидат
-  if (showScore) cols.push("90px")
-  if (showSalary) cols.push("140px")
-  if (showCity) cols.push("120px")
-  if (showResponseDate) cols.push("110px")
-  cols.push("130px") // Статус
-  if (showProgress) cols.push("160px") // Демо
-  if (showSource) cols.push("110px")
-  if (showActions) cols.push("auto")
+  cols.push("minmax(280px, 2fr)")  // Кандидат
+  if (showScore) cols.push("70px")        // AI-оценка
+  if (showSalary) cols.push("110px")      // Зарплата
+  if (showCity) cols.push("140px")        // Город
+  if (showResponseDate) cols.push("100px") // Дата отклика
+  cols.push("90px")                        // Статус
+  if (showProgress) cols.push("110px")    // Демо
+  if (showSource) cols.push("60px")       // Источник
+  if (showActions) cols.push("60px")      // Действия
 
   const gridStyle = { gridTemplateColumns: cols.join(" ") }
 
@@ -218,15 +218,15 @@ export function ListView({
               : <ArrowDown className="size-3 text-primary" strokeWidth={2.5} />
           )}
         </button>
-        <div>Кандидат</div>
-        {showScore && <SortHeader label="AI-оценка" sortKey="aiScore" sort={sort} onToggle={handleSort} />}
-        {showSalary && <SortHeader label="Зарплата" sortKey="salary" sort={sort} onToggle={handleSort} />}
-        {showCity && <div>Город</div>}
-        {showResponseDate && <SortHeader label="Дата отклика" sortKey="responseDate" sort={sort} onToggle={handleSort} />}
-        <SortHeader label="Статус" sortKey="status" sort={sort} onToggle={handleSort} />
-        {showProgress && <SortHeader label="Демо" sortKey="progress" sort={sort} onToggle={handleSort} />}
-        {showSource && <div>Источник</div>}
-        {showActions && <div>Действия</div>}
+        <div className="text-left">Кандидат</div>
+        {showScore && <SortHeader label="AI-оценка" sortKey="aiScore" sort={sort} onToggle={handleSort} align="center" />}
+        {showSalary && <SortHeader label="Зарплата" sortKey="salary" sort={sort} onToggle={handleSort} align="center" />}
+        {showCity && <div className="text-center">Город</div>}
+        {showResponseDate && <SortHeader label="Дата отклика" sortKey="responseDate" sort={sort} onToggle={handleSort} align="center" />}
+        <SortHeader label="Статус" sortKey="status" sort={sort} onToggle={handleSort} align="center" />
+        {showProgress && <SortHeader label="Демо" sortKey="progress" sort={sort} onToggle={handleSort} align="center" />}
+        {showSource && <div className="text-center">Источник</div>}
+        {showActions && <div className="text-center">Действия</div>}
       </div>
 
       {/* Rows */}
@@ -276,7 +276,7 @@ export function ListView({
 
               {/* AI score */}
               {showScore && (
-                <div>
+                <div className="text-center">
                   <Badge
                     variant="outline"
                     className={cn(
@@ -291,7 +291,7 @@ export function ListView({
 
               {/* Salary */}
               {showSalary && (
-                <div className="text-[14px] font-medium text-foreground whitespace-nowrap">
+                <div className="text-center text-[14px] font-medium text-foreground whitespace-nowrap">
                   {settings.showSalaryFull
                     ? `${candidate.salaryMin.toLocaleString("ru-RU")} — ${candidate.salaryMax.toLocaleString("ru-RU")} ₽`
                     : `${Math.round(candidate.salaryMin / 1000)}-${Math.round(candidate.salaryMax / 1000)}k`
@@ -301,7 +301,7 @@ export function ListView({
 
               {/* City */}
               {showCity && (
-                <div className="flex items-center gap-1 text-[14px] text-muted-foreground min-w-0">
+                <div className="flex items-center justify-center gap-1 text-[14px] text-muted-foreground min-w-0">
                   <MapPin className="w-3.5 h-3.5 flex-shrink-0" />
                   <span className="truncate">{candidate.city}</span>
                 </div>
@@ -309,7 +309,7 @@ export function ListView({
 
               {/* Response Date */}
               {showResponseDate && (
-                <div className="text-sm text-muted-foreground tabular-nums whitespace-nowrap">
+                <div className="text-center text-sm text-muted-foreground tabular-nums whitespace-nowrap">
                   {dt ? (
                     <Tooltip>
                       <TooltipTrigger asChild>
@@ -322,23 +322,25 @@ export function ListView({
               )}
 
               {/* Stage badge */}
-              <div>
+              <div className="text-center">
                 <span
                   className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium text-white whitespace-nowrap"
                   style={{ background: `linear-gradient(135deg, ${candidate.colorFrom}, ${candidate.colorTo})` }}
                 >
-                  {candidate.columnTitle}
+                  {candidate.columnTitle === "Демонстрация" ? "Демо" : candidate.columnTitle}
                 </span>
               </div>
 
               {/* Demo progress */}
               {showProgress && (
-                <DemoProgressBar variant="list" progressPercent={progress} />
+                <div className="flex items-center justify-center">
+                  <DemoProgressBar variant="list" progressPercent={progress} />
+                </div>
               )}
 
               {/* Source */}
               {showSource && (
-                <div>
+                <div className="text-center">
                   <Badge variant="outline" className={cn("text-[10px] border", getSourceColor(candidate.source))}>
                     {candidate.source}
                   </Badge>
@@ -347,38 +349,38 @@ export function ListView({
 
               {/* Actions */}
               {showActions && (
-                <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                <div className="flex gap-0.5 justify-center items-center" onClick={(e) => e.stopPropagation()}>
                   {isDecisionStage ? (
                     <>
-                      <Button variant="ghost" size="icon" className="h-7 w-7 text-success hover:bg-success/10" title="Принять" onClick={() => onAction?.(candidate.id, candidate.columnId, "advance")}>
-                        <ThumbsUp className="w-3.5 h-3.5" />
+                      <Button variant="ghost" size="icon" className="h-6 w-6 p-0 text-success hover:bg-success/10" title="Принять" onClick={() => onAction?.(candidate.id, candidate.columnId, "advance")}>
+                        <ThumbsUp className="w-3 h-3" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:bg-destructive/10" title="Отказать" onClick={() => onAction?.(candidate.id, candidate.columnId, "reject")}>
-                        <XCircle className="w-3.5 h-3.5" />
+                      <Button variant="ghost" size="icon" className="h-6 w-6 p-0 text-destructive hover:bg-destructive/10" title="Отказать" onClick={() => onAction?.(candidate.id, candidate.columnId, "reject")}>
+                        <XCircle className="w-3 h-3" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="h-7 w-7 text-warning hover:bg-warning/10" title="В резерв" onClick={() => onAction?.(candidate.id, candidate.columnId, "reserve")}>
-                        <Clock className="w-3.5 h-3.5" />
+                      <Button variant="ghost" size="icon" className="h-6 w-6 p-0 text-warning hover:bg-warning/10" title="В резерв" onClick={() => onAction?.(candidate.id, candidate.columnId, "reserve")}>
+                        <Clock className="w-3 h-3" />
                       </Button>
                     </>
                   ) : (
                     <>
-                      <Button variant="ghost" size="icon" className="h-7 w-7 text-success hover:bg-success/10" title="Пригласить" onClick={() => onAction?.(candidate.id, candidate.columnId, "advance")}>
-                        <CheckCircle2 className="w-3.5 h-3.5" />
+                      <Button variant="ghost" size="icon" className="h-6 w-6 p-0 text-success hover:bg-success/10" title="Пригласить" onClick={() => onAction?.(candidate.id, candidate.columnId, "advance")}>
+                        <CheckCircle2 className="w-3 h-3" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:bg-destructive/10" title="Отказать" onClick={() => onAction?.(candidate.id, candidate.columnId, "reject")}>
-                        <XCircle className="w-3.5 h-3.5" />
+                      <Button variant="ghost" size="icon" className="h-6 w-6 p-0 text-destructive hover:bg-destructive/10" title="Отказать" onClick={() => onAction?.(candidate.id, candidate.columnId, "reject")}>
+                        <XCircle className="w-3 h-3" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 p-0 text-muted-foreground hover:text-primary hover:bg-primary/10"
+                        title="Открыть"
+                        onClick={() => onOpenProfile?.(candidate, candidate.columnId)}
+                      >
+                        <ArrowRight className="w-3 h-3" />
                       </Button>
                     </>
                   )}
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 text-muted-foreground hover:text-primary hover:bg-primary/10"
-                    title="Открыть"
-                    onClick={() => onOpenProfile?.(candidate, candidate.columnId)}
-                  >
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </Button>
                 </div>
               )}
             </div>
