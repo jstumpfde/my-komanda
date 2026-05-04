@@ -9,7 +9,7 @@ import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip
 import { cn } from "@/lib/utils"
 import type { CandidateAction } from "@/lib/column-config"
 import { applySortMode, type CandidateSortMode } from "@/lib/candidate-sort"
-import { MapPin, CheckCircle2, XCircle, ArrowRight, ThumbsUp, Clock, ArrowUp, ArrowDown, ChevronsUpDown, Star } from "lucide-react"
+import { MapPin, CheckCircle2, XCircle, ArrowRight, ThumbsUp, Clock, ArrowUp, ArrowDown, Star } from "lucide-react"
 import { DemoProgressBar, calcDemoPercent } from "@/components/hr/demo-progress-bar"
 
 export type ListSortKey = "favorite" | "aiScore" | "progress" | "salary" | "responseDate" | "status" | "city" | "source"
@@ -84,26 +84,21 @@ function SortHeader({
   const active = sort?.key === sortKey
   const dir = active ? sort!.dir : null
   const ariaSort = !active ? "none" : dir === "asc" ? "ascending" : "descending"
+  const Icon = dir === "asc" ? ArrowUp : ArrowDown
   return (
     <button
       type="button"
       onClick={() => onToggle(sortKey)}
       aria-sort={ariaSort}
       className={cn(
-        "inline-flex items-center gap-1 rounded-md px-1.5 -mx-1.5 py-0.5 hover:bg-accent/60 hover:text-foreground transition-colors",
-        active ? "text-primary font-semibold bg-primary/10" : "text-muted-foreground",
-        align === "center" && "justify-center",
-        align === "right" && "justify-end",
+        "inline-flex items-center gap-1 cursor-pointer transition-colors",
+        active ? "text-primary font-semibold" : "text-muted-foreground hover:text-foreground",
+        align === "center" && "justify-center w-full",
+        align === "right" && "justify-end w-full",
       )}
     >
-      {label}
-      {dir === "asc" ? (
-        <ArrowUp className="size-3.5" strokeWidth={2.5} />
-      ) : dir === "desc" ? (
-        <ArrowDown className="size-3.5" strokeWidth={2.5} />
-      ) : (
-        <ChevronsUpDown className="size-3.5 opacity-40" strokeWidth={2} />
-      )}
+      <span>{label}</span>
+      {active && <Icon className="size-3" strokeWidth={2.5} />}
     </button>
   )
 }
