@@ -1,6 +1,8 @@
 import { addDays } from "date-fns"
 import { FOLLOWUP_PRESETS, type FollowUpPreset } from "./presets"
 
+export type FollowUpBranch = "not_opened" | "opened_not_finished"
+
 export interface ScheduledTouch {
   campaignId: string
   candidateId: string
@@ -9,6 +11,7 @@ export interface ScheduledTouch {
   channel: "hh"
   messageText: string
   status: "pending"
+  branch: FollowUpBranch
 }
 
 export function generateTouchSchedule(
@@ -17,6 +20,7 @@ export function generateTouchSchedule(
   preset: FollowUpPreset,
   startDate: Date,
   messages: string[],
+  branch: FollowUpBranch = "not_opened",
 ): ScheduledTouch[] {
   if (preset === "off") return []
   const schedule = FOLLOWUP_PRESETS[preset]
@@ -31,5 +35,6 @@ export function generateTouchSchedule(
     channel: "hh" as const,
     messageText: messages[idx] ?? messages[messages.length - 1] ?? "",
     status: "pending" as const,
+    branch,
   }))
 }

@@ -1743,15 +1743,18 @@ export const passwordResetTokens = pgTable("password_reset_tokens", {
 // один из 4 пресетов (off/soft/standard/aggressive) и кастомные тексты.
 
 export const followUpCampaigns = pgTable("follow_up_campaigns", {
-  id:                  uuid("id").defaultRandom().primaryKey(),
-  vacancyId:           uuid("vacancy_id").notNull().references(() => vacancies.id, { onDelete: "cascade" }),
-  preset:              text("preset").notNull().default("off"), // 'off' | 'soft' | 'standard' | 'aggressive'
-  enabled:             boolean("enabled").notNull().default(false),
-  stopOnReply:         boolean("stop_on_reply").notNull().default(true),
-  stopOnVacancyClosed: boolean("stop_on_vacancy_closed").notNull().default(true),
-  customMessages:      jsonb("custom_messages").$type<string[] | null>(),
-  createdAt:           timestamp("created_at").defaultNow().notNull(),
-  updatedAt:           timestamp("updated_at").defaultNow().notNull(),
+  id:                   uuid("id").defaultRandom().primaryKey(),
+  vacancyId:            uuid("vacancy_id").notNull().references(() => vacancies.id, { onDelete: "cascade" }),
+  preset:               text("preset").notNull().default("off"), // 'off' | 'soft' | 'standard' | 'aggressive'
+  enabled:              boolean("enabled").notNull().default(false),
+  stopOnReply:          boolean("stop_on_reply").notNull().default(true),
+  stopOnVacancyClosed:  boolean("stop_on_vacancy_closed").notNull().default(true),
+  // Кастомные тексты ветки А (кандидат не открыл демо).
+  customMessages:       jsonb("custom_messages").$type<string[] | null>(),
+  // Кастомные тексты ветки Б (открыл, но не дошёл до конца).
+  customMessagesOpened: jsonb("custom_messages_opened").$type<string[] | null>(),
+  createdAt:            timestamp("created_at").defaultNow().notNull(),
+  updatedAt:            timestamp("updated_at").defaultNow().notNull(),
 })
 
 export const followUpMessages = pgTable("follow_up_messages", {
@@ -1764,6 +1767,8 @@ export const followUpMessages = pgTable("follow_up_messages", {
   channel:      text("channel").notNull(), // 'hh' | 'email' | 'telegram'
   messageText:  text("message_text").notNull(),
   status:       text("status").notNull().default("pending"), // 'pending' | 'sent' | 'failed' | 'cancelled'
+  // Ветка дожима: 'not_opened' (А) | 'opened_not_finished' (Б).
+  branch:       text("branch").notNull().default("not_opened"),
   errorMessage: text("error_message"),
   createdAt:    timestamp("created_at").defaultNow().notNull(),
 })

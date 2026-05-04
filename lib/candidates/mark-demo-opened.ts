@@ -12,6 +12,7 @@
 import { eq } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { candidates } from "@/lib/db/schema"
+import { switchToBranchOpened } from "@/lib/followup/switch-branch"
 
 interface StageHistoryEntry {
   from:   string
@@ -66,5 +67,13 @@ export async function markDemoOpened(candidateId: string): Promise<void> {
     await db.update(candidates).set(updates).where(eq(candidates.id, candidateId))
   } catch (err) {
     console.error("[markDemoOpened] failed:", err instanceof Error ? err.message : err)
+    return
   }
+
+  // Переключение ветки дожима А → Б (fire-and-forget — не блокируем
+  // редирект кандидата, ошибки логируем).
+  void switchToBranchOpened(candidateId).catch((err) => {
+    console.error("[markDemoOpened] switchToBranchOpened failed:",
+      err instanceof Error ? err.message : err)
+  })
 }
