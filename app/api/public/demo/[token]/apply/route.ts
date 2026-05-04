@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { eq } from "drizzle-orm"
 import { nanoid } from "nanoid"
 import { db } from "@/lib/db"
-import { candidates, demos, vacancies } from "@/lib/db/schema"
-import { screenCandidate } from "@/lib/ai-screen-candidate"
+import { candidates, demos } from "@/lib/db/schema"
 import { generateCandidateShortId, isShortId } from "@/lib/short-id"
 
 type AnketaPayload = {
@@ -98,9 +97,8 @@ export async function POST(
 
       await db.update(candidates).set(updates).where(eq(candidates.id, existing.id))
 
-      // F3: fire-and-forget AI-скрининг
-      void runAiScreening(existing.id, existing.vacancyId, cleanAnketa, body)
-        .catch(err => console.error("[demo apply] AI screening failed:", err))
+      // AI-скрининг убран — оценка теперь только при завершении демо
+      // (см. app/api/public/demo/[token]/answer/route.ts).
 
       return NextResponse.json({ success: true, id: existing.id })
     }
@@ -144,53 +142,3 @@ export async function POST(
   }
 }
 
-async function runAiScreening(
-  candidateId: string,
-  vacancyId: string,
-  anketa: Record<string, unknown>,
-  body: { firstName: string; lastName: string; city?: string },
-) {
-  const [vac] = await db
-    .select({ title: vacancies.title, descriptionJson: vacancies.descriptionJson, city: vacancies.city })
-    .from(vacancies)
-    .where(eq(vacancies.id, vacancyId))
-    .limit(1)
-
-  if (!vac) return
-
-  const dj = (vac.descriptionJson as Record<string, unknown> | null) ?? {}
-  const an = (dj.anketa as Record<string, unknown> | null) ?? {}
-
-  const result = await screenCandidate({
-    candidateData: {
-      name: `${body.firstName} ${body.lastName}`,
-      city: body.city,
-      experience: typeof anketa.experienceSummary === "string" ? anketa.experienceSummary : undefined,
-      resume: [
-        anketa.experienceSummary,
-        anketa.portfolioUrl ? `Портфолио: ${anketa.portfolioUrl}` : null,
-        anketa.hhUrl ? `HH: ${anketa.hhUrl}` : null,
-        anketa.niches ? `Ниши: ${anketa.niches}` : null,
-      ].filter(Boolean).join("\n") || undefined,
-    },
-    vacancyAnketa: {
-      vacancyTitle: vac.title,
-      requirements: typeof an.requirements === "string" ? an.requirements : undefined,
-      responsibilities: typeof an.responsibilities === "string" ? an.responsibilities : undefined,
-      requiredSkills: Array.isArray(an.requiredSkills) ? an.requiredSkills.map(String) : undefined,
-      desiredSkills: Array.isArray(an.desiredSkills) ? an.desiredSkills.map(String) : undefined,
-      experienceMin: typeof an.experienceMin === "string" ? an.experienceMin : undefined,
-      positionCity: vac.city ?? undefined,
-    },
-  })
-
-  await db.update(candidates).set({
-    aiScore: result.score,
-    aiSummary: result.recommendation,
-    aiDetails: [
-      ...result.strengths.map(s => ({ question: "Сильная сторона", score: 1, comment: s })),
-      ...result.weaknesses.map(w => ({ question: "Слабая сторона", score: 0, comment: w })),
-    ],
-    updatedAt: new Date(),
-  }).where(eq(candidates.id, candidateId))
-}
