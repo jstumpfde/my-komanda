@@ -86,39 +86,37 @@ export function DemoProgressBar({
   }
 
   // variant === "list"
-  const isComplete = hasData && pct === 100
-  const isStarted = hasData && (pct as number) > 0 && (pct as number) < 100
-  const fillColor = isComplete
-    ? "bg-emerald-500"
-    : isStarted
-      ? "bg-blue-500"
-      : "bg-transparent"
-  const label = !hasData || pct === 0
-    ? "Не начато"
-    : isComplete
-      ? "Завершено"
-      : `${pct}%`
-  const labelClass = !hasData || pct === 0
-    ? "text-muted-foreground"
-    : isComplete
-      ? "text-emerald-600 dark:text-emerald-500"
-      : "text-blue-600 dark:text-blue-500"
-  const fillWidth = !hasData || pct === 0 ? "0%" : `${pct}%`
+  // null/undefined прогресс трактуем как 0% (кандидат не приступал).
+  const percent = hasData ? (pct as number) : 0
+  const isComplete = percent === 100
+  const isStarted = percent > 0 && percent < 100
 
   return (
-    <div className={cn("flex items-center gap-2", className)}>
+    <div className={cn("flex flex-col items-center gap-1 w-full max-w-[140px] mx-auto", className)}>
+      <span
+        className={cn(
+          "text-xs font-medium tabular-nums",
+          percent === 0 && "text-muted-foreground",
+          isStarted && "text-primary",
+          isComplete && "text-success",
+        )}
+      >
+        {percent}%
+      </span>
       <div
-        className="h-2 w-[80px] flex-shrink-0 rounded-full bg-muted overflow-hidden"
-        aria-label={`Прогресс демо: ${label}`}
+        className="w-full h-1.5 rounded-full overflow-hidden bg-gray-100 dark:bg-gray-800/50"
+        aria-label={`Прогресс демо: ${percent}%`}
       >
         <div
-          className={cn("h-full rounded-full transition-all", fillColor)}
-          style={{ width: fillWidth }}
+          className={cn(
+            "h-full transition-all",
+            percent === 0 && "bg-transparent",
+            isStarted && "bg-primary",
+            isComplete && "bg-success",
+          )}
+          style={{ width: `${percent}%` }}
         />
       </div>
-      <span className={cn("text-xs tabular-nums whitespace-nowrap font-medium", labelClass)}>
-        {label}
-      </span>
     </div>
   )
 }
