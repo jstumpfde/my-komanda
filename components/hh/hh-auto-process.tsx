@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Slider } from "@/components/ui/slider"
-import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
 import {
@@ -53,7 +52,6 @@ export function HhAutoProcess({
   const [limit, setLimit] = useState<number>(5)
   const [speed, setSpeed] = useState<SpeedPreset>("safe")
   const [minScore, setMinScore] = useState<number>(defaultMinScore)
-  const [dryRun, setDryRun] = useState(false)
 
   const delaySeconds = useMemo(
     () => SPEED_OPTIONS.find(o => o.value === speed)?.seconds ?? 30,
@@ -70,7 +68,7 @@ export function HhAutoProcess({
       const res = await fetch("/api/integrations/hh/process-queue", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ limit, vacancyId, dryRun, delaySeconds, minScore }),
+        body: JSON.stringify({ limit, vacancyId, delaySeconds, minScore }),
       })
       const data = await res.json() as ProcessQueueResponse
       if (!res.ok) throw new Error(data.error || "Ошибка")
@@ -85,12 +83,10 @@ export function HhAutoProcess({
 
       if (data.processed === 0) {
         toast.info(data.message || "Нет новых откликов для разбора")
-      } else if (dryRun) {
-        toast.success(`Тестовый прогон: ${summary} (${dur}с)`)
       } else {
         toast.success(`Разбор завершён: ${summary} (${dur}с)`)
       }
-      if (!dryRun) onProcessed?.()
+      onProcessed?.()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Ошибка")
     } finally {
@@ -172,18 +168,6 @@ export function HhAutoProcess({
           <span>0</span>
           <span>95</span>
         </div>
-      </div>
-
-      <div className="flex items-start gap-2">
-        <Checkbox
-          id="dry-run"
-          checked={dryRun}
-          onCheckedChange={v => setDryRun(v === true)}
-          className="mt-0.5"
-        />
-        <Label htmlFor="dry-run" className="text-xs leading-snug cursor-pointer">
-          Тестовый прогон (без отправки сообщений в hh)
-        </Label>
       </div>
 
       <div className="text-[11px] text-muted-foreground border-t pt-2">
