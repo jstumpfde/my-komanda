@@ -70,8 +70,8 @@ export function BulkActionsBar({ count, stages, onClear, onAction }: BulkActions
       <div
         className={cn(
           "fixed bottom-4 left-1/2 -translate-x-1/2 z-40",
-          "w-[calc(100%-2rem)] max-w-3xl",
-          "flex items-center gap-3 px-4 py-2.5",
+          "w-[calc(100%-2rem)] max-w-4xl",
+          "flex items-center gap-2 px-3 py-2.5",
           "rounded-xl border border-border shadow-lg",
           "bg-background/85 backdrop-blur-sm supports-[backdrop-filter]:bg-background/70",
         )}
@@ -79,7 +79,7 @@ export function BulkActionsBar({ count, stages, onClear, onAction }: BulkActions
         aria-label="Массовые действия"
       >
         {/* Left: count + clear */}
-        <div className="flex items-center gap-2 min-w-0">
+        <div className="flex items-center gap-1.5 min-w-0">
           <span className="text-sm font-medium whitespace-nowrap">
             Выделено {count}
           </span>
@@ -91,48 +91,48 @@ export function BulkActionsBar({ count, stages, onClear, onAction }: BulkActions
             onClick={onClear}
           >
             <X className="size-3.5" />
-            <span className="hidden sm:inline">Снять выделение</span>
+            <span className="hidden lg:inline">Снять выделение</span>
           </Button>
         </div>
 
         <div className="flex-1" />
 
         {/* Right: 5 actions */}
-        <div className="flex items-center gap-1.5 flex-wrap justify-end">
+        <div className="flex items-center gap-1.5 flex-nowrap justify-end">
           <Button
             type="button"
             size="sm"
             variant="outline"
-            className="h-8 gap-1.5 text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+            className="h-8 px-2.5 gap-1.5 text-sm text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
             disabled={!!busy}
             onClick={() => setConfirmRejectOpen(true)}
           >
             {busy === "reject" ? <Loader2 className="size-4 animate-spin" /> : <XCircle className="size-4" />}
-            <span className="hidden sm:inline">Отказать</span>
+            <span className="hidden md:inline">Отказать</span>
           </Button>
 
           <Button
             type="button"
             size="sm"
             variant="outline"
-            className="h-8 gap-1.5 text-violet-600 border-violet-300 hover:bg-violet-500/10 hover:text-violet-700 dark:text-violet-300 dark:border-violet-700"
+            className="h-8 px-2.5 gap-1.5 text-sm text-violet-600 border-violet-300 hover:bg-violet-500/10 hover:text-violet-700 dark:text-violet-300 dark:border-violet-700"
             disabled={!!busy}
             onClick={() => run("invite")}
           >
             {busy === "invite" ? <Loader2 className="size-4 animate-spin" /> : <Calendar className="size-4" />}
-            <span className="hidden sm:inline">Пригласить</span>
+            <span className="hidden md:inline">Пригласить</span>
           </Button>
 
           <Button
             type="button"
             size="sm"
             variant="outline"
-            className="h-8 gap-1.5 text-blue-600 border-blue-300 hover:bg-blue-500/10 hover:text-blue-700 dark:text-blue-300 dark:border-blue-700"
+            className="h-8 px-2.5 gap-1.5 text-sm text-blue-600 border-blue-300 hover:bg-blue-500/10 hover:text-blue-700 dark:text-blue-300 dark:border-blue-700"
             disabled={!!busy}
             onClick={() => run("talent_pool")}
           >
             {busy === "talent_pool" ? <Loader2 className="size-4 animate-spin" /> : <BookmarkPlus className="size-4" />}
-            <span className="hidden sm:inline">В резерв</span>
+            <span className="hidden md:inline">В резерв</span>
           </Button>
 
           <DropdownMenu>
@@ -141,11 +141,11 @@ export function BulkActionsBar({ count, stages, onClear, onAction }: BulkActions
                 type="button"
                 size="sm"
                 variant="outline"
-                className="h-8 gap-1.5"
+                className="h-8 px-2.5 gap-1.5 text-sm"
                 disabled={!!busy}
               >
                 {busy === "set_stage" ? <Loader2 className="size-4 animate-spin" /> : <ArrowRight className="size-4" />}
-                <span className="hidden sm:inline">В стейдж</span>
+                <span className="hidden md:inline">В стейдж</span>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="max-h-72 overflow-auto">
@@ -166,12 +166,12 @@ export function BulkActionsBar({ count, stages, onClear, onAction }: BulkActions
             type="button"
             size="sm"
             variant="outline"
-            className="h-8 gap-1.5 text-amber-600 border-amber-300 hover:bg-amber-500/10 hover:text-amber-700 dark:text-amber-300 dark:border-amber-700"
+            className="h-8 px-2.5 gap-1.5 text-sm text-amber-600 border-amber-300 hover:bg-amber-500/10 hover:text-amber-700 dark:text-amber-300 dark:border-amber-700"
             disabled={!!busy}
             onClick={() => run("toggle_favorite")}
           >
             {busy === "toggle_favorite" ? <Loader2 className="size-4 animate-spin" /> : <Star className="size-4" />}
-            <span className="hidden sm:inline">В избранное</span>
+            <span className="hidden md:inline">В избранное</span>
           </Button>
         </div>
       </div>
