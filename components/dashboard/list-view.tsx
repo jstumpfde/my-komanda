@@ -12,7 +12,7 @@ import { applySortMode, type CandidateSortMode } from "@/lib/candidate-sort"
 import { MapPin, CheckCircle2, XCircle, ArrowRight, ThumbsUp, Clock, ArrowUp, ArrowDown, Star } from "lucide-react"
 import { DemoProgressBar, calcDemoPercent } from "@/components/hr/demo-progress-bar"
 
-export type ListSortKey = "favorite" | "aiScore" | "progress" | "salary" | "responseDate" | "status"
+export type ListSortKey = "favorite" | "aiScore" | "progress" | "salary" | "responseDate" | "status" | "city" | "source"
 export type ListSortDir = "asc" | "desc"
 export interface ListSortState {
   key: ListSortKey
@@ -46,6 +46,8 @@ const DEFAULT_DIR: Record<ListSortKey, ListSortDir> = {
   salary:       "desc",
   responseDate: "desc",
   status:       "asc",
+  city:         "asc",
+  source:       "asc",
 }
 
 /** Возвращает 0..100 либо null (не приступал). Использует общий хелпер. */
@@ -57,11 +59,10 @@ function formatResponseDate(d: Date | string | null | undefined): { short: strin
   if (!d) return null
   const date = typeof d === "string" ? new Date(d) : d
   if (Number.isNaN(date.getTime())) return null
-  const now = new Date()
   const dd = String(date.getDate()).padStart(2, "0")
   const mm = String(date.getMonth() + 1).padStart(2, "0")
   const yy = String(date.getFullYear()).slice(-2)
-  const short = date.getFullYear() === now.getFullYear() ? `${dd}.${mm}` : `${dd}.${mm}.${yy}`
+  const short = `${dd}.${mm}.${yy}`
   const full = date.toLocaleString("ru-RU", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })
   return { short, full }
 }
@@ -148,6 +149,24 @@ export function ListView({
         case "status": {
           return mul * ((STAGE_ORDER[a.columnId] ?? 99) - (STAGE_ORDER[b.columnId] ?? 99))
         }
+        case "city": {
+          // null/пустые в конец независимо от направления — иначе они доминируют
+          // и активная сортировка перестаёт давать различимый результат.
+          const ca = (a.city ?? "").trim()
+          const cb = (b.city ?? "").trim()
+          if (!ca && !cb) return 0
+          if (!ca) return 1
+          if (!cb) return -1
+          return mul * ca.localeCompare(cb, "ru")
+        }
+        case "source": {
+          const sa = (a.source ?? "").trim()
+          const sb = (b.source ?? "").trim()
+          if (!sa && !sb) return 0
+          if (!sa) return 1
+          if (!sb) return -1
+          return mul * sa.localeCompare(sb, "ru")
+        }
       }
       return 0
     })
@@ -204,7 +223,7 @@ export function ListView({
     <div className="rounded-xl border border-border overflow-hidden bg-card">
       {/* Table Header */}
       <div
-        className="grid gap-4 px-4 py-2.5 bg-muted/60 border-b border-border text-[13px] font-medium text-muted-foreground tracking-normal items-center"
+        className="grid gap-4 pl-2 pr-4 py-2.5 bg-muted/60 border-b border-border text-[13px] font-medium text-muted-foreground tracking-normal items-center"
         style={gridStyle}
       >
         <button
@@ -228,10 +247,10 @@ export function ListView({
         {showProgress && <SortHeader label="Демо" sortKey="progress" sort={sort} onToggle={handleSort} align="center" />}
         {showScore && <SortHeader label="AI-оценка" sortKey="aiScore" sort={sort} onToggle={handleSort} align="center" />}
         {showSalary && <SortHeader label="Зарплата" sortKey="salary" sort={sort} onToggle={handleSort} align="center" />}
-        {showCity && <div className="text-center">Город</div>}
+        {showCity && <SortHeader label="Город" sortKey="city" sort={sort} onToggle={handleSort} align="center" />}
         {showResponseDate && <SortHeader label="Дата" sortKey="responseDate" sort={sort} onToggle={handleSort} align="center" />}
         <SortHeader label="Статус" sortKey="status" sort={sort} onToggle={handleSort} align="center" />
-        {showSource && <div className="text-center">Источник</div>}
+        {showSource && <SortHeader label="Источник" sortKey="source" sort={sort} onToggle={handleSort} align="center" />}
         {showActions && <div className="text-center">Действия</div>}
       </div>
 
@@ -246,7 +265,7 @@ export function ListView({
             <div
               key={candidate.id}
               className={cn(
-                "grid gap-4 px-4 items-center hover:bg-muted/40 transition-colors min-h-[56px] text-[14px] cursor-pointer",
+                "grid gap-4 pl-2 pr-4 items-center hover:bg-muted/40 transition-colors min-h-[56px] text-[14px] cursor-pointer",
                 i % 2 === 0 ? "" : "bg-muted/20"
               )}
               style={gridStyle}
@@ -336,7 +355,7 @@ export function ListView({
 
               {/* Date */}
               {showResponseDate && (
-                <div className="text-left text-sm text-muted-foreground tabular-nums whitespace-nowrap">
+                <div className="text-center text-sm text-muted-foreground tabular-nums whitespace-nowrap">
                   {dt ? (
                     <Tooltip>
                       <TooltipTrigger asChild>
