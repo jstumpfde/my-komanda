@@ -292,8 +292,24 @@ export function ListView({
           </div>
         )}
         <div className="text-left px-2">Кандидат</div>
-        <div className="flex items-center justify-center px-2" aria-hidden="true">
-          <Star className="size-4 text-muted-foreground/60" />
+        <div className="flex items-center justify-center px-2">
+          <button
+            type="button"
+            onClick={() => handleSort("favorite")}
+            aria-sort={sort?.key === "favorite" ? (sort.dir === "asc" ? "ascending" : "descending") : "none"}
+            aria-label="Сортировать по избранному"
+            className={cn(
+              "inline-flex items-center gap-0.5 rounded-md px-1 py-0.5 hover:bg-accent/60 transition-colors",
+              sort?.key === "favorite" ? "text-primary bg-primary/10" : "text-muted-foreground/60",
+            )}
+          >
+            <Star className={cn("size-4", sort?.key === "favorite" && "fill-amber-400 text-amber-400")} />
+            {sort?.key === "favorite" && (sort.dir === "asc" ? (
+              <ArrowUp className="size-3" strokeWidth={2.5} />
+            ) : (
+              <ArrowDown className="size-3" strokeWidth={2.5} />
+            ))}
+          </button>
         </div>
         {showProgress && <SortHeader label="Демо" sortKey="progress" sort={sort} onToggle={handleSort} align="center" />}
         {showScore && <SortHeader label="AI-оценка" sortKey="aiScore" sort={sort} onToggle={handleSort} align="center" />}
