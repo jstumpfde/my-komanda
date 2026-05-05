@@ -1584,9 +1584,19 @@ function MediaBlock({
   const startRecording = async (type: "video" | "audio") => {
     setErrMsg("")
     try {
+      // Видео-визитка — портретное 9:16 (как Stories/TikTok). На телефоне это
+      // нативная ориентация, на десктопе UI ужимаем по maxWidth.
       const constraints: MediaStreamConstraints =
         type === "video"
-          ? { audio: true, video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } } }
+          ? {
+              audio: true,
+              video: {
+                facingMode: "user",
+                aspectRatio: { ideal: 9 / 16 },
+                width: { ideal: 720 },
+                height: { ideal: 1280 },
+              },
+            }
           : { audio: true, video: false }
 
       const stream = await navigator.mediaDevices.getUserMedia(constraints)
@@ -1939,8 +1949,11 @@ function MediaBlock({
       {mode === "recording" && (
         <div className="space-y-3">
           {recType === "video" ? (
-            <div className="relative rounded-xl overflow-hidden bg-black aspect-video">
-              <video ref={videoPreviewRef} playsInline className="w-full h-full object-contain" />
+            <div
+              className="relative rounded-xl overflow-hidden bg-black mx-auto w-full"
+              style={{ maxWidth: 360, aspectRatio: "9 / 16" }}
+            >
+              <video ref={videoPreviewRef} playsInline className="w-full h-full object-cover" />
               <div className="absolute top-3 left-3 flex items-center gap-2 rounded-full bg-black/60 px-3 py-1">
                 <span className="h-3 w-3 rounded-full bg-red-500 animate-pulse" />
                 <span className="text-white text-sm font-medium">REC</span>
@@ -1985,7 +1998,8 @@ function MediaBlock({
                 const v = e.currentTarget
                 if (v.duration > 1 && Number.isFinite(v.duration)) v.currentTime = 1
               }}
-              className="w-full rounded-xl bg-black aspect-video"
+              className="rounded-xl bg-black mx-auto w-full"
+              style={{ maxWidth: 360, aspectRatio: "9 / 16", objectFit: "cover" }}
             />
           )}
           {blobMediaTypeRef.current === "audio" && (
@@ -2050,7 +2064,8 @@ function MediaBlock({
                 const v = e.currentTarget
                 if (v.duration > 1 && Number.isFinite(v.duration)) v.currentTime = 1
               }}
-              className="w-full rounded-xl bg-black aspect-video"
+              className="rounded-xl bg-black mx-auto w-full"
+              style={{ maxWidth: 360, aspectRatio: "9 / 16", objectFit: "cover" }}
             />
           )}
           {result.mediaType === "audio" && (
