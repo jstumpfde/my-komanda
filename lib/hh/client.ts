@@ -160,10 +160,35 @@ export class HHClient {
   }
 
   async getApplications(hhVacancyId: string): Promise<HHApplication[]> {
-    const data = await this.apiGet<{ items: HHApplication[] }>(
-      `/vacancies/${hhVacancyId}/negotiations?per_page=100`
+    const PER_PAGE = 50
+    const MAX_PAGES = 20
+    const all: HHApplication[] = []
+
+    const first = await this.apiGet<{
+      items: HHApplication[]
+      pages: number
+      found: number
+      page: number
+    }>(`/negotiations/response?vacancy_id=${hhVacancyId}&page=0&per_page=${PER_PAGE}`)
+
+    all.push(...(first.items ?? []))
+    const totalPages = Math.min(first.pages ?? 1, MAX_PAGES)
+    console.log(
+      `[hh-import] vacancy=${hhVacancyId} found=${first.found ?? 0} pages=${first.pages ?? 1} (capped=${totalPages})`
     )
-    return data.items ?? []
+
+    for (let page = 1; page < totalPages; page++) {
+      const data = await this.apiGet<{
+        items: HHApplication[]
+        pages: number
+        found: number
+        page: number
+      }>(`/negotiations/response?vacancy_id=${hhVacancyId}&page=${page}&per_page=${PER_PAGE}`)
+      all.push(...(data.items ?? []))
+    }
+
+    console.log(`[hh-import] vacancy=${hhVacancyId} fetched=${all.length} applications`)
+    return all
   }
 
   async importApplications(vacancyId: string): Promise<{ imported: number }> {
