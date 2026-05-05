@@ -187,6 +187,23 @@ const SCENARIO_PRESETS: Record<ScenarioType, { steps: StepType[]; icon: typeof V
 
 // ─── Компонент ──────────────────────────────────────────────
 
+/**
+ * Идентификаторы карточек внутри AutomationSettings.
+ * Используются страницей вакансии для разноса секций по верхним табам
+ * («Сообщения» / «Демо и воронка» / «AI сценарии») при сохранении единого
+ * стейта, save-логики и сетевых вызовов внутри одного компонента.
+ */
+export type AutomationSectionId =
+  | "firstMessage"
+  | "callIntent"
+  | "followup"
+  | "pipeline"
+  | "autoActions"
+  | "enrichment"
+  | "templates"
+  | "dialer"
+  | "scenarioHire"
+
 interface AutomationSettingsProps {
   vacancyId: string
   descriptionJson?: unknown
@@ -194,9 +211,14 @@ interface AutomationSettingsProps {
   salaryFrom?: number | null
   salaryTo?: number | null
   aiProcessSettings?: { inviteMessage?: string; reInviteMessage?: string } | null
+  /** Если задано — рендерятся только эти карточки. Иначе все. */
+  sections?: AutomationSectionId[]
+  /** Показать глобальную кнопку «Сохранить настройки» внизу. По умолчанию true. */
+  showGlobalSave?: boolean
 }
 
-export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, salaryFrom, salaryTo, aiProcessSettings }: AutomationSettingsProps) {
+export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, salaryFrom, salaryTo, aiProcessSettings, sections, showGlobalSave = true }: AutomationSettingsProps) {
+  const showSection = (id: AutomationSectionId): boolean => !sections || sections.includes(id)
   // Parse initial scenario from descriptionJson
   const initialScenario = (() => {
     if (descriptionJson && typeof descriptionJson === "object" && descriptionJson !== null) {
@@ -570,6 +592,7 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
   return (
     <div className="space-y-6">
       {/* ═══ 1. Первое сообщение ═══════════════════════════════ */}
+      {showSection("firstMessage") && (
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
@@ -688,8 +711,10 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
           </div>
         </CardContent>
       </Card>
+      )}
 
       {/* ═══ 2. Если кандидат отвечает ═════════════════════════ */}
+      {showSection("callIntent") && (
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
@@ -741,8 +766,10 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
           </div>
         </CardContent>
       </Card>
+      )}
 
       {/* ═══ 3. Цепочка дожима ═════════════════════════════════ */}
+      {showSection("followup") && (
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
@@ -869,8 +896,10 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
           )}
         </CardContent>
       </Card>
+      )}
 
       {/* ═══ 5. Воронка найма ═══════════════════════════════════ */}
+      {showSection("pipeline") && (
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
@@ -998,8 +1027,10 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
           </div>
         </CardContent>
       </Card>
+      )}
 
       {/* ═══ 6. Автоматические действия ═══════════════════════ */}
+      {showSection("autoActions") && (
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
@@ -1084,8 +1115,10 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
           </div>
         </CardContent>
       </Card>
+      )}
 
       {/* ═══ 9. Дозапрос данных ═══════════════════════════════ */}
+      {showSection("enrichment") && (
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
@@ -1139,8 +1172,10 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
           )}
         </CardContent>
       </Card>
+      )}
 
       {/* ═══ 7. Шаблоны сообщений ════════════════════════════ */}
+      {showSection("templates") && (
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
@@ -1178,8 +1213,10 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
           </div>
         </CardContent>
       </Card>
+      )}
 
       {/* ═══ 8. Бот-звонарь ══════════════════════════════════ */}
+      {showSection("dialer") && (
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
@@ -1219,8 +1256,10 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
           )}
         </CardContent>
       </Card>
+      )}
 
       {/* ═══ 4. Сценарий найма ═════════════════════════════════ */}
+      {showSection("scenarioHire") && (
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
@@ -1292,14 +1331,17 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
           </div>
         </CardContent>
       </Card>
+      )}
 
       {/* Кнопка сохранения */}
-      <div className="flex justify-end mt-3">
-        <Button size="sm" className="gap-1.5 h-8 text-xs" onClick={saveSettings} disabled={saving}>
-          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-          Сохранить настройки
-        </Button>
-      </div>
+      {showGlobalSave && (
+        <div className="flex justify-end mt-3">
+          <Button size="sm" className="gap-1.5 h-8 text-xs" onClick={saveSettings} disabled={saving}>
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+            Сохранить настройки
+          </Button>
+        </div>
+      )}
     </div>
   )
 }

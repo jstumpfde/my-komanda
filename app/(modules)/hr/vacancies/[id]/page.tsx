@@ -46,7 +46,7 @@ import { defaultColumnColors, COLUMN_ORDER, type CandidateAction, getNextColumnI
 import type { Candidate } from "@/components/dashboard/candidate-card"
 import { HhVacancyBanner } from "@/components/vacancies/hh-vacancy-banner"
 import { HhAutoProcess } from "@/components/hh/hh-auto-process"
-import { AutomationSettings } from "@/components/vacancies/automation-settings"
+import { AutomationSettings, type AutomationSectionId } from "@/components/vacancies/automation-settings"
 import { VacancyScheduleSettings } from "@/components/vacancies/vacancy-schedule-settings"
 import { PublishTab } from "@/components/vacancies/publish-tab"
 import { MiniFormBuilder } from "@/components/vacancies/mini-form-builder"
@@ -544,11 +544,21 @@ export default function VacancyPage() {
   const [brandSaving, setBrandSaving] = useState(false)
   const defaultTab = status === "active" ? "candidates" : "anketa"
   const rawUrlTab = searchParams?.get("tab") ?? null
-  // Старая ссылка `?tab=automation` → новая `?tab=settings&section=automation`
+  // Старая ссылка `?tab=automation` → новая `?tab=settings&section=ai`
   const urlTab = rawUrlTab === "automation" ? "settings" : rawUrlTab
-  const urlSection = rawUrlTab === "automation" ? "automation" : (searchParams?.get("section") ?? null)
+  const rawUrlSection = rawUrlTab === "automation" ? "ai" : (searchParams?.get("section") ?? null)
+  // Миграция старых section-значений на новые 6 табов.
+  // general → page (стартовая вкладка с брендингом), automation → ai.
+  const SETTINGS_SECTION_IDS = ["page", "sources", "messages", "funnel", "ai", "integrations"] as const
+  type SettingsSectionId = typeof SETTINGS_SECTION_IDS[number]
+  const initialSettingsSection: SettingsSectionId =
+    rawUrlSection === "general" ? "page" :
+    rawUrlSection === "automation" ? "ai" :
+    rawUrlSection && (SETTINGS_SECTION_IDS as readonly string[]).includes(rawUrlSection)
+      ? (rawUrlSection as SettingsSectionId)
+      : "page"
   const [activeTab, setActiveTab] = useState(urlTab ?? defaultTab)
-  const [settingsSection, setSettingsSection] = useState<"general" | "automation">(urlSection === "automation" ? "automation" : "general")
+  const [settingsSection, setSettingsSection] = useState<SettingsSectionId>(initialSettingsSection)
   const [anPeriod, setAnPeriod] = useState("all")
   const [anSources, setAnSources] = useState<string[]>([])
   const [anCities, setAnCities] = useState<string[]>([])
@@ -2093,11 +2103,15 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
               </TabsContent>
 
               <TabsContent value="settings">
-                {/* Сабнав: Общие / Автоматизация */}
-                <div className="flex items-center gap-1 mb-4 border-b">
+                {/* Сабнав: 6 табов настроек вакансии */}
+                <div className="flex items-center gap-1 mb-4 border-b overflow-x-auto">
                   {([
-                    { value: "general" as const, label: "Общие", icon: Settings },
-                    { value: "automation" as const, label: "Автоматизация", icon: Zap },
+                    { value: "page"        as const, label: "Страница и брендинг", icon: Globe },
+                    { value: "sources"     as const, label: "Источники",           icon: Link2 },
+                    { value: "messages"    as const, label: "Сообщения",           icon: MessageCircle },
+                    { value: "funnel"      as const, label: "Демо и воронка",      icon: Kanban },
+                    { value: "ai"          as const, label: "AI сценарии",         icon: Zap },
+                    { value: "integrations" as const, label: "Интеграции",          icon: Settings },
                   ]).map((s) => {
                     const Icon = s.icon
                     const active = settingsSection === s.value
@@ -2109,12 +2123,11 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                           setSettingsSection(s.value)
                           const sp = new URLSearchParams(window.location.search)
                           sp.set("tab", "settings")
-                          if (s.value === "automation") sp.set("section", "automation")
-                          else sp.delete("section")
+                          sp.set("section", s.value)
                           router.replace(`${window.location.pathname}?${sp.toString()}`, { scroll: false })
                         }}
                         className={cn(
-                          "inline-flex items-center gap-1.5 px-3 py-2 text-sm border-b-2 -mb-px transition-colors",
+                          "inline-flex items-center gap-1.5 px-3 py-2 text-sm border-b-2 -mb-px transition-colors whitespace-nowrap shrink-0",
                           active
                             ? "border-primary text-foreground font-medium"
                             : "border-transparent text-muted-foreground hover:text-foreground"
@@ -2127,40 +2140,16 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                   })}
                 </div>
 
-                {settingsSection === "automation" && (
+                {/* ───────── ТАБ «Страница и брендинг» ───────── */}
+                {settingsSection === "page" && (
+                <div className="space-y-6 max-w-3xl">
                   <div>
-                    <AutomationSettings vacancyId={id} descriptionJson={apiVacancy?.descriptionJson} vacancyTitle={apiVacancy?.title} salaryFrom={apiVacancy?.salaryMin} salaryTo={apiVacancy?.salaryMax} aiProcessSettings={apiVacancy?.aiProcessSettings as { inviteMessage?: string; reInviteMessage?: string } | null | undefined} />
-                    <div className="mt-6">
-                      <VacancyAiProcessSettings
-                        vacancyId={id}
-                        initial={apiVacancy?.aiProcessSettings ?? null}
-                        initialAiScoringEnabled={apiVacancy?.aiScoringEnabled ?? true}
-                        onSaved={() => refetchVacancy()}
-                      />
-                    </div>
-                    <div className="mt-6">
-                      <VacancyFollowupSettings vacancyId={id} />
-                    </div>
-                    <div className="mt-6 space-y-3">
-                      <VacancyScheduleSettings vacancyId={id} />
-                    </div>
-                    <div className="mt-6">
-                      <PostDemoSettings vacancyId={id} />
-                    </div>
+                    <h3 className="text-lg font-semibold text-foreground mb-1">Публичная страница</h3>
+                    <p className="text-sm text-muted-foreground">Настройка страницы вакансии для кандидатов</p>
                   </div>
-                )}
 
-                {settingsSection === "general" && (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  {/* Левая колонка */}
-                  <div className="space-y-6">
-                    <div>
-                      <h3 className="text-lg font-semibold text-foreground mb-1">Публичная страница</h3>
-                      <p className="text-sm text-muted-foreground">Настройка страницы вакансии для кандидатов</p>
-                    </div>
-
-                    {/* Поля мини-формы */}
-                    <MiniFormBuilder vacancyId={id} descriptionJson={apiVacancy?.descriptionJson} />
+                  {/* Поля мини-формы */}
+                  <MiniFormBuilder vacancyId={id} descriptionJson={apiVacancy?.descriptionJson} />
 
                     {/* Брендинг страницы */}
                     <Card>
@@ -2396,25 +2385,25 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                       </CardContent>
                     </Card>
 
-                    {/* HTML-страница */}
-                    <PublishTab
-                      vacancyTitle={internalName || vacancyTitle}
-                      vacancySlug={id}
-                      vacancyCity={apiVacancy?.city ?? "Москва"}
-                      salaryFrom={80000}
-                      salaryTo={150000}
-                      brandOverride={{ companyName: brandCompanyName, color: brandColor, logo: brandLogo, slogan: brandSlogan }}
-                    />
-                  </div>
+                  {/* HTML-страница */}
+                  <PublishTab
+                    vacancyTitle={internalName || vacancyTitle}
+                    vacancySlug={id}
+                    vacancyCity={apiVacancy?.city ?? "Москва"}
+                    salaryFrom={80000}
+                    salaryTo={150000}
+                    brandOverride={{ companyName: brandCompanyName, color: brandColor, logo: brandLogo, slogan: brandSlogan }}
+                  />
+                </div>
+                )}
 
-                  {/* Правая колонка */}
-                  <div className="space-y-6">
-                    {/* Источники кандидатов */}
-                    {/* Источники кандидатов */}
-                    <div>
-                      <h3 className="text-lg font-semibold text-foreground mb-1">Источники кандидатов</h3>
-                      <p className="text-sm text-muted-foreground mb-3">Подключение сервисов для импорта откликов</p>
-                      <div className="space-y-3">
+                {/* ───────── ТАБ «Источники» ───────── */}
+                {settingsSection === "sources" && (
+                <div className="space-y-6 max-w-3xl">
+                  <div>
+                    <h3 className="text-lg font-semibold text-foreground mb-1">Источники кандидатов</h3>
+                    <p className="text-sm text-muted-foreground mb-3">Подключение сервисов для импорта откликов</p>
+                    <div className="space-y-3">
                         {apiVacancy?.hhVacancyId ? (
                           <div className="rounded-lg border bg-card p-4">
                             <div className="flex items-center gap-3">
@@ -2488,44 +2477,109 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                           <Badge variant="outline" className="text-xs h-6 text-muted-foreground shrink-0">Не подключено</Badge>
                           <Button size="sm" className="h-8 text-xs shrink-0" disabled>Подключить</Button>
                         </div>
-                        <div className="rounded-lg border bg-card p-4 flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-white text-[11px] font-bold" style={{ backgroundColor: "#0066CC" }}>SJ</div>
-                          <div className="flex-1 min-w-0"><p className="text-sm font-medium flex items-center gap-2">SuperJob <span className="text-[10px] bg-amber-100 text-amber-700 rounded-full px-2 py-0.5 font-normal">Скоро</span></p><p className="text-[11px] text-muted-foreground">Импорт откликов с SuperJob</p></div>
-                          <span className="text-xs text-muted-foreground shrink-0">0 кликов · 0 кандидатов</span>
-                          <Badge variant="outline" className="text-xs h-6 text-muted-foreground shrink-0">Не подключено</Badge>
-                          <Button size="sm" className="h-8 text-xs shrink-0" disabled>Подключить</Button>
-                        </div>
+                      <div className="rounded-lg border bg-card p-4 flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-white text-[11px] font-bold" style={{ backgroundColor: "#0066CC" }}>SJ</div>
+                        <div className="flex-1 min-w-0"><p className="text-sm font-medium flex items-center gap-2">SuperJob <span className="text-[10px] bg-amber-100 text-amber-700 rounded-full px-2 py-0.5 font-normal">Скоро</span></p><p className="text-[11px] text-muted-foreground">Импорт откликов с SuperJob</p></div>
+                        <span className="text-xs text-muted-foreground shrink-0">0 кликов · 0 кандидатов</span>
+                        <Badge variant="outline" className="text-xs h-6 text-muted-foreground shrink-0">Не подключено</Badge>
+                        <Button size="sm" className="h-8 text-xs shrink-0" disabled>Подключить</Button>
+                      </div>
+                      <div className="rounded-lg border bg-card p-4 flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-white text-[11px] font-bold" style={{ backgroundColor: "#FF0000" }}>Я</div>
+                        <div className="flex-1 min-w-0"><p className="text-sm font-medium flex items-center gap-2">Яндекс.Работа <span className="text-[10px] bg-amber-100 text-amber-700 rounded-full px-2 py-0.5 font-normal">Скоро</span></p><p className="text-[11px] text-muted-foreground">Импорт откликов с Яндекс.Работа</p></div>
+                        <span className="text-xs text-muted-foreground shrink-0">0 кликов · 0 кандидатов</span>
+                        <Badge variant="outline" className="text-xs h-6 text-muted-foreground shrink-0">Не подключено</Badge>
+                        <Button size="sm" className="h-8 text-xs shrink-0" disabled>Подключить</Button>
                       </div>
                     </div>
+                  </div>
 
-                    {/* CRM Integrations */}
-                    <div>
-                      <h3 className="text-lg font-semibold text-foreground mb-1">CRM-интеграции</h3>
-                      <p className="text-sm text-muted-foreground mb-3">Синхронизация воронки с CRM</p>
-                      <div className="space-y-3">
-                        <div className="rounded-lg border bg-card p-4 flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-white text-[9px] font-bold" style={{ backgroundColor: "#2FC6F6" }}>Б24</div>
-                          <div className="flex-1 min-w-0"><p className="text-sm font-medium flex items-center gap-2">Битрикс24 <span className="text-[10px] bg-amber-100 text-amber-700 rounded-full px-2 py-0.5 font-normal">Скоро</span></p><p className="text-[11px] text-muted-foreground">Синхронизация воронки и кандидатов</p></div>
-                          <Badge variant="outline" className="text-xs h-6 text-muted-foreground shrink-0">Не подключено</Badge>
-                          <Button size="sm" className="h-8 text-xs shrink-0" disabled>Подключить</Button>
-                        </div>
-                        <div className="rounded-lg border bg-card p-4 flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-white text-[11px] font-bold" style={{ backgroundColor: "#7B68EE" }}>amo</div>
-                          <div className="flex-1 min-w-0"><p className="text-sm font-medium flex items-center gap-2">AmoCRM <span className="text-[10px] bg-amber-100 text-amber-700 rounded-full px-2 py-0.5 font-normal">Скоро</span></p><p className="text-[11px] text-muted-foreground">Синхронизация воронки и кандидатов</p></div>
-                          <Badge variant="outline" className="text-xs h-6 text-muted-foreground shrink-0">Не подключено</Badge>
-                          <Button size="sm" className="h-8 text-xs shrink-0" disabled>Подключить</Button>
-                        </div>
-                        <div className="rounded-lg border bg-card p-4 flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-white" style={{ backgroundColor: "#6B7280" }}><Settings className="w-3.5 h-3.5" /></div>
-                          <div className="flex-1 min-w-0"><p className="text-sm font-medium flex items-center gap-2">Другая CRM <span className="text-[10px] bg-amber-100 text-amber-700 rounded-full px-2 py-0.5 font-normal">Скоро</span></p><p className="text-[11px] text-muted-foreground">Подключение через API или webhook</p></div>
-                          <Badge variant="outline" className="text-xs h-6 text-muted-foreground shrink-0">Не подключено</Badge>
-                          <Button size="sm" className="h-8 text-xs shrink-0" disabled>Настроить</Button>
-                        </div>
+                  {/* Источники и UTM-ссылки */}
+                  <UtmLinksSection vacancyId={id} vacancySlug={id} />
+                </div>
+                )}
+
+                {/* ───────── ТАБ «Сообщения» ───────── */}
+                {settingsSection === "messages" && (
+                <div className="space-y-6 max-w-3xl">
+                  <AutomationSettings
+                    vacancyId={id}
+                    descriptionJson={apiVacancy?.descriptionJson}
+                    vacancyTitle={apiVacancy?.title}
+                    salaryFrom={apiVacancy?.salaryMin}
+                    salaryTo={apiVacancy?.salaryMax}
+                    aiProcessSettings={apiVacancy?.aiProcessSettings as { inviteMessage?: string; reInviteMessage?: string } | null | undefined}
+                    sections={["firstMessage", "callIntent", "followup", "templates"] satisfies AutomationSectionId[]}
+                  />
+                  <VacancyFollowupSettings vacancyId={id} />
+                </div>
+                )}
+
+                {/* ───────── ТАБ «Демо и воронка» ───────── */}
+                {settingsSection === "funnel" && (
+                <div className="space-y-6 max-w-3xl">
+                  <AutomationSettings
+                    vacancyId={id}
+                    descriptionJson={apiVacancy?.descriptionJson}
+                    vacancyTitle={apiVacancy?.title}
+                    salaryFrom={apiVacancy?.salaryMin}
+                    salaryTo={apiVacancy?.salaryMax}
+                    aiProcessSettings={apiVacancy?.aiProcessSettings as { inviteMessage?: string; reInviteMessage?: string } | null | undefined}
+                    sections={["pipeline", "enrichment"] satisfies AutomationSectionId[]}
+                  />
+                  <PostDemoSettings vacancyId={id} />
+                </div>
+                )}
+
+                {/* ───────── ТАБ «AI сценарии» ───────── */}
+                {settingsSection === "ai" && (
+                <div className="space-y-6 max-w-3xl">
+                  <VacancyAiProcessSettings
+                    vacancyId={id}
+                    initial={apiVacancy?.aiProcessSettings ?? null}
+                    initialAiScoringEnabled={apiVacancy?.aiScoringEnabled ?? true}
+                    onSaved={() => refetchVacancy()}
+                  />
+                  <AutomationSettings
+                    vacancyId={id}
+                    descriptionJson={apiVacancy?.descriptionJson}
+                    vacancyTitle={apiVacancy?.title}
+                    salaryFrom={apiVacancy?.salaryMin}
+                    salaryTo={apiVacancy?.salaryMax}
+                    aiProcessSettings={apiVacancy?.aiProcessSettings as { inviteMessage?: string; reInviteMessage?: string } | null | undefined}
+                    sections={["autoActions", "scenarioHire", "dialer"] satisfies AutomationSectionId[]}
+                  />
+                  <VacancyScheduleSettings vacancyId={id} />
+                </div>
+                )}
+
+                {/* ───────── ТАБ «Интеграции» ───────── */}
+                {settingsSection === "integrations" && (
+                <div className="space-y-6 max-w-3xl">
+                  <div>
+                    <h3 className="text-lg font-semibold text-foreground mb-1">CRM-интеграции</h3>
+                    <p className="text-sm text-muted-foreground mb-3">Синхронизация воронки с CRM</p>
+                    <div className="space-y-3">
+                      <div className="rounded-lg border bg-card p-4 flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-white text-[9px] font-bold" style={{ backgroundColor: "#2FC6F6" }}>Б24</div>
+                        <div className="flex-1 min-w-0"><p className="text-sm font-medium flex items-center gap-2">Битрикс24 <span className="text-[10px] bg-amber-100 text-amber-700 rounded-full px-2 py-0.5 font-normal">Скоро</span></p><p className="text-[11px] text-muted-foreground">Синхронизация воронки и кандидатов</p></div>
+                        <Badge variant="outline" className="text-xs h-6 text-muted-foreground shrink-0">Не подключено</Badge>
+                        <Button size="sm" className="h-8 text-xs shrink-0" disabled>Подключить</Button>
+                      </div>
+                      <div className="rounded-lg border bg-card p-4 flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-white text-[11px] font-bold" style={{ backgroundColor: "#7B68EE" }}>amo</div>
+                        <div className="flex-1 min-w-0"><p className="text-sm font-medium flex items-center gap-2">AmoCRM <span className="text-[10px] bg-amber-100 text-amber-700 rounded-full px-2 py-0.5 font-normal">Скоро</span></p><p className="text-[11px] text-muted-foreground">Синхронизация воронки и кандидатов</p></div>
+                        <Badge variant="outline" className="text-xs h-6 text-muted-foreground shrink-0">Не подключено</Badge>
+                        <Button size="sm" className="h-8 text-xs shrink-0" disabled>Подключить</Button>
+                      </div>
+                      <div className="rounded-lg border bg-card p-4 flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-white" style={{ backgroundColor: "#6B7280" }}><Settings className="w-3.5 h-3.5" /></div>
+                        <div className="flex-1 min-w-0"><p className="text-sm font-medium flex items-center gap-2">Другая CRM <span className="text-[10px] bg-amber-100 text-amber-700 rounded-full px-2 py-0.5 font-normal">Скоро</span></p><p className="text-[11px] text-muted-foreground">Подключение через API или webhook</p></div>
+                        <Badge variant="outline" className="text-xs h-6 text-muted-foreground shrink-0">Не подключено</Badge>
+                        <Button size="sm" className="h-8 text-xs shrink-0" disabled>Настроить</Button>
                       </div>
                     </div>
-
-                    {/* Источники и UTM-ссылки */}
-                    <UtmLinksSection vacancyId={id} vacancySlug={id} />
+                    <p className="text-[11px] text-muted-foreground mt-3">Любые webhook/API-настройки появятся здесь после подключения CRM.</p>
                   </div>
                 </div>
                 )}
