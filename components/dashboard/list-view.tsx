@@ -1,10 +1,11 @@
 "use client"
 
-import { useMemo } from "react"
+import { useMemo, useRef } from "react"
 import type { Candidate } from "./candidate-card"
 import type { CardDisplaySettings } from "./card-settings"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 import type { CandidateAction } from "@/lib/column-config"
@@ -37,6 +38,9 @@ interface ListViewProps {
   /** Если задан — сортировка по колонке управляется снаружи (URL/сервер). */
   sort?: ListSortState | null
   onSortChange?: (next: ListSortState | null) => void
+  /** Множественное выделение для bulk-операций. Если не задано — колонка чекбоксов скрыта. */
+  selectedIds?: Set<string>
+  onSelectionChange?: (next: Set<string>) => void
 }
 
 const DEFAULT_DIR: Record<ListSortKey, ListSortDir> = {
@@ -108,7 +112,10 @@ function SortHeader({
 export function ListView({
   columns, settings, onOpenProfile, onAction, onToggleFavorite,
   sortMode = "date_desc", sort = null, onSortChange,
+  selectedIds, onSelectionChange,
 }: ListViewProps) {
+  const lastSelectedIdRef = useRef<string | null>(null)
+  const selectionEnabled = !!selectedIds && !!onSelectionChange
   const showProgress     = settings.showProgress !== false
   const showResponseDate = settings.showResponseDate !== false
   const showCity         = settings.showCity
@@ -206,7 +213,9 @@ export function ListView({
   // длиннее («Первичный контакт» ~17 симв, «Анкета заполнена» ~16 симв),
   // поэтому Статус получает больше места (min 140 / 1.8fr), а Кандидат —
   // меньше избыточного простора (с 6fr → 3fr, max-w на имя 240px).
-  const cols: string[] = ["40px"]                       // ★ — фикс
+  const cols: string[] = []
+  if (selectionEnabled) cols.push("36px")               // ☐ — фикс
+  cols.push("40px")                                     // ★ — фикс
   cols.push("minmax(180px, 3fr)")                       // Кандидат
   if (showProgress) cols.push("minmax(110px, 1.5fr)")   // Демо
   if (showScore) cols.push("minmax(70px, 1fr)")         // AI-оценка
@@ -219,6 +228,53 @@ export function ListView({
 
   const gridStyle = { gridTemplateColumns: cols.join(" ") }
 
+  // ─── Selection helpers ──────────────────────────────────────────────────
+  const visibleIds = useMemo(() => allCandidates.map((c) => c.id), [allCandidates])
+  const selectedCount = useMemo(() => {
+    if (!selectedIds) return 0
+    let n = 0
+    for (const id of visibleIds) if (selectedIds.has(id)) n++
+    return n
+  }, [selectedIds, visibleIds])
+  const headerState: boolean | "indeterminate" =
+    selectedCount === 0 ? false : selectedCount === visibleIds.length ? true : "indeterminate"
+
+  const toggleAllVisible = () => {
+    if (!selectedIds || !onSelectionChange) return
+    const next = new Set(selectedIds)
+    if (selectedCount === visibleIds.length) {
+      for (const id of visibleIds) next.delete(id)
+    } else {
+      for (const id of visibleIds) next.add(id)
+    }
+    onSelectionChange(next)
+  }
+
+  const toggleOne = (id: string, e?: React.MouseEvent | React.KeyboardEvent) => {
+    if (!selectedIds || !onSelectionChange) return
+    const next = new Set(selectedIds)
+    const isShift = !!(e && (e as React.MouseEvent).shiftKey)
+    if (isShift && lastSelectedIdRef.current && lastSelectedIdRef.current !== id) {
+      const fromIdx = visibleIds.indexOf(lastSelectedIdRef.current)
+      const toIdx = visibleIds.indexOf(id)
+      if (fromIdx !== -1 && toIdx !== -1) {
+        const [lo, hi] = fromIdx < toIdx ? [fromIdx, toIdx] : [toIdx, fromIdx]
+        const shouldSelect = !next.has(id)
+        for (let i = lo; i <= hi; i++) {
+          if (shouldSelect) next.add(visibleIds[i])
+          else next.delete(visibleIds[i])
+        }
+        lastSelectedIdRef.current = id
+        onSelectionChange(next)
+        return
+      }
+    }
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    lastSelectedIdRef.current = id
+    onSelectionChange(next)
+  }
+
   return (
     <div className="rounded-xl border border-border overflow-hidden bg-card">
       {/* Table Header */}
@@ -226,6 +282,15 @@ export function ListView({
         className="grid gap-4 pl-2 pr-4 py-2.5 bg-muted/60 border-b border-border text-[13px] font-medium text-muted-foreground tracking-normal items-center"
         style={gridStyle}
       >
+        {selectionEnabled && (
+          <div className="flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+            <Checkbox
+              checked={headerState}
+              onCheckedChange={() => toggleAllVisible()}
+              aria-label={selectedCount === visibleIds.length && visibleIds.length > 0 ? "Снять выделение со всех" : "Выделить всех на странице"}
+            />
+          </div>
+        )}
         <button
           type="button"
           onClick={() => handleSort("favorite")}
@@ -261,16 +326,32 @@ export function ListView({
           const aiActuallyRan = candidate.aiScore != null && !!candidate.aiSummary
           const progress = progressPercentOf(candidate)
           const dt = formatResponseDate(candidate.createdAt ?? candidate.addedAt)
+          const isSelected = !!selectedIds?.has(candidate.id)
           return (
             <div
               key={candidate.id}
               className={cn(
                 "grid gap-4 pl-2 pr-4 items-center hover:bg-muted/40 transition-colors min-h-[56px] text-[14px] cursor-pointer",
-                i % 2 === 0 ? "" : "bg-muted/20"
+                i % 2 === 0 ? "" : "bg-muted/20",
+                isSelected && "bg-primary/5 hover:bg-primary/10"
               )}
               style={gridStyle}
               onClick={() => onOpenProfile?.(candidate, candidate.columnId)}
             >
+              {/* Selection checkbox */}
+              {selectionEnabled && (
+                <div
+                  className="flex items-center justify-center"
+                  onClick={(e) => { e.stopPropagation(); toggleOne(candidate.id, e) }}
+                >
+                  <Checkbox
+                    checked={isSelected}
+                    onCheckedChange={() => { /* handled by row click */ }}
+                    aria-label={isSelected ? "Снять выделение" : "Выделить кандидата"}
+                  />
+                </div>
+              )}
+
               {/* Favorite */}
               <div onClick={(e) => e.stopPropagation()} className="flex items-center justify-center">
                 <button

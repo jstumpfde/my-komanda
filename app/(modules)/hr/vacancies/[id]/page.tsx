@@ -19,6 +19,7 @@ import { SortMenu } from "@/components/dashboard/sort-menu"
 import { Tooltip as UITooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip"
 import type { CandidateSortMode } from "@/lib/candidate-sort"
 import { CandidateDrawer } from "@/components/candidates/candidate-drawer"
+import { BulkActionsBar, type BulkAction } from "@/components/dashboard/bulk-actions-bar"
 import { CandidatesProgressList } from "@/components/candidates/candidates-progress-list"
 import { AddCandidateDialog } from "@/components/dashboard/add-candidate-dialog"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
@@ -476,6 +477,9 @@ export default function VacancyPage() {
   const [drawerCandidateId, setDrawerCandidateId] = useState<string | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [addDialogOpen, setAddDialogOpen] = useState(false)
+  // Bulk-selection state (только список — выделение между кандидатами)
+  const [selectedCandidateIds, setSelectedCandidateIds] = useState<Set<string>>(new Set())
+  const [bulkBusy, setBulkBusy] = useState(false)
   const [internalName, setInternalName] = useState("")
   const [isEditingName, setIsEditingName] = useState(false)
   const [savingName, setSavingName] = useState(false)
@@ -990,6 +994,53 @@ export default function VacancyPage() {
     setColumns((p) => p.map((c) => c.id !== "new" ? c : { ...c, candidates: [...c.candidates, candidate], count: c.candidates.length + 1 }))
     toast.success(`${candidate.name} добавлен`)
   }
+
+  // ─── Bulk actions (плавающая панель) ────────────────────────────────────
+  const handleBulkAction = useCallback(
+    async (action: BulkAction, payload?: { stage?: string }) => {
+      if (selectedCandidateIds.size === 0 || bulkBusy) return
+      const ids = Array.from(selectedCandidateIds)
+      setBulkBusy(true)
+      try {
+        const res = await fetch("/api/modules/hr/candidates/bulk", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ candidateIds: ids, action, payload }),
+        })
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({})) as { error?: string }
+          toast.error(err.error || "Не удалось выполнить массовое действие")
+          return
+        }
+        const data = (await res.json()) as { affected?: number; isFavorite?: boolean }
+        const n = data.affected ?? ids.length
+        switch (action) {
+          case "reject":
+            toast.success(`Отказано: ${n}`)
+            break
+          case "invite":
+            toast.success(`Приглашено на интервью: ${n}`)
+            break
+          case "talent_pool":
+            toast.success(`В резерв: ${n}`)
+            break
+          case "set_stage":
+            toast.success(`Перемещено: ${n}`)
+            break
+          case "toggle_favorite":
+            toast.success(data.isFavorite ? `В избранном: ${n}` : `Снято с избранного: ${n}`)
+            break
+        }
+        setSelectedCandidateIds(new Set())
+        await refetchCandidates()
+      } catch {
+        toast.error("Ошибка сети")
+      } finally {
+        setBulkBusy(false)
+      }
+    },
+    [selectedCandidateIds, bulkBusy, refetchCandidates],
+  )
 
   const filteredColumns = columns.map((col) => {
     const filtered = col.candidates.filter((c) => {
@@ -1814,6 +1865,8 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                   sortMode={sortMode}
                   listSort={listSort}
                   onListSortChange={setListSort}
+                  selectedIds={selectedCandidateIds}
+                  onSelectionChange={setSelectedCandidateIds}
                 />
               </TabsContent>
 
@@ -2879,6 +2932,14 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
             })
           })
         }}
+      />
+
+      {/* Bulk actions floating bar — visible only when кандидаты выделены */}
+      <BulkActionsBar
+        count={selectedCandidateIds.size}
+        stages={columns.map((c) => ({ id: c.id, title: c.title }))}
+        onClear={() => setSelectedCandidateIds(new Set())}
+        onAction={handleBulkAction}
       />
 
     </SidebarProvider>
