@@ -159,8 +159,20 @@ export async function GET(req: NextRequest) {
         const demoTotalBlocks = totalsByVacancy.get(r.vacancyId) ?? 0
         const progress = r.demoProgressJson as { blocks?: DemoBlockProgress[]; completedAt?: string | null } | null
         const blocks = Array.isArray(progress?.blocks) ? progress.blocks : []
-        const completed = blocks.filter((b) => b.status === "completed")
-        const demoCompletedBlocks = completed.length
+        // Дедуп по blockId — пересдача теста / повторный ответ создают
+        // несколько записей на один и тот же блок, иначе видим 38/36.
+        // Также исключаем виртуальный маркер __complete__.
+        const completedByBlockId = new Map<string, DemoBlockProgress>()
+        for (const b of blocks) {
+          if (b.status === "completed" && b.blockId && b.blockId !== "__complete__") {
+            completedByBlockId.set(b.blockId, b)
+          }
+        }
+        const completed = Array.from(completedByBlockId.values())
+        // Cap на total — структура демо могла измениться после ответов.
+        const demoCompletedBlocks = demoTotalBlocks > 0
+          ? Math.min(completed.length, demoTotalBlocks)
+          : completed.length
         // Если демо завершено (completedAt или блок __complete__) — 100%.
         // Иначе формула даёт ~19% даже на финале: completed-записи генерят
         // только task/media, а total включает и статичные блоки.
