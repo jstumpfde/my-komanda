@@ -811,8 +811,10 @@ export default function DemoPage() {
           }
         } else if (b.type === "media") {
           if (mediaUploaded[b.id]) {
-            // ping чтобы сервер пересчитал hasVideoVizitka и положил блок в completed
-            batch.push({ blockId: b.id, answer: { viewed: true }, status: "completed", timeSpent })
+            // Передаём фактический MediaAnswer ({url, mediaType: "video", ...}), а
+            // не маркер {viewed: true}. Иначе сервер перезапишет ответ в
+            // anketa_answers и hasVideoVizitka рассчитается как false.
+            batch.push({ blockId: b.id, answer: mediaUploaded[b.id], status: "completed", timeSpent })
           } else if (mediaSkipped[b.id]) {
             batch.push({ blockId: b.id, answer: { skipped: true }, status: "skipped", timeSpent })
           }
@@ -1549,6 +1551,11 @@ function MediaBlock({
   const videoPreviewRef = useRef<HTMLVideoElement>(null)
   const timerRef = useRef<number | null>(null)
   const photoInputRef = useRef<HTMLInputElement>(null)
+  // Дублируем elapsed/previewUrl в refs, чтобы upload, вызванный из onstop /
+  // pickPhoto / pickVideoFile (т.е. из устаревшего замыкания), видел свежие
+  // значения без пересоздания обработчика.
+  const elapsedRef = useRef(0)
+  const previewUrlRef = useRef<string | null>(null)
 
   // Определяем, можно ли записывать через MediaRecorder — если нет, показываем file fallback
   const canRecordVideo = !!pickSupportedMime(VIDEO_MIME_CANDIDATES) && typeof navigator !== "undefined" && !!navigator.mediaDevices?.getUserMedia
@@ -1569,7 +1576,7 @@ function MediaBlock({
   useEffect(() => {
     return () => {
       cleanup()
-      if (previewUrl) URL.revokeObjectURL(previewUrl)
+      if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -1620,20 +1627,26 @@ function MediaBlock({
         blobMimeRef.current = mime
         blobMediaTypeRef.current = type
         const url = URL.createObjectURL(blob)
+        previewUrlRef.current = url
         setPreviewUrl(url)
         setPreviewMime(mime)
-        setMode("preview")
         cleanup()
+        // Авто-загрузка сразу после Стоп — без шага «Отправить».
+        // Через "preview" не идём, чтобы не было окна, в котором кандидат
+        // мог бы нажать «Далее» с локальным Blob, не дошедшим до сервера.
+        void upload()
       }
 
       recorder.start()
       setRecType(type)
+      elapsedRef.current = 0
       setElapsed(0)
       setMode("recording")
 
       const startedAt = Date.now()
       timerRef.current = window.setInterval(() => {
         const secs = (Date.now() - startedAt) / 1000
+        elapsedRef.current = secs
         setElapsed(secs)
         if (maxDuration !== null && secs >= maxDuration && recorder.state === "recording") {
           recorder.stop()
@@ -1653,12 +1666,15 @@ function MediaBlock({
   }
 
   const resetToIdle = () => {
-    if (previewUrl) URL.revokeObjectURL(previewUrl)
+    if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current)
+    previewUrlRef.current = null
     setPreviewUrl(null)
     setPreviewMime("")
     blobRef.current = null
     blobMimeRef.current = ""
+    elapsedRef.current = 0
     setElapsed(0)
+    setUploadProgress(0)
     setErrMsg("")
     setRecType(null)
     setMode("idle")
@@ -1672,11 +1688,13 @@ function MediaBlock({
     blobRef.current = file
     blobMimeRef.current = file.type || "image/jpeg"
     blobMediaTypeRef.current = "photo"
+    elapsedRef.current = 0
     const url = URL.createObjectURL(file)
+    previewUrlRef.current = url
     setPreviewUrl(url)
     setPreviewMime(blobMimeRef.current)
     setErrMsg("")
-    setMode("preview")
+    void upload()
   }
 
   const pickVideoFile = (file: File) => {
@@ -1687,11 +1705,13 @@ function MediaBlock({
     blobRef.current = file
     blobMimeRef.current = file.type || "video/mp4"
     blobMediaTypeRef.current = "video"
+    elapsedRef.current = 0
     const url = URL.createObjectURL(file)
+    previewUrlRef.current = url
     setPreviewUrl(url)
     setPreviewMime(blobMimeRef.current)
     setErrMsg("")
-    setMode("preview")
+    void upload()
   }
 
   const upload = async () => {
@@ -1699,6 +1719,7 @@ function MediaBlock({
     if (!blob) return
     if (blob.size > MAX_MEDIA_SIZE) {
       setErrMsg("Размер файла больше 50MB. Попробуйте записать короче.")
+      setMode("preview")
       return
     }
 
@@ -1712,6 +1733,7 @@ function MediaBlock({
     const fileObj = blob instanceof File
       ? blob
       : new File([blob], fileName, { type: mime })
+    const durationSecs = elapsedRef.current
 
     // Режим директора — имитируем «загрузку», ничего не отправляем на сервер
     if (previewMode) {
@@ -1719,13 +1741,14 @@ function MediaBlock({
       const answer: MediaAnswer = {
         url: localUrl,
         mediaType,
-        duration: mediaType !== "photo" ? Math.round(elapsed) : undefined,
+        duration: mediaType !== "photo" ? Math.round(durationSecs) : undefined,
         size: blob.size,
         mime,
       }
       setResult(answer)
       onUploaded(answer)
-      if (previewUrl) URL.revokeObjectURL(previewUrl)
+      if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current)
+      previewUrlRef.current = null
       setPreviewUrl(null)
       setMode("done")
       return
@@ -1735,7 +1758,7 @@ function MediaBlock({
     fd.append("file", fileObj)
     fd.append("blockId", block.id)
     fd.append("mediaType", mediaType)
-    if (mediaType !== "photo") fd.append("duration", String(Math.round(elapsed)))
+    if (mediaType !== "photo") fd.append("duration", String(Math.round(durationSecs)))
 
     setUploadProgress(0)
     try {
@@ -1765,13 +1788,14 @@ function MediaBlock({
       const answer: MediaAnswer = {
         url: data.url,
         mediaType,
-        duration: mediaType !== "photo" ? Math.round(elapsed) : undefined,
+        duration: mediaType !== "photo" ? Math.round(durationSecs) : undefined,
         size: blob.size,
         mime,
       }
       setResult(answer)
       onUploaded(answer)
-      if (previewUrl) URL.revokeObjectURL(previewUrl)
+      if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current)
+      previewUrlRef.current = null
       setPreviewUrl(null)
       setMode("done")
     } catch (err: any) {
@@ -1957,6 +1981,10 @@ function MediaBlock({
               src={previewUrl}
               controls
               playsInline
+              onLoadedMetadata={(e) => {
+                const v = e.currentTarget
+                if (v.duration > 1 && Number.isFinite(v.duration)) v.currentTime = 1
+              }}
               className="w-full rounded-xl bg-black aspect-video"
             />
           )}
@@ -1976,14 +2004,16 @@ function MediaBlock({
               <RotateCcw className={iconClass} />
               Перезаписать
             </button>
-            <button
-              onClick={upload}
-              className={`${bigBtnBase} text-white flex-1`}
-              style={{ backgroundColor: brandColor }}
-            >
-              <Send className={iconClass} />
-              Отправить
-            </button>
+            {errMsg && (
+              <button
+                onClick={() => upload()}
+                className={`${bigBtnBase} text-white flex-1`}
+                style={{ backgroundColor: brandColor }}
+              >
+                <Send className={iconClass} />
+                Попробовать ещё раз
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -2012,7 +2042,16 @@ function MediaBlock({
             <span>Отправлено</span>
           </div>
           {result.mediaType === "video" && (
-            <video src={result.url} controls playsInline className="w-full rounded-xl bg-black aspect-video" />
+            <video
+              src={result.url}
+              controls
+              playsInline
+              onLoadedMetadata={(e) => {
+                const v = e.currentTarget
+                if (v.duration > 1 && Number.isFinite(v.duration)) v.currentTime = 1
+              }}
+              className="w-full rounded-xl bg-black aspect-video"
+            />
           )}
           {result.mediaType === "audio" && (
             <audio src={result.url} controls className="w-full" />
