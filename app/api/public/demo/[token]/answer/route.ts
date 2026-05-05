@@ -31,6 +31,13 @@ const FINAL_STAGES = new Set(["hired", "rejected"])
 const PRE_OPENED = new Set(["new", "primary_contact", "demo"])
 const PRE_COMPLETED = new Set(["new", "primary_contact", "demo", "demo_opened"])
 
+// Виртуальные маркеры — это служебные blockId, которые НЕ попадают в anketa_answers
+// (т.к. это не пользовательские ответы, а отметки достижения этапов прогресса).
+// __complete__ — последний урок завершён.
+// __anketa__   — анкета финального этапа отправлена.
+// __thanks__   — кандидат увидел экран «Спасибо».
+const VIRTUAL_MARKERS = new Set(["__complete__", "__anketa__", "__thanks__"])
+
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ token: string }> },
@@ -112,10 +119,11 @@ export async function POST(
         existingAnswers = Object.values(rawAnswers as Record<string, any>)
       else existingAnswers = []
 
-      // Применяем все incoming-блоки. "__complete__" в anketaAnswers не пишем —
-      // это маркер завершения, не настоящий ответ. В demoProgressJson.blocks пишем.
+      // Применяем все incoming-блоки. Виртуальные маркеры (__complete__, __anketa__,
+      // __thanks__) в anketaAnswers не пишем — это отметки прогресса, не ответы
+      // кандидата. В demoProgressJson.blocks пишем все, включая виртуальные.
       for (const inc of incoming) {
-        if (inc.blockId !== "__complete__") {
+        if (!VIRTUAL_MARKERS.has(inc.blockId)) {
           const idx = existingAnswers.findIndex((a: any) => a?.blockId === inc.blockId)
           const newAnswer = {
             blockId: inc.blockId,
@@ -179,8 +187,8 @@ export async function POST(
 
       if (!FINAL_STAGES.has(currentStage)) {
         // F2.A: первый ответ из ранних стадий → demo_opened.
-        // prevBlocks был пустой (до текущего batch) и в batch есть НЕ-__complete__ блоки.
-        const hasRealBlock = incoming.some((b) => b.blockId !== "__complete__")
+        // prevBlocks был пустой (до текущего batch) и в batch есть НЕ-виртуальный блок.
+        const hasRealBlock = incoming.some((b) => !VIRTUAL_MARKERS.has(b.blockId))
         if (PRE_OPENED.has(currentStage) && prevBlocks.length === 0 && hasRealBlock && !isComplete) {
           newStage = "demo_opened"
           stageReason = "demo_started"

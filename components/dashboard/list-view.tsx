@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils"
 import type { CandidateAction } from "@/lib/column-config"
 import { applySortMode, type CandidateSortMode } from "@/lib/candidate-sort"
 import { MapPin, CheckCircle2, XCircle, ArrowRight, ThumbsUp, Clock, ArrowUp, ArrowDown, Star } from "lucide-react"
-import { DemoProgressBar, calcDemoPercent } from "@/components/hr/demo-progress-bar"
+import { DemoProgressBar, calcDemoPercent, calcDemoFraction } from "@/components/hr/demo-progress-bar"
 
 export type ListSortKey = "favorite" | "aiScore" | "progress" | "salary" | "responseDate" | "status" | "city" | "source"
 export type ListSortDir = "asc" | "desc"
@@ -311,6 +311,7 @@ export function ListView({
           const isDecisionStage = candidate.columnId === "interview" || candidate.columnId === "offer"
           const aiActuallyRan = candidate.aiScore != null && !!candidate.aiSummary
           const progress = progressPercentOf(candidate)
+          const demoFraction = calcDemoFraction(candidate.demoProgressJson)
           const dt = formatResponseDate(candidate.createdAt ?? candidate.addedAt)
           const isSelected = !!selectedIds?.has(candidate.id)
           return (
@@ -382,6 +383,8 @@ export function ListView({
                   <DemoProgressBar
                     variant="list"
                     progressPercent={progress}
+                    completedBlocks={demoFraction.hasData ? demoFraction.current : undefined}
+                    totalBlocks={demoFraction.hasData ? demoFraction.total : undefined}
                     hasVideoVizitka={candidate.demoProgressJson?.hasVideoVizitka}
                   />
                 </div>
