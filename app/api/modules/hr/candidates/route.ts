@@ -126,6 +126,8 @@ export async function GET(req: NextRequest) {
       const vacancyIds = [...new Set(rows.map((r) => r.vacancyId))]
 
       const totalsByVacancy = new Map<string, number>()
+      // Map: vacancyId → Map<blockId, lessonIndex> для страничного прогресса
+      const blockToLessonByVacancy = new Map<string, Map<string, number>>()
       if (vacancyIds.length > 0) {
         const demoRows = await db
           .select({
@@ -145,11 +147,18 @@ export async function GET(req: NextRequest) {
         }
         for (const [vid, lessonsJson] of latestByVacancy.entries()) {
           const lessons = Array.isArray(lessonsJson) ? (lessonsJson as LessonShape[]) : []
-          const total = lessons.reduce(
-            (sum, l) => sum + (Array.isArray(l?.blocks) ? l.blocks.length : 0),
-            0,
-          )
-          totalsByVacancy.set(vid, total)
+          // Total = lessons.length + 2 (страницы Анкеты и Спасибо в конце)
+          totalsByVacancy.set(vid, lessons.length + 2)
+          // Map: blockId → lessonIndex
+          const blockMap = new Map<string, number>()
+          lessons.forEach((lesson, lessonIdx) => {
+            const lessonBlocks = Array.isArray(lesson?.blocks) ? lesson.blocks : []
+            for (const b of lessonBlocks) {
+              const bid = (b as { id?: string })?.id
+              if (typeof bid === "string") blockMap.set(bid, lessonIdx)
+            }
+          })
+          blockToLessonByVacancy.set(vid, blockMap)
         }
       }
 
@@ -159,20 +168,30 @@ export async function GET(req: NextRequest) {
         const demoTotalBlocks = totalsByVacancy.get(r.vacancyId) ?? 0
         const progress = r.demoProgressJson as { blocks?: DemoBlockProgress[]; completedAt?: string | null } | null
         const blocks = Array.isArray(progress?.blocks) ? progress.blocks : []
-        // Дедуп по blockId — пересдача теста / повторный ответ создают
-        // несколько записей на один и тот же блок, иначе видим 38/36.
-        // Также исключаем виртуальный маркер __complete__.
+        // Считаем СТРАНИЦЫ (уроки) пройденными, а не блоки.
+        // Страница засчитана если есть хотя бы 1 пройденный blockId этой страницы.
+        // Анкета (__anketa__) и Спасибо (__thanks__) — отдельные страницы +2.
+        const blockMap = blockToLessonByVacancy.get(r.vacancyId)
+        const completedLessons = new Set<number>()
         const completedByBlockId = new Map<string, DemoBlockProgress>()
+        let hasAnketa = false
+        let hasThanks = false
         for (const b of blocks) {
-          if (b.status === "completed" && b.blockId && b.blockId !== "__complete__") {
-            completedByBlockId.set(b.blockId, b)
-          }
+          if (b.status !== "completed") continue
+          if (!b.blockId) continue
+          if (b.blockId === "__anketa__") { hasAnketa = true; continue }
+          if (b.blockId === "__thanks__") { hasThanks = true; continue }
+          if (b.blockId === "__complete__") continue
+          completedByBlockId.set(b.blockId, b)
+          const lessonIdx = blockMap?.get(b.blockId)
+          if (typeof lessonIdx === "number") completedLessons.add(lessonIdx)
         }
         const completed = Array.from(completedByBlockId.values())
-        // Cap на total — структура демо могла измениться после ответов.
+        // Итого: уроки + анкета + спасибо
+        const completedPages = completedLessons.size + (hasAnketa ? 1 : 0) + (hasThanks ? 1 : 0)
         const demoCompletedBlocks = demoTotalBlocks > 0
-          ? Math.min(completed.length, demoTotalBlocks)
-          : completed.length
+          ? Math.min(completedPages, demoTotalBlocks)
+          : completedPages
         // Если демо завершено (completedAt или блок __complete__) — 100%.
         // Иначе формула даёт ~19% даже на финале: completed-записи генерят
         // только task/media, а total включает и статичные блоки.
