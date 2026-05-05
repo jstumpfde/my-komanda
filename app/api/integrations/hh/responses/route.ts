@@ -12,6 +12,18 @@ const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
 // 200мс даёт ~5 rps, что заведомо безопасно даже при пиковых батчах.
 const RESUME_FETCH_DELAY_MS = 200
 
+// Defensive resolution: hh API формат может отличаться (items / collection / голый массив).
+// Пустой список — это не ошибка, а просто 0 откликов.
+function resolveItems(r: unknown): HHNegotiationItem[] {
+  return Array.isArray((r as { items?: unknown })?.items)
+    ? ((r as { items: HHNegotiationItem[] }).items)
+    : Array.isArray((r as { collection?: unknown })?.collection)
+      ? ((r as { collection: HHNegotiationItem[] }).collection)
+      : Array.isArray(r)
+        ? (r as HHNegotiationItem[])
+        : []
+}
+
 export async function GET() {
   const session = await auth()
   if (!session?.user?.companyId) {
@@ -51,25 +63,38 @@ export async function GET() {
         continue
       }
       try {
-        const data = await getNegotiations(accessToken, { vacancyId: v.hhVacancyId }) as unknown
-        // Defensive resolution: hh API формат может отличаться (items / collection / голый массив).
-        // Пустой список — это не ошибка, а просто 0 откликов.
-        const r = data as { items?: unknown; collection?: unknown } | unknown[] | null | undefined
-        const items: HHNegotiationItem[] = Array.isArray((r as { items?: unknown })?.items)
-          ? ((r as { items: HHNegotiationItem[] }).items)
-          : Array.isArray((r as { collection?: unknown })?.collection)
-            ? ((r as { collection: HHNegotiationItem[] }).collection)
-            : Array.isArray(r)
-              ? (r as HHNegotiationItem[])
-              : []
-        if (items.length === 0) {
+        const MAX_PAGES = 20 // защита от бесконечного цикла; 20 * 50 = 1000 откликов
+        const allVacItems: HHNegotiationItem[] = []
+
+        const firstResp = await getNegotiations(accessToken, { vacancyId: v.hhVacancyId, page: 0 }) as unknown
+        const firstItems = resolveItems(firstResp)
+        allVacItems.push(...firstItems)
+
+        const pages = (firstResp as { pages?: number })?.pages ?? 1
+        const found = (firstResp as { found?: number })?.found
+        const totalPages = Math.min(pages, MAX_PAGES)
+        console.log(
+          "[hh/responses] vacancy", v.hhVacancyId,
+          "pages:", pages,
+          "capped:", totalPages,
+          "found:", found,
+        )
+
+        if (firstItems.length === 0 && pages <= 1) {
           console.info(`[hh/responses] vacancy ${v.id} (hh ${v.hhVacancyId}): 0 откликов`)
         }
+
+        for (let page = 1; page < totalPages; page++) {
+          const data = await getNegotiations(accessToken, { vacancyId: v.hhVacancyId, page })
+          const items = resolveItems(data)
+          allVacItems.push(...items)
+        }
+
         // hh при фильтре по vacancy_id не возвращает поле vacancy на каждом item
         // (все они и так относятся к запрошенной вакансии). Восстанавливаем привязку
         // из контекста цикла, иначе ниже отвалится проверка !item.vacancy?.id.
         const hhVacancyId = v.hhVacancyId
-        const itemsWithVacancy: HHNegotiationItem[] = items.map((item) =>
+        const itemsWithVacancy: HHNegotiationItem[] = allVacItems.map((item) =>
           item.vacancy?.id ? item : { ...item, vacancy: { id: hhVacancyId, name: item.vacancy?.name ?? "" } },
         )
         allItems.push(...itemsWithVacancy)
