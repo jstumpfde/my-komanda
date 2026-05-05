@@ -215,8 +215,8 @@ export function ListView({
   // меньше избыточного простора (с 6fr → 3fr, max-w на имя 240px).
   const cols: string[] = []
   if (selectionEnabled) cols.push("36px")               // ☐ — фикс
-  cols.push("40px")                                     // ★ — фикс
   cols.push("minmax(180px, 3fr)")                       // Кандидат
+  cols.push("40px")                                     // ★ — фикс
   if (showProgress) cols.push("minmax(110px, 1.5fr)")   // Демо
   if (showScore) cols.push("minmax(70px, 1fr)")         // AI-оценка
   if (showSalary) cols.push("minmax(110px, 1.5fr)")     // Зарплата
@@ -283,7 +283,7 @@ export function ListView({
         style={gridStyle}
       >
         {selectionEnabled && (
-          <div className="flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center justify-center pl-2 pr-2" onClick={(e) => e.stopPropagation()}>
             <Checkbox
               checked={headerState}
               onCheckedChange={() => toggleAllVisible()}
@@ -291,24 +291,10 @@ export function ListView({
             />
           </div>
         )}
-        <button
-          type="button"
-          onClick={() => handleSort("favorite")}
-          aria-sort={sort?.key === "favorite" ? (sort.dir === "asc" ? "ascending" : "descending") : "none"}
-          className={cn(
-            "inline-flex items-center justify-center gap-0.5 rounded-md py-0.5 hover:bg-accent/60 transition-colors",
-            sort?.key === "favorite" && "bg-primary/10",
-          )}
-          aria-label="Сортировать по избранному"
-        >
-          <Star className={cn("size-4", sort?.key === "favorite" ? "fill-amber-400 text-amber-400" : "")} />
-          {sort?.key === "favorite" && (
-            sort.dir === "asc"
-              ? <ArrowUp className="size-3 text-primary" strokeWidth={2.5} />
-              : <ArrowDown className="size-3 text-primary" strokeWidth={2.5} />
-          )}
-        </button>
-        <div className="text-left">Кандидат</div>
+        <div className="text-left px-2">Кандидат</div>
+        <div className="flex items-center justify-center px-2" aria-hidden="true">
+          <Star className="size-4 text-muted-foreground/60" />
+        </div>
         {showProgress && <SortHeader label="Демо" sortKey="progress" sort={sort} onToggle={handleSort} align="center" />}
         {showScore && <SortHeader label="AI-оценка" sortKey="aiScore" sort={sort} onToggle={handleSort} align="center" />}
         {showSalary && <SortHeader label="Зарплата" sortKey="salary" sort={sort} onToggle={handleSort} align="center" />}
@@ -341,7 +327,7 @@ export function ListView({
               {/* Selection checkbox */}
               {selectionEnabled && (
                 <div
-                  className="flex items-center justify-center"
+                  className="flex items-center justify-center pl-2 pr-2"
                   onClick={(e) => { e.stopPropagation(); toggleOne(candidate.id, e) }}
                 >
                   <Checkbox
@@ -352,20 +338,8 @@ export function ListView({
                 </div>
               )}
 
-              {/* Favorite */}
-              <div onClick={(e) => e.stopPropagation()} className="flex items-center justify-center">
-                <button
-                  type="button"
-                  onClick={() => onToggleFavorite?.(candidate.id, !candidate.isFavorite)}
-                  className="inline-flex items-center justify-center p-1 rounded hover:bg-accent/60 transition-colors"
-                  aria-label={candidate.isFavorite ? "Убрать из избранного" : "В избранное"}
-                >
-                  <Star className={cn("size-4", candidate.isFavorite ? "fill-amber-400 text-amber-400" : "text-muted-foreground/40 hover:text-amber-400")} />
-                </button>
-              </div>
-
               {/* Name + experience */}
-              <div className="flex items-center gap-3 min-w-0">
+              <div className="flex items-center gap-3 min-w-0 px-2">
                 <div
                   className="w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-white text-[11px] font-bold"
                   style={{ background: `linear-gradient(135deg, ${candidate.colorFrom}, ${candidate.colorTo})` }}
@@ -388,6 +362,18 @@ export function ListView({
                     </p>
                   )}
                 </div>
+              </div>
+
+              {/* Favorite */}
+              <div onClick={(e) => e.stopPropagation()} className="flex items-center justify-center px-2">
+                <button
+                  type="button"
+                  onClick={() => onToggleFavorite?.(candidate.id, !candidate.isFavorite)}
+                  className="inline-flex items-center justify-center p-1 rounded hover:bg-accent/60 transition-colors"
+                  aria-label={candidate.isFavorite ? "Убрать из избранного" : "В избранное"}
+                >
+                  <Star className={cn("size-4", candidate.isFavorite ? "fill-amber-400 text-amber-400" : "text-muted-foreground/40 hover:text-amber-400")} />
+                </button>
               </div>
 
               {/* Demo progress */}
