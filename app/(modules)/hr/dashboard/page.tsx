@@ -389,7 +389,12 @@ function DashboardContent() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
               {/* Efficiency — реальное */}
               <div className="border rounded-xl shadow-sm hover:shadow-md transition-shadow p-6">
-                <h3 className="text-lg font-semibold mb-4">Эффективность по вакансиям</h3>
+                <div className="flex items-center justify-between mb-1">
+                  <h3 className="text-lg font-semibold">Эффективность по вакансиям</h3>
+                </div>
+                <p className="text-xs text-muted-foreground mb-4">
+                  Сколько откликов дошло до этапа «Решение» / всего откликов
+                </p>
                 {!loaded ? (
                   <div className="h-40" />
                 ) : vacancies.length === 0 ? (
@@ -403,13 +408,19 @@ function DashboardContent() {
                       const done = v.decisionCount || 0
                       const pct = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0
                       const barColor = pct >= 50 ? C.green : pct >= 20 ? C.blue : C.orange
+                      const tooltip = `Дошло до решения: ${done} из ${total} откликов${total > 0 ? ` (${pct}%)` : ""}`
                       return (
                         <div key={v.id}>
-                          <div className="flex items-center justify-between mb-1.5">
+                          <div className="flex items-center justify-between mb-1.5 gap-2">
                             <span className="text-xs font-medium truncate">{v.title}</span>
-                            <span className="text-[11px] text-muted-foreground">{done}/{total}</span>
+                            <span
+                              className="text-[11px] text-muted-foreground tabular-nums whitespace-nowrap shrink-0"
+                              title={tooltip}
+                            >
+                              {done}/{total} <span className="text-muted-foreground/70">решений</span>
+                            </span>
                           </div>
-                          <div className="h-2.5 bg-muted/30 rounded-full overflow-hidden">
+                          <div className="h-2.5 bg-muted/30 rounded-full overflow-hidden" title={tooltip}>
                             <div
                               className="h-full rounded-full transition-all"
                               style={{ width: `${pct}%`, backgroundColor: barColor }}
