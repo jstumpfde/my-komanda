@@ -24,10 +24,11 @@ export interface DemoProgressInfo {
  */
 export function calcDemoPercent(dp: DemoProgressData | null | undefined): DemoProgressInfo {
   if (!dp || !Array.isArray(dp.blocks)) return { percent: null, completed: 0, total: 0 }
-  const completed = dp.blocks.filter((b) => b?.status === "completed").length
+  const completed = dp.blocks.filter((b) => b?.status === "completed" && b?.blockId !== "__complete__").length
   const total = dp.totalBlocks ?? dp.blocks.length
   if (!total) return { percent: 0, completed, total }
-  return { percent: Math.round((completed / total) * 100), completed, total }
+  const rawPercent = Math.round((completed / total) * 100)
+  return { percent: Math.min(rawPercent, 100), completed, total }
 }
 
 export type DemoProgressVariant = "list" | "kanban"
