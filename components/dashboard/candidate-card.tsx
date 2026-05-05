@@ -47,6 +47,7 @@ export interface Candidate {
     blocks?: Array<{ blockId: string; status: string; timeSpent?: number; answer?: unknown }>
     totalBlocks?: number
     completedAt?: string | null
+    hasVideoVizitka?: boolean
   } | null
   isFavorite?: boolean
   createdAt?: string | Date | null
@@ -158,6 +159,7 @@ export function CandidateCard({ candidate, settings, columnId, isLastColumn, onO
             progressPercent={percent}
             completedBlocks={completed}
             totalBlocks={total}
+            hasVideoVizitka={candidate.demoProgressJson?.hasVideoVizitka}
           />
         )
       })()}

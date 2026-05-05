@@ -1,5 +1,6 @@
 "use client"
 
+import { Video } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 /** Структура demo_progress_json кандидата (минимум, необходимый компоненту). */
@@ -7,6 +8,7 @@ export interface DemoProgressData {
   blocks?: Array<{ blockId?: string; status?: string; timeSpent?: number; answer?: unknown }>
   totalBlocks?: number
   completedAt?: string | null
+  hasVideoVizitka?: boolean
 }
 
 export interface DemoProgressInfo {
@@ -40,6 +42,8 @@ interface DemoProgressBarProps {
   completedBlocks?: number
   /** Только для variant="kanban": общее количество блоков. */
   totalBlocks?: number
+  /** Если true — рядом с подписью процента показывается иконка видео-визитки. */
+  hasVideoVizitka?: boolean
   /**
    * "list"   — узкая шкала ~80px справа подпись "{N}%" / "Не начато" / "Завершено".
    *             Цвета: пусто — серая, 1-99% — синяя, 100% — зелёная.
@@ -54,6 +58,7 @@ export function DemoProgressBar({
   progressPercent,
   completedBlocks,
   totalBlocks,
+  hasVideoVizitka,
   variant = "list",
   className,
 }: DemoProgressBarProps) {
@@ -81,7 +86,12 @@ export function DemoProgressBar({
             style={{ width: hasData ? `${pct}%` : "0%" }}
           />
         </div>
-        <p className="text-xs text-muted-foreground mt-0.5">{label}</p>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          {label}
+          {hasVideoVizitka && (
+            <Video className="inline w-3 h-3 ml-1 text-muted-foreground" aria-label="Есть видео-визитка" />
+          )}
+        </p>
       </div>
     )
   }
@@ -103,6 +113,9 @@ export function DemoProgressBar({
         )}
       >
         {percent}%
+        {hasVideoVizitka && (
+          <Video className="inline w-3 h-3 ml-1 text-muted-foreground" aria-label="Есть видео-визитка" />
+        )}
       </span>
       <div
         className="w-full h-1.5 rounded-full overflow-hidden bg-gray-100 dark:bg-gray-800/50"
