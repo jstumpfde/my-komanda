@@ -449,7 +449,12 @@ export default function CandidateDetailPage() {
                           src={rec.url}
                           controls
                           playsInline
-                          className="w-full rounded-lg bg-black aspect-video"
+                          onLoadedMetadata={(e) => {
+                            const v = e.currentTarget
+                            if (v.duration > 1 && Number.isFinite(v.duration)) v.currentTime = 1
+                          }}
+                          className="rounded-lg bg-black mx-auto block w-full"
+                          style={{ maxWidth: 320, aspectRatio: "9 / 16", objectFit: "cover" }}
                         />
                       )}
                       {rec.mediaType === "audio" && (

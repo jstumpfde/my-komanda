@@ -185,7 +185,12 @@ function MediaAnswerView({ media }: { media: MediaAnswer }) {
           preload="metadata"
           src={media.url}
           playsInline
-          className="w-full rounded-md bg-black max-h-[400px] object-contain"
+          onLoadedMetadata={(e) => {
+            const v = e.currentTarget
+            if (v.duration > 1 && Number.isFinite(v.duration)) v.currentTime = 1
+          }}
+          className="rounded-md bg-black mx-auto block w-full"
+          style={{ maxWidth: 320, aspectRatio: "9 / 16", objectFit: "cover" }}
         />
         <a
           href={media.url}
