@@ -109,12 +109,20 @@ export async function PUT(
   }
 }
 
-// Тип для блока автоматических действий, хранится в descriptionJson.automation
+// Тип для блока автоматических действий, хранится в descriptionJson.automation.
+// rejectTemplate / inviteTemplate помечены как deprecated — их заменили
+// messageTemplates.soft_reject и messageTemplates.demo_invite (см. таб
+// «Сообщения» → «Шаблоны сообщений»). Поля сохраняются в типе только для
+// обратной совместимости с уже сохранёнными данными в descriptionJson;
+// PATCH больше не пишет их в БД, но оставляем в типе на случай рефакторинга
+// миграции через scripts/migrate-templates.ts.
 export interface VacancyAutomationSettings {
   autoInvite?: boolean
   autoReject?: boolean
   notifyManager?: boolean
+  /** @deprecated используйте messageTemplates.soft_reject */
   rejectTemplate?: string
+  /** @deprecated используйте messageTemplates.demo_invite */
   inviteTemplate?: string
 }
 
@@ -169,8 +177,9 @@ export async function PATCH(
       if (typeof incoming.autoInvite === "boolean") sanitized.autoInvite = incoming.autoInvite
       if (typeof incoming.autoReject === "boolean") sanitized.autoReject = incoming.autoReject
       if (typeof incoming.notifyManager === "boolean") sanitized.notifyManager = incoming.notifyManager
-      if (typeof incoming.rejectTemplate === "string") sanitized.rejectTemplate = incoming.rejectTemplate
-      if (typeof incoming.inviteTemplate === "string") sanitized.inviteTemplate = incoming.inviteTemplate
+      // rejectTemplate / inviteTemplate больше не сохраняются — UI убрал поля,
+      // данные живут в messageTemplates.soft_reject / messageTemplates.demo_invite.
+      // Если кто-то всё-таки пришлёт старые ключи — игнорируем (не перезатираем merge).
 
       const nextJson = {
         ...currentJson,

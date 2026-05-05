@@ -2509,7 +2509,7 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                     salaryFrom={apiVacancy?.salaryMin}
                     salaryTo={apiVacancy?.salaryMax}
                     aiProcessSettings={apiVacancy?.aiProcessSettings as { inviteMessage?: string; reInviteMessage?: string } | null | undefined}
-                    sections={["firstMessage", "callIntent", "followup", "templates"] satisfies AutomationSectionId[]}
+                    sections={["firstMessage", "callIntent", "templates"] satisfies AutomationSectionId[]}
                   />
                   <VacancyFollowupSettings vacancyId={id} />
                 </div>
