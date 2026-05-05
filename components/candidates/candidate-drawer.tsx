@@ -28,23 +28,13 @@ import {
   Send,
   MessageSquare,
   MessageSquarePlus,
-  Clock,
   Sparkles,
-  MonitorOff,
   History as HistoryIcon,
   CheckCircle,
-  SkipForward,
   X,
   FileQuestion,
   Play,
-  MoreHorizontal,
 } from "lucide-react"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import type { ApiCandidate } from "@/hooks/use-candidates"
@@ -734,9 +724,8 @@ export function CandidateDrawer({
           </ScrollArea>
         ) : candidate && derived ? (
           <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
-            <TabsList className="grid grid-cols-7 mx-3 mt-3 shrink-0 h-auto">
+            <TabsList className="grid grid-cols-6 mx-3 mt-3 shrink-0 h-auto">
               <TabsTrigger value="contacts" className="text-[10px] px-1 py-1.5">Контакты</TabsTrigger>
-              <TabsTrigger value="demo" className="text-[10px] px-1 py-1.5">Демо</TabsTrigger>
               <TabsTrigger value="answers" className="text-[10px] px-1 py-1.5">Ответы</TabsTrigger>
               <TabsTrigger value="chat" className="text-[10px] px-1 py-1.5">Чат hh</TabsTrigger>
               <TabsTrigger value="ai" className="text-[10px] px-1 py-1.5">AI</TabsTrigger>
@@ -888,74 +877,6 @@ export function CandidateDrawer({
                     </Button>
                   </div>
                 </section>
-              </TabsContent>
-
-              {/* ── Демо ─────────────────────────────────────────── */}
-              <TabsContent value="demo" className="px-6 py-4 pb-28 mt-0">
-                {!derived.demo || derived.demoBlocks.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-                    <MonitorOff className="w-10 h-10 mb-3 opacity-50" />
-                    <p className="text-sm text-center">Кандидат не открывал демонстрацию должности</p>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    <div className="p-3 rounded-lg bg-muted/40 border border-border/60 space-y-2">
-                      <p className="text-sm">
-                        Прошёл <span className="font-semibold text-foreground">{derived.demoCompleted}</span> из <span className="font-semibold text-foreground">{derived.demoTotal}</span> блоков · <span className="font-semibold text-foreground">{derived.demoPct}%</span>
-                      </p>
-                      <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
-                        <div
-                          className={cn(
-                            "h-full rounded-full transition-all",
-                            derived.demoPct === 0 ? "bg-muted-foreground/30"
-                            : derived.demoPct < 50 ? "bg-orange-500"
-                            : derived.demoPct < 100 ? "bg-emerald-500"
-                            : "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]"
-                          )}
-                          style={{ width: `${derived.demoPct}%` }}
-                        />
-                      </div>
-                    </div>
-
-                    {derived.demo.completedAt && (
-                      <div className="p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-700 dark:text-emerald-400 font-medium text-center">
-                        ✓ Завершено {formatDate(derived.demo.completedAt)}
-                      </div>
-                    )}
-
-                    <div className="space-y-1.5">
-                      {derived.demoBlocks.map((b, i) => {
-                        const Icon = b.status === "completed" ? CheckCircle
-                          : b.status === "skipped" ? SkipForward
-                          : Clock
-                        const iconColor = b.status === "completed" ? "text-emerald-500"
-                          : b.status === "skipped" ? "text-muted-foreground"
-                          : "text-amber-500"
-                        const meta = derived.blockMeta.get(b.blockId)
-                        const blockTitle = meta?.title?.trim() || `Блок ${i + 1}`
-                        const endIso = b.answeredAt
-                        const endMs = endIso ? Date.parse(endIso) : NaN
-                        const startIso = !isNaN(endMs) && b.timeSpent && b.timeSpent > 0
-                          ? new Date(endMs - b.timeSpent * 1000).toISOString()
-                          : undefined
-                        const dur = formatDuration(b.timeSpent)
-                        return (
-                          <div key={i} className="flex items-start gap-2.5 p-2 rounded-lg border border-border/60">
-                            <Icon className={cn("w-4 h-4 shrink-0 mt-0.5", iconColor)} />
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm text-foreground break-words">{blockTitle}</p>
-                              <div className="text-[11px] text-muted-foreground space-x-2">
-                                {startIso && <span>Начал: {formatTimeShort(startIso)}</span>}
-                                {endIso && <span>Закончил: {formatTimeShort(endIso)}</span>}
-                                {dur && <span>· {dur}</span>}
-                              </div>
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )}
               </TabsContent>
 
               {/* ── Ответы ───────────────────────────────────────── */}
@@ -1274,29 +1195,6 @@ export function CandidateDrawer({
               </Button>
             )}
 
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="shrink-0 px-2.5"
-                  aria-label="Дополнительные действия"
-                  disabled={scoringAi || !!changingStage}
-                >
-                  <MoreHorizontal className="w-4 h-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" side="top" className="w-56">
-                <DropdownMenuItem
-                  onSelect={(e) => { e.preventDefault(); handleAiScore() }}
-                  disabled={scoringAi}
-                  className="gap-2"
-                >
-                  {scoringAi ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4 text-purple-600 dark:text-purple-400" />}
-                  {candidate.aiScore != null ? "Переоценить AI" : "Оценить AI"}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
           </div>
         )}
       </SheetContent>
