@@ -113,6 +113,38 @@ const STATUS_CONFIG: Record<VacancyStatus, { label: string; color: string }> = {
   closed_cancelled: { label: "Закрыта (отменена)", color: "bg-red-500/10 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800" },
 }
 
+// Извлекаем возраст из anketa_answers (форма /apply сохраняет birthDate либо
+// объектом {birthDate: "YYYY-MM-DD"}, либо массивом [{blockId/key, answer}]).
+function deriveAge(anketaAnswers: unknown): number | undefined {
+  if (!anketaAnswers || typeof anketaAnswers !== "object") return undefined
+  let birthRaw: string | undefined
+  if (Array.isArray(anketaAnswers)) {
+    for (const e of anketaAnswers as Record<string, unknown>[]) {
+      if (!e || typeof e !== "object") continue
+      const key = (e.blockId ?? e.fieldKey ?? e.key) as string | undefined
+      if (key === "birthDate" || key === "birth_date" || key === "birthday") {
+        const a = e.answer
+        if (typeof a === "string") { birthRaw = a; break }
+        if (a && typeof a === "object" && "value" in a && typeof (a as { value: unknown }).value === "string") {
+          birthRaw = (a as { value: string }).value
+          break
+        }
+      }
+    }
+  } else {
+    const obj = anketaAnswers as Record<string, unknown>
+    const v = obj.birthDate ?? obj.birth_date ?? obj.birthday
+    if (typeof v === "string") birthRaw = v
+  }
+  if (!birthRaw) return undefined
+  const birth = new Date(birthRaw)
+  if (Number.isNaN(birth.getTime())) return undefined
+  const now = new Date()
+  let age = now.getFullYear() - birth.getFullYear()
+  if (now.getMonth() < birth.getMonth() || (now.getMonth() === birth.getMonth() && now.getDate() < birth.getDate())) age--
+  return age >= 0 && age < 150 ? age : undefined
+}
+
 // Map ApiCandidate → Candidate (for the kanban card)
 function apiCandidateToCard(c: ApiCandidate, columnId: string): Candidate {
   const progress = PROGRESS_BY_COLUMN[columnId] ?? 10
@@ -136,6 +168,7 @@ function apiCandidateToCard(c: ApiCandidate, columnId: string): Candidate {
     demoProgressJson: c.demoProgressJson as Candidate["demoProgressJson"],
     isFavorite: c.isFavorite ?? false,
     createdAt: c.createdAt,
+    age: deriveAge(c.anketaAnswers),
   }
 }
 
@@ -1060,6 +1093,14 @@ export default function VacancyPage() {
       if (filters.sources.length > 0 && !filters.sources.includes(c.source)) return false
       if (filters.workFormats.length > 0 && !(c as any).workFormat && !filters.workFormats.includes("office")) return false
       if (filters.workFormats.length > 0 && (c as any).workFormat && !filters.workFormats.includes((c as any).workFormat)) return false
+      // Возраст: фильтр работает только если слайдер сдвинут с дефолта (18..65).
+      // Кандидаты без birthDate в анкете отбрасываются — иначе нельзя сузить
+      // выборку «только 25-30 лет», когда часть кандидатов вообще без данных.
+      if ((filters.ageMin ?? 18) > 18 || (filters.ageMax ?? 65) < 65) {
+        const age = c.age
+        if (age == null) return false
+        if (age < (filters.ageMin ?? 18) || age > (filters.ageMax ?? 65)) return false
+      }
       return true
     })
     return { ...col, candidates: filtered, count: filtered.length }
@@ -2148,9 +2189,6 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                     <p className="text-sm text-muted-foreground">Настройка страницы вакансии для кандидатов</p>
                   </div>
 
-                  {/* Поля мини-формы */}
-                  <MiniFormBuilder vacancyId={id} descriptionJson={apiVacancy?.descriptionJson} />
-
                     {/* Брендинг страницы */}
                     <Card>
                       <CardHeader className="pb-3">
@@ -2384,6 +2422,9 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                         </div>
                       </CardContent>
                     </Card>
+
+                  {/* Поля мини-формы */}
+                  <MiniFormBuilder vacancyId={id} descriptionJson={apiVacancy?.descriptionJson} />
 
                   {/* HTML-страница */}
                   <PublishTab
