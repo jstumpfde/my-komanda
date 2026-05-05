@@ -293,7 +293,11 @@ export function ListView({
               {/* Demo progress */}
               {showProgress && (
                 <div className="flex items-center justify-center">
-                  <DemoProgressBar variant="list" progressPercent={progress} />
+                  <DemoProgressBar
+                    variant="list"
+                    progressPercent={progress}
+                    hasVideoVizitka={candidate.demoProgressJson?.hasVideoVizitka}
+                  />
                 </div>
               )}
 
