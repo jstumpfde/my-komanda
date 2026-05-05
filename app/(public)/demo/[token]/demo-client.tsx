@@ -73,6 +73,33 @@ function isValidBirthDate(s: string): boolean {
   return d.getFullYear() === year && d.getMonth() === month - 1 && d.getDate() === day
 }
 
+// Валидация формата ДД.ММ.ГГГГ (для text input с маской)
+function isValidBirthDateRu(s: string): boolean {
+  const m = s.match(/^(\d{2})\.(\d{2})\.(\d{4})$/)
+  if (!m) return false
+  const day = +m[1], month = +m[2], year = +m[3]
+  if (year < 1920 || year > 2010) return false
+  if (month < 1 || month > 12) return false
+  if (day < 1 || day > 31) return false
+  const d = new Date(year, month - 1, day)
+  return d.getFullYear() === year && d.getMonth() === month - 1 && d.getDate() === day
+}
+
+// ДД.ММ.ГГГГ → YYYY-MM-DD (ISO)
+function ruBirthToIso(s: string): string {
+  const m = s.match(/^(\d{2})\.(\d{2})\.(\d{4})$/)
+  if (!m) return ""
+  return `${m[3]}-${m[2]}-${m[1]}`
+}
+
+// Применяет маску ДД.ММ.ГГГГ: оставляет только цифры, расставляет точки.
+function maskBirthDateRu(input: string): string {
+  const digits = input.replace(/\D/g, "").slice(0, 8)
+  if (digits.length <= 2) return digits
+  if (digits.length <= 4) return `${digits.slice(0, 2)}.${digits.slice(2)}`
+  return `${digits.slice(0, 2)}.${digits.slice(2, 4)}.${digits.slice(4)}`
+}
+
 interface DemoData {
   candidateName: string
   vacancyTitle: string
@@ -604,6 +631,8 @@ export default function DemoPage() {
   const [taskAnswers, setTaskAnswers] = useState<Record<string, Record<string, string>>>({})
   const [mediaUploaded, setMediaUploaded] = useState<Record<string, MediaAnswer>>({})
   const [mediaSkipped, setMediaSkipped] = useState<Record<string, boolean>>({})
+  const [mediaUploading, setMediaUploading] = useState<Record<string, boolean>>({})
+  const isAnyMediaUploading = Object.values(mediaUploading).some(Boolean)
   const [viewedBlockIds, setViewedBlockIds] = useState<Set<string>>(() => new Set())
   const [saving, setSaving] = useState(false)
   const blockStartTime = useRef(Date.now())
@@ -888,7 +917,7 @@ export default function DemoPage() {
     (!fieldEmail.enabled    || !fieldEmail.required    || formEmail.trim().length    > 0) &&
     (!fieldPhone.enabled    || !fieldPhone.required    || formPhone.trim().length    > 0) &&
     (!fieldTelegram.enabled || !fieldTelegram.required || formTelegram.trim().length > 0) &&
-    (!fieldBirth.enabled    || (fieldBirth.required ? isValidBirthDate(formBirth) : (formBirth.length === 0 || isValidBirthDate(formBirth)))) &&
+    (!fieldBirth.enabled    || (fieldBirth.required ? isValidBirthDateRu(formBirth) : (formBirth.length === 0 || isValidBirthDateRu(formBirth)))) &&
     (!fieldCity.enabled     || !fieldCity.required     || formCity.trim().length     > 0)
 
   const handleFormSubmit = async () => {
@@ -908,7 +937,7 @@ export default function DemoPage() {
           lastName:  fieldLast.enabled  ? formLast.trim()  : "",
           email:     fieldEmail.enabled ? formEmail.trim() : "",
           phone:     fieldPhone.enabled ? formPhone.trim() : "",
-          birthDate: fieldBirth.enabled && isValidBirthDate(formBirth) ? formBirth : undefined,
+          birthDate: fieldBirth.enabled && isValidBirthDateRu(formBirth) ? ruBirthToIso(formBirth) : undefined,
           city:      fieldCity.enabled  ? (formCity.trim() || undefined) : undefined,
           anketa: {
             telegram:             fieldTelegram.enabled ? (formTelegram.trim() || undefined) : undefined,
@@ -994,7 +1023,15 @@ export default function DemoPage() {
         finalBlock = "red"
       }
 
-      const firstName = data.candidateName?.split(" ")[0] || data.candidateName || ""
+      // Приоритет: имя из анкеты (то, что кандидат сам подтвердил),
+      // затем prefill из hh resume, и только в крайнем случае split candidateName,
+      // который для hh-источника часто идёт как «Фамилия Имя» — split[0] даёт фамилию.
+      const firstName =
+        formFirst.trim() ||
+        data.prefill?.first_name ||
+        data.candidateName?.split(" ")[0] ||
+        data.candidateName ||
+        "кандидат"
       const replaceName = (s: string) => s.replace(/\[Имя\]/g, firstName).replace(/\[имя\]/g, firstName)
 
       const manualButtonEnabled = settings.manualButtonEnabled !== false
@@ -1181,10 +1218,11 @@ export default function DemoPage() {
                         <Label className={labelClass}>Дата рождения {requiredMark(fieldBirth.required)}</Label>
                         <Input
                           value={formBirth}
-                          onChange={e => setFormBirth(e.target.value)}
-                          type="date"
-                          min="1920-01-01"
-                          max="2010-12-31"
+                          onChange={e => setFormBirth(maskBirthDateRu(e.target.value))}
+                          type="text"
+                          inputMode="numeric"
+                          placeholder="дд.мм.гггг"
+                          maxLength={10}
                           className={inputClass}
                           style={inputStyle}
                         />
@@ -1355,6 +1393,15 @@ export default function DemoPage() {
                         return next
                       })
                     }
+                    onUploadingChange={(uploading) =>
+                      setMediaUploading((prev) => {
+                        if (!!prev[block.id] === uploading) return prev
+                        const next = { ...prev }
+                        if (uploading) next[block.id] = true
+                        else delete next[block.id]
+                        return next
+                      })
+                    }
                   />
                 )}
               </div>
@@ -1379,11 +1426,12 @@ export default function DemoPage() {
           )}
           <Button
             onClick={handleNext}
-            disabled={hasRequiredUnanswered || saving}
+            disabled={hasRequiredUnanswered || saving || isAnyMediaUploading}
+            title={isAnyMediaUploading ? "Дождитесь окончания загрузки видео" : undefined}
             className="flex-1 h-12 text-base font-medium"
             style={{ backgroundColor: brandColor }}
           >
-            {saving ? (
+            {saving || isAnyMediaUploading ? (
               <Loader2 className="h-5 w-5 animate-spin" />
             ) : currentIndex === totalLessons - 1 ? (
               "Завершить"
@@ -1458,6 +1506,7 @@ function MediaBlock({
   onUploaded,
   onSkip,
   onUnskip,
+  onUploadingChange,
 }: {
   block: Block
   token: string
@@ -1468,6 +1517,7 @@ function MediaBlock({
   onUploaded: (ans: MediaAnswer) => void
   onSkip?: () => void
   onUnskip?: () => void
+  onUploadingChange?: (uploading: boolean) => void
 }) {
   const allowVideo = block.mediaAllowVideo ?? true
   const allowAudio = block.mediaAllowAudio ?? false
@@ -1483,6 +1533,12 @@ function MediaBlock({
   const [uploadProgress, setUploadProgress] = useState<number>(0)
   const [errMsg, setErrMsg] = useState("")
   const [result, setResult] = useState<MediaAnswer | null>(existing ?? null)
+
+  // Сообщаем родителю, когда идёт реальная отправка файла на сервер —
+  // нужно, чтобы заблокировать кнопку «Завершить» пока не закончится upload.
+  useEffect(() => {
+    onUploadingChange?.(mode === "uploading")
+  }, [mode, onUploadingChange])
 
   const streamRef = useRef<MediaStream | null>(null)
   const recorderRef = useRef<MediaRecorder | null>(null)
