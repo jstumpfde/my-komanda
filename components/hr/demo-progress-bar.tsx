@@ -33,6 +33,32 @@ export function calcDemoPercent(dp: DemoProgressData | null | undefined): DemoPr
   return { percent: Math.min(rawPercent, 100), completed, total }
 }
 
+export interface DemoFractionInfo {
+  /** Сколько блоков completed (без служебного __complete__-маркера). */
+  current: number
+  /** Всего шагов = totalBlocks из БД (для новых записей это lessons + 2 виртуальных). */
+  total: number
+  /** Есть ли вообще запись о прогрессе. false → UI показывает "Не начато". */
+  hasData: boolean
+}
+
+/**
+ * Возвращает прогресс в виде дроби current/total для отображения в HR-таблице.
+ * В отличие от calcDemoPercent даёт сырые числа без округления и без клампа,
+ * чтобы UI мог нарисовать "12/17" вместо "71%".
+ *
+ * total читается из сохранённого totalBlocks. Для записей, созданных после
+ * добавления виртуальных маркеров (__anketa__, __thanks__), это lessons + 2.
+ * Для legacy-записей это просто число блоков уроков — фракция выглядит как
+ * "15/15" вместо "15/17"; принимаем как ожидаемое поведение для старых данных.
+ */
+export function calcDemoFraction(dp: DemoProgressData | null | undefined): DemoFractionInfo {
+  if (!dp || !Array.isArray(dp.blocks)) return { current: 0, total: 0, hasData: false }
+  const current = dp.blocks.filter((b) => b?.status === "completed" && b?.blockId !== "__complete__").length
+  const total = dp.totalBlocks ?? dp.blocks.length
+  return { current, total, hasData: dp.blocks.length > 0 }
+}
+
 export type DemoProgressVariant = "list" | "kanban"
 
 interface DemoProgressBarProps {
@@ -97,38 +123,53 @@ export function DemoProgressBar({
   }
 
   // variant === "list"
-  // null/undefined прогресс трактуем как 0% (кандидат не приступал).
-  const percent = hasData ? (pct as number) : 0
-  const isComplete = percent === 100
-  const isStarted = percent > 0 && percent < 100
+  // В списке кандидатов показываем дробь "X/Y" вместо процента.
+  // Источник истины — completedBlocks/totalBlocks (calcDemoFraction).
+  // На progressPercent опираемся только для отрисовки заливки и цвета подписи.
+  const hasFraction = typeof completedBlocks === "number" && typeof totalBlocks === "number" && totalBlocks > 0
+  const cur = completedBlocks ?? 0
+  const tot = totalBlocks ?? 0
+  const isComplete = hasFraction && cur >= tot
+  const isStarted = hasFraction && cur > 0 && cur < tot
+  const fillColor = isComplete
+    ? "bg-emerald-500"
+    : isStarted
+      ? "bg-blue-500"
+      : "bg-transparent"
+  // "Не начато" — когда нет данных вообще ИЛИ кандидат ещё не сделал ни одного шага.
+  const noProgress = !hasData || (hasFraction && cur === 0) || (!hasFraction && pct === 0)
+  const label = noProgress
+    ? "Не начато"
+    : hasFraction
+      ? `${cur}/${tot}`
+      : isComplete
+        ? "Завершено"
+        : `${pct}%`
+  const labelClass = noProgress
+    ? "text-muted-foreground"
+    : isComplete
+      ? "text-emerald-600 dark:text-emerald-500"
+      : "text-blue-600 dark:text-blue-500"
+  const fillPct = hasFraction
+    ? Math.min(100, Math.round((cur / tot) * 100))
+    : (pct ?? 0)
+  const fillWidth = noProgress ? "0%" : `${fillPct}%`
 
   return (
     <div className={cn("flex flex-col items-center gap-1 w-full max-w-[140px] mx-auto", className)}>
-      <span
-        className={cn(
-          "text-xs font-medium tabular-nums",
-          percent === 0 && "text-muted-foreground",
-          isStarted && "text-primary",
-          isComplete && "text-success",
-        )}
-      >
-        {percent}%
+      <span className={cn("text-sm tabular-nums whitespace-nowrap font-medium inline-flex items-center", labelClass)}>
+        {label}
         {hasVideoVizitka && (
           <Video className="inline w-3 h-3 ml-1 text-muted-foreground" aria-label="Есть видео-визитка" />
         )}
       </span>
       <div
         className="w-full h-1.5 rounded-full overflow-hidden bg-gray-100 dark:bg-gray-800/50"
-        aria-label={`Прогресс демо: ${percent}%`}
+        aria-label={`Прогресс демо: ${label}`}
       >
         <div
-          className={cn(
-            "h-full transition-all",
-            percent === 0 && "bg-transparent",
-            isStarted && "bg-primary",
-            isComplete && "bg-success",
-          )}
-          style={{ width: `${percent}%` }}
+          className={cn("h-full rounded-full transition-all", fillColor)}
+          style={{ width: fillWidth }}
         />
       </div>
     </div>

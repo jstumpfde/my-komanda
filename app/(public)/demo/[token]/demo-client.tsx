@@ -743,6 +743,11 @@ export default function DemoPage() {
   const progress = getProgress(allBlocks, taskAnswers, mediaUploaded, mediaSkipped, viewedBlockIds)
   const progressPercent = progress.percent
 
+  // ВСЕГО шагов прогресса = реальные блоки уроков + 2 виртуальных:
+  // __anketa__ (анкета финального этапа) и __thanks__ (экран «Спасибо»).
+  // Используется и при отправке batch'ей уроков, и при пост-финальных маркерах.
+  const totalBlocksWithVirtual = allBlocks.length + 2
+
   // Single-block POST. Используется только для финального "__complete__".
   // Прогресс по уроку отправляется батчем через postLessonBatch.
   const postCompleteMarker = async (): Promise<boolean> => {
@@ -756,12 +761,38 @@ export default function DemoPage() {
           answer: { completed: true },
           status: "completed",
           currentLesson: currentIndex,
-          totalBlocks: allBlocks.length,
+          totalBlocks: totalBlocksWithVirtual,
         }),
       })
       return res.ok
     } catch {
       return false
+    }
+  }
+
+  // Виртуальные маркеры прогресса (__anketa__, __thanks__). Сервер исключает
+  // их из anketa_answers, но засчитывает в demo_progress_json.blocks как
+  // completed — это даёт фракцию current/total в HR-таблице.
+  // Идемпотентен: сервер дедуплицирует blocks по blockId.
+  const postVirtualMarkers = async (markerIds: string[]): Promise<void> => {
+    if (isPreviewMode || markerIds.length === 0) return
+    try {
+      await fetch(`/api/public/demo/${token}/answer`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          blocks: markerIds.map((id) => ({
+            blockId: id,
+            answer: { virtual: true },
+            status: "completed",
+            timeSpent: 0,
+          })),
+          totalBlocks: totalBlocksWithVirtual,
+        }),
+      })
+    } catch {
+      // fire-and-forget — фракция в HR упадёт обратно к 16/17 при следующей загрузке,
+      // но это лучше, чем блокировать пользовательский экран.
     }
   }
 
@@ -833,7 +864,7 @@ export default function DemoPage() {
               lessonId: currentFlat.lessonId,
               blocks: batch,
               currentLesson: currentIndex,
-              totalBlocks: allBlocks.length,
+              totalBlocks: totalBlocksWithVirtual,
             }),
           })
           success = res.ok
@@ -867,6 +898,12 @@ export default function DemoPage() {
         // не проставится, кандидат увидит финальный экран, но HR может
         // не получить decision-стейдж до retry.
         await postCompleteMarker()
+        // Если HR выключил пост-демо блок — кандидат увидит экран «Спасибо»
+        // напрямую, минуя анкету. Чтобы фракция прогресса в HR не застряла на
+        // N/N+2, отмечаем оба виртуальных маркера сразу.
+        if (data?.postDemoSettings?.enabled === false) {
+          void postVirtualMarkers(["__anketa__", "__thanks__"])
+        }
         if (typeof window !== "undefined") {
           window.scrollTo({ top: 0, behavior: "smooth" })
         }
@@ -952,6 +989,9 @@ export default function DemoPage() {
           },
         }),
       })
+      // Анкета отправлена + сразу же отрендерится экран «Спасибо» — отмечаем
+      // оба виртуальных маркера прогресса, чтобы фракция в HR показывала N+2.
+      void postVirtualMarkers(["__anketa__", "__thanks__"])
       setFormSubmitted(true)
     } catch {
       setFormSubmitted(true)
