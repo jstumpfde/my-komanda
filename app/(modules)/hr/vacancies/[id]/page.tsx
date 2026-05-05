@@ -79,7 +79,7 @@ interface ColumnData {
   candidates: Candidate[]
 }
 
-type VacancyStatus = "draft" | "active" | "paused" | "closed_success" | "closed_cancelled"
+type VacancyStatus = "draft" | "active" | "published" | "paused" | "closed_success" | "closed_cancelled"
 
 // Источник правды — COLUMN_ORDER из lib/column-config.ts. Object.entries
 // над defaultColumnColors не гарантирует порядок и включает rejected
@@ -109,6 +109,7 @@ const defaultSettings: CardDisplaySettings = {
 const STATUS_CONFIG: Record<VacancyStatus, { label: string; color: string }> = {
   draft: { label: "Черновик", color: "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800" },
   active: { label: "Активна", color: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800" },
+  published: { label: "Опубликована", color: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800" },
   paused: { label: "Приостановлена", color: "bg-slate-500/10 text-slate-700 dark:text-slate-400 border-slate-200 dark:border-slate-800" },
   closed_success: { label: "Закрыта (найден)", color: "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800" },
   closed_cancelled: { label: "Закрыта (отменена)", color: "bg-red-500/10 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800" },
@@ -1445,7 +1446,7 @@ export default function VacancyPage() {
             <div className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-3 min-w-0 flex-1">
                 <h2 className="text-sm font-medium text-foreground truncate">{internalName || vacancyTitle}</h2>
-                <Badge variant="outline" className={cn("text-[10px] shrink-0", statusCfg.color)}>{statusCfg.label}</Badge>
+                <Badge variant="outline" className={cn("text-[10px] shrink-0", statusCfg?.color)}>{statusCfg?.label ?? "—"}</Badge>
               </div>
               {advisorScore.score > 0 && (
                 <div className="flex items-center gap-2 shrink-0">
@@ -1500,7 +1501,7 @@ export default function VacancyPage() {
                       <Pencil className="size-3.5 text-muted-foreground/0 group-hover:text-muted-foreground transition-colors" />
                     </button>
                   )}
-                  <Badge variant="outline" className={statusCfg.color}>{statusCfg.label}</Badge>
+                  <Badge variant="outline" className={statusCfg?.color}>{statusCfg?.label ?? "—"}</Badge>
                   {status === "active" && apiVacancy?.createdAt && <span className="flex items-center gap-1.5 text-xs text-muted-foreground"><Clock className="size-3.5" />{Math.floor((Date.now() - new Date(apiVacancy.createdAt).getTime()) / 86400000)} дн.</span>}
                   <UITooltip>
                     <TooltipTrigger asChild>
