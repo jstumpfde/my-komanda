@@ -24,16 +24,6 @@ import {
 
 type MessageTone = "official" | "casual" | "custom"
 type ResponseReaction = "slot-and-demo" | "slot-only" | "insist-demo"
-type FollowUpPreset = "off" | "min" | "medium" | "max"
-
-interface TouchPoint {
-  id: string
-  day: number
-  label: string
-  description: string
-  template: string
-  enabled: boolean
-}
 
 export type ScenarioType = "demo-call" | "call-demo" | "call-only" | "fast-hire" | "ai-smart"
 
@@ -116,24 +106,6 @@ const OFFICIAL_TEMPLATE = `Здравствуйте, [Имя].
 Предлагаем вам ознакомиться с материалами по ссылке ниже. После просмотра вы сможете записаться на собеседование.
 [ссылка]`
 
-const ALL_TOUCH_POINTS: TouchPoint[] = [
-  { id: "t1", day: 1, label: "Повторное сообщение", description: "Тот же канал", template: "[Имя], добрый день! Вчера отправляли вам обзор должности [должность]. Может, не дошло? Вот ссылка: [ссылка] — займёт всего 15 мин 🙂", enabled: true },
-  { id: "t2", day: 3, label: "Другой угол — доход", description: "Акцент на заработок", template: "[Имя], хотели уточнить по нашей вакансии. Менеджеры у нас выходят на 120-180К уже через 3 месяца. Чтобы было понятнее — собрали короткий обзор: [ссылка]", enabled: true },
-  { id: "t3", day: 7, label: "AI-звонок", description: "Голосовой бот (заглушка)", template: "Добрый день, [Имя]! Звоню из компании по поводу вакансии [должность]. Отправляли вам обзор — удалось посмотреть?", enabled: true },
-  { id: "t4", day: 14, label: "Вакансия открыта", description: "Напоминание", template: "[Имя], вакансия [должность] всё ещё открыта. Если актуально — вот обзор: [ссылка]. Если нет — просто скажите, не будем беспокоить.", enabled: true },
-  { id: "t5", day: 30, label: "Месяц прошёл", description: "Финальное касание", template: "[Имя], прошёл месяц с вашего отклика. Вакансия [должность] ещё доступна. Понимаем, что планы могут измениться — просто дайте знать, если ещё интересно: [ссылка]", enabled: true },
-  { id: "t6", day: 45, label: "Через 1,5 месяца", description: "Мягкий follow-up", template: "[Имя], возвращаемся к вашему отклику. У нас обновились условия — стоит посмотреть: [ссылка]", enabled: true },
-  { id: "t7", day: 60, label: "2 месяца", description: "Последний шанс", template: "[Имя], мы скоро закрываем вакансию [должность]. Если всё ещё рассматриваете — самое время: [ссылка]", enabled: true },
-  { id: "t8", day: 90, label: "3 месяца", description: "Архивное", template: "[Имя], давно не общались. Если вдруг вопрос с работой снова актуален — у нас есть интересные позиции. Напишите, расскажем подробнее.", enabled: true },
-]
-
-const PRESET_TOUCH_COUNTS: Record<FollowUpPreset, number> = {
-  off: 0,
-  min: 3,
-  medium: 5,
-  max: 8,
-}
-
 const STEP_META: Record<StepType, { icon: typeof MessageSquare; label: string; color: string }> = {
   message: { icon: MessageSquare, label: "Сообщение", color: "bg-blue-500/10 text-blue-600 border-blue-200 dark:border-blue-800" },
   demo: { icon: Video, label: "Демонстрация", color: "bg-purple-500/10 text-purple-600 border-purple-200 dark:border-purple-800" },
@@ -187,6 +159,23 @@ const SCENARIO_PRESETS: Record<ScenarioType, { steps: StepType[]; icon: typeof V
 
 // ─── Компонент ──────────────────────────────────────────────
 
+/**
+ * Идентификаторы карточек внутри AutomationSettings.
+ * Используются страницей вакансии для разноса секций по верхним табам
+ * («Сообщения» / «Демо и воронка» / «AI сценарии») при сохранении единого
+ * стейта, save-логики и сетевых вызовов внутри одного компонента.
+ */
+export type AutomationSectionId =
+  | "firstMessage"
+  | "callIntent"
+  | "followup"
+  | "pipeline"
+  | "autoActions"
+  | "enrichment"
+  | "templates"
+  | "dialer"
+  | "scenarioHire"
+
 interface AutomationSettingsProps {
   vacancyId: string
   descriptionJson?: unknown
@@ -194,9 +183,14 @@ interface AutomationSettingsProps {
   salaryFrom?: number | null
   salaryTo?: number | null
   aiProcessSettings?: { inviteMessage?: string; reInviteMessage?: string } | null
+  /** Если задано — рендерятся только эти карточки. Иначе все. */
+  sections?: AutomationSectionId[]
+  /** Показать глобальную кнопку «Сохранить настройки» внизу. По умолчанию true. */
+  showGlobalSave?: boolean
 }
 
-export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, salaryFrom, salaryTo, aiProcessSettings }: AutomationSettingsProps) {
+export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, salaryFrom, salaryTo, aiProcessSettings, sections, showGlobalSave = true }: AutomationSettingsProps) {
+  const showSection = (id: AutomationSectionId): boolean => !sections || sections.includes(id)
   // Parse initial scenario from descriptionJson
   const initialScenario = (() => {
     if (descriptionJson && typeof descriptionJson === "object" && descriptionJson !== null) {
@@ -298,18 +292,11 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
     (initialAutomation.responseReaction as ResponseReaction) || "slot-and-demo"
   )
 
-  // 3. Цепочка дожима
-  const [followUpEnabled, setFollowUpEnabled] = useState<boolean>(
-    (initialAutomation.followUpEnabled as boolean) ?? false
-  )
-  const [followUpPreset, setFollowUpPreset] = useState<FollowUpPreset>(
-    (initialAutomation.followUpPreset as FollowUpPreset) || "medium"
-  )
-  const [touchPoints, setTouchPoints] = useState<TouchPoint[]>(ALL_TOUCH_POINTS)
-  const [stopOnNo, setStopOnNo] = useState((initialAutomation.stopOnNo as boolean) ?? true)
-  const [stopOnClose, setStopOnClose] = useState((initialAutomation.stopOnClose as boolean) ?? true)
-  const [editingTouch, setEditingTouch] = useState<string | null>(null)
-  const [editingText, setEditingText] = useState("")
+  // 3. Цепочка дожима — переехала в отдельный компонент VacancyFollowupSettings
+  // (API: /api/modules/hr/vacancies/[id]/followup-settings, таблица
+  // vacancy_followup_campaigns). Устаревшие ключи в descriptionJson.automation
+  // (followUpEnabled, followUpPreset, stopOnNo, stopOnClose) больше не читаются
+  // и не пишутся; orphan-данные могут сохраняться в БД до миграции.
 
   // 4. Сценарий
   const [scenarioType, setScenarioType] = useState<ScenarioType>(initialScenario)
@@ -381,8 +368,11 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
 
   // 6. Авто-действия
   // Дефолты: autoInvite/autoReject включены, notifyManager выключен (см. ТЗ).
-  const DEFAULT_REJECT_TEMPLATE = "Здравствуйте, {имя}! Благодарим за интерес к позиции {должность}. К сожалению, на данный момент мы остановились на других кандидатах. Желаем удачи в поиске!"
-  const DEFAULT_INVITE_TEMPLATE = "Здравствуйте, {имя}! Мы рассмотрели ваш отклик на позицию {должность} и хотели бы пригласить вас на следующий этап. {ссылка_на_демонстрацию}"
+  // Поля rejectTemplate / inviteTemplate удалены из UI — их роль выполняют
+  // messageTemplates.soft_reject и messageTemplates.demo_invite соответственно
+  // (редактируются в табе «Сообщения» → «Шаблоны сообщений»).
+  // Старые поля в descriptionJson.automation остаются как orphan-данные у вакансий,
+  // которые не успели мигрировать через scripts/migrate-templates.ts.
   const [autoInvite, setAutoInvite] = useState<boolean>(
     typeof initialAutomation.autoInvite === "boolean" ? (initialAutomation.autoInvite as boolean) : true
   )
@@ -391,12 +381,6 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
   )
   const [notifyManager, setNotifyManager] = useState<boolean>(
     typeof initialAutomation.notifyManager === "boolean" ? (initialAutomation.notifyManager as boolean) : false
-  )
-  const [rejectTemplate, setRejectTemplate] = useState<string>(
-    (initialAutomation.rejectTemplate as string) || DEFAULT_REJECT_TEMPLATE
-  )
-  const [inviteTemplate, setInviteTemplate] = useState<string>(
-    (initialAutomation.inviteTemplate as string) || DEFAULT_INVITE_TEMPLATE
   )
 
   // Дебаунсированное сохранение блока «Автоматические действия» через PATCH.
@@ -422,8 +406,6 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
               autoInvite,
               autoReject,
               notifyManager,
-              rejectTemplate,
-              inviteTemplate,
             },
           }),
         })
@@ -438,7 +420,7 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
     return () => {
       if (automationDebounceRef.current) clearTimeout(automationDebounceRef.current)
     }
-  }, [vacancyId, autoInvite, autoReject, notifyManager, rejectTemplate, inviteTemplate])
+  }, [vacancyId, autoInvite, autoReject, notifyManager])
 
   // 9. Дозапрос данных
   const initialCompleteness = (initialAutomation.completenessCheck as { enabled?: boolean; threshold?: number; channel?: string; delay?: string }) || {}
@@ -489,9 +471,6 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
     }
   }, [descriptionJson])
 
-  const activeTouchCount = PRESET_TOUCH_COUNTS[followUpPreset]
-  const visibleTouches = touchPoints.slice(0, activeTouchCount)
-
   // Тоны временно в разработке — не меняют текст рассылки.
   void OFFICIAL_TEMPLATE
   void tone
@@ -499,18 +478,6 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
 
   const handleScenarioChange = (s: ScenarioType) => {
     setScenarioType(s)
-  }
-
-  const startEditTouch = (tp: TouchPoint) => {
-    setEditingTouch(tp.id)
-    setEditingText(tp.template)
-  }
-
-  const saveEditTouch = () => {
-    if (!editingTouch) return
-    setTouchPoints(prev => prev.map(tp => tp.id === editingTouch ? { ...tp, template: editingText } : tp))
-    setEditingTouch(null)
-    toast.success("Шаблон сохранён")
   }
 
   // Save all automation settings to API
@@ -528,15 +495,9 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
         delayMinutes: Number(firstMessageDelay),
         ...(previousWorkingHours ? { workingHours: previousWorkingHours } : {}),
         responseReaction,
-        followUpEnabled,
-        followUpPreset,
-        stopOnNo,
-        stopOnClose,
         autoInvite,
         autoReject,
         notifyManager,
-        rejectTemplate,
-        inviteTemplate,
         messageTemplates,
         dialer: { enabled: dialerEnabled, scriptId: dialerScriptId, trigger: dialerTrigger },
         completenessCheck: { enabled: completenessEnabled, threshold: Number(completenessThreshold), channel: completenessChannel, delay: completenessDelay },
@@ -565,11 +526,12 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
     } finally {
       setSaving(false)
     }
-  }, [vacancyId, scenarioType, descriptionJson, firstMessageDelay, responseReaction, followUpEnabled, followUpPreset, stopOnNo, stopOnClose, pipelinePreset, pipelineStages, autoInvite, autoReject, notifyManager, rejectTemplate, inviteTemplate, messageTemplates, dialerEnabled, dialerScriptId, dialerTrigger, completenessEnabled, completenessThreshold, completenessChannel, completenessDelay])
+  }, [vacancyId, scenarioType, descriptionJson, firstMessageDelay, responseReaction, pipelinePreset, pipelineStages, autoInvite, autoReject, notifyManager, messageTemplates, dialerEnabled, dialerScriptId, dialerTrigger, completenessEnabled, completenessThreshold, completenessChannel, completenessDelay])
 
   return (
     <div className="space-y-6">
       {/* ═══ 1. Первое сообщение ═══════════════════════════════ */}
+      {showSection("firstMessage") && (
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
@@ -688,8 +650,10 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
           </div>
         </CardContent>
       </Card>
+      )}
 
       {/* ═══ 2. Если кандидат отвечает ═════════════════════════ */}
+      {showSection("callIntent") && (
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
@@ -741,142 +705,24 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
           </div>
         </CardContent>
       </Card>
+      )}
 
-      {/* ═══ 3. Цепочка дожима ═════════════════════════════════ */}
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Zap className="w-4 h-4" />
-              Цепочка дожима
-              {followUpEnabled && followUpPreset !== "off" && (
-                <Badge variant="outline" className="ml-2 text-xs">{activeTouchCount} касаний</Badge>
-              )}
-            </CardTitle>
-            <div className="flex items-center gap-2">
-              <Label htmlFor="followup-toggle" className="text-xs text-muted-foreground cursor-pointer">
-                {followUpEnabled ? "Включено" : "Выключено"}
-              </Label>
-              <Switch id="followup-toggle" checked={followUpEnabled} onCheckedChange={setFollowUpEnabled} />
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-5">
-          {!followUpEnabled ? (
-            <p className="text-sm text-muted-foreground py-2">Выключено. Повторные сообщения отправляться не будут.</p>
-          ) : (
-          <>
-          {/* Пресеты */}
-          <div className="space-y-2">
-            <Label className="text-sm font-medium">Интенсивность</Label>
-            <div className="flex flex-wrap gap-2">
-              {([
-                { value: "off" as const, label: "Выкл", color: "" },
-                { value: "min" as const, label: "Мин — 3 касания", color: "text-blue-600" },
-                { value: "medium" as const, label: "Средний — 5 касаний", color: "text-amber-600" },
-                { value: "max" as const, label: "Макс — 8 касаний", color: "text-red-600" },
-              ]).map(opt => (
-                <button
-                  key={opt.value}
-                  className={cn(
-                    "px-4 py-2 rounded-lg border text-sm font-medium transition-all",
-                    followUpPreset === opt.value
-                      ? "border-primary bg-primary/5 text-primary ring-2 ring-primary/20"
-                      : "border-border hover:border-primary/30 text-foreground"
-                  )}
-                  onClick={() => setFollowUpPreset(opt.value)}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Таблица касаний */}
-          {followUpPreset !== "off" && (
-            <>
-              <div className="space-y-2">
-                {visibleTouches.map((tp) => (
-                  <div key={tp.id} className={cn(
-                    "rounded-lg border transition-all",
-                    !tp.enabled && "opacity-50"
-                  )}>
-                    <div className="flex items-center gap-3 p-3">
-                      <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center shrink-0">
-                        <span className="text-xs font-bold text-muted-foreground">Д{tp.day}</span>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium text-foreground">{tp.label}</span>
-                          <span className="text-xs text-muted-foreground">· {tp.description}</span>
-                        </div>
-                        {editingTouch === tp.id ? (
-                          <div className="mt-2 space-y-2">
-                            <textarea
-                              className="w-full border rounded-lg p-2.5 text-xs resize-none h-20 bg-background focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
-                              value={editingText}
-                              onChange={(e) => setEditingText(e.target.value)}
-                            />
-                            <div className="flex items-center gap-2">
-                              <Button size="sm" className="h-7 text-xs gap-1" onClick={saveEditTouch}>
-                                <Check className="w-3 h-3" /> Сохранить
-                              </Button>
-                              <Button size="sm" variant="ghost" className="h-7 text-xs gap-1" onClick={() => setEditingTouch(null)}>
-                                <X className="w-3 h-3" /> Отмена
-                              </Button>
-                            </div>
-                          </div>
-                        ) : (
-                          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{tp.template}</p>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => startEditTouch(tp)}>
-                          <Pencil className="w-3 h-3" />
-                        </Button>
-                        <Switch
-                          checked={tp.enabled}
-                          onCheckedChange={(v) => setTouchPoints(prev => prev.map(t => t.id === tp.id ? { ...t, enabled: v } : t))}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <Separator />
-
-              {/* Переключатели */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label className="text-sm">Остановить если ответил «нет»</Label>
-                    <p className="text-xs text-muted-foreground">Прекратить касания после отказа</p>
-                  </div>
-                  <Switch checked={stopOnNo} onCheckedChange={setStopOnNo} />
-                </div>
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label className="text-sm">Остановить если вакансия закрыта</Label>
-                    <p className="text-xs text-muted-foreground">Не отправлять если вакансия в архиве</p>
-                  </div>
-                  <Switch checked={stopOnClose} onCheckedChange={setStopOnClose} />
-                </div>
-              </div>
-            </>
-          )}
-          </>
-          )}
-        </CardContent>
-      </Card>
+      {/* ═══ 3. Цепочка дожима — удалена. ═══════════════════════
+          Источник истины — VacancyFollowupSettings (vacancy_followup_campaigns).
+          showSection("followup") сохранён в типе AutomationSectionId,
+          но больше не рендерит UI — для обратной совместимости с
+          вызывающими компонентами, которые могут ещё передавать "followup"
+          в массиве sections. */}
 
       {/* ═══ 5. Воронка найма ═══════════════════════════════════ */}
+      {showSection("pipeline") && (
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
             <Users className="w-4 h-4" />
-            Сценарий обработки кандидатов
+            Этапы воронки
           </CardTitle>
+          <p className="text-xs text-muted-foreground mt-1">Сколько этапов проходит кандидат от отклика до оффера</p>
         </CardHeader>
         <CardContent className="space-y-4">
           {/* AI recommendation */}
@@ -949,7 +795,7 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
           {/* Custom stages editor */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <Label className="text-xs font-medium">Этапы воронки{pipelinePreset === "custom" && <span className="text-primary ml-1">(свой сценарий)</span>}</Label>
+              <Label className="text-xs font-medium">Список этапов{pipelinePreset === "custom" && <span className="text-primary ml-1">(свой сценарий)</span>}</Label>
             </div>
             <div className="space-y-1.5">
               {pipelineStages.map((stage, idx) => (
@@ -998,8 +844,10 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
           </div>
         </CardContent>
       </Card>
+      )}
 
       {/* ═══ 6. Автоматические действия ═══════════════════════ */}
+      {showSection("autoActions") && (
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
@@ -1058,34 +906,18 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
 
             <Separator />
 
-            <div className="space-y-1.5">
-              <Label htmlFor="reject-template" className="text-xs">Шаблон сообщения отказа</Label>
-              <Textarea
-                id="reject-template"
-                value={rejectTemplate}
-                onChange={e => setRejectTemplate(e.target.value)}
-                rows={3}
-                className="text-sm resize-none bg-[var(--input-bg)] border border-input"
-              />
-              <p className="text-[11px] text-muted-foreground">Переменные: {"{имя}"}, {"{должность}"}</p>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="invite-template" className="text-xs">Шаблон приглашения</Label>
-              <Textarea
-                id="invite-template"
-                value={inviteTemplate}
-                onChange={e => setInviteTemplate(e.target.value)}
-                rows={3}
-                className="text-sm resize-none bg-[var(--input-bg)] border border-input"
-              />
-              <p className="text-[11px] text-muted-foreground">Переменные: {"{имя}"}, {"{должность}"}, {"{ссылка_на_демонстрацию}"}</p>
-            </div>
+            <p className="text-[11px] text-muted-foreground">
+              Тексты приглашения и отказа теперь редактируются в табе{" "}
+              <span className="font-medium text-foreground">«Сообщения» → «Шаблоны сообщений»</span>{" "}
+              (поля «Приглашение на демонстрацию» и «Мягкий отказ»). Это унифицированное хранилище шаблонов.
+            </p>
           </div>
         </CardContent>
       </Card>
+      )}
 
       {/* ═══ 9. Дозапрос данных ═══════════════════════════════ */}
+      {showSection("enrichment") && (
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
@@ -1139,8 +971,10 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
           )}
         </CardContent>
       </Card>
+      )}
 
       {/* ═══ 7. Шаблоны сообщений ════════════════════════════ */}
+      {showSection("templates") && (
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
@@ -1178,8 +1012,10 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
           </div>
         </CardContent>
       </Card>
+      )}
 
       {/* ═══ 8. Бот-звонарь ══════════════════════════════════ */}
+      {showSection("dialer") && (
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
@@ -1219,14 +1055,17 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
           )}
         </CardContent>
       </Card>
+      )}
 
-      {/* ═══ 4. Сценарий найма ═════════════════════════════════ */}
+      {/* ═══ 4. Последовательность взаимодействия ═════════════════════════════════ */}
+      {showSection("scenarioHire") && (
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
             <GitBranch className="w-4 h-4" />
-            Сценарий найма
+            Последовательность взаимодействия
           </CardTitle>
+          <p className="text-xs text-muted-foreground mt-1">В каком порядке кандидат проходит шаги</p>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-3">
@@ -1292,14 +1131,17 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
           </div>
         </CardContent>
       </Card>
+      )}
 
       {/* Кнопка сохранения */}
-      <div className="flex justify-end mt-3">
-        <Button size="sm" className="gap-1.5 h-8 text-xs" onClick={saveSettings} disabled={saving}>
-          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-          Сохранить настройки
-        </Button>
-      </div>
+      {showGlobalSave && (
+        <div className="flex justify-end mt-3">
+          <Button size="sm" className="gap-1.5 h-8 text-xs" onClick={saveSettings} disabled={saving}>
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+            Сохранить настройки
+          </Button>
+        </div>
+      )}
     </div>
   )
 }
