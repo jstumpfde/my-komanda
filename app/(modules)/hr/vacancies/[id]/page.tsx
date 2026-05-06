@@ -171,6 +171,8 @@ function apiCandidateToCard(c: ApiCandidate, columnId: string): Candidate {
     aiSummary: c.aiSummary ?? undefined,
     aiVerdict: c.aiScore != null ? (c.aiScore >= 70 ? "подходит" : c.aiScore >= 40 ? "возможно" : "не подходит") : undefined,
     demoProgressJson: c.demoProgressJson as Candidate["demoProgressJson"],
+    demoTotalBlocks: (c as { demoTotalBlocks?: number }).demoTotalBlocks,
+    demoCompletedBlocks: (c as { demoCompletedBlocks?: number }).demoCompletedBlocks,
     isFavorite: c.isFavorite ?? false,
     createdAt: c.createdAt,
     // HR-020: фильтр-поля

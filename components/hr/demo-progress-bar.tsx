@@ -138,13 +138,15 @@ export function DemoProgressBar({
       : "bg-transparent"
   // "Не начато" — когда нет данных вообще ИЛИ кандидат ещё не сделал ни одного шага.
   const noProgress = !hasData || (hasFraction && cur === 0) || (!hasFraction && pct === 0)
+  // Возвращаем процент вместо дроби — completedBlocks может быть подсчитан
+  // по подблокам (35), а total по страницам (17), что даёт некрасивую "35/17".
+  // Процент cap'ается на 100% и работает консистентно для всех записей.
+  const displayPct = hasFraction
+    ? Math.min(100, Math.round((cur / tot) * 100))
+    : (pct ?? 0)
   const label = noProgress
     ? "Не начато"
-    : hasFraction
-      ? `${cur}/${tot}`
-      : isComplete
-        ? "Завершено"
-        : `${pct}%`
+    : `${displayPct}%`
   const labelClass = noProgress
     ? "text-muted-foreground"
     : isComplete

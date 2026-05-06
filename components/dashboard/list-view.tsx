@@ -327,7 +327,15 @@ export function ListView({
           const isDecisionStage = candidate.columnId === "interview" || candidate.columnId === "offer"
           const aiActuallyRan = candidate.aiScore != null && !!candidate.aiSummary
           const progress = progressPercentOf(candidate)
-          const demoFraction = calcDemoFraction(candidate.demoProgressJson)
+          // Источник истины — поля demoTotalBlocks/demoCompletedBlocks из API
+          // (см. /api/modules/hr/candidates), где total = lessons.length + 2,
+          // а completed = страницы пройденные хотя бы 1 блоком + анкета + спасибо.
+          // Fallback на calcDemoFraction для legacy-данных без этих полей.
+          const apiTotal = (candidate as { demoTotalBlocks?: number }).demoTotalBlocks
+          const apiCompleted = (candidate as { demoCompletedBlocks?: number }).demoCompletedBlocks
+          const demoFraction = (typeof apiTotal === "number" && apiTotal > 0)
+            ? { current: apiCompleted ?? 0, total: apiTotal, hasData: true }
+            : calcDemoFraction(candidate.demoProgressJson)
           const dt = formatResponseDate(candidate.createdAt ?? candidate.addedAt)
           const isSelected = !!selectedIds?.has(candidate.id)
           return (

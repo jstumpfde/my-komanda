@@ -45,6 +45,10 @@ export interface ApiCandidate {
   stageHistory?: unknown
   shortId?: string | null
   referredByShortId?: string | null
+  // Прогресс по страницам курса (вычисляется в API: total = lessons.length + 2)
+  demoTotalBlocks?: number
+  demoCompletedBlocks?: number
+  progressPercent?: number | null
 }
 
 // ─── useCandidates ────────────────────────────────────────────────────────────
