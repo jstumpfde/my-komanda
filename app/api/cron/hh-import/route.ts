@@ -26,16 +26,20 @@ export async function POST(req: NextRequest) {
   const errors: string[] = []
 
   try {
-    // Все активные hh-вакансии всех компаний.
+    // Все активные hh-вакансии всех компаний с включённым авто-разбором.
     const activeRows = await db
       .select({
-        hhVacancyId: hhVacancies.hhVacancyId,
-        vacancyId:   hhVacancies.localVacancyId,
-        companyId:   vacancies.companyId,
+        hhVacancyId:           hhVacancies.hhVacancyId,
+        vacancyId:             hhVacancies.localVacancyId,
+        companyId:             vacancies.companyId,
+        autoProcessingEnabled: vacancies.autoProcessingEnabled,
       })
       .from(hhVacancies)
       .innerJoin(vacancies, eq(hhVacancies.localVacancyId, vacancies.id))
-      .where(eq(hhVacancies.status, "active"))
+      .where(and(
+        eq(hhVacancies.status, "active"),
+        eq(vacancies.autoProcessingEnabled, true),
+      ))
 
     // Группируем по компании — каждой компании один токен и один проход разбора.
     const byCompany = new Map<string, typeof activeRows>()

@@ -273,6 +273,9 @@ export const vacancies = pgTable("vacancies", {
   hhSyncedAt: timestamp("hh_synced_at"),
   aiProcessSettings: jsonb("ai_process_settings").default({}),
   aiScoringEnabled: boolean("ai_scoring_enabled").notNull().default(true),
+  // Авто-разбор hh-откликов: cron каждые 10 минут разбирает накопленные отклики
+  // в рабочее время. Если выключено — клиент жмёт «Разобрать» вручную.
+  autoProcessingEnabled:      boolean("auto_processing_enabled").notNull().default(false),
   // Расписание отправки сообщений (часы + дни + праздники).
   // Логика — lib/schedule/can-send-now.ts.
   scheduleEnabled:            boolean("schedule_enabled").notNull().default(false),
