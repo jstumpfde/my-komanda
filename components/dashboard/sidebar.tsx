@@ -162,6 +162,7 @@ export function DashboardSidebar() {
   const { role, user, logout } = useAuth()
 
   const vis = getVisibleSections(role) ?? { main: true, hiring: false, tools: false, settings: false, admin: false }
+  const isAdminOrManager = role === 'platform_admin' || role === 'platform_manager' 
   const visSettings = getVisibleSettings(role) ?? ['profile']
 
   // Company branding — предпочитаем brandName (короткий бренд), fallback на name.
@@ -448,6 +449,7 @@ export function DashboardSidebar() {
            ══════════════════════════════════════════════════════════════════ */}
         <div className="hidden group-data-[collapsible=icon]:flex flex-col gap-0.5 items-center">
           {/* AI-инструменты: Конфигуратор, Цели, Утренний обзор */}
+          {isAdminOrManager && (<>
           <SidebarMenuButton
             tooltip="Конфигуратор"
             isActive={pathname.startsWith("/configurator")}
@@ -481,6 +483,7 @@ export function DashboardSidebar() {
           >
             <Sunrise className="size-5" />
           </SidebarMenuButton>
+          </>)}
           <div className="my-1 w-6 border-t border-sidebar-border" />
 
           {/* Module switcher icons */}
@@ -541,7 +544,7 @@ export function DashboardSidebar() {
            ══════════════════════════════════════════════════════════════════ */}
         <div className="group-data-[collapsible=icon]:hidden space-y-1">
           {/* AI-инструменты: Конфигуратор / Мои цели / Утренний обзор */}
-          {([
+          {isAdminOrManager && ([
             { href: "/configurator", label: "Конфигуратор", Icon: Sparkles, accent: "indigo", color: "#818cf8" },
             { href: "/goals",        label: "Мои цели",      Icon: Target,   accent: "violet", color: "#a78bfa" },
             { href: "/morning-brief",label: "Утренний обзор", Icon: Sunrise,  accent: "amber",  color: "#fbbf24" },
