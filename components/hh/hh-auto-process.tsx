@@ -1,11 +1,12 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Slider } from "@/components/ui/slider"
 import { Label } from "@/components/ui/label"
+import { Switch } from "@/components/ui/switch"
 import { toast } from "sonner"
 import {
   Play, Square, Loader2, Settings2, Zap, Shield, Gauge, AlertTriangle, Info,
@@ -53,6 +54,48 @@ export function HhAutoProcess({
   const [limit, setLimit] = useState<number | "all">(5)
   const [speed, setSpeed] = useState<SpeedPreset>("safe")
   const [minScore, setMinScore] = useState<number>(defaultMinScore)
+
+  const [autoProcessingEnabled, setAutoProcessingEnabled] = useState<boolean | null>(null)
+  const [autoProcessingSaving, setAutoProcessingSaving] = useState(false)
+
+  useEffect(() => {
+    if (!vacancyId) return
+    let cancelled = false
+    fetch(`/api/modules/hr/vacancies/${vacancyId}/schedule-settings`)
+      .then(async (r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`)
+        return r.json() as Promise<{ autoProcessingEnabled?: boolean }>
+      })
+      .then((d) => { if (!cancelled) setAutoProcessingEnabled(Boolean(d.autoProcessingEnabled)) })
+      .catch(() => { /* молча — тумблер просто будет неактивен */ })
+    return () => { cancelled = true }
+  }, [vacancyId])
+
+  const toggleAutoProcessing = async (next: boolean) => {
+    if (!vacancyId) return
+    const prev = autoProcessingEnabled
+    setAutoProcessingEnabled(next)
+    setAutoProcessingSaving(true)
+    try {
+      const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}/schedule-settings`, {
+        method:  "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ autoProcessingEnabled: next }),
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.error ?? `HTTP ${res.status}`)
+      }
+      const data = await res.json() as { autoProcessingEnabled?: boolean }
+      setAutoProcessingEnabled(Boolean(data.autoProcessingEnabled))
+      toast.success(next ? "Авто-разбор включён" : "Авто-разбор выключен")
+    } catch (e) {
+      setAutoProcessingEnabled(prev)
+      toast.error(e instanceof Error ? e.message : "Не удалось сохранить")
+    } finally {
+      setAutoProcessingSaving(false)
+    }
+  }
 
   const delaySeconds = useMemo(
     () => SPEED_OPTIONS.find(o => o.value === speed)?.seconds ?? 30,
@@ -163,6 +206,26 @@ export function HhAutoProcess({
           })}
         </div>
       </div>
+
+      {vacancyId && (
+        <div className="border rounded px-2.5 py-2">
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <Label className="text-xs font-medium block">
+                Авто-разбор: {autoProcessingEnabled ? "ВКЛ" : "ВЫКЛ"}
+              </Label>
+              <p className="text-[10px] text-muted-foreground mt-0.5">
+                Cron каждые 10 минут — в рабочее время
+              </p>
+            </div>
+            <Switch
+              checked={Boolean(autoProcessingEnabled)}
+              disabled={autoProcessingEnabled === null || autoProcessingSaving}
+              onCheckedChange={toggleAutoProcessing}
+            />
+          </div>
+        </div>
+      )}
 
       <div>
         <div className="flex items-center justify-between mb-1.5">

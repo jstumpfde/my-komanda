@@ -15,6 +15,7 @@ interface CustomHoliday {
 }
 
 interface ScheduleResponse {
+  autoProcessingEnabled:      boolean
   scheduleEnabled:            boolean
   scheduleStart:              string
   scheduleEnd:                string
@@ -28,6 +29,7 @@ const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
 const HHMM      = /^([01]\d|2[0-3]):[0-5]\d$/
 
 function asScheduleResponse(row: {
+  autoProcessingEnabled:      boolean
   scheduleEnabled:            boolean
   scheduleStart:              string
   scheduleEnd:                string
@@ -51,6 +53,7 @@ function asScheduleResponse(row: {
       })
     : []
   return {
+    autoProcessingEnabled:      row.autoProcessingEnabled,
     scheduleEnabled:            row.scheduleEnabled,
     scheduleStart:              row.scheduleStart,
     scheduleEnd:                row.scheduleEnd,
@@ -71,6 +74,7 @@ export async function GET(
 
     const [row] = await db
       .select({
+        autoProcessingEnabled:      vacancies.autoProcessingEnabled,
         scheduleEnabled:            vacancies.scheduleEnabled,
         scheduleStart:              vacancies.scheduleStart,
         scheduleEnd:                vacancies.scheduleEnd,
@@ -111,6 +115,9 @@ export async function PATCH(
     const body = await req.json().catch(() => ({})) as Partial<ScheduleResponse>
     const updates: Record<string, unknown> = { updatedAt: new Date() }
 
+    if (typeof body.autoProcessingEnabled === "boolean") {
+      updates.autoProcessingEnabled = body.autoProcessingEnabled
+    }
     if (typeof body.scheduleEnabled === "boolean") {
       updates.scheduleEnabled = body.scheduleEnabled
     }
@@ -150,6 +157,7 @@ export async function PATCH(
       .set(updates)
       .where(eq(vacancies.id, id))
       .returning({
+        autoProcessingEnabled:      vacancies.autoProcessingEnabled,
         scheduleEnabled:            vacancies.scheduleEnabled,
         scheduleStart:              vacancies.scheduleStart,
         scheduleEnd:                vacancies.scheduleEnd,
