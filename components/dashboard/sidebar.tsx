@@ -201,12 +201,20 @@ export function DashboardSidebar() {
       .catch(() => {})
   }, [pathname])
 
-  // Active modules fetched from API
-  // TODO: включить обратно когда настроим биллинг
-  // Временно все модули активны для демо
+  // Active modules — берутся из getVisibleSections(role) на основе роли пользователя
+  // platform_admin/platform_manager → все модули
+  // director/hr_lead/hr_manager/... → только HR + БЗ (для клиентов)
   // E-commerce: убран из меню, планируется позже
-  const ALL_MODULES: ModuleId[] = ['hr', 'knowledge', 'learning', 'tasks', 'sales', 'marketing', 'warehouse', 'logistics', 'booking', 'dialer', 'qc', 'b2b']
-  const [activeModules, setActiveModules] = useState<ModuleId[]>(ALL_MODULES)
+  const ALL_MODULES_FOR_ROLE = (vis.modules ?? ['hr', 'knowledge', 'learning', 'tasks', 'sales', 'marketing', 'warehouse', 'logistics', 'booking', 'dialer', 'qc', 'b2b']) as ModuleId[]
+  const [activeModules, setActiveModules] = useState<ModuleId[]>(ALL_MODULES_FOR_ROLE)
+  // Пересчёт модулей при изменении роли (когда useSession догружает данные)
+  useEffect(() => {
+    const newModules = (vis.modules ?? ['hr', 'knowledge', 'learning', 'tasks', 'sales', 'marketing', 'warehouse', 'logistics', 'booking', 'dialer', 'qc', 'b2b']) as ModuleId[]
+    setActiveModules(prev => {
+      if (prev.length === newModules.length && prev.every((m, i) => m === newModules[i])) return prev
+      return newModules
+    })
+  }, [vis.modules])
 
   // ── Sidebar visibility customization ──
   const { visibility: sidebarVis, setVisibility: setSidebarVis, isModuleVisible, isItemVisible, resetToDefault: resetSidebarVis } = useSidebarVisibility()

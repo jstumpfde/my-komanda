@@ -143,26 +143,31 @@ export const ROLE_ICONS: Record<UserRole, string> = {
 }
 
 // Sidebar visibility per role
+// Полный список модулей для платформенных ролей
+const ALL_MODULES_LIST = ['hr', 'knowledge', 'learning', 'tasks', 'sales', 'marketing', 'warehouse', 'logistics', 'booking', 'dialer', 'qc', 'b2b']
+// Урезанный список для клиентов (видят только HR + БЗ)
+const CLIENT_MODULES_LIST = ['hr', 'knowledge']
+
 export function getVisibleSections(role: UserRole) {
   switch (role) {
     case "platform_admin":
-      return { main: true, hiring: true, tools: true, settings: true, admin: true }
+      return { main: true, hiring: true, tools: true, settings: true, admin: true, modules: ALL_MODULES_LIST }
     case "platform_manager":
-      return { main: true, hiring: true, tools: true, settings: false, admin: false }
+      return { main: true, hiring: true, tools: true, settings: false, admin: false, modules: ALL_MODULES_LIST }
     case "director":
-      return { main: true, hiring: true, tools: true, settings: true, admin: false }
+      return { main: true, hiring: true, tools: true, settings: true, admin: false, modules: CLIENT_MODULES_LIST }
     case "hr_lead":
-      return { main: true, hiring: true, tools: true, settings: true, admin: false }
+      return { main: true, hiring: true, tools: true, settings: true, admin: false, modules: CLIENT_MODULES_LIST }
     case "hr_manager":
-      return { main: true, hiring: true, tools: false, settings: false, admin: false }
+      return { main: true, hiring: true, tools: false, settings: false, admin: false, modules: CLIENT_MODULES_LIST }
     case "department_head":
-      return { main: true, hiring: false, tools: false, settings: false, admin: false }
+      return { main: true, hiring: false, tools: false, settings: false, admin: false, modules: CLIENT_MODULES_LIST }
     case "observer":
-      return { main: true, hiring: false, tools: false, settings: false, admin: false }
+      return { main: true, hiring: false, tools: false, settings: false, admin: false, modules: CLIENT_MODULES_LIST }
     case "tester_hr":
-      return { main: true, hiring: true, tools: false, settings: false, admin: false }
+      return { main: true, hiring: true, tools: false, settings: false, admin: false, modules: CLIENT_MODULES_LIST }
     case "employee":
-      return { main: false, hiring: false, tools: false, settings: false, admin: false }
+      return { main: false, hiring: false, tools: false, settings: false, admin: false, modules: [] }
   }
 }
 
