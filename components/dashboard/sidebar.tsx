@@ -485,7 +485,7 @@ export function DashboardSidebar() {
 
           {/* Module switcher icons */}
           {(Object.keys(MODULE_REGISTRY) as ModuleId[])
-            .filter((id) => (id !== 'hr' || vis.hiring) && isModuleVisible(id))
+            .filter((id) => (id !== 'hr' || vis.hiring) && isModuleVisible(id) && activeModules.includes(id))
             .map((id) => {
             const mod = MODULE_REGISTRY[id]
             const Icon = getIcon(mod.icon)
@@ -577,7 +577,7 @@ export function DashboardSidebar() {
           <div className="my-1.5 mx-3 border-t border-sidebar-border/60" />
 
           {(Object.keys(MODULE_REGISTRY) as ModuleId[])
-            .filter((id) => (id !== 'hr' || vis.hiring) && isModuleVisible(id))
+            .filter((id) => (id !== 'hr' || vis.hiring) && isModuleVisible(id) && activeModules.includes(id))
             .map((id) => {
             const isModuleEnabled = activeModules.includes(id)
             const mod = MODULE_REGISTRY[id]
