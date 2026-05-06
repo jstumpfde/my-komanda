@@ -1529,18 +1529,11 @@ export default function VacancyPage() {
                       <button
                         type="button"
                         onClick={async () => {
-                          const code = apiVacancy?.shortCode
-                          if (code) {
-                            window.open(`${window.location.origin}/demo/${code}0000?as=hr`, "_blank", "noopener,noreferrer")
-                            return
-                          }
                           try {
-                            const res = await fetch(`/api/modules/hr/vacancies/${id}/preview-link`)
+                            const res = await fetch(`/api/modules/hr/vacancies/${id}/preview-candidate`, { method: "POST" })
                             const json = await res.json()
-                            const path = json?.data?.url || json?.url
-                            if (!path) { toast.error("Не удалось открыть превью"); return }
-                            const sep = path.includes("?") ? "&" : "?"
-                            window.open(`${window.location.origin}${path}${sep}as=hr`, "_blank", "noopener,noreferrer")
+                            if (!json?.token) { toast.error("Не удалось открыть превью"); return }
+                            window.open(`${window.location.origin}/demo/${json.token}?as=hr`, "_blank", "noopener,noreferrer")
                           } catch {
                             toast.error("Не удалось открыть превью")
                           }
@@ -1730,14 +1723,14 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
               <div className="flex items-center justify-between gap-3 mb-3 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
                 <TabsList className="shrink-0">
                   {(status === "active" ? [
-                    { value: "candidates", icon: Kanban, label: "Кандидаты" },
-                    { value: "analytics", icon: BarChart3, label: "Аналитика" },
+                    { value: "anketa", icon: ClipboardList, label: "Анкета" },
                     { value: "course", icon: BookOpen, label: "Демонстрация" },
-                    { value: "anketa", icon: ClipboardList, label: "Анкета" },
-                  ] : [
-                    { value: "anketa", icon: ClipboardList, label: "Анкета" },
-                    { value: "analytics", icon: BarChart3, label: "Аналитика" },
                     { value: "candidates", icon: Kanban, label: "Кандидаты" },
+                    { value: "analytics", icon: BarChart3, label: "Аналитика" },
+                  ] : [
+                    { value: "candidates", icon: Kanban, label: "Кандидаты" },
+                    { value: "analytics", icon: BarChart3, label: "Аналитика" },
+                    { value: "anketa", icon: ClipboardList, label: "Анкета" },
                     { value: "course", icon: BookOpen, label: "Демонстрация" },
                   ]).map(tab => (
                     <TabsTrigger key={tab.value} value={tab.value} className="gap-1.5">
@@ -1759,7 +1752,8 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                       />
                     )}
                     <CandidateFilters filters={filters} onFiltersChange={setFilters} candidates={columns.flatMap((c) => c.candidates)} />
-                    <SortMenu sortMode={sortMode} onSortChange={setSortMode} />
+                    {false && <SortMenu sortMode={sortMode} onSortChange={setSortMode} />}
+                    {false && (
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs">
@@ -1778,6 +1772,7 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
+                    )}
                     <ViewSettings
                       settings={cardSettings}
                       onSettingsChange={setCardSettings}

@@ -35,9 +35,7 @@ const DISPLAY_TOGGLES: Array<{ key: keyof CardDisplaySettings; label: string }> 
   { key: "showSalaryFull",    label: "Зарплата (полностью)" },
   { key: "showSalary",        label: "Зарплата (кратко)" },
   { key: "showCity",          label: "Город" },
-  { key: "showExperience",    label: "Опыт работы" },
-  { key: "showSkills",        label: "Ключевые навыки" },
-  { key: "showAge",           label: "Возраст" },
+
   { key: "showSource",        label: "Источник" },
   { key: "showActions",       label: "Кнопки действий" },
 ]

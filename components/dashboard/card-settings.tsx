@@ -34,9 +34,7 @@ const settingsLabels: { key: keyof CardDisplaySettings; label: string }[] = [
   { key: "showSalary", label: "Зарплата (кратко)" },
   { key: "showSalaryFull", label: "Зарплата (полностью)" },
   { key: "showCity", label: "Город" },
-  { key: "showExperience", label: "Опыт работы" },
-  { key: "showSkills", label: "Ключевые навыки" },
-  { key: "showAge", label: "Возраст" },
+
   { key: "showSource", label: "Источник" },
   { key: "showActions", label: "Кнопки действий" },
 ]
