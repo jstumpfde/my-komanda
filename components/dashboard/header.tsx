@@ -34,7 +34,7 @@ export function DashboardHeader() {
   const { theme, setTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
   const { state, toggleSidebar } = useSidebar()
-  const { user, role, isViewingAs, setRole, returnToAdmin } = useAuth()
+  const { user, role, realRole, isViewingAs, setRole, returnToAdmin } = useAuth()
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
   const router = useRouter()
@@ -133,34 +133,41 @@ export function DashboardHeader() {
           </Button>
 
           <div className="flex items-center gap-2">
-            {/* Role Switcher */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs">
-                  <span>{ROLE_ICONS[role]}</span>
-                  <span className="hidden sm:inline">{ROLE_LABELS[role]}</span>
-                  <ChevronDown className="w-3 h-3 opacity-50" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-64">
-                {ALL_ROLES.map((r, i) => {
-                  const isSep = (i === 2 || i === 5) // after platform roles, after main client roles
-                  return (
-                    <div key={r}>
-                      {isSep && <DropdownMenuSeparator />}
-                      <DropdownMenuItem
-                        className={cn("gap-2 cursor-pointer", role === r && "bg-primary/5")}
-                        onClick={() => handleRoleSwitch(r)}
-                      >
-                        <span className="text-base">{ROLE_ICONS[r]}</span>
-                        <span className="flex-1 text-sm">{ROLE_LABELS[r]}</span>
-                        {role === r && <Badge variant="secondary" className="text-[9px] h-4 px-1">текущая</Badge>}
-                      </DropdownMenuItem>
-                    </div>
-                  )
-                })}
-              </DropdownMenuContent>
-            </DropdownMenu>
+            {/* Role Switcher — только для платформенных админов */}
+            {(realRole === "platform_admin" || realRole === "platform_manager") ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs">
+                    <span>{ROLE_ICONS[role]}</span>
+                    <span className="hidden sm:inline">{ROLE_LABELS[role]}</span>
+                    <ChevronDown className="w-3 h-3 opacity-50" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-64">
+                  {ALL_ROLES.map((r, i) => {
+                    const isSep = (i === 2 || i === 5) // after platform roles, after main client roles
+                    return (
+                      <div key={r}>
+                        {isSep && <DropdownMenuSeparator />}
+                        <DropdownMenuItem
+                          className={cn("gap-2 cursor-pointer", role === r && "bg-primary/5")}
+                          onClick={() => handleRoleSwitch(r)}
+                        >
+                          <span className="text-base">{ROLE_ICONS[r]}</span>
+                          <span className="flex-1 text-sm">{ROLE_LABELS[r]}</span>
+                          {role === r && <Badge variant="secondary" className="text-[9px] h-4 px-1">текущая</Badge>}
+                        </DropdownMenuItem>
+                      </div>
+                    )
+                  })}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <div className="flex items-center gap-1.5 h-8 px-3 text-xs text-muted-foreground">
+                <span>{ROLE_ICONS[role]}</span>
+                <span className="hidden sm:inline">{ROLE_LABELS[role]}</span>
+              </div>
+            )}
 
             {/* Theme Switcher */}
             <div className="hidden md:flex items-center gap-1 bg-muted rounded-lg p-1">
