@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useEffect, useCallback } from "react"
+import { useState, useRef, useEffect, useCallback, useMemo } from "react"
 import { useParams, useRouter, useSearchParams } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { useAuth, isPlatformRole } from "@/lib/auth"
@@ -398,10 +398,28 @@ export default function VacancyPage() {
     router.replace(`${window.location.pathname}${qs ? "?" + qs : ""}`, { scroll: false })
   }, [router])
 
+  const [filters, setFilters] = useState<FilterState>({ searchText: "", cities: [], salaryMin: 0, salaryMax: 250000, scoreMin: 0, sources: [], workFormats: [], relocation: "any", businessTrips: "any", experienceMin: 0, experienceMax: 20, funnelStatuses: [], demoProgress: [], dateRange: "", dateFrom: "", dateTo: "", ageMin: 18, ageMax: 65, education: [], languages: [], otherLanguages: [], skills: [], industries: [] })
+
+  // Серверные фильтры — передаём в useCandidates, который шлёт их в API
+  const candidatesFilters = useMemo(() => ({
+    minAge: filters.ageMin,
+    maxAge: filters.ageMax,
+    minExperience: filters.experienceMin,
+    maxExperience: filters.experienceMax,
+    workFormats: filters.workFormats,
+    educationLevels: filters.education,
+    languages: filters.languages,
+    keySkills: filters.skills,
+    industries: filters.industries,
+    relocationReady: filters.relocation === "yes" ? true : filters.relocation === "no" ? false : null,
+    businessTripsReady: filters.businessTrips === "yes" ? true : filters.businessTrips === "no" ? false : null,
+  }), [filters])
+
   const { candidates: apiCandidates, updateStage, refetch: refetchCandidates, toggleFavorite } = useCandidates(
     id,
     undefined,
     listSort ? { sort: listSort.key, order: listSort.dir } : undefined,
+    candidatesFilters,
   )
 
   const handleToggleFavorite = useCallback(async (candidateId: string, isFavorite: boolean) => {
@@ -522,7 +540,7 @@ export default function VacancyPage() {
     setCardSettingsLocal(next)
     persistColumns(next as unknown as Record<string, boolean>)
   }, [persistColumns])
-  const [filters, setFilters] = useState<FilterState>({ searchText: "", cities: [], salaryMin: 0, salaryMax: 250000, scoreMin: 0, sources: [], workFormats: [], relocation: "any", businessTrips: "any", experienceMin: 0, experienceMax: 20, funnelStatuses: [], demoProgress: [], dateRange: "", dateFrom: "", dateTo: "", ageMin: 18, ageMax: 65, education: [], languages: [], otherLanguages: [], skills: [], industries: [] })
+// filters перемещён выше — см. строку перед useCandidates
   const [drawerCandidateId, setDrawerCandidateId] = useState<string | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [addDialogOpen, setAddDialogOpen] = useState(false)

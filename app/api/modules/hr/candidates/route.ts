@@ -263,20 +263,20 @@ export async function GET(req: NextRequest) {
     if (minAge && Number.isFinite(Number(minAge))) {
       // age >= minAge → birth_date <= today - minAge years
       const yrs = Math.max(0, Math.floor(Number(minAge)))
-      filterConds.push(sql`(${candidates.birthDate} IS NULL OR ${candidates.birthDate} <= (CURRENT_DATE - make_interval(years => ${yrs})))`)
+      filterConds.push(sql`(${candidates.birthDate} IS NOT NULL AND ${candidates.birthDate} <= (CURRENT_DATE - make_interval(years => ${yrs})))`)
     }
     if (maxAge && Number.isFinite(Number(maxAge))) {
       const yrs = Math.max(0, Math.floor(Number(maxAge)) + 1)
-      filterConds.push(sql`(${candidates.birthDate} IS NULL OR ${candidates.birthDate} >= (CURRENT_DATE - make_interval(years => ${yrs})))`)
+      filterConds.push(sql`(${candidates.birthDate} IS NOT NULL AND ${candidates.birthDate} >= (CURRENT_DATE - make_interval(years => ${yrs})))`)
     }
 
     const minExp = url.searchParams.get("minExperience")
     const maxExp = url.searchParams.get("maxExperience")
     if (minExp) {
-      filterConds.push(sql`(${candidates.experienceYears} IS NULL OR ${candidates.experienceYears} >= ${Number(minExp)})`)
+      filterConds.push(sql`(${candidates.experienceYears} IS NOT NULL AND ${candidates.experienceYears} >= ${Number(minExp)})`)
     }
     if (maxExp) {
-      filterConds.push(sql`(${candidates.experienceYears} IS NULL OR ${candidates.experienceYears} <= ${Number(maxExp)})`)
+      filterConds.push(sql`(${candidates.experienceYears} IS NOT NULL AND ${candidates.experienceYears} <= ${Number(maxExp)})`)
     }
 
     const workFormatsParam = url.searchParams.get("workFormat")

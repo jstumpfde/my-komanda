@@ -292,6 +292,7 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [] }: 
           )}
 
           {/* Salary Range */}
+          {false && (
           <div className="space-y-2">
             <label className="text-xs font-medium text-muted-foreground">
               Зарплата: {filters.salaryMin.toLocaleString("ru-RU")} – {filters.salaryMax.toLocaleString("ru-RU")} ₽
@@ -301,6 +302,7 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [] }: 
               <Slider value={[filters.salaryMax]} onValueChange={([v]) => onFiltersChange({ ...filters, salaryMax: v })} min={0} max={250000} step={10000} />
             </div>
           </div>
+          )}
 
           {/* Score */}
           <div className="space-y-2">
@@ -311,6 +313,7 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [] }: 
           <Separator />
 
           {/* 1. Work Format — 3 checkboxes */}
+          {false && (
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-muted-foreground">Формат работы</label>
             <div className="space-y-1">
@@ -326,8 +329,10 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [] }: 
               ))}
             </div>
           </div>
+          )}
 
           {/* 2. Relocation */}
+          {false && (
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-muted-foreground">Готовность к переезду</label>
             <div className="space-y-1">
@@ -346,8 +351,10 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [] }: 
               ))}
             </div>
           </div>
+          )}
 
           {/* 2b. Business Trips */}
+          {false && (
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-muted-foreground">Готовность к командировкам</label>
             <div className="space-y-1">
@@ -366,8 +373,10 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [] }: 
               ))}
             </div>
           </div>
+          )}
 
           {/* 3. Experience */}
+          {false && (
           <div className="space-y-2">
             <label className="text-xs font-medium text-muted-foreground">
               Опыт работы: {filters.experienceMin} – {filters.experienceMax} лет
@@ -378,6 +387,7 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [] }: 
               min={0} max={20} step={1}
             />
           </div>
+          )}
 
           <Separator />
 
@@ -466,6 +476,7 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [] }: 
           <Separator />
 
           {/* 8. Education */}
+          {false && (
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-muted-foreground">Образование</label>
             <div className="space-y-1">
@@ -481,8 +492,10 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [] }: 
               ))}
             </div>
           </div>
+          )}
 
           {/* 9. Languages */}
+          {false && (
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-muted-foreground">Языки</label>
             <div className="space-y-1">
@@ -562,10 +575,12 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [] }: 
               </div>
             )}
           </div>
+          )}
 
           <Separator />
 
           {/* 10. Skills — combobox */}
+          {false && (
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-muted-foreground">Ключевые навыки</label>
             <Popover open={skillsOpen} onOpenChange={setSkillsOpen}>
@@ -612,8 +627,10 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [] }: 
               </div>
             )}
           </div>
+          )}
 
           {/* 11. Industry — combobox */}
+          {false && (
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-muted-foreground">Текущая отрасль</label>
             <Popover open={industryOpen} onOpenChange={setIndustryOpen}>
@@ -660,6 +677,7 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [] }: 
               </div>
             )}
           </div>
+          )}
 
           <Button variant="default" className="w-full h-8 text-sm" onClick={() => setIsOpen(false)}>
             Применить

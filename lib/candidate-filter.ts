@@ -19,6 +19,10 @@ const FUNNEL_LABEL_TO_STAGE: Record<string, string[]> = {
 }
 
 function getDemoPercent(c: Candidate): number | null {
+  // Приоритет — поле progressPercent из API (page-based, согласовано с UI)
+  const apiPct = (c as any).progressPercent
+  if (typeof apiPct === "number") return apiPct
+  // Fallback — старый расчёт
   const dp = c.demoProgressJson
   if (!dp || !Array.isArray(dp.blocks)) return null
   const total = dp.totalBlocks ?? dp.blocks.length
@@ -35,7 +39,7 @@ function passesDemoProgress(c: Candidate, demoProgress: string[]): boolean {
     if (label === "Не начал")          return pct == null || pct === 0
     if (label === "В процессе")        return pct != null && pct > 0 && pct < 85
     if (label === "Завершил (≥85%)")   return pct != null && pct >= 85
-    if (label === "Завершил (<85%)")   return pct != null && pct >= 100 ? false : pct != null && pct >= 85 && pct < 100
+    if (label === "Завершил (<85%)")   return pct != null && pct > 0 && pct < 85
     return false
   })
 }
@@ -127,7 +131,7 @@ export function applyCandidateFilters<C extends FilterableColumn>(
     const filtered = col.candidates.filter((c) => {
       if (filters.searchText && !c.name.toLowerCase().includes(filters.searchText.toLowerCase())) return false
       if (filters.cities.length > 0 && !filters.cities.includes(c.city)) return false
-      if ((c.score ?? 0) < filters.scoreMin) return false
+      if (((c as any).aiScore ?? c.score ?? 0) < filters.scoreMin) return false
       if (filters.sources.length > 0 && !filters.sources.includes(c.source)) return false
 
       // Work format

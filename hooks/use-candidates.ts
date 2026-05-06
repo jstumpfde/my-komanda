@@ -53,6 +53,21 @@ export interface ApiCandidate {
 
 // ─── useCandidates ────────────────────────────────────────────────────────────
 
+export interface CandidatesFilters {
+  // Серверные фильтры (API применяет в SQL)
+  minAge?: number
+  maxAge?: number
+  minExperience?: number
+  maxExperience?: number
+  workFormats?: string[]              // ['office','hybrid','remote']
+  educationLevels?: string[]          // ['secondary','specialized','higher','mba']
+  languages?: string[]
+  keySkills?: string[]
+  industries?: string[]
+  relocationReady?: boolean | null    // true/false/null=any
+  businessTripsReady?: boolean | null
+}
+
 export interface CandidatesSortParams {
   sort?: string
   order?: "asc" | "desc"
@@ -62,6 +77,7 @@ export function useCandidates(
   vacancyId: string | null,
   stageFilter?: string[],
   sortParams?: CandidatesSortParams,
+  filters?: CandidatesFilters,
 ) {
   const [candidates, setCandidates] = useState<ApiCandidate[]>([])
   const [loading, setLoading] = useState(false)
@@ -83,6 +99,40 @@ export function useCandidates(
         params.set("sort", sortParams.sort)
         params.set("order", sortParams.order ?? "desc")
       }
+      // Серверные фильтры — добавляются только если заданы (default-значения не шлём)
+      if (filters) {
+        if (typeof filters.minAge === "number" && filters.minAge > 18) {
+          params.set("minAge", String(filters.minAge))
+        }
+        if (typeof filters.maxAge === "number" && filters.maxAge < 65) {
+          params.set("maxAge", String(filters.maxAge))
+        }
+        if (typeof filters.minExperience === "number" && filters.minExperience > 0) {
+          params.set("minExperience", String(filters.minExperience))
+        }
+        if (typeof filters.maxExperience === "number" && filters.maxExperience < 20) {
+          params.set("maxExperience", String(filters.maxExperience))
+        }
+        if (filters.workFormats && filters.workFormats.length > 0) {
+          params.set("workFormat", filters.workFormats.join(","))
+        }
+        if (filters.educationLevels && filters.educationLevels.length > 0) {
+          params.set("educationLevel", filters.educationLevels.join(","))
+        }
+        if (filters.languages && filters.languages.length > 0) {
+          params.set("languages", filters.languages.join(","))
+        }
+        if (filters.keySkills && filters.keySkills.length > 0) {
+          params.set("keySkills", filters.keySkills.join(","))
+        }
+        if (filters.industries && filters.industries.length > 0) {
+          params.set("industry", filters.industries.join(","))
+        }
+        if (filters.relocationReady === true) params.set("relocationReady", "true")
+        if (filters.relocationReady === false) params.set("relocationReady", "false")
+        if (filters.businessTripsReady === true) params.set("businessTripsReady", "true")
+        if (filters.businessTripsReady === false) params.set("businessTripsReady", "false")
+      }
       const res = await fetch(`/api/modules/hr/candidates?${params.toString()}`)
       if (!res.ok) {
         const d = await res.json() as { error?: string }
@@ -95,7 +145,7 @@ export function useCandidates(
     } finally {
       setLoading(false)
     }
-  }, [vacancyId, stageFilter?.join(","), sortParams?.sort, sortParams?.order])  // eslint-disable-line react-hooks/exhaustive-deps
+  }, [vacancyId, stageFilter?.join(","), sortParams?.sort, sortParams?.order, JSON.stringify(filters)])  // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     fetch_()
