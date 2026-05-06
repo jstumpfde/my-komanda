@@ -1,11 +1,10 @@
 "use client"
 
-import { Sparkles, Calendar } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { Sparkles } from "lucide-react"
 import { getBestPublicationTime } from "../utils/getBestPublicationTime"
 
 interface BestPublicationTimeBlockProps {
-  vacancy: { title?: string | null }
+  vacancy: { id?: string; title?: string | null }
 }
 
 export function BestPublicationTimeBlock({ vacancy }: BestPublicationTimeBlockProps) {
@@ -24,19 +23,9 @@ export function BestPublicationTimeBlock({ vacancy }: BestPublicationTimeBlockPr
         для максимума откликов
       </p>
 
-      <p className="text-xs text-muted-foreground mb-3 leading-relaxed">
+      <p className="text-xs text-muted-foreground leading-relaxed">
         {reasoning}
       </p>
-
-      <Button
-        variant="outline"
-        size="sm"
-        className="w-full gap-1.5 border-purple-300 text-purple-700 hover:bg-purple-50 dark:border-purple-800 dark:text-purple-300 dark:hover:bg-purple-950/30"
-        onClick={() => alert("coming soon")}
-      >
-        <Calendar className="w-3.5 h-3.5" />
-        Запланировать публикацию на это время
-      </Button>
     </div>
   )
 }

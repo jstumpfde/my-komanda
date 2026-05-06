@@ -1878,9 +1878,6 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
               </div>
 
               <TabsContent value="anketa">
-                <div className="mb-4">
-                  <BestPublicationTimeBlock vacancy={{ title: internalName || vacancyTitle }} />
-                </div>
                 <AnketaTab vacancyId={id} descriptionJson={apiVacancy?.descriptionJson} onTitleChange={(t) => { if (t) setInternalName(t) }} onNavigateTab={(tab) => { setActiveTab(tab); window.scrollTo({ top: 0, behavior: "smooth" }) }} onScoreChange={setAdvisorScore} />
               </TabsContent>
 
