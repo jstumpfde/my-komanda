@@ -146,7 +146,7 @@ export const ROLE_ICONS: Record<UserRole, string> = {
 // Полный список модулей для платформенных ролей
 const ALL_MODULES_LIST = ['hr', 'knowledge', 'learning', 'tasks', 'sales', 'marketing', 'warehouse', 'logistics', 'booking', 'dialer', 'qc', 'b2b']
 // Урезанный список для клиентов (видят только HR + БЗ)
-const CLIENT_MODULES_LIST = ['hr', 'knowledge']
+const CLIENT_MODULES_LIST = ['hr']
 
 export function getVisibleSections(role: UserRole) {
   switch (role) {
