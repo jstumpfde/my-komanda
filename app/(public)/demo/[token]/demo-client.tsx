@@ -1362,12 +1362,12 @@ export default function DemoPage() {
             </span>
           </div>
 
-          {/* Blocks — по одной карточке на каждый блок урока, со скроллом */}
-          <div className="space-y-4">
+          {/* Blocks — все блоки в одной сплошной белой карточке */}
+          <div className="rounded-xl bg-white overflow-hidden">
             {currentFlat.blocks.map((block) => (
               <div
                 key={block.id}
-                className="rounded-xl bg-white p-5 sm:p-8 space-y-4"
+                className="px-5 py-4 sm:px-8 sm:py-6 space-y-4"
               >
                 {block.type === "text" && <TextBlock block={block} data={data} />}
                 {block.type === "info" && <InfoBlock block={block} data={data} />}

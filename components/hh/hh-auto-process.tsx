@@ -38,7 +38,7 @@ const SPEED_OPTIONS: Array<{ value: SpeedPreset; seconds: number; label: string;
 ]
 
 const LIMIT_OPTIONS: Array<number | "all"> = [5, 10, 25, 50, "all"]
-const LIMIT_FALLBACK_MAX = 999
+const LIMIT_FALLBACK_MAX = 8
 
 export function HhAutoProcess({
   vacancyId,
@@ -247,9 +247,9 @@ export function HhAutoProcess({
 
       {isAll ? (
         <div className="flex items-start gap-2 rounded border border-red-300 bg-red-50 px-2.5 py-2 text-[11px] leading-snug text-red-900 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
-          <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-px" />
+          <Info className="w-3.5 h-3.5 shrink-0 mt-px" />
           <span>
-            ⚠️ Будет отправлено сообщений: <strong>{effectiveLimit}</strong>. Действие необратимое.
+            Будет отправлено сообщений: <strong>{effectiveLimit}</strong>
           </span>
         </div>
       ) : null}

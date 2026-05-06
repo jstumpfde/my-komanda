@@ -1,6 +1,8 @@
 "use client"
 
 import { useState, useEffect, lazy, Suspense } from "react"
+import { useRouter } from "next/navigation"
+import { useAuth } from "@/lib/auth"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
@@ -68,6 +70,16 @@ function formatDate(): string {
 function DashboardTab() {
   const [obRemaining, setObRemaining] = useState(0)
   const [obDone, setObDone] = useState(true)
+  const router = useRouter()
+  const { role } = useAuth()
+
+  // Не-админы видят список вакансий вместо демо-дашборда (там seed-данные)
+  useEffect(() => {
+    const adminRoles = ['platform_admin', 'platform_manager', 'admin', 'manager']
+    if (role && !adminRoles.includes(role)) {
+      router.replace('/hr/vacancies')
+    }
+  }, [role, router])
 
   useEffect(() => {
     const ob = getOnboarding()

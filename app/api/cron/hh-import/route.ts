@@ -13,7 +13,7 @@ import { HHClient } from "@/lib/hh/client"
 import { checkCronAuth } from "@/lib/cron/auth"
 import { processHhQueue } from "@/lib/hh/process-queue"
 
-const PROCESS_LIMIT_PER_RUN = 30
+const PROCESS_LIMIT_PER_RUN = 8
 
 export async function POST(req: NextRequest) {
   const auth = checkCronAuth(req)
@@ -49,7 +49,10 @@ export async function POST(req: NextRequest) {
       byCompany.set(row.companyId, list)
     }
 
-    for (const [companyId, rows] of byCompany.entries()) {
+    // Параллельная обработка компаний — каждая компания идёт своим потоком.
+    // Внутри компании (importApplications + processHhQueue) сохраняется
+    // последовательность, чтобы не словить 429 от hh.ru на одном employer.
+    await Promise.all(Array.from(byCompany.entries()).map(async ([companyId, rows]) => {
       // Без токена hh — пропускаем компанию.
       const tokenRows = await db
         .select()
@@ -58,7 +61,7 @@ export async function POST(req: NextRequest) {
         .limit(1)
       if (!tokenRows[0]) {
         skipped++
-        continue
+        return
       }
 
       // Шаг 1 — импорт новых откликов в hh_responses (status='response').
@@ -101,7 +104,7 @@ export async function POST(req: NextRequest) {
         console.error(`[hh-import] processQueue company ${companyId} failed:`, msg)
         errors.push(`processQueue ${companyId}: ${msg}`)
       }
-    }
+    }))
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     console.error("[hh-import] top-level:", msg)
