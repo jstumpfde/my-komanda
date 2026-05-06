@@ -297,7 +297,7 @@ export function DashboardSidebar() {
     } catch {}
     // Auto-expand group matching current path
     for (const id of activeModules) {
-      for (const group of getModuleGroups(id)) {
+      for (const group of getModuleGroups(id, !isAdminOrManager)) {
         if (group.label && group.items.some(i => !i.divider && (pathname === i.href || pathname.startsWith(i.href + '/')))) {
           next.add(`${id}:${group.label}`)
         }
@@ -316,7 +316,7 @@ export function DashboardSidebar() {
   useEffect(() => {
     if (!mounted) return
     for (const id of activeModules) {
-      for (const group of getModuleGroups(id)) {
+      for (const group of getModuleGroups(id, !isAdminOrManager)) {
         if (group.label && group.items.some(i => !i.divider && (pathname === i.href || pathname.startsWith(i.href + '/')))) {
           const key = `${id}:${group.label}`
           setExpandedGroups(prev => {
@@ -515,7 +515,7 @@ export function DashboardSidebar() {
           {(() => {
             const activeId = activeModules.find(id => pathname.startsWith(MODULE_REGISTRY[id].basePath)) || activeModules[0]
             if (!activeId) return null
-            const groups = getModuleGroups(activeId)
+            const groups = getModuleGroups(activeId, !isAdminOrManager)
             return groups.filter(g => g.items.some(i => !i.divider)).map((group) => {
               const firstItem = group.items.find(i => !i.divider)!
               const GroupIcon = getIcon(firstItem.icon)
@@ -587,7 +587,7 @@ export function DashboardSidebar() {
             const ModIcon = getIcon(mod.icon)
             const isExpanded = expandedModules.has(id)
             const isModuleActive = pathname.startsWith(mod.basePath)
-            const groups = isModuleEnabled ? getModuleGroups(id) : []
+            const groups = isModuleEnabled ? getModuleGroups(id, !isAdminOrManager) : []
             const hasItems = isModuleEnabled && groups.some(g => g.items.length > 0)
 
             // Single-item module → render as direct link (no accordion)

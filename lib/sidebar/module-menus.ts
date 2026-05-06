@@ -38,13 +38,22 @@ export function getModuleMenuItems(activeModules: ModuleId[]) {
     }))
 }
 
-export function getModuleGroups(moduleId: ModuleId): MenuGroup[] {
+export function getModuleGroups(moduleId: ModuleId, isClientLite?: boolean): MenuGroup[] {
   const groupDefs = MODULE_GROUP_DEFS[moduleId]
   if (!groupDefs) {
     return [{ label: '', items: MODULE_REGISTRY[moduleId]?.menuItems ?? [] }]
   }
   const allItems = MODULE_REGISTRY[moduleId]?.menuItems ?? []
   const byHref = new Map(allItems.map((item) => [item.href, item]))
+
+  // Для клиентов (директор/HR-менеджер и т.д.) — внутри HR оставить только Вакансии
+  if (isClientLite && moduleId === 'hr') {
+    const vacancyItem = byHref.get('/hr/vacancies')
+    if (vacancyItem) {
+      return [{ label: 'Найм', items: [vacancyItem] }]
+    }
+  }
+
   return groupDefs.map(({ label, hrefs, legacy }) => ({
     label,
     legacy,
