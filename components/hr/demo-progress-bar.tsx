@@ -144,9 +144,13 @@ export function DemoProgressBar({
   const displayPct = hasFraction
     ? Math.min(100, Math.round((cur / tot) * 100))
     : (pct ?? 0)
+  // Показываем дробь "15/17" — page-based прогресс. Если completedBlocks/totalBlocks
+  // не приходят (legacy данные), fallback на процент.
   const label = noProgress
     ? "Не начато"
-    : `${displayPct}%`
+    : hasFraction
+      ? `${cur}/${tot}`
+      : `${displayPct}%`
   const labelClass = noProgress
     ? "text-muted-foreground"
     : isComplete

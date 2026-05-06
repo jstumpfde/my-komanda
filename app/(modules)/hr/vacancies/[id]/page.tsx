@@ -173,6 +173,7 @@ function apiCandidateToCard(c: ApiCandidate, columnId: string): Candidate {
     demoProgressJson: c.demoProgressJson as Candidate["demoProgressJson"],
     demoTotalBlocks: (c as { demoTotalBlocks?: number }).demoTotalBlocks,
     demoCompletedBlocks: (c as { demoCompletedBlocks?: number }).demoCompletedBlocks,
+    progressPercent: (c as { progressPercent?: number | null }).progressPercent,
     isFavorite: c.isFavorite ?? false,
     createdAt: c.createdAt,
     // HR-020: фильтр-поля

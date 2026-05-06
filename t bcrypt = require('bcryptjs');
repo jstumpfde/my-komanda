@@ -1,0 +1,9 @@
+                            email                            |     name     |   role   |         created_at         
+-------------------------------------------------------------+--------------+----------+----------------------------
+ admin@test.ru                                               | Admin        | admin    | 2026-03-23 17:12:44.829823
+ deleted__aba0bf73-fe9d-4858-9a0d-4c5487da1130@deleted.local | Юрий Штумпф  | client   | 2026-03-23 18:57:07.375563
+ jstumpf.de@gmail.com                                        | Юрий S       | client   | 2026-03-24 09:23:23.727662
+ jstump2f.de@gmail.com                                       | Iury Shtumpf | client   | 2026-03-24 16:53:36.433554
+ jstu222333mpf.de@gmail.com                                  | Юрий Штумпф  | director | 2026-03-28 06:33:38.612074
+(5 rows)
+

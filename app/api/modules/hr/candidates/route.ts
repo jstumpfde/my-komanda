@@ -192,16 +192,13 @@ export async function GET(req: NextRequest) {
         const demoCompletedBlocks = demoTotalBlocks > 0
           ? Math.min(completedPages, demoTotalBlocks)
           : completedPages
-        // Если демо завершено (completedAt или блок __complete__) — 100%.
-        // Иначе формула даёт ~19% даже на финале: completed-записи генерят
-        // только task/media, а total включает и статичные блоки.
-        const isDemoComplete = !!progress?.completedAt
-          || blocks.some((b) => b.blockId === "__complete__")
-        const progressPercent = isDemoComplete
-          ? 100
-          : demoTotalBlocks > 0
-            ? Math.round((demoCompletedBlocks / demoTotalBlocks) * 100)
-            : null
+        // Считаем процент честно по страницам (completed/total).
+        // Раньше при наличии __complete__ маркера выставляли 100%, но это давало
+        // ложные срабатывания: 4 страницы из 17 = 100% если кандидат когда-то
+        // нажал "Завершить", даже если реально прошёл мало.
+        const progressPercent = demoTotalBlocks > 0
+          ? Math.min(100, Math.round((demoCompletedBlocks / demoTotalBlocks) * 100))
+          : null
 
         const stamps = completed
           .map((b) => (b.answeredAt ? new Date(b.answeredAt).getTime() : NaN))
@@ -379,11 +376,61 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Имя: fallback на anketa_answers, затем на hh_responses.candidate_name
-    const withDisplayName = rows.map((r) => ({
-      ...r,
-      name: deriveCandidateName(r.name, r.anketaAnswers, hhNameByCandidateId.get(r.id) ?? null),
-    }))
+    // Подгружаем структуру курса для расчёта прогресса по СТРАНИЦАМ
+    // (см. ту же логику в ветке без vacancyId выше).
+    let demoTotalBlocks = 0
+    const blockToLesson = new Map<string, number>()
+    const demoRowsV2 = await db
+      .select({ lessonsJson: demos.lessonsJson, updatedAt: demos.updatedAt })
+      .from(demos)
+      .where(eq(demos.vacancyId, vacancyId))
+      .orderBy(desc(demos.updatedAt))
+      .limit(1)
+    if (demoRowsV2.length > 0) {
+      const lessons = Array.isArray(demoRowsV2[0].lessonsJson)
+        ? (demoRowsV2[0].lessonsJson as LessonShape[])
+        : []
+      demoTotalBlocks = lessons.length + 2
+      lessons.forEach((lesson, lessonIdx) => {
+        const lessonBlocks = Array.isArray(lesson?.blocks) ? lesson.blocks : []
+        for (const b of lessonBlocks) {
+          const bid = (b as { id?: string })?.id
+          if (typeof bid === "string") blockToLesson.set(bid, lessonIdx)
+        }
+      })
+    }
+
+    // Имя + page-based прогресс
+    const withDisplayName = rows.map((r) => {
+      const progress = r.demoProgressJson as { blocks?: DemoBlockProgress[] } | null
+      const blocks = Array.isArray(progress?.blocks) ? progress.blocks : []
+      const completedLessons = new Set<number>()
+      let hasAnketa = false
+      let hasThanks = false
+      for (const b of blocks) {
+        if (b.status !== "completed" || !b.blockId) continue
+        if (b.blockId === "__anketa__") { hasAnketa = true; continue }
+        if (b.blockId === "__thanks__") { hasThanks = true; continue }
+        if (b.blockId === "__complete__") continue
+        const lessonIdx = blockToLesson.get(b.blockId)
+        if (typeof lessonIdx === "number") completedLessons.add(lessonIdx)
+      }
+      const completedPages = completedLessons.size + (hasAnketa ? 1 : 0) + (hasThanks ? 1 : 0)
+      const demoCompletedBlocks = demoTotalBlocks > 0
+        ? Math.min(completedPages, demoTotalBlocks)
+        : completedPages
+      const progressPercent = demoTotalBlocks > 0
+        ? Math.min(100, Math.round((demoCompletedBlocks / demoTotalBlocks) * 100))
+        : null
+
+      return {
+        ...r,
+        name: deriveCandidateName(r.name, r.anketaAnswers, hhNameByCandidateId.get(r.id) ?? null),
+        demoTotalBlocks,
+        demoCompletedBlocks,
+        progressPercent,
+      }
+    })
 
     return apiSuccess(withDisplayName)
   } catch (err) {

@@ -51,6 +51,10 @@ export interface Candidate {
   } | null
   isFavorite?: boolean
   createdAt?: string | Date | null
+  // Page-based progress fields, populated from API in vacancy page mapping
+  demoTotalBlocks?: number
+  demoCompletedBlocks?: number
+  progressPercent?: number | null
 }
 
 interface CandidateCardProps {

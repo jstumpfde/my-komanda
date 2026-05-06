@@ -54,8 +54,12 @@ const DEFAULT_DIR: Record<ListSortKey, ListSortDir> = {
   source:       "asc",
 }
 
-/** Возвращает 0..100 либо null (не приступал). Использует общий хелпер. */
+/** Возвращает 0..100 либо null (не приступал).
+ *  Приоритет: API-поле progressPercent (page-based, корректно для всех данных).
+ *  Fallback на calcDemoPercent — для legacy-записей без API-полей. */
 function progressPercentOf(c: Candidate): number | null {
+  const apiPct = (c as { progressPercent?: number | null }).progressPercent
+  if (typeof apiPct === "number") return apiPct
   return calcDemoPercent(c.demoProgressJson).percent
 }
 
@@ -406,7 +410,9 @@ export function ListView({
                 <div className="flex items-center justify-center">
                   <DemoProgressBar
                     variant="list"
-                    progressPercent={progress}
+                    progressPercent={demoFraction.hasData && demoFraction.total > 0
+                      ? Math.min(100, Math.round((demoFraction.current / demoFraction.total) * 100))
+                      : null}
                     completedBlocks={demoFraction.hasData ? demoFraction.current : undefined}
                     totalBlocks={demoFraction.hasData ? demoFraction.total : undefined}
                     hasVideoVizitka={candidate.demoProgressJson?.hasVideoVizitka}
