@@ -22,3 +22,4 @@ node_modules/
 ecosystem.config.js
 tsconfig.tsbuildinfo
 node_modules
+.next-prev/
