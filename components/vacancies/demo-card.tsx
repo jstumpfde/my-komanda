@@ -35,6 +35,8 @@ import { VARIABLES, BLOCK_TYPE_META, createBlock, replaceVars } from "@/lib/cour
 import { LibraryDialog } from "./library-dialog"
 import { AiGenerateDialog } from "./ai-generate-dialog"
 import { cleanHtml } from "@/lib/clean-html"
+import { VideoEmbed } from "@/components/blocks/VideoEmbed"
+import { getVideoEmbedInfo, VIDEO_PROVIDER_LABELS } from "@/lib/video/embed"
 
 interface DemoCardProps {
   demo: Demo
@@ -1248,21 +1250,6 @@ function FileDropZone({ accept, label, onFile }: { accept: string; label: string
   )
 }
 
-function getEmbedUrl(url: string): string | null {
-  try {
-    // YouTube
-    let m = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]+)/)
-    if (m) return `https://www.youtube.com/embed/${m[1]}`
-    // RuTube
-    m = url.match(/rutube\.ru\/video\/([\w]+)/)
-    if (m) return `https://rutube.ru/play/embed/${m[1]}`
-    // VK
-    m = url.match(/vk\.com\/video(-?\d+_\d+)/)
-    if (m) return `https://vk.com/video_ext.php?oid=${m[1].split("_")[0]}&id=${m[1].split("_")[1]}`
-  } catch {}
-  return null
-}
-
 /* ──── Image Block Editor ──── */
 function ImageBlockEditor({ block, onUpdate }: { block: Block; onUpdate: (p: Partial<Block>) => void }) {
   return (
@@ -1296,8 +1283,8 @@ function ImageBlockEditor({ block, onUpdate }: { block: Block; onUpdate: (p: Par
 
 /* ──── Video Block Editor ──── */
 function VideoBlockEditor({ block, onUpdate }: { block: Block; onUpdate: (p: Partial<Block>) => void }) {
-  const embedUrl = block.videoUrl ? getEmbedUrl(block.videoUrl) : null
   const isLocal = block.videoUrl.startsWith("blob:") || block.videoUrl.startsWith("data:")
+  const info = block.videoUrl && !isLocal ? getVideoEmbedInfo(block.videoUrl) : null
   const fileRef = useRef<HTMLInputElement>(null)
   const [recording, setRecording] = useState(false)
   const recorderRef = useRef<MediaRecorder | null>(null)
@@ -1342,7 +1329,24 @@ function VideoBlockEditor({ block, onUpdate }: { block: Block; onUpdate: (p: Par
         </Button>
         <input ref={fileRef} type="file" accept="video/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) onUpdate({ videoUrl: URL.createObjectURL(f) }) }} />
       </div>
-      <Input placeholder="🔗 Вставить ссылку (YouTube / RuTube / VK)" value={isLocal ? "" : block.videoUrl} onChange={(e) => onUpdate({ videoUrl: e.target.value })} className="text-xs" />
+      <Input placeholder="🔗 Вставить ссылку (YouTube / Vimeo / RuTube / VK / Я.Диск / .mp4)" value={isLocal ? "" : block.videoUrl} onChange={(e) => onUpdate({ videoUrl: e.target.value })} className="text-xs" />
+
+      {/* Provider hint */}
+      {info && info.provider !== "unknown" && (
+        <p className="text-[11px] text-muted-foreground">
+          Распознано: <span className="font-medium text-foreground">{VIDEO_PROVIDER_LABELS[info.provider]}</span>
+        </p>
+      )}
+      {info && info.provider === "unknown" && (
+        <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+          ⚠ URL не распознан. Поддерживаются: YouTube, Vimeo, RuTube, VK Видео, Яндекс.Диск, прямые .mp4 файлы
+        </p>
+      )}
+      {info && info.provider === "yandex_disk" && (
+        <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+          ⚠ Яндекс.Диск может блокировать встраивание. Если видео не работает — рекомендуем загрузить на YouTube или RuTube
+        </p>
+      )}
 
       {/* Preview area */}
       {recording ? (
@@ -1358,12 +1362,12 @@ function VideoBlockEditor({ block, onUpdate }: { block: Block; onUpdate: (p: Par
         </div>
       ) : block.videoUrl ? (
         <div className="relative group max-w-[800px] mx-auto">
-          {embedUrl ? (
-            <iframe src={embedUrl} className="w-full aspect-video rounded-lg" allowFullScreen />
-          ) : (
+          {isLocal ? (
             <video src={block.videoUrl} controls className="w-full aspect-video rounded-lg" />
+          ) : (
+            <VideoEmbed url={block.videoUrl} />
           )}
-          <button className="absolute top-2 right-2 bg-destructive text-white rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => onUpdate({ videoUrl: "" })}><X className="w-3 h-3" /></button>
+          <button className="absolute top-2 right-2 z-10 bg-destructive text-white rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => onUpdate({ videoUrl: "" })}><X className="w-3 h-3" /></button>
         </div>
       ) : null}
       <Textarea className="text-sm" rows={2} value={block.content} onChange={(e) => onUpdate({ content: e.target.value })} placeholder="Описание (опционально)" />

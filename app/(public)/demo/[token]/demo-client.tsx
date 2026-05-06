@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label"
 import { CheckCircle2, ChevronRight, Loader2, Video as VideoIcon, Mic, Camera, Square, RotateCcw, Send, Upload } from "lucide-react"
 import type { Block, Lesson, Question } from "@/lib/course-types"
 import { resolveBrand } from "@/lib/brand-colors"
+import { VideoEmbed } from "@/components/blocks/VideoEmbed"
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -361,28 +362,7 @@ function VideoBlock({ block }: { block: Block }) {
   if (!block.videoUrl) {
     return <div className="rounded-lg bg-gray-100 p-8 text-center text-gray-400">Видео не загружено</div>
   }
-  // YouTube / Vimeo embed
-  const isYoutube = block.videoUrl.includes("youtube.com") || block.videoUrl.includes("youtu.be")
-  const isVimeo = block.videoUrl.includes("vimeo.com")
-  if (isYoutube || isVimeo) {
-    let src = block.videoUrl
-    if (isYoutube) {
-      const match = block.videoUrl.match(/(?:v=|youtu\.be\/)([a-zA-Z0-9_-]+)/)
-      if (match) src = `https://www.youtube.com/embed/${match[1]}`
-    }
-    if (isVimeo) {
-      const match = block.videoUrl.match(/vimeo\.com\/(\d+)/)
-      if (match) src = `https://player.vimeo.com/video/${match[1]}`
-    }
-    return (
-      <div className="aspect-video w-full overflow-hidden rounded-lg">
-        <iframe src={src} className="h-full w-full" allowFullScreen allow="autoplay; encrypted-media" />
-      </div>
-    )
-  }
-  return (
-    <video src={block.videoUrl} controls className="w-full rounded-lg" />
-  )
+  return <VideoEmbed url={block.videoUrl} />
 }
 
 function ImageBlock({ block }: { block: Block }) {
