@@ -2,7 +2,7 @@ import { NextRequest } from "next/server"
 import { eq, and } from "drizzle-orm"
 import * as cheerio from "cheerio"
 import { db } from "@/lib/db"
-import { vacancies } from "@/lib/db/schema"
+import { vacancies, hhVacancies } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { logActivity } from "@/lib/activity-log"
 import { getClaudeMessagesUrl } from "@/lib/claude-proxy"
@@ -356,6 +356,40 @@ export async function POST(
       .set(updates)
       .where(eq(vacancies.id, id))
       .returning()
+
+    // ─── Sync hh_vacancies (upsert) so UI считает вакансию подключённой ────
+    const hhValues = {
+      companyId:       user.companyId,
+      hhVacancyId,
+      title:           mappedData.title || updated.title,
+      areaName:        mappedData.city || null,
+      salaryFrom:      mappedData.salaryFrom,
+      salaryTo:        mappedData.salaryTo,
+      salaryCurrency:  mappedData.salaryCurrency || null,
+      status:          "active",
+      url:             hhUrl,
+      localVacancyId:  id,
+      rawData:         mappedData as unknown as Record<string, unknown>,
+      syncedAt:        now,
+    }
+    await db
+      .insert(hhVacancies)
+      .values(hhValues)
+      .onConflictDoUpdate({
+        target: [hhVacancies.companyId, hhVacancies.hhVacancyId],
+        set: {
+          title:          hhValues.title,
+          areaName:       hhValues.areaName,
+          salaryFrom:     hhValues.salaryFrom,
+          salaryTo:       hhValues.salaryTo,
+          salaryCurrency: hhValues.salaryCurrency,
+          status:         hhValues.status,
+          url:            hhValues.url,
+          localVacancyId: hhValues.localVacancyId,
+          rawData:        hhValues.rawData,
+          syncedAt:       hhValues.syncedAt,
+        },
+      })
 
     logActivity({
       companyId: user.companyId,
