@@ -2514,8 +2514,8 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                         ) : (
                           <div className="rounded-lg border bg-card p-4 flex items-center gap-3">
                             <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-white text-[11px] font-bold" style={{ backgroundColor: "#D6001C" }}>hh</div>
-                            <div className="flex-1 min-w-0"><p className="text-sm font-medium">hh.ru</p><p className="text-[11px] text-muted-foreground">Эта вакансия не привязана. Привязка делается в табе «Кандидаты».</p></div>
-                            <Badge variant="outline" className="text-xs h-6 text-muted-foreground shrink-0">Не привязана</Badge>
+                            <div className="flex-1 min-w-0"><p className="text-sm font-medium">hh.ru</p><p className="text-[11px] text-muted-foreground">Эта вакансия не привязана к hh.ru. Нажмите «Привязать», чтобы выбрать вакансию из аккаунта.</p></div>
+                            <Button size="sm" className="h-8 text-xs shrink-0" onClick={() => setHhImportDialogOpen(true)}>Привязать</Button>
                           </div>
                         )}
                         <div className="rounded-lg border bg-card p-4 flex items-center gap-3">
@@ -2702,21 +2702,21 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
       <Dialog open={hhImportDialogOpen} onOpenChange={(o) => { if (!hhImportBusy) { setHhImportDialogOpen(o); if (!o) setHhImportUrl("") } }}>
         <DialogContent className="sm:max-w-xl">
           <DialogHeader>
-            <DialogTitle>Импорт с hh.ru</DialogTitle>
+            <DialogTitle>Привязать вакансию с hh.ru</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
-            <p className="text-xs text-muted-foreground">Вставьте ссылку на вакансию с hh.ru — данные будут загружены и анкета заполнена автоматически.</p>
+            <p className="text-xs text-muted-foreground">Вставьте ссылку на вакансию с hh.ru — она будет привязана, данные подтянутся, и платформа начнёт получать отклики.</p>
             <Input
               value={hhImportUrl}
               onChange={(e) => setHhImportUrl(e.target.value)}
-              placeholder="Вставьте ссылку на вакансию с hh.ru (например https://hh.ru/vacancy/12345678)"
+              placeholder="Ссылка на вакансию с hh.ru (например https://hh.ru/vacancy/12345678)"
               className="h-10 text-sm"
               autoFocus
               disabled={hhImportBusy}
               onKeyDown={(e) => { if (e.key === "Enter" && hhImportUrl.trim() && !hhImportBusy) handleHhVacancyImport() }}
             />
             <Button className="w-full h-10" onClick={handleHhVacancyImport} disabled={hhImportBusy || !hhImportUrl.trim()}>
-              {hhImportBusy ? <><Loader2 className="size-4 mr-1.5 animate-spin" />Импорт...</> : <><Globe className="size-4 mr-1.5" />Импортировать</>}
+              {hhImportBusy ? <><Loader2 className="size-4 mr-1.5 animate-spin" />Привязка...</> : <><Globe className="size-4 mr-1.5" />Привязать вакансию</>}
             </Button>
           </div>
         </DialogContent>
