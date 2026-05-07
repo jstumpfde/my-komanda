@@ -277,7 +277,7 @@ function TaskAnswerView({ block, answer }: { block: Block; answer: Record<string
             ) : text.trim() ? (
               <p className="text-sm text-muted-foreground whitespace-pre-wrap break-words">{text}</p>
             ) : (
-              <p className="text-xs text-muted-foreground/60 italic">Не отвечено</p>
+              <p className="text-xs text-muted-foreground/60 italic">нет ответа</p>
             )}
           </div>
         )
@@ -288,6 +288,23 @@ function TaskAnswerView({ block, answer }: { block: Block; answer: Record<string
 
 function pickFirstMediaType(media: MediaAnswer | MediaAnswer[]): MediaAnswer["mediaType"] {
   return Array.isArray(media) ? media[0].mediaType : media.mediaType
+}
+
+// Только блоки, в которые кандидат реально что-то отвечает: task (вопросы)
+// и media (запись/загрузка). Все остальные — info/text/video/image/file/button —
+// это просмотр контента, не ответ. Их в табе «Ответы» показывать не нужно.
+const ANSWERABLE_BLOCK_TYPES = new Set<string>(["task", "media"])
+
+function isViewMarkerOnly(answer: unknown): boolean {
+  if (!answer || typeof answer !== "object" || Array.isArray(answer)) return false
+  const o = answer as Record<string, unknown>
+  // Если есть медиа или текстовые поля — это реальный ответ, не маркер просмотра.
+  if (coerceMedia(o)) return false
+  // Маркер «кандидат пролистал блок»: { viewed: true } и ничего полезного больше.
+  const meaningfulKeys = Object.keys(o).filter(
+    (k) => k !== "viewed" && k !== "viewedAt" && k !== "timeSpent"
+  )
+  return meaningfulKeys.length === 0
 }
 
 function EntryCard({ entry, blockMap }: { entry: AnketaEntry; blockMap: Map<string, BlockMapEntry> }) {
@@ -310,12 +327,10 @@ function EntryCard({ entry, blockMap }: { entry: AnketaEntry; blockMap: Map<stri
           e.answer.trim() ? (
             <p className="text-sm text-muted-foreground whitespace-pre-wrap break-words">{e.answer}</p>
           ) : (
-            <p className="text-xs text-muted-foreground/60 italic">Не отвечено</p>
+            <p className="text-xs text-muted-foreground/60 italic">нет ответа</p>
           )
         ) : (
-          <p className="text-sm text-muted-foreground whitespace-pre-wrap break-words">
-            {JSON.stringify(e.answer)}
-          </p>
+          <p className="text-xs text-muted-foreground/60 italic">нет ответа</p>
         )}
       </div>
     )
@@ -372,18 +387,14 @@ function EntryCard({ entry, blockMap }: { entry: AnketaEntry; blockMap: Map<stri
         ans.trim() ? (
           <p className="text-sm text-muted-foreground whitespace-pre-wrap break-words">{ans}</p>
         ) : (
-          <p className="text-xs text-muted-foreground/60 italic">Не отвечено</p>
+          <p className="text-xs text-muted-foreground/60 italic">нет ответа</p>
         )
       ) : ans && typeof ans === "object" ? (
         block
           ? <TaskAnswerView block={block} answer={ans as Record<string, unknown>} />
-          : (
-            <pre className="text-xs text-muted-foreground whitespace-pre-wrap break-all">
-              {JSON.stringify(ans, null, 2)}
-            </pre>
-          )
+          : <p className="text-xs text-muted-foreground/60 italic">нет ответа</p>
       ) : (
-        <p className="text-xs text-muted-foreground/60 italic">Не отвечено</p>
+        <p className="text-xs text-muted-foreground/60 italic">нет ответа</p>
       )}
     </div>
   )
@@ -395,10 +406,20 @@ export function AnswersTab({ answers, demoLessons }: AnswersTabProps) {
   const entries = normalizeEntries(answers).filter(Boolean)
   const blockMap = buildBlockMap(demoLessons)
 
-  // Скрываем завершающий маркер из общего количества
+  // Оставляем только реальные ответы кандидата: task/media-блоки и legacy-пары
+  // {question, answer}. Маркеры просмотра (viewed: true для info/text/video/…)
+  // и системные записи (__complete__) — отбрасываем.
   const visible = entries.filter((e) => {
     if (!e || typeof e !== "object") return false
-    if ("blockId" in e && (e as { blockId?: string }).blockId === "__complete__") return false
+    // legacy {question, answer} — всегда оставляем
+    if ("question" in e && typeof (e as { question?: unknown }).question === "string") return true
+    const blockId = "blockId" in e ? (e as { blockId?: string }).blockId : ""
+    if (!blockId || blockId === "__complete__") return false
+    const mapped = blockMap.get(blockId)
+    // Если блок известен и он не отвечательный (info/text/video/image/file/button) — пропускаем
+    if (mapped?.block?.type && !ANSWERABLE_BLOCK_TYPES.has(mapped.block.type)) return false
+    // Если ответ — только { viewed: true } без полезных полей — пропускаем
+    if (isViewMarkerOnly((e as { answer?: unknown }).answer)) return false
     return true
   })
 
