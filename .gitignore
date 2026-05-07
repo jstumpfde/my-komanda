@@ -23,3 +23,6 @@ ecosystem.config.js
 tsconfig.tsbuildinfo
 node_modules
 .next-prev/
+
+# User uploads (videos, photos, files from candidates)
+public/uploads/
