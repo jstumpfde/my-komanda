@@ -25,6 +25,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { useVacancies, type ApiVacancy } from "@/hooks/use-vacancies"
+import { VacancyStatusBadge, getVacancyStatusLabel } from "@/components/vacancies/vacancy-status-badge"
 import {
   Plus, Briefcase, MapPin, List, LayoutGrid, Table2, Calendar, Banknote,
   Search, MoreHorizontal, Pencil, Copy, Archive, Trash2, ListFilter,
@@ -39,33 +40,18 @@ import {
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const STATUS_LABELS: Record<string, string> = {
-  draft: "Черновик",
-  active: "Активна",
-  paused: "Приостановлена",
-  closed_success: "Закрыта (найден)",
-  closed_cancelled: "Закрыта (отменена)",
-}
-
-const STATUS_COLORS: Record<string, string> = {
-  draft:             "bg-amber-500/15 text-amber-700 dark:text-amber-400",
-  active:            "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
-  paused:            "bg-slate-500/15 text-slate-700 dark:text-slate-400",
-  closed_success:    "bg-blue-500/15 text-blue-700 dark:text-blue-400",
-  closed_cancelled:  "bg-red-500/15 text-red-700 dark:text-red-400",
-}
-
 const STATUS_ORDER: Record<string, number> = {
-  active: 0, draft: 1, paused: 2, closed_success: 3, closed_cancelled: 4,
+  active: 0, published: 0, draft: 1, paused: 2, closed_success: 3, closed_cancelled: 4, archived: 5,
 }
 
 const STATUS_FILTER_OPTIONS = [
   { value: "all",              label: "Все статусы" },
-  { value: "draft",            label: "Черновик" },
-  { value: "active",           label: "Активна" },
-  { value: "paused",           label: "Приостановлена" },
-  { value: "closed_success",   label: "Закрыта (найден)" },
-  { value: "closed_cancelled", label: "Закрыта (отменена)" },
+  { value: "draft",            label: getVacancyStatusLabel("draft") },
+  { value: "active",           label: getVacancyStatusLabel("active") },
+  { value: "published",        label: getVacancyStatusLabel("published") },
+  { value: "paused",           label: getVacancyStatusLabel("paused") },
+  { value: "closed_success",   label: getVacancyStatusLabel("closed_success") },
+  { value: "closed_cancelled", label: getVacancyStatusLabel("closed_cancelled") },
 ]
 
 type ViewMode = "list" | "tiles" | "table"
@@ -116,12 +102,7 @@ interface TeamMember {
 // ─── Shared components ───────────────────────────────────────────────────────
 
 function StatusBadge({ status }: { status: string | null }) {
-  const s = status ?? "draft"
-  return (
-    <Badge variant="outline" className={cn("border-0 text-xs shrink-0", STATUS_COLORS[s])}>
-      {STATUS_LABELS[s] ?? s}
-    </Badge>
-  )
+  return <VacancyStatusBadge status={status} />
 }
 
 function HrAvatar({ name }: { name: string }) {
