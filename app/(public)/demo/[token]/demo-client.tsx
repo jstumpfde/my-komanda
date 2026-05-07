@@ -1320,13 +1320,10 @@ export default function DemoPage() {
               )}
             </div>
             <span className="text-sm text-gray-500 flex-shrink-0 ml-2">
-              Урок {currentIndex + 1} из {totalLessons}
+              Шаг {currentIndex + 1} из {totalLessons}
             </span>
           </div>
           <Progress value={progressPercent} className="h-2" />
-          <div className="mt-1 text-[11px] text-gray-400 text-right">
-            {progress.completed} из {progress.total} блоков пройдено
-          </div>
         </div>
       </div>
 
