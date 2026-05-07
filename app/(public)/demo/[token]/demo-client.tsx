@@ -1472,16 +1472,17 @@ export default function DemoPage() {
 
 const MAX_MEDIA_SIZE = 50 * 1024 * 1024
 
+// iOS-friendly: mp4 первым — Safari не поддерживает webm.
 const VIDEO_MIME_CANDIDATES = [
+  "video/mp4",
   "video/webm;codecs=vp9,opus",
   "video/webm;codecs=vp8,opus",
   "video/webm",
-  "video/mp4",
 ]
 const AUDIO_MIME_CANDIDATES = [
+  "audio/mp4",
   "audio/webm;codecs=opus",
   "audio/webm",
-  "audio/mp4",
   "audio/mpeg",
 ]
 
@@ -1569,6 +1570,9 @@ function MediaBlock({
   const videoPreviewRef = useRef<HTMLVideoElement>(null)
   const timerRef = useRef<number | null>(null)
   const photoInputRef = useRef<HTMLInputElement>(null)
+  const videoFileInputRef = useRef<HTMLInputElement>(null)
+  const audioFileInputRef = useRef<HTMLInputElement>(null)
+  const fallbackTimerRef = useRef<number | null>(null)
   // Дублируем elapsed/previewUrl в refs, чтобы upload, вызванный из onstop /
   // pickPhoto / pickVideoFile (т.е. из устаревшего замыкания), видел свежие
   // значения без пересоздания обработчика.
@@ -1578,6 +1582,23 @@ function MediaBlock({
   // Определяем, можно ли записывать через MediaRecorder — если нет, показываем file fallback
   const canRecordVideo = !!pickSupportedMime(VIDEO_MIME_CANDIDATES) && typeof navigator !== "undefined" && !!navigator.mediaDevices?.getUserMedia
   const canRecordAudio = !!pickSupportedMime(AUDIO_MIME_CANDIDATES) && typeof navigator !== "undefined" && !!navigator.mediaDevices?.getUserMedia
+
+  // setErrMsg + лог в DevTools кандидата + (опц.) автооткрытие диалога загрузки
+  // через 2с — чтобы кандидат не застревал, если запись физически не работает.
+  const reportErr = useCallback((msg: string, err?: unknown, autoFallbackType?: "video" | "audio") => {
+    setErrMsg(msg)
+    console.warn("[MediaBlock]", msg, err ?? "")
+    if (fallbackTimerRef.current) {
+      clearTimeout(fallbackTimerRef.current)
+      fallbackTimerRef.current = null
+    }
+    if (autoFallbackType) {
+      fallbackTimerRef.current = window.setTimeout(() => {
+        if (autoFallbackType === "video") videoFileInputRef.current?.click()
+        if (autoFallbackType === "audio") audioFileInputRef.current?.click()
+      }, 2000)
+    }
+  }, [])
 
   const cleanup = useCallback(() => {
     if (timerRef.current) {
@@ -1594,6 +1615,10 @@ function MediaBlock({
   useEffect(() => {
     return () => {
       cleanup()
+      if (fallbackTimerRef.current) {
+        clearTimeout(fallbackTimerRef.current)
+        fallbackTimerRef.current = null
+      }
       if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1637,7 +1662,7 @@ function MediaBlock({
         ? pickSupportedMime(VIDEO_MIME_CANDIDATES)
         : pickSupportedMime(AUDIO_MIME_CANDIDATES)
       if (!mime) {
-        setErrMsg("Браузер не поддерживает запись. Используйте загрузку файла.")
+        reportErr("Браузер не поддерживает запись. Открываем загрузку файла…", null, type)
         cleanup()
         return
       }
@@ -1681,8 +1706,7 @@ function MediaBlock({
         }
       }, 200)
     } catch (err) {
-      console.error("getUserMedia error", err)
-      setErrMsg("Не удалось получить доступ к камере/микрофону. Разрешите доступ и попробуйте снова.")
+      reportErr("Не удалось получить доступ к камере/микрофону. Открываем загрузку файла…", err, type)
       cleanup()
       setMode("idle")
     }
@@ -1710,7 +1734,7 @@ function MediaBlock({
 
   const pickPhoto = (file: File) => {
     if (file.size > MAX_MEDIA_SIZE) {
-      setErrMsg("Файл больше 50MB. Выберите файл поменьше.")
+      reportErr("Файл больше 50MB. Выберите файл поменьше.")
       return
     }
     blobRef.current = file
@@ -1727,7 +1751,7 @@ function MediaBlock({
 
   const pickVideoFile = (file: File) => {
     if (file.size > MAX_MEDIA_SIZE) {
-      setErrMsg("Файл больше 50MB. Запишите короче или выберите другой файл.")
+      reportErr("Файл больше 50MB. Запишите короче или выберите другой файл.")
       return
     }
     blobRef.current = file
@@ -1742,11 +1766,28 @@ function MediaBlock({
     void upload()
   }
 
+  const pickAudioFile = (file: File) => {
+    if (file.size > MAX_MEDIA_SIZE) {
+      reportErr("Файл больше 50MB. Выберите файл поменьше.")
+      return
+    }
+    blobRef.current = file
+    blobMimeRef.current = file.type || "audio/mp4"
+    blobMediaTypeRef.current = "audio"
+    elapsedRef.current = 0
+    const url = URL.createObjectURL(file)
+    previewUrlRef.current = url
+    setPreviewUrl(url)
+    setPreviewMime(blobMimeRef.current)
+    setErrMsg("")
+    void upload()
+  }
+
   const upload = async () => {
     const blob = blobRef.current
     if (!blob) return
     if (blob.size > MAX_MEDIA_SIZE) {
-      setErrMsg("Размер файла больше 50MB. Попробуйте записать короче.")
+      reportErr("Размер файла больше 50MB. Попробуйте записать короче.")
       setMode("preview")
       return
     }
@@ -1827,8 +1868,7 @@ function MediaBlock({
       setPreviewUrl(null)
       setMode("done")
     } catch (err: any) {
-      console.error("upload error", err)
-      setErrMsg(err?.message || "Ошибка загрузки. Попробуйте ещё раз.")
+      reportErr(err?.message || "Ошибка загрузки. Попробуйте ещё раз.", err)
       setMode("preview")
     }
   }
@@ -1884,47 +1924,68 @@ function MediaBlock({
         <div className="space-y-3">
           <div className="flex flex-wrap gap-3">
             {allowVideo && (
-              canRecordVideo ? (
+              <>
                 <button
                   onClick={() => startRecording("video")}
-                  className={`${bigBtnBase} bg-blue-600 text-white hover:bg-blue-700`}
+                  disabled={!canRecordVideo}
+                  title={!canRecordVideo ? "Запись недоступна в этом браузере — загрузите готовый файл" : undefined}
+                  className={`${bigBtnBase} ${canRecordVideo ? "bg-blue-600 text-white hover:bg-blue-700" : "bg-gray-200 text-gray-500 cursor-not-allowed"}`}
                 >
                   <VideoIcon className={iconClass} />
                   Записать видео
                 </button>
-              ) : (
-                <>
-                  <button
-                    onClick={() => document.getElementById(`${block.id}-videofile`)?.click()}
-                    className={`${bigBtnBase} bg-blue-600 text-white hover:bg-blue-700`}
-                  >
-                    <Upload className={iconClass} />
-                    Загрузить видео
-                  </button>
-                  <input
-                    id={`${block.id}-videofile`}
-                    type="file"
-                    accept="video/*"
-                    capture="user"
-                    className="hidden"
-                    onChange={(e) => {
-                      const f = e.target.files?.[0]
-                      if (f) pickVideoFile(f)
-                      e.target.value = ""
-                    }}
-                  />
-                </>
-              )
+                <button
+                  onClick={() => videoFileInputRef.current?.click()}
+                  className={`${bigBtnBase} border border-blue-600 bg-white text-blue-700 hover:bg-blue-50`}
+                >
+                  <Upload className={iconClass} />
+                  Загрузить файл
+                </button>
+                <input
+                  ref={videoFileInputRef}
+                  type="file"
+                  accept="video/*"
+                  capture="user"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0]
+                    if (f) pickVideoFile(f)
+                    e.target.value = ""
+                  }}
+                />
+              </>
             )}
 
-            {allowAudio && canRecordAudio && (
-              <button
-                onClick={() => startRecording("audio")}
-                className={`${bigBtnBase} bg-blue-600 text-white hover:bg-blue-700`}
-              >
-                <Mic className={iconClass} />
-                Записать аудио
-              </button>
+            {allowAudio && (
+              <>
+                <button
+                  onClick={() => startRecording("audio")}
+                  disabled={!canRecordAudio}
+                  title={!canRecordAudio ? "Запись недоступна в этом браузере — загрузите готовый файл" : undefined}
+                  className={`${bigBtnBase} ${canRecordAudio ? "bg-blue-600 text-white hover:bg-blue-700" : "bg-gray-200 text-gray-500 cursor-not-allowed"}`}
+                >
+                  <Mic className={iconClass} />
+                  Записать аудио
+                </button>
+                <button
+                  onClick={() => audioFileInputRef.current?.click()}
+                  className={`${bigBtnBase} border border-blue-600 bg-white text-blue-700 hover:bg-blue-50`}
+                >
+                  <Upload className={iconClass} />
+                  Загрузить файл
+                </button>
+                <input
+                  ref={audioFileInputRef}
+                  type="file"
+                  accept="audio/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0]
+                    if (f) pickAudioFile(f)
+                    e.target.value = ""
+                  }}
+                />
+              </>
             )}
 
             {allowPhoto && (
@@ -1951,6 +2012,12 @@ function MediaBlock({
               </>
             )}
           </div>
+
+          {(allowVideo || allowAudio) && (
+            <p className="text-xs text-gray-500">
+              Если запись не работает — загрузите готовый файл.
+            </p>
+          )}
 
           {/* Кнопка «Пропустить и завершить» — только для опциональных media */}
           {isOptional && onSkip && (
