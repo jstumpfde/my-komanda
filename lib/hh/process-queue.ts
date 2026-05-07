@@ -11,6 +11,7 @@ import { and, asc, eq, isNull } from "drizzle-orm"
 import { getValidToken } from "@/lib/hh-helpers"
 import { changeNegotiationState, getNegotiationMessages } from "@/lib/hh-api"
 import { generateCandidateShortId } from "@/lib/short-id"
+import { extractHhResumeFields, toCandidateColumns } from "@/lib/hh/extract-resume-fields"
 import { generateTouchSchedule } from "@/lib/followup/schedule"
 import { DEFAULT_FOLLOWUP_NOT_OPENED } from "@/lib/followup/default-messages"
 import { isFollowUpPreset } from "@/lib/followup/presets"
@@ -159,14 +160,18 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
     }
 
     const raw = resp.rawData as {
-      resume?: {
-        id?: string
-        area?: { name?: string }
-        salary?: { amount?: number; currency?: string }
-      }
+      resume?: Record<string, unknown>
     } | null
-    const candidateCity = raw?.resume?.area?.name ?? undefined
-    const candidateSalary = raw?.resume?.salary?.amount ?? null
+    // Расширенные поля резюме (birth_date, experience, education, skills, ...).
+    // Если резюме приватное (403) или удалено — extracted будет {} и колонки не пишутся.
+    const extracted = extractHhResumeFields(raw?.resume)
+    const resumeIdForLog = (raw?.resume?.["id"] as string | undefined) ?? resp.hhResponseId
+    if (raw?.resume && !extracted.birthDate) {
+      console.warn(`[PQ] resume ${resumeIdForLog}: birth_date/age отсутствуют — кандидат без даты рождения`)
+    }
+    const extractedCols = toCandidateColumns(extracted)
+    const candidateCity = (extracted.city as string | undefined) ?? undefined
+    const candidateSalary = (extracted.salaryMin as number | undefined) ?? null
 
     // После отправки приглашения через hh API кандидат сразу попадает в
     // 'primary_contact' (приглашение отправлено, но не открыто). Переход
@@ -247,6 +252,9 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
             token:          newToken,
             shortId:        short?.shortId ?? null,
             sequenceNumber: short?.sequenceNumber ?? null,
+            // Расширенные поля из hh-резюме (birth_date, education, key_skills, ...)
+            // Записываются только те, для которых в extracted есть осмысленное значение.
+            ...extractedCols,
           }).returning()
           return row
         })
@@ -271,6 +279,40 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
             setFields.name = resp.candidateName
           }
         }
+
+        // Дополнительный backfill из hh-резюме: birth_date, experience, education,
+        // skills и т.д. — только если у кандидата ещё нет anketa_answers (значит,
+        // он сам не заполнял анкету и его hh-данные актуальнее) и поле пустое.
+        try {
+          const [exFull] = await db.select({
+            anketaAnswers:      candidates.anketaAnswers,
+            birthDate:          candidates.birthDate,
+            experienceYears:    candidates.experienceYears,
+            educationLevel:     candidates.educationLevel,
+            workFormat:         candidates.workFormat,
+            keySkills:          candidates.keySkills,
+            skills:             candidates.skills,
+            languages:          candidates.languages,
+            relocationReady:    candidates.relocationReady,
+            businessTripsReady: candidates.businessTripsReady,
+            salaryMin:          candidates.salaryMin,
+            salaryMax:          candidates.salaryMax,
+          }).from(candidates).where(eq(candidates.id, candidateId)).limit(1)
+
+          if (exFull && exFull.anketaAnswers === null) {
+            for (const [k, v] of Object.entries(extractedCols)) {
+              const cur = (exFull as Record<string, unknown>)[k]
+              const curEmpty =
+                cur === null || cur === undefined ||
+                (Array.isArray(cur) && cur.length === 0) ||
+                (typeof cur === "string" && cur.trim() === "")
+              if (curEmpty) setFields[k] = v
+            }
+          }
+        } catch (err) {
+          console.warn("[PQ] hh-resume backfill failed", err instanceof Error ? err.message : err)
+        }
+
         await db.update(candidates).set(setFields).where(eq(candidates.id, candidateId))
       }
 
@@ -340,7 +382,8 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
       }
 
       if (hhAction && finalMessage) {
-        const rawResume = raw?.resume?.id
+        const rawResumeRaw = raw?.resume?.["id"]
+        const rawResume = typeof rawResumeRaw === "string" ? rawResumeRaw : undefined
         try {
           await changeNegotiationState(
             tokenResult.accessToken,

@@ -3,6 +3,7 @@ import { hhTokens, hhCandidates, candidates, vacancies, hhVacancies } from "@/li
 import { eq } from "drizzle-orm"
 import { nanoid } from "nanoid"
 import { generateCandidateShortId } from "@/lib/short-id"
+import { extractHhResumeFields, toCandidateColumns } from "@/lib/hh/extract-resume-fields"
 
 export interface HHVacancy {
   id: string
@@ -21,6 +22,12 @@ export interface HHVacancyPayload {
   employment?: { id: string }
 }
 
+// Resume в /negotiations/response — preview-объект. hh возвращает здесь
+// подмножество полей: age, area, salary, total_experience, skill_set;
+// birth_date / education / language / relocation доступны только в /resumes/{id}.
+// Все «расширенные» поля типизируем как unknown и парсим через
+// extractHhResumeFields (lib/hh/extract-resume-fields.ts) — единственная
+// точка маппинга hh-resume → candidate columns.
 export interface HHApplication {
   id: string
   resume: {
@@ -29,11 +36,8 @@ export interface HHApplication {
     last_name: string
     middle_name?: string
     title?: string
-    area?: { name: string }
-    salary?: { amount: number; currency: string }
-    total_experience?: { months: number }
-    skill_set?: string[]
     contact?: Array<{ type: { id: string }; value: { formatted?: string; email?: string } }>
+    [key: string]: unknown
   }
 }
 
@@ -225,6 +229,13 @@ export class HHClient {
       const phone = resume.contact?.find((c) => c.type?.id === "cell")?.value?.formatted ?? null
       const email = resume.contact?.find((c) => c.type?.id === "email")?.value?.email ?? null
 
+      // Все hh-поля резюме (age, birth_date, area, salary, total_experience,
+      // skill_set, education, language, relocation, business_trip_readiness …)
+      // едут через единый extractor — вместо инлайновой выборки, которая
+      // теряла birth_date/age и привела к 463 кандидатам без даты рождения.
+      const extracted = extractHhResumeFields(resume)
+      const extractedCols = toCandidateColumns(extracted)
+
       const newCandidate = await db.transaction(async (tx) => {
         const short = await generateCandidateShortId(tx, vacancyId)
         const [row] = await tx
@@ -234,19 +245,18 @@ export class HHClient {
             name: fullName,
             phone,
             email,
-            city: resume.area?.name ?? null,
             source: "hh",
             stage: "new",
             score: 50,
-            salaryMin: resume.salary?.amount ?? null,
-            salaryMax: resume.salary?.amount ?? null,
-            experience: resume.total_experience
-              ? `${Math.floor(resume.total_experience.months / 12)} лет`
-              : null,
-            skills: resume.skill_set ?? [],
             token: nanoid(32),
             shortId: short?.shortId ?? null,
             sequenceNumber: short?.sequenceNumber ?? null,
+            // Расширенные hh-поля (city, salary, birth_date, experience_years,
+            // education_level, key_skills, languages, relocation_ready, ...).
+            // toCandidateColumns пишет только те ключи, для которых hh-резюме
+            // дало осмысленное значение, и заодно дублирует skills/experience
+            // в legacy-поля (skills text[], experience text "5 лет").
+            ...extractedCols,
           })
           .returning()
         return row
