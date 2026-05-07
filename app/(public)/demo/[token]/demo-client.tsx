@@ -1180,9 +1180,7 @@ export default function DemoPage() {
           <div className="bg-blue-50 border border-blue-100 rounded-xl p-5 text-sm text-gray-700 space-y-3 leading-relaxed">
             <p className="font-medium text-gray-800">Заполните ваши данные!</p>
             <p>Мы разберём ваши ответы — в том числе ответы на вопросы — и свяжемся с вами.</p>
-            <p>Если видим, что подходим друг другу — приглашаем на финальный созвон с CEO на 30–40 минут: уточняем детали, обсуждаем оффер, договариваемся о дате выхода.</p>
-            <p>Если на этом этапе понимаем, что не сработаемся — честно сообщаем, почему. Без долгих формулировок и дежурных «мы вам перезвоним».</p>
-            <p className="font-medium text-gray-800">Удачи.</p>
+            <p className="font-medium text-gray-800">Ждём Вас!</p>
           </div>
 
           <div className="bg-white rounded-xl p-6 shadow-sm space-y-4">
