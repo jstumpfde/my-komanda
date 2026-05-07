@@ -405,6 +405,14 @@ export default function VacancyPage() {
     industries: filters.industries,
     relocationReady: filters.relocation === "yes" ? true : filters.relocation === "no" ? false : null,
     businessTripsReady: filters.businessTrips === "yes" ? true : filters.businessTrips === "no" ? false : null,
+    demoProgress: filters.demoProgress,
+    dateFrom: filters.dateFrom,
+    dateTo: filters.dateTo,
+    salaryMin: filters.salaryMin,
+    salaryMax: filters.salaryMax,
+    sources: filters.sources,
+    cities: filters.cities,
+    scoreMin: filters.scoreMin,
   }), [filters])
 
   const { candidates: apiCandidates, updateStage, refetch: refetchCandidates, toggleFavorite } = useCandidates(

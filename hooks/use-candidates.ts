@@ -66,6 +66,15 @@ export interface CandidatesFilters {
   industries?: string[]
   relocationReady?: boolean | null    // true/false/null=any
   businessTripsReady?: boolean | null
+  // Расширенные фильтры (страница вакансии)
+  demoProgress?: string[]             // ['not_started','in_progress','completed_85','completed_below_85']
+  dateFrom?: string                   // ISO date
+  dateTo?: string                     // ISO date
+  salaryMin?: number
+  salaryMax?: number
+  sources?: string[]                  // ['hh','manual','referral','demo','avito','telegram','site']
+  cities?: string[]
+  scoreMin?: number
 }
 
 export interface CandidatesSortParams {
@@ -132,6 +141,27 @@ export function useCandidates(
         if (filters.relocationReady === false) params.set("relocationReady", "false")
         if (filters.businessTripsReady === true) params.set("businessTripsReady", "true")
         if (filters.businessTripsReady === false) params.set("businessTripsReady", "false")
+
+        if (filters.demoProgress && filters.demoProgress.length > 0) {
+          params.set("demoProgress", filters.demoProgress.join(","))
+        }
+        if (filters.dateFrom) params.set("dateFrom", filters.dateFrom)
+        if (filters.dateTo) params.set("dateTo", filters.dateTo)
+        if (typeof filters.salaryMin === "number" && filters.salaryMin > 0) {
+          params.set("salaryMin", String(filters.salaryMin))
+        }
+        if (typeof filters.salaryMax === "number" && filters.salaryMax > 0 && filters.salaryMax < 250000) {
+          params.set("salaryMax", String(filters.salaryMax))
+        }
+        if (filters.sources && filters.sources.length > 0) {
+          params.set("sources", filters.sources.join(","))
+        }
+        if (filters.cities && filters.cities.length > 0) {
+          params.set("cities", filters.cities.join(","))
+        }
+        if (typeof filters.scoreMin === "number" && filters.scoreMin > 0) {
+          params.set("scoreMin", String(filters.scoreMin))
+        }
       }
       const res = await fetch(`/api/modules/hr/candidates?${params.toString()}`)
       if (!res.ok) {

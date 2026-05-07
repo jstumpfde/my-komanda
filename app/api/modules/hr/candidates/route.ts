@@ -376,6 +376,73 @@ export async function GET(req: NextRequest) {
       filterConds.push(sql`(${candidates.businessTripsReady} IS NULL OR ${candidates.businessTripsReady} = ${want})`)
     }
 
+    // Дата отклика: candidates.created_at между dateFrom (включительно)
+    // и dateTo (включительно — добавляем интервал 1 день).
+    const dateFromParam = url.searchParams.get("dateFrom")
+    if (dateFromParam && /^\d{4}-\d{2}-\d{2}/.test(dateFromParam)) {
+      filterConds.push(sql`${candidates.createdAt} >= ${dateFromParam}::timestamp`)
+    }
+    const dateToParam = url.searchParams.get("dateTo")
+    if (dateToParam && /^\d{4}-\d{2}-\d{2}/.test(dateToParam)) {
+      filterConds.push(sql`${candidates.createdAt} < (${dateToParam}::timestamp + INTERVAL '1 day')`)
+    }
+
+    // Зарплата: salaryMin — кандидат хочет НЕ МЕНЕЕ X (его максимум >= X).
+    // salaryMax — кандидат хочет НЕ БОЛЕЕ X (его минимум <= X).
+    // NULL-зарплаты пропускаем (включаем кандидатов без указанного оффера).
+    const salaryMinParam = url.searchParams.get("salaryMin")
+    if (salaryMinParam && Number.isFinite(Number(salaryMinParam))) {
+      const v = Math.max(0, Math.floor(Number(salaryMinParam)))
+      filterConds.push(sql`(
+        (${candidates.salaryMin} IS NULL AND ${candidates.salaryMax} IS NULL)
+        OR COALESCE(${candidates.salaryMax}, ${candidates.salaryMin}, 0) >= ${v}
+      )`)
+    }
+    const salaryMaxParam = url.searchParams.get("salaryMax")
+    if (salaryMaxParam && Number.isFinite(Number(salaryMaxParam))) {
+      const v = Math.max(0, Math.floor(Number(salaryMaxParam)))
+      filterConds.push(sql`(
+        (${candidates.salaryMin} IS NULL AND ${candidates.salaryMax} IS NULL)
+        OR COALESCE(${candidates.salaryMin}, ${candidates.salaryMax}, 999999999) <= ${v}
+      )`)
+    }
+
+    // Источник кандидата (multi-select).
+    const sourcesParam = url.searchParams.get("sources")
+    if (sourcesParam) {
+      const list = sourcesParam.split(",").filter(Boolean)
+      if (list.length > 0) {
+        filterConds.push(inArray(candidates.source, list) as SQL)
+      }
+    }
+
+    // Город (multi-select).
+    const citiesParam = url.searchParams.get("cities")
+    if (citiesParam) {
+      const list = citiesParam.split(",").filter(Boolean)
+      if (list.length > 0) {
+        filterConds.push(inArray(candidates.city, list) as SQL)
+      }
+    }
+
+    // AI-скор от X.
+    const scoreMinParam = url.searchParams.get("scoreMin")
+    if (scoreMinParam && Number.isFinite(Number(scoreMinParam))) {
+      const v = Math.max(0, Math.floor(Number(scoreMinParam)))
+      // Включаем кандидатов без скора (NULL) если v=0; иначе исключаем.
+      if (v > 0) {
+        filterConds.push(sql`(${candidates.aiScore} IS NOT NULL AND ${candidates.aiScore} >= ${v})`)
+      }
+    }
+
+    // demoProgress — фильтрация по прогрессу демо. Поскольку процент
+    // считается из demo_progress_json + lessons.length, делаем это
+    // post-fetch (как сейчас сделана сортировка по progress в строке 388).
+    const demoProgressParam = url.searchParams.get("demoProgress")
+    const demoProgressFilters = demoProgressParam
+      ? demoProgressParam.split(",").filter(Boolean)
+      : []
+
     const baseConds: SQL[] = [
       eq(candidates.vacancyId, vacancyId) as SQL,
       notPreview as SQL,
@@ -478,7 +545,27 @@ export async function GET(req: NextRequest) {
       }
     })
 
-    return apiSuccess(withDisplayName)
+    // Пост-фильтр по прогрессу демо (демо-прогресс зависит от lessons.length,
+    // его проще применить здесь, после расчёта progressPercent).
+    let filtered = withDisplayName
+    if (demoProgressFilters.length > 0) {
+      filtered = withDisplayName.filter((c) => {
+        const p = c.progressPercent
+        const dp = c.demoProgressJson as { blocks?: { status?: string }[]; completedAt?: string | null } | null
+        const hasStarted = !!dp && Array.isArray(dp.blocks) && dp.blocks.some(b => b?.status === "completed")
+        const completedAt = dp?.completedAt ?? null
+
+        for (const f of demoProgressFilters) {
+          if (f === "not_started" && !hasStarted) return true
+          if (f === "in_progress" && hasStarted && (p ?? 0) >= 1 && (p ?? 0) <= 84) return true
+          if (f === "completed_85" && (p ?? 0) >= 85) return true
+          if (f === "completed_below_85" && completedAt !== null && (p ?? 0) < 85) return true
+        }
+        return false
+      })
+    }
+
+    return apiSuccess(filtered)
   } catch (err) {
     if (err instanceof Response) return err
     return apiError("Internal server error", 500)
