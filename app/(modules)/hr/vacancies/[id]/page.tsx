@@ -1977,11 +1977,29 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                   const sourceOptions = Array.from(new Set(allRaw.map((c) => c.source))).sort()
                   const hasAnFilters = anPeriod !== "all" || anSources.length > 0 || anCities.length > 0 || anFormats.length > 0 || anSalaryMin > 0 || anSalaryMax < 300000 || anScoreMin > 0 || anStages.length > 0
                   const resetAnFilters = () => { setAnPeriod("all"); setAnSources([]); setAnCities([]); setAnFormats([]); setAnSalaryMin(0); setAnSalaryMax(300000); setAnScoreMin(0); setAnStages([]) }
-                  const transitions = funnelStages.slice(1).map((s, i) => ({
-                    from: funnelStages[i].stage, to: s.stage,
-                    pct: funnelStages[i].count > 0 ? Math.round((s.count / funnelStages[i].count) * 100) : 0,
-                  }))
-                  const minPct = transitions.length > 0 ? Math.min(...transitions.map((t) => t.pct)) : 0
+                  // Минимальный «значимый» объём, при котором конверсия имеет смысл.
+                  // На малой выборке (< 5 прошли предыдущий этап) проценты — шум,
+                  // и тревога «Здесь теряем больше всего» вводит в заблуждение.
+                  const ALARM_MIN_PREV = 5
+                  const ALARM_MAX_PCT = 30
+                  const transitions = funnelStages.slice(1).map((s, i) => {
+                    const prev = funnelStages[i].count
+                    const hasData = prev > 0
+                    const pct = hasData ? Math.round((s.count / prev) * 100) : 0
+                    return {
+                      from: funnelStages[i].stage,
+                      to: s.stage,
+                      pct,
+                      hasData,
+                      // Тревогу показываем только если: (1) есть данные, (2) через
+                      // этап реально прошёл репрезентативный объём, (3) конверсия низкая.
+                      eligibleForAlarm: hasData && prev >= ALARM_MIN_PREV && pct <= ALARM_MAX_PCT,
+                    }
+                  })
+                  const eligibleAlarms = transitions.filter((t) => t.eligibleForAlarm)
+                  const minPct = eligibleAlarms.length > 0
+                    ? Math.min(...eligibleAlarms.map((t) => t.pct))
+                    : -1
                   const overallConv = totalCandidates > 0 ? ((funnelStages[funnelStages.length - 1].count / totalCandidates) * 100).toFixed(1) : "0"
 
                   // Sources
@@ -2006,7 +2024,7 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                   ]
 
                   return (
-                    <div className="space-y-4">
+                    <div className="space-y-4 max-w-[1200px] mx-auto">
                       {/* Funnel chart + 3 metric cards */}
                       <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-4">
                         <Card>
@@ -2057,14 +2075,19 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                         </CardHeader>
                         <CardContent className="space-y-1.5">
                           {transitions.map((t) => {
-                            const isWorst = t.pct === minPct && transitions.length > 1
+                            // Подсветка «теряем больше всего» — только для самой низкой
+                            // конверсии среди eligibleForAlarm-этапов. Если данных мало
+                            // или процент в пределах нормы — не подсвечиваем.
+                            const isWorst = t.eligibleForAlarm && t.pct === minPct && eligibleAlarms.length > 1
                             return (
                               <div key={t.from + t.to} className={cn("flex items-center gap-3 px-3 py-2 rounded-lg text-sm", isWorst ? "bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800" : "bg-muted/30")}>
                                 <span className="text-muted-foreground w-[200px] shrink-0 text-xs">{t.from} → {t.to}</span>
                                 <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-                                  <div className={cn("h-full rounded-full", isWorst ? "bg-red-500" : "bg-primary")} style={{ width: `${t.pct}%` }} />
+                                  <div className={cn("h-full rounded-full", isWorst ? "bg-red-500" : "bg-primary")} style={{ width: `${t.hasData ? t.pct : 0}%` }} />
                                 </div>
-                                <span className={cn("text-xs font-semibold w-12 text-right", isWorst ? "text-red-600" : "text-foreground")}>{t.pct}%</span>
+                                <span className={cn("text-xs font-semibold w-12 text-right", isWorst ? "text-red-600" : t.hasData ? "text-foreground" : "text-muted-foreground")}>
+                                  {t.hasData ? `${t.pct}%` : "—"}
+                                </span>
                                 {isWorst && <div className="flex items-center gap-1 text-red-600 shrink-0"><AlertTriangle className="w-3.5 h-3.5" /><span className="text-xs font-medium">Здесь теряем больше всего</span></div>}
                               </div>
                             )
