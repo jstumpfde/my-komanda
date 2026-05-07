@@ -9,6 +9,33 @@ import { deriveCandidateName } from "@/lib/candidate-name"
 
 type SortKey = "favorite" | "aiScore" | "salary" | "responseDate" | "status" | "progress"
 
+// Вытаскивает birthDate из anketa_answers (object-form ИЛИ массив записей
+// с {key|blockId, answer}). Используется как fallback, когда колонка
+// candidates.birth_date пустая — кандидат заполнял дату через анкету,
+// но колонка не была сохранена.
+function extractBirthDateFromAnketa(anketa: unknown): string | null {
+  if (!anketa || typeof anketa !== "object") return null
+  const isIso = (s: unknown): s is string =>
+    typeof s === "string" && /^\d{4}-\d{2}-\d{2}/.test(s)
+  if (Array.isArray(anketa)) {
+    for (const e of anketa as Record<string, unknown>[]) {
+      if (!e || typeof e !== "object") continue
+      const key = String(e.blockId ?? e.key ?? e.questionId ?? e.id ?? "")
+      if (key === "birthDate" || key === "birth_date" || key === "birthday") {
+        const ans = e.answer
+        if (isIso(ans)) return ans.slice(0, 10)
+      }
+    }
+    return null
+  }
+  const obj = anketa as Record<string, unknown>
+  for (const k of ["birthDate", "birth_date", "birthday"] as const) {
+    const v = obj[k]
+    if (isIso(v)) return v.slice(0, 10)
+  }
+  return null
+}
+
 const STAGE_ORDER_SQL = sql`CASE ${candidates.stage}
   WHEN 'new' THEN 0
   WHEN 'demo' THEN 1
@@ -260,14 +287,28 @@ export async function GET(req: NextRequest) {
 
     const minAge = url.searchParams.get("minAge")
     const maxAge = url.searchParams.get("maxAge")
+    // «Эффективная» дата рождения — колонка birth_date или вытащенная из
+    // anketa_answers (object-form: {birthDate|birth_date|birthday: "YYYY-MM-DD"}).
+    // Кандидаты, у которых дату вообще не из чего вычислить, отфильтровываются:
+    // пользователь явно сузил диапазон возраста — он ожидает что список
+    // сожмётся, а не покажет всех «на всякий случай».
+    const effectiveBirthDate = sql`COALESCE(
+      ${candidates.birthDate},
+      CASE WHEN ${candidates.anketaAnswers}->>'birthDate' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
+           THEN (${candidates.anketaAnswers}->>'birthDate')::date END,
+      CASE WHEN ${candidates.anketaAnswers}->>'birth_date' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
+           THEN (${candidates.anketaAnswers}->>'birth_date')::date END,
+      CASE WHEN ${candidates.anketaAnswers}->>'birthday' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
+           THEN (${candidates.anketaAnswers}->>'birthday')::date END
+    )`
     if (minAge && Number.isFinite(Number(minAge))) {
       // age >= minAge → birth_date <= today - minAge years
       const yrs = Math.max(0, Math.floor(Number(minAge)))
-      filterConds.push(sql`(${candidates.birthDate} IS NOT NULL AND ${candidates.birthDate} <= (CURRENT_DATE - make_interval(years => ${yrs})))`)
+      filterConds.push(sql`(${effectiveBirthDate} IS NOT NULL AND ${effectiveBirthDate} <= (CURRENT_DATE - make_interval(years => ${yrs})))`)
     }
     if (maxAge && Number.isFinite(Number(maxAge))) {
       const yrs = Math.max(0, Math.floor(Number(maxAge)) + 1)
-      filterConds.push(sql`(${candidates.birthDate} IS NOT NULL AND ${candidates.birthDate} >= (CURRENT_DATE - make_interval(years => ${yrs})))`)
+      filterConds.push(sql`(${effectiveBirthDate} IS NOT NULL AND ${effectiveBirthDate} >= (CURRENT_DATE - make_interval(years => ${yrs})))`)
     }
 
     const minExp = url.searchParams.get("minExperience")
@@ -423,8 +464,13 @@ export async function GET(req: NextRequest) {
         ? Math.min(100, Math.round((demoCompletedBlocks / demoTotalBlocks) * 100))
         : null
 
+      // Эффективная дата рождения: birth_date или вытащенная из anketa_answers.
+      // Нужно для клиентского фильтра по возрасту, который читает c.birthDate.
+      const effectiveBirthDate = r.birthDate ?? extractBirthDateFromAnketa(r.anketaAnswers)
+
       return {
         ...r,
+        birthDate: effectiveBirthDate,
         name: deriveCandidateName(r.name, r.anketaAnswers, hhNameByCandidateId.get(r.id) ?? null),
         demoTotalBlocks,
         demoCompletedBlocks,
