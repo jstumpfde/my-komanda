@@ -1539,13 +1539,33 @@ export default function VacancyPage() {
                 </div>
                 <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-muted-foreground">
                   {activeTab === "candidates" && <>
-                    <span><span className="font-medium text-foreground">{hhSyncMeta?.responsesCount ?? apiCandidates.length}</span> откликов</span>
+                    <UITooltip>
+                      <TooltipTrigger asChild>
+                        <span className="cursor-help"><span className="font-medium text-foreground">{apiCandidates.length}</span> всего кандидатов</span>
+                      </TooltipTrigger>
+                      <TooltipContent>Все кандидаты на вакансии — все источники, все этапы</TooltipContent>
+                    </UITooltip>
                     <span>·</span>
-                    <span><span className="font-medium text-foreground">{apiCandidates.length}</span> кандидатов</span>
+                    <UITooltip>
+                      <TooltipTrigger asChild>
+                        <span className="cursor-help"><span className={cn("font-medium", (hhPendingResponses ?? 0) > 0 ? "text-amber-700" : "text-foreground")}>{hhPendingResponses ?? 0}</span> ждут разбора</span>
+                      </TooltipTrigger>
+                      <TooltipContent>Отклики с hh.ru, которые ещё не обработаны (нажмите «Разобрать»)</TooltipContent>
+                    </UITooltip>
                     <span>·</span>
-                    <span><span className={cn("font-medium", (hhPendingResponses ?? 0) > 0 ? "text-amber-700" : "text-foreground")}>{hhPendingResponses ?? 0}</span> необраб.</span>
+                    <UITooltip>
+                      <TooltipTrigger asChild>
+                        <span className="cursor-help"><span className="font-medium text-foreground">{apiCandidates.filter(c => c.demoProgressJson != null).length}</span> открыли демо</span>
+                      </TooltipTrigger>
+                      <TooltipContent>Сколько кандидатов хотя бы зашли на демо-анкету</TooltipContent>
+                    </UITooltip>
                     <span>·</span>
-                    <span><span className="font-medium text-foreground">{apiCandidates.filter(c => c.demoProgressJson != null).length}</span> в демо</span>
+                    <UITooltip>
+                      <TooltipTrigger asChild>
+                        <span className="cursor-help"><span className="font-medium text-foreground">{apiCandidates.filter(c => c.stage === "rejected").length}</span> отказ</span>
+                      </TooltipTrigger>
+                      <TooltipContent>Кандидаты со статусом «Отказ» в воронке</TooltipContent>
+                    </UITooltip>
                     {hhConnected === true && apiVacancy?.hhVacancyId && hhSyncMeta && (<>
                       <span>·</span>
                       <UITooltip>

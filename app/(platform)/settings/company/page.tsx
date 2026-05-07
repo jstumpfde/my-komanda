@@ -601,22 +601,6 @@ export default function CompanyProfilePage() {
         </Card>
 
 
-        {/* ═══ Описание для вакансий ═══════════════════════ */}
-        <Card>
-          <CardHeader className="pb-2 pt-4 px-5"><CardTitle className="text-base flex items-center gap-2"><FileText className="w-4 h-4" /> Описание компании для вакансий</CardTitle></CardHeader>
-          <CardContent className="px-5 pb-4 pt-0 space-y-2">
-            <Textarea
-              value={companyDescription}
-              onChange={e => { setCompanyDescription(e.target.value); autoSave("company_description", e.target.value) }}
-              onBlur={() => saveNow("company_description", companyDescription)}
-              rows={6}
-              className="w-full text-sm"
-              placeholder="Company24.pro — AI-платформа для автоматизации бизнес-процессов. 14 модулей, 14 AI-агентов. Помогаем компаниям автоматизировать найм, обучение, продажи..."
-            />
-            <p className="text-xs text-muted-foreground">Этот текст будет подтягиваться в новые вакансии. Можно отредактировать в каждой вакансии отдельно.</p>
-          </CardContent>
-        </Card>
-
         {/* ═══ Сохранить ══════════════════════════════════ */}
         <div className="flex justify-end pb-4">
           <Button size="lg" className="gap-2" onClick={handleSave} disabled={saving || hasErrors}>

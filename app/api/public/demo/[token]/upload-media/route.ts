@@ -10,7 +10,7 @@ import { isShortId } from "@/lib/short-id"
 export const runtime = "nodejs"
 export const maxDuration = 60
 
-const MAX_SIZE = 50 * 1024 * 1024 // 50MB
+const MAX_SIZE = 200 * 1024 * 1024 // 200MB
 
 const ALLOWED_MIME: Record<string, string[]> = {
   video: ["video/webm", "video/mp4", "video/quicktime", "video/ogg"],
@@ -73,7 +73,7 @@ export async function POST(
     const mediaType = mediaTypeRaw as "video" | "audio" | "photo"
 
     if (file.size === 0) return apiError("Файл пустой", 400)
-    if (file.size > MAX_SIZE) return apiError("Файл больше 50MB", 413)
+    if (file.size > MAX_SIZE) return apiError("Файл больше 200MB", 413)
 
     const mime = (file.type || "").toLowerCase()
     const allowed = ALLOWED_MIME[mediaType]

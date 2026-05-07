@@ -902,14 +902,16 @@ export function DashboardSidebar() {
           document.body
         )}
 
-        {/* Customize menu button */}
-        <button
-          onClick={() => setCustomizeOpen(true)}
-          className="group-data-[collapsible=icon]:hidden flex items-center gap-2 px-2 py-1.5 rounded-md text-xs text-sidebar-foreground/40 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-colors w-full"
-        >
-          <SlidersHorizontal className="w-3.5 h-3.5" />
-          Настроить меню
-        </button>
+        {/* Customize menu button — только для platform_admin / platform_manager */}
+        {isAdminOrManager && (
+          <button
+            onClick={() => setCustomizeOpen(true)}
+            className="group-data-[collapsible=icon]:hidden flex items-center gap-2 px-2 py-1.5 rounded-md text-xs text-sidebar-foreground/40 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-colors w-full"
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5" />
+            Настроить меню
+          </button>
+        )}
 
         <SidebarCustomizationSheet
           open={customizeOpen}
