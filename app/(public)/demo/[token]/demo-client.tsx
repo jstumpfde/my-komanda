@@ -1177,13 +1177,15 @@ export default function DemoPage() {
             <p className="text-sm text-gray-500 mt-1">Мы свяжемся с вами по поводу позиции &laquo;{data.vacancyTitle}&raquo;</p>
           </div>
 
-          <div className="bg-blue-50 border border-blue-100 rounded-xl p-5 text-sm text-gray-700 space-y-3 leading-relaxed">
-            <p className="font-medium text-gray-800">Заполните ваши данные!</p>
-            <p>Мы разберём ваши ответы — в том числе ответы на вопросы — и свяжемся с вами.</p>
-            <p className="font-medium text-gray-800">Ждём Вас!</p>
-          </div>
+          <div className="bg-white rounded-2xl shadow-md p-6 space-y-5 mx-auto max-w-[640px]">
+            <div className="space-y-2">
+              <h2 className="text-lg font-semibold text-gray-900">Заполните ваши данные!</h2>
+              <p className="text-sm text-gray-600 leading-relaxed">
+                Мы разберём ваши ответы — в том числе ответы на вопросы — и свяжемся с вами. Ждём Вас!
+              </p>
+            </div>
 
-          <div className="bg-white rounded-xl p-6 shadow-sm space-y-4">
+            <div className="space-y-4">
 
             {/* Основные данные */}
             {(() => {
@@ -1278,6 +1280,7 @@ export default function DemoPage() {
               {formSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               Отправить
             </Button>
+            </div>
           </div>
 
         </div>
