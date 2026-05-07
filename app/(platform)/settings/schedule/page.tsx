@@ -116,17 +116,32 @@ function formatIndividualSchedule(days: Record<string, { active: boolean; start:
   return parts.join(", ")
 }
 
-const MOCK_INDIVIDUAL_SCHEDULES: IndividualSchedule[] = [
-  {
-    employeeId: "m1", employeeName: "Анна Иванова",
-    days: {
-      mon: { active: true, start: "10:00", end: "19:00" }, tue: { active: true, start: "10:00", end: "19:00" },
-      wed: { active: true, start: "10:00", end: "19:00" }, thu: { active: true, start: "10:00", end: "19:00" },
-      fri: { active: true, start: "10:00", end: "17:00" }, sat: { active: false, start: "10:00", end: "15:00" },
-      sun: { active: false, start: "10:00", end: "15:00" },
-    },
-  },
-]
+// Дефолтный график (используется когда у юзера ещё нет своих настроек)
+const DEFAULT_INDIVIDUAL_DAYS: Record<string, { active: boolean; start: string; end: string }> = {
+  mon: { active: true, start: "09:00", end: "18:00" },
+  tue: { active: true, start: "09:00", end: "18:00" },
+  wed: { active: true, start: "09:00", end: "18:00" },
+  thu: { active: true, start: "09:00", end: "18:00" },
+  fri: { active: true, start: "09:00", end: "18:00" },
+  sat: { active: false, start: "10:00", end: "15:00" },
+  sun: { active: false, start: "10:00", end: "15:00" },
+}
+
+// Преобразование week_schedule из API ({mon: {enabled, from, to}}) в формат страницы
+// (active/start/end). Принимает оба варианта именования (enabled|active, from|start, to|end).
+function normalizeDays(raw: unknown): Record<string, { active: boolean; start: string; end: string }> {
+  if (!raw || typeof raw !== "object") return { ...DEFAULT_INDIVIDUAL_DAYS }
+  const out: Record<string, { active: boolean; start: string; end: string }> = {}
+  for (const id of WEEKDAY_IDS) {
+    const r = (raw as Record<string, Record<string, unknown> | undefined>)[id] ?? {}
+    out[id] = {
+      active: typeof r.active === "boolean" ? r.active : (typeof r.enabled === "boolean" ? r.enabled : DEFAULT_INDIVIDUAL_DAYS[id].active),
+      start:  (typeof r.start === "string" ? r.start : (typeof r.from === "string" ? r.from : DEFAULT_INDIVIDUAL_DAYS[id].start)),
+      end:    (typeof r.end === "string" ? r.end : (typeof r.to === "string" ? r.to : DEFAULT_INDIVIDUAL_DAYS[id].end)),
+    }
+  }
+  return out
+}
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
@@ -183,10 +198,28 @@ export default function CompanySchedulePage() {
   const [absenceDialogOpen, setAbsenceDialogOpen] = useState(false)
   const [absForm, setAbsForm] = useState({ employee: "", type: "vacation" as AbsenceType, dateFrom: "", dateTo: "", comment: "" })
   // Individual schedules
-  const [individualSchedules, setIndividualSchedules] = useState<IndividualSchedule[]>(MOCK_INDIVIDUAL_SCHEDULES)
+  const [individualSchedules, setIndividualSchedules] = useState<IndividualSchedule[]>([])
+  const [individualLoading, setIndividualLoading] = useState(true)
   const [editingEmployeeId, setEditingEmployeeId] = useState<string | null>(null)
   const [editingDays, setEditingDays] = useState<Record<string, { active: boolean; start: string; end: string }>>({})
   const [savingSchedule, setSavingSchedule] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    fetch("/api/settings/team/schedules")
+      .then(r => r.ok ? r.json() : [])
+      .then((rows: Array<{ userId: string; userName: string; weekSchedule: unknown }>) => {
+        if (cancelled || !Array.isArray(rows)) return
+        setIndividualSchedules(rows.map(r => ({
+          employeeId:   r.userId,
+          employeeName: r.userName,
+          days:         normalizeDays(r.weekSchedule),
+        })))
+      })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setIndividualLoading(false) })
+    return () => { cancelled = true }
+  }, [])
 
   const startEditSchedule = (emp: IndividualSchedule) => {
     setEditingEmployeeId(emp.employeeId)
@@ -197,11 +230,18 @@ export default function CompanySchedulePage() {
     if (!editingEmployeeId) return
     setSavingSchedule(true)
     try {
-      await fetch(`/api/team/${editingEmployeeId}`, {
-        method: "PATCH",
+      // Преобразуем формат страницы (active/start/end) в формат БД (enabled/from/to)
+      const weekSchedule: Record<string, { enabled: boolean; from: string; to: string }> = {}
+      for (const id of WEEKDAY_IDS) {
+        const d = editingDays[id] ?? DEFAULT_INDIVIDUAL_DAYS[id]
+        weekSchedule[id] = { enabled: d.active, from: d.start, to: d.end }
+      }
+      const res = await fetch(`/api/settings/team/schedules/${editingEmployeeId}`, {
+        method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ custom_schedule: { enabled: true, days: editingDays } }),
+        body: JSON.stringify({ weekSchedule, timezone }),
       })
+      if (!res.ok) throw new Error("Ошибка сохранения")
       setIndividualSchedules(prev => prev.map(e =>
         e.employeeId === editingEmployeeId ? { ...e, days: editingDays } : e
       ))
@@ -253,9 +293,11 @@ export default function CompanySchedulePage() {
   const lunchSummary = lunchEnabled ? `${lunchFrom}–${lunchTo}` : "Выключен"
   const holidaySummary = `${holidays.length} ${holidays.length === 1 ? "праздник" : holidays.length < 5 ? "праздника" : "праздников"} (${COUNTRY_LABELS[country]})`
   const absenceSummary = absences.length === 0 ? "Нет запланированных" : `${absences.length} запланировано`
-  const individualSummary = individualSchedules.length === 0
-    ? "Все по графику компании"
-    : `${individualSchedules.length} ${individualSchedules.length === 1 ? "сотрудник" : individualSchedules.length < 5 ? "сотрудника" : "сотрудников"} с индивидуальным графиком`
+  const individualSummary = individualLoading
+    ? "Загружаем..."
+    : individualSchedules.length === 0
+      ? "В компании нет сотрудников"
+      : `${individualSchedules.length} ${individualSchedules.length === 1 ? "сотрудник" : individualSchedules.length < 5 ? "сотрудника" : "сотрудников"}`
 
   return (
     <div className="max-w-3xl">
@@ -519,9 +561,13 @@ export default function CompanySchedulePage() {
           </button>
           {expanded.has("individual") && (
             <CardContent className="p-0 border-t">
-              {individualSchedules.length === 0 ? (
+              {individualLoading ? (
+                <div className="py-4 text-center text-sm text-muted-foreground flex items-center justify-center gap-2">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />Загружаем...
+                </div>
+              ) : individualSchedules.length === 0 ? (
                 <div className="py-4 text-center text-sm text-muted-foreground">
-                  Все сотрудники работают по графику компании
+                  В компании пока нет сотрудников
                 </div>
               ) : (
                 <>

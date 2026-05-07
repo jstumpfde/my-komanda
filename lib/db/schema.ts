@@ -172,6 +172,18 @@ export const userPreferences = pgTable("user_preferences", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 })
 
+// ─── Индивидуальные графики работы сотрудников ──────────────────────────────
+
+export const userSchedules = pgTable("user_schedules", {
+  id:           uuid("id").primaryKey().defaultRandom(),
+  userId:       uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull().unique(),
+  companyId:    uuid("company_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  weekSchedule: jsonb("week_schedule").notNull(),  // { mon: {enabled, from, to}, tue: {...}, ... }
+  timezone:     text("timezone").default("Europe/Moscow"),
+  createdAt:    timestamp("created_at").defaultNow(),
+  updatedAt:    timestamp("updated_at").defaultNow(),
+})
+
 // ─── Sales: CRM Компании ─────────────────────────────────────────────────────
 
 export const salesCompanies = pgTable("sales_companies", {
