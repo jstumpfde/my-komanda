@@ -202,6 +202,16 @@
   [data-sidebar="sidebar"] { --sidebar-width: 60px; }
 }
 
+/* «Эффективная» ширина sidebar — обновляется при свёрнутом состоянии.
+   Используется fixed/sticky-headers, которые позиционируются слева от
+   контента и должны растягиваться на освободившуюся область при collapse. */
+[data-slot="sidebar-wrapper"] {
+  --sidebar-effective-width: var(--sidebar-width);
+}
+[data-slot="sidebar-wrapper"]:has([data-state="collapsed"]) {
+  --sidebar-effective-width: var(--sidebar-width-icon);
+}
+
 
 @layer base {
   b, strong { font-weight: 700 !important; }

@@ -1462,7 +1462,7 @@ export default function VacancyPage() {
               "fixed top-14 right-0 z-40 bg-background border-b shadow-sm py-2 transition-all duration-200",
               showStickyHeader ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-2 pointer-events-none"
             )}
-            style={{ left: "var(--sidebar-width, 16rem)", paddingLeft: 56, paddingRight: 56 }}
+            style={{ left: "var(--sidebar-effective-width, var(--sidebar-width, 16rem))", paddingLeft: 56, paddingRight: 56, transition: "left 200ms ease-linear" }}
           >
             <div className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-3 min-w-0 flex-1">
