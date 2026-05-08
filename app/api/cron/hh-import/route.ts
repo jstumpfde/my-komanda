@@ -13,11 +13,12 @@
 // повторный INSERT/обновление по тем же откликам.
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
-import { hhVacancies, vacancies, hhTokens, hhResponses } from "@/lib/db/schema"
-import { and, eq, count, sql } from "drizzle-orm"
+import { hhVacancies, vacancies, hhTokens, hhResponses, companies } from "@/lib/db/schema"
+import { and, eq, count, sql, inArray } from "drizzle-orm"
 import { HHClient } from "@/lib/hh/client"
 import { checkCronAuth } from "@/lib/cron/auth"
 import { processHhQueue } from "@/lib/hh/process-queue"
+import { isWorkingHours, describeNowIn, DEFAULT_WORKING_HOURS } from "@/lib/utils/working-hours"
 
 // Лимит откликов в обработку за один вызов cron'а — на компанию.
 // 50 — компромисс: hh API per-employer rate-limit ≈ 60 rps, в коде
@@ -52,6 +53,7 @@ export async function POST(req: NextRequest) {
   let processed = 0
   let deferredOffHours = 0
   let skipped   = 0
+  let skippedOffHoursCompanies = 0
   const errors: string[] = []
 
   try {
@@ -78,10 +80,30 @@ export async function POST(req: NextRequest) {
       byCompany.set(row.companyId, list)
     }
 
+    // Working-hours фильтр: до importApplications (=> до hh API). Цель — не
+    // долбить hh.ru ночью/в выходные/в праздники. Источник правды —
+    // companies.working_hours JSONB (миграция 0092). NULL → DEFAULT_WORKING_HOURS.
+    const companyIds = Array.from(byCompany.keys())
+    const workingHoursByCompany = new Map<string, typeof DEFAULT_WORKING_HOURS | null>()
+    if (companyIds.length > 0) {
+      const rows = await db
+        .select({ id: companies.id, workingHours: companies.workingHours })
+        .from(companies)
+        .where(inArray(companies.id, companyIds))
+      for (const r of rows) workingHoursByCompany.set(r.id, r.workingHours ?? null)
+    }
+
     // Параллельная обработка компаний — каждая компания идёт своим потоком.
     // Внутри компании (importApplications + processHhQueue) сохраняется
     // последовательность, чтобы не словить 429 от hh.ru на одном employer.
     await Promise.all(Array.from(byCompany.entries()).map(async ([companyId, rows]) => {
+      const schedule = workingHoursByCompany.get(companyId) ?? null
+      if (!isWorkingHours(schedule)) {
+        skippedOffHoursCompanies++
+        const tz = schedule?.tz ?? DEFAULT_WORKING_HOURS.tz
+        console.info(`[hh-import] company ${companyId} off-hours (${describeNowIn(tz)}) — skip`)
+        return
+      }
       // Без токена hh — пропускаем компанию.
       const tokenRows = await db
         .select()
@@ -151,6 +173,7 @@ export async function POST(req: NextRequest) {
     processed,
     deferredOffHours,
     skipped,
+    skippedOffHoursCompanies,
     errors,
   })
 }

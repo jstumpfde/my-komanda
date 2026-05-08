@@ -129,6 +129,15 @@ export const companies = pgTable("companies", {
   // Privacy policy (per-company, ФЗ-152) — null = используется дефолтный шаблон
   privacyPolicyHtml:        text("privacy_policy_html"),
   privacyPolicyUpdatedAt:   timestamp("privacy_policy_updated_at"),
+  // Рабочее время компании для cron-фильтрации (см. lib/utils/working-hours.ts).
+  // NULL = используется DEFAULT_WORKING_HOURS (Mon-Fri 09:00-21:00 Europe/Moscow).
+  workingHours:       jsonb("working_hours").$type<{
+    tz: string
+    days: number[]
+    from: string
+    to: string
+    holidays?: string[]
+  }>(),
   createdAt:          timestamp("created_at").defaultNow(),
   updatedAt:          timestamp("updated_at").defaultNow(),
 })
