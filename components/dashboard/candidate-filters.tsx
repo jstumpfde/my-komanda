@@ -679,8 +679,16 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [] }: 
           </div>
           )}
 
+          {/* Кнопка раньше называлась «Применить», но фильтры применяются
+              немедленно при каждом изменении (onFiltersChange → useCandidates
+              → refetch). Никакого batch-apply здесь нет, поэтому клик просто
+              закрывал поповер — и пользователь думал, что кнопка не работает.
+              Переименовали в «Готово», и подсказка для ясности. */}
+          <p className="text-[11px] text-muted-foreground text-center -mb-1">
+            Фильтры применяются мгновенно
+          </p>
           <Button variant="default" className="w-full h-8 text-sm" onClick={() => setIsOpen(false)}>
-            Применить
+            Готово
           </Button>
         </div>
       </PopoverContent>
