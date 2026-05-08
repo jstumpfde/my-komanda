@@ -28,6 +28,7 @@ export interface ApiCandidate {
   industry?: string | null
   relocationReady?: boolean | null
   businessTripsReady?: boolean | null
+  photoUrl?: string | null
   token: string
   demoProgressJson: unknown
   // Реальный формат в БД — массив [{ blockId, answer, ... }] или legacy [{ question, answer }].

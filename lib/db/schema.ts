@@ -391,6 +391,9 @@ export const candidates = pgTable("candidates", {
   industry: text("industry"),
   relocationReady: boolean("relocation_ready"),
   businessTripsReady: boolean("business_trips_ready"),
+  // URL фото из hh-резюме (medium ≈ 240×240). Кешируется в БД при импорте,
+  // чтобы фронт не запрашивал hh API на каждый рендер карточки кандидата.
+  photoUrl: text("photo_url"),
   token: text("token").unique().notNull(),
   shortId: text("short_id").unique(),                 // "2604V0010042" — vacancy.short_code + LPAD(seq,4)
   sequenceNumber: integer("sequence_number"),         // порядковый номер в рамках вакансии (0 = preview)

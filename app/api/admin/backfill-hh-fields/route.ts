@@ -186,6 +186,7 @@ export async function POST(req: NextRequest) {
           salaryMax:          candidates.salaryMax,
           city:               candidates.city,
           experience:         candidates.experience,
+          photoUrl:           candidates.photoUrl,
         }).from(candidates).where(eq(candidates.id, t.id)).limit(1)
         if (!cur) { skipped++; continue }
 
