@@ -304,9 +304,13 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [] }: 
           </div>
           )}
 
-          {/* Score */}
+          {/* Score. На дефолте (0) — пишем «не задано», чтобы пользователь не
+              думал, что у него стоит фильтр «AI ≥ 0» (он ничего не отсекает,
+              но визуально выглядит как активный). */}
           <div className="space-y-2">
-            <label className="text-xs font-medium text-muted-foreground">Минимальный AI-скор: {filters.scoreMin}</label>
+            <label className="text-xs font-medium text-muted-foreground">
+              Минимальный AI-скор: {filters.scoreMin > 0 ? filters.scoreMin : <span className="italic">не задан</span>}
+            </label>
             <Slider value={[filters.scoreMin]} onValueChange={([v]) => onFiltersChange({ ...filters, scoreMin: v })} min={0} max={100} step={5} />
           </div>
 
@@ -461,10 +465,14 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [] }: 
             </div>
           </div>
 
-          {/* 7. Age */}
+          {/* 7. Age. На дефолтном диапазоне 18–65 — это «без фильтра по возрасту»,
+              а не «возраст между 18 и 65» (нет ничего отсекаемого). Подписываем
+              явно, иначе пользователь думает, что мы скрываем кандидатов <18/>65. */}
           <div className="space-y-2">
             <label className="text-xs font-medium text-muted-foreground">
-              Возраст: {filters.ageMin} – {filters.ageMax} лет
+              {filters.ageMin === 18 && filters.ageMax === 65
+                ? <>Возраст: <span className="italic">не задан</span></>
+                : <>Возраст: {filters.ageMin} – {filters.ageMax} лет</>}
             </label>
             <Slider
               value={[filters.ageMin, filters.ageMax]}
