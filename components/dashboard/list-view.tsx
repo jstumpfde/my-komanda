@@ -387,7 +387,7 @@ export function ListView({
                       className="text-[13px] text-muted-foreground truncate max-w-[240px]"
                       title={candidate.experience}
                     >
-                      {candidate.experience}
+                      {candidate.experienceYears ? `Опыт ${candidate.experienceYears} лет` : (candidate.experience ? `Опыт ${candidate.experience}` : "")}
                     </p>
                   )}
                 </div>
