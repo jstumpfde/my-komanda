@@ -679,6 +679,21 @@ export default function VacancyPage() {
   const [hhPendingResponses, setHhPendingResponses] = useState<number | null>(null)
   const [hhSyncing, setHhSyncing] = useState(false)
 
+  // Сводные счётчики для шапки. Отдельный endpoint, не зависящий от фильтров,
+  // чтобы «всего кандидатов» всегда показывало COUNT по vacancy_id, а не
+  // длину apiCandidates (которая ужимается фильтрами / задержкой загрузки).
+  const [headerStats, setHeaderStats] = useState<{ total: number; pending: number; demoOpened: number; rejected: number } | null>(null)
+  const loadHeaderStats = useCallback(async () => {
+    if (!id) return
+    try {
+      const res = await fetch(`/api/modules/hr/vacancies/${id}/candidate-stats`)
+      if (!res.ok) return
+      const data = await res.json() as { total: number; pending: number; demoOpened: number; rejected: number }
+      setHeaderStats(data)
+    } catch { /* silent */ }
+  }, [id])
+  useEffect(() => { loadHeaderStats() }, [loadHeaderStats])
+
   const loadHhSyncMeta = useCallback(async () => {
     const hhVacId = apiVacancy?.hhVacancyId
     if (!hhVacId) return
@@ -713,7 +728,7 @@ export default function VacancyPage() {
         fetch("/api/integrations/hh/vacancies"),
         fetch("/api/integrations/hh/responses"),
       ])
-      await Promise.all([loadHhSyncMeta(), loadHhPending()])
+      await Promise.all([loadHhSyncMeta(), loadHhPending(), loadHeaderStats()])
       refetchCandidates(); refetchVacancy()
       toast.success("Синхронизировано с hh.ru")
     } catch { toast.error("Ошибка синхронизации") }
@@ -1547,30 +1562,33 @@ export default function VacancyPage() {
                 </div>
                 <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-muted-foreground">
                   {activeTab === "candidates" && <>
+                    {/* Цифры берём из headerStats (отдельный COUNT по vacancy_id),
+                        а не из apiCandidates — тот режется фильтрами и задержкой
+                        загрузки. Пока не загружено — fallback на apiCandidates. */}
                     <UITooltip>
                       <TooltipTrigger asChild>
-                        <span className="cursor-help"><span className="font-medium text-foreground">{apiCandidates.length}</span> всего кандидатов</span>
+                        <span className="cursor-help"><span className="font-medium text-foreground">{headerStats?.total ?? apiCandidates.length}</span> всего кандидатов</span>
                       </TooltipTrigger>
                       <TooltipContent>Все кандидаты на вакансии — все источники, все этапы</TooltipContent>
                     </UITooltip>
                     <span>·</span>
                     <UITooltip>
                       <TooltipTrigger asChild>
-                        <span className="cursor-help"><span className={cn("font-medium", (hhPendingResponses ?? 0) > 0 ? "text-amber-700" : "text-foreground")}>{hhPendingResponses ?? 0}</span> ждут разбора</span>
+                        <span className="cursor-help"><span className={cn("font-medium", ((headerStats?.pending ?? hhPendingResponses) ?? 0) > 0 ? "text-amber-700" : "text-foreground")}>{(headerStats?.pending ?? hhPendingResponses) ?? 0}</span> ждут разбора</span>
                       </TooltipTrigger>
                       <TooltipContent>Отклики с hh.ru, которые ещё не обработаны (нажмите «Разобрать»)</TooltipContent>
                     </UITooltip>
                     <span>·</span>
                     <UITooltip>
                       <TooltipTrigger asChild>
-                        <span className="cursor-help"><span className="font-medium text-foreground">{apiCandidates.filter(c => c.demoProgressJson != null).length}</span> открыли демо</span>
+                        <span className="cursor-help"><span className="font-medium text-foreground">{headerStats?.demoOpened ?? apiCandidates.filter(c => c.demoProgressJson != null).length}</span> открыли демо</span>
                       </TooltipTrigger>
                       <TooltipContent>Сколько кандидатов хотя бы зашли на демо-анкету</TooltipContent>
                     </UITooltip>
                     <span>·</span>
                     <UITooltip>
                       <TooltipTrigger asChild>
-                        <span className="cursor-help"><span className="font-medium text-foreground">{apiCandidates.filter(c => c.stage === "rejected").length}</span> отказ</span>
+                        <span className="cursor-help"><span className="font-medium text-foreground">{headerStats?.rejected ?? apiCandidates.filter(c => c.stage === "rejected").length}</span> отказ</span>
                       </TooltipTrigger>
                       <TooltipContent>Кандидаты со статусом «Отказ» в воронке</TooltipContent>
                     </UITooltip>
