@@ -19,6 +19,7 @@ export interface ExtractedHhFields {
   languages?:          string[]
   relocationReady?:    boolean | null
   businessTripsReady?: boolean | null
+  photoUrl?:           string | null
   // legacy
   experience?:         string | null   // напр. "5 лет"
 }
@@ -45,6 +46,14 @@ type RawResume = {
   schedules?: Array<{ id?: unknown }> | unknown
   employments?: Array<{ id?: unknown }> | unknown
   business_trip?: unknown
+  photo?: {
+    small?:  unknown
+    medium?: unknown
+    big?:    unknown
+    "100"?:  unknown
+    "240"?:  unknown
+    "500"?:  unknown
+  } | null
   [key: string]: unknown
 }
 
@@ -198,6 +207,22 @@ export function extractHhResumeFields(raw: unknown): ExtractedHhFields {
   out.relocationReady = mapRelocation(r)
   out.businessTripsReady = mapBusinessTrips(r)
 
+  // photo: hh отдаёт несколько размеров {small,medium,big,100,240,500}.
+  // Для UI кандидата лучше «среднего» размера: medium → 240 → big → 100 → small.
+  // Если ни один не строка — null (нет фото).
+  if (r.photo && typeof r.photo === "object") {
+    const ph = r.photo
+    const candidate =
+      (isString(ph.medium) && ph.medium) ||
+      (isString(ph["240"]) && ph["240"]) ||
+      (isString(ph.big) && ph.big) ||
+      (isString(ph["500"]) && ph["500"]) ||
+      (isString(ph["100"]) && ph["100"]) ||
+      (isString(ph.small) && ph.small) ||
+      null
+    out.photoUrl = candidate || null
+  }
+
   return out
 }
 
@@ -220,5 +245,6 @@ export function toCandidateColumns(fields: ExtractedHhFields): Record<string, un
   if (Array.isArray(fields.languages) && fields.languages.length > 0) cols.languages = fields.languages
   if (typeof fields.relocationReady === "boolean") cols.relocationReady = fields.relocationReady
   if (typeof fields.businessTripsReady === "boolean") cols.businessTripsReady = fields.businessTripsReady
+  if (typeof fields.photoUrl === "string" && fields.photoUrl.length > 0) cols.photoUrl = fields.photoUrl
   return cols
 }

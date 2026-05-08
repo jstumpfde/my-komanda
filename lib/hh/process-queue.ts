@@ -297,6 +297,7 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
             businessTripsReady: candidates.businessTripsReady,
             salaryMin:          candidates.salaryMin,
             salaryMax:          candidates.salaryMax,
+            photoUrl:           candidates.photoUrl,
           }).from(candidates).where(eq(candidates.id, candidateId)).limit(1)
 
           if (exFull && exFull.anketaAnswers === null) {

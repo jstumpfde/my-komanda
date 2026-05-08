@@ -43,6 +43,7 @@ export interface Candidate {
   industry?: string | null
   relocationReady?: boolean | null
   businessTripsReady?: boolean | null
+  photoUrl?: string | null
   demoProgressJson?: {
     blocks?: Array<{ blockId: string; status: string; timeSpent?: number; answer?: unknown }>
     totalBlocks?: number

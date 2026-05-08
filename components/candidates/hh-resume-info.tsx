@@ -183,6 +183,11 @@ interface HhResumeInfoProps {
     experience: string | null
     salaryMin: number | null
     salaryMax: number | null
+    // photoUrl из БД (candidates.photo_url) — кешируется при импорте hh-резюме,
+    // чтобы фронт не дёргал hh API при каждом открытии карточки. Если задан —
+    // используется в первую очередь; rawData.resume.photo.* остаётся вторым
+    // приоритетом для старых кандидатов без backfill.
+    photoUrl?: string | null
   }
 }
 
@@ -464,8 +469,15 @@ export function HhResumeInfo({ rawData, fallback }: HhResumeInfoProps) {
   const age = resume?.age ?? ageFromBirth
   const gender = resume?.gender?.name
   const desiredPosition = pickStr(resume, "title", "position", "должность")
-  // Для большого фото предпочитаем 240px > medium > 100 > small
-  const photoUrl = resume?.photo?.["240"] || resume?.photo?.medium || resume?.photo?.["100"] || resume?.photo?.small
+  // Источник 1 (приоритет): candidates.photo_url из БД — кешированный URL
+  //   из hh-резюме, сохранён при импорте/backfill. Не зависит от свежести raw_data.
+  // Источник 2 (fallback): resume.photo.* из rawData (240 > medium > 100 > small).
+  // Если оба пусты — показываем плейсхолдер с инициалами в ProfilePhoto.
+  const photoUrl = fallback.photoUrl
+    || resume?.photo?.["240"]
+    || resume?.photo?.medium
+    || resume?.photo?.["100"]
+    || resume?.photo?.small
   const initials = fullName
     .split(/\s+/)
     .slice(0, 2)

@@ -749,6 +749,7 @@ export function CandidateDrawer({
                       experience: candidate.experience,
                       salaryMin: candidate.salaryMin,
                       salaryMax: candidate.salaryMax,
+                      photoUrl: candidate.photoUrl ?? null,
                     }}
                   />
                 ) : (

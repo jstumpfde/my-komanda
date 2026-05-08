@@ -177,6 +177,7 @@ function apiCandidateToCard(c: ApiCandidate, columnId: string): Candidate {
     industry: c.industry ?? null,
     relocationReady: c.relocationReady ?? null,
     businessTripsReady: c.businessTripsReady ?? null,
+    photoUrl: c.photoUrl ?? null,
   }
 }
 
