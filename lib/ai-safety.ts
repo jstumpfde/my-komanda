@@ -26,6 +26,22 @@ export function handleAiError(err: unknown): { error: true; message: string } {
     if (msg.includes("timeout") || msg.includes("aborted")) {
       return { error: true, message: "AI не успел ответить. Попробуйте ещё раз." }
     }
+    // Все proxy-fallback'и упали — отдельный, понятный текст для пользователя.
+    // hh-импорт и кандидаты появляются в системе и без AI-скоринга, поэтому
+    // сообщение об этом подсвечено явно (см. Задача 3 в TZ).
+    if (msg.includes("all claude proxies failed")) {
+      return {
+        error: true,
+        message: "AI proxy недоступен. Уже работаем над починкой. hh-импорт продолжается без AI-скоринга — кандидаты появятся в системе, скоринг догонит позже.",
+      }
+    }
+    // 5xx от proxy/upstream — отличаем от 429.
+    if (/\b(50[02-4]|403)\b/.test(msg) && msg.includes("proxy")) {
+      return {
+        error: true,
+        message: "AI proxy вернул ошибку. Уже работаем над починкой. hh-импорт продолжается без AI-скоринга — скоринг применим позже.",
+      }
+    }
   }
   return { error: true, message: "AI временно недоступен. Попробуйте через минуту." }
 }
