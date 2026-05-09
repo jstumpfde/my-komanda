@@ -416,6 +416,10 @@ export const candidates = pgTable("candidates", {
   automationPaused: boolean("automation_paused").notNull().default(false),
   // v5: дубль по реферальной ссылке — какой short_id привёл этого кандидата.
   referredByShortId: text("referred_by_short_id"),
+  // Альтернативные токены при дедупликации: один человек может зайти по
+  // разным реф-ссылкам, мы оставляем одну карточку и копим сюда исходные
+  // токены (см. lib/candidates/normalize-contacts.ts + apply route).
+  referralUuids: jsonb("referral_uuids").$type<string[]>().notNull().default([]),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 })
