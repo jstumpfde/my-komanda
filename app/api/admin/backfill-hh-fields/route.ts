@@ -74,9 +74,10 @@ export async function POST(req: NextRequest) {
 
   // Целевые кандидаты: source='hh', anketaAnswers IS NULL, без даты рождения
   // (или без experienceYears — на случай если birth_date был угадан).
+  // Берём всех hh-кандидатов где не хватает данных (даже с заполненной анкетой —
+  // в анкете может не быть даты рождения, а в hh-резюме есть)
   const conditions = [
     eq(candidates.source, "hh"),
-    isNull(candidates.anketaAnswers),
     isNull(candidates.birthDate),
   ]
   if (body.vacancyId) conditions.push(eq(candidates.vacancyId, body.vacancyId))
