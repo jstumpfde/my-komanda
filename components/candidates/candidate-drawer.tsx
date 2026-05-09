@@ -134,10 +134,10 @@ interface DemoProgress {
 
 // ─── Survey contacts (из анкетной формы) ──────────────────────────────────────
 
-// anketa_answers может быть массивом ответов по блокам демо или объектом-снимком
-// данных, что кандидат указал в анкете (firstName/lastName/phone/email/...).
-// Здесь интересует только объектная форма: контактные/идентификационные поля,
-// которые могут отличаться от hh-данных в основной карточке.
+// candidates.survey_responses — снимок того, что кандидат указал в анкете
+// при заполнении формы по демо-токену. Хранится отдельно от anketa_answers
+// (там массив демо-блоков, не контакты). Поля могут отличаться от
+// hh-данных в основной карточке — показываем выделенным блоком в UI.
 interface SurveyContacts {
   firstName?: string
   lastName?: string
@@ -769,7 +769,7 @@ export function CandidateDrawer({
       if (typeof raw === "object") return Object.keys(raw).length > 0
       return false
     })()
-    const surveyContacts = pickSurveyContacts(candidate.anketaAnswers)
+    const surveyContacts = pickSurveyContacts(candidate.surveyResponses)
     return { demo, demoBlocks: realBlocks, demoTotal, demoCompleted, demoPct, stageHistory, timeline, hasAnswers, blockMeta, surveyContacts }
   }, [candidate])
 

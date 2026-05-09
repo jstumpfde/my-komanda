@@ -399,6 +399,12 @@ export const candidates = pgTable("candidates", {
   sequenceNumber: integer("sequence_number"),         // порядковый номер в рамках вакансии (0 = preview)
   demoProgressJson: jsonb("demo_progress_json"),
   anketaAnswers: jsonb("anketa_answers"), // [{question, answer}]
+  // Снимок данных, которые кандидат сам указал в анкетной форме по
+  // демо-токену (firstName/lastName/phone/email/city/birthDate/telegram
+  // /portfolioUrl/hhUrl/otherLinks/experienceSummary/employmentPreference
+  // /niches/filledAt). Отдельно от anketa_answers — там массив демо-блоков.
+  // Не перезаписывает основные поля name/phone/email/city/birth_date.
+  surveyResponses: jsonb("survey_responses"),
   aiScore: integer("ai_score"),
   aiSummary: text("ai_summary"),
   aiDetails: jsonb("ai_details"), // [{question, score, comment}]
