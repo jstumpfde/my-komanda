@@ -34,6 +34,34 @@ const ANKETA_ELIGIBLE = new Set([
   "decision",
 ])
 
+function buildSurveyResponses(body: {
+  firstName: string
+  lastName: string
+  email: string
+  phone: string
+  birthDate?: string
+  city?: string
+  anketa?: AnketaPayload
+}): Record<string, unknown> {
+  // Снимок анкеты — кладётся в candidates.survey_responses (отдельное
+  // поле, не в anketa_answers, чтобы не затирать массив демо-блоков).
+  const out: Record<string, unknown> = {
+    filledAt: new Date().toISOString(),
+    firstName: body.firstName.trim(),
+    lastName:  body.lastName.trim(),
+    email:     body.email.trim(),
+    phone:     body.phone.trim(),
+  }
+  if (body.city?.trim())      out.city      = body.city.trim()
+  if (body.birthDate?.trim()) out.birthDate = body.birthDate.trim()
+  if (body.anketa) {
+    for (const [k, v] of Object.entries(body.anketa)) {
+      if (typeof v === "string" && v.trim().length > 0) out[k] = v.trim()
+    }
+  }
+  return out
+}
+
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ token: string }> }
@@ -54,26 +82,7 @@ export async function POST(
       return NextResponse.json({ error: "Заполните обязательные поля" }, { status: 400 })
     }
 
-    // Готовим объект анкеты для jsonb. Пропускаем пустые значения.
-    const cleanAnketa: Record<string, unknown> = {}
-    if (body.anketa) {
-      for (const [k, v] of Object.entries(body.anketa)) {
-        if (typeof v === "string" && v.trim().length > 0) cleanAnketa[k] = v.trim()
-      }
-    }
-    if (body.birthDate) cleanAnketa.birthDate = body.birthDate
-    cleanAnketa.submittedAt = new Date().toISOString()
-
-    // Снимок контактных данных, которые кандидат указал в анкете.
-    // Эти поля могут отличаться от hh-данных в основной карточке —
-    // показываем их отдельным блоком «Данные из анкеты» в UI.
-    // НЕ перезаписывают основные name/phone/email/city/birth_date,
-    // если карточка уже привязана к hh-резюме (см. ниже).
-    cleanAnketa.firstName = body.firstName
-    cleanAnketa.lastName = body.lastName
-    cleanAnketa.email = body.email
-    cleanAnketa.phone = body.phone
-    if (body.city?.trim()) cleanAnketa.city = body.city.trim()
+    const surveyResponses = buildSurveyResponses(body)
 
     // Резолв: short_id или token. LEFT JOIN на hh_candidates чтобы
     // понять, привязана ли карточка к hh-резюме.
@@ -83,7 +92,6 @@ export async function POST(
         vacancyId: candidates.vacancyId,
         stage: candidates.stage,
         stageHistory: candidates.stageHistory,
-        anketaAnswers: candidates.anketaAnswers,
         hhResumeId: hhCandidates.hhResumeId,
       })
       .from(candidates)
@@ -92,21 +100,17 @@ export async function POST(
       .limit(1)
 
     if (existing) {
-      // Слияние с уже сохранёнными ответами (jsonb)
-      const prev = (existing.anketaAnswers as Record<string, unknown> | null) ?? {}
-      const merged = { ...prev, ...cleanAnketa }
-
       const now = new Date().toISOString()
       const currentStage = existing.stage ?? "new"
       const stageHistory = (existing.stageHistory as StageHistoryEntry[] | null) || []
       // Если карточка привязана к hh-резюме — основные поля
       // (name/email/phone/city) берутся из hh.ru и не перезаписываются
       // тем, что кандидат указал в анкете. Анкетные данные живут только
-      // в anketa_answers и показываются отдельным блоком в UI.
+      // в survey_responses и показываются отдельным блоком в UI.
       const isFromHh = !!existing.hhResumeId
 
       const updates: Record<string, unknown> = {
-        anketaAnswers: merged,
+        surveyResponses,
         updatedAt: new Date(),
       }
       if (!isFromHh) {
@@ -129,9 +133,6 @@ export async function POST(
 
       await db.update(candidates).set(updates).where(eq(candidates.id, existing.id))
 
-      // AI-скрининг убран — оценка теперь только при завершении демо
-      // (см. app/api/public/demo/[token]/answer/route.ts).
-
       return NextResponse.json({ success: true, id: existing.id })
     }
 
@@ -146,7 +147,7 @@ export async function POST(
       return NextResponse.json({ error: "Вакансия не найдена" }, { status: 404 })
     }
 
-    // Дедупликация (ТЗ задача 3): тот же человек мог уже быть импортирован
+    // Дедупликация: тот же человек мог уже быть импортирован
     // с hh, но открыл публичную демо-ссылку другим путём. Прежде чем
     // создавать новую карточку — ищем существующую по нормализованным
     // (vacancy_id, phone) ИЛИ (vacancy_id, email).
@@ -165,7 +166,6 @@ export async function POST(
             id:            candidates.id,
             stage:         candidates.stage,
             stageHistory:  candidates.stageHistory,
-            anketaAnswers: candidates.anketaAnswers,
             referralUuids: candidates.referralUuids,
             hhResumeId:    hhCandidates.hhResumeId,
           })
@@ -176,8 +176,6 @@ export async function POST(
       : []
 
     if (dup) {
-      const prev   = (dup.anketaAnswers as Record<string, unknown> | null) ?? {}
-      const merged = { ...prev, ...cleanAnketa }
       const now    = new Date().toISOString()
       const currentStage = dup.stage ?? "new"
       const stageHistory = (dup.stageHistory as StageHistoryEntry[] | null) || []
@@ -186,7 +184,7 @@ export async function POST(
       const isFromHh = !!dup.hhResumeId
 
       const updates: Record<string, unknown> = {
-        anketaAnswers: merged,
+        surveyResponses,
         referralUuids: refsNext,
         updatedAt:     new Date(),
       }
@@ -221,7 +219,7 @@ export async function POST(
           source: "demo",
           stage: "new",
           token: nanoid(12),
-          anketaAnswers: cleanAnketa,
+          surveyResponses,
           shortId: short?.shortId ?? null,
           sequenceNumber: short?.sequenceNumber ?? null,
         })
@@ -235,4 +233,3 @@ export async function POST(
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
-
