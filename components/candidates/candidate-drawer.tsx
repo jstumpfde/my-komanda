@@ -132,6 +132,121 @@ interface DemoProgress {
   completedAt?: string | null
 }
 
+// ─── Survey contacts (из анкетной формы) ──────────────────────────────────────
+
+// anketa_answers может быть массивом ответов по блокам демо или объектом-снимком
+// данных, что кандидат указал в анкете (firstName/lastName/phone/email/...).
+// Здесь интересует только объектная форма: контактные/идентификационные поля,
+// которые могут отличаться от hh-данных в основной карточке.
+interface SurveyContacts {
+  firstName?: string
+  lastName?: string
+  phone?: string
+  email?: string
+  city?: string
+  birthDate?: string
+  telegram?: string
+  portfolioUrl?: string
+  hhUrl?: string
+  otherLinks?: string
+  experienceSummary?: string
+  employmentPreference?: string
+  niches?: string
+}
+
+const SURVEY_KEYS: (keyof SurveyContacts)[] = [
+  "firstName", "lastName", "phone", "email", "city", "birthDate",
+  "telegram", "portfolioUrl", "hhUrl", "otherLinks",
+  "experienceSummary", "employmentPreference", "niches",
+]
+
+function pickSurveyContacts(answers: unknown): SurveyContacts | null {
+  if (!answers || typeof answers !== "object" || Array.isArray(answers)) return null
+  const o = answers as Record<string, unknown>
+  const result: SurveyContacts = {}
+  for (const k of SURVEY_KEYS) {
+    const v = o[k]
+    if (typeof v === "string" && v.trim().length > 0) {
+      result[k] = v.trim()
+    }
+  }
+  return Object.keys(result).length > 0 ? result : null
+}
+
+function SurveyRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-start gap-1.5">
+      <span className="text-xs text-muted-foreground shrink-0 w-28">{label}</span>
+      <span className="text-foreground break-words min-w-0 flex-1">{children}</span>
+    </div>
+  )
+}
+
+function SurveyContactsBlock({ contacts: sc }: { contacts: SurveyContacts }) {
+  const fullName = `${sc.firstName ?? ""} ${sc.lastName ?? ""}`.trim()
+  // Выделенный блок: данные кандидата из анкеты. Они могут отличаться от
+  // основных контактов на вкладке «Контакты», если карточка привязана к hh —
+  // там источник истины hh.ru, здесь — то, что кандидат сам указал в форме.
+  return (
+    <div className="rounded-lg border border-amber-300/60 dark:border-amber-700/60 bg-amber-50/50 dark:bg-amber-950/20 p-3 space-y-2">
+      <div>
+        <h3 className="text-xs font-semibold text-amber-900 dark:text-amber-200 uppercase tracking-wide">
+          Данные из анкеты
+        </h3>
+        <p className="text-[11px] text-muted-foreground">
+          Что кандидат указал при заполнении (отдельно от основных контактов)
+        </p>
+      </div>
+      <div className="space-y-1 text-sm">
+        {fullName && <SurveyRow label="Имя">{fullName}</SurveyRow>}
+        {sc.phone && (
+          <SurveyRow label="Телефон">
+            <a href={`tel:${sc.phone}`} className="hover:text-primary">{sc.phone}</a>
+          </SurveyRow>
+        )}
+        {sc.email && (
+          <SurveyRow label="Email">
+            <a href={`mailto:${sc.email}`} className="hover:text-primary">{sc.email}</a>
+          </SurveyRow>
+        )}
+        {sc.city && <SurveyRow label="Город">{sc.city}</SurveyRow>}
+        {sc.birthDate && <SurveyRow label="Дата рождения">{sc.birthDate}</SurveyRow>}
+        {sc.telegram && <SurveyRow label="Telegram">{sc.telegram}</SurveyRow>}
+        {sc.portfolioUrl && (
+          <SurveyRow label="Портфолио">
+            <a href={sc.portfolioUrl} target="_blank" rel="noopener noreferrer" className="hover:text-primary underline-offset-2 hover:underline break-all">{sc.portfolioUrl}</a>
+          </SurveyRow>
+        )}
+        {sc.hhUrl && (
+          <SurveyRow label="hh.ru">
+            <a href={sc.hhUrl} target="_blank" rel="noopener noreferrer" className="hover:text-primary underline-offset-2 hover:underline break-all">{sc.hhUrl}</a>
+          </SurveyRow>
+        )}
+        {sc.otherLinks && (
+          <SurveyRow label="Другие ссылки">
+            <span className="whitespace-pre-wrap">{sc.otherLinks}</span>
+          </SurveyRow>
+        )}
+        {sc.experienceSummary && (
+          <SurveyRow label="Опыт">
+            <span className="whitespace-pre-wrap">{sc.experienceSummary}</span>
+          </SurveyRow>
+        )}
+        {sc.employmentPreference && (
+          <SurveyRow label="Формат работы">
+            <span className="whitespace-pre-wrap">{sc.employmentPreference}</span>
+          </SurveyRow>
+        )}
+        {sc.niches && (
+          <SurveyRow label="Ниши">
+            <span className="whitespace-pre-wrap">{sc.niches}</span>
+          </SurveyRow>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ─── Stage config ─────────────────────────────────────────────────────────────
 
 const STAGE_LABELS: Record<string, { label: string; color: string }> = {
@@ -654,7 +769,8 @@ export function CandidateDrawer({
       if (typeof raw === "object") return Object.keys(raw).length > 0
       return false
     })()
-    return { demo, demoBlocks: realBlocks, demoTotal, demoCompleted, demoPct, stageHistory, timeline, hasAnswers, blockMeta }
+    const surveyContacts = pickSurveyContacts(candidate.anketaAnswers)
+    return { demo, demoBlocks: realBlocks, demoTotal, demoCompleted, demoPct, stageHistory, timeline, hasAnswers, blockMeta, surveyContacts }
   }, [candidate])
 
   return (
@@ -885,7 +1001,10 @@ export function CandidateDrawer({
                   с видео/аудио рендерятся высоко (max-h-[400px] на видео),
                   и стандартного буфера 7rem не хватало чтобы последний блок
                   был полностью виден над sticky-футером. */}
-              <TabsContent value="answers" className="px-6 py-4 pb-40 mt-0">
+              <TabsContent value="answers" className="px-6 py-4 pb-40 mt-0 space-y-4">
+                {derived.surveyContacts ? (
+                  <SurveyContactsBlock contacts={derived.surveyContacts} />
+                ) : null}
                 <AnswersTab answers={candidate.anketaAnswers} demoLessons={candidate.demoLessons} />
               </TabsContent>
 

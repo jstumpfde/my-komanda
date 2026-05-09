@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { and, eq, or, sql } from "drizzle-orm"
 import { nanoid } from "nanoid"
 import { db } from "@/lib/db"
-import { candidates, demos } from "@/lib/db/schema"
+import { candidates, demos, hhCandidates } from "@/lib/db/schema"
 import { generateCandidateShortId, isShortId } from "@/lib/short-id"
 import { normalizePhone, normalizeEmail } from "@/lib/candidates/normalize-contacts"
 
@@ -64,7 +64,19 @@ export async function POST(
     if (body.birthDate) cleanAnketa.birthDate = body.birthDate
     cleanAnketa.submittedAt = new Date().toISOString()
 
-    // Резолв: short_id или token.
+    // Снимок контактных данных, которые кандидат указал в анкете.
+    // Эти поля могут отличаться от hh-данных в основной карточке —
+    // показываем их отдельным блоком «Данные из анкеты» в UI.
+    // НЕ перезаписывают основные name/phone/email/city/birth_date,
+    // если карточка уже привязана к hh-резюме (см. ниже).
+    cleanAnketa.firstName = body.firstName
+    cleanAnketa.lastName = body.lastName
+    cleanAnketa.email = body.email
+    cleanAnketa.phone = body.phone
+    if (body.city?.trim()) cleanAnketa.city = body.city.trim()
+
+    // Резолв: short_id или token. LEFT JOIN на hh_candidates чтобы
+    // понять, привязана ли карточка к hh-резюме.
     const [existing] = await db
       .select({
         id: candidates.id,
@@ -72,8 +84,10 @@ export async function POST(
         stage: candidates.stage,
         stageHistory: candidates.stageHistory,
         anketaAnswers: candidates.anketaAnswers,
+        hhResumeId: hhCandidates.hhResumeId,
       })
       .from(candidates)
+      .leftJoin(hhCandidates, eq(hhCandidates.candidateId, candidates.id))
       .where(isShortId(token) ? eq(candidates.shortId, token) : eq(candidates.token, token))
       .limit(1)
 
@@ -85,14 +99,21 @@ export async function POST(
       const now = new Date().toISOString()
       const currentStage = existing.stage ?? "new"
       const stageHistory = (existing.stageHistory as StageHistoryEntry[] | null) || []
+      // Если карточка привязана к hh-резюме — основные поля
+      // (name/email/phone/city) берутся из hh.ru и не перезаписываются
+      // тем, что кандидат указал в анкете. Анкетные данные живут только
+      // в anketa_answers и показываются отдельным блоком в UI.
+      const isFromHh = !!existing.hhResumeId
 
       const updates: Record<string, unknown> = {
-        name: `${body.firstName} ${body.lastName}`,
-        email: body.email,
-        phone: body.phone,
-        city: body.city || null,
         anketaAnswers: merged,
         updatedAt: new Date(),
+      }
+      if (!isFromHh) {
+        updates.name = `${body.firstName} ${body.lastName}`
+        updates.email = body.email
+        updates.phone = body.phone
+        updates.city = body.city || null
       }
 
       // F2.C: → anketa_filled (после расширения воронки промежуточный
@@ -146,8 +167,10 @@ export async function POST(
             stageHistory:  candidates.stageHistory,
             anketaAnswers: candidates.anketaAnswers,
             referralUuids: candidates.referralUuids,
+            hhResumeId:    hhCandidates.hhResumeId,
           })
           .from(candidates)
+          .leftJoin(hhCandidates, eq(hhCandidates.candidateId, candidates.id))
           .where(and(eq(candidates.vacancyId, demo.vacancyId), or(...dupConds)))
           .limit(1)
       : []
@@ -160,15 +183,18 @@ export async function POST(
       const stageHistory = (dup.stageHistory as StageHistoryEntry[] | null) || []
       const refs   = (dup.referralUuids as string[] | null) ?? []
       const refsNext = refs.includes(token) ? refs : [...refs, token]
+      const isFromHh = !!dup.hhResumeId
 
       const updates: Record<string, unknown> = {
-        name:          `${body.firstName} ${body.lastName}`,
-        email:         body.email,
-        phone:         body.phone,
-        city:          body.city || null,
         anketaAnswers: merged,
         referralUuids: refsNext,
         updatedAt:     new Date(),
+      }
+      if (!isFromHh) {
+        updates.name  = `${body.firstName} ${body.lastName}`
+        updates.email = body.email
+        updates.phone = body.phone
+        updates.city  = body.city || null
       }
       if (!FINAL_STAGES.has(currentStage) && ANKETA_ELIGIBLE.has(currentStage)) {
         updates.stage = "anketa_filled"
