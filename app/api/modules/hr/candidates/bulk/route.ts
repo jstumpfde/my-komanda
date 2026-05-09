@@ -3,6 +3,9 @@ import { eq, and, inArray } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { candidates, vacancies } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
+import { trySyncRejectToHh } from "@/lib/hh/sync-stage"
+
+const HH_BULK_DELAY_MS = 500
 
 const VALID_STAGES = [
   "new", "primary_contact", "demo", "demo_opened", "decision",
@@ -25,6 +28,20 @@ interface BulkBody {
 }
 
 const MAX_IDS = 500
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
+
+// Последовательно синхронизирует отказы с hh.ru.  Делается ПОСЛЕ
+// успешного db-апдейта; ошибки логируются, локальный стейдж не откатывается.
+// Задержка между запросами — anti-429 (hh ограничивает скорость negotiations).
+async function syncBulkRejectToHh(ids: readonly string[]): Promise<void> {
+  for (const id of ids) {
+    try { await trySyncRejectToHh(id) } catch (err) {
+      console.warn(`[bulk] hh reject sync failed for ${id}:`, err)
+    }
+    if (HH_BULK_DELAY_MS > 0) await sleep(HH_BULK_DELAY_MS)
+  }
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -73,6 +90,8 @@ export async function POST(req: NextRequest) {
           return upd.length
         })
         affected = result
+        // Sync с hh — fire-and-forget. Не задерживаем HTTP-ответ HR'у.
+        void syncBulkRejectToHh(ownedIds)
         break
       }
 
@@ -127,6 +146,9 @@ export async function POST(req: NextRequest) {
           return upd.length
         })
         affected = result
+        if (stage === "rejected") {
+          void syncBulkRejectToHh(ownedIds)
+        }
         break
       }
 

@@ -3,13 +3,22 @@ import { eq, and } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { candidates, vacancies } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
+import { trySyncRejectToHh, trySyncInviteToHh } from "@/lib/hh/sync-stage"
 
 const VALID_STAGES = [
-  "new", "demo", "decision", "ai_screening", "interview",
-  "final_decision", "hired", "rejected", "talent_pool",
-  "pending", "preboarding",
+  "new", "primary_contact", "demo", "demo_opened", "decision",
+  "anketa_filled", "ai_screening", "interview", "final_decision",
+  "hired", "rejected", "talent_pool", "pending", "preboarding",
 ] as const
 type Stage = (typeof VALID_STAGES)[number]
+
+// Стейджи «после приглашения». Если кандидат уже был в одном из них
+// и его переводят в primary_contact — это внутренняя ручная корректировка,
+// hh-инвайт повторно не отправляем (он уже его получил).
+const POST_INVITE_STAGES: ReadonlySet<Stage> = new Set([
+  "primary_contact", "demo_opened", "demo", "anketa_filled",
+  "decision", "ai_screening", "interview", "final_decision", "hired",
+])
 
 export { PUT as PATCH }
 
@@ -31,9 +40,10 @@ export async function PUT(
       )
     }
 
-    // Verify candidate belongs to user's company via vacancy join
+    // Verify candidate belongs to user's company via vacancy join.
+    // Возвращаем previousStage чтобы понять, нужен ли hh-инвайт.
     const [row] = await db
-      .select({ candidateId: candidates.id })
+      .select({ candidateId: candidates.id, previousStage: candidates.stage })
       .from(candidates)
       .innerJoin(vacancies, eq(candidates.vacancyId, vacancies.id))
       .where(and(eq(candidates.id, id), eq(vacancies.companyId, user.companyId)))
@@ -60,6 +70,21 @@ export async function PUT(
       })
       .where(eq(candidates.id, id))
       .returning()
+
+    // Sync с hh.ru — fire-and-forget, ошибка не блокирует ответ.
+    if (stage === "rejected") {
+      trySyncRejectToHh(id).catch((err) => {
+        console.warn(`[stage-route] hh reject sync failed for ${id}:`, err)
+      })
+    } else if (
+      stage === "primary_contact"
+      && row.previousStage !== null
+      && !POST_INVITE_STAGES.has(row.previousStage as Stage)
+    ) {
+      trySyncInviteToHh(id).catch((err) => {
+        console.warn(`[stage-route] hh invite sync failed for ${id}:`, err)
+      })
+    }
 
     return apiSuccess(updated)
   } catch (err) {
