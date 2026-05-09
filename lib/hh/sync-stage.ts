@@ -10,7 +10,7 @@
 // последовательно с задержкой (anti-429) — см. bulk/route.ts.
 
 import { db } from "@/lib/db"
-import { candidates, hhResponses, vacancies } from "@/lib/db/schema"
+import { candidates, hhCandidates, hhResponses, vacancies } from "@/lib/db/schema"
 import type { VacancyAiProcessSettings } from "@/lib/db/schema"
 import { and, eq } from "drizzle-orm"
 import { getValidToken } from "@/lib/hh-helpers"
@@ -58,16 +58,23 @@ async function loadContext(candidateId: string): Promise<{
   vac:  { title: string; companyId: string; aiProcessSettings: VacancyAiProcessSettings }
   hh:   { hhResponseId: string }
 } | null> {
+  // Шаг 1: основной запрос — кандидат, вакансия и попытка резолва
+  // hh_responses через прямую связку local_candidate_id (новый импорт).
+  // Дополнительно тянем hh_candidates.hh_application_id — для legacy
+  // hh-кандидатов (старый импорт через lib/hh/client) это единственный
+  // путь к hh_responses. На проде ~100% hh-кандидатов идут через legacy
+  // путь, без fallback sync молча промахивается.
   const [row] = await db
     .select({
-      candId:        candidates.id,
-      candName:      candidates.name,
-      candShortId:   candidates.shortId,
-      vacancyId:     candidates.vacancyId,
-      vacTitle:      vacancies.title,
-      vacCompanyId:  vacancies.companyId,
-      vacAiSettings: vacancies.aiProcessSettings,
-      hhResponseId:  hhResponses.hhResponseId,
+      candId:           candidates.id,
+      candName:         candidates.name,
+      candShortId:      candidates.shortId,
+      vacancyId:        candidates.vacancyId,
+      vacTitle:         vacancies.title,
+      vacCompanyId:     vacancies.companyId,
+      vacAiSettings:    vacancies.aiProcessSettings,
+      hhResponseId:     hhResponses.hhResponseId,
+      hhApplicationId:  hhCandidates.hhApplicationId,
     })
     .from(candidates)
     .innerJoin(vacancies, eq(vacancies.id, candidates.vacancyId))
@@ -75,10 +82,28 @@ async function loadContext(candidateId: string): Promise<{
       eq(hhResponses.localCandidateId, candidates.id),
       eq(hhResponses.companyId,        vacancies.companyId),
     ))
+    .leftJoin(hhCandidates, eq(hhCandidates.candidateId, candidates.id))
     .where(eq(candidates.id, candidateId))
     .limit(1)
 
-  if (!row || !row.hhResponseId) return null
+  if (!row) return null
+
+  // Шаг 2: если прямой связки нет, но есть hh_application_id — резолвим
+  // через него (тот же fallback, что в /api/modules/hr/candidates/[id]/route).
+  let hhResponseId = row.hhResponseId
+  if (!hhResponseId && row.hhApplicationId) {
+    const [resp] = await db
+      .select({ hhResponseId: hhResponses.hhResponseId })
+      .from(hhResponses)
+      .where(and(
+        eq(hhResponses.companyId,     row.vacCompanyId),
+        eq(hhResponses.hhResponseId,  row.hhApplicationId),
+      ))
+      .limit(1)
+    hhResponseId = resp?.hhResponseId ?? null
+  }
+
+  if (!hhResponseId) return null
 
   return {
     cand: {
@@ -92,7 +117,7 @@ async function loadContext(candidateId: string): Promise<{
       companyId:         row.vacCompanyId,
       aiProcessSettings: (row.vacAiSettings as VacancyAiProcessSettings | null) ?? {},
     },
-    hh: { hhResponseId: row.hhResponseId },
+    hh: { hhResponseId },
   }
 }
 
