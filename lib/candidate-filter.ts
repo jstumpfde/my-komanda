@@ -74,7 +74,7 @@ function passesDateRange(c: Candidate, filters: FilterState): boolean {
 function passesAgeRange(c: Candidate, filters: FilterState): boolean {
   const { ageMin, ageMax } = filters
   if (ageMin === 18 && ageMax === 65) return true
-  if (!c.birthDate) return true   // нет данных — не отфильтровываем
+  if (!c.birthDate) return false  // нет данных — фильтр активен, исключаем (Вариант B)
   const bd = c.birthDate instanceof Date ? c.birthDate : new Date(c.birthDate)
   if (Number.isNaN(bd.getTime())) return true
   const now = new Date()
