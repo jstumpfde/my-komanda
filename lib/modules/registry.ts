@@ -38,7 +38,6 @@ export const MODULE_REGISTRY: Record<ModuleId, ModuleConfig> = {
       { label: 'Демо-редактор',  href: '/hr/demo-editor', icon: 'Layers' },
       { label: 'Уведомления',       href: '/hr/settings/notifications',  icon: 'Bell' },
       { label: 'Расписание',        href: '/hr/settings/schedule',       icon: 'Clock' },
-      { label: 'Этапы воронки',     href: '/hr/settings/funnel-stages',  icon: 'GitBranch' },
       { label: 'Шаблоны сообщений', href: '/hr/settings/templates',      icon: 'FileText' },
       { label: 'Источники',         href: '/hr/settings/sources',        icon: 'Globe' },
       { label: 'Планы',         href: '/hr/adaptation/plans',      icon: 'ClipboardList' },

@@ -212,13 +212,17 @@ async function applyWantsContact(candidateId: string): Promise<void> {
     .limit(1)
   const fromStage = prev?.stage ?? "unknown"
 
+  // Ф1: slug "wants_contact" удалён (нет в БД, не в lib/stages.ts).
+  // Кандидата возвращаем в primary_contact — HR увидит «AI определил намерение
+  // на личный контакт» через stageHistory reason="wants_contact_ai".
+  // Поле automationPaused оставляем — уже было в коде до Ф1, отдельная логика.
   await db.update(candidates).set({
-    stage: "wants_contact",
+    stage: "primary_contact",
     automationPaused: true,
     updatedAt: new Date(),
   }).where(eq(candidates.id, candidateId))
 
-  await appendStageHistory(candidateId, fromStage, "wants_contact", "wants_contact_ai")
+  await appendStageHistory(candidateId, fromStage, "primary_contact", "wants_contact_ai")
 
   await db.update(followUpMessages).set({
     status: "cancelled",

@@ -1473,22 +1473,6 @@ export const hhResponses = pgTable("hh_responses", {
 // Legacy alias — old code references hhTokens
 export const hhTokens = hhIntegrations
 
-// ─── Funnel Stages ──────────────────────────────────────────────────────────
-
-export const funnelStages = pgTable("funnel_stages", {
-  id:         uuid("id").primaryKey().defaultRandom(),
-  companyId:  uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
-  title:      text("title").notNull(),
-  slug:       text("slug").notNull(),
-  sortOrder:  integer("sort_order").notNull().default(0),
-  color:      text("color").default("#3B82F6"),
-  isTerminal: boolean("is_terminal").default(false),
-  isDefault:  boolean("is_default").default(false),
-  createdAt:  timestamp("created_at").defaultNow(),
-}, (t) => [
-  unique("uq_funnel_stages_company_slug").on(t.companyId, t.slug),
-])
-
 // ─── Learning Plans ─────────────────────────────────────────────────────────
 
 export const learningPlans = pgTable("learning_plans", {

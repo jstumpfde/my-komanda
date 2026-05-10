@@ -14,10 +14,8 @@ import { toast } from "sonner"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import {
-  MessageSquare, Clock, Zap, Phone, Brain, Send, GripVertical,
-  ChevronDown, ChevronUp, Pencil, Check, X, Pause, GitBranch,
-  FileText, BarChart3, Video, ClipboardList, Award, UserX,
-  Bot, Sparkles, Truck, Users, ChevronRight, Loader2, Plus,
+  MessageSquare, Zap, Phone, Brain, Send, Pencil, Check,
+  FileText, ClipboardList, Sparkles, Loader2,
 } from "lucide-react"
 
 // ─── Типы ────────────────────────────────────────────────────
@@ -25,74 +23,9 @@ import {
 type MessageTone = "official" | "casual" | "custom"
 type ResponseReaction = "slot-and-demo" | "slot-only" | "insist-demo"
 
-export type ScenarioType = "demo-call" | "call-demo" | "call-only" | "fast-hire" | "ai-smart"
-
-type StepType = "message" | "demo" | "questionnaire" | "scoring" | "call" | "interview" | "pause" | "condition" | "offer" | "reject"
-
-// ─── Pipeline presets ───────────────────────────────────────
-
-type PipelinePreset = "fast" | "standard" | "deep" | "custom"
-
-interface PipelineStage {
-  id: string
-  name: string
-  ai?: boolean
-}
-
-const PIPELINE_PRESETS: Record<Exclude<PipelinePreset, "custom">, {
-  label: string
-  desc: string
-  time: string
-  icon: string
-  color: string
-  stages: PipelineStage[]
-}> = {
-  fast: {
-    label: "Быстрый найм",
-    desc: "Массовый найм, линейный персонал",
-    time: "3-5 дней",
-    icon: "rocket",
-    color: "text-amber-600",
-    stages: [
-      { id: "response", name: "Отклик" },
-      { id: "demo", name: "Демо-курс (авто)", ai: true },
-      { id: "ai_screening", name: "AI-скрининг", ai: true },
-      { id: "offer", name: "Оффер / Отказ" },
-    ],
-  },
-  standard: {
-    label: "Стандартный",
-    desc: "Специалисты и менеджеры",
-    time: "7-14 дней",
-    icon: "zap",
-    color: "text-blue-600",
-    stages: [
-      { id: "response", name: "Отклик" },
-      { id: "demo", name: "Демо-курс" },
-      { id: "anketa", name: "Анкета кандидата" },
-      { id: "ai_screening", name: "AI-скрининг", ai: true },
-      { id: "interview", name: "Собеседование" },
-      { id: "offer", name: "Оффер / Отказ" },
-    ],
-  },
-  deep: {
-    label: "Глубокий отбор",
-    desc: "Руководители, ключевые позиции",
-    time: "14-30 дней",
-    icon: "search",
-    color: "text-violet-600",
-    stages: [
-      { id: "response", name: "Отклик" },
-      { id: "demo", name: "Демо-курс" },
-      { id: "anketa", name: "Анкета кандидата" },
-      { id: "ai_screening", name: "AI-скрининг", ai: true },
-      { id: "test", name: "Тестовое задание" },
-      { id: "interview", name: "Собеседование" },
-      { id: "references", name: "Проверка рекомендаций" },
-      { id: "offer", name: "Оффер / Отказ" },
-    ],
-  },
-}
+// ScenarioType / StepType / SCENARIO_PRESETS («Последовательность взаимодействия») и
+// PIPELINE_PRESETS («Этапы воронки») удалены в Ф1 рефакторинга 2026-05-10.
+// Замена: lib/stages.ts (Ф2) + components/vacancies/funnel-tab.tsx (Ф3) + scenario-tab.tsx (Ф7).
 
 // ─── Данные по-умолчанию ─────────────────────────────────────
 
@@ -106,57 +39,6 @@ const OFFICIAL_TEMPLATE = `Здравствуйте, [Имя].
 Предлагаем вам ознакомиться с материалами по ссылке ниже. После просмотра вы сможете записаться на собеседование.
 [ссылка]`
 
-const STEP_META: Record<StepType, { icon: typeof MessageSquare; label: string; color: string }> = {
-  message: { icon: MessageSquare, label: "Сообщение", color: "bg-blue-500/10 text-blue-600 border-blue-200 dark:border-blue-800" },
-  demo: { icon: Video, label: "Демонстрация", color: "bg-purple-500/10 text-purple-600 border-purple-200 dark:border-purple-800" },
-  questionnaire: { icon: ClipboardList, label: "Анкета", color: "bg-amber-500/10 text-amber-600 border-amber-200 dark:border-amber-800" },
-  scoring: { icon: BarChart3, label: "Скоринг", color: "bg-cyan-500/10 text-cyan-600 border-cyan-200 dark:border-cyan-800" },
-  call: { icon: Phone, label: "Звонок", color: "bg-emerald-500/10 text-emerald-600 border-emerald-200 dark:border-emerald-800" },
-  interview: { icon: Users, label: "Интервью", color: "bg-indigo-500/10 text-indigo-600 border-indigo-200 dark:border-indigo-800" },
-  pause: { icon: Pause, label: "Пауза", color: "bg-gray-500/10 text-gray-600 border-gray-200 dark:border-gray-800" },
-  condition: { icon: GitBranch, label: "Условие", color: "bg-orange-500/10 text-orange-600 border-orange-200 dark:border-orange-800" },
-  offer: { icon: Award, label: "Оффер", color: "bg-green-500/10 text-green-600 border-green-200 dark:border-green-800" },
-  reject: { icon: UserX, label: "Отказ", color: "bg-red-500/10 text-red-600 border-red-200 dark:border-red-800" },
-}
-
-const SCENARIO_PRESETS: Record<ScenarioType, { steps: StepType[]; icon: typeof Video; label: string; desc: string; color: string }> = {
-  "demo-call": {
-    steps: ["message", "demo", "scoring", "call", "interview", "offer"],
-    icon: Video,
-    label: "Демонстрация → Звонок",
-    desc: "Для продаж — сначала кандидат смотрит демо, затем созвон",
-    color: "text-purple-600",
-  },
-  "call-demo": {
-    steps: ["message", "call", "demo", "scoring", "interview", "offer"],
-    icon: Phone,
-    label: "Звонок → Демонстрация",
-    desc: "Для скептиков — сначала короткий звонок, потом демо",
-    color: "text-emerald-600",
-  },
-  "call-only": {
-    steps: ["message", "call", "interview", "offer"],
-    icon: Phone,
-    label: "Только звонок",
-    desc: "Топ-менеджмент — без демо, сразу живое общение",
-    color: "text-blue-600",
-  },
-  "fast-hire": {
-    steps: ["message", "questionnaire", "scoring", "call", "offer"],
-    icon: Truck,
-    label: "Быстрый найм",
-    desc: "Склад, курьеры — минимум шагов, максимум скорости",
-    color: "text-amber-600",
-  },
-  "ai-smart": {
-    steps: ["message", "scoring", "condition", "demo", "call", "interview", "offer"],
-    icon: Bot,
-    label: "Умный — AI решает по скорингу",
-    desc: "Адаптивный — AI подбирает путь кандидата по скорингу",
-    color: "text-cyan-600",
-  },
-}
-
 // ─── Компонент ──────────────────────────────────────────────
 
 /**
@@ -169,19 +51,14 @@ export type AutomationSectionId =
   | "firstMessage"
   | "callIntent"
   | "followup"
-  | "pipeline"
   | "autoActions"
   | "enrichment"
   | "templates"
   | "dialer"
-  | "scenarioHire"
 
 interface AutomationSettingsProps {
   vacancyId: string
   descriptionJson?: unknown
-  vacancyTitle?: string
-  salaryFrom?: number | null
-  salaryTo?: number | null
   aiProcessSettings?: { inviteMessage?: string; reInviteMessage?: string } | null
   /** Если задано — рендерятся только эти карточки. Иначе все. */
   sections?: AutomationSectionId[]
@@ -189,18 +66,8 @@ interface AutomationSettingsProps {
   showGlobalSave?: boolean
 }
 
-export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, salaryFrom, salaryTo, aiProcessSettings, sections, showGlobalSave = true }: AutomationSettingsProps) {
+export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettings, sections, showGlobalSave = true }: AutomationSettingsProps) {
   const showSection = (id: AutomationSectionId): boolean => !sections || sections.includes(id)
-  // Parse initial scenario from descriptionJson
-  const initialScenario = (() => {
-    if (descriptionJson && typeof descriptionJson === "object" && descriptionJson !== null) {
-      const dj = descriptionJson as Record<string, unknown>
-      if (dj.scenario && typeof dj.scenario === "string" && dj.scenario in SCENARIO_PRESETS) {
-        return dj.scenario as ScenarioType
-      }
-    }
-    return "demo-call" as ScenarioType
-  })()
 
   // Parse automation settings from descriptionJson
   const initialAutomation = (() => {
@@ -298,73 +165,9 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
   // (followUpEnabled, followUpPreset, stopOnNo, stopOnClose) больше не читаются
   // и не пишутся; orphan-данные могут сохраняться в БД до миграции.
 
-  // 4. Сценарий
-  const [scenarioType, setScenarioType] = useState<ScenarioType>(initialScenario)
+  // 4. Сценарий — переехал в новый таб «Сценарий» (Ф7), components/vacancies/scenario-tab.tsx.
+  // 5. Воронка найма — переехала в новый таб «Воронка» (Ф3), components/vacancies/funnel-tab.tsx.
   const [saving, setSaving] = useState(false)
-
-  // 5. Воронка найма (pipeline)
-  const initialPipeline = (() => {
-    if (descriptionJson && typeof descriptionJson === "object" && descriptionJson !== null) {
-      const dj = descriptionJson as Record<string, unknown>
-      const p = dj.pipeline as { preset?: string; stages?: PipelineStage[] } | undefined
-      if (p?.preset && (p.preset in PIPELINE_PRESETS || p.preset === "custom")) {
-        return { preset: p.preset as PipelinePreset, stages: p.stages || PIPELINE_PRESETS.standard.stages }
-      }
-    }
-    return { preset: "standard" as PipelinePreset, stages: PIPELINE_PRESETS.standard.stages }
-  })()
-  const [pipelinePreset, setPipelinePreset] = useState<PipelinePreset>(initialPipeline.preset)
-  const [pipelineStages, setPipelineStages] = useState<PipelineStage[]>(initialPipeline.stages)
-  const [newStageName, setNewStageName] = useState("")
-  const [dragStageIdx, setDragStageIdx] = useState<number | null>(null)
-  const [dragOverStageIdx, setDragOverStageIdx] = useState<number | null>(null)
-
-  // AI recommendation based on salary
-  const recommendedPipeline = (() => {
-    const salary = salaryTo || salaryFrom || 0
-    if (salary > 0 && salary < 100000) return "fast" as const
-    if (salary >= 500000) return "deep" as const
-    return "standard" as const
-  })()
-
-  const handlePipelineChange = (preset: PipelinePreset) => {
-    setPipelinePreset(preset)
-    if (preset !== "custom") {
-      setPipelineStages(PIPELINE_PRESETS[preset].stages.map(s => ({ ...s })))
-    }
-  }
-
-  const addCustomStage = () => {
-    if (!newStageName.trim()) return
-    setPipelineStages(prev => [...prev.slice(0, -1), { id: `custom-${Date.now()}`, name: newStageName.trim() }, prev[prev.length - 1]])
-    setNewStageName("")
-    setPipelinePreset("custom")
-  }
-
-  const removeStage = (id: string) => {
-    if (pipelineStages.length <= 2) return
-    setPipelineStages(prev => prev.filter(s => s.id !== id))
-    setPipelinePreset("custom")
-  }
-
-  const renameStage = (id: string, name: string) => {
-    setPipelineStages(prev => prev.map(s => s.id === id ? { ...s, name } : s))
-    setPipelinePreset("custom")
-  }
-
-  const dropStage = (target: number) => {
-    if (dragStageIdx === null || dragStageIdx === target) {
-      setDragStageIdx(null); setDragOverStageIdx(null); return
-    }
-    setPipelineStages(prev => {
-      const next = [...prev]
-      const [moved] = next.splice(dragStageIdx, 1)
-      next.splice(target, 0, moved)
-      return next
-    })
-    setPipelinePreset("custom")
-    setDragStageIdx(null); setDragOverStageIdx(null)
-  }
 
   // 6. Авто-действия
   // Дефолты: autoInvite/autoReject включены, notifyManager выключен (см. ТЗ).
@@ -461,24 +264,10 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
     return { ...globalTemplates, ...saved }
   })
 
-  // Sync if descriptionJson changes externally
-  useEffect(() => {
-    if (descriptionJson && typeof descriptionJson === "object" && descriptionJson !== null) {
-      const dj = descriptionJson as Record<string, unknown>
-      if (dj.scenario && typeof dj.scenario === "string" && dj.scenario in SCENARIO_PRESETS) {
-        setScenarioType(dj.scenario as ScenarioType)
-      }
-    }
-  }, [descriptionJson])
-
   // Тоны временно в разработке — не меняют текст рассылки.
   void OFFICIAL_TEMPLATE
   void tone
   void setTone
-
-  const handleScenarioChange = (s: ScenarioType) => {
-    setScenarioType(s)
-  }
 
   // Save all automation settings to API
   const saveSettings = useCallback(async () => {
@@ -503,18 +292,16 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
         completenessCheck: { enabled: completenessEnabled, threshold: Number(completenessThreshold), channel: completenessChannel, delay: completenessDelay },
       }
 
+      // scenario и pipeline теперь сохраняются через отдельные API:
+      // PUT /api/modules/hr/vacancies/[id]/scenario (Ф7)
+      // PUT /api/modules/hr/vacancies/[id]/pipeline (Ф3)
       const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           description_json: {
             ...currentJson,
-            scenario: scenarioType,
             automation: automationData,
-            pipeline: {
-              preset: pipelinePreset,
-              stages: pipelineStages,
-            },
           },
         }),
       })
@@ -526,7 +313,7 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
     } finally {
       setSaving(false)
     }
-  }, [vacancyId, scenarioType, descriptionJson, firstMessageDelay, responseReaction, pipelinePreset, pipelineStages, autoInvite, autoReject, notifyManager, messageTemplates, dialerEnabled, dialerScriptId, dialerTrigger, completenessEnabled, completenessThreshold, completenessChannel, completenessDelay])
+  }, [vacancyId, descriptionJson, firstMessageDelay, responseReaction, autoInvite, autoReject, notifyManager, messageTemplates, dialerEnabled, dialerScriptId, dialerTrigger, completenessEnabled, completenessThreshold, completenessChannel, completenessDelay])
 
   return (
     <div className="space-y-6">
@@ -714,137 +501,9 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
           вызывающими компонентами, которые могут ещё передавать "followup"
           в массиве sections. */}
 
-      {/* ═══ 5. Воронка найма ═══════════════════════════════════ */}
-      {showSection("pipeline") && (
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Users className="w-4 h-4" />
-            Этапы воронки
-          </CardTitle>
-          <p className="text-xs text-muted-foreground mt-1">Сколько этапов проходит кандидат от отклика до оффера</p>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {/* AI recommendation */}
-          {(salaryFrom || salaryTo) && (
-            <div className="flex items-start gap-2 p-3 rounded-lg bg-primary/5 border border-primary/20 text-xs">
-              <Sparkles className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" />
-              <span>
-                Рекомендуем: <strong>{PIPELINE_PRESETS[recommendedPipeline].label}</strong> — для позиции{" "}
-                {vacancyTitle || "вакансии"} с ЗП {salaryFrom ? `от ${salaryFrom.toLocaleString("ru")}` : ""}{salaryTo ? ` до ${salaryTo.toLocaleString("ru")}` : ""} ₽
-              </span>
-            </div>
-          )}
-
-          {/* Preset cards */}
-          <div className="space-y-3">
-            {(Object.entries(PIPELINE_PRESETS) as [Exclude<PipelinePreset, "custom">, typeof PIPELINE_PRESETS[Exclude<PipelinePreset, "custom">]][]).map(([key, preset]) => {
-              const isSelected = pipelinePreset === key
-              const isRecommended = key === recommendedPipeline
-              return (
-                <button
-                  key={key}
-                  className={cn(
-                    "w-full text-left rounded-xl border p-4 transition-all",
-                    isSelected
-                      ? "border-primary bg-primary/5 ring-2 ring-primary/20"
-                      : "border-border hover:border-primary/30"
-                  )}
-                  onClick={() => handlePipelineChange(key)}
-                >
-                  <div className="flex items-start gap-3">
-                    <div className={cn(
-                      "w-4 h-4 rounded-full border-2 mt-0.5 shrink-0 flex items-center justify-center",
-                      isSelected ? "border-primary" : "border-muted-foreground/40"
-                    )}>
-                      {isSelected && <div className="w-2 h-2 rounded-full bg-primary" />}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-medium">{preset.label}</p>
-                        {isRecommended && <Badge variant="secondary" className="text-[10px] h-4 px-1.5">Рекомендуем</Badge>}
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-0.5">{preset.desc}. Среднее время: {preset.time}</p>
-
-                      {/* Stage chain */}
-                      <div className="flex flex-wrap items-center gap-1 mt-2.5">
-                        {preset.stages.map((stage, idx) => (
-                          <div key={stage.id} className="flex items-center gap-1">
-                            <div className={cn(
-                              "inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-xs",
-                              isSelected ? "bg-primary/10 border-primary/30 text-primary" : "bg-muted border-border text-muted-foreground"
-                            )}>
-                              {stage.name}
-                              {stage.ai && <Bot className="w-3 h-3 shrink-0" />}
-                            </div>
-                            {idx < preset.stages.length - 1 && (
-                              <ChevronRight className="w-3 h-3 text-muted-foreground/40 shrink-0" />
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </button>
-              )
-            })}
-          </div>
-
-          <Separator />
-
-          {/* Custom stages editor */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <Label className="text-xs font-medium">Список этапов{pipelinePreset === "custom" && <span className="text-primary ml-1">(свой сценарий)</span>}</Label>
-            </div>
-            <div className="space-y-1.5">
-              {pipelineStages.map((stage, idx) => (
-                <div
-                  key={stage.id}
-                  draggable
-                  onDragStart={() => setDragStageIdx(idx)}
-                  onDragOver={e => { e.preventDefault(); setDragOverStageIdx(idx) }}
-                  onDragLeave={() => setDragOverStageIdx(prev => prev === idx ? null : prev)}
-                  onDrop={e => { e.preventDefault(); dropStage(idx) }}
-                  onDragEnd={() => { setDragStageIdx(null); setDragOverStageIdx(null) }}
-                  className={cn(
-                    "flex items-center gap-2 group rounded-md transition-all",
-                    dragStageIdx === idx && "opacity-50",
-                    dragOverStageIdx === idx && dragStageIdx !== idx && "ring-2 ring-primary/50 bg-primary/5",
-                  )}
-                >
-                  <GripVertical className="w-4 h-4 text-muted-foreground cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 shrink-0" />
-                  <span className="text-xs text-muted-foreground w-5 text-right shrink-0">{idx + 1}.</span>
-                  <Input
-                    value={stage.name}
-                    onChange={e => renameStage(stage.id, e.target.value)}
-                    className="h-8 text-sm flex-1 bg-[var(--input-bg)] border border-input"
-                  />
-                  {stage.ai && <Badge variant="outline" className="text-[10px] h-5 px-1 shrink-0"><Bot className="w-3 h-3 mr-0.5" />AI</Badge>}
-                  {pipelineStages.length > 2 && (
-                    <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive" onClick={() => removeStage(stage.id)}>
-                      <X className="w-3.5 h-3.5" />
-                    </Button>
-                  )}
-                </div>
-              ))}
-            </div>
-            <div className="flex gap-2">
-              <Input
-                value={newStageName}
-                onChange={e => setNewStageName(e.target.value)}
-                placeholder="Новый этап..."
-                className="h-8 text-sm flex-1 bg-[var(--input-bg)] border border-input"
-                onKeyDown={e => { if (e.key === "Enter") addCustomStage() }}
-              />
-              <Button variant="outline" size="sm" className="h-8 text-xs gap-1 shrink-0" onClick={addCustomStage} disabled={!newStageName.trim()}>
-                <Plus className="w-3 h-3" /> Добавить
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-      )}
+      {/* ═══ 5. Воронка найма ═══ удалена в Ф1.
+          Источник истины — таб «Воронка» (Ф3, components/vacancies/funnel-tab.tsx),
+          сохраняется через PUT /api/modules/hr/vacancies/[id]/pipeline. */}
 
       {/* ═══ 6. Автоматические действия ═══════════════════════ */}
       {showSection("autoActions") && (
@@ -1057,81 +716,9 @@ export function AutomationSettings({ vacancyId, descriptionJson, vacancyTitle, s
       </Card>
       )}
 
-      {/* ═══ 4. Последовательность взаимодействия ═════════════════════════════════ */}
-      {showSection("scenarioHire") && (
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <GitBranch className="w-4 h-4" />
-            Последовательность взаимодействия
-          </CardTitle>
-          <p className="text-xs text-muted-foreground mt-1">В каком порядке кандидат проходит шаги</p>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-3">
-            {(Object.entries(SCENARIO_PRESETS) as [ScenarioType, typeof SCENARIO_PRESETS[ScenarioType]][]).map(([key, preset]) => {
-              const Icon = preset.icon
-              const isSelected = scenarioType === key
-              return (
-                <button
-                  key={key}
-                  className={cn(
-                    "w-full text-left rounded-xl border p-4 transition-all",
-                    isSelected
-                      ? "border-primary bg-primary/5 ring-2 ring-primary/20"
-                      : "border-border hover:border-primary/30"
-                  )}
-                  onClick={() => handleScenarioChange(key)}
-                >
-                  <div className="flex items-start gap-3">
-                    {/* Radio circle */}
-                    <div className={cn(
-                      "w-4 h-4 rounded-full border-2 mt-0.5 shrink-0 flex items-center justify-center",
-                      isSelected ? "border-primary" : "border-muted-foreground/40"
-                    )}>
-                      {isSelected && <div className="w-2 h-2 rounded-full bg-primary" />}
-                    </div>
-
-                    {/* Icon */}
-                    <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center shrink-0", isSelected ? "bg-primary/10" : "bg-muted")}>
-                      <Icon className={cn("w-4 h-4", preset.color)} />
-                    </div>
-
-                    {/* Text */}
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-foreground">{preset.label}</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">{preset.desc}</p>
-
-                      {/* Horizontal step chain */}
-                      <div className="flex flex-wrap items-center gap-1 mt-3">
-                        {preset.steps.map((step, idx) => {
-                          const meta = STEP_META[step]
-                          const StepIcon = meta.icon
-                          return (
-                            <div key={`${step}-${idx}`} className="flex items-center gap-1">
-                              <div className={cn(
-                                "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs font-medium",
-                                meta.color
-                              )}>
-                                <StepIcon className="w-3 h-3 shrink-0" />
-                                {meta.label}
-                              </div>
-                              {idx < preset.steps.length - 1 && (
-                                <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/50 shrink-0" />
-                              )}
-                            </div>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  </div>
-                </button>
-              )
-            })}
-          </div>
-        </CardContent>
-      </Card>
-      )}
+      {/* ═══ 4. Последовательность взаимодействия ═══ удалена в Ф1.
+          5 пресетов (демо→звонок и т.д.) переосмыслены в табе «Сценарий» (Ф7,
+          components/vacancies/scenario-tab.tsx, lib/scenarios.ts). */}
 
       {/* Кнопка сохранения */}
       {showGlobalSave && (

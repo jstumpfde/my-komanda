@@ -249,11 +249,12 @@ function SurveyContactsBlock({ contacts: sc }: { contacts: SurveyContacts }) {
 
 // ─── Stage config ─────────────────────────────────────────────────────────────
 
+// Ф1: удалены ключи `demo` и `wants_contact` (нет в БД).
+// Ф2 заменит этот словарь на единый источник правды из lib/stages.ts.
 const STAGE_LABELS: Record<string, { label: string; color: string }> = {
   new: { label: "Новый", color: "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800" },
   primary_contact: { label: "Первичный контакт", color: "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800" },
   demo_opened: { label: "Демо открыто", color: "bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800" },
-  demo: { label: "На демо", color: "bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800" },
   decision: { label: "Демо пройдено", color: "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800" },
   anketa_filled: { label: "Анкета заполнена", color: "bg-orange-500/10 text-orange-700 dark:text-orange-400 border-orange-200 dark:border-orange-800" },
   scheduled: { label: "Интервью назначено", color: "bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-200 dark:border-purple-800" },
@@ -261,7 +262,6 @@ const STAGE_LABELS: Record<string, { label: string; color: string }> = {
   interviewed: { label: "Прошёл интервью", color: "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800" },
   hired: { label: "Нанят", color: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800" },
   rejected: { label: "Отказ", color: "bg-destructive/10 text-destructive border-destructive/20" },
-  wants_contact: { label: "Хочет контакт", color: "bg-cyan-500/10 text-cyan-700 dark:text-cyan-400 border-cyan-200 dark:border-cyan-800" },
 }
 
 // ─── Avatar with initials ─────────────────────────────────────────────────────
