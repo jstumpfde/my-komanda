@@ -2613,9 +2613,6 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                   <AutomationSettings
                     vacancyId={id}
                     descriptionJson={apiVacancy?.descriptionJson}
-                    vacancyTitle={apiVacancy?.title}
-                    salaryFrom={apiVacancy?.salaryMin}
-                    salaryTo={apiVacancy?.salaryMax}
                     aiProcessSettings={apiVacancy?.aiProcessSettings as { inviteMessage?: string; reInviteMessage?: string } | null | undefined}
                     sections={["firstMessage", "callIntent", "templates"] satisfies AutomationSectionId[]}
                   />
@@ -2623,23 +2620,27 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                 </div>
                 )}
 
-                {/* ───────── ТАБ «Демо и воронка» ───────── */}
+                {/* ───────── ТАБ «Демо и воронка» ─────────
+                    Ф1: убрана секция "pipeline" из AutomationSettings —
+                    воронка переезжает в новый таб «Воронка» (Ф3, FunnelTab).
+                    В Ф4 этот таб реорганизуется: enrichment → Анкета (Ф5),
+                    PostDemoSettings → AI и автоматизация. Сейчас оставляем
+                    карточки на месте, чтобы не ломать UI до Ф4-Ф5. */}
                 {settingsSection === "funnel" && (
                 <div className="space-y-6 max-w-3xl">
                   <AutomationSettings
                     vacancyId={id}
                     descriptionJson={apiVacancy?.descriptionJson}
-                    vacancyTitle={apiVacancy?.title}
-                    salaryFrom={apiVacancy?.salaryMin}
-                    salaryTo={apiVacancy?.salaryMax}
                     aiProcessSettings={apiVacancy?.aiProcessSettings as { inviteMessage?: string; reInviteMessage?: string } | null | undefined}
-                    sections={["pipeline", "enrichment"] satisfies AutomationSectionId[]}
+                    sections={["enrichment"] satisfies AutomationSectionId[]}
                   />
                   <PostDemoSettings vacancyId={id} />
                 </div>
                 )}
 
-                {/* ───────── ТАБ «AI сценарии» ───────── */}
+                {/* ───────── ТАБ «AI сценарии» ─────────
+                    Ф1: убрана секция "scenarioHire" — 5 пресетов
+                    «Демо→Звонок» переосмыслены в табе «Сценарий» (Ф7). */}
                 {settingsSection === "ai" && (
                 <div className="space-y-6 max-w-3xl">
                   <VacancyAiProcessSettings
@@ -2651,11 +2652,8 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                   <AutomationSettings
                     vacancyId={id}
                     descriptionJson={apiVacancy?.descriptionJson}
-                    vacancyTitle={apiVacancy?.title}
-                    salaryFrom={apiVacancy?.salaryMin}
-                    salaryTo={apiVacancy?.salaryMax}
                     aiProcessSettings={apiVacancy?.aiProcessSettings as { inviteMessage?: string; reInviteMessage?: string } | null | undefined}
-                    sections={["autoActions", "scenarioHire", "dialer"] satisfies AutomationSectionId[]}
+                    sections={["autoActions", "dialer"] satisfies AutomationSectionId[]}
                   />
                   <VacancyScheduleSettings vacancyId={id} />
                 </div>

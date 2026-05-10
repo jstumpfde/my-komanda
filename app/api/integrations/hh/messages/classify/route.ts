@@ -113,15 +113,17 @@ export async function POST(req: NextRequest) {
       }
     }
   } else if (candidateId && classification.intent === "wants_personal_contact") {
+    // Ф1: slug "wants_contact" удалён — возвращаем в primary_contact.
+    // Поле automationPaused оставляем (уже было до Ф1, отдельная логика).
     await db
       .update(candidates)
       .set({
-        stage: "wants_contact",
+        stage: "primary_contact",
         automationPaused: true,
         updatedAt: new Date(),
       })
       .where(eq(candidates.id, candidateId))
-    actionApplied = "moved_to_wants_contact"
+    actionApplied = "moved_to_primary_contact_wants_call"
   } else if (classification.intent === "unclear") {
     console.info(
       `[hh/classify] unclear intent for response=${hhResponseId} confidence=${classification.confidence}`,
