@@ -3,7 +3,7 @@ import { eq, and } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { candidates, vacancies } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
-import { trySyncRejectToHh, trySyncInviteToHh } from "@/lib/hh/sync-stage"
+import { trySyncStageToHh } from "@/lib/hh/sync-stage"
 
 const VALID_STAGES = [
   "new", "primary_contact", "demo", "demo_opened", "decision",
@@ -72,17 +72,21 @@ export async function PUT(
       .returning()
 
     // Sync с hh.ru — fire-and-forget, ошибка не блокирует ответ.
-    if (stage === "rejected") {
-      trySyncRejectToHh(id).catch((err) => {
-        console.warn(`[stage-route] hh reject sync failed for ${id}:`, err)
-      })
-    } else if (
-      stage === "primary_contact"
+    // Ф6: hh-action читается из pipeline вакансии (lib/hh/sync-stage.ts).
+    // Дефолтное поведение совпадает со старым (primary_contact = invitation,
+    // rejected = discard), но теперь HR может настроить hh-action на любой
+    // стадии в табе «Воронка».
+    //
+    // Защита от повторного invite: если HR двигает кандидата в стадию с
+    // hhAction=invitation, а кандидат уже был дальше по воронке —
+    // пропускаем sync. Иначе HR-исправление back-to-primary_contact
+    // привело бы к повторному hh-приглашению.
+    const alreadyInvited = stage === "primary_contact"
       && row.previousStage !== null
-      && !POST_INVITE_STAGES.has(row.previousStage as Stage)
-    ) {
-      trySyncInviteToHh(id).catch((err) => {
-        console.warn(`[stage-route] hh invite sync failed for ${id}:`, err)
+      && POST_INVITE_STAGES.has(row.previousStage as Stage)
+    if (!alreadyInvited) {
+      trySyncStageToHh(id, stage).catch((err) => {
+        console.warn(`[stage-route] hh sync failed for ${id} (${stage}):`, err)
       })
     }
 

@@ -16,6 +16,12 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Search, Settings, X, ChevronsUpDown, Check } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Candidate } from "./candidate-card"
+import {
+  PLATFORM_STAGES,
+  getEnabledStages,
+  getStageLabel,
+  type VacancyPipelineV2,
+} from "@/lib/stages"
 
 export interface FilterState {
   searchText: string
@@ -54,6 +60,13 @@ interface CandidateFiltersProps {
   filters: FilterState
   onFiltersChange: (filters: FilterState) => void
   candidates?: Candidate[]
+  /**
+   * Ф6: pipeline текущей вакансии. Если передан — чек-лист «Статус в воронке»
+   * рендерится из включённых стадий pipeline (с кастомными лейблами).
+   * Если null/undefined — fallback на захардкоженный FUNNEL_STATUSES для
+   * страниц, где нет привязки к одной вакансии.
+   */
+  vacancyPipeline?: VacancyPipelineV2 | null
 }
 
 const WORK_FORMATS = [
@@ -118,7 +131,7 @@ const INDUSTRY_OPTIONS = [
   "Бухгалтерия/Аудит", "Страхование", "Консалтинг", "Управление персоналом", "Другое",
 ]
 
-export function CandidateFilters({ filters, onFiltersChange, candidates = [] }: CandidateFiltersProps) {
+export function CandidateFilters({ filters, onFiltersChange, candidates = [], vacancyPipeline }: CandidateFiltersProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [showAllCities, setShowAllCities] = useState(false)
   const [showAllSources, setShowAllSources] = useState(false)
@@ -395,20 +408,41 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [] }: 
 
           <Separator />
 
-          {/* 4. Funnel Status */}
+          {/* 4. Funnel Status — динамический если есть pipeline, иначе legacy */}
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-muted-foreground">Статус в воронке</label>
             <div className="space-y-1">
-              {FUNNEL_STATUSES.map((s) => (
-                <div key={s} className="flex items-center gap-2">
-                  <Checkbox
-                    id={`funnel-${s}`}
-                    checked={filters.funnelStatuses.includes(s)}
-                    onCheckedChange={() => onFiltersChange({ ...filters, funnelStatuses: toggleArray(filters.funnelStatuses, s) })}
-                  />
-                  <label htmlFor={`funnel-${s}`} className="text-sm cursor-pointer">{s}</label>
-                </div>
-              ))}
+              {vacancyPipeline ? (
+                getEnabledStages(vacancyPipeline).map((slug) => {
+                  const label = getStageLabel(slug, vacancyPipeline)
+                  return (
+                    <div key={slug} className="flex items-center gap-2">
+                      <Checkbox
+                        id={`funnel-${slug}`}
+                        checked={filters.funnelStatuses.includes(slug)}
+                        onCheckedChange={() => onFiltersChange({ ...filters, funnelStatuses: toggleArray(filters.funnelStatuses, slug) })}
+                      />
+                      <label htmlFor={`funnel-${slug}`} className="text-sm cursor-pointer flex items-center gap-2">
+                        <span>{label}</span>
+                        {PLATFORM_STAGES[slug].isTerminal && (
+                          <span className="text-[10px] text-muted-foreground">терминальная</span>
+                        )}
+                      </label>
+                    </div>
+                  )
+                })
+              ) : (
+                FUNNEL_STATUSES.map((s) => (
+                  <div key={s} className="flex items-center gap-2">
+                    <Checkbox
+                      id={`funnel-${s}`}
+                      checked={filters.funnelStatuses.includes(s)}
+                      onCheckedChange={() => onFiltersChange({ ...filters, funnelStatuses: toggleArray(filters.funnelStatuses, s) })}
+                    />
+                    <label htmlFor={`funnel-${s}`} className="text-sm cursor-pointer">{s}</label>
+                  </div>
+                ))
+              )}
             </div>
           </div>
 

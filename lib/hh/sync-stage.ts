@@ -15,6 +15,7 @@ import type { VacancyAiProcessSettings } from "@/lib/db/schema"
 import { and, eq } from "drizzle-orm"
 import { getValidToken } from "@/lib/hh-helpers"
 import { changeNegotiationState } from "@/lib/hh-api"
+import { getStageHhAction, parsePipeline, type StageSlug } from "@/lib/stages"
 
 const DEFAULT_REJECT_MESSAGE =
   `Здравствуйте, {{name}}!\n\n` +
@@ -55,7 +56,7 @@ interface CandidateContext {
 
 async function loadContext(candidateId: string): Promise<{
   cand: CandidateContext
-  vac:  { title: string; companyId: string; aiProcessSettings: VacancyAiProcessSettings }
+  vac:  { title: string; companyId: string; aiProcessSettings: VacancyAiProcessSettings; descriptionJson: unknown }
   hh:   { hhResponseId: string }
 } | null> {
   // Шаг 1: основной запрос — кандидат, вакансия и попытка резолва
@@ -73,6 +74,7 @@ async function loadContext(candidateId: string): Promise<{
       vacTitle:         vacancies.title,
       vacCompanyId:     vacancies.companyId,
       vacAiSettings:    vacancies.aiProcessSettings,
+      vacDescriptionJson: vacancies.descriptionJson,
       hhResponseId:     hhResponses.hhResponseId,
       hhApplicationId:  hhCandidates.hhApplicationId,
     })
@@ -116,6 +118,7 @@ async function loadContext(candidateId: string): Promise<{
       title:             row.vacTitle ?? "",
       companyId:         row.vacCompanyId,
       aiProcessSettings: (row.vacAiSettings as VacancyAiProcessSettings | null) ?? {},
+      descriptionJson:   row.vacDescriptionJson,
     },
     hh: { hhResponseId },
   }
@@ -183,6 +186,67 @@ export async function trySyncInviteToHh(candidateId: string): Promise<boolean> {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     console.warn(`[hh:sync-stage] invite failed for cand ${candidateId}: ${msg}`)
+    return false
+  }
+}
+
+/**
+ * Универсальная синхронизация: читает hh-action из настроек воронки вакансии
+ * (vacancies.description_json.pipeline) для конкретной стадии и отправляет
+ * соответствующее действие в hh (Ф6 рефакторинга 2026-05-10).
+ *
+ * Логика:
+ *   getStageHhAction(stage, pipeline) === "discard"    → отказ с rejectMessage
+ *   getStageHhAction(stage, pipeline) === "invitation" → приглашение с inviteMessage
+ *   null                                                → ничего не делать
+ *
+ * Это позволяет HR настроить произвольный hh-маппинг (например, «На стадию
+ * reference_check отправлять приглашение») в табе «Воронка».
+ *
+ * НЕ заменяет старые trySyncRejectToHh / trySyncInviteToHh — они остаются
+ * для обратной совместимости и для дефолтного поведения, если pipeline пуст.
+ */
+export async function trySyncStageToHh(candidateId: string, newStage: string): Promise<boolean> {
+  try {
+    const ctx = await loadContext(candidateId)
+    if (!ctx) return false
+
+    const pipeline = parsePipeline(
+      (ctx.vac.descriptionJson as Record<string, unknown> | null)?.pipeline,
+    )
+    const action = getStageHhAction(newStage as StageSlug, pipeline)
+    if (!action) return false
+
+    const token = await getValidToken(ctx.vac.companyId)
+    if (!token) return false
+
+    if (action === "discard") {
+      const tpl = ctx.vac.aiProcessSettings.rejectMessage?.trim() || DEFAULT_REJECT_MESSAGE
+      const message = renderTemplate(tpl, {
+        name:    ctx.cand.name,
+        vacancy: ctx.vac.title,
+      })
+      await changeNegotiationState(token.accessToken, ctx.hh.hhResponseId, "discard", message)
+      console.info(`[hh:sync-stage] discard (${newStage}) → ${ctx.hh.hhResponseId} (cand ${ctx.cand.id})`)
+      return true
+    }
+
+    // invitation
+    const demoToken = ctx.cand.shortId ?? ctx.cand.id
+    const demoLink  = `https://company24.pro/demo/${demoToken}`
+    const tpl = ctx.vac.aiProcessSettings.inviteMessage?.trim() || DEFAULT_INVITE_MESSAGE
+    let message = renderTemplate(tpl, {
+      name:      ctx.cand.name,
+      vacancy:   ctx.vac.title,
+      demo_link: demoLink,
+    })
+    if (!message.includes(demoLink)) message = `${message}\n\n${demoLink}`
+    await changeNegotiationState(token.accessToken, ctx.hh.hhResponseId, "invitation", message)
+    console.info(`[hh:sync-stage] invitation (${newStage}) → ${ctx.hh.hhResponseId} (cand ${ctx.cand.id})`)
+    return true
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.warn(`[hh:sync-stage] stage-sync failed for cand ${candidateId} stage=${newStage}: ${msg}`)
     return false
   }
 }

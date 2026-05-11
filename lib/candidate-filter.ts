@@ -6,14 +6,15 @@
 import type { FilterState } from "@/components/dashboard/candidate-filters"
 import type { Candidate } from "@/components/dashboard/candidate-card"
 
-// "Всего откликов" / "Демо пройдено" / ... — UI-метки → значения колонки stage в БД.
-// Где маппинг невозможен (например, «Демо пройдено» — это не stage, а прогресс)
-// — отрабатываем спец-условием в коде.
+// Ф6: filters.funnelStatuses теперь содержит ИЛИ slug стадий из lib/stages.ts
+// (когда фильтр вызывается из контекста вакансии с pipeline), ИЛИ UI-метки
+// (legacy для страниц без pipeline). FUNNEL_LABEL_TO_STAGE используется как
+// fallback для UI-меток. Slug'и проверяются прямым совпадением с col.id ниже.
 const FUNNEL_LABEL_TO_STAGE: Record<string, string[]> = {
   "Всего откликов":     ["new"],
   "Интервью назначено": ["scheduled"],
   "Интервью пройдено": ["interview", "interviewed", "decision", "final_decision"],
-  "Оффер":              ["offer"],
+  "Оффер":              ["offer", "offer_sent"],
   "Нанят":              ["hired"],
   "Отказ":              ["rejected"],
 }
@@ -147,18 +148,27 @@ export function applyCandidateFilters<C extends FilterableColumn>(
       // Experience years (slider)
       if (!passesExperience(c, filters)) return false
 
-      // Funnel status — мапим через stage = id столбца (kanban)
+      // Funnel status — поддерживаем оба формата:
+      //   • slug ("new", "primary_contact", "decision", …) — Ф6, фильтр в
+      //     контексте вакансии с pipeline
+      //   • UI-метка ("Всего откликов", "Демо пройдено", …) — legacy
       if (filters.funnelStatuses.length > 0) {
-        // «Демо пройдено» — спец-кейс по проценту, проверяем здесь:
+        // Спец-кейс «Демо пройдено» — UI-метка, проверка по проценту демо
         const demoOk =
           filters.funnelStatuses.includes("Демо пройдено")
             ? (getDemoPercent(c) ?? -1) >= 85
             : false
         const stagesAllowed = new Set<string>()
-        for (const label of filters.funnelStatuses) {
-          if (label === "Демо пройдено") continue
-          const ss = FUNNEL_LABEL_TO_STAGE[label]
-          if (ss) ss.forEach((s) => stagesAllowed.add(s))
+        for (const entry of filters.funnelStatuses) {
+          if (entry === "Демо пройдено") continue
+          // Сначала проверяем как UI-метку
+          const ss = FUNNEL_LABEL_TO_STAGE[entry]
+          if (ss) {
+            ss.forEach((s) => stagesAllowed.add(s))
+          } else {
+            // Иначе считаем что это slug — добавляем как есть
+            stagesAllowed.add(entry)
+          }
         }
         const stageOk = stagesAllowed.size > 0 && stagesAllowed.has(col.id)
         if (!demoOk && !stageOk) return false
