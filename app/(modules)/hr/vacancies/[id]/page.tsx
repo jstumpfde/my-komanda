@@ -21,6 +21,7 @@ import { Tooltip as UITooltip, TooltipTrigger, TooltipContent } from "@/componen
 import type { CandidateSortMode } from "@/lib/candidate-sort"
 import { CandidateDrawer } from "@/components/candidates/candidate-drawer"
 import { parsePipeline } from "@/lib/stages"
+import { FunnelTab } from "@/components/vacancies/funnel-tab"
 import { BulkActionsBar, type BulkAction } from "@/components/dashboard/bulk-actions-bar"
 import { CandidatesProgressList } from "@/components/candidates/candidates-progress-list"
 import { AddCandidateDialog } from "@/components/dashboard/add-candidate-dialog"
@@ -39,7 +40,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Checkbox } from "@/components/ui/checkbox"
 import { Slider } from "@/components/ui/slider"
 import { Input } from "@/components/ui/input"
-import { Plus, Clock, Pause, Play, Archive, RotateCcw, Trash2, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, Zap, Globe, AlertTriangle, TrendingUp, Calendar, MapPin, DollarSign, Filter, X, Link2, Copy, Save, Sparkles, Eye, Check, Loader2, Download, ExternalLink, ClipboardList, ChevronLeft, ChevronRight, ChevronDown, CheckCircle2, XCircle, Users, Phone, Upload, RefreshCw, Activity } from "lucide-react"
+import { Plus, Clock, Pause, Play, Archive, RotateCcw, Trash2, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, Zap, Globe, AlertTriangle, TrendingUp, Calendar, MapPin, DollarSign, Filter, X, Link2, Copy, Save, Sparkles, Eye, Check, Loader2, Download, ExternalLink, ClipboardList, ChevronLeft, ChevronRight, ChevronDown, CheckCircle2, XCircle, Users, Phone, Upload, RefreshCw, Activity, Workflow } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Label } from "@/components/ui/label"
@@ -626,7 +627,10 @@ export default function VacancyPage() {
   const rawUrlSection = rawUrlTab === "automation" ? "ai" : (searchParams?.get("section") ?? null)
   // Миграция старых section-значений на новые 6 табов.
   // general → page (стартовая вкладка с брендингом), automation → ai.
-  const SETTINGS_SECTION_IDS = ["page", "sources", "messages", "funnel", "ai", "integrations"] as const
+  // Ф3 добавил "pipeline" (новый таб «Воронка»). В Ф4 произойдёт полная
+  // переорганизация — старый "funnel" («Демо и воронка») удалится, "pipeline"
+  // переименуется в "funnel".
+  const SETTINGS_SECTION_IDS = ["page", "sources", "messages", "pipeline", "funnel", "ai", "integrations"] as const
   type SettingsSectionId = typeof SETTINGS_SECTION_IDS[number]
   const initialSettingsSection: SettingsSectionId =
     rawUrlSection === "general" ? "page" :
@@ -2226,6 +2230,7 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                     { value: "page"        as const, label: "Страница и брендинг", icon: Globe },
                     { value: "sources"     as const, label: "Источники",           icon: Link2 },
                     { value: "messages"    as const, label: "Сообщения",           icon: MessageCircle },
+                    { value: "pipeline"    as const, label: "Воронка",             icon: Workflow },
                     { value: "funnel"      as const, label: "Демо и воронка",      icon: Kanban },
                     { value: "ai"          as const, label: "AI сценарии",         icon: Zap },
                     { value: "integrations" as const, label: "Интеграции",          icon: Settings },
@@ -2627,6 +2632,18 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                   />
                   <VacancyFollowupSettings vacancyId={id} />
                 </div>
+                )}
+
+                {/* ───────── ТАБ «Воронка» (Ф3) ─────────
+                    Источник правды pipeline: vacancies.description_json.pipeline.
+                    Парсится через parsePipeline в vacancyPipeline (выше).
+                    Сохранение — PUT /api/modules/hr/vacancies/[id]/pipeline. */}
+                {settingsSection === "pipeline" && (
+                <FunnelTab
+                  vacancyId={id}
+                  initialPipeline={vacancyPipeline}
+                  onSaved={() => refetchVacancy()}
+                />
                 )}
 
                 {/* ───────── ТАБ «Демо и воронка» ─────────
