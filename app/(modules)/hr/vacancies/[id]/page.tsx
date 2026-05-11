@@ -1812,7 +1812,12 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                         onProcessed={() => { refetchCandidates(); handleHhSync() }}
                       />
                     )}
-                    <CandidateFilters filters={filters} onFiltersChange={setFilters} candidates={columns.flatMap((c) => c.candidates)} />
+                    <CandidateFilters
+                      filters={filters}
+                      onFiltersChange={setFilters}
+                      candidates={columns.flatMap((c) => c.candidates)}
+                      vacancyPipeline={vacancyPipeline}
+                    />
                     {false && <SortMenu sortMode={sortMode} onSortChange={setSortMode} />}
                     {false && (
                     <DropdownMenu>
