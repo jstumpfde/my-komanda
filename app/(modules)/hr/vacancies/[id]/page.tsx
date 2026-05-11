@@ -22,6 +22,9 @@ import type { CandidateSortMode } from "@/lib/candidate-sort"
 import { CandidateDrawer } from "@/components/candidates/candidate-drawer"
 import { parsePipeline } from "@/lib/stages"
 import { FunnelTab } from "@/components/vacancies/funnel-tab"
+import { ScheduleTab } from "@/components/vacancies/schedule-tab"
+import { CallsTab } from "@/components/vacancies/calls-tab"
+import { VacancyAutoProcessingToggle } from "@/components/vacancies/vacancy-auto-processing-toggle"
 import { BulkActionsBar, type BulkAction } from "@/components/dashboard/bulk-actions-bar"
 import { CandidatesProgressList } from "@/components/candidates/candidates-progress-list"
 import { AddCandidateDialog } from "@/components/dashboard/add-candidate-dialog"
@@ -627,17 +630,25 @@ export default function VacancyPage() {
   const rawUrlSection = rawUrlTab === "automation" ? "ai" : (searchParams?.get("section") ?? null)
   // Миграция старых section-значений на новые 6 табов.
   // general → page (стартовая вкладка с брендингом), automation → ai.
-  // Ф3 добавил "pipeline" (новый таб «Воронка»). В Ф4 произойдёт полная
-  // переорганизация — старый "funnel" («Демо и воронка») удалится, "pipeline"
-  // переименуется в "funnel".
-  const SETTINGS_SECTION_IDS = ["page", "sources", "messages", "pipeline", "funnel", "ai", "integrations"] as const
+  // Ф4: финальные 8 табов настроек (9-й «Сценарий» добавится в Ф7).
+  // URL-миграции:
+  //   "general" → "page"             (старая ссылка с «Общим»)
+  //   "automation" → "ai"            (старая ссылка с «AI сценарии»)
+  //   "pipeline" → "funnel"          (новый таб «Воронка» из Ф3 переименован)
+  //   "funnel" пришло из старого «Демо и воронка» → "ai" (PostDemoSettings уехал туда)
+  const SETTINGS_SECTION_IDS = ["page", "sources", "funnel", "messages", "calls", "ai", "schedule", "integrations"] as const
   type SettingsSectionId = typeof SETTINGS_SECTION_IDS[number]
-  const initialSettingsSection: SettingsSectionId =
-    rawUrlSection === "general" ? "page" :
-    rawUrlSection === "automation" ? "ai" :
-    rawUrlSection && (SETTINGS_SECTION_IDS as readonly string[]).includes(rawUrlSection)
-      ? (rawUrlSection as SettingsSectionId)
-      : "page"
+  const initialSettingsSection: SettingsSectionId = (() => {
+    if (rawUrlSection === "general") return "page"
+    if (rawUrlSection === "automation") return "ai"
+    if (rawUrlSection === "pipeline") return "funnel"
+    // Старый "funnel" (Демо и воронка) → ai (туда переехал PostDemoSettings).
+    // Новый "funnel" (Воронка) обслуживается напрямую в списке ниже.
+    if (rawUrlSection && (SETTINGS_SECTION_IDS as readonly string[]).includes(rawUrlSection)) {
+      return rawUrlSection as SettingsSectionId
+    }
+    return "page"
+  })()
   const [activeTab, setActiveTab] = useState(urlTab ?? defaultTab)
   const [settingsSection, setSettingsSection] = useState<SettingsSectionId>(initialSettingsSection)
   const [anPeriod, setAnPeriod] = useState("all")
@@ -2229,10 +2240,11 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                   {([
                     { value: "page"        as const, label: "Страница и брендинг", icon: Globe },
                     { value: "sources"     as const, label: "Источники",           icon: Link2 },
+                    { value: "funnel"      as const, label: "Воронка",             icon: Workflow },
                     { value: "messages"    as const, label: "Сообщения",           icon: MessageCircle },
-                    { value: "pipeline"    as const, label: "Воронка",             icon: Workflow },
-                    { value: "funnel"      as const, label: "Демо и воронка",      icon: Kanban },
-                    { value: "ai"          as const, label: "AI сценарии",         icon: Zap },
+                    { value: "calls"       as const, label: "Звонки",              icon: Phone },
+                    { value: "ai"          as const, label: "AI и автоматизация",  icon: Sparkles },
+                    { value: "schedule"    as const, label: "Расписание",          icon: Clock },
                     { value: "integrations" as const, label: "Интеграции",          icon: Settings },
                   ]).map((s) => {
                     const Icon = s.icon
@@ -2618,27 +2630,17 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
 
                   {/* Источники и UTM-ссылки */}
                   <UtmLinksSection vacancyId={id} vacancySlug={id} />
+
+                  {/* Ф4: «Авто-разбор откликов» переехал сюда из «AI сценарии». */}
+                  <VacancyAutoProcessingToggle vacancyId={id} />
                 </div>
                 )}
 
-                {/* ───────── ТАБ «Сообщения» ───────── */}
-                {settingsSection === "messages" && (
-                <div className="space-y-6 max-w-3xl">
-                  <AutomationSettings
-                    vacancyId={id}
-                    descriptionJson={apiVacancy?.descriptionJson}
-                    aiProcessSettings={apiVacancy?.aiProcessSettings as { inviteMessage?: string; reInviteMessage?: string } | null | undefined}
-                    sections={["firstMessage", "callIntent", "templates"] satisfies AutomationSectionId[]}
-                  />
-                  <VacancyFollowupSettings vacancyId={id} />
-                </div>
-                )}
-
-                {/* ───────── ТАБ «Воронка» (Ф3) ─────────
+                {/* ───────── ТАБ «Воронка» (Ф3, переименован из "pipeline" в Ф4) ─────────
                     Источник правды pipeline: vacancies.description_json.pipeline.
                     Парсится через parsePipeline в vacancyPipeline (выше).
                     Сохранение — PUT /api/modules/hr/vacancies/[id]/pipeline. */}
-                {settingsSection === "pipeline" && (
+                {settingsSection === "funnel" && (
                 <FunnelTab
                   vacancyId={id}
                   initialPipeline={vacancyPipeline}
@@ -2646,27 +2648,34 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                 />
                 )}
 
-                {/* ───────── ТАБ «Демо и воронка» ─────────
-                    Ф1: убрана секция "pipeline" из AutomationSettings —
-                    воронка переезжает в новый таб «Воронка» (Ф3, FunnelTab).
-                    В Ф4 этот таб реорганизуется: enrichment → Анкета (Ф5),
-                    PostDemoSettings → AI и автоматизация. Сейчас оставляем
-                    карточки на месте, чтобы не ломать UI до Ф4-Ф5. */}
-                {settingsSection === "funnel" && (
+                {/* ───────── ТАБ «Сообщения» (Ф4) ─────────
+                    Содержит только сами сообщения. Раздел «Если кандидат хочет
+                    созвониться» (callIntent) переехал в «AI и автоматизация». */}
+                {settingsSection === "messages" && (
                 <div className="space-y-6 max-w-3xl">
                   <AutomationSettings
                     vacancyId={id}
                     descriptionJson={apiVacancy?.descriptionJson}
                     aiProcessSettings={apiVacancy?.aiProcessSettings as { inviteMessage?: string; reInviteMessage?: string } | null | undefined}
-                    sections={["enrichment"] satisfies AutomationSectionId[]}
+                    sections={["firstMessage", "templates"] satisfies AutomationSectionId[]}
                   />
-                  <PostDemoSettings vacancyId={id} />
+                  <VacancyFollowupSettings vacancyId={id} />
                 </div>
                 )}
 
-                {/* ───────── ТАБ «AI сценарии» ─────────
-                    Ф1: убрана секция "scenarioHire" — 5 пресетов
-                    «Демо→Звонок» переосмыслены в табе «Сценарий» (Ф7). */}
+                {/* ───────── ТАБ «Звонки» (Ф4, новый) ─────────
+                    Бот-звонарь и шаблоны сценариев обзвона.
+                    dialer-секция переехала сюда из «AI сценарии». */}
+                {settingsSection === "calls" && (
+                <CallsTab vacancyId={id} descriptionJson={apiVacancy?.descriptionJson} />
+                )}
+
+                {/* ───────── ТАБ «AI и автоматизация» (Ф4, переименован из «AI сценарии») ─────────
+                    Из таба ушли: бот-звонарь → «Звонки», расписание → «Расписание»,
+                    авто-разбор → «Источники», 5 пресетов «Демо→Звонок» → удалены в Ф1.
+                    Сюда приехали: «Если кандидат хочет созвониться» (callIntent) из
+                    «Сообщений», PostDemoSettings («После демонстрации») из старого
+                    «Демо и воронка». В Ф7 здесь появится связь с табом «Сценарий». */}
                 {settingsSection === "ai" && (
                 <div className="space-y-6 max-w-3xl">
                   <VacancyAiProcessSettings
@@ -2679,10 +2688,16 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                     vacancyId={id}
                     descriptionJson={apiVacancy?.descriptionJson}
                     aiProcessSettings={apiVacancy?.aiProcessSettings as { inviteMessage?: string; reInviteMessage?: string } | null | undefined}
-                    sections={["autoActions", "dialer"] satisfies AutomationSectionId[]}
+                    sections={["callIntent", "autoActions"] satisfies AutomationSectionId[]}
                   />
-                  <VacancyScheduleSettings vacancyId={id} />
+                  <PostDemoSettings vacancyId={id} />
                 </div>
+                )}
+
+                {/* ───────── ТАБ «Расписание» (Ф4, новый) ─────────
+                    Рабочие часы и нерабочие дни. Авто-разбор уехал в «Источники». */}
+                {settingsSection === "schedule" && (
+                <ScheduleTab vacancyId={id} />
                 )}
 
                 {/* ───────── ТАБ «Интеграции» ───────── */}
