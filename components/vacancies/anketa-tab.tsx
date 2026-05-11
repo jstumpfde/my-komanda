@@ -15,7 +15,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { ChevronDown, ChevronUp, Plus, X, Save, Loader2, Trash2, GripVertical, Eye, Copy, FileDown, Sparkles, RefreshCw, Check, PenLine, Upload, File, FileSpreadsheet, FileImage } from "lucide-react"
 import { toast } from "sonner"
 import { POSITION_CATEGORIES } from "@/lib/position-classifier"
-import { AnketaPublicSection } from "@/components/vacancies/anketa-public-section"
+// AnketaPublicSection переехал в отдельный таб «Анкета» (Ф5.1) и рендерится
+// из app/(modules)/hr/vacancies/[id]/page.tsx — здесь больше не используется.
 import { type Question, type QuestionAnswerType, defaultQuestion } from "@/lib/course-types"
 import { CompanySelector } from "@/components/vacancies/company-selector"
 import { type ParsedVacancy } from "@/components/vacancies/anketa-wizard"
@@ -2282,10 +2283,6 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange, onNavigat
         }
       }}
     />
-
-    {/* Ф5: Публичная анкета — текст-обёртка, поля, дозапрос данных.
-        Переехало из старого таба «Демо и воронка». */}
-    <AnketaPublicSection vacancyId={vacancyId} descriptionJson={descriptionJson} />
     </div>
   )
 }
