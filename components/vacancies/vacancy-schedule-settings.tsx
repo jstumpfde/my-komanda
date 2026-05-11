@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
-import { Loader2, Save, Plus, Trash2, Clock, Calendar, Sparkles } from "lucide-react"
+import { Loader2, Save, Plus, Trash2, Clock, Calendar } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { RU_HOLIDAYS } from "@/lib/schedule/holidays"
 
@@ -61,6 +61,9 @@ interface Props {
 }
 
 export function VacancyScheduleSettings({ vacancyId }: Props) {
+  // Ф4: «Авто-разбор откликов» вынесен в отдельный компонент
+  // VacancyAutoProcessingToggle и переехал в таб «Источники». Здесь остались
+  // только рабочие часы и нерабочие дни.
   const [data, setData] = useState<ScheduleData | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -152,28 +155,6 @@ export function VacancyScheduleSettings({ vacancyId }: Props) {
 
   return (
     <>
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Sparkles className="w-4 h-4" /> Авто-разбор откликов
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5 pr-4">
-              <Label className="text-sm font-medium">Авто-разбор откликов с hh.ru</Label>
-              <p className="text-xs text-muted-foreground">
-                Cron каждые 10 минут разбирает новые отклики в рабочее время. Если выключено — нужно нажимать кнопку «Разобрать всё» вручную.
-              </p>
-            </div>
-            <Switch
-              checked={data.autoProcessingEnabled}
-              onCheckedChange={(v) => setData({ ...data, autoProcessingEnabled: v })}
-            />
-          </div>
-        </CardContent>
-      </Card>
-
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
