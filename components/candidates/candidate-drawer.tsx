@@ -36,6 +36,11 @@ import {
   Play,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import {
+  getStageLabel,
+  getStageColorClasses,
+  type VacancyPipelineV2,
+} from "@/lib/stages"
 import { toast } from "sonner"
 import type { ApiCandidate } from "@/hooks/use-candidates"
 import type { Lesson, Block } from "@/lib/course-types"
@@ -249,20 +254,10 @@ function SurveyContactsBlock({ contacts: sc }: { contacts: SurveyContacts }) {
 
 // ─── Stage config ─────────────────────────────────────────────────────────────
 
-// Ф1: удалены ключи `demo` и `wants_contact` (нет в БД).
-// Ф2 заменит этот словарь на единый источник правды из lib/stages.ts.
-const STAGE_LABELS: Record<string, { label: string; color: string }> = {
-  new: { label: "Новый", color: "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800" },
-  primary_contact: { label: "Первичный контакт", color: "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800" },
-  demo_opened: { label: "Демо открыто", color: "bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800" },
-  decision: { label: "Демо пройдено", color: "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800" },
-  anketa_filled: { label: "Анкета заполнена", color: "bg-orange-500/10 text-orange-700 dark:text-orange-400 border-orange-200 dark:border-orange-800" },
-  scheduled: { label: "Интервью назначено", color: "bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-200 dark:border-purple-800" },
-  interview: { label: "Интервью", color: "bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-200 dark:border-purple-800" },
-  interviewed: { label: "Прошёл интервью", color: "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800" },
-  hired: { label: "Нанят", color: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800" },
-  rejected: { label: "Отказ", color: "bg-destructive/10 text-destructive border-destructive/20" },
-}
+// Ф2: STAGE_LABELS удалён. Источник правды — lib/stages.ts.
+// Лейбл/цвет — getStageLabel(slug, vacancyPipeline) и getStageColorClasses(slug, vacancyPipeline).
+// vacancyPipeline передаётся через props CandidateDrawer; если null —
+// используются дефолтные значения из PLATFORM_STAGES.
 
 // ─── Avatar with initials ─────────────────────────────────────────────────────
 
@@ -392,8 +387,8 @@ function buildTimeline(args: {
     if (!entry?.at) continue
     const t = Date.parse(entry.at)
     if (isNaN(t)) continue
-    const fromLabel = entry.from ? (STAGE_LABELS[entry.from]?.label ?? entry.from) : null
-    const toLabel = entry.to ? (STAGE_LABELS[entry.to]?.label ?? entry.to) : null
+    const fromLabel = entry.from ? getStageLabel(entry.from, vacancyPipeline) : null
+    const toLabel = entry.to ? getStageLabel(entry.to, vacancyPipeline) : null
     // Понятные заголовки для известных reason'ов — иначе fallback на "Перевод: A → B".
     let title: string
     switch (entry.reason) {
@@ -485,6 +480,12 @@ export interface CandidateDrawerProps {
   onOpenChange: (open: boolean) => void
   onStageChange?: (candidateId: string, newStage: string) => void
   onToggleFavorite?: (candidateId: string, isFavorite: boolean) => void | Promise<void>
+  /**
+   * Pipeline текущей вакансии для отображения кастомных лейблов/цветов стадий.
+   * Если null/undefined — используются дефолты из lib/stages.ts.
+   * См. parsePipeline(vacancy.descriptionJson?.pipeline) на стороне родителя.
+   */
+  vacancyPipeline?: VacancyPipelineV2 | null
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
@@ -495,6 +496,7 @@ export function CandidateDrawer({
   onOpenChange,
   onStageChange,
   onToggleFavorite,
+  vacancyPipeline,
 }: CandidateDrawerProps) {
   const [candidate, setCandidate] = useState<ApiCandidate | null>(null)
   // Notes хранятся в demo_progress_json у самого кандидата — отдельный
@@ -740,7 +742,9 @@ export function CandidateDrawer({
     return `до ${max!.toLocaleString("ru-RU")} ₽`
   }
 
-  const stageCfg = candidate?.stage ? STAGE_LABELS[candidate.stage] : null
+  const stageCfg = candidate?.stage
+    ? { label: getStageLabel(candidate.stage, vacancyPipeline), color: getStageColorClasses(candidate.stage, vacancyPipeline) }
+    : null
   const salary = formatSalary(candidate?.salaryMin ?? null, candidate?.salaryMax ?? null)
   const isHired = candidate?.stage === "hired"
   const isRejected = candidate?.stage === "rejected"

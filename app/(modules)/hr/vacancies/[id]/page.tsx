@@ -20,6 +20,7 @@ import { SortMenu } from "@/components/dashboard/sort-menu"
 import { Tooltip as UITooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip"
 import type { CandidateSortMode } from "@/lib/candidate-sort"
 import { CandidateDrawer } from "@/components/candidates/candidate-drawer"
+import { parsePipeline } from "@/lib/stages"
 import { BulkActionsBar, type BulkAction } from "@/components/dashboard/bulk-actions-bar"
 import { CandidatesProgressList } from "@/components/candidates/candidates-progress-list"
 import { AddCandidateDialog } from "@/components/dashboard/add-candidate-dialog"
@@ -392,6 +393,14 @@ export default function VacancyPage() {
   }, [router])
 
   const [filters, setFilters] = useState<FilterState>({ searchText: "", cities: [], salaryMin: 0, salaryMax: 250000, scoreMin: 0, sources: [], workFormats: [], relocation: "any", businessTrips: "any", experienceMin: 0, experienceMax: 20, funnelStatuses: [], demoProgress: [], dateRange: "", dateFrom: "", dateTo: "", ageMin: 18, ageMax: 65, education: [], languages: [], otherLanguages: [], skills: [], industries: [] })
+
+  // Pipeline текущей вакансии — парсится один раз из descriptionJson и
+  // прокидывается в CandidateDrawer (Ф2), в Ф3 — также в FunnelTab,
+  // в Ф6 — в фильтр и hh-sync.
+  const vacancyPipeline = useMemo(
+    () => parsePipeline((apiVacancy?.descriptionJson as Record<string, unknown> | undefined)?.pipeline),
+    [apiVacancy?.descriptionJson],
+  )
 
   // Серверные фильтры — передаём в useCandidates, который шлёт их в API
   const candidatesFilters = useMemo(() => ({
@@ -3070,6 +3079,7 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
           setDrawerOpen(open)
           if (!open) setDrawerCandidateId(null)
         }}
+        vacancyPipeline={vacancyPipeline}
         onToggleFavorite={handleToggleFavorite}
         onStageChange={(candidateId, newStage) => {
           // Sync kanban columns when stage changes in drawer
