@@ -25,6 +25,7 @@ import { FunnelTab } from "@/components/vacancies/funnel-tab"
 import { ScheduleTab } from "@/components/vacancies/schedule-tab"
 import { CallsTab } from "@/components/vacancies/calls-tab"
 import { VacancyAutoProcessingToggle } from "@/components/vacancies/vacancy-auto-processing-toggle"
+import { AnketaPublicSection } from "@/components/vacancies/anketa-public-section"
 import { BulkActionsBar, type BulkAction } from "@/components/dashboard/bulk-actions-bar"
 import { CandidatesProgressList } from "@/components/candidates/candidates-progress-list"
 import { AddCandidateDialog } from "@/components/dashboard/add-candidate-dialog"
@@ -623,7 +624,9 @@ export default function VacancyPage() {
   const [brandCustomDomain, setBrandCustomDomain] = useState("")
   const [editingSlug, setEditingSlug] = useState(false)
   const [brandSaving, setBrandSaving] = useState(false)
-  const defaultTab = status === "active" ? "candidates" : "anketa"
+  // Ф5.1: для черновика дефолтный таб — «Описание» (бывший AnketaTab),
+  // а не «Анкета» (теперь только публичная форма для кандидата).
+  const defaultTab = status === "active" ? "candidates" : "description"
   const rawUrlTab = searchParams?.get("tab") ?? null
   // Старая ссылка `?tab=automation` → новая `?tab=settings&section=ai`
   const urlTab = rawUrlTab === "automation" ? "settings" : rawUrlTab
@@ -1507,7 +1510,9 @@ export default function VacancyPage() {
                 <h2 className="text-sm font-medium text-foreground truncate">{internalName || vacancyTitle}</h2>
                 <VacancyStatusBadge status={status} size="sm" />
               </div>
-              {advisorScore.score > 0 && (
+              {/* Ф5.1: advisorScore считается по полям AnketaTab,
+                  поэтому показываем только когда юзер на табе «Описание». */}
+              {advisorScore.score > 0 && activeTab === "description" && (
                 <div className="flex items-center gap-2 shrink-0">
                   <div className="w-20 h-1.5 rounded-full bg-muted overflow-hidden">
                     <div className={cn(
@@ -1783,7 +1788,10 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
             <Tabs value={activeTab} onValueChange={setActiveTab}>
               <div className="flex items-center justify-between gap-3 mb-3 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
                 <TabsList className="shrink-0">
+                  {/* Ф5.1: добавлен таб «Описание» (бывший AnketaTab — редактор вакансии).
+                      Таб «Анкета» теперь = публичная анкета для кандидата. */}
                   {(status === "active" ? [
+                    { value: "description", icon: FileText, label: "Описание" },
                     { value: "anketa", icon: ClipboardList, label: "Анкета" },
                     { value: "course", icon: BookOpen, label: "Демонстрация" },
                     { value: "candidates", icon: Kanban, label: "Кандидаты" },
@@ -1791,6 +1799,7 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                   ] : [
                     { value: "candidates", icon: Kanban, label: "Кандидаты" },
                     { value: "analytics", icon: BarChart3, label: "Аналитика" },
+                    { value: "description", icon: FileText, label: "Описание" },
                     { value: "anketa", icon: ClipboardList, label: "Анкета" },
                     { value: "course", icon: BookOpen, label: "Демонстрация" },
                   ]).map(tab => (
@@ -1847,7 +1856,9 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                     />
                   </div>
                 )}
-                {activeTab === "anketa" && (
+                {/* Ф5.1: тулбар «Заполнить из…» относится к редактору вакансии,
+                    переехал из таба anketa в новый description. */}
+                {activeTab === "description" && (
                   <div className="flex items-center gap-1.5 shrink-0">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
@@ -1943,8 +1954,38 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                 )}
               </div>
 
+              {/* Ф5.1: «Описание» — редактор вакансии (50+ полей AnketaData) + AI-ассистент. */}
+              <TabsContent value="description">
+                <AnketaTab
+                  vacancyId={id}
+                  descriptionJson={apiVacancy?.descriptionJson}
+                  onTitleChange={(t) => { if (t) setInternalName(t) }}
+                  onNavigateTab={(tab) => { setActiveTab(tab); window.scrollTo({ top: 0, behavior: "smooth" }) }}
+                  onScoreChange={setAdvisorScore}
+                />
+              </TabsContent>
+
+              {/* Ф5.1: «Анкета» — только публичная анкета для кандидата
+                  (text-обёртка + поля + дозапрос). Поля вакансии переехали
+                  в новый таб «Описание». */}
               <TabsContent value="anketa">
-                <AnketaTab vacancyId={id} descriptionJson={apiVacancy?.descriptionJson} onTitleChange={(t) => { if (t) setInternalName(t) }} onNavigateTab={(tab) => { setActiveTab(tab); window.scrollTo({ top: 0, behavior: "smooth" }) }} onScoreChange={setAdvisorScore} />
+                <div className="space-y-6 max-w-3xl">
+                  <div>
+                    <h2 className="text-lg font-semibold">Публичная анкета для кандидата</h2>
+                    <p className="text-sm text-muted-foreground">
+                      Что видит кандидат после прохождения демо-курса. Поля и тексты, которые он заполняет.
+                      Сами поля вакансии редактируются в табе{" "}
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab("description")}
+                        className="text-primary hover:underline"
+                      >
+                        «Описание»
+                      </button>.
+                    </p>
+                  </div>
+                  <AnketaPublicSection vacancyId={id} descriptionJson={apiVacancy?.descriptionJson} />
+                </div>
               </TabsContent>
 
               <TabsContent value="candidates">
