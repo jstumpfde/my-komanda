@@ -2690,7 +2690,9 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                     aiProcessSettings={apiVacancy?.aiProcessSettings as { inviteMessage?: string; reInviteMessage?: string } | null | undefined}
                     sections={["callIntent", "autoActions"] satisfies AutomationSectionId[]}
                   />
-                  <PostDemoSettings vacancyId={id} />
+                  {/* Ф5: только пороги AI и превью. Поля формы (formFields)
+                      переехали в страницу «Анкета» (Публичная анкета). */}
+                  <PostDemoSettings vacancyId={id} sections={["thresholds", "preview"]} />
                 </div>
                 )}
 

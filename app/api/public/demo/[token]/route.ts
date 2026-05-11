@@ -120,6 +120,18 @@ export async function GET(
       .limit(1)
     const prefill = hhRow ? extractHhPrefill(hhRow.rawData) : { first_name: null, last_name: null, city: null }
 
+    // Ф5: текст-обёртка анкеты — vacancies.description_json.anketaIntro
+    const dj = (vacancy.descriptionJson as Record<string, unknown> | null) ?? {}
+    const introRaw = (dj.anketaIntro && typeof dj.anketaIntro === "object")
+      ? dj.anketaIntro as Record<string, unknown>
+      : null
+    const anketaIntro = introRaw
+      ? {
+          title: typeof introRaw.title === "string" ? introRaw.title : "",
+          description: typeof introRaw.description === "string" ? introRaw.description : "",
+        }
+      : null
+
     return apiSuccess({
       candidateName: candidate.name,
       vacancyTitle: vacancy.title,
@@ -137,6 +149,7 @@ export async function GET(
       answers: candidate.anketaAnswers,
       aiScore: candidate.aiScore,
       postDemoSettings: demo.postDemoSettings ?? {},
+      anketaIntro,
       prefill,
     })
   } catch (err) {

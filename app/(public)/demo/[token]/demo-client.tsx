@@ -125,6 +125,9 @@ interface DemoData {
   answers: { blockId: string; answer: any }[] | null
   aiScore: number | null
   postDemoSettings: PostDemoSettings
+  // Ф5: текст-обёртка финальной анкеты, vacancies.description_json.anketaIntro.
+  // Пустые поля или null → показываем дефолты.
+  anketaIntro?: { title: string; description: string } | null
   prefill?: { first_name: string | null; last_name: string | null; city: string | null }
 }
 
@@ -1177,11 +1180,18 @@ export default function DemoPage() {
             <p className="text-sm text-gray-500 mt-1">Мы свяжемся с вами по поводу позиции &laquo;{data.vacancyTitle}&raquo;</p>
           </div>
 
-          <div className="bg-blue-50 border border-blue-100 rounded-xl p-5 text-sm text-gray-700 space-y-3 leading-relaxed">
-            <p className="font-medium text-gray-800">Заполните ваши данные!</p>
-            <p>Мы разберём ваши ответы — в том числе ответы на вопросы — и свяжемся с вами.</p>
-            <p className="font-medium text-gray-800">Ждём Вас!</p>
-          </div>
+          {/* Ф5: текст-обёртка из vacancy.descriptionJson.anketaIntro (если задана HR). */}
+          {(() => {
+            const introTitle = data.anketaIntro?.title?.trim() || "Заполните ваши данные!"
+            const introDescription = data.anketaIntro?.description?.trim()
+              || "Мы разберём ваши ответы — в том числе ответы на вопросы — и свяжемся с вами.\n\nЖдём Вас!"
+            return (
+              <div className="bg-blue-50 border border-blue-100 rounded-xl p-5 text-sm text-gray-700 space-y-3 leading-relaxed">
+                <p className="font-medium text-gray-800">{introTitle}</p>
+                <p className="whitespace-pre-line">{introDescription}</p>
+              </div>
+            )
+          })()}
 
           <div className="bg-white rounded-xl p-6 shadow-sm space-y-4">
 

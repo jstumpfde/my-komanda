@@ -44,11 +44,21 @@ const FIELD_LABELS: Record<FormFieldKey, string> = {
 
 const FIELD_ORDER: FormFieldKey[] = ["firstName", "lastName", "email", "phone", "telegram", "birthDate", "city"]
 
+export type PostDemoSection = "thresholds" | "formFields" | "preview"
+
 interface PostDemoSettingsProps {
   vacancyId: string
+  /**
+   * Какие карточки показывать. Если не задано — все 3 как раньше.
+   * Ф5: в табе «AI и автоматизация» → ["thresholds", "preview"],
+   * в табе «Анкета» → ["formFields"]. Все инстансы используют общий API
+   * /api/modules/hr/vacancies/[id]/post-demo-settings, merge на бэкенде.
+   */
+  sections?: PostDemoSection[]
 }
 
-export function PostDemoSettings({ vacancyId }: PostDemoSettingsProps) {
+export function PostDemoSettings({ vacancyId, sections }: PostDemoSettingsProps) {
+  const showSection = (id: PostDemoSection) => !sections || sections.includes(id)
   const [enabled, setEnabled] = useState(true)
   const [mode, setMode] = useState<PostDemoMode>("auto")
 
@@ -187,6 +197,7 @@ export function PostDemoSettings({ vacancyId }: PostDemoSettingsProps) {
 
   return (
     <div className="space-y-6">
+      {showSection("thresholds") && (
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
@@ -401,8 +412,10 @@ export function PostDemoSettings({ vacancyId }: PostDemoSettingsProps) {
           </div>
         </CardContent>
       </Card>
+      )}
 
-      {/* Финальная анкета — настройка полей */}
+      {showSection("formFields") && (
+      /* Финальная анкета — настройка полей */
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
@@ -455,8 +468,10 @@ export function PostDemoSettings({ vacancyId }: PostDemoSettingsProps) {
           </div>
         </CardContent>
       </Card>
+      )}
 
-      {/* Live preview */}
+      {showSection("preview") && (
+      /* Live preview */
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Превью финального экрана</CardTitle>
@@ -530,6 +545,7 @@ export function PostDemoSettings({ vacancyId }: PostDemoSettingsProps) {
           </div>
         </CardContent>
       </Card>
+      )}
     </div>
   )
 }
