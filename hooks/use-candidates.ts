@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
+import { useRouter, useSearchParams, usePathname } from "next/navigation"
 
 // ─── Types (mirror DB schema fields returned by the API) ──────────────────────
 
@@ -235,4 +236,236 @@ export function useCandidates(
   }, [])
 
   return { candidates, loading, error, refetch: fetch_, updateStage, toggleFavorite }
+}
+
+// ─── usePaginatedCandidates ───────────────────────────────────────────────────
+//
+// Серверная пагинация для страницы /hr/vacancies/[id]?tab=candidates.
+// Отдельный хук от useCandidates — там legacy-контракт «вся выборка массивом»,
+// который используют канбан, дашборд и mini-table. Здесь же:
+//   • SQL .limit/.offset на бэкенде, count(*) для total
+//   • URL state: ?page=&pageSize=&sortBy=&order=
+//   • setPage/setPageSize/setSort пушат router.replace(url, { scroll: false })
+//
+// Шаг 1 (Ф1): sortBy=progress и фильтр demoProgress на бэкенде игнорируются
+// в пагинированном режиме (см. app/api/modules/hr/candidates/route.ts).
+
+const PAGINATED_PAGE_SIZES = [20, 50, 100] as const
+type PageSize = (typeof PAGINATED_PAGE_SIZES)[number]
+
+export type PaginatedSortKey =
+  | "createdAt" | "name" | "aiScore" | "salary" | "stage" | "progress"
+
+const PAGINATED_SORT_KEYS: readonly PaginatedSortKey[] = [
+  "createdAt", "name", "aiScore", "salary", "stage", "progress",
+]
+
+interface PaginatedResponse {
+  candidates: ApiCandidate[]
+  total: number
+  page: number
+  pageSize: number
+  totalPages: number
+}
+
+interface UsePaginatedCandidatesParams {
+  vacancyId: string | null
+  filters?: CandidatesFilters
+  stageFilter?: string[]
+}
+
+export function usePaginatedCandidates({
+  vacancyId,
+  filters,
+  stageFilter,
+}: UsePaginatedCandidatesParams) {
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+
+  // URL — единственный источник правды для page/pageSize/sortBy/order.
+  // Дефолты применяются если параметра нет в URL или он невалиден.
+  const page = useMemo(() => {
+    const raw = Number.parseInt(searchParams.get("page") ?? "1", 10)
+    return Number.isFinite(raw) && raw > 0 ? raw : 1
+  }, [searchParams])
+
+  const pageSize: PageSize = useMemo(() => {
+    const raw = Number.parseInt(searchParams.get("pageSize") ?? "20", 10)
+    return (PAGINATED_PAGE_SIZES as readonly number[]).includes(raw)
+      ? (raw as PageSize)
+      : 20
+  }, [searchParams])
+
+  const sortBy: PaginatedSortKey = useMemo(() => {
+    const raw = searchParams.get("sortBy")
+    return raw && (PAGINATED_SORT_KEYS as readonly string[]).includes(raw)
+      ? (raw as PaginatedSortKey)
+      : "createdAt"
+  }, [searchParams])
+
+  const order: "asc" | "desc" = useMemo(() => {
+    return searchParams.get("order") === "asc" ? "asc" : "desc"
+  }, [searchParams])
+
+  const [candidates, setCandidates] = useState<ApiCandidate[]>([])
+  const [total, setTotal] = useState(0)
+  const [totalPages, setTotalPages] = useState(1)
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  // Стабильная сериализация фильтров для зависимостей useEffect.
+  const filtersKey = useMemo(() => JSON.stringify(filters ?? {}), [filters])
+  const stageKey = useMemo(() => (stageFilter ?? []).join(","), [stageFilter])
+
+  const refetch = useCallback(async () => {
+    if (!vacancyId) {
+      setCandidates([]); setTotal(0); setTotalPages(1)
+      return
+    }
+    setIsLoading(true)
+    setError(null)
+    try {
+      const params = new URLSearchParams({
+        vacancyId,
+        page:     String(page),
+        pageSize: String(pageSize),
+        sortBy,
+        order,
+      })
+      if (stageFilter && stageFilter.length > 0) {
+        params.set("stage", stageFilter.join(","))
+      }
+      if (filters) {
+        if (typeof filters.minAge === "number" && filters.minAge > 18)       params.set("minAge", String(filters.minAge))
+        if (typeof filters.maxAge === "number" && filters.maxAge < 65)       params.set("maxAge", String(filters.maxAge))
+        if (typeof filters.minExperience === "number" && filters.minExperience > 0)   params.set("minExperience", String(filters.minExperience))
+        if (typeof filters.maxExperience === "number" && filters.maxExperience < 20)  params.set("maxExperience", String(filters.maxExperience))
+        if (filters.workFormats?.length)      params.set("workFormat", filters.workFormats.join(","))
+        if (filters.educationLevels?.length)  params.set("educationLevel", filters.educationLevels.join(","))
+        if (filters.languages?.length)        params.set("languages", filters.languages.join(","))
+        if (filters.keySkills?.length)        params.set("keySkills", filters.keySkills.join(","))
+        if (filters.industries?.length)       params.set("industry", filters.industries.join(","))
+        if (filters.relocationReady === true)    params.set("relocationReady", "true")
+        if (filters.relocationReady === false)   params.set("relocationReady", "false")
+        if (filters.businessTripsReady === true)  params.set("businessTripsReady", "true")
+        if (filters.businessTripsReady === false) params.set("businessTripsReady", "false")
+        if (filters.dateFrom) params.set("dateFrom", filters.dateFrom)
+        if (filters.dateTo)   params.set("dateTo", filters.dateTo)
+        if (typeof filters.salaryMin === "number" && filters.salaryMin > 0) params.set("salaryMin", String(filters.salaryMin))
+        if (typeof filters.salaryMax === "number" && filters.salaryMax > 0 && filters.salaryMax < 250000) params.set("salaryMax", String(filters.salaryMax))
+        if (filters.sources?.length) params.set("sources", filters.sources.join(","))
+        if (filters.cities?.length)  params.set("cities", filters.cities.join(","))
+        if (typeof filters.scoreMin === "number" && filters.scoreMin > 0) params.set("scoreMin", String(filters.scoreMin))
+        // demoProgress в пагинированном режиме игнорируется бэкендом (Шаг 1),
+        // не шлём чтобы не вводить в заблуждение.
+      }
+
+      const res = await fetch(`/api/modules/hr/candidates?${params.toString()}`)
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({})) as { error?: string }
+        throw new Error(d.error ?? `HTTP ${res.status}`)
+      }
+      const data = await res.json() as PaginatedResponse
+      setCandidates(data.candidates ?? [])
+      setTotal(data.total ?? 0)
+      setTotalPages(Math.max(1, data.totalPages ?? 1))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Ошибка загрузки кандидатов")
+    } finally {
+      setIsLoading(false)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vacancyId, page, pageSize, sortBy, order, stageKey, filtersKey])
+
+  useEffect(() => { refetch() }, [refetch])
+
+  // ── URL mutations ─────────────────────────────────────────────────────────
+  // Используем replace (не push) — пагинация не должна засорять историю.
+  // scroll: false — чтобы не прыгать к началу страницы при смене страницы.
+  const writeUrl = useCallback((patch: Record<string, string | null>) => {
+    const next = new URLSearchParams(searchParams.toString())
+    for (const [k, v] of Object.entries(patch)) {
+      if (v === null) next.delete(k)
+      else next.set(k, v)
+    }
+    const qs = next.toString()
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+  }, [router, pathname, searchParams])
+
+  const setPage = useCallback((p: number) => {
+    const clamped = Math.max(1, Math.min(totalPages, Math.floor(p)))
+    writeUrl({ page: clamped === 1 ? null : String(clamped) })
+  }, [writeUrl, totalPages])
+
+  const setPageSize = useCallback((size: number) => {
+    const safe: PageSize = (PAGINATED_PAGE_SIZES as readonly number[]).includes(size)
+      ? (size as PageSize)
+      : 20
+    // При смене размера страницы — откатываем на первую: позиция текущей
+    // страницы становится бессмысленной (record 21 на pageSize=20 → page 2,
+    // а на pageSize=50 → page 1).
+    writeUrl({ pageSize: safe === 20 ? null : String(safe), page: null })
+  }, [writeUrl])
+
+  const setSort = useCallback((key: PaginatedSortKey, dir?: "asc" | "desc") => {
+    const nextDir: "asc" | "desc" =
+      dir ?? (sortBy === key && order === "desc" ? "asc" : "desc")
+    writeUrl({
+      sortBy: key === "createdAt" ? null : key,
+      order:  nextDir === "desc" ? null : nextDir,
+      page:   null,
+    })
+  }, [writeUrl, sortBy, order])
+
+  // ── Mutations (повторяют useCandidates — но обновляют локальный state) ────
+  const updateStage = useCallback(async (candidateId: string, stage: string): Promise<boolean> => {
+    try {
+      const res = await fetch(`/api/modules/hr/candidates/${candidateId}/stage`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stage }),
+      })
+      if (!res.ok) return false
+      setCandidates(prev => prev.map(c => c.id === candidateId ? { ...c, stage } : c))
+      return true
+    } catch { return false }
+  }, [])
+
+  const toggleFavorite = useCallback(async (candidateId: string, isFavorite: boolean): Promise<boolean> => {
+    setCandidates(prev => prev.map(c => c.id === candidateId ? { ...c, isFavorite } : c))
+    try {
+      const res = await fetch(`/api/modules/hr/candidates/${candidateId}/favorite`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isFavorite }),
+      })
+      if (!res.ok) {
+        setCandidates(prev => prev.map(c => c.id === candidateId ? { ...c, isFavorite: !isFavorite } : c))
+        return false
+      }
+      return true
+    } catch {
+      setCandidates(prev => prev.map(c => c.id === candidateId ? { ...c, isFavorite: !isFavorite } : c))
+      return false
+    }
+  }, [])
+
+  return {
+    candidates,
+    total,
+    page,
+    pageSize,
+    totalPages,
+    sortBy,
+    order,
+    isLoading,
+    error,
+    setPage,
+    setPageSize,
+    setSort,
+    refetch,
+    updateStage,
+    toggleFavorite,
+  }
 }
