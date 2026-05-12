@@ -13,7 +13,7 @@ import { applySortMode, type CandidateSortMode } from "@/lib/candidate-sort"
 import { MapPin, CheckCircle2, XCircle, ArrowRight, ThumbsUp, Clock, ArrowUp, ArrowDown, Star } from "lucide-react"
 import { DemoProgressBar, calcDemoPercent, calcDemoFraction } from "@/components/hr/demo-progress-bar"
 
-export type ListSortKey = "favorite" | "aiScore" | "progress" | "salary" | "responseDate" | "status" | "city" | "source"
+export type ListSortKey = "favorite" | "name" | "aiScore" | "progress" | "salary" | "responseDate" | "status" | "city" | "source"
 export type ListSortDir = "asc" | "desc"
 export interface ListSortState {
   key: ListSortKey
@@ -41,10 +41,14 @@ interface ListViewProps {
   /** Множественное выделение для bulk-операций. Если не задано — колонка чекбоксов скрыта. */
   selectedIds?: Set<string>
   onSelectionChange?: (next: Set<string>) => void
+  /** Если задан — рендерим колонку «№» с номером строки от startIndex+1.
+   *  Используется на пагинированном списке: (page-1)*pageSize. */
+  startIndex?: number
 }
 
 const DEFAULT_DIR: Record<ListSortKey, ListSortDir> = {
   favorite:     "desc",
+  name:         "asc",
   aiScore:      "desc",
   progress:     "desc",
   salary:       "desc",
@@ -116,7 +120,7 @@ function SortHeader({
 export function ListView({
   columns, settings, onOpenProfile, onAction, onToggleFavorite,
   sortMode = "date_desc", sort = null, onSortChange,
-  selectedIds, onSelectionChange,
+  selectedIds, onSelectionChange, startIndex,
 }: ListViewProps) {
   const lastSelectedIdRef = useRef<string | null>(null)
   const selectionEnabled = !!selectedIds && !!onSelectionChange
@@ -140,6 +144,14 @@ export function ListView({
       switch (sort.key) {
         case "favorite": {
           return mul * ((a.isFavorite ? 1 : 0) - (b.isFavorite ? 1 : 0))
+        }
+        case "name": {
+          const na = (a.name ?? "").trim()
+          const nb = (b.name ?? "").trim()
+          if (!na && !nb) return 0
+          if (!na) return 1
+          if (!nb) return -1
+          return mul * na.localeCompare(nb, "ru")
         }
         case "aiScore": {
           return mul * ((a.aiScore ?? -1) - (b.aiScore ?? -1))
@@ -217,8 +229,11 @@ export function ListView({
   // длиннее («Первичный контакт» ~17 симв, «Анкета заполнена» ~16 симв),
   // поэтому Статус получает больше места (min 140 / 1.8fr), а Кандидат —
   // меньше избыточного простора (с 6fr → 3fr, max-w на имя 240px).
+  const showRowNumbers = typeof startIndex === "number"
+
   const cols: string[] = []
   if (selectionEnabled) cols.push("36px")               // ☐ — фикс
+  if (showRowNumbers)   cols.push("44px")               // № — фикс
   cols.push("minmax(180px, 3fr)")                       // Кандидат
   cols.push("40px")                                     // ★ — фикс
   if (showProgress) cols.push("minmax(110px, 1.5fr)")   // Демо
@@ -295,7 +310,16 @@ export function ListView({
             />
           </div>
         )}
-        <div className="text-left px-2">Кандидат</div>
+        {showRowNumbers && (
+          <div className="text-center text-muted-foreground/70 tabular-nums select-none">№</div>
+        )}
+        <div className="px-2">
+          {onSortChange ? (
+            <SortHeader label="Кандидат" sortKey="name" sort={sort} onToggle={handleSort} align="left" />
+          ) : (
+            <span>Кандидат</span>
+          )}
+        </div>
         <div className="flex items-center justify-center px-2">
           <button
             type="button"
@@ -364,6 +388,13 @@ export function ListView({
                     onCheckedChange={() => { /* handled by row click */ }}
                     aria-label={isSelected ? "Снять выделение" : "Выделить кандидата"}
                   />
+                </div>
+              )}
+
+              {/* Row number (опционально, только при пагинированном режиме) */}
+              {showRowNumbers && (
+                <div className="text-center text-[13px] text-muted-foreground tabular-nums select-none">
+                  {(startIndex ?? 0) + i + 1}
                 </div>
               )}
 
