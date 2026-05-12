@@ -677,7 +677,6 @@ export default function VacancyPage() {
 
   // HH.ru sync state (lifted from VacancyPulse — used by both pulse hero text and bottom toolbar buttons)
   const [hhSyncMeta, setHhSyncMeta] = useState<{ hhVacancyId: string; responsesCount: number; syncedAt: string; createdAt: string; localVacancyId: string | null } | null>(null)
-  const [hhPendingResponses, setHhPendingResponses] = useState<number | null>(null)
   const [hhSyncing, setHhSyncing] = useState(false)
 
   // Сводные счётчики для шапки. Отдельный endpoint, не зависящий от фильтров,
@@ -705,31 +704,25 @@ export default function VacancyPage() {
     } catch { /* silent */ }
   }, [apiVacancy?.hhVacancyId])
 
-  const loadHhPending = useCallback(async () => {
-    const hhVacId = apiVacancy?.hhVacancyId
-    if (!hhVacId) return
-    try {
-      const res = await fetch("/api/integrations/hh/responses")
-      const data = await res.json() as { responses?: Array<{ hhVacancyId: string; status: string }> }
-      const count = (data.responses ?? []).filter(r => r.hhVacancyId === hhVacId && r.status === "response").length
-      setHhPendingResponses(count)
-    } catch { /* silent */ }
-  }, [apiVacancy?.hhVacancyId])
+  // Счётчик «ждут разбора» приходит из лёгкого /candidate-stats (headerStats.pending).
+  // Раньше тут был loadHhPending, который тянул /api/integrations/hh/responses
+  // (~13.8 МБ — все hh-отклики компании) только ради этой цифры. Убран.
 
   useEffect(() => {
     if (hhConnected !== true || !apiVacancy?.hhVacancyId) return
     loadHhSyncMeta()
-    loadHhPending()
-  }, [hhConnected, apiVacancy?.hhVacancyId, loadHhSyncMeta, loadHhPending])
+  }, [hhConnected, apiVacancy?.hhVacancyId, loadHhSyncMeta])
 
   const handleHhSync = async () => {
     setHhSyncing(true)
     try {
+      // GET /api/integrations/hh/responses — это серверный синк с hh API
+      // (тянет negotiations + резюме). Запускаем только по явному клику кнопки.
       await Promise.all([
         fetch("/api/integrations/hh/vacancies"),
         fetch("/api/integrations/hh/responses"),
       ])
-      await Promise.all([loadHhSyncMeta(), loadHhPending(), loadHeaderStats()])
+      await Promise.all([loadHhSyncMeta(), loadHeaderStats()])
       refetchCandidates(); refetchVacancy()
       toast.success("Синхронизировано с hh.ru")
     } catch { toast.error("Ошибка синхронизации") }
@@ -769,7 +762,6 @@ export default function VacancyPage() {
       setHhUnlinkOpen(false)
       setHhStats(null)
       setHhSyncMeta(null)
-      setHhPendingResponses(null)
       await refetchVacancy()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Ошибка отвязки")
@@ -1575,7 +1567,7 @@ export default function VacancyPage() {
                     <span>·</span>
                     <UITooltip>
                       <TooltipTrigger asChild>
-                        <span className="cursor-help"><span className={cn("font-medium", ((headerStats?.pending ?? hhPendingResponses) ?? 0) > 0 ? "text-amber-700" : "text-foreground")}>{(headerStats?.pending ?? hhPendingResponses) ?? 0}</span> ждут разбора</span>
+                        <span className="cursor-help"><span className={cn("font-medium", (headerStats?.pending ?? 0) > 0 ? "text-amber-700" : "text-foreground")}>{headerStats?.pending ?? 0}</span> ждут разбора</span>
                       </TooltipTrigger>
                       <TooltipContent>Отклики с hh.ru, которые ещё не обработаны (нажмите «Разобрать»)</TooltipContent>
                     </UITooltip>
