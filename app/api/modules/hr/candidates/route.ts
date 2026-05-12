@@ -68,7 +68,7 @@ const STAGE_ORDER_SQL = sql`CASE ${candidates.stage}
 END`
 
 function buildOrderBy(key: SortKey | null, dir: "asc" | "desc"): SQL[] {
-  const wrap = (col: SQL | ReturnType<typeof asc>) => (dir === "asc" ? asc(col as SQL) : desc(col as SQL))
+  const wrap = (col: Parameters<typeof asc>[0]) => (dir === "asc" ? asc(col) : desc(col))
   switch (key) {
     case "favorite":     return [wrap(candidates.isFavorite), desc(candidates.createdAt)]
     case "aiScore":      return [wrap(candidates.aiScore),    desc(candidates.createdAt)]
