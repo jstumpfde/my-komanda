@@ -489,14 +489,31 @@ export default function VacancyPage() {
       .catch(() => {})
   }, [])
 
+  // Однократный guard для авто-переключения таба при первой загрузке статуса:
+  // после ручного клика юзера на «Анкета» refetch apiVacancy не должен снова
+  // выкидывать его на «Кандидаты».
+  const tabAutoSyncedRef = useRef(false)
+
   // Sync vacancy status + custom columns from API
   useEffect(() => {
     if (apiVacancy?.status) {
       const s = apiVacancy.status as VacancyStatus
       setStatus(s)
-      // Если URL не задаёт таб явно — переключаем дефолт по статусу при публикации
-      if (!urlTab) {
-        setActiveTab(prev => prev === "anketa" || prev === "analytics" ? (s === "active" ? "candidates" : "anketa") : prev)
+      const isActive = s === "active" || s === "published"
+      // URL-таб «застрял» на анкете от прошлого визита, но вакансия уже
+      // опубликована — принудительно открываем «Кандидаты» и чистим ?tab,
+      // чтобы при следующем визите дефолт не залипал.
+      if (!tabAutoSyncedRef.current && isActive && urlTab === "anketa") {
+        tabAutoSyncedRef.current = true
+        setActiveTab("candidates")
+        const sp = new URLSearchParams(window.location.search)
+        sp.delete("tab")
+        const qs = sp.toString()
+        router.replace(`${window.location.pathname}${qs ? "?" + qs : ""}`, { scroll: false })
+      } else if (!urlTab) {
+        // URL без ?tab= — подгоняем дефолт под статус (при публикации
+        // черновика автоматически выходим из anketa/analytics).
+        setActiveTab(prev => prev === "anketa" || prev === "analytics" ? (isActive ? "candidates" : "anketa") : prev)
       }
     }
     // Load custom columns from description_json (skip hidden ones)
@@ -536,7 +553,7 @@ export default function VacancyPage() {
       return { ...col, candidates: colCandidates, count: colCandidates.length }
     }))
   }, [apiCandidates])
-  const { prefs: userPrefs, loaded: userPrefsLoaded, setViewMode: persistViewMode, setColumns: persistColumns } = useUserPreferences()
+  const { prefs: userPrefs, loaded: userPrefsLoaded, setViewMode: persistViewMode, setColumns: persistColumns, setListSort: persistListSort } = useUserPreferences()
   // viewMode объявлен выше (перед useCandidates) для условного отключения запроса.
   const [sortMode, setSortMode] = useState<CandidateSortMode>("date_desc")
   const [cardSettings, setCardSettingsLocal] = useState(defaultSettings)
@@ -1179,6 +1196,9 @@ export default function VacancyPage() {
   }
 
   const handleListSortChange = useCallback((next: ListSortState | null) => {
+    // Persist выбора в user-prefs — на следующем визите без ?sort/?sortBy
+    // в URL значение поднимется обратно (см. инжект-эффект ниже).
+    persistListSort(next ? { key: next.key, dir: next.dir } : null)
     if (useListPaginated && next) {
       const serverKey = SERVER_SORT_MAP[next.key]
       if (serverKey) {
@@ -1191,7 +1211,45 @@ export default function VacancyPage() {
       }
     }
     setListSort(next)
-  }, [useListPaginated, paginated, setListSort]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [useListPaginated, paginated, setListSort, persistListSort]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Эффективная сортировка для ListView. В пагинированном режиме источник
+  // правды — серверный sortBy/order (через usePaginatedCandidates), потому
+  // что handleListSortChange зануляет listSort, чтобы не было двух
+  // конфликтующих URL-параметров. Без этого мэппинга после клика по
+  // заголовку стрелка ▲/▼ не появлялась — клик казался не сработавшим
+  // (юзер кликал ещё раз — отсюда «залипание»).
+  const effectiveListSort = useMemo<ListSortState | null>(() => {
+    if (!useListPaginated) return listSort
+    // ?sortBy не задан в URL → серверный дефолт createdAt desc, активной
+    // сортировки визуально не показываем.
+    const rawSortBy = searchParams?.get("sortBy") ?? null
+    if (!rawSortBy) return null
+    const entry = (Object.entries(SERVER_SORT_MAP) as [ListSortKey, PaginatedSortKey][])
+      .find(([, v]) => v === paginated.sortBy)
+    const listKey: ListSortKey = entry?.[0] ?? (paginated.sortBy as ListSortKey)
+    return { key: listKey, dir: paginated.order }
+  }, [useListPaginated, listSort, paginated.sortBy, paginated.order, searchParams]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ─── Инжект сохранённой сортировки из user-prefs (per-user persistence) ───
+  // Однократный guard: при первом успешном входе в режим list-paginated с
+  // загруженными prefs — подмешиваем в URL сохранённый выбор. Если в URL уже
+  // есть ?sort/?sortBy — пропускаем (явная ссылка имеет приоритет). Если в
+  // prefs ничего нет — материализуем дефолт createdAt desc, чтобы юзер сразу
+  // видел активную стрелку «Дата ▼» и при следующем визите prefs не были null.
+  const listSortPrefsAppliedRef = useRef(false)
+  useEffect(() => {
+    if (!userPrefsLoaded || listSortPrefsAppliedRef.current) return
+    if (!useListPaginated) return
+    listSortPrefsAppliedRef.current = true
+    const hasUrlSort = !!(searchParams?.get("sort") || searchParams?.get("sortBy"))
+    if (hasUrlSort) return
+    const stored = userPrefs.listSort
+    const toApply: ListSortState = stored
+      ? { key: stored.key as ListSortKey, dir: stored.dir }
+      : { key: "responseDate", dir: "desc" }
+    handleListSortChange(toApply)
+  }, [userPrefsLoaded, useListPaginated, userPrefs.listSort, searchParams, handleListSortChange])
 
   // ─── Unified 6-stage metrics (single source of truth) ───
   const allCandidates = columns.flatMap((c) => c.candidates)
@@ -2027,7 +2085,7 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                   onAddCustomColumn={handleAddCustomColumn}
                   onRemoveColumn={handleRemoveColumn}
                   sortMode={sortMode}
-                  listSort={listSort}
+                  listSort={effectiveListSort}
                   onListSortChange={handleListSortChange}
                   selectedIds={selectedCandidateIds}
                   onSelectionChange={setSelectedCandidateIds}
