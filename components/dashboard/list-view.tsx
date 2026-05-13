@@ -2,6 +2,7 @@
 
 import { useMemo, useRef } from "react"
 import type { Candidate } from "./candidate-card"
+import { CandidateAvatar } from "./candidate-avatar"
 import type { CardDisplaySettings } from "./card-settings"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -400,12 +401,12 @@ export function ListView({
 
               {/* Name + experience */}
               <div className="flex items-center gap-3 min-w-0 px-2">
-                <div
-                  className="w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-white text-[11px] font-bold"
-                  style={{ background: `linear-gradient(135deg, ${candidate.colorFrom}, ${candidate.colorTo})` }}
-                >
-                  {candidate.name.charAt(0)}
-                </div>
+                <CandidateAvatar
+                  name={candidate.name}
+                  photoUrl={candidate.photoUrl}
+                  colorFrom={candidate.colorFrom}
+                  colorTo={candidate.colorTo}
+                />
                 <div className="min-w-0">
                   <p
                     className="text-[15px] font-medium text-foreground truncate max-w-[240px]"
