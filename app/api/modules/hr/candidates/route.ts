@@ -101,7 +101,11 @@ export async function GET(req: NextRequest) {
   try {
     const user = await requireCompany()
     const url = new URL(req.url)
-    const vacancyId = url.searchParams.get("vacancy_id")
+    // Принимаем оба варианта имени параметра: vacancyId (новый, camelCase —
+    // его шлёт usePaginatedCandidates) и vacancy_id (legacy — useCandidates).
+    // Без fallback'a новый клиент проваливался в ветку «без vacancyId» ниже
+    // и получал total по всей компании через innerJoin(vacancies).
+    const vacancyId = url.searchParams.get("vacancyId") ?? url.searchParams.get("vacancy_id")
     const stageParam = url.searchParams.get("stage")
 
     // If no vacancy_id — return candidates for this company with vacancy title.
