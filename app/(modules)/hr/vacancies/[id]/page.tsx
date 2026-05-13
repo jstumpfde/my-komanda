@@ -417,25 +417,27 @@ export default function VacancyPage() {
     scoreMin: filters.scoreMin,
   }), [filters])
 
+  // viewMode поднят сюда (выше хуков), чтобы useCandidates умел пропускать
+  // запрос в режиме list-paginated и не дублировал usePaginatedCandidates.
+  // Сеттер-обёртка setViewMode (с persist в user-prefs) объявлена ниже.
+  const [viewMode, setViewModeLocal] = useState<ViewMode>("list")
+  const tabFromUrl = searchParams?.get("tab") ?? "candidates"
+  // Режим серверной пагинации: только tab=candidates + viewMode=list.
+  // В этом режиме useCandidates отключается (vacancyId=null), источником
+  // строк списка становится usePaginatedCandidates. На остальных видах
+  // (kanban/funnel/tiles) useCandidates снова работает и наполняет columns.
+  const useListPaginated = tabFromUrl === "candidates" && viewMode === "list"
+
   const { candidates: apiCandidates, updateStage, refetch: refetchCandidates, toggleFavorite } = useCandidates(
-    id,
+    useListPaginated ? null : id,
     undefined,
     listSort ? { sort: listSort.key, order: listSort.dir } : undefined,
     candidatesFilters,
   )
 
   // Пагинированный список — отдельный запрос с серверной пагинацией.
-  // Активируется только когда: tab=candidates + viewMode=list. На других
-  // вью/табах (kanban/funnel/tiles/description/...) vacancyId=null → хук
-  // не делает запрос. Старый apiCandidates остаётся источником истины для
-  // drawer/AI-generate/talent-pool/аналитики — миграция этих мест на
-  // отдельные endpoints — отдельная задача (Ф2+).
-  // activeTab/viewMode объявлены ниже, используем lazy-getters через
-  // searchParams чтобы избежать «used before declaration» в хуке.
-  const paginatedTabActive =
-    (searchParams?.get("tab") ?? "candidates") === "candidates"
   const paginated = usePaginatedCandidates({
-    vacancyId: paginatedTabActive ? id : null,
+    vacancyId: useListPaginated ? id : null,
     filters: candidatesFilters,
   })
 
@@ -535,7 +537,7 @@ export default function VacancyPage() {
     }))
   }, [apiCandidates])
   const { prefs: userPrefs, loaded: userPrefsLoaded, setViewMode: persistViewMode, setColumns: persistColumns } = useUserPreferences()
-  const [viewMode, setViewModeLocal] = useState<ViewMode>("list")
+  // viewMode объявлен выше (перед useCandidates) для условного отключения запроса.
   const [sortMode, setSortMode] = useState<CandidateSortMode>("date_desc")
   const [cardSettings, setCardSettingsLocal] = useState(defaultSettings)
 
@@ -1146,7 +1148,7 @@ export default function VacancyPage() {
   const filteredColumns = applyCandidateFilters(columns, filters)
 
   // ─── Пагинированный список (только для tab=candidates + viewMode=list) ───
-  const useListPaginated = activeTab === "candidates" && viewMode === "list"
+  // useListPaginated объявлен выше (перед useCandidates).
 
   // 20 строк paginated → одна синтетическая «колонка-всё», kanban-board
   // её просто скормит ListView (см. KanbanBoard:299). stage у каждого
@@ -1617,33 +1619,32 @@ export default function VacancyPage() {
                 </div>
                 <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-muted-foreground">
                   {activeTab === "candidates" && <>
-                    {/* Цифры берём из headerStats (отдельный COUNT по vacancy_id),
-                        а не из apiCandidates — тот режется фильтрами и задержкой
-                        загрузки. Пока не загружено — fallback на apiCandidates. */}
+                    {/* Цифры берём из headerStats (отдельный COUNT по vacancy_id).
+                        Пока запрос /candidate-stats не вернулся — показываем «—». */}
                     <UITooltip>
                       <TooltipTrigger asChild>
-                        <span className="cursor-help"><span className="font-medium text-foreground">{headerStats?.total ?? apiCandidates.length}</span> всего кандидатов</span>
+                        <span className="cursor-help"><span className="font-medium text-foreground">{headerStats?.total ?? "—"}</span> всего кандидатов</span>
                       </TooltipTrigger>
                       <TooltipContent>Все кандидаты на вакансии — все источники, все этапы</TooltipContent>
                     </UITooltip>
                     <span>·</span>
                     <UITooltip>
                       <TooltipTrigger asChild>
-                        <span className="cursor-help"><span className={cn("font-medium", (headerStats?.pending ?? 0) > 0 ? "text-amber-700" : "text-foreground")}>{headerStats?.pending ?? 0}</span> ждут разбора</span>
+                        <span className="cursor-help"><span className={cn("font-medium", (headerStats?.pending ?? 0) > 0 ? "text-amber-700" : "text-foreground")}>{headerStats?.pending ?? "—"}</span> ждут разбора</span>
                       </TooltipTrigger>
                       <TooltipContent>Отклики с hh.ru, которые ещё не обработаны (нажмите «Разобрать»)</TooltipContent>
                     </UITooltip>
                     <span>·</span>
                     <UITooltip>
                       <TooltipTrigger asChild>
-                        <span className="cursor-help"><span className="font-medium text-foreground">{headerStats?.demoOpened ?? apiCandidates.filter(c => c.demoProgressJson != null).length}</span> открыли демо</span>
+                        <span className="cursor-help"><span className="font-medium text-foreground">{headerStats?.demoOpened ?? "—"}</span> открыли демо</span>
                       </TooltipTrigger>
                       <TooltipContent>Сколько кандидатов хотя бы зашли на демо-анкету</TooltipContent>
                     </UITooltip>
                     <span>·</span>
                     <UITooltip>
                       <TooltipTrigger asChild>
-                        <span className="cursor-help"><span className="font-medium text-foreground">{headerStats?.rejected ?? apiCandidates.filter(c => c.stage === "rejected").length}</span> отказ</span>
+                        <span className="cursor-help"><span className="font-medium text-foreground">{headerStats?.rejected ?? "—"}</span> отказ</span>
                       </TooltipTrigger>
                       <TooltipContent>Кандидаты со статусом «Отказ» в воронке</TooltipContent>
                     </UITooltip>
