@@ -234,11 +234,11 @@ export function ListView({
   // поэтому Статус получает больше места (min 140 / 1.8fr), а Кандидат —
   // меньше избыточного простора (с 6fr → 3fr, max-w на имя 240px).
   const cols: string[] = []
-  // ☐ и ★ сжаты до 28px каждая + justify-end/justify-start в JSX, чтобы
-  // визуально склеиться с Кандидатом. С gap-4 (16px) и -ml-3 на ★/Кандидате
-  // получаем минимальный визуальный зазор между всеми тремя.
+  // ☐ — 28px, justify-end. ★ — 32px (w-8), justify-center, чтобы звёздочка
+  // визуально была по центру ячейки с равным воздухом слева/справа.
+  // -ml-3 на ★ и Кандидате схлопывает gap-4 до 4px edge-to-edge.
   if (selectionEnabled) cols.push("28px")               // ☐ — фикс
-  cols.push("28px")                                     // ★ — фикс
+  cols.push("32px")                                     // ★ — фикс (w-8)
   cols.push("minmax(207px, 3.45fr)")                    // Кандидат — расширен ~15% за счёт Демо/AI
   if (showProgress) cols.push("minmax(95px, 1.2fr)")    // Демо
   if (showScore) cols.push("minmax(60px, 0.85fr)")      // AI
@@ -314,7 +314,7 @@ export function ListView({
             />
           </div>
         )}
-        <div className="flex items-center justify-start -ml-3">
+        <div className="flex items-center justify-center -ml-3">
           <button
             type="button"
             onClick={() => handleSort("favorite")}
@@ -393,7 +393,7 @@ export function ListView({
               )}
 
               {/* Favorite */}
-              <div onClick={(e) => e.stopPropagation()} className="flex items-center justify-start -ml-3">
+              <div onClick={(e) => e.stopPropagation()} className="flex items-center justify-center -ml-3">
                 <button
                   type="button"
                   onClick={() => onToggleFavorite?.(candidate.id, !candidate.isFavorite)}
