@@ -231,10 +231,10 @@ export function ListView({
   // меньше избыточного простора (с 6fr → 3fr, max-w на имя 240px).
   const cols: string[] = []
   if (selectionEnabled) cols.push("36px")               // ☐ — фикс
-  cols.push("minmax(180px, 3fr)")                       // Кандидат
+  cols.push("minmax(207px, 3.45fr)")                    // Кандидат — расширен ~15% за счёт Демо/AI
   cols.push("40px")                                     // ★ — фикс
-  if (showProgress) cols.push("minmax(110px, 1.5fr)")   // Демо
-  if (showScore) cols.push("minmax(70px, 1fr)")         // AI-оценка
+  if (showProgress) cols.push("minmax(95px, 1.2fr)")    // Демо
+  if (showScore) cols.push("minmax(60px, 0.85fr)")      // AI
   if (showSalary) cols.push("minmax(110px, 1.5fr)")     // Зарплата
   if (showCity) cols.push("minmax(120px, 2fr)")         // Город
   if (showResponseDate) cols.push("minmax(80px, 1fr)")  // Дата
@@ -334,7 +334,7 @@ export function ListView({
           </button>
         </div>
         {showProgress && <SortHeader label="Демо" sortKey="progress" sort={sort} onToggle={handleSort} align="center" />}
-        {showScore && <SortHeader label="AI-оценка" sortKey="aiScore" sort={sort} onToggle={handleSort} align="center" />}
+        {showScore && <SortHeader label="AI-оцен." sortKey="aiScore" sort={sort} onToggle={handleSort} align="center" />}
         {showSalary && <SortHeader label="Зарплата" sortKey="salary" sort={sort} onToggle={handleSort} align="center" />}
         {showCity && <SortHeader label="Город" sortKey="city" sort={sort} onToggle={handleSort} align="center" />}
         {showResponseDate && <SortHeader label="Дата" sortKey="responseDate" sort={sort} onToggle={handleSort} align="center" />}
