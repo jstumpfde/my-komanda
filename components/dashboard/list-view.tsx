@@ -325,7 +325,7 @@ export function ListView({
               sort?.key === "favorite" ? "text-primary bg-primary/10" : "text-muted-foreground/60",
             )}
           >
-            <Star className={cn("size-4", sort?.key === "favorite" && "fill-amber-400 text-amber-400")} />
+            <Star className={cn("size-4", sort?.key === "favorite" && "fill-yellow-400 text-yellow-400")} />
             {sort?.key === "favorite" && (sort.dir === "asc" ? (
               <ArrowUp className="size-3" strokeWidth={2.5} />
             ) : (
@@ -419,7 +419,7 @@ export function ListView({
                   className="inline-flex items-center justify-center p-1 rounded hover:bg-accent/60 transition-colors"
                   aria-label={candidate.isFavorite ? "Убрать из избранного" : "В избранное"}
                 >
-                  <Star className={cn("size-4", candidate.isFavorite ? "fill-amber-400 text-amber-400" : "text-muted-foreground/40 hover:text-amber-400")} />
+                  <Star className={cn("size-4", candidate.isFavorite ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground/40 hover:text-yellow-400")} />
                 </button>
               </div>
 
