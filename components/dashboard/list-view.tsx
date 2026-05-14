@@ -235,8 +235,8 @@ export function ListView({
   // меньше избыточного простора (с 6fr → 3fr, max-w на имя 240px).
   const cols: string[] = []
   if (selectionEnabled) cols.push("36px")               // ☐ — фикс
-  cols.push("minmax(207px, 3.45fr)")                    // Кандидат — расширен ~15% за счёт Демо/AI
   cols.push("40px")                                     // ★ — фикс
+  cols.push("minmax(207px, 3.45fr)")                    // Кандидат — расширен ~15% за счёт Демо/AI
   if (showProgress) cols.push("minmax(95px, 1.2fr)")    // Демо
   if (showScore) cols.push("minmax(60px, 0.85fr)")      // AI
   if (showSalary) cols.push("minmax(110px, 1.5fr)")     // Зарплата
@@ -311,13 +311,6 @@ export function ListView({
             />
           </div>
         )}
-        <div className="-ml-3">
-          {onSortChange ? (
-            <SortHeader label="Кандидат" sortKey="name" sort={sort} onToggle={handleSort} align="left" />
-          ) : (
-            <span>Кандидат</span>
-          )}
-        </div>
         <div className="flex items-center justify-center -ml-3">
           <button
             type="button"
@@ -336,6 +329,13 @@ export function ListView({
               <ArrowDown className="size-3" strokeWidth={2.5} />
             ))}
           </button>
+        </div>
+        <div className="-ml-3">
+          {onSortChange ? (
+            <SortHeader label="Кандидат" sortKey="name" sort={sort} onToggle={handleSort} align="left" />
+          ) : (
+            <span>Кандидат</span>
+          )}
         </div>
         {showProgress && <SortHeader label="Демо" sortKey="progress" sort={sort} onToggle={handleSort} align="center" />}
         {showScore && <SortHeader label="AI-оцен." sortKey="aiScore" sort={sort} onToggle={handleSort} align="center" />}
@@ -389,6 +389,18 @@ export function ListView({
                 </div>
               )}
 
+              {/* Favorite */}
+              <div onClick={(e) => e.stopPropagation()} className="flex items-center justify-center -ml-3">
+                <button
+                  type="button"
+                  onClick={() => onToggleFavorite?.(candidate.id, !candidate.isFavorite)}
+                  className="inline-flex items-center justify-center p-1 rounded hover:bg-accent/60 transition-colors"
+                  aria-label={candidate.isFavorite ? "Убрать из избранного" : "В избранное"}
+                >
+                  <Star className={cn("size-4", candidate.isFavorite ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground/40 hover:text-yellow-400")} />
+                </button>
+              </div>
+
               {/* Name + experience */}
               <div className="flex items-center gap-3 min-w-0 -ml-3">
                 <CandidateAvatar
@@ -413,18 +425,6 @@ export function ListView({
                     </p>
                   )}
                 </div>
-              </div>
-
-              {/* Favorite */}
-              <div onClick={(e) => e.stopPropagation()} className="flex items-center justify-center -ml-3">
-                <button
-                  type="button"
-                  onClick={() => onToggleFavorite?.(candidate.id, !candidate.isFavorite)}
-                  className="inline-flex items-center justify-center p-1 rounded hover:bg-accent/60 transition-colors"
-                  aria-label={candidate.isFavorite ? "Убрать из избранного" : "В избранное"}
-                >
-                  <Star className={cn("size-4", candidate.isFavorite ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground/40 hover:text-yellow-400")} />
-                </button>
               </div>
 
               {/* Demo progress */}
