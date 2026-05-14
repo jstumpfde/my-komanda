@@ -5,7 +5,8 @@ import { useParams, useRouter, useSearchParams } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { useAuth, isPlatformRole } from "@/lib/auth"
 import { useVacancy } from "@/hooks/use-vacancies"
-import { useCandidates, type ApiCandidate } from "@/hooks/use-candidates"
+import { useCandidates, usePaginatedCandidates, type ApiCandidate, type PaginatedSortKey } from "@/hooks/use-candidates"
+import { Pagination } from "@/components/dashboard/pagination"
 import { useUserPreferences } from "@/hooks/use-user-preferences"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
@@ -377,7 +378,7 @@ export default function VacancyPage() {
   const searchParams = useSearchParams()
 
   // Сортировка списка кандидатов — состояние в URL, чтобы переживало refresh
-  const VALID_SORT_KEYS: ListSortKey[] = ["favorite", "aiScore", "progress", "salary", "responseDate", "status", "city", "source"]
+  const VALID_SORT_KEYS: ListSortKey[] = ["favorite", "name", "aiScore", "progress", "salary", "responseDate", "status", "city", "source"]
   const sortParam = searchParams?.get("sort") ?? null
   const orderParam = searchParams?.get("order") ?? null
   const listSort: ListSortState | null = sortParam && (VALID_SORT_KEYS as string[]).includes(sortParam)
@@ -436,6 +437,21 @@ export default function VacancyPage() {
     listSort ? { sort: listSort.key, order: listSort.dir } : undefined,
     candidatesFilters,
   )
+
+  // Пагинированный список — отдельный запрос с серверной пагинацией.
+  // Активируется только когда: tab=candidates + viewMode=list. На других
+  // вью/табах (kanban/funnel/tiles/description/...) vacancyId=null → хук
+  // не делает запрос. Старый apiCandidates остаётся источником истины для
+  // drawer/AI-generate/talent-pool/аналитики — миграция этих мест на
+  // отдельные endpoints — отдельная задача (Ф2+).
+  // activeTab/viewMode объявлены ниже, используем lazy-getters через
+  // searchParams чтобы избежать «used before declaration» в хуке.
+  const paginatedTabActive =
+    (searchParams?.get("tab") ?? "candidates") === "candidates"
+  const paginated = usePaginatedCandidates({
+    vacancyId: paginatedTabActive ? id : null,
+    filters: candidatesFilters,
+  })
 
   const handleToggleFavorite = useCallback(async (candidateId: string, isFavorite: boolean) => {
     const ok = await toggleFavorite(candidateId, isFavorite)
@@ -704,7 +720,6 @@ export default function VacancyPage() {
 
   // HH.ru sync state (lifted from VacancyPulse — used by both pulse hero text and bottom toolbar buttons)
   const [hhSyncMeta, setHhSyncMeta] = useState<{ hhVacancyId: string; responsesCount: number; syncedAt: string; createdAt: string; localVacancyId: string | null } | null>(null)
-  const [hhPendingResponses, setHhPendingResponses] = useState<number | null>(null)
   const [hhSyncing, setHhSyncing] = useState(false)
 
   // Сводные счётчики для шапки. Отдельный endpoint, не зависящий от фильтров,
@@ -732,31 +747,25 @@ export default function VacancyPage() {
     } catch { /* silent */ }
   }, [apiVacancy?.hhVacancyId])
 
-  const loadHhPending = useCallback(async () => {
-    const hhVacId = apiVacancy?.hhVacancyId
-    if (!hhVacId) return
-    try {
-      const res = await fetch("/api/integrations/hh/responses")
-      const data = await res.json() as { responses?: Array<{ hhVacancyId: string; status: string }> }
-      const count = (data.responses ?? []).filter(r => r.hhVacancyId === hhVacId && r.status === "response").length
-      setHhPendingResponses(count)
-    } catch { /* silent */ }
-  }, [apiVacancy?.hhVacancyId])
+  // Счётчик «ждут разбора» приходит из лёгкого /candidate-stats (headerStats.pending).
+  // Раньше тут был loadHhPending, который тянул /api/integrations/hh/responses
+  // (~13.8 МБ — все hh-отклики компании) только ради этой цифры. Убран.
 
   useEffect(() => {
     if (hhConnected !== true || !apiVacancy?.hhVacancyId) return
     loadHhSyncMeta()
-    loadHhPending()
-  }, [hhConnected, apiVacancy?.hhVacancyId, loadHhSyncMeta, loadHhPending])
+  }, [hhConnected, apiVacancy?.hhVacancyId, loadHhSyncMeta])
 
   const handleHhSync = async () => {
     setHhSyncing(true)
     try {
+      // GET /api/integrations/hh/responses — это серверный синк с hh API
+      // (тянет negotiations + резюме). Запускаем только по явному клику кнопки.
       await Promise.all([
         fetch("/api/integrations/hh/vacancies"),
         fetch("/api/integrations/hh/responses"),
       ])
-      await Promise.all([loadHhSyncMeta(), loadHhPending(), loadHeaderStats()])
+      await Promise.all([loadHhSyncMeta(), loadHeaderStats()])
       refetchCandidates(); refetchVacancy()
       toast.success("Синхронизировано с hh.ru")
     } catch { toast.error("Ошибка синхронизации") }
@@ -796,7 +805,6 @@ export default function VacancyPage() {
       setHhUnlinkOpen(false)
       setHhStats(null)
       setHhSyncMeta(null)
-      setHhPendingResponses(null)
       await refetchVacancy()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Ошибка отвязки")
@@ -1163,6 +1171,52 @@ export default function VacancyPage() {
   )
 
   const filteredColumns = applyCandidateFilters(columns, filters)
+
+  // ─── Пагинированный список (только для tab=candidates + viewMode=list) ───
+  const useListPaginated = activeTab === "candidates" && viewMode === "list"
+
+  // 20 строк paginated → одна синтетическая «колонка-всё», kanban-board
+  // её просто скормит ListView (см. KanbanBoard:299). stage у каждого
+  // кандидата свой (для отображения «Статус»-колонки в ряду).
+  const paginatedColumns = useMemo(() => {
+    if (!useListPaginated) return null
+    const items = paginated.candidates.map(c => apiCandidateToCard(c, c.stage ?? "new"))
+    return [{
+      id: "all",
+      title: "Кандидаты",
+      count: items.length,
+      colorFrom: "#a78bfa",
+      colorTo: "#c084fc",
+      candidates: items,
+    }]
+  }, [useListPaginated, paginated.candidates])
+
+  // Маппинг клиентских sort-ключей (ListView) → серверных (paginated API).
+  // Ключи без сервера (favorite/city/source) остаются клиентскими — ListView
+  // отсортирует 20 строк локально.
+  const SERVER_SORT_MAP: Partial<Record<ListSortKey, PaginatedSortKey>> = {
+    name: "name",
+    aiScore: "aiScore",
+    salary: "salary",
+    responseDate: "createdAt",
+    status: "stage",
+    progress: "progress",
+  }
+
+  const handleListSortChange = useCallback((next: ListSortState | null) => {
+    if (useListPaginated && next) {
+      const serverKey = SERVER_SORT_MAP[next.key]
+      if (serverKey) {
+        // Серверная сортировка — пишет в ?sortBy=&order= (usePaginatedCandidates),
+        // ИЛИ сбрасывается в дефолт (?sortBy не задан) при desc по createdAt.
+        paginated.setSort(serverKey, next.dir)
+        // Legacy ?sort/?order больше не нужны в этом режиме — чистим.
+        setListSort(null)
+        return
+      }
+    }
+    setListSort(next)
+  }, [useListPaginated, paginated, setListSort]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Unified 6-stage metrics (single source of truth) ───
   const allCandidates = columns.flatMap((c) => c.candidates)
@@ -1604,7 +1658,7 @@ export default function VacancyPage() {
                     <span>·</span>
                     <UITooltip>
                       <TooltipTrigger asChild>
-                        <span className="cursor-help"><span className={cn("font-medium", ((headerStats?.pending ?? hhPendingResponses) ?? 0) > 0 ? "text-amber-700" : "text-foreground")}>{(headerStats?.pending ?? hhPendingResponses) ?? 0}</span> ждут разбора</span>
+                        <span className="cursor-help"><span className={cn("font-medium", (headerStats?.pending ?? 0) > 0 ? "text-amber-700" : "text-foreground")}>{headerStats?.pending ?? 0}</span> ждут разбора</span>
                       </TooltipTrigger>
                       <TooltipContent>Отклики с hh.ru, которые ещё не обработаны (нажмите «Разобрать»)</TooltipContent>
                     </UITooltip>
@@ -1622,6 +1676,20 @@ export default function VacancyPage() {
                       </TooltipTrigger>
                       <TooltipContent>Кандидаты со статусом «Отказ» в воронке</TooltipContent>
                     </UITooltip>
+                    {useListPaginated && paginated.total > 0 && (
+                      <>
+                        <span>·</span>
+                        <span className="text-foreground">
+                          Стр. <span className="font-medium tabular-nums">{paginated.page}</span> из{" "}
+                          <span className="font-medium tabular-nums">{paginated.totalPages}</span>{" "}
+                          (<span className="tabular-nums">
+                            {(paginated.page - 1) * paginated.pageSize + 1}
+                            –
+                            {Math.min(paginated.total, paginated.page * paginated.pageSize)}
+                          </span>)
+                        </span>
+                      </>
+                    )}
                     {hhConnected === true && apiVacancy?.hhVacancyId && hhSyncMeta && (<>
                       <span>·</span>
                       <UITooltip>
@@ -2015,7 +2083,7 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                   settings={cardSettings}
                   viewMode={viewMode}
                   onViewModeChange={setViewMode}
-                  columns={filteredColumns}
+                  columns={paginatedColumns ?? filteredColumns}
                   onColumnsChange={setColumns}
                   onOpenProfile={(c, colId) => {
                     // Open the candidate drawer with real API data
@@ -2029,10 +2097,23 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                   onRemoveColumn={handleRemoveColumn}
                   sortMode={sortMode}
                   listSort={listSort}
-                  onListSortChange={setListSort}
+                  onListSortChange={handleListSortChange}
                   selectedIds={selectedCandidateIds}
                   onSelectionChange={setSelectedCandidateIds}
+                  listStartIndex={useListPaginated ? (paginated.page - 1) * paginated.pageSize : undefined}
                 />
+                {useListPaginated && (
+                  <div className="mt-3">
+                    <Pagination
+                      page={paginated.page}
+                      pageSize={paginated.pageSize}
+                      total={paginated.total}
+                      totalPages={paginated.totalPages}
+                      onPageChange={paginated.setPage}
+                      onPageSizeChange={paginated.setPageSize}
+                    />
+                  </div>
+                )}
               </TabsContent>
 
               <TabsContent value="course">

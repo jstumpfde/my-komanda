@@ -16,11 +16,6 @@ interface HhUnlinkedVacancy {
   localVacancyId: string | null
 }
 
-interface HhResponseLite {
-  hhVacancyId: string
-  status: string
-}
-
 interface Props {
   vacancyId: string
   hhVacancyId?: string | null
@@ -51,15 +46,18 @@ export function HhVacancyBanner({ vacancyId, hhVacancyId, vacancyTitle, onCandid
     } catch { /* silent */ }
   }, [])
 
+  // Лёгкий endpoint — COUNT(*) hh_responses в БД по этой вакансии.
+  // Раньше тут тянулся /api/integrations/hh/responses (полный синк с hh API,
+  // ~13.8 МБ всех откликов компании) только ради этой цифры.
   const loadPending = useCallback(async () => {
     if (!hhVacancyId) return
     try {
-      const res = await fetch("/api/integrations/hh/responses")
-      const data = await res.json() as { responses?: HhResponseLite[] }
-      const count = (data.responses ?? []).filter(r => r.hhVacancyId === hhVacancyId && r.status === "response").length
-      setPendingCount(count)
+      const res = await fetch(`/api/integrations/hh/vacancies/${vacancyId}/stats`)
+      if (!res.ok) return
+      const data = await res.json() as { newResponses?: number }
+      setPendingCount(typeof data.newResponses === "number" ? data.newResponses : 0)
     } catch { /* silent */ }
-  }, [hhVacancyId])
+  }, [hhVacancyId, vacancyId])
 
   useEffect(() => {
     if (connected !== true) return

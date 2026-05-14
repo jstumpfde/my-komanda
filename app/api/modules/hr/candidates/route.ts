@@ -7,7 +7,23 @@ import { generateCandidateToken } from "@/lib/candidate-tokens"
 import { generateCandidateShortId } from "@/lib/short-id"
 import { deriveCandidateName } from "@/lib/candidate-name"
 
-type SortKey = "favorite" | "aiScore" | "salary" | "responseDate" | "status" | "progress"
+type SortKey =
+  | "favorite"
+  | "aiScore"
+  | "salary"
+  | "responseDate"
+  | "status"
+  | "progress"
+  | "createdAt"
+  | "name"
+  | "stage"
+
+const ALLOWED_SORT_KEYS: ReadonlySet<SortKey> = new Set<SortKey>([
+  "favorite", "aiScore", "salary", "responseDate", "status", "progress",
+  "createdAt", "name", "stage",
+])
+
+const ALLOWED_PAGE_SIZES: ReadonlySet<number> = new Set<number>([20, 50, 100])
 
 // Вытаскивает birthDate из anketa_answers (object-form ИЛИ массив записей
 // с {key|blockId, answer}). Используется как fallback, когда колонка
@@ -52,13 +68,16 @@ const STAGE_ORDER_SQL = sql`CASE ${candidates.stage}
 END`
 
 function buildOrderBy(key: SortKey | null, dir: "asc" | "desc"): SQL[] {
-  const wrap = (col: SQL | ReturnType<typeof asc>) => (dir === "asc" ? asc(col as SQL) : desc(col as SQL))
+  const wrap = (col: Parameters<typeof asc>[0]) => (dir === "asc" ? asc(col) : desc(col))
   switch (key) {
     case "favorite":     return [wrap(candidates.isFavorite), desc(candidates.createdAt)]
     case "aiScore":      return [wrap(candidates.aiScore),    desc(candidates.createdAt)]
     case "salary":       return [wrap(sql`COALESCE(${candidates.salaryMax}, ${candidates.salaryMin}, 0)`), desc(candidates.createdAt)]
-    case "responseDate": return [wrap(candidates.createdAt)]
-    case "status":       return [wrap(STAGE_ORDER_SQL), desc(candidates.createdAt)]
+    case "name":         return [wrap(candidates.name), desc(candidates.createdAt)]
+    case "responseDate":
+    case "createdAt":    return [wrap(candidates.createdAt)]
+    case "status":
+    case "stage":        return [wrap(STAGE_ORDER_SQL), desc(candidates.createdAt)]
     default:             return [desc(candidates.createdAt)]
   }
 }
@@ -273,10 +292,30 @@ export async function GET(req: NextRequest) {
 
     const stages = stageParam ? stageParam.split(",").filter(Boolean) : []
 
-    const sortRaw = url.searchParams.get("sort") as SortKey | null
+    // Пагинация — opt-in: включается если задан page ИЛИ pageSize.
+    // Шаг 1 (Ф1): sort=progress и фильтр demoProgress в пагинированном
+    // режиме игнорируются (см. ТЗ). Шаг 2 перенесёт прогресс в SQL.
+    const pageParam     = url.searchParams.get("page")
+    const pageSizeParam = url.searchParams.get("pageSize")
+    const paginated     = pageParam !== null || pageSizeParam !== null
+
+    const sizeRaw  = Number.parseInt(pageSizeParam ?? "20", 10) || 20
+    const pageSize = ALLOWED_PAGE_SIZES.has(sizeRaw) ? sizeRaw : 20
+    const page     = Math.max(1, Number.parseInt(pageParam ?? "1", 10) || 1)
+    const offset   = (page - 1) * pageSize
+
+    // sortBy — новый параметр (ТЗ), sort — legacy fallback.
+    const sortByRaw = url.searchParams.get("sortBy") ?? url.searchParams.get("sort")
+    let sortKey: SortKey | null =
+      sortByRaw && ALLOWED_SORT_KEYS.has(sortByRaw as SortKey) ? (sortByRaw as SortKey) : null
+
+    // В пагинированном режиме progress считается post-fetch и ломает count(*).
+    // Откатываем на createdAt — это явное поведение Шага 1.
+    if (paginated && sortKey === "progress") sortKey = "createdAt"
+
     const orderRaw = url.searchParams.get("order")
     const dir: "asc" | "desc" = orderRaw === "asc" ? "asc" : "desc"
-    const orderBy = buildOrderBy(sortRaw, dir)
+    const orderBy = buildOrderBy(sortKey, dir)
 
     const notPreview = or(isNull(candidates.source), ne(candidates.source, "preview"))
 
@@ -450,9 +489,24 @@ export async function GET(req: NextRequest) {
     if (stages.length > 0) baseConds.push(inArray(candidates.stage, stages) as SQL)
     const where = and(...baseConds, ...filterConds)
 
-    let rows = await db.select().from(candidates).where(where).orderBy(...orderBy)
+    // total нужен только в пагинированном режиме. Тот же WHERE, что и select —
+    // включая JSON-фильтры (age/birthDate из anketa_answers).
+    let total = 0
+    if (paginated) {
+      const [{ cnt }] = await db
+        .select({ cnt: sql<number>`count(*)::int` })
+        .from(candidates)
+        .where(where)
+      total = cnt ?? 0
+    }
 
-    if (sortRaw === "progress") {
+    const rowsQuery = db.select().from(candidates).where(where).orderBy(...orderBy)
+    let rows = paginated
+      ? await rowsQuery.limit(pageSize).offset(offset)
+      : await rowsQuery
+
+    // Пост-сортировка по progress только в непагинированном режиме (см. выше).
+    if (!paginated && sortKey === "progress") {
       const mul = dir === "asc" ? 1 : -1
       const progressOf = (c: typeof rows[number]): number => {
         const dp = c.demoProgressJson as { blocks?: { status?: string }[]; totalBlocks?: number } | null
@@ -547,8 +601,10 @@ export async function GET(req: NextRequest) {
 
     // Пост-фильтр по прогрессу демо (демо-прогресс зависит от lessons.length,
     // его проще применить здесь, после расчёта progressPercent).
+    // В пагинированном режиме фильтр ИГНОРИРУЕТСЯ — иначе count(*) врёт
+    // (см. ТЗ Шаг 1). Шаг 2 перенесёт прогресс в SQL и включит обратно.
     let filtered = withDisplayName
-    if (demoProgressFilters.length > 0) {
+    if (!paginated && demoProgressFilters.length > 0) {
       filtered = withDisplayName.filter((c) => {
         const p = c.progressPercent
         const dp = c.demoProgressJson as { blocks?: { status?: string }[]; completedAt?: string | null } | null
@@ -563,6 +619,11 @@ export async function GET(req: NextRequest) {
         }
         return false
       })
+    }
+
+    if (paginated) {
+      const totalPages = Math.max(1, Math.ceil(total / pageSize))
+      return apiSuccess({ candidates: filtered, total, page, pageSize, totalPages })
     }
 
     return apiSuccess(filtered)
