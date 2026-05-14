@@ -203,7 +203,11 @@ export function ListView({
     } else if (sort.dir === DEFAULT_DIR[key]) {
       onSortChange({ key, dir: sort.dir === "asc" ? "desc" : "asc" })
     } else {
-      onSortChange(null)
+      // 3-й клик — сброс на глобальный дефолт (progress desc), а не null.
+      // Раньше возвращали null, но в pagination-режиме это приводило к
+      // визуальному "залипанию" последней сортировки (paginated state не
+      // сбрасывался). Явный reset к дефолту делает цикл предсказуемым.
+      onSortChange({ key: "progress", dir: "desc" })
     }
   }
 
