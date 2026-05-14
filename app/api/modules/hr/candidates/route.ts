@@ -535,13 +535,51 @@ export async function GET(req: NextRequest) {
       )`)
     }
 
-    // demoProgress — фильтрация по прогрессу демо. Поскольку процент
-    // считается из demo_progress_json + lessons.length, делаем это
-    // post-fetch (как сейчас сделана сортировка по progress в строке 388).
+    // demoProgress — фильтрация по прогрессу демо. В paginated режиме
+    // применяется в SQL (требует pre-fetch demoTotalBlocks для расчёта
+    // порога 85%). В non-paginated — post-fetch (ниже), потому что там
+    // есть точный progressPercent на каждом кандидате.
     const demoProgressParam = url.searchParams.get("demoProgress")
     const demoProgressFilters = demoProgressParam
       ? demoProgressParam.split(",").filter(Boolean)
       : []
+
+    // Pre-fetch demoTotalBlocks (только для paginated + demoProgress filter).
+    // Использует ту же логику, что и блок ниже (line ~590), но раньше —
+    // чтобы участвовать в WHERE.
+    let paginatedDemoTotalBlocks = 0
+    if (paginated && demoProgressFilters.length > 0) {
+      const earlyDemoRows = await db
+        .select({ lessonsJson: demos.lessonsJson })
+        .from(demos)
+        .where(eq(demos.vacancyId, vacancyId))
+        .orderBy(desc(demos.updatedAt))
+        .limit(1)
+      if (earlyDemoRows.length > 0) {
+        const lessons = Array.isArray(earlyDemoRows[0].lessonsJson)
+          ? (earlyDemoRows[0].lessonsJson as LessonShape[])
+          : []
+        paginatedDemoTotalBlocks = lessons.length + 2
+      }
+    }
+
+    if (paginated && demoProgressFilters.length > 0 && paginatedDemoTotalBlocks > 0) {
+      const threshold85 = Math.ceil(paginatedDemoTotalBlocks * 0.85)
+      const orParts: SQL[] = []
+      for (const f of demoProgressFilters) {
+        if (f === "not_started") {
+          orParts.push(sql`${DEMO_PROGRESS_COUNT_SQL} = 0`)
+        } else if (f === "in_progress") {
+          orParts.push(sql`(${DEMO_PROGRESS_COUNT_SQL} > 0 AND ${DEMO_PROGRESS_COUNT_SQL} < ${threshold85})`)
+        } else if (f === "completed_85") {
+          orParts.push(sql`${DEMO_PROGRESS_COUNT_SQL} >= ${threshold85}`)
+        } else if (f === "completed_below_85") {
+          orParts.push(sql`((${candidates.demoProgressJson}->>'completedAt') IS NOT NULL AND ${DEMO_PROGRESS_COUNT_SQL} < ${threshold85})`)
+        }
+      }
+      const orSql = or(...orParts)
+      if (orSql) filterConds.push(orSql)
+    }
 
     const baseConds: SQL[] = [
       eq(candidates.vacancyId, vacancyId) as SQL,

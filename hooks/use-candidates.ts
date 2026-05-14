@@ -389,8 +389,10 @@ export function usePaginatedCandidates({
         if (filters.cities?.length)  params.set("cities", filters.cities.join(","))
         if (typeof filters.scoreMin === "number" && filters.scoreMin > 0) params.set("scoreMin", String(filters.scoreMin))
         if (filters.search && filters.search.trim()) params.set("search", filters.search.trim())
-        // demoProgress в пагинированном режиме игнорируется бэкендом (Шаг 1),
-        // не шлём чтобы не вводить в заблуждение.
+        // demoProgress в paginated режиме теперь применяется на сервере через
+        // SQL (см. route.ts: pre-fetch demoTotalBlocks → SQL WHERE с COUNT
+        // подзапросом). count(*) корректен — фильтр в WHERE, а не post-fetch.
+        if (filters.demoProgress?.length) params.set("demoProgress", filters.demoProgress.join(","))
       }
 
       const res = await fetch(`/api/modules/hr/candidates?${params.toString()}`)
