@@ -393,16 +393,16 @@ export function ListView({
                   colorFrom={candidate.colorFrom}
                   colorTo={candidate.colorTo}
                 />
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <p
-                    className="text-[15px] font-medium text-foreground truncate max-w-[240px]"
+                    className="text-[15px] font-medium text-foreground truncate"
                     title={candidate.name}
                   >
                     {candidate.name}
                   </p>
                   {settings.showExperience && (
                     <p
-                      className="text-[13px] text-muted-foreground truncate max-w-[240px]"
+                      className="text-[13px] text-muted-foreground truncate"
                       title={candidate.experience}
                     >
                       {candidate.experienceYears ? `Опыт ${candidate.experienceYears} лет` : (candidate.experience ? `Опыт ${candidate.experience}` : "")}
