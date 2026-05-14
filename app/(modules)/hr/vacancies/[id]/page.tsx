@@ -1892,16 +1892,19 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
             <Tabs value={activeTab} onValueChange={setActiveTab}>
               <div className="flex items-center justify-between gap-3 mb-3 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
                 <TabsList className="shrink-0">
-                  {(status === "active" ? [
-                    { value: "anketa", icon: ClipboardList, label: "Анкета" },
-                    { value: "course", icon: BookOpen, label: "Демонстрация" },
+                  {/* Запущенные вакансии (active|published) — фокус на работе
+                      с кандидатами: Кандидаты → Аналитика → Анкета → Демо.
+                      Черновики — фокус на настройке: Анкета → Демо → Кандидаты → Аналитика. */}
+                  {((status === "active" || status === "published") ? [
                     { value: "candidates", icon: Kanban, label: "Кандидаты" },
                     { value: "analytics", icon: BarChart3, label: "Аналитика" },
+                    { value: "anketa", icon: ClipboardList, label: "Анкета" },
+                    { value: "course", icon: BookOpen, label: "Демонстрация" },
                   ] : [
-                    { value: "candidates", icon: Kanban, label: "Кандидаты" },
-                    { value: "analytics", icon: BarChart3, label: "Аналитика" },
                     { value: "anketa", icon: ClipboardList, label: "Анкета" },
                     { value: "course", icon: BookOpen, label: "Демонстрация" },
+                    { value: "candidates", icon: Kanban, label: "Кандидаты" },
+                    { value: "analytics", icon: BarChart3, label: "Аналитика" },
                   ]).map(tab => (
                     <TabsTrigger key={tab.value} value={tab.value} className="gap-1.5">
                       <tab.icon className="w-3.5 h-3.5" />{tab.label}
