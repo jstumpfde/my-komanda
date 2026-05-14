@@ -429,9 +429,32 @@ export default function VacancyPage() {
   // (kanban/funnel/tiles) useCandidates снова работает и наполняет columns.
   const useListPaginated = tabFromUrl === "candidates" && viewMode === "list"
 
+  // Маппинг русских лейблов фильтра воронки → реальные значения
+  // candidates.stage в БД. Без этого маппинга stage=Демо%20пройдено,Оффер,...
+  // ехал в API и никогда не матчил inArray(candidates.stage, ...).
+  // Лейблы из FUNNEL_STATUSES в candidate-filters.tsx (7 шт), enum в БД из
+  // STAGE_ORDER_SQL (route.ts:50). 1:1 маппинг; некоторые DB-значения
+  // (interviewed/offer) могут не встречаться в текущих данных — фильтр всё
+  // равно валиден и просто вернёт 0 строк.
+  const FUNNEL_LABEL_TO_DB_STAGES: Record<string, string[]> = {
+    "Всего откликов":     ["new"],
+    "Демо пройдено":      ["decision"],
+    "Интервью назначено": ["interview"],
+    "Интервью пройдено":  ["interviewed"],
+    "Оффер":              ["offer"],
+    "Нанят":              ["hired"],
+    "Отказ":              ["rejected"],
+  }
+  const stageFilterFromFunnel: string[] | undefined = useMemo(() => {
+    const labels = filters.funnelStatuses ?? []
+    if (labels.length === 0) return undefined
+    const stages = labels.flatMap(l => FUNNEL_LABEL_TO_DB_STAGES[l] ?? [])
+    return stages.length > 0 ? stages : undefined
+  }, [filters.funnelStatuses]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const { candidates: apiCandidates, updateStage, refetch: refetchCandidates, toggleFavorite } = useCandidates(
     useListPaginated ? null : id,
-    filters.funnelStatuses?.length ? filters.funnelStatuses : undefined,
+    stageFilterFromFunnel,
     listSort ? { sort: listSort.key, order: listSort.dir } : undefined,
     candidatesFilters,
   )
@@ -440,7 +463,7 @@ export default function VacancyPage() {
   const paginated = usePaginatedCandidates({
     vacancyId: useListPaginated ? id : null,
     filters: candidatesFilters,
-    stageFilter: filters.funnelStatuses?.length ? filters.funnelStatuses : undefined,
+    stageFilter: stageFilterFromFunnel,
   })
 
   const handleToggleFavorite = useCallback(async (candidateId: string, isFavorite: boolean) => {
