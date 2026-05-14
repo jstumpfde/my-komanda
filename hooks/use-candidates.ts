@@ -314,6 +314,12 @@ export function usePaginatedCandidates({
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // refreshTick — счётчик, бампается из URL-сеттеров (setSort/setPage/setPageSize)
+  // после router.replace. Гарантирует refetch при тех навигациях, на которые
+  // useSearchParams в App Router не всегда реагирует ререндером
+  // (router.replace c {scroll:false} того же route). См. issue Next 49426.
+  const [refreshTick, setRefreshTick] = useState(0)
+
   // Стабильная сериализация фильтров для зависимостей useEffect.
   const filtersKey = useMemo(() => JSON.stringify(filters ?? {}), [filters])
   const stageKey = useMemo(() => (stageFilter ?? []).join(","), [stageFilter])
@@ -376,7 +382,7 @@ export function usePaginatedCandidates({
       setIsLoading(false)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [vacancyId, page, pageSize, sortBy, order, stageKey, filtersKey])
+  }, [vacancyId, page, pageSize, sortBy, order, stageKey, filtersKey, refreshTick])
 
   useEffect(() => { refetch() }, [refetch])
 
@@ -396,6 +402,7 @@ export function usePaginatedCandidates({
   const setPage = useCallback((p: number) => {
     const clamped = Math.max(1, Math.min(totalPages, Math.floor(p)))
     writeUrl({ page: clamped === 1 ? null : String(clamped) })
+    setRefreshTick(t => t + 1)
   }, [writeUrl, totalPages])
 
   const setPageSize = useCallback((size: number) => {
@@ -406,6 +413,7 @@ export function usePaginatedCandidates({
     // страницы становится бессмысленной (record 21 на pageSize=20 → page 2,
     // а на pageSize=50 → page 1).
     writeUrl({ pageSize: safe === 20 ? null : String(safe), page: null })
+    setRefreshTick(t => t + 1)
   }, [writeUrl])
 
   const setSort = useCallback((key: PaginatedSortKey, dir?: "asc" | "desc") => {
@@ -416,6 +424,7 @@ export function usePaginatedCandidates({
       order:  nextDir === "desc" ? null : nextDir,
       page:   null,
     })
+    setRefreshTick(t => t + 1)
   }, [writeUrl, sortBy, order])
 
   // ── Mutations (повторяют useCandidates — но обновляют локальный state) ────
