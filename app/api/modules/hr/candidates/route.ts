@@ -17,10 +17,12 @@ type SortKey =
   | "createdAt"
   | "name"
   | "stage"
+  | "city"
+  | "source"
 
 const ALLOWED_SORT_KEYS: ReadonlySet<SortKey> = new Set<SortKey>([
   "favorite", "aiScore", "salary", "responseDate", "status", "progress",
-  "createdAt", "name", "stage",
+  "createdAt", "name", "stage", "city", "source",
 ])
 
 const ALLOWED_PAGE_SIZES: ReadonlySet<number> = new Set<number>([20, 50, 100])
@@ -99,6 +101,22 @@ function buildOrderBy(key: SortKey | null, dir: "asc" | "desc"): SQL[] {
     case "createdAt":    return [wrap(candidates.createdAt), tiebreak]
     case "status":
     case "stage":        return [wrap(STAGE_ORDER_SQL), desc(candidates.createdAt), tiebreak]
+    case "city": return [
+      // NULL/пустые в конец независимо от направления — иначе они доминируют
+      // и активная сортировка теряет смысл (как в client-side sort, line ~177).
+      dir === "asc"
+        ? sql`NULLIF(${candidates.city}, '') ASC NULLS LAST`
+        : sql`NULLIF(${candidates.city}, '') DESC NULLS LAST`,
+      desc(candidates.createdAt),
+      tiebreak,
+    ]
+    case "source": return [
+      dir === "asc"
+        ? sql`NULLIF(${candidates.source}, '') ASC NULLS LAST`
+        : sql`NULLIF(${candidates.source}, '') DESC NULLS LAST`,
+      desc(candidates.createdAt),
+      tiebreak,
+    ]
     default:             return [desc(candidates.createdAt), tiebreak]
   }
 }

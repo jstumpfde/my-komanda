@@ -1193,6 +1193,9 @@ export default function VacancyPage() {
     responseDate: "createdAt",
     status: "stage",
     progress: "progress",
+    city: "city",
+    source: "source",
+    favorite: "favorite",
   }
 
   const handleListSortChange = useCallback((next: ListSortState | null) => {

@@ -255,9 +255,11 @@ type PageSize = (typeof PAGINATED_PAGE_SIZES)[number]
 
 export type PaginatedSortKey =
   | "createdAt" | "name" | "aiScore" | "salary" | "stage" | "progress"
+  | "city" | "source" | "favorite"
 
 const PAGINATED_SORT_KEYS: readonly PaginatedSortKey[] = [
   "createdAt", "name", "aiScore", "salary", "stage", "progress",
+  "city", "source", "favorite",
 ]
 
 interface PaginatedResponse {

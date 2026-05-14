@@ -42,8 +42,7 @@ interface ListViewProps {
   /** Множественное выделение для bulk-операций. Если не задано — колонка чекбоксов скрыта. */
   selectedIds?: Set<string>
   onSelectionChange?: (next: Set<string>) => void
-  /** Если задан — рендерим колонку «№» с номером строки от startIndex+1.
-   *  Используется на пагинированном списке: (page-1)*pageSize. */
+  /** @deprecated Колонка № удалена. Поле сохранено для совместимости интерфейса с callers. */
   startIndex?: number
 }
 
@@ -121,7 +120,7 @@ function SortHeader({
 export function ListView({
   columns, settings, onOpenProfile, onAction, onToggleFavorite,
   sortMode = "date_desc", sort = null, onSortChange,
-  selectedIds, onSelectionChange, startIndex,
+  selectedIds, onSelectionChange,
 }: ListViewProps) {
   const lastSelectedIdRef = useRef<string | null>(null)
   const selectionEnabled = !!selectedIds && !!onSelectionChange
@@ -230,11 +229,8 @@ export function ListView({
   // длиннее («Первичный контакт» ~17 симв, «Анкета заполнена» ~16 симв),
   // поэтому Статус получает больше места (min 140 / 1.8fr), а Кандидат —
   // меньше избыточного простора (с 6fr → 3fr, max-w на имя 240px).
-  const showRowNumbers = typeof startIndex === "number"
-
   const cols: string[] = []
   if (selectionEnabled) cols.push("36px")               // ☐ — фикс
-  if (showRowNumbers)   cols.push("44px")               // № — фикс
   cols.push("minmax(180px, 3fr)")                       // Кандидат
   cols.push("40px")                                     // ★ — фикс
   if (showProgress) cols.push("minmax(110px, 1.5fr)")   // Демо
@@ -303,7 +299,7 @@ export function ListView({
         style={gridStyle}
       >
         {selectionEnabled && (
-          <div className="flex items-center justify-center pl-2 pr-2" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
             <Checkbox
               checked={headerState}
               onCheckedChange={() => toggleAllVisible()}
@@ -311,17 +307,14 @@ export function ListView({
             />
           </div>
         )}
-        {showRowNumbers && (
-          <div className="text-center text-muted-foreground/70 tabular-nums select-none">№</div>
-        )}
-        <div className="px-2">
+        <div className="-ml-3">
           {onSortChange ? (
             <SortHeader label="Кандидат" sortKey="name" sort={sort} onToggle={handleSort} align="left" />
           ) : (
             <span>Кандидат</span>
           )}
         </div>
-        <div className="flex items-center justify-center px-2">
+        <div className="flex items-center justify-center -ml-3">
           <button
             type="button"
             onClick={() => handleSort("favorite")}
@@ -381,7 +374,7 @@ export function ListView({
               {/* Selection checkbox */}
               {selectionEnabled && (
                 <div
-                  className="flex items-center justify-center pl-2 pr-2"
+                  className="flex items-center justify-center"
                   onClick={(e) => { e.stopPropagation(); toggleOne(candidate.id, e) }}
                 >
                   <Checkbox
@@ -392,15 +385,8 @@ export function ListView({
                 </div>
               )}
 
-              {/* Row number (опционально, только при пагинированном режиме) */}
-              {showRowNumbers && (
-                <div className="text-center text-[13px] text-muted-foreground tabular-nums select-none">
-                  {(startIndex ?? 0) + i + 1}
-                </div>
-              )}
-
               {/* Name + experience */}
-              <div className="flex items-center gap-3 min-w-0 px-2">
+              <div className="flex items-center gap-3 min-w-0 -ml-3">
                 <CandidateAvatar
                   name={candidate.name}
                   photoUrl={candidate.photoUrl}
@@ -426,7 +412,7 @@ export function ListView({
               </div>
 
               {/* Favorite */}
-              <div onClick={(e) => e.stopPropagation()} className="flex items-center justify-center px-2">
+              <div onClick={(e) => e.stopPropagation()} className="flex items-center justify-center -ml-3">
                 <button
                   type="button"
                   onClick={() => onToggleFavorite?.(candidate.id, !candidate.isFavorite)}
