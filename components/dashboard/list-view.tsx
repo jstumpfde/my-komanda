@@ -101,7 +101,7 @@ function SortHeader({
       onClick={() => onToggle(sortKey)}
       aria-sort={ariaSort}
       className={cn(
-        "inline-flex items-center gap-1 rounded-md px-1.5 -mx-1.5 py-0.5 hover:bg-accent hover:text-foreground transition-colors",
+        "inline-flex items-center gap-1 rounded-md px-1.5 -mx-1.5 py-0.5 hover:bg-accent hover:text-foreground transition-colors whitespace-nowrap",
         active ? "text-primary font-semibold bg-primary/20 ring-1 ring-primary/30" : "text-muted-foreground",
         align === "center" && "justify-center",
         align === "right" && "justify-end",
