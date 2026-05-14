@@ -87,7 +87,15 @@ function buildOrderBy(key: SortKey | null, dir: "asc" | "desc"): SQL[] {
   const tiebreak = desc(candidates.id)
   switch (key) {
     case "favorite":     return [wrap(candidates.isFavorite), desc(candidates.createdAt), tiebreak]
-    case "aiScore":      return [wrap(candidates.aiScore),    desc(candidates.createdAt), tiebreak]
+    case "aiScore": return [
+      // NULL ai_score всегда в конец независимо от направления — кандидаты
+      // без скоринга не должны доминировать в desc-выдаче.
+      dir === "asc"
+        ? sql`${candidates.aiScore} ASC NULLS LAST`
+        : sql`${candidates.aiScore} DESC NULLS LAST`,
+      desc(candidates.createdAt),
+      tiebreak,
+    ]
     case "salary":       return [wrap(sql`COALESCE(${candidates.salaryMax}, ${candidates.salaryMin}, 0)`), desc(candidates.createdAt), tiebreak]
     case "name":         return [wrap(candidates.name), desc(candidates.createdAt), tiebreak]
     case "progress":     return [
