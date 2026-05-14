@@ -396,6 +396,7 @@ export default function VacancyPage() {
 
   // Серверные фильтры — передаём в useCandidates, который шлёт их в API
   const candidatesFilters = useMemo(() => ({
+    search: filters.searchText,
     minAge: filters.ageMin,
     maxAge: filters.ageMax,
     minExperience: filters.experienceMin,
@@ -430,7 +431,7 @@ export default function VacancyPage() {
 
   const { candidates: apiCandidates, updateStage, refetch: refetchCandidates, toggleFavorite } = useCandidates(
     useListPaginated ? null : id,
-    undefined,
+    filters.funnelStatuses?.length ? filters.funnelStatuses : undefined,
     listSort ? { sort: listSort.key, order: listSort.dir } : undefined,
     candidatesFilters,
   )
@@ -439,6 +440,7 @@ export default function VacancyPage() {
   const paginated = usePaginatedCandidates({
     vacancyId: useListPaginated ? id : null,
     filters: candidatesFilters,
+    stageFilter: filters.funnelStatuses?.length ? filters.funnelStatuses : undefined,
   })
 
   const handleToggleFavorite = useCallback(async (candidateId: string, isFavorite: boolean) => {

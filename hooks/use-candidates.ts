@@ -62,6 +62,7 @@ export interface ApiCandidate {
 
 export interface CandidatesFilters {
   // Серверные фильтры (API применяет в SQL)
+  search?: string                     // Поиск по имени/email/телефону (ILIKE %v%)
   minAge?: number
   maxAge?: number
   minExperience?: number
@@ -168,6 +169,9 @@ export function useCandidates(
         }
         if (typeof filters.scoreMin === "number" && filters.scoreMin > 0) {
           params.set("scoreMin", String(filters.scoreMin))
+        }
+        if (filters.search && filters.search.trim()) {
+          params.set("search", filters.search.trim())
         }
       }
       const res = await fetch(`/api/modules/hr/candidates?${params.toString()}`)
@@ -384,6 +388,7 @@ export function usePaginatedCandidates({
         if (filters.sources?.length) params.set("sources", filters.sources.join(","))
         if (filters.cities?.length)  params.set("cities", filters.cities.join(","))
         if (typeof filters.scoreMin === "number" && filters.scoreMin > 0) params.set("scoreMin", String(filters.scoreMin))
+        if (filters.search && filters.search.trim()) params.set("search", filters.search.trim())
         // demoProgress в пагинированном режиме игнорируется бэкендом (Шаг 1),
         // не шлём чтобы не вводить в заблуждение.
       }

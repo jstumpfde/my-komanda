@@ -514,6 +514,19 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // Поиск по имени/email/телефону (ILIKE). %/_/\ экранируем, чтобы юзер
+    // не получил расширенный паттерн при вводе этих символов.
+    const searchParam = url.searchParams.get("search")?.trim()
+    if (searchParam && searchParam.length > 0) {
+      const escaped = searchParam.replace(/[\\%_]/g, (m) => "\\" + m)
+      const pattern = `%${escaped}%`
+      filterConds.push(sql`(
+        ${candidates.name}  ILIKE ${pattern}
+        OR ${candidates.email} ILIKE ${pattern}
+        OR ${candidates.phone} ILIKE ${pattern}
+      )`)
+    }
+
     // demoProgress — фильтрация по прогрессу демо. Поскольку процент
     // считается из demo_progress_json + lessons.length, делаем это
     // post-fetch (как сейчас сделана сортировка по progress в строке 388).
