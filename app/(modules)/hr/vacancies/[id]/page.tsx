@@ -1235,8 +1235,9 @@ export default function VacancyPage() {
   // Однократный guard: при первом успешном входе в режим list-paginated с
   // загруженными prefs — подмешиваем в URL сохранённый выбор. Если в URL уже
   // есть ?sort/?sortBy — пропускаем (явная ссылка имеет приоритет). Если в
-  // prefs ничего нет — материализуем дефолт createdAt desc, чтобы юзер сразу
-  // видел активную стрелку «Дата ▼» и при следующем визите prefs не были null.
+  // prefs ничего нет — материализуем дефолт progress desc (новый юзер сразу
+  // видит самых продвинутых кандидатов сверху). Существующие prefs с
+  // {key:"responseDate"} оставляем как есть — это явный выбор пользователя.
   const listSortPrefsAppliedRef = useRef(false)
   useEffect(() => {
     if (!userPrefsLoaded || listSortPrefsAppliedRef.current) return
@@ -1247,7 +1248,7 @@ export default function VacancyPage() {
     const stored = userPrefs.listSort
     const toApply: ListSortState = stored
       ? { key: stored.key as ListSortKey, dir: stored.dir }
-      : { key: "responseDate", dir: "desc" }
+      : { key: "progress", dir: "desc" }
     handleListSortChange(toApply)
   }, [userPrefsLoaded, useListPaginated, userPrefs.listSort, searchParams, handleListSortChange])
 
