@@ -394,6 +394,17 @@ export default function VacancyPage() {
 
   const [filters, setFilters] = useState<FilterState>({ searchText: "", cities: [], salaryMin: 0, salaryMax: 250000, scoreMin: 0, sources: [], workFormats: [], relocation: "any", businessTrips: "any", experienceMin: 0, experienceMax: 20, funnelStatuses: [], demoProgress: [], dateRange: "", dateFrom: "", dateTo: "", ageMin: 18, ageMax: 65, education: [], languages: [], otherLanguages: [], skills: [], industries: [] })
 
+  // Маппинг русских лейблов фильтра прогресса демо → API-идентификаторы.
+  // UI: candidate-filters.tsx:70 ["Не начал", "В процессе", "Завершил (≥85%)",
+  // "Завершил (<85%)"]. API: route.ts ожидает not_started/in_progress/
+  // completed_85/completed_below_85.
+  const DEMO_PROGRESS_LABEL_TO_API: Record<string, string> = {
+    "Не начал":         "not_started",
+    "В процессе":       "in_progress",
+    "Завершил (≥85%)":  "completed_85",
+    "Завершил (<85%)":  "completed_below_85",
+  }
+
   // Серверные фильтры — передаём в useCandidates, который шлёт их в API
   const candidatesFilters = useMemo(() => ({
     search: filters.searchText,
@@ -408,7 +419,9 @@ export default function VacancyPage() {
     industries: filters.industries,
     relocationReady: filters.relocation === "yes" ? true : filters.relocation === "no" ? false : null,
     businessTripsReady: filters.businessTrips === "yes" ? true : filters.businessTrips === "no" ? false : null,
-    demoProgress: filters.demoProgress,
+    demoProgress: filters.demoProgress
+      .map(l => DEMO_PROGRESS_LABEL_TO_API[l])
+      .filter((v): v is string => !!v),
     dateFrom: filters.dateFrom,
     dateTo: filters.dateTo,
     salaryMin: filters.salaryMin,
@@ -416,7 +429,7 @@ export default function VacancyPage() {
     sources: filters.sources,
     cities: filters.cities,
     scoreMin: filters.scoreMin,
-  }), [filters])
+  }), [filters]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // viewMode поднят сюда (выше хуков), чтобы useCandidates умел пропускать
   // запрос в режиме list-paginated и не дублировал usePaginatedCandidates.
