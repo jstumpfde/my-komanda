@@ -1221,15 +1221,17 @@ export default function VacancyPage() {
   // (юзер кликал ещё раз — отсюда «залипание»).
   const effectiveListSort = useMemo<ListSortState | null>(() => {
     if (!useListPaginated) return listSort
-    // ?sortBy не задан в URL → серверный дефолт createdAt desc, активной
-    // сортировки визуально не показываем.
-    const rawSortBy = searchParams?.get("sortBy") ?? null
-    if (!rawSortBy) return null
+    // Источник правды — локальный state usePaginatedCandidates, а не URL.
+    // URL — просто зеркало; при дефолте (?sortBy не задан) state всё равно
+    // содержит реально применённую сортировку (progress desc после инжекта
+    // user-prefs). Если читать из URL — ListView получает sort=null, не
+    // подсвечивает активный заголовок и инициирует "set default" вместо
+    // "toggle dir" при клике, что превращает клик в no-op.
     const entry = (Object.entries(SERVER_SORT_MAP) as [ListSortKey, PaginatedSortKey][])
       .find(([, v]) => v === paginated.sortBy)
     const listKey: ListSortKey = entry?.[0] ?? (paginated.sortBy as ListSortKey)
     return { key: listKey, dir: paginated.order }
-  }, [useListPaginated, listSort, paginated.sortBy, paginated.order, searchParams]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [useListPaginated, listSort, paginated.sortBy, paginated.order]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Инжект сохранённой сортировки из user-prefs (per-user persistence) ───
   // Однократный guard: при первом успешном входе в режим list-paginated с
