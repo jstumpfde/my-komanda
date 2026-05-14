@@ -283,42 +283,61 @@ export function usePaginatedCandidates({
   const pathname = usePathname()
   const searchParams = useSearchParams()
 
-  // URL — единственный источник правды для page/pageSize/sortBy/order.
-  // Дефолты применяются если параметра нет в URL или он невалиден.
-  const page = useMemo(() => {
-    const raw = Number.parseInt(searchParams.get("page") ?? "1", 10)
+  // Источник правды — локальный state. URL зеркалирует state через writeUrl
+  // (для shareable links и back/forward). Раньше state читался напрямую из
+  // useSearchParams через useMemo, но в App Router router.replace не всегда
+  // успевает обновить useSearchParams к моменту следующего рендера — между
+  // setSort и refetch оставалась гонка, и fetch уходил со старым sortBy
+  // (см. Next.js issue #49426).
+  //
+  // useState с инициализатором — initializer выполняется ровно один раз при
+  // mount и захватывает текущее значение searchParams. Дальше state живёт
+  // независимо. Sync-effect ниже обновляет state, если URL изменился извне
+  // (back/forward, открытие из закладки, paste URL).
+  const parsePage = (sp: URLSearchParams) => {
+    const raw = Number.parseInt(sp.get("page") ?? "1", 10)
     return Number.isFinite(raw) && raw > 0 ? raw : 1
-  }, [searchParams])
-
-  const pageSize: PageSize = useMemo(() => {
-    const raw = Number.parseInt(searchParams.get("pageSize") ?? "20", 10)
-    return (PAGINATED_PAGE_SIZES as readonly number[]).includes(raw)
-      ? (raw as PageSize)
-      : 20
-  }, [searchParams])
-
-  const sortBy: PaginatedSortKey = useMemo(() => {
-    const raw = searchParams.get("sortBy")
+  }
+  const parsePageSize = (sp: URLSearchParams): PageSize => {
+    const raw = Number.parseInt(sp.get("pageSize") ?? "20", 10)
+    return (PAGINATED_PAGE_SIZES as readonly number[]).includes(raw) ? (raw as PageSize) : 20
+  }
+  const parseSortBy = (sp: URLSearchParams): PaginatedSortKey => {
+    const raw = sp.get("sortBy")
     return raw && (PAGINATED_SORT_KEYS as readonly string[]).includes(raw)
       ? (raw as PaginatedSortKey)
       : "createdAt"
-  }, [searchParams])
+  }
+  const parseOrder = (sp: URLSearchParams): "asc" | "desc" =>
+    sp.get("order") === "asc" ? "asc" : "desc"
 
-  const order: "asc" | "desc" = useMemo(() => {
-    return searchParams.get("order") === "asc" ? "asc" : "desc"
-  }, [searchParams])
+  const [page,     setPageState]     = useState<number>(()        => parsePage(searchParams))
+  const [pageSize, setPageSizeState] = useState<PageSize>(()      => parsePageSize(searchParams))
+  const [sortBy,   setSortByState]   = useState<PaginatedSortKey>(() => parseSortBy(searchParams))
+  const [order,    setOrderState]    = useState<"asc" | "desc">(() => parseOrder(searchParams))
+
+  // Sync state ← URL: срабатывает на внешние навигации (back/forward, paste URL).
+  // Для собственных мутаций через setPage/setSort/setPageSize эффект тоже
+  // запустится после router.replace, но прочитает те же значения, что уже в
+  // state, и пропустит setState благодаря guard'ам — никакого loop'а.
+  const searchParamsKey = searchParams.toString()
+  useEffect(() => {
+    const nextPage     = parsePage(searchParams)
+    const nextPageSize = parsePageSize(searchParams)
+    const nextSortBy   = parseSortBy(searchParams)
+    const nextOrder    = parseOrder(searchParams)
+    if (nextPage     !== page)     setPageState(nextPage)
+    if (nextPageSize !== pageSize) setPageSizeState(nextPageSize)
+    if (nextSortBy   !== sortBy)   setSortByState(nextSortBy)
+    if (nextOrder    !== order)    setOrderState(nextOrder)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParamsKey])
 
   const [candidates, setCandidates] = useState<ApiCandidate[]>([])
   const [total, setTotal] = useState(0)
   const [totalPages, setTotalPages] = useState(1)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
-  // refreshTick — счётчик, бампается из URL-сеттеров (setSort/setPage/setPageSize)
-  // после router.replace. Гарантирует refetch при тех навигациях, на которые
-  // useSearchParams в App Router не всегда реагирует ререндером
-  // (router.replace c {scroll:false} того же route). См. issue Next 49426.
-  const [refreshTick, setRefreshTick] = useState(0)
 
   // Стабильная сериализация фильтров для зависимостей useEffect.
   const filtersKey = useMemo(() => JSON.stringify(filters ?? {}), [filters])
@@ -382,7 +401,7 @@ export function usePaginatedCandidates({
       setIsLoading(false)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [vacancyId, page, pageSize, sortBy, order, stageKey, filtersKey, refreshTick])
+  }, [vacancyId, page, pageSize, sortBy, order, stageKey, filtersKey])
 
   useEffect(() => { refetch() }, [refetch])
 
@@ -401,8 +420,8 @@ export function usePaginatedCandidates({
 
   const setPage = useCallback((p: number) => {
     const clamped = Math.max(1, Math.min(totalPages, Math.floor(p)))
+    setPageState(clamped)
     writeUrl({ page: clamped === 1 ? null : String(clamped) })
-    setRefreshTick(t => t + 1)
   }, [writeUrl, totalPages])
 
   const setPageSize = useCallback((size: number) => {
@@ -412,19 +431,22 @@ export function usePaginatedCandidates({
     // При смене размера страницы — откатываем на первую: позиция текущей
     // страницы становится бессмысленной (record 21 на pageSize=20 → page 2,
     // а на pageSize=50 → page 1).
+    setPageSizeState(safe)
+    setPageState(1)
     writeUrl({ pageSize: safe === 20 ? null : String(safe), page: null })
-    setRefreshTick(t => t + 1)
   }, [writeUrl])
 
   const setSort = useCallback((key: PaginatedSortKey, dir?: "asc" | "desc") => {
     const nextDir: "asc" | "desc" =
       dir ?? (sortBy === key && order === "desc" ? "asc" : "desc")
+    setSortByState(key)
+    setOrderState(nextDir)
+    setPageState(1)
     writeUrl({
       sortBy: key === "createdAt" ? null : key,
       order:  nextDir === "desc" ? null : nextDir,
       page:   null,
     })
-    setRefreshTick(t => t + 1)
   }, [writeUrl, sortBy, order])
 
   // ── Mutations (повторяют useCandidates — но обновляют локальный state) ────
