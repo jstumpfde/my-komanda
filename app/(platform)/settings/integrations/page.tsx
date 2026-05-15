@@ -127,32 +127,32 @@ export default function IntegrationsPage() {
               <div>
                 <h2 className="text-base font-semibold text-foreground mb-3">Интеграции с CRM</h2>
               </div>
-              {/* CRM-карточки идут в один столбец — как в остальных секциях
-                  настроек (профиль/расписание). Раньше было sm:grid-cols-2,
-                  что давало кривую сетку на mid-desktop. */}
-              <div className="grid grid-cols-1 gap-4">
+              {/* CRM-карточки — две в ряд на десктопе (sm:grid-cols-2),
+                  кнопки внутри карточек — компактные, не растягиваются.
+                  max-w-3xl на сетке держит карточки в ~40% ширины контента. */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-3xl">
                 {/* Bitrix24 */}
                 <Card>
                   <CardContent className="p-5">
                     <div className="flex items-center gap-3 mb-4">
                       <div className="w-10 h-10 rounded-lg bg-blue-500 flex items-center justify-center text-white font-bold text-xs shrink-0">B24</div>
-                      <div className="flex-1">
+                      <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold text-foreground">Bitrix24</p>
                         <p className="text-xs text-muted-foreground">CRM + задачи + чат</p>
                       </div>
-                      <Badge variant="outline" className={cn("text-xs", bitrix.connected ? "bg-emerald-500/10 text-emerald-700 border-emerald-200" : "")}>
+                      <Badge variant="outline" className={cn("text-xs shrink-0", bitrix.connected ? "bg-emerald-500/10 text-emerald-700 border-emerald-200" : "")}>
                         {bitrix.connected ? <><CheckCircle2 className="w-3 h-3 mr-1" />Подключено</> : "Не подключено"}
                       </Badge>
                     </div>
                     {bitrix.connected ? (
                       <div className="space-y-2">
-                        <p className="text-xs text-muted-foreground">{bitrix.portal}</p>
-                        <Button variant="outline" size="sm" className="w-full text-destructive hover:text-destructive" onClick={() => { setBitrix({ name: "Bitrix24", connected: false }); toast("Bitrix24 отключён") }}>
+                        <p className="text-xs text-muted-foreground truncate">{bitrix.portal}</p>
+                        <Button variant="outline" size="sm" className="text-destructive hover:text-destructive" onClick={() => { setBitrix({ name: "Bitrix24", connected: false }); toast("Bitrix24 отключён") }}>
                           Отключить
                         </Button>
                       </div>
                     ) : (
-                      <Button className="w-full gap-1.5" onClick={() => setConnectDialog("bitrix")}>
+                      <Button size="sm" className="gap-1.5" onClick={() => setConnectDialog("bitrix")}>
                         <Link2 className="w-4 h-4" /> Подключить
                       </Button>
                     )}
@@ -164,23 +164,23 @@ export default function IntegrationsPage() {
                   <CardContent className="p-5">
                     <div className="flex items-center gap-3 mb-4">
                       <div className="w-10 h-10 rounded-lg bg-indigo-500 flex items-center justify-center text-white font-bold text-xs shrink-0">amo</div>
-                      <div className="flex-1">
+                      <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold text-foreground">AmoCRM</p>
                         <p className="text-xs text-muted-foreground">Воронка продаж</p>
                       </div>
-                      <Badge variant="outline" className={cn("text-xs", amo.connected ? "bg-emerald-500/10 text-emerald-700 border-emerald-200" : "")}>
+                      <Badge variant="outline" className={cn("text-xs shrink-0", amo.connected ? "bg-emerald-500/10 text-emerald-700 border-emerald-200" : "")}>
                         {amo.connected ? <><CheckCircle2 className="w-3 h-3 mr-1" />Подключено</> : "Не подключено"}
                       </Badge>
                     </div>
                     {amo.connected ? (
                       <div className="space-y-2">
-                        <p className="text-xs text-muted-foreground">{amo.portal}</p>
-                        <Button variant="outline" size="sm" className="w-full text-destructive hover:text-destructive" onClick={() => { setAmo({ name: "AmoCRM", connected: false }); toast("AmoCRM отключён") }}>
+                        <p className="text-xs text-muted-foreground truncate">{amo.portal}</p>
+                        <Button variant="outline" size="sm" className="text-destructive hover:text-destructive" onClick={() => { setAmo({ name: "AmoCRM", connected: false }); toast("AmoCRM отключён") }}>
                           Отключить
                         </Button>
                       </div>
                     ) : (
-                      <Button className="w-full gap-1.5" onClick={() => setConnectDialog("amo")}>
+                      <Button size="sm" className="gap-1.5" onClick={() => setConnectDialog("amo")}>
                         <Link2 className="w-4 h-4" /> Подключить
                       </Button>
                     )}
