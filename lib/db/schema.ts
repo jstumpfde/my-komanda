@@ -383,6 +383,8 @@ export const candidates = pgTable("candidates", {
   score: integer("score"),
   salaryMin: integer("salary_min"),
   salaryMax: integer("salary_max"),
+  // Валюта ожидаемой зарплаты (RUR/RUB/EUR/USD/...). NULL — RUB по умолчанию.
+  salaryCurrency: text("salary_currency"),
   experience: text("experience"),
   skills: text("skills").array().default([]),
   // HR-020: новые поля для рабочих фильтров списка кандидатов.

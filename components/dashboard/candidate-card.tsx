@@ -15,6 +15,7 @@ export interface Candidate {
   city: string
   salaryMin: number
   salaryMax: number
+  salaryCurrency?: string | null
   score: number
   progress: number
   source: string

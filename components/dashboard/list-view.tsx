@@ -69,6 +69,17 @@ function progressPercentOf(c: Candidate): number | null {
   return calcDemoPercent(c.demoProgressJson).percent
 }
 
+// Символы валют hh.ru: RUR/RUB → ₽, EUR → €, USD → $, остальное → код.
+function currencySymbol(code: string | null | undefined): string {
+  if (!code) return "₽"
+  const c = code.toUpperCase()
+  if (c === "RUR" || c === "RUB") return "₽"
+  if (c === "EUR") return "€"
+  if (c === "USD") return "$"
+  if (c === "GBP") return "£"
+  return c
+}
+
 function formatResponseDate(d: Date | string | null | undefined): { short: string; full: string } | null {
   if (!d) return null
   const date = typeof d === "string" ? new Date(d) : d
@@ -484,12 +495,14 @@ export function ListView({
                 </div>
               )}
 
-              {/* Salary — single expected value */}
+              {/* Salary — single expected value (валюта берётся из
+                  candidate.salaryCurrency, fallback ₽) */}
               {showSalary && (() => {
                 const salary = candidate.salaryMax || candidate.salaryMin
+                const sym = currencySymbol(candidate.salaryCurrency)
                 return (
                   <div className="text-center text-[14px] font-medium text-foreground whitespace-nowrap">
-                    {salary ? `${salary.toLocaleString("ru-RU")} ₽` : "—"}
+                    {salary ? `${salary.toLocaleString("ru-RU")} ${sym}` : "—"}
                   </div>
                 )
               })()}

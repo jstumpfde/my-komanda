@@ -152,6 +152,7 @@ function apiCandidateToCard(c: ApiCandidate, columnId: string): Candidate {
     city: c.city ?? "",
     salaryMin: c.salaryMin ?? 0,
     salaryMax: c.salaryMax ?? 0,
+    salaryCurrency: c.salaryCurrency ?? null,
     score: c.score ?? 50,
     progress,
     source: c.source ?? "Прямая ссылка",

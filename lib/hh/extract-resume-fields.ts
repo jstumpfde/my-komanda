@@ -9,6 +9,7 @@ export interface ExtractedHhFields {
   city?:               string | null
   salaryMin?:          number | null
   salaryMax?:          number | null
+  salaryCurrency?:     string | null   // RUR/RUB/EUR/USD/...
   // HR-020 фильтры
   birthDate?:          string | null   // YYYY-MM-DD (date column)
   experienceYears?:    number | null
@@ -177,6 +178,8 @@ export function extractHhResumeFields(raw: unknown): ExtractedHhFields {
     out.salaryMin = salaryAmount
     out.salaryMax = salaryAmount
   }
+  const salaryCurrency = r.salary?.currency
+  if (isString(salaryCurrency)) out.salaryCurrency = salaryCurrency
 
   // birth date
   out.birthDate = parseBirthDate(r)
@@ -235,6 +238,7 @@ export function toCandidateColumns(fields: ExtractedHhFields): Record<string, un
   if (fields.city) cols.city = fields.city
   if (typeof fields.salaryMin === "number") cols.salaryMin = fields.salaryMin
   if (typeof fields.salaryMax === "number") cols.salaryMax = fields.salaryMax
+  if (fields.salaryCurrency) cols.salaryCurrency = fields.salaryCurrency
   if (fields.birthDate) cols.birthDate = fields.birthDate
   if (typeof fields.experienceYears === "number") cols.experienceYears = fields.experienceYears
   if (fields.experience) cols.experience = fields.experience

@@ -17,6 +17,8 @@ export interface ApiCandidate {
   score: number | null
   salaryMin: number | null
   salaryMax: number | null
+  // Валюта зарплаты (RUR/RUB/EUR/USD/...). NULL = RUB по умолчанию.
+  salaryCurrency?: string | null
   experience: string | null
   skills: string[] | null
   // HR-020: новые поля для рабочих фильтров списка кандидатов.
