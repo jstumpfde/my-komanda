@@ -6,7 +6,7 @@ import { useSession } from "next-auth/react"
 import { toast } from "sonner"
 import { useSidebar } from "@/components/ui/sidebar"
 import { Button } from "@/components/ui/button"
-import { Sun, Moon, Coffee, PanelLeftClose, PanelLeft, Bell, Building2, CreditCard, Users, Plug, Clock, User, LogOut, Palette, Sparkles, ScrollText, ChevronDown, Loader2 } from "lucide-react"
+import { Sun, Moon, Coffee, PanelLeftClose, PanelLeft, Bell, Building2, CreditCard, Users, Plug, Clock, User, LogOut, Palette, ScrollText, ChevronDown, Loader2 } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
@@ -18,8 +18,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 
 // Единый порядок табов Settings (sync с lib/sidebar/config.ts SETTINGS_MENU):
 // Компания → Профиль → Команда → Расписание → Уведомления → Интеграции →
-// Тариф и оплата → Брендинг → Профиль для демо. Админский «Юр. документы»
-// прячется через roles и идёт последним.
+// Тариф и оплата → Брендинг. Админский «Юр. документы» прячется через
+// roles и идёт последним.
 const navItems: { href: string; label: string; icon: typeof Building2; roles?: UserRole[] }[] = [
   { href: "/settings/company",       label: "Компания",    icon: Building2 },
   { href: "/settings/profile",       label: "Профиль",     icon: User },
@@ -29,7 +29,6 @@ const navItems: { href: string; label: string; icon: typeof Building2; roles?: U
   { href: "/settings/integrations",  label: "Интеграции",  icon: Plug },
   { href: "/settings/billing",       label: "Тариф и оплата", icon: CreditCard },
   { href: "/settings/branding",      label: "Брендинг",    icon: Palette },
-  { href: "/settings/demo-profile",  label: "Профиль для демо", icon: Sparkles },
   { href: "/settings/legal",         label: "Юр. документы", icon: ScrollText, roles: ["platform_admin"] },
 ]
 
