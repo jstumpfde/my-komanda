@@ -15,7 +15,7 @@ import { MapPin, CheckCircle2, XCircle, ArrowRight, ThumbsUp, Clock, ArrowUp, Ar
 import { DemoProgressBar, calcDemoPercent, calcDemoFraction } from "@/components/hr/demo-progress-bar"
 import { getStageLabel, getStageColorClasses } from "@/lib/stages"
 
-export type ListSortKey = "favorite" | "name" | "aiScore" | "progress" | "salary" | "responseDate" | "status" | "city" | "source"
+export type ListSortKey = "favorite" | "name" | "aiScore" | "resumeScore" | "progress" | "salary" | "responseDate" | "status" | "city" | "source"
 export type ListSortDir = "asc" | "desc"
 export interface ListSortState {
   key: ListSortKey
@@ -51,6 +51,7 @@ const DEFAULT_DIR: Record<ListSortKey, ListSortDir> = {
   favorite:     "desc",
   name:         "asc",
   aiScore:      "desc",
+  resumeScore:  "desc",
   progress:     "desc",
   salary:       "desc",
   responseDate: "desc",
@@ -157,6 +158,9 @@ export function ListView({
         case "aiScore": {
           return mul * ((a.aiScore ?? -1) - (b.aiScore ?? -1))
         }
+        case "resumeScore": {
+          return mul * ((a.resumeScore ?? -1) - (b.resumeScore ?? -1))
+        }
         case "progress": {
           return mul * ((progressPercentOf(a) ?? -1) - (progressPercentOf(b) ?? -1))
         }
@@ -241,6 +245,7 @@ export function ListView({
   if (selectionEnabled) cols.push("28px")               // ☐ — фикс
   cols.push("32px")                                     // ★ — фикс (w-8)
   cols.push("minmax(207px, 3.45fr)")                    // Кандидат — расширен ~15% за счёт Демо/AI
+  cols.push("50px")                                     // Рез. — AI-скор резюме (фикс, w-8 badge)
   if (showProgress) cols.push("minmax(95px, 1.2fr)")    // Демо
   if (showScore) cols.push("minmax(60px, 0.85fr)")      // AI
   if (showSalary) cols.push("minmax(110px, 1.5fr)")     // Зарплата
@@ -341,6 +346,7 @@ export function ListView({
             <span>Кандидат</span>
           )}
         </div>
+        <SortHeader label="Рез." sortKey="resumeScore" sort={sort} onToggle={handleSort} align="center" />
         {showProgress && <SortHeader label="Демо" sortKey="progress" sort={sort} onToggle={handleSort} align="center" />}
         {showScore && <SortHeader label="AI-оцен." sortKey="aiScore" sort={sort} onToggle={handleSort} align="center" />}
         {showSalary && <SortHeader label="Зарплата" sortKey="salary" sort={sort} onToggle={handleSort} align="center" />}
@@ -429,6 +435,23 @@ export function ListView({
                     </p>
                   )}
                 </div>
+              </div>
+
+              {/* Resume AI score — выставлен в process-queue.ts при приёме отклика. */}
+              <div className="flex items-center justify-center" title="AI-скор резюме (до демо)">
+                {candidate.resumeScore != null ? (
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      "text-[11px] font-semibold border px-1.5 py-0 h-5 w-8 justify-center",
+                      getScoreColor(candidate.resumeScore),
+                    )}
+                  >
+                    {candidate.resumeScore}
+                  </Badge>
+                ) : (
+                  <span className="text-muted-foreground/40 text-xs">—</span>
+                )}
               </div>
 
               {/* Demo progress */}

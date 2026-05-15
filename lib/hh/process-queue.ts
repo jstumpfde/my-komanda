@@ -16,6 +16,7 @@ import { generateTouchSchedule } from "@/lib/followup/schedule"
 import { DEFAULT_FOLLOWUP_NOT_OPENED } from "@/lib/followup/default-messages"
 import { isFollowUpPreset } from "@/lib/followup/presets"
 import { canSendNow } from "@/lib/schedule/can-send-now"
+import { screenResume } from "@/lib/ai-screen-resume"
 
 const DEMO_INVITE_MESSAGE = "Здравствуйте! Спасибо за отклик. Мы подготовили короткую демонстрацию должности — 15 минут, и вы узнаете всё о задачах, команде и доходе."
 
@@ -353,10 +354,49 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
         await db.update(candidates).set(setFields).where(eq(candidates.id, candidateId))
       }
 
-      // AI-скоринг при импорте hh-откликов отключён — оценка теперь
-      // запускается только при завершении демо (см.
-      // app/api/public/demo/[token]/answer/route.ts), чтобы не тратить
-      // токены на кандидатов, которые до демо не дошли.
+      // AI-скоринг резюме (resume_score) — выставляется ОДИН РАЗ при первом
+      // приёме отклика. Если кандидат уже оценён ранее (resume_score IS NOT
+      // NULL) — пропускаем, чтобы не тратить токены повторно. Полный AI-скор
+      // (aiScore) считается отдельно после завершения демо.
+      if (candidateId && localVac) {
+        try {
+          const [scoreRow] = await db
+            .select({ resumeScore: candidates.resumeScore })
+            .from(candidates)
+            .where(eq(candidates.id, candidateId))
+            .limit(1)
+          if (scoreRow && scoreRow.resumeScore == null) {
+            const descJson = localVac.descriptionJson as Record<string, unknown> | null
+            const anketa = (descJson?.anketa as Record<string, unknown> | undefined) ?? {}
+            const result = await screenResume({
+              resume: {
+                name:            resp.candidateName,
+                city:            candidateCity ?? null,
+                salaryMin:       candidateSalary,
+                experienceYears: (extracted.experienceYears as number | undefined) ?? null,
+                keySkills:       (extracted.keySkills as string[] | undefined) ?? null,
+                skills:          (extracted.skills as string[] | undefined) ?? null,
+                educationLevel:  (extracted.educationLevel as string | undefined) ?? null,
+                workFormat:      (extracted.workFormat as string | undefined) ?? null,
+              },
+              vacancy: {
+                title:                localVac.title,
+                city:                 localVac.city,
+                aiIdealProfile:       (anketa.aiIdealProfile as string | undefined) ?? null,
+                aiRequiredHardSkills: (anketa.aiRequiredHardSkills as string[] | undefined) ?? null,
+                aiStopFactors:        (anketa.aiStopFactors as string[] | undefined) ?? null,
+              },
+            })
+            if (result) {
+              await db.update(candidates)
+                .set({ resumeScore: result.score })
+                .where(eq(candidates.id, candidateId))
+            }
+          }
+        } catch (err) {
+          console.warn("[PQ] resume screening failed:", err instanceof Error ? err.message : err)
+        }
+      }
 
       // Проверяем — отправляли ли работодателю уже что-то по этому отклику.
       let previouslyInvited = false

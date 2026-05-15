@@ -413,6 +413,10 @@ export const candidates = pgTable("candidates", {
   aiSummary: text("ai_summary"),
   aiDetails: jsonb("ai_details"), // [{question, score, comment}]
   aiScoredAt: timestamp("ai_scored_at"),
+  // AI-скор по данным резюме (hh.ru / анкета) — выставляется в момент приёма
+  // отклика, до демо. Шкала 0..100, NULL = не оценивали. Отдельно от aiScore
+  // (он считается после прохождения демо и включает ответы на вопросы).
+  resumeScore: integer("resume_score"),
   stageHistory: jsonb("stage_history").default("[]"), // [{stage, date, note}]
   isFavorite: boolean("is_favorite").notNull().default(false),
   // Момент первого открытия страницы /demo/<shortId> владельцем-кандидатом.

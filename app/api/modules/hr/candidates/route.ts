@@ -10,6 +10,7 @@ import { deriveCandidateName } from "@/lib/candidate-name"
 type SortKey =
   | "favorite"
   | "aiScore"
+  | "resumeScore"
   | "salary"
   | "responseDate"
   | "status"
@@ -21,7 +22,7 @@ type SortKey =
   | "source"
 
 const ALLOWED_SORT_KEYS: ReadonlySet<SortKey> = new Set<SortKey>([
-  "favorite", "aiScore", "salary", "responseDate", "status", "progress",
+  "favorite", "aiScore", "resumeScore", "salary", "responseDate", "status", "progress",
   "createdAt", "name", "stage", "city", "source",
 ])
 
@@ -93,6 +94,14 @@ function buildOrderBy(key: SortKey | null, dir: "asc" | "desc"): SQL[] {
       dir === "asc"
         ? sql`${candidates.aiScore} ASC NULLS LAST`
         : sql`${candidates.aiScore} DESC NULLS LAST`,
+      desc(candidates.createdAt),
+      tiebreak,
+    ]
+    case "resumeScore": return [
+      // NULL resume_score — в конец (тот же принцип что aiScore).
+      dir === "asc"
+        ? sql`${candidates.resumeScore} ASC NULLS LAST`
+        : sql`${candidates.resumeScore} DESC NULLS LAST`,
       desc(candidates.createdAt),
       tiebreak,
     ]
@@ -197,6 +206,7 @@ export async function GET(req: NextRequest) {
           stage: candidates.stage,
           score: candidates.score,
           aiScore: candidates.aiScore,
+          resumeScore: candidates.resumeScore,
           vacancyId: candidates.vacancyId,
           vacancyTitle: vacancies.title,
           createdAt: candidates.createdAt,

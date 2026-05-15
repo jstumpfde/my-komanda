@@ -43,6 +43,9 @@ export interface ApiCandidate {
   aiScore: number | null
   aiSummary: string | null
   aiDetails: { question: string; score: number; comment: string }[] | null
+  // AI-скор резюме (выставляется в lib/hh/process-queue.ts при приёме отклика).
+  // Отдельно от aiScore — тот считается после демо и учитывает ответы.
+  resumeScore?: number | null
   isFavorite: boolean | null
   createdAt: string | null
   updatedAt: string | null
@@ -258,11 +261,11 @@ const PAGINATED_PAGE_SIZES = [20, 50, 100] as const
 type PageSize = (typeof PAGINATED_PAGE_SIZES)[number]
 
 export type PaginatedSortKey =
-  | "createdAt" | "name" | "aiScore" | "salary" | "stage" | "progress"
+  | "createdAt" | "name" | "aiScore" | "resumeScore" | "salary" | "stage" | "progress"
   | "city" | "source" | "favorite"
 
 const PAGINATED_SORT_KEYS: readonly PaginatedSortKey[] = [
-  "createdAt", "name", "aiScore", "salary", "stage", "progress",
+  "createdAt", "name", "aiScore", "resumeScore", "salary", "stage", "progress",
   "city", "source", "favorite",
 ]
 

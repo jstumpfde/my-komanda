@@ -29,6 +29,8 @@ export interface Candidate {
   aiSummary?: string
   aiScore?: number
   aiVerdict?: string
+  // AI-скор резюме (выставляется при приёме hh-отклика, до демо).
+  resumeScore?: number | null
   interviewDate?: Date
   interviewTime?: string
   utmSource?: string

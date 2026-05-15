@@ -163,6 +163,7 @@ function apiCandidateToCard(c: ApiCandidate, columnId: string): Candidate {
     aiScore: c.aiScore ?? undefined,
     aiSummary: c.aiSummary ?? undefined,
     aiVerdict: c.aiScore != null ? (c.aiScore >= 70 ? "подходит" : c.aiScore >= 40 ? "возможно" : "не подходит") : undefined,
+    resumeScore: c.resumeScore ?? null,
     demoProgressJson: c.demoProgressJson as Candidate["demoProgressJson"],
     demoTotalBlocks: (c as { demoTotalBlocks?: number }).demoTotalBlocks,
     demoCompletedBlocks: (c as { demoCompletedBlocks?: number }).demoCompletedBlocks,
@@ -1228,6 +1229,7 @@ export default function VacancyPage() {
   const SERVER_SORT_MAP: Partial<Record<ListSortKey, PaginatedSortKey>> = {
     name: "name",
     aiScore: "aiScore",
+    resumeScore: "resumeScore",
     salary: "salary",
     responseDate: "createdAt",
     status: "stage",
