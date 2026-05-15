@@ -5,7 +5,7 @@
 // /api/cron/hh-import (X-Cron-Secret + respectWorkingHours=true).
 
 import { db } from "@/lib/db"
-import { hhResponses, candidates, vacancies, followUpCampaigns, followUpMessages } from "@/lib/db/schema"
+import { hhResponses, candidates, vacancies, followUpCampaigns, followUpMessages, hhCandidates } from "@/lib/db/schema"
 import type { VacancyAiProcessSettings } from "@/lib/db/schema"
 import { and, asc, eq, isNull } from "drizzle-orm"
 import { getValidToken } from "@/lib/hh-helpers"
@@ -188,6 +188,42 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
       // Существующая запись (если найдена) — для защитного backfill
       // пустых полей (city/name/phone/email) при апдейте.
       let existingCand: { id: string; city: string | null; name: string; phone: string | null; email: string | null } | null = null
+
+      // ── НОВОЕ: dedup по hh_resume_id ──────────────────────────────────
+      // client.ts при импорте создаёт связку (candidate ↔ hh_resume_id) в
+      // таблице hh_candidates. Если этот же resume.id приходит в hh_response,
+      // ищем существующего кандидата ДО фоллбэка на email/phone/name. Без
+      // этой проверки приватное hh-резюме (name='Кандидат с hh.ru',
+      // email/phone NULL) не находилось и process-queue создавал второй
+      // candidate-row → классический "дубль" anketa_filled/new.
+      const resumeIdFromRaw = (raw?.resume?.["id"] as string | undefined) ?? null
+      if (!candidateId && localVac && resumeIdFromRaw) {
+        const [byResume] = await db
+          .select({
+            id: candidates.id,
+            city: candidates.city,
+            name: candidates.name,
+            phone: candidates.phone,
+            email: candidates.email,
+          })
+          .from(hhCandidates)
+          .innerJoin(candidates, eq(candidates.id, hhCandidates.candidateId))
+          .where(and(
+            eq(hhCandidates.hhResumeId, resumeIdFromRaw),
+            eq(candidates.vacancyId, localVac.id),
+          ))
+          .limit(1)
+        if (byResume) {
+          candidateId = byResume.id
+          existingCand = byResume
+          // Зафиксируем привязку в hh_responses — следующий проход найдёт
+          // кандидата напрямую через resp.localCandidateId, не делая JOIN.
+          await db.update(hhResponses)
+            .set({ localCandidateId: candidateId })
+            .where(eq(hhResponses.id, resp.id))
+        }
+      }
+      // ── /НОВОЕ ─────────────────────────────────────────────────────────
 
       if (!candidateId && localVac) {
         const cols = { id: candidates.id, city: candidates.city, name: candidates.name, phone: candidates.phone, email: candidates.email }
