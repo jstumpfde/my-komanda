@@ -314,7 +314,7 @@ export default function CompanySchedulePage() {
             <CardContent className="p-0 border-t">
               {WEEKDAYS.map((day, i) => (
                 <div key={day.id} className={cn(
-                  "grid grid-cols-[44px_48px_1fr] items-center px-4 py-2 border-b border-border/50 last:border-b-0",
+                  "grid grid-cols-[44px_48px_1fr] items-center px-4 py-2 border-b border-border/50",
                 )}>
                   <div><Switch checked={schedule[i].enabled} onCheckedChange={(v) => updateDay(i, { enabled: v })} /></div>
                   <span className={cn("text-sm font-medium", !schedule[i].enabled && "text-muted-foreground")}>{day.short}</span>
@@ -335,32 +335,16 @@ export default function CompanySchedulePage() {
                   )}
                 </div>
               ))}
-            </CardContent>
-          )}
-        </Card>
-
-        {/* ═══ Аккордеон 2: Обеденный перерыв ═══ */}
-        <Card className="overflow-hidden">
-          <button
-            onClick={() => toggle("lunch")}
-            className="w-full flex items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/30 cursor-pointer"
-          >
-            <Coffee className="size-4 text-orange-600 shrink-0" />
-            <div className="flex-1 min-w-0">
-              <span className="text-sm font-semibold text-foreground">Обеденный перерыв</span>
-              {!expanded.has("lunch") && (
-                <p className="text-xs text-muted-foreground mt-0.5">{lunchSummary}</p>
-              )}
-            </div>
-            <ChevronDown className={cn("w-4 h-4 text-muted-foreground shrink-0 transition-transform", expanded.has("lunch") && "rotate-180")} />
-          </button>
-          {expanded.has("lunch") && (
-            <CardContent className="p-0 border-t">
-              <div className="flex items-center gap-4 px-4 py-2.5">
-                <Switch checked={lunchEnabled} onCheckedChange={setLunchEnabled} />
-                <span className={cn("text-sm", !lunchEnabled && "text-muted-foreground")}>{lunchEnabled ? "Перерыв включён" : "Без перерыва"}</span>
-                {lunchEnabled && (
-                  <div className="flex items-center gap-2 ml-2">
+              {/* Обед — встроен в блок рабочих дней последней строкой.
+                  Та же grid-сетка, что и WEEKDAYS, чтобы все колонки совпали. */}
+              <div className="grid grid-cols-[44px_48px_1fr] items-center px-4 py-2 bg-muted/10">
+                <div><Switch checked={lunchEnabled} onCheckedChange={setLunchEnabled} /></div>
+                <span className={cn("text-sm font-medium inline-flex items-center gap-1", !lunchEnabled && "text-muted-foreground")}>
+                  <Coffee className="size-3.5 text-orange-600" />
+                  Обед
+                </span>
+                {lunchEnabled ? (
+                  <div className="flex items-center gap-2">
                     <Select value={lunchFrom} onValueChange={setLunchFrom}>
                       <SelectTrigger className="w-24 h-7 text-sm bg-[var(--input-bg)]"><SelectValue /></SelectTrigger>
                       <SelectContent>{HALF_HOURS.map((h) => <SelectItem key={h} value={h}>{h}</SelectItem>)}</SelectContent>
@@ -371,13 +355,16 @@ export default function CompanySchedulePage() {
                       <SelectContent>{HALF_HOURS.map((h) => <SelectItem key={h} value={h}>{h}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
+                ) : (
+                  <span className="text-sm text-muted-foreground">Без перерыва</span>
                 )}
               </div>
             </CardContent>
           )}
         </Card>
 
-        {/* ═══ Аккордеон 3: Праздничные дни ═══ */}
+        {/* ═══ Аккордеон 2: Праздничные дни (отдельный аккордеон «Обед»
+            упразднён — обед теперь живёт строкой внутри «Рабочие дни») ═══ */}
         <Card className="overflow-hidden">
           <button
             onClick={() => toggle("holidays")}
