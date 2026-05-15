@@ -2047,6 +2047,35 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange, onNavigat
                   <Copy className="w-3 h-3" /> Скопировать
                 </Button>
               )}
+              {data.hhDescription && (
+                <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={() => {
+                  // Превращаем HTML → plain text через DOM (надёжнее regex —
+                  // корректно обрабатывает &nbsp;, <br>, вложенные теги).
+                  const div = document.createElement("div")
+                  div.innerHTML = data.hhDescription
+                  // Заменяем block-level теги на переносы строк ДО textContent,
+                  // иначе абзацы склеятся в одну строку.
+                  div.querySelectorAll("br").forEach(b => b.replaceWith("\n"))
+                  div.querySelectorAll("p, li, h1, h2, h3, h4, h5, h6, div").forEach(el => {
+                    el.append("\n")
+                  })
+                  const text = (div.textContent ?? "").replace(/\n{3,}/g, "\n\n").trim()
+                  const titleRaw = (data.vacancyTitle || "vacancy").trim()
+                  const safe = titleRaw.replace(/[^\p{L}\p{N}\-_]+/gu, "-").replace(/-+/g, "-").replace(/^-|-$/g, "").slice(0, 80) || "vacancy"
+                  const blob = new Blob([text], { type: "text/plain;charset=utf-8" })
+                  const url = URL.createObjectURL(blob)
+                  const a = document.createElement("a")
+                  a.href = url
+                  a.download = `${safe}.txt`
+                  document.body.appendChild(a)
+                  a.click()
+                  document.body.removeChild(a)
+                  URL.revokeObjectURL(url)
+                  toast.success("Файл скачан")
+                }}>
+                  <FileDown className="w-3 h-3" /> Скачать .txt
+                </Button>
+              )}
               <Button
                 variant="outline"
                 size="sm"
