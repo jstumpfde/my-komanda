@@ -114,11 +114,20 @@ export function HhAutoProcess({
     setOpen(false)
     const startedAt = Date.now()
     try {
+      // Защита от рассинхронизации типов после ввода через UI:
+      // Number() гарантирует, что limit/delaySeconds/minScore — это всегда
+      // конечные числа (без NaN), даже если state пришёл из URL/localStorage
+      // как строка.
+      const payload = {
+        vacancyId,
+        limit:        Number.isFinite(Number(effectiveLimit)) ? Number(effectiveLimit) : 5,
+        delaySeconds: Number.isFinite(Number(delaySeconds))   ? Number(delaySeconds)   : 30,
+        minScore:     useMinScore ? (Number.isFinite(Number(minScore)) ? Number(minScore) : 70) : 0,
+      }
       const res = await fetch("/api/integrations/hh/process-queue", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        // minScore=0 = не применять порог. useMinScore=false → 0.
-        body: JSON.stringify({ limit: effectiveLimit, vacancyId, delaySeconds, minScore: useMinScore ? minScore : 0 }),
+        body: JSON.stringify(payload),
       })
       const data = await res.json() as ProcessQueueResponse
       if (!res.ok) throw new Error(data.error || "Ошибка")
