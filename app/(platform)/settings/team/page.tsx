@@ -125,6 +125,75 @@ export default function TeamPage() {
   const [inviteOpen, setInviteOpen] = useState(false)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
 
+  // «Добавить участника вручную» — отдельная модалка, создаёт реального
+  // user'а через POST /api/team (см. app/api/team/route.ts). В отличие от
+  // «Пригласить участника», который только создаёт строку в localStorage.
+  const [addOpen, setAddOpen] = useState(false)
+  const [addName, setAddName] = useState("")
+  const [addEmail, setAddEmail] = useState("")
+  const [addRole, setAddRole] = useState<TeamRole>("hr_manager")
+  const [addAvatarFile, setAddAvatarFile] = useState<File | null>(null)
+  const [addBusy, setAddBusy] = useState(false)
+  const addFileInputRef = useRef<HTMLInputElement>(null)
+
+  const handleAddMember = async () => {
+    if (!addName.trim()) { toast.error("Введите имя"); return }
+    if (!addEmail.trim()) { toast.error("Введите email"); return }
+    setAddBusy(true)
+    try {
+      // 1) Создаём пользователя
+      const res = await fetch("/api/team", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: addName.trim(),
+          email: addEmail.trim(),
+          role: addRole,
+        }),
+      })
+      const json = await res.json().catch(() => ({})) as {
+        data?: { id: string; name: string; email: string; role: string; avatarUrl: string | null; tempPassword: string }
+        error?: string
+      }
+      const payload = json.data
+      if (!res.ok || !payload) throw new Error(json.error || "Ошибка")
+
+      // 2) Опционально — загружаем фото на этого пользователя
+      if (addAvatarFile) {
+        const fd = new FormData()
+        fd.append("file", addAvatarFile)
+        fd.append("userId", payload.id)
+        await fetch("/api/team/avatar", { method: "POST", body: fd }).catch(() => {})
+      }
+
+      // 3) Добавляем в локальный список (localStorage — для UI-консистентности
+      //    со старой логикой страницы). При следующем визите подтянется из API.
+      const initials = payload.name.split(" ").map(s => s[0]).join("").slice(0, 2).toUpperCase() || "??"
+      setMembers(prev => [...prev, {
+        id: payload.id,
+        name: payload.name,
+        email: payload.email,
+        role: payload.role as TeamRole,
+        status: "active",
+        avatar: initials,
+        avatarUrl: payload.avatarUrl ?? undefined,
+        vacancyIds: [],
+        categories: [],
+        candidateVisibility: payload.role === "observer" ? "all" : "own",
+      }])
+
+      // 4) Закрываем модалку и показываем временный пароль ОДИН РАЗ —
+      //    дальше API его уже не отдаёт.
+      setAddOpen(false)
+      setAddName(""); setAddEmail(""); setAddAvatarFile(null); setAddRole("hr_manager")
+      toast.success(`Добавлен: ${payload.email}. Временный пароль: ${payload.tempPassword}`, { duration: 15000 })
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Ошибка добавления")
+    } finally {
+      setAddBusy(false)
+    }
+  }
+
   // Inline edit state for expanded row
   const [editRole, setEditRole] = useState<TeamRole>("hr_manager")
   const [editPermissions, setEditPermissions] = useState<Record<string, boolean>>({})
@@ -297,6 +366,10 @@ export default function TeamPage() {
           <Button variant="outline" className="gap-1.5" onClick={openLinkDialog}>
             <Link2 className="w-4 h-4" />
             Ссылка-приглашение
+          </Button>
+          <Button variant="outline" className="gap-1.5" onClick={() => setAddOpen(true)}>
+            <UserPlus className="w-4 h-4" />
+            Добавить участника
           </Button>
           <Button className="gap-1.5" onClick={() => setInviteOpen(true)}>
             <Plus className="w-4 h-4" />
@@ -568,6 +641,78 @@ export default function TeamPage() {
                 </div>
               </details>
             )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ═══ Диалог «Добавить участника вручную» ═════════════════════════
+          Создаёт реального user'а через POST /api/team (с генерацией
+          временного пароля). В отличие от Invite — без email-уведомления. */}
+      <Dialog open={addOpen} onOpenChange={(o) => { if (!addBusy) setAddOpen(o) }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <UserPlus className="w-5 h-5" />
+              Добавить участника
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="space-y-1.5">
+              <Label className="text-sm">Полное имя</Label>
+              <Input value={addName} onChange={(e) => setAddName(e.target.value)} placeholder="Иван Иванов" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-sm">Email</Label>
+              <Input type="email" value={addEmail} onChange={(e) => setAddEmail(e.target.value)} placeholder="user@example.com" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-sm">Роль</Label>
+              <Select value={addRole} onValueChange={(v) => setAddRole(v as TeamRole)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="director">Директор</SelectItem>
+                  <SelectItem value="hr_manager">HR-менеджер</SelectItem>
+                  <SelectItem value="department_head">Руководитель отдела</SelectItem>
+                  <SelectItem value="observer">Наблюдатель</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-sm">Фото (необязательно)</Label>
+              <input
+                ref={addFileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={(e) => setAddAvatarFile(e.target.files?.[0] ?? null)}
+              />
+              <div className="flex items-center gap-2">
+                <Button type="button" variant="outline" size="sm" onClick={() => addFileInputRef.current?.click()} className="gap-1.5">
+                  <Camera className="w-3.5 h-3.5" />
+                  {addAvatarFile ? "Заменить" : "Выбрать файл"}
+                </Button>
+                {addAvatarFile && (
+                  <>
+                    <span className="text-xs text-muted-foreground truncate flex-1">{addAvatarFile.name}</span>
+                    <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={() => setAddAvatarFile(null)}>
+                      <X className="w-3 h-3" />
+                    </Button>
+                  </>
+                )}
+              </div>
+              <p className="text-[11px] text-muted-foreground">jpg / png / webp, до 2 МБ</p>
+            </div>
+            <p className="text-[11px] text-muted-foreground border-t pt-2">
+              Будет сгенерирован временный пароль. Скопируйте его из уведомления —
+              после закрытия пароль не покажется снова.
+            </p>
+            <div className="flex justify-end gap-2 pt-1">
+              <Button variant="outline" onClick={() => setAddOpen(false)} disabled={addBusy}>Отмена</Button>
+              <Button onClick={handleAddMember} disabled={addBusy || !addName.trim() || !addEmail.trim()}>
+                {addBusy ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <Plus className="w-4 h-4 mr-1.5" />}
+                Добавить
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
