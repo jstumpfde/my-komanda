@@ -52,6 +52,8 @@ export interface Candidate {
   } | null
   isFavorite?: boolean
   createdAt?: string | Date | null
+  /** Реальный stage из БД (для status-бейджа в list-view paginated режиме). */
+  stage?: string | null
   // Page-based progress fields, populated from API in vacancy page mapping
   demoTotalBlocks?: number
   demoCompletedBlocks?: number
