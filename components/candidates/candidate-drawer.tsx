@@ -366,9 +366,10 @@ function buildTimeline(args: {
   demoBlocks: DemoBlock[]
   demoCompletedAt: string | null | undefined
   blockMeta: Map<string, BlockMeta>
+  vacancyPipeline: VacancyPipelineV2 | null | undefined
 }): TimelineEvent[] {
   const events: TimelineEvent[] = []
-  const { candidate, stageHistory, demoBlocks, demoCompletedAt, blockMeta } = args
+  const { candidate, stageHistory, demoBlocks, demoCompletedAt, blockMeta, vacancyPipeline } = args
 
   if (candidate.createdAt) {
     const t = Date.parse(candidate.createdAt)
@@ -762,7 +763,7 @@ export function CandidateDrawer({
     const demoPct = demoTotal > 0 ? Math.round((demoCompleted / demoTotal) * 100) : 0
     const stageHistory = (Array.isArray(candidate.stageHistory) ? candidate.stageHistory : []) as StageHistoryEntry[]
     const timeline = buildTimeline({
-      candidate, stageHistory, demoBlocks: realBlocks, demoCompletedAt: demo?.completedAt, blockMeta,
+      candidate, stageHistory, demoBlocks: realBlocks, demoCompletedAt: demo?.completedAt, blockMeta, vacancyPipeline,
     })
     const hasAnswers = (() => {
       const raw = candidate.anketaAnswers
