@@ -169,6 +169,7 @@ function apiCandidateToCard(c: ApiCandidate, columnId: string): Candidate {
     progressPercent: (c as { progressPercent?: number | null }).progressPercent,
     isFavorite: c.isFavorite ?? false,
     createdAt: c.createdAt,
+    stage: c.stage ?? null,
     // HR-020: фильтр-поля
     birthDate: c.birthDate ?? undefined,
     experienceYears: c.experienceYears ?? null,
