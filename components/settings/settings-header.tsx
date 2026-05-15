@@ -14,14 +14,18 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 
+// Единый порядок табов Settings (sync с lib/sidebar/config.ts SETTINGS_MENU):
+// Компания → Профиль → Команда → Расписание → Уведомления → Интеграции →
+// Тариф и оплата → Брендинг → Профиль для демо. Админский «Юр. документы»
+// прячется через roles и идёт последним.
 const navItems: { href: string; label: string; icon: typeof Building2; roles?: UserRole[] }[] = [
   { href: "/settings/company",       label: "Компания",    icon: Building2 },
   { href: "/settings/profile",       label: "Профиль",     icon: User },
   { href: "/settings/team",          label: "Команда",     icon: Users },
-  { href: "/settings/billing",       label: "Тариф и оплата", icon: CreditCard },
-  { href: "/settings/integrations",  label: "Интеграции",  icon: Plug },
   { href: "/settings/schedule",      label: "Расписание",  icon: Clock },
   { href: "/settings/notifications", label: "Уведомления", icon: Bell },
+  { href: "/settings/integrations",  label: "Интеграции",  icon: Plug },
+  { href: "/settings/billing",       label: "Тариф и оплата", icon: CreditCard },
   { href: "/settings/branding",      label: "Брендинг",    icon: Palette },
   { href: "/settings/demo-profile",  label: "Профиль для демо", icon: Sparkles },
   { href: "/settings/legal",         label: "Юр. документы", icon: ScrollText, roles: ["platform_admin"] },

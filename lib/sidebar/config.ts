@@ -11,16 +11,21 @@ export const PLATFORM_MENU: PlatformMenuItem[] = [
   { name: 'Рефералы', href: '/referrals', icon: 'Gift' },
 ]
 
+// Единый порядок (sync с components/settings/settings-header.tsx):
+// Компания → Профиль → Команда → Расписание → Уведомления → Интеграции →
+// Тариф и оплата → Брендинг → Профиль для демо. «Роли и доступ» — extra,
+// идёт последним.
 export const SETTINGS_MENU: PlatformMenuItem[] = [
-  { name: 'Компания',       href: '/settings/company',       icon: 'Building2'   },
-  { name: 'Профиль',        href: '/settings/profile',       icon: 'User'        },
-  { name: 'Команда',        href: '/settings/team',          icon: 'Users'       },
-  { name: 'Брендинг',       href: '/settings/branding',      icon: 'Palette'     },
-  { name: 'Расписание',     href: '/settings/schedule',      icon: 'Calendar'    },
-  { name: 'Уведомления',    href: '/settings/notifications', icon: 'Bell'        },
-  { name: 'Интеграции',     href: '/settings/integrations',  icon: 'Plug'        },
-  { name: 'Тариф и оплата', href: '/settings/billing',       icon: 'CreditCard'  },
-  { name: 'Роли и доступ',  href: '/settings/roles',         icon: 'Shield'      },
+  { name: 'Компания',           href: '/settings/company',       icon: 'Building2'   },
+  { name: 'Профиль',            href: '/settings/profile',       icon: 'User'        },
+  { name: 'Команда',            href: '/settings/team',          icon: 'Users'       },
+  { name: 'Расписание',         href: '/settings/schedule',      icon: 'Calendar'    },
+  { name: 'Уведомления',        href: '/settings/notifications', icon: 'Bell'        },
+  { name: 'Интеграции',         href: '/settings/integrations',  icon: 'Plug'        },
+  { name: 'Тариф и оплата',     href: '/settings/billing',       icon: 'CreditCard'  },
+  { name: 'Брендинг',           href: '/settings/branding',      icon: 'Palette'     },
+  { name: 'Профиль для демо',   href: '/settings/demo-profile',  icon: 'Sparkles'    },
+  { name: 'Роли и доступ',      href: '/settings/roles',         icon: 'Shield'      },
 ]
 
 export const ADMIN_MENU: PlatformMenuItem[] = [
