@@ -127,7 +127,10 @@ export default function IntegrationsPage() {
               <div>
                 <h2 className="text-base font-semibold text-foreground mb-3">Интеграции с CRM</h2>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* CRM-карточки идут в один столбец — как в остальных секциях
+                  настроек (профиль/расписание). Раньше было sm:grid-cols-2,
+                  что давало кривую сетку на mid-desktop. */}
+              <div className="grid grid-cols-1 gap-4">
                 {/* Bitrix24 */}
                 <Card>
                   <CardContent className="p-5">
