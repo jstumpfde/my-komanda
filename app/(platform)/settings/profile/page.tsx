@@ -222,7 +222,11 @@ export default function ProfileSettingsPage() {
             </div>
 
             <div className="space-y-4">
-              {/* ═══ Информация об аккаунте ══════════════════════ */}
+              {/* ═══ Аккаунт + Имя — одна секция ═══════════════════
+                  Раньше было две карточки с дублирующимся displayName
+                  (в Аккаунт-карточке + Input в Имя-карточке). Объединил
+                  в одну: аватар + редактируемое имя слева, email + роль
+                  справа в той же строке. */}
               <Card>
                 <CardHeader className="pb-2 pt-4 px-5">
                   <CardTitle className="text-base flex items-center gap-2">
@@ -234,14 +238,15 @@ export default function ProfileSettingsPage() {
                   {loadingProfile ? (
                     <div className="flex items-center gap-3 py-2">
                       <div className="w-14 h-14 rounded-full bg-muted animate-pulse" />
-                      <div className="space-y-2">
+                      <div className="space-y-2 flex-1">
                         <div className="h-4 w-40 rounded bg-muted animate-pulse" />
                         <div className="h-3 w-56 rounded bg-muted animate-pulse" />
                       </div>
                     </div>
                   ) : (
-                    <div className="flex items-center gap-4 py-1">
-                      <div className="relative group">
+                    <div className="flex items-start gap-4 py-1">
+                      {/* Avatar — click открывает file picker (как в хедере) */}
+                      <div className="relative group shrink-0">
                         <button type="button" onClick={() => fileInputRef.current?.click()} className="rounded-full focus:outline-none focus:ring-2 focus:ring-primary/30" disabled={uploadingAvatar}>
                           <Avatar className="w-14 h-14 text-lg">
                             {avatarUrl && <AvatarImage src={avatarUrl} alt={displayName} />}
@@ -260,30 +265,48 @@ export default function ProfileSettingsPage() {
                           </button>
                         )}
                       </div>
-                      <div>
-                        <p className="font-semibold text-foreground text-base">{displayName}</p>
-                        <p className="text-sm text-muted-foreground flex items-center gap-1.5 mt-0.5">
-                          <Mail className="w-3.5 h-3.5" />
-                          {displayEmail}
-                          {isOwner ? (
-                            <button
-                              type="button"
-                              onClick={() => setEmailChangeOpen(true)}
-                              className="ml-2 text-xs text-primary hover:underline cursor-pointer"
+
+                      <div className="flex-1 min-w-0 space-y-2.5">
+                        {/* Имя — inline edit + Save inline */}
+                        <div>
+                          <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Имя</Label>
+                          <div className="flex items-center gap-2 mt-1">
+                            <Input
+                              value={name}
+                              onChange={e => setName(e.target.value)}
+                              placeholder="Иван Иванов"
+                              onKeyDown={e => { if (e.key === "Enter") handleSaveName() }}
+                              maxLength={100}
+                              className="h-8 text-sm"
+                            />
+                            <Button
+                              size="sm"
+                              className="h-8 gap-1.5 shrink-0"
+                              onClick={handleSaveName}
+                              disabled={savingName || !name.trim() || name.trim() === (profile?.name ?? "")}
                             >
-                              Запросить смену email
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => setEmailChangeOpen(true)}
-                              className="ml-2 text-sm text-primary hover:underline cursor-pointer"
-                            >
-                              Изменить email
-                            </button>
-                          )}
-                        </p>
-                        <div className="mt-2">
+                              {savingName
+                                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                : <Save className="w-3.5 h-3.5" />
+                              }
+                              {savingName ? "..." : "Сохранить"}
+                            </Button>
+                          </div>
+                        </div>
+
+                        {/* Email + роль в одной строке */}
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm text-muted-foreground">
+                          <span className="inline-flex items-center gap-1.5">
+                            <Mail className="w-3.5 h-3.5" />
+                            {displayEmail}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setEmailChangeOpen(true)}
+                            className="text-xs text-primary hover:underline cursor-pointer"
+                          >
+                            {isOwner ? "Запросить смену email" : "Изменить email"}
+                          </button>
                           <Badge
                             variant="outline"
                             className={`text-xs ${ROLE_COLORS[displayRole] ?? ROLE_COLORS.client}`}
@@ -295,43 +318,6 @@ export default function ProfileSettingsPage() {
                       </div>
                     </div>
                   )}
-                </CardContent>
-              </Card>
-
-              {/* ═══ Изменить имя ════════════════════════════════ */}
-              <Card>
-                <CardHeader className="pb-2 pt-4 px-5">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <User className="w-4 h-4" />
-                    Имя
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="px-5 pb-4 pt-0 space-y-3">
-                  <div className="space-y-1">
-                    <Label className="text-sm">Полное имя</Label>
-                    <Input
-                      value={name}
-                      onChange={e => setName(e.target.value)}
-                      placeholder="Иван Иванов"
-                      onKeyDown={e => { if (e.key === "Enter") handleSaveName() }}
-                      maxLength={100}
-                    />
-                    <p className="text-[11px] text-muted-foreground">
-                      Отображается в системе и письмах кандидатам
-                    </p>
-                  </div>
-                  <Button
-                    size="sm"
-                    className="gap-2"
-                    onClick={handleSaveName}
-                    disabled={savingName || !name.trim() || name.trim() === (profile?.name ?? "")}
-                  >
-                    {savingName
-                      ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      : <Save className="w-3.5 h-3.5" />
-                    }
-                    {savingName ? "Сохранение..." : "Сохранить имя"}
-                  </Button>
                 </CardContent>
               </Card>
 
