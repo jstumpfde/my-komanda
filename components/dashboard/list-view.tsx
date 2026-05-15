@@ -13,6 +13,7 @@ import type { CandidateAction } from "@/lib/column-config"
 import { applySortMode, type CandidateSortMode } from "@/lib/candidate-sort"
 import { MapPin, CheckCircle2, XCircle, ArrowRight, ThumbsUp, Clock, ArrowUp, ArrowDown, Star } from "lucide-react"
 import { DemoProgressBar, calcDemoPercent, calcDemoFraction } from "@/components/hr/demo-progress-bar"
+import { getStageLabel, getStageColorClasses } from "@/lib/stages"
 
 export type ListSortKey = "favorite" | "name" | "aiScore" | "progress" | "salary" | "responseDate" | "status" | "city" | "source"
 export type ListSortDir = "asc" | "desc"
@@ -494,11 +495,20 @@ export function ListView({
 
               {/* Stage badge */}
               <div className="text-center">
+                {/* В paginated-режиме все кандидаты завёрнуты в одну
+                    синтетическую колонку {title:"Кандидаты"}; columnTitle
+                    одинаков у всех. Поэтому лейбл/цвет статуса берём из
+                    реального candidate.stage через PLATFORM_STAGES. */}
                 <span
-                  className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium text-white whitespace-nowrap"
-                  style={{ background: `linear-gradient(135deg, ${candidate.colorFrom}, ${candidate.colorTo})` }}
+                  className={cn(
+                    "inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap",
+                    candidate.stage ? getStageColorClasses(candidate.stage) : "",
+                  )}
+                  style={candidate.stage ? undefined : { background: `linear-gradient(135deg, ${candidate.colorFrom}, ${candidate.colorTo})`, color: "#fff" }}
                 >
-                  {candidate.columnTitle === "Демонстрация" ? "Демо" : candidate.columnTitle}
+                  {candidate.stage
+                    ? getStageLabel(candidate.stage)
+                    : (candidate.columnTitle === "Демонстрация" ? "Демо" : candidate.columnTitle)}
                 </span>
               </div>
 

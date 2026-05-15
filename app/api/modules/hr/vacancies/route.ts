@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server"
-import { eq, and, count, isNull, isNotNull } from "drizzle-orm"
+import { eq, and, count, isNull, isNotNull, sql } from "drizzle-orm"
 import { nanoid } from "nanoid"
 import { db } from "@/lib/db"
 import { vacancies } from "@/lib/db/schema"
@@ -118,6 +118,38 @@ export async function POST(req: NextRequest) {
     })
 
     console.log("[POST /api/modules/hr/vacancies] created:", vacancy.id, "short:", vacancy.shortCode)
+
+    // Авто-seed funnel_stages для компании при первой создаваемой вакансии.
+    // Per-company таблица; INSERT идемпотентен через WHERE NOT EXISTS, чтобы
+    // повторный вызов не плодил дубли. 9 стадий в актуальном порядке
+    // PLATFORM_STAGES (lib/stages.ts). Если у компании уже есть свои —
+    // оставляем как есть.
+    try {
+      await db.execute(sql`
+        INSERT INTO funnel_stages (id, company_id, slug, title, color, sort_order, is_terminal, is_default, created_at, updated_at)
+        SELECT gen_random_uuid(), ${user.companyId}::uuid, slug, title, color, sort_order, is_terminal, is_default, NOW(), NOW()
+        FROM (VALUES
+          ('new',             'Новый',             '#94a3b8', 0, false, true),
+          ('primary_contact', 'Первичный контакт', '#60a5fa', 1, false, false),
+          ('demo_opened',     'Демо открыто',      '#6366f1', 2, false, false),
+          ('anketa_filled',   'Анкета заполнена',  '#fb923c', 3, false, false),
+          ('ai_screening',    'AI-скрининг',       '#06b6d4', 4, false, false),
+          ('decision',        'Демо пройдено',     '#f59e0b', 5, false, false),
+          ('interview',       'Собеседование',     '#8b5cf6', 6, false, false),
+          ('hired',           'Нанят',             '#22c55e', 7, true,  false),
+          ('rejected',        'Отказ',             '#ef4444', 8, true,  false)
+        ) AS t(slug, title, color, sort_order, is_terminal, is_default)
+        WHERE NOT EXISTS (
+          SELECT 1 FROM funnel_stages fs
+          WHERE fs.company_id = ${user.companyId}::uuid AND fs.slug = t.slug
+        )
+      `)
+    } catch (e) {
+      // Seed — best-effort. Если упало (таблица отсутствует, нет прав) —
+      // вакансия уже создана, fallback на defaultColumnColors из кода.
+      console.warn("[POST /vacancies] funnel_stages seed skipped:", e instanceof Error ? e.message : e)
+    }
+
     logActivity({ companyId: user.companyId, userId: user.id!, action: "create", entityType: "vacancy", entityId: vacancy.id, entityTitle: vacancy.title, module: "hr", request: req })
     return apiSuccess(vacancy, 201)
   } catch (err) {
