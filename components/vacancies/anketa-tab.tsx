@@ -959,13 +959,25 @@ function CategoryField({ value, onChange }: { value: string; onChange: (v: strin
 
 // ─── Main component ──────────────────────────────────────────────────────────
 
-export function AnketaTab({ vacancyId, descriptionJson, onTitleChange, onNavigateTab, onScoreChange }: {
+// Handle для page-level Save-кнопки (мы экспортим save через ref,
+// чтобы родительская вкладка page.tsx могла триггерить сохранение из
+// своего хедера — без дублирования логики save() внутри AnketaTab).
+export interface AnketaTabHandle {
+  save: () => Promise<void>
+}
+
+interface AnketaTabProps {
   vacancyId: string
   descriptionJson: unknown
   onTitleChange?: (title: string) => void
   onNavigateTab?: (tab: string) => void
   onScoreChange?: (score: { score: number; label: string }) => void
-}) {
+  onSavingChange?: (saving: boolean) => void
+  /** Ref-like callback: компонент передаст { save } сразу после mount. */
+  registerHandle?: (handle: AnketaTabHandle) => void
+}
+
+export function AnketaTab({ vacancyId, descriptionJson, onTitleChange, onNavigateTab, onScoreChange, onSavingChange, registerHandle }: AnketaTabProps) {
   const [data, setData] = useState<AnketaData>(() => {
     const saved = (descriptionJson as Record<string, unknown>)?.anketa as Record<string, unknown> | undefined
     return saved ? migrateAnketa(saved) : emptyAnketa()
@@ -1101,6 +1113,17 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange, onNavigat
       setSaving(false)
     }
   }, [data, descriptionJson, vacancyId])
+
+  // Прокидываем saving в page.tsx, чтобы кнопка «Сохранить» в шапке таба
+  // умела показать spinner. На первом рендере (false) — состояние совпадает.
+  useEffect(() => { onSavingChange?.(saving) }, [saving, onSavingChange])
+
+  // Регистрируем handle при mount, чтобы родитель мог дёргать save().
+  // registerHandle — стабильная ссылка из useCallback в page.tsx; не вызовет
+  // лишних re-register'ов.
+  useEffect(() => {
+    registerHandle?.({ save })
+  }, [registerHandle, save])
 
   // ── AI Refill ──
   const handleAiRefill = useCallback(async () => {

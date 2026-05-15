@@ -33,7 +33,7 @@ import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { CourseTab, type CourseTabHandle } from "@/components/vacancies/course-tab"
-import { AnketaTab } from "@/components/vacancies/anketa-tab"
+import { AnketaTab, type AnketaTabHandle } from "@/components/vacancies/anketa-tab"
 import type { NotionEditorHandle } from "@/components/vacancies/notion-editor"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -739,6 +739,14 @@ export default function VacancyPage() {
   const courseEditorRef = useRef<NotionEditorHandle>(null)
   const courseTabRef = useRef<CourseTabHandle>(null)
   const [courseEditorSaveStatus, setCourseEditorSaveStatus] = useState<"saved" | "saving">("saved")
+
+  // Anketa external save handle: AnketaTab вызывает registerHandle({save})
+  // при mount, мы держим ссылку и зелёная кнопка «Сохранить» в шапке таба
+  // её дёргает. Через useState (не useRef), чтобы re-render шапки случался
+  // когда handle становится доступен.
+  const [anketaHandle, setAnketaHandle] = useState<AnketaTabHandle | null>(null)
+  const [anketaSaving, setAnketaSaving] = useState(false)
+  const registerAnketaHandle = useCallback((h: AnketaTabHandle) => setAnketaHandle(h), [])
 
   // HH.ru integration state
   const [hhConnected, setHhConnected] = useState<boolean | null>(null)
@@ -1853,7 +1861,7 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                     )}
                     {apiCandidates.length > 0 && <DropdownMenuSeparator />}
                     <DropdownMenuItem className="gap-2 cursor-pointer" disabled={duplicating} onClick={handleDuplicate}>
-                      {duplicating ? <Loader2 className="size-3.5 animate-spin" /> : <Copy className="size-3.5" />}Создать похожую
+                      {duplicating ? <Loader2 className="size-3.5 animate-spin" /> : <Copy className="size-3.5" />}Дублировать
                     </DropdownMenuItem>
                     {(status === "draft" || status === "paused") && (
                       <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => { updateVacancyStatus("closed_cancelled"); toast("В архив") }}>
@@ -1997,6 +2005,20 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                 )}
                 {activeTab === "anketa" && (
                   <div className="flex items-center gap-1.5 shrink-0">
+                    {/* Зелёная Save-кнопка (как в Демо-табе) — дёргает save()
+                        внутри AnketaTab через handle, который компонент
+                        регистрирует при mount. */}
+                    <Button
+                      size="sm"
+                      className="gap-1.5 text-xs h-8"
+                      onClick={() => anketaHandle?.save()}
+                      disabled={!anketaHandle || anketaSaving}
+                    >
+                      {anketaSaving
+                        ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        : <Check className="w-3.5 h-3.5" />}
+                      Сохранить
+                    </Button>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8" disabled={pasteBusy}>
@@ -2092,7 +2114,15 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
               </div>
 
               <TabsContent value="anketa">
-                <AnketaTab vacancyId={id} descriptionJson={apiVacancy?.descriptionJson} onTitleChange={(t) => { if (t) setInternalName(t) }} onNavigateTab={(tab) => { setActiveTab(tab); window.scrollTo({ top: 0, behavior: "smooth" }) }} onScoreChange={setAdvisorScore} />
+                <AnketaTab
+                  vacancyId={id}
+                  descriptionJson={apiVacancy?.descriptionJson}
+                  onTitleChange={(t) => { if (t) setInternalName(t) }}
+                  onNavigateTab={(tab) => { setActiveTab(tab); window.scrollTo({ top: 0, behavior: "smooth" }) }}
+                  onScoreChange={setAdvisorScore}
+                  onSavingChange={setAnketaSaving}
+                  registerHandle={registerAnketaHandle}
+                />
               </TabsContent>
 
               <TabsContent value="candidates">
