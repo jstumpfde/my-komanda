@@ -2,6 +2,7 @@
 
 import { useMemo, useRef } from "react"
 import type { Candidate } from "./candidate-card"
+import { CandidateAvatar } from "./candidate-avatar"
 import type { CardDisplaySettings } from "./card-settings"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -41,8 +42,7 @@ interface ListViewProps {
   /** Множественное выделение для bulk-операций. Если не задано — колонка чекбоксов скрыта. */
   selectedIds?: Set<string>
   onSelectionChange?: (next: Set<string>) => void
-  /** Если задан — рендерим колонку «№» с номером строки от startIndex+1.
-   *  Используется на пагинированном списке: (page-1)*pageSize. */
+  /** @deprecated Колонка № удалена. Поле сохранено для совместимости интерфейса с callers. */
   startIndex?: number
 }
 
@@ -101,8 +101,8 @@ function SortHeader({
       onClick={() => onToggle(sortKey)}
       aria-sort={ariaSort}
       className={cn(
-        "inline-flex items-center gap-1 rounded-md px-1.5 -mx-1.5 py-0.5 hover:bg-accent/60 hover:text-foreground transition-colors",
-        active ? "text-primary font-semibold bg-primary/10" : "text-muted-foreground",
+        "inline-flex items-center gap-1 rounded-md px-1.5 -mx-1.5 py-0.5 hover:bg-accent hover:text-foreground transition-colors whitespace-nowrap",
+        active ? "text-primary font-semibold bg-primary/20 ring-1 ring-primary/30" : "text-muted-foreground",
         align === "center" && "justify-center",
         align === "right" && "justify-end",
       )}
@@ -120,7 +120,7 @@ function SortHeader({
 export function ListView({
   columns, settings, onOpenProfile, onAction, onToggleFavorite,
   sortMode = "date_desc", sort = null, onSortChange,
-  selectedIds, onSelectionChange, startIndex,
+  selectedIds, onSelectionChange,
 }: ListViewProps) {
   const lastSelectedIdRef = useRef<string | null>(null)
   const selectionEnabled = !!selectedIds && !!onSelectionChange
@@ -203,7 +203,11 @@ export function ListView({
     } else if (sort.dir === DEFAULT_DIR[key]) {
       onSortChange({ key, dir: sort.dir === "asc" ? "desc" : "asc" })
     } else {
-      onSortChange(null)
+      // 3-й клик — сброс на глобальный дефолт (progress desc), а не null.
+      // Раньше возвращали null, но в pagination-режиме это приводило к
+      // визуальному "залипанию" последней сортировки (paginated state не
+      // сбрасывался). Явный reset к дефолту делает цикл предсказуемым.
+      onSortChange({ key: "progress", dir: "desc" })
     }
   }
 
@@ -229,15 +233,15 @@ export function ListView({
   // длиннее («Первичный контакт» ~17 симв, «Анкета заполнена» ~16 симв),
   // поэтому Статус получает больше места (min 140 / 1.8fr), а Кандидат —
   // меньше избыточного простора (с 6fr → 3fr, max-w на имя 240px).
-  const showRowNumbers = typeof startIndex === "number"
-
   const cols: string[] = []
-  if (selectionEnabled) cols.push("36px")               // ☐ — фикс
-  if (showRowNumbers)   cols.push("44px")               // № — фикс
-  cols.push("minmax(180px, 3fr)")                       // Кандидат
-  cols.push("40px")                                     // ★ — фикс
-  if (showProgress) cols.push("minmax(110px, 1.5fr)")   // Демо
-  if (showScore) cols.push("minmax(70px, 1fr)")         // AI-оценка
+  // ☐ — 28px, justify-end. ★ — 32px (w-8), justify-center, чтобы звёздочка
+  // визуально была по центру ячейки с равным воздухом слева/справа.
+  // -ml-3 на ★ и Кандидате схлопывает gap-4 до 4px edge-to-edge.
+  if (selectionEnabled) cols.push("28px")               // ☐ — фикс
+  cols.push("32px")                                     // ★ — фикс (w-8)
+  cols.push("minmax(207px, 3.45fr)")                    // Кандидат — расширен ~15% за счёт Демо/AI
+  if (showProgress) cols.push("minmax(95px, 1.2fr)")    // Демо
+  if (showScore) cols.push("minmax(60px, 0.85fr)")      // AI
   if (showSalary) cols.push("minmax(110px, 1.5fr)")     // Зарплата
   if (showCity) cols.push("minmax(120px, 2fr)")         // Город
   if (showResponseDate) cols.push("minmax(80px, 1fr)")  // Дата
@@ -302,7 +306,7 @@ export function ListView({
         style={gridStyle}
       >
         {selectionEnabled && (
-          <div className="flex items-center justify-center pl-2 pr-2" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center justify-end" onClick={(e) => e.stopPropagation()}>
             <Checkbox
               checked={headerState}
               onCheckedChange={() => toggleAllVisible()}
@@ -310,17 +314,7 @@ export function ListView({
             />
           </div>
         )}
-        {showRowNumbers && (
-          <div className="text-center text-muted-foreground/70 tabular-nums select-none">№</div>
-        )}
-        <div className="px-2">
-          {onSortChange ? (
-            <SortHeader label="Кандидат" sortKey="name" sort={sort} onToggle={handleSort} align="left" />
-          ) : (
-            <span>Кандидат</span>
-          )}
-        </div>
-        <div className="flex items-center justify-center px-2">
+        <div className="flex items-center justify-center -ml-3">
           <button
             type="button"
             onClick={() => handleSort("favorite")}
@@ -331,7 +325,7 @@ export function ListView({
               sort?.key === "favorite" ? "text-primary bg-primary/10" : "text-muted-foreground/60",
             )}
           >
-            <Star className={cn("size-4", sort?.key === "favorite" && "fill-amber-400 text-amber-400")} />
+            <Star className={cn("size-4", sort?.key === "favorite" && "fill-yellow-400 text-yellow-400")} />
             {sort?.key === "favorite" && (sort.dir === "asc" ? (
               <ArrowUp className="size-3" strokeWidth={2.5} />
             ) : (
@@ -339,10 +333,17 @@ export function ListView({
             ))}
           </button>
         </div>
+        <div className="-ml-3">
+          {onSortChange ? (
+            <SortHeader label="Кандидат" sortKey="name" sort={sort} onToggle={handleSort} align="left" />
+          ) : (
+            <span>Кандидат</span>
+          )}
+        </div>
         {showProgress && <SortHeader label="Демо" sortKey="progress" sort={sort} onToggle={handleSort} align="center" />}
-        {showScore && <SortHeader label="AI-оценка" sortKey="aiScore" sort={sort} onToggle={handleSort} align="center" />}
+        {showScore && <SortHeader label="AI-оцен." sortKey="aiScore" sort={sort} onToggle={handleSort} align="center" />}
         {showSalary && <SortHeader label="Зарплата" sortKey="salary" sort={sort} onToggle={handleSort} align="center" />}
-        {showCity && <SortHeader label="Город" sortKey="city" sort={sort} onToggle={handleSort} align="center" />}
+        {showCity && <SortHeader label="Город" sortKey="city" sort={sort} onToggle={handleSort} align="left" />}
         {showResponseDate && <SortHeader label="Дата" sortKey="responseDate" sort={sort} onToggle={handleSort} align="center" />}
         <SortHeader label="Статус" sortKey="status" sort={sort} onToggle={handleSort} align="center" />
         {showSource && <SortHeader label="Источник" sortKey="source" sort={sort} onToggle={handleSort} align="center" />}
@@ -380,7 +381,7 @@ export function ListView({
               {/* Selection checkbox */}
               {selectionEnabled && (
                 <div
-                  className="flex items-center justify-center pl-2 pr-2"
+                  className="flex items-center justify-end"
                   onClick={(e) => { e.stopPropagation(); toggleOne(candidate.id, e) }}
                 >
                   <Checkbox
@@ -391,49 +392,42 @@ export function ListView({
                 </div>
               )}
 
-              {/* Row number (опционально, только при пагинированном режиме) */}
-              {showRowNumbers && (
-                <div className="text-center text-[13px] text-muted-foreground tabular-nums select-none">
-                  {(startIndex ?? 0) + i + 1}
-                </div>
-              )}
-
-              {/* Name + experience */}
-              <div className="flex items-center gap-3 min-w-0 px-2">
-                <div
-                  className="w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-white text-[11px] font-bold"
-                  style={{ background: `linear-gradient(135deg, ${candidate.colorFrom}, ${candidate.colorTo})` }}
-                >
-                  {candidate.name.charAt(0)}
-                </div>
-                <div className="min-w-0">
-                  <p
-                    className="text-[15px] font-medium text-foreground truncate max-w-[240px]"
-                    title={candidate.name}
-                  >
-                    {candidate.name}
-                  </p>
-                  {settings.showExperience && (
-                    <p
-                      className="text-[13px] text-muted-foreground truncate max-w-[240px]"
-                      title={candidate.experience}
-                    >
-                      {candidate.experienceYears ? `Опыт ${candidate.experienceYears} лет` : (candidate.experience ? `Опыт ${candidate.experience}` : "")}
-                    </p>
-                  )}
-                </div>
-              </div>
-
               {/* Favorite */}
-              <div onClick={(e) => e.stopPropagation()} className="flex items-center justify-center px-2">
+              <div onClick={(e) => e.stopPropagation()} className="flex items-center justify-center -ml-3">
                 <button
                   type="button"
                   onClick={() => onToggleFavorite?.(candidate.id, !candidate.isFavorite)}
                   className="inline-flex items-center justify-center p-1 rounded hover:bg-accent/60 transition-colors"
                   aria-label={candidate.isFavorite ? "Убрать из избранного" : "В избранное"}
                 >
-                  <Star className={cn("size-4", candidate.isFavorite ? "fill-amber-400 text-amber-400" : "text-muted-foreground/40 hover:text-amber-400")} />
+                  <Star className={cn("size-4", candidate.isFavorite ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground/40 hover:text-yellow-400")} />
                 </button>
+              </div>
+
+              {/* Name + experience */}
+              <div className="flex items-center gap-3 min-w-0 -ml-3">
+                <CandidateAvatar
+                  name={candidate.name}
+                  photoUrl={candidate.photoUrl}
+                  colorFrom={candidate.colorFrom}
+                  colorTo={candidate.colorTo}
+                />
+                <div className="min-w-0 flex-1">
+                  <p
+                    className="text-[15px] font-medium text-foreground truncate"
+                    title={candidate.name}
+                  >
+                    {candidate.name}
+                  </p>
+                  {settings.showExperience && (
+                    <p
+                      className="text-[13px] text-muted-foreground truncate"
+                      title={candidate.experience}
+                    >
+                      {candidate.experienceYears ? `Опыт ${candidate.experienceYears} лет` : (candidate.experience ? `Опыт ${candidate.experience}` : "")}
+                    </p>
+                  )}
+                </div>
               </div>
 
               {/* Demo progress */}

@@ -17,10 +17,12 @@ type SortKey =
   | "createdAt"
   | "name"
   | "stage"
+  | "city"
+  | "source"
 
 const ALLOWED_SORT_KEYS: ReadonlySet<SortKey> = new Set<SortKey>([
   "favorite", "aiScore", "salary", "responseDate", "status", "progress",
-  "createdAt", "name", "stage",
+  "createdAt", "name", "stage", "city", "source",
 ])
 
 const ALLOWED_PAGE_SIZES: ReadonlySet<number> = new Set<number>([20, 50, 100])
@@ -67,18 +69,63 @@ const STAGE_ORDER_SQL = sql`CASE ${candidates.stage}
   ELSE 99
 END`
 
+// Абсолютное число пройденных блоков демо (status='completed', исключая
+// служебный __complete__-маркер). totalBlocks одинаков для всех кандидатов
+// одной вакансии, поэтому порядок по этой метрике совпадает с порядком по
+// progressPercent в рамках одной вакансии. Точный процент клиент видит из
+// progressPercent в маппинге ниже.
+const DEMO_PROGRESS_COUNT_SQL = sql`(
+  SELECT count(*) FROM jsonb_array_elements(${candidates.demoProgressJson}->'blocks') b
+  WHERE b->>'status' = 'completed'
+    AND b->>'blockId' <> '__complete__'
+)`
+
 function buildOrderBy(key: SortKey | null, dir: "asc" | "desc"): SQL[] {
   const wrap = (col: Parameters<typeof asc>[0]) => (dir === "asc" ? asc(col) : desc(col))
+  // id DESC — secondary tiebreaker для стабильной пагинации при равных значениях
+  // primary-ключа (например, у двух кандидатов одинаковый прогресс).
+  const tiebreak = desc(candidates.id)
   switch (key) {
-    case "favorite":     return [wrap(candidates.isFavorite), desc(candidates.createdAt)]
-    case "aiScore":      return [wrap(candidates.aiScore),    desc(candidates.createdAt)]
-    case "salary":       return [wrap(sql`COALESCE(${candidates.salaryMax}, ${candidates.salaryMin}, 0)`), desc(candidates.createdAt)]
-    case "name":         return [wrap(candidates.name), desc(candidates.createdAt)]
+    case "favorite":     return [wrap(candidates.isFavorite), desc(candidates.createdAt), tiebreak]
+    case "aiScore": return [
+      // NULL ai_score всегда в конец независимо от направления — кандидаты
+      // без скоринга не должны доминировать в desc-выдаче.
+      dir === "asc"
+        ? sql`${candidates.aiScore} ASC NULLS LAST`
+        : sql`${candidates.aiScore} DESC NULLS LAST`,
+      desc(candidates.createdAt),
+      tiebreak,
+    ]
+    case "salary":       return [wrap(sql`COALESCE(${candidates.salaryMax}, ${candidates.salaryMin}, 0)`), desc(candidates.createdAt), tiebreak]
+    case "name":         return [wrap(candidates.name), desc(candidates.createdAt), tiebreak]
+    case "progress":     return [
+      dir === "asc"
+        ? sql`${DEMO_PROGRESS_COUNT_SQL} ASC NULLS LAST`
+        : sql`${DEMO_PROGRESS_COUNT_SQL} DESC NULLS LAST`,
+      desc(candidates.createdAt),
+      tiebreak,
+    ]
     case "responseDate":
-    case "createdAt":    return [wrap(candidates.createdAt)]
+    case "createdAt":    return [wrap(candidates.createdAt), tiebreak]
     case "status":
-    case "stage":        return [wrap(STAGE_ORDER_SQL), desc(candidates.createdAt)]
-    default:             return [desc(candidates.createdAt)]
+    case "stage":        return [wrap(STAGE_ORDER_SQL), desc(candidates.createdAt), tiebreak]
+    case "city": return [
+      // NULL/пустые в конец независимо от направления — иначе они доминируют
+      // и активная сортировка теряет смысл (как в client-side sort, line ~177).
+      dir === "asc"
+        ? sql`NULLIF(${candidates.city}, '') ASC NULLS LAST`
+        : sql`NULLIF(${candidates.city}, '') DESC NULLS LAST`,
+      desc(candidates.createdAt),
+      tiebreak,
+    ]
+    case "source": return [
+      dir === "asc"
+        ? sql`NULLIF(${candidates.source}, '') ASC NULLS LAST`
+        : sql`NULLIF(${candidates.source}, '') DESC NULLS LAST`,
+      desc(candidates.createdAt),
+      tiebreak,
+    ]
+    default:             return [desc(candidates.createdAt), tiebreak]
   }
 }
 
@@ -101,7 +148,11 @@ export async function GET(req: NextRequest) {
   try {
     const user = await requireCompany()
     const url = new URL(req.url)
-    const vacancyId = url.searchParams.get("vacancy_id")
+    // Принимаем оба варианта имени параметра: vacancyId (новый, camelCase —
+    // его шлёт usePaginatedCandidates) и vacancy_id (legacy — useCandidates).
+    // Без fallback'a новый клиент проваливался в ветку «без vacancyId» ниже
+    // и получал total по всей компании через innerJoin(vacancies).
+    const vacancyId = url.searchParams.get("vacancyId") ?? url.searchParams.get("vacancy_id")
     const stageParam = url.searchParams.get("stage")
 
     // If no vacancy_id — return candidates for this company with vacancy title.
@@ -293,8 +344,9 @@ export async function GET(req: NextRequest) {
     const stages = stageParam ? stageParam.split(",").filter(Boolean) : []
 
     // Пагинация — opt-in: включается если задан page ИЛИ pageSize.
-    // Шаг 1 (Ф1): sort=progress и фильтр demoProgress в пагинированном
-    // режиме игнорируются (см. ТЗ). Шаг 2 перенесёт прогресс в SQL.
+    // sortBy=progress теперь считается в SQL (см. DEMO_PROGRESS_COUNT_SQL),
+    // count(*) не ломает. Фильтр demoProgress остаётся post-fetch — его
+    // применение в пагинированном режиме всё ещё игнорируется (см. ниже).
     const pageParam     = url.searchParams.get("page")
     const pageSizeParam = url.searchParams.get("pageSize")
     const paginated     = pageParam !== null || pageSizeParam !== null
@@ -306,12 +358,8 @@ export async function GET(req: NextRequest) {
 
     // sortBy — новый параметр (ТЗ), sort — legacy fallback.
     const sortByRaw = url.searchParams.get("sortBy") ?? url.searchParams.get("sort")
-    let sortKey: SortKey | null =
+    const sortKey: SortKey | null =
       sortByRaw && ALLOWED_SORT_KEYS.has(sortByRaw as SortKey) ? (sortByRaw as SortKey) : null
-
-    // В пагинированном режиме progress считается post-fetch и ломает count(*).
-    // Откатываем на createdAt — это явное поведение Шага 1.
-    if (paginated && sortKey === "progress") sortKey = "createdAt"
 
     const orderRaw = url.searchParams.get("order")
     const dir: "asc" | "desc" = orderRaw === "asc" ? "asc" : "desc"
@@ -474,13 +522,64 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // demoProgress — фильтрация по прогрессу демо. Поскольку процент
-    // считается из demo_progress_json + lessons.length, делаем это
-    // post-fetch (как сейчас сделана сортировка по progress в строке 388).
+    // Поиск по имени/email/телефону (ILIKE). %/_/\ экранируем, чтобы юзер
+    // не получил расширенный паттерн при вводе этих символов.
+    const searchParam = url.searchParams.get("search")?.trim()
+    if (searchParam && searchParam.length > 0) {
+      const escaped = searchParam.replace(/[\\%_]/g, (m) => "\\" + m)
+      const pattern = `%${escaped}%`
+      filterConds.push(sql`(
+        ${candidates.name}  ILIKE ${pattern}
+        OR ${candidates.email} ILIKE ${pattern}
+        OR ${candidates.phone} ILIKE ${pattern}
+      )`)
+    }
+
+    // demoProgress — фильтрация по прогрессу демо. В paginated режиме
+    // применяется в SQL (требует pre-fetch demoTotalBlocks для расчёта
+    // порога 85%). В non-paginated — post-fetch (ниже), потому что там
+    // есть точный progressPercent на каждом кандидате.
     const demoProgressParam = url.searchParams.get("demoProgress")
     const demoProgressFilters = demoProgressParam
       ? demoProgressParam.split(",").filter(Boolean)
       : []
+
+    // Pre-fetch demoTotalBlocks (только для paginated + demoProgress filter).
+    // Использует ту же логику, что и блок ниже (line ~590), но раньше —
+    // чтобы участвовать в WHERE.
+    let paginatedDemoTotalBlocks = 0
+    if (paginated && demoProgressFilters.length > 0) {
+      const earlyDemoRows = await db
+        .select({ lessonsJson: demos.lessonsJson })
+        .from(demos)
+        .where(eq(demos.vacancyId, vacancyId))
+        .orderBy(desc(demos.updatedAt))
+        .limit(1)
+      if (earlyDemoRows.length > 0) {
+        const lessons = Array.isArray(earlyDemoRows[0].lessonsJson)
+          ? (earlyDemoRows[0].lessonsJson as LessonShape[])
+          : []
+        paginatedDemoTotalBlocks = lessons.length + 2
+      }
+    }
+
+    if (paginated && demoProgressFilters.length > 0 && paginatedDemoTotalBlocks > 0) {
+      const threshold85 = Math.ceil(paginatedDemoTotalBlocks * 0.85)
+      const orParts: SQL[] = []
+      for (const f of demoProgressFilters) {
+        if (f === "not_started") {
+          orParts.push(sql`${DEMO_PROGRESS_COUNT_SQL} = 0`)
+        } else if (f === "in_progress") {
+          orParts.push(sql`(${DEMO_PROGRESS_COUNT_SQL} > 0 AND ${DEMO_PROGRESS_COUNT_SQL} < ${threshold85})`)
+        } else if (f === "completed_85") {
+          orParts.push(sql`${DEMO_PROGRESS_COUNT_SQL} >= ${threshold85}`)
+        } else if (f === "completed_below_85") {
+          orParts.push(sql`((${candidates.demoProgressJson}->>'completedAt') IS NOT NULL AND ${DEMO_PROGRESS_COUNT_SQL} < ${threshold85})`)
+        }
+      }
+      const orSql = or(...orParts)
+      if (orSql) filterConds.push(orSql)
+    }
 
     const baseConds: SQL[] = [
       eq(candidates.vacancyId, vacancyId) as SQL,
@@ -501,23 +600,9 @@ export async function GET(req: NextRequest) {
     }
 
     const rowsQuery = db.select().from(candidates).where(where).orderBy(...orderBy)
-    let rows = paginated
+    const rows = paginated
       ? await rowsQuery.limit(pageSize).offset(offset)
       : await rowsQuery
-
-    // Пост-сортировка по progress только в непагинированном режиме (см. выше).
-    if (!paginated && sortKey === "progress") {
-      const mul = dir === "asc" ? 1 : -1
-      const progressOf = (c: typeof rows[number]): number => {
-        const dp = c.demoProgressJson as { blocks?: { status?: string }[]; totalBlocks?: number } | null
-        if (!dp || !Array.isArray(dp.blocks)) return -1
-        const total = dp.totalBlocks ?? dp.blocks.length
-        if (!total) return -1
-        const completed = dp.blocks.filter(b => b?.status === "completed").length
-        return Math.round((completed / total) * 100)
-      }
-      rows = [...rows].sort((a, b) => mul * (progressOf(a) - progressOf(b)))
-    }
 
     // Подтягиваем candidate_name из hh_responses как третий fallback к
     // deriveCandidateName (см. lib/candidate-name.ts).

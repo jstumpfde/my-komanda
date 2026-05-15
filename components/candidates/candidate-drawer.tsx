@@ -848,7 +848,7 @@ export function CandidateDrawer({
               <TabsTrigger value="contacts" className="text-[10px] px-1 py-1.5">Контакты</TabsTrigger>
               <TabsTrigger value="answers" className="text-[10px] px-1 py-1.5">Ответы</TabsTrigger>
               <TabsTrigger value="chat" className="text-[10px] px-1 py-1.5">Чат hh</TabsTrigger>
-              <TabsTrigger value="ai" className="text-[10px] px-1 py-1.5">AI</TabsTrigger>
+              <TabsTrigger value="ai" className="text-[10px] px-1 py-1.5">AI-оценка</TabsTrigger>
               <TabsTrigger value="channels" className="text-[10px] px-1 py-1.5">Каналы</TabsTrigger>
               <TabsTrigger value="history" className="text-[10px] px-1 py-1.5">История</TabsTrigger>
             </TabsList>

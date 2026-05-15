@@ -19,7 +19,7 @@ interface Props {
   onSaved?: (settings: Settings, aiScoringEnabled: boolean) => void
 }
 
-const DEFAULT_INVITE = "Здравствуйте! Спасибо за отклик. Мы подготовили короткую демонстрацию должности — 15 минут, и вы узнаете всё о задачах, команде и доходе. Перейдите по ссылке: https://company24.pro/demo/invite"
+const DEFAULT_INVITE = "Здравствуйте! Спасибо за отклик. Мы подготовили короткую демонстрацию должности — 15 минут, и вы узнаете всё о задачах, команде и доходе."
 const DEFAULT_REJECT = "Здравствуйте! Спасибо за интерес к нашей вакансии. К сожалению, на данный момент ваш опыт не совсем подходит под наши требования. Желаем удачи в поиске!"
 
 export function VacancyAiProcessSettings({ vacancyId, initial, initialAiScoringEnabled, onSaved }: Props) {
@@ -27,7 +27,9 @@ export function VacancyAiProcessSettings({ vacancyId, initial, initialAiScoringE
   const [belowAction, setBelowAction] = useState<"reject" | "keep_new">(
     initial?.belowThresholdAction ?? "reject",
   )
-  const [inviteMessage, setInviteMessage] = useState<string>(initial?.inviteMessage ?? DEFAULT_INVITE)
+  // inviteMessage остался в типе settings и редактируется в табе «Сообщения»
+  // (automation-settings.tsx). Здесь убрали поле, чтобы не плодить две формы
+  // на одно поле — гонка двух форм затирала свежие правки старым state.
   const [rejectMessage, setRejectMessage] = useState<string>(initial?.rejectMessage ?? DEFAULT_REJECT)
   const [aiScoringEnabled, setAiScoringEnabled] = useState<boolean>(initialAiScoringEnabled ?? true)
   const [saving, setSaving] = useState(false)
@@ -36,9 +38,6 @@ export function VacancyAiProcessSettings({ vacancyId, initial, initialAiScoringE
     if (!initial) return
     if (typeof initial.minScore === "number") setMinScore(initial.minScore)
     if (initial.belowThresholdAction) setBelowAction(initial.belowThresholdAction)
-    if (typeof initial.inviteMessage === "string" && initial.inviteMessage.length > 0) {
-      setInviteMessage(initial.inviteMessage)
-    }
     if (typeof initial.rejectMessage === "string" && initial.rejectMessage.length > 0) {
       setRejectMessage(initial.rejectMessage)
     }
@@ -57,7 +56,6 @@ export function VacancyAiProcessSettings({ vacancyId, initial, initialAiScoringE
         body: JSON.stringify({
           minScore,
           belowThresholdAction: belowAction,
-          inviteMessage,
           rejectMessage,
           aiScoringEnabled,
         }),
@@ -155,19 +153,9 @@ export function VacancyAiProcessSettings({ vacancyId, initial, initialAiScoringE
           </div>
         </div>
 
-        <div>
-          <Label className="text-xs font-medium mb-1.5 block">Текст приглашения на демо</Label>
-          <Textarea
-            value={inviteMessage}
-            onChange={e => setInviteMessage(e.target.value)}
-            rows={4}
-            placeholder={DEFAULT_INVITE}
-            className="text-sm resize-y"
-          />
-          <p className="text-[10px] text-muted-foreground mt-1">
-            Можно использовать [Имя], [должность], [компания], [ссылка] — будут подставлены автоматически.
-          </p>
-        </div>
+        <p className="text-[11px] text-muted-foreground bg-muted/40 rounded-md px-2.5 py-2 border">
+          Текст первого сообщения настраивается в табе «Сообщения».
+        </p>
 
         <div>
           <Label className="text-xs font-medium mb-1.5 block">Текст мягкого отказа</Label>

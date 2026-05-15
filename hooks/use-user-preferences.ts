@@ -4,21 +4,44 @@ import { useCallback, useEffect, useRef, useState } from "react"
 
 export type CandidatesViewMode = "funnel" | "list" | "kanban" | "tiles"
 
+export interface ListSortPref {
+  key: string
+  dir: "asc" | "desc"
+}
+
 export interface UserPreferences {
   viewMode: CandidatesViewMode
   columns: Record<string, boolean>
+  // null — нет сохранённого выбора. Page инжектит дефолт при первом визите.
+  listSort: ListSortPref | null
 }
 
 const DEFAULT_PREFS: UserPreferences = {
   viewMode: "list",
   columns: {},
+  listSort: null,
 }
 
 const ALLOWED_MODES: CandidatesViewMode[] = ["funnel", "list", "kanban", "tiles"]
 
+// Whitelist должен совпадать с ListSortKey (components/dashboard/list-view.tsx)
+// и серверным ALLOWED_LIST_SORT_KEYS (app/api/user/preferences/route.ts).
+const ALLOWED_LIST_SORT_KEYS = new Set([
+  "favorite", "name", "aiScore", "progress", "salary",
+  "responseDate", "status", "city", "source",
+])
+
+function normalizeListSort(raw: unknown): ListSortPref | null {
+  if (!raw || typeof raw !== "object") return null
+  const r = raw as { key?: unknown; dir?: unknown }
+  if (typeof r.key !== "string" || !ALLOWED_LIST_SORT_KEYS.has(r.key)) return null
+  if (r.dir !== "asc" && r.dir !== "desc") return null
+  return { key: r.key, dir: r.dir }
+}
+
 function normalize(raw: unknown): UserPreferences {
   if (!raw || typeof raw !== "object") return { ...DEFAULT_PREFS }
-  const r = raw as { viewMode?: unknown; columns?: unknown }
+  const r = raw as { viewMode?: unknown; columns?: unknown; listSort?: unknown }
   const viewMode = ALLOWED_MODES.includes(r.viewMode as CandidatesViewMode)
     ? (r.viewMode as CandidatesViewMode)
     : "list"
@@ -26,7 +49,7 @@ function normalize(raw: unknown): UserPreferences {
     r.columns && typeof r.columns === "object" && !Array.isArray(r.columns)
       ? (r.columns as Record<string, boolean>)
       : {}
-  return { viewMode, columns }
+  return { viewMode, columns, listSort: normalizeListSort(r.listSort) }
 }
 
 /**
@@ -54,7 +77,11 @@ export function useUserPreferences() {
     }
   }, [])
 
-  const persist = useCallback((patch: { viewMode?: CandidatesViewMode; columns?: Record<string, boolean> }) => {
+  const persist = useCallback((patch: {
+    viewMode?: CandidatesViewMode
+    columns?: Record<string, boolean>
+    listSort?: ListSortPref | null
+  }) => {
     inflight.current?.abort()
     const ac = new AbortController()
     inflight.current = ac
@@ -82,5 +109,13 @@ export function useUserPreferences() {
     [persist],
   )
 
-  return { prefs, loaded, setViewMode, setColumns }
+  const setListSort = useCallback(
+    (listSort: ListSortPref | null) => {
+      setPrefs((p) => ({ ...p, listSort }))
+      persist({ listSort })
+    },
+    [persist],
+  )
+
+  return { prefs, loaded, setViewMode, setColumns, setListSort }
 }

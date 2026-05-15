@@ -12,11 +12,27 @@ export async function POST(req: NextRequest) {
   const companyId = session.user.companyId
   const body = await req.json().catch(() => ({}))
 
+  // UUID-валидация vacancyId: drizzle бросает ошибку с регекс-сообщением,
+  // если попытаться передать невалидную строку в WHERE eq(uuid_col, ...).
+  // Возвращаем чистый 400 вместо 500.
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+  const rawVacancyId = typeof body.vacancyId === "string" ? body.vacancyId : null
+  const vacancyId = rawVacancyId && UUID_RE.test(rawVacancyId) ? rawVacancyId : undefined
+
+  // Коэрция чисел: клиент мог прислать строку, undefined или NaN.
+  const toFiniteNumber = (v: unknown): number | undefined => {
+    if (v == null) return undefined
+    const n = Number(v)
+    return Number.isFinite(n) ? n : undefined
+  }
+  const limit        = toFiniteNumber(body.limit)
+  const delaySeconds = toFiniteNumber(body.delaySeconds)
+
   const result = await processHhQueue({
     companyId,
-    localVacancyId:      typeof body.vacancyId === "string" ? body.vacancyId : undefined,
-    limit:               typeof body.limit === "number" ? body.limit : undefined,
-    delaySeconds:        body.delaySeconds != null ? Number(body.delaySeconds) : undefined,
+    localVacancyId:      vacancyId,
+    limit,
+    delaySeconds,
     respectWorkingHours: false, // ручной запуск — без блока по времени
     stopFlags,
   })

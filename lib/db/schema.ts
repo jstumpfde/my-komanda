@@ -168,6 +168,10 @@ export const userPreferences = pgTable("user_preferences", {
   userId: uuid("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
   candidatesViewMode: text("candidates_view_mode").default("list"), // 'funnel' | 'list' | 'kanban' | 'tiles'
   candidatesColumnsJson: jsonb("candidates_columns_json").default("{}"),
+  // { key: ListSortKey, dir: "asc"|"desc" } — последний выбор сортировки списка
+  // кандидатов. NULL → дефолт createdAt desc, инжектится и persist'ится при
+  // первом визите (см. app/(modules)/hr/vacancies/[id]/page.tsx).
+  candidatesListSortJson: jsonb("candidates_list_sort_json"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 })
@@ -359,7 +363,7 @@ export const DEFAULT_FORM_FIELDS: Required<NonNullable<PostDemoSettings["formFie
   email:     { enabled: true, required: true },
   phone:     { enabled: true, required: true },
   telegram:  { enabled: true, required: false },
-  birthDate: { enabled: true, required: true },
+  birthDate: { enabled: true, required: false },
   city:      { enabled: true, required: false },
 }
 

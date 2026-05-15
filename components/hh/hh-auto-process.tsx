@@ -53,6 +53,7 @@ export function HhAutoProcess({
 
   const [limit, setLimit] = useState<number | "all">(5)
   const [speed, setSpeed] = useState<SpeedPreset>("safe")
+  const [useMinScore, setUseMinScore] = useState<boolean>(false)
   const [minScore, setMinScore] = useState<number>(defaultMinScore)
 
   const [autoProcessingEnabled, setAutoProcessingEnabled] = useState<boolean | null>(null)
@@ -113,10 +114,20 @@ export function HhAutoProcess({
     setOpen(false)
     const startedAt = Date.now()
     try {
+      // Защита от рассинхронизации типов после ввода через UI:
+      // Number() гарантирует, что limit/delaySeconds/minScore — это всегда
+      // конечные числа (без NaN), даже если state пришёл из URL/localStorage
+      // как строка.
+      const payload = {
+        vacancyId,
+        limit:        Number.isFinite(Number(effectiveLimit)) ? Number(effectiveLimit) : 5,
+        delaySeconds: Number.isFinite(Number(delaySeconds))   ? Number(delaySeconds)   : 30,
+        minScore:     useMinScore ? (Number.isFinite(Number(minScore)) ? Number(minScore) : 70) : 0,
+      }
       const res = await fetch("/api/integrations/hh/process-queue", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ limit: effectiveLimit, vacancyId, delaySeconds, minScore }),
+        body: JSON.stringify(payload),
       })
       const data = await res.json() as ProcessQueueResponse
       if (!res.ok) throw new Error(data.error || "Ошибка")
@@ -165,22 +176,26 @@ export function HhAutoProcess({
 
   const settingsContent = (
     <div className="space-y-4">
-      <div>
-        <Label className="text-xs font-medium mb-1.5 block">Сколько обработать</Label>
-        <div className="flex gap-1.5">
-          {LIMIT_OPTIONS.map(n => (
-            <Button
-              key={String(n)}
-              size="sm"
-              variant={limit === n ? "default" : "outline"}
-              className="h-7 text-xs px-3 flex-1"
-              onClick={() => setLimit(n)}
-            >
-              {n === "all" ? "Все" : n}
-            </Button>
-          ))}
+      {/* Блок выбора количества — только при ВЫКЛ авто-разборе. При ВКЛ
+          разбор идёт по cron-расписанию, явный лимит не нужен. */}
+      {!autoProcessingEnabled && (
+        <div>
+          <Label className="text-xs font-medium mb-1.5 block">Сколько обработать</Label>
+          <div className="flex gap-1.5">
+            {LIMIT_OPTIONS.map(n => (
+              <Button
+                key={String(n)}
+                size="sm"
+                variant={limit === n ? "default" : "outline"}
+                className="h-7 text-xs px-3 flex-1"
+                onClick={() => setLimit(n)}
+              >
+                {n === "all" ? "Все" : n}
+              </Button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       <div>
         <Label className="text-xs font-medium mb-1.5 block">Скорость</Label>
@@ -229,20 +244,28 @@ export function HhAutoProcess({
 
       <div>
         <div className="flex items-center justify-between mb-1.5">
-          <Label className="text-xs font-medium">Минимальный AI-скор для приглашения</Label>
-          <Badge variant="outline" className="h-5 px-1.5 text-[10px] tabular-nums">{minScore}</Badge>
+          <Label className="text-xs font-medium">Использовать минимальный AI-скор</Label>
+          <Switch checked={useMinScore} onCheckedChange={setUseMinScore} />
         </div>
-        <Slider
-          value={[minScore]}
-          min={0}
-          max={95}
-          step={5}
-          onValueChange={v => setMinScore(v[0] ?? 70)}
-        />
-        <div className="flex justify-between text-[10px] text-muted-foreground mt-1">
-          <span>0</span>
-          <span>95</span>
-        </div>
+        {useMinScore && (
+          <>
+            <div className="flex items-center justify-between mb-1.5">
+              <Label className="text-xs text-muted-foreground">Порог приглашения</Label>
+              <Badge variant="outline" className="h-5 px-1.5 text-[10px] tabular-nums">{minScore}</Badge>
+            </div>
+            <Slider
+              value={[minScore]}
+              min={0}
+              max={95}
+              step={5}
+              onValueChange={v => setMinScore(v[0] ?? 70)}
+            />
+            <div className="flex justify-between text-[10px] text-muted-foreground mt-1">
+              <span>0</span>
+              <span>95</span>
+            </div>
+          </>
+        )}
       </div>
 
       {isAll ? (

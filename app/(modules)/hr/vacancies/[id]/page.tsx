@@ -21,12 +21,6 @@ import { SortMenu } from "@/components/dashboard/sort-menu"
 import { Tooltip as UITooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip"
 import type { CandidateSortMode } from "@/lib/candidate-sort"
 import { CandidateDrawer } from "@/components/candidates/candidate-drawer"
-import { parsePipeline } from "@/lib/stages"
-import { FunnelTab } from "@/components/vacancies/funnel-tab"
-import { ScheduleTab } from "@/components/vacancies/schedule-tab"
-import { CallsTab } from "@/components/vacancies/calls-tab"
-import { VacancyAutoProcessingToggle } from "@/components/vacancies/vacancy-auto-processing-toggle"
-import { AnketaPublicSection } from "@/components/vacancies/anketa-public-section"
 import { BulkActionsBar, type BulkAction } from "@/components/dashboard/bulk-actions-bar"
 import { CandidatesProgressList } from "@/components/candidates/candidates-progress-list"
 import { AddCandidateDialog } from "@/components/dashboard/add-candidate-dialog"
@@ -45,7 +39,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Checkbox } from "@/components/ui/checkbox"
 import { Slider } from "@/components/ui/slider"
 import { Input } from "@/components/ui/input"
-import { Plus, Clock, Pause, Play, Archive, RotateCcw, Trash2, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, Zap, Globe, AlertTriangle, TrendingUp, Calendar, MapPin, DollarSign, Filter, X, Link2, Copy, Save, Sparkles, Eye, Check, Loader2, Download, ExternalLink, ClipboardList, ChevronLeft, ChevronRight, ChevronDown, CheckCircle2, XCircle, Users, Phone, Upload, RefreshCw, Activity, Workflow, FileText } from "lucide-react"
+import { Plus, Clock, Pause, Play, Archive, RotateCcw, Trash2, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, Zap, Globe, AlertTriangle, TrendingUp, Calendar, MapPin, DollarSign, Filter, X, Link2, Copy, Save, Sparkles, Eye, Check, Loader2, Download, ExternalLink, ClipboardList, ChevronLeft, ChevronRight, ChevronDown, CheckCircle2, XCircle, Users, Phone, Upload, RefreshCw, Activity, FileText } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Label } from "@/components/ui/label"
@@ -400,16 +394,20 @@ export default function VacancyPage() {
 
   const [filters, setFilters] = useState<FilterState>({ searchText: "", cities: [], salaryMin: 0, salaryMax: 250000, scoreMin: 0, sources: [], workFormats: [], relocation: "any", businessTrips: "any", experienceMin: 0, experienceMax: 20, funnelStatuses: [], demoProgress: [], dateRange: "", dateFrom: "", dateTo: "", ageMin: 18, ageMax: 65, education: [], languages: [], otherLanguages: [], skills: [], industries: [] })
 
-  // Pipeline текущей вакансии — парсится один раз из descriptionJson и
-  // прокидывается в CandidateDrawer (Ф2), в Ф3 — также в FunnelTab,
-  // в Ф6 — в фильтр и hh-sync.
-  const vacancyPipeline = useMemo(
-    () => parsePipeline((apiVacancy?.descriptionJson as Record<string, unknown> | undefined)?.pipeline),
-    [apiVacancy?.descriptionJson],
-  )
+  // Маппинг русских лейблов фильтра прогресса демо → API-идентификаторы.
+  // UI: candidate-filters.tsx:70 ["Не начал", "В процессе", "Завершил (≥85%)",
+  // "Завершил (<85%)"]. API: route.ts ожидает not_started/in_progress/
+  // completed_85/completed_below_85.
+  const DEMO_PROGRESS_LABEL_TO_API: Record<string, string> = {
+    "Не начал":         "not_started",
+    "В процессе":       "in_progress",
+    "Завершил (≥85%)":  "completed_85",
+    "Завершил (<85%)":  "completed_below_85",
+  }
 
   // Серверные фильтры — передаём в useCandidates, который шлёт их в API
   const candidatesFilters = useMemo(() => ({
+    search: filters.searchText,
     minAge: filters.ageMin,
     maxAge: filters.ageMax,
     minExperience: filters.experienceMin,
@@ -421,7 +419,9 @@ export default function VacancyPage() {
     industries: filters.industries,
     relocationReady: filters.relocation === "yes" ? true : filters.relocation === "no" ? false : null,
     businessTripsReady: filters.businessTrips === "yes" ? true : filters.businessTrips === "no" ? false : null,
-    demoProgress: filters.demoProgress,
+    demoProgress: filters.demoProgress
+      .map(l => DEMO_PROGRESS_LABEL_TO_API[l])
+      .filter((v): v is string => !!v),
     dateFrom: filters.dateFrom,
     dateTo: filters.dateTo,
     salaryMin: filters.salaryMin,
@@ -429,28 +429,54 @@ export default function VacancyPage() {
     sources: filters.sources,
     cities: filters.cities,
     scoreMin: filters.scoreMin,
-  }), [filters])
+  }), [filters]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // viewMode поднят сюда (выше хуков), чтобы useCandidates умел пропускать
+  // запрос в режиме list-paginated и не дублировал usePaginatedCandidates.
+  // Сеттер-обёртка setViewMode (с persist в user-prefs) объявлена ниже.
+  const [viewMode, setViewModeLocal] = useState<ViewMode>("list")
+  const tabFromUrl = searchParams?.get("tab") ?? "candidates"
+  // Режим серверной пагинации: только tab=candidates + viewMode=list.
+  // В этом режиме useCandidates отключается (vacancyId=null), источником
+  // строк списка становится usePaginatedCandidates. На остальных видах
+  // (kanban/funnel/tiles) useCandidates снова работает и наполняет columns.
+  const useListPaginated = tabFromUrl === "candidates" && viewMode === "list"
+
+  // Маппинг русских лейблов фильтра воронки → реальные значения
+  // candidates.stage в БД. Без этого маппинга stage=Демо%20пройдено,Оффер,...
+  // ехал в API и никогда не матчил inArray(candidates.stage, ...).
+  // Лейблы из FUNNEL_STATUSES в candidate-filters.tsx (7 шт), enum в БД из
+  // STAGE_ORDER_SQL (route.ts:50). 1:1 маппинг; некоторые DB-значения
+  // (interviewed/offer) могут не встречаться в текущих данных — фильтр всё
+  // равно валиден и просто вернёт 0 строк.
+  const FUNNEL_LABEL_TO_DB_STAGES: Record<string, string[]> = {
+    "Всего откликов":     ["new"],
+    "Демо пройдено":      ["decision"],
+    "Интервью назначено": ["interview"],
+    "Интервью пройдено":  ["interviewed"],
+    "Оффер":              ["offer"],
+    "Нанят":              ["hired"],
+    "Отказ":              ["rejected"],
+  }
+  const stageFilterFromFunnel: string[] | undefined = useMemo(() => {
+    const labels = filters.funnelStatuses ?? []
+    if (labels.length === 0) return undefined
+    const stages = labels.flatMap(l => FUNNEL_LABEL_TO_DB_STAGES[l] ?? [])
+    return stages.length > 0 ? stages : undefined
+  }, [filters.funnelStatuses]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const { candidates: apiCandidates, updateStage, refetch: refetchCandidates, toggleFavorite } = useCandidates(
-    id,
-    undefined,
+    useListPaginated ? null : id,
+    stageFilterFromFunnel,
     listSort ? { sort: listSort.key, order: listSort.dir } : undefined,
     candidatesFilters,
   )
 
   // Пагинированный список — отдельный запрос с серверной пагинацией.
-  // Активируется только когда: tab=candidates + viewMode=list. На других
-  // вью/табах (kanban/funnel/tiles/description/...) vacancyId=null → хук
-  // не делает запрос. Старый apiCandidates остаётся источником истины для
-  // drawer/AI-generate/talent-pool/аналитики — миграция этих мест на
-  // отдельные endpoints — отдельная задача (Ф2+).
-  // activeTab/viewMode объявлены ниже, используем lazy-getters через
-  // searchParams чтобы избежать «used before declaration» в хуке.
-  const paginatedTabActive =
-    (searchParams?.get("tab") ?? "candidates") === "candidates"
   const paginated = usePaginatedCandidates({
-    vacancyId: paginatedTabActive ? id : null,
+    vacancyId: useListPaginated ? id : null,
     filters: candidatesFilters,
+    stageFilter: stageFilterFromFunnel,
   })
 
   const handleToggleFavorite = useCallback(async (candidateId: string, isFavorite: boolean) => {
@@ -501,14 +527,31 @@ export default function VacancyPage() {
       .catch(() => {})
   }, [])
 
+  // Однократный guard для авто-переключения таба при первой загрузке статуса:
+  // после ручного клика юзера на «Анкета» refetch apiVacancy не должен снова
+  // выкидывать его на «Кандидаты».
+  const tabAutoSyncedRef = useRef(false)
+
   // Sync vacancy status + custom columns from API
   useEffect(() => {
     if (apiVacancy?.status) {
       const s = apiVacancy.status as VacancyStatus
       setStatus(s)
-      // Если URL не задаёт таб явно — переключаем дефолт по статусу при публикации
-      if (!urlTab) {
-        setActiveTab(prev => prev === "anketa" || prev === "analytics" ? (s === "active" ? "candidates" : "anketa") : prev)
+      const isActive = s === "active" || s === "published"
+      // URL-таб «застрял» на анкете от прошлого визита, но вакансия уже
+      // опубликована — принудительно открываем «Кандидаты» и чистим ?tab,
+      // чтобы при следующем визите дефолт не залипал.
+      if (!tabAutoSyncedRef.current && isActive && urlTab === "anketa") {
+        tabAutoSyncedRef.current = true
+        setActiveTab("candidates")
+        const sp = new URLSearchParams(window.location.search)
+        sp.delete("tab")
+        const qs = sp.toString()
+        router.replace(`${window.location.pathname}${qs ? "?" + qs : ""}`, { scroll: false })
+      } else if (!urlTab) {
+        // URL без ?tab= — подгоняем дефолт под статус (при публикации
+        // черновика автоматически выходим из anketa/analytics).
+        setActiveTab(prev => prev === "anketa" || prev === "analytics" ? (isActive ? "candidates" : "anketa") : prev)
       }
     }
     // Load custom columns from description_json (skip hidden ones)
@@ -548,8 +591,8 @@ export default function VacancyPage() {
       return { ...col, candidates: colCandidates, count: colCandidates.length }
     }))
   }, [apiCandidates])
-  const { prefs: userPrefs, loaded: userPrefsLoaded, setViewMode: persistViewMode, setColumns: persistColumns } = useUserPreferences()
-  const [viewMode, setViewModeLocal] = useState<ViewMode>("list")
+  const { prefs: userPrefs, loaded: userPrefsLoaded, setViewMode: persistViewMode, setColumns: persistColumns, setListSort: persistListSort } = useUserPreferences()
+  // viewMode объявлен выше (перед useCandidates) для условного отключения запроса.
   const [sortMode, setSortMode] = useState<CandidateSortMode>("date_desc")
   const [cardSettings, setCardSettingsLocal] = useState(defaultSettings)
 
@@ -640,34 +683,21 @@ export default function VacancyPage() {
   const [brandCustomDomain, setBrandCustomDomain] = useState("")
   const [editingSlug, setEditingSlug] = useState(false)
   const [brandSaving, setBrandSaving] = useState(false)
-  // Ф5.1: для черновика дефолтный таб — «Описание» (бывший AnketaTab),
-  // а не «Анкета» (теперь только публичная форма для кандидата).
-  const defaultTab = status === "active" ? "candidates" : "description"
+  const defaultTab = status === "active" ? "candidates" : "anketa"
   const rawUrlTab = searchParams?.get("tab") ?? null
   // Старая ссылка `?tab=automation` → новая `?tab=settings&section=ai`
   const urlTab = rawUrlTab === "automation" ? "settings" : rawUrlTab
   const rawUrlSection = rawUrlTab === "automation" ? "ai" : (searchParams?.get("section") ?? null)
   // Миграция старых section-значений на новые 6 табов.
   // general → page (стартовая вкладка с брендингом), automation → ai.
-  // Ф4: финальные 8 табов настроек (9-й «Сценарий» добавится в Ф7).
-  // URL-миграции:
-  //   "general" → "page"             (старая ссылка с «Общим»)
-  //   "automation" → "ai"            (старая ссылка с «AI сценарии»)
-  //   "pipeline" → "funnel"          (новый таб «Воронка» из Ф3 переименован)
-  //   "funnel" пришло из старого «Демо и воронка» → "ai" (PostDemoSettings уехал туда)
-  const SETTINGS_SECTION_IDS = ["page", "sources", "funnel", "messages", "calls", "ai", "schedule", "integrations"] as const
+  const SETTINGS_SECTION_IDS = ["page", "sources", "messages", "funnel", "ai", "integrations"] as const
   type SettingsSectionId = typeof SETTINGS_SECTION_IDS[number]
-  const initialSettingsSection: SettingsSectionId = (() => {
-    if (rawUrlSection === "general") return "page"
-    if (rawUrlSection === "automation") return "ai"
-    if (rawUrlSection === "pipeline") return "funnel"
-    // Старый "funnel" (Демо и воронка) → ai (туда переехал PostDemoSettings).
-    // Новый "funnel" (Воронка) обслуживается напрямую в списке ниже.
-    if (rawUrlSection && (SETTINGS_SECTION_IDS as readonly string[]).includes(rawUrlSection)) {
-      return rawUrlSection as SettingsSectionId
-    }
-    return "page"
-  })()
+  const initialSettingsSection: SettingsSectionId =
+    rawUrlSection === "general" ? "page" :
+    rawUrlSection === "automation" ? "ai" :
+    rawUrlSection && (SETTINGS_SECTION_IDS as readonly string[]).includes(rawUrlSection)
+      ? (rawUrlSection as SettingsSectionId)
+      : "page"
   const [activeTab, setActiveTab] = useState(urlTab ?? defaultTab)
   const [settingsSection, setSettingsSection] = useState<SettingsSectionId>(initialSettingsSection)
   const [anPeriod, setAnPeriod] = useState("all")
@@ -1173,7 +1203,7 @@ export default function VacancyPage() {
   const filteredColumns = applyCandidateFilters(columns, filters)
 
   // ─── Пагинированный список (только для tab=candidates + viewMode=list) ───
-  const useListPaginated = activeTab === "candidates" && viewMode === "list"
+  // useListPaginated объявлен выше (перед useCandidates).
 
   // 20 строк paginated → одна синтетическая «колонка-всё», kanban-board
   // её просто скормит ListView (см. KanbanBoard:299). stage у каждого
@@ -1201,9 +1231,15 @@ export default function VacancyPage() {
     responseDate: "createdAt",
     status: "stage",
     progress: "progress",
+    city: "city",
+    source: "source",
+    favorite: "favorite",
   }
 
   const handleListSortChange = useCallback((next: ListSortState | null) => {
+    // Persist выбора в user-prefs — на следующем визите без ?sort/?sortBy
+    // в URL значение поднимется обратно (см. инжект-эффект ниже).
+    persistListSort(next ? { key: next.key, dir: next.dir } : null)
     if (useListPaginated && next) {
       const serverKey = SERVER_SORT_MAP[next.key]
       if (serverKey) {
@@ -1216,7 +1252,48 @@ export default function VacancyPage() {
       }
     }
     setListSort(next)
-  }, [useListPaginated, paginated, setListSort]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [useListPaginated, paginated, setListSort, persistListSort]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Эффективная сортировка для ListView. В пагинированном режиме источник
+  // правды — серверный sortBy/order (через usePaginatedCandidates), потому
+  // что handleListSortChange зануляет listSort, чтобы не было двух
+  // конфликтующих URL-параметров. Без этого мэппинга после клика по
+  // заголовку стрелка ▲/▼ не появлялась — клик казался не сработавшим
+  // (юзер кликал ещё раз — отсюда «залипание»).
+  const effectiveListSort = useMemo<ListSortState | null>(() => {
+    if (!useListPaginated) return listSort
+    // Источник правды — локальный state usePaginatedCandidates, а не URL.
+    // URL — просто зеркало; при дефолте (?sortBy не задан) state всё равно
+    // содержит реально применённую сортировку (progress desc после инжекта
+    // user-prefs). Если читать из URL — ListView получает sort=null, не
+    // подсвечивает активный заголовок и инициирует "set default" вместо
+    // "toggle dir" при клике, что превращает клик в no-op.
+    const entry = (Object.entries(SERVER_SORT_MAP) as [ListSortKey, PaginatedSortKey][])
+      .find(([, v]) => v === paginated.sortBy)
+    const listKey: ListSortKey = entry?.[0] ?? (paginated.sortBy as ListSortKey)
+    return { key: listKey, dir: paginated.order }
+  }, [useListPaginated, listSort, paginated.sortBy, paginated.order]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ─── Инжект сохранённой сортировки из user-prefs (per-user persistence) ───
+  // Однократный guard: при первом успешном входе в режим list-paginated с
+  // загруженными prefs — подмешиваем в URL сохранённый выбор. Если в URL уже
+  // есть ?sort/?sortBy — пропускаем (явная ссылка имеет приоритет). Если в
+  // prefs ничего нет — материализуем дефолт progress desc (новый юзер сразу
+  // видит самых продвинутых кандидатов сверху). Существующие prefs с
+  // {key:"responseDate"} оставляем как есть — это явный выбор пользователя.
+  const listSortPrefsAppliedRef = useRef(false)
+  useEffect(() => {
+    if (!userPrefsLoaded || listSortPrefsAppliedRef.current) return
+    if (!useListPaginated) return
+    listSortPrefsAppliedRef.current = true
+    const hasUrlSort = !!(searchParams?.get("sort") || searchParams?.get("sortBy"))
+    if (hasUrlSort) return
+    const stored = userPrefs.listSort
+    const toApply: ListSortState = stored
+      ? { key: stored.key as ListSortKey, dir: stored.dir }
+      : { key: "progress", dir: "desc" }
+    handleListSortChange(toApply)
+  }, [userPrefsLoaded, useListPaginated, userPrefs.listSort, searchParams, handleListSortChange])
 
   // ─── Unified 6-stage metrics (single source of truth) ───
   const allCandidates = columns.flatMap((c) => c.candidates)
@@ -1564,9 +1641,7 @@ export default function VacancyPage() {
                 <h2 className="text-sm font-medium text-foreground truncate">{internalName || vacancyTitle}</h2>
                 <VacancyStatusBadge status={status} size="sm" />
               </div>
-              {/* Ф5.1: advisorScore считается по полям AnketaTab,
-                  поэтому показываем только когда юзер на табе «Описание». */}
-              {advisorScore.score > 0 && activeTab === "description" && (
+              {advisorScore.score > 0 && (
                 <div className="flex items-center gap-2 shrink-0">
                   <div className="w-20 h-1.5 rounded-full bg-muted overflow-hidden">
                     <div className={cn(
@@ -1646,33 +1721,32 @@ export default function VacancyPage() {
                 </div>
                 <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-muted-foreground">
                   {activeTab === "candidates" && <>
-                    {/* Цифры берём из headerStats (отдельный COUNT по vacancy_id),
-                        а не из apiCandidates — тот режется фильтрами и задержкой
-                        загрузки. Пока не загружено — fallback на apiCandidates. */}
+                    {/* Цифры берём из headerStats (отдельный COUNT по vacancy_id).
+                        Пока запрос /candidate-stats не вернулся — показываем «—». */}
                     <UITooltip>
                       <TooltipTrigger asChild>
-                        <span className="cursor-help"><span className="font-medium text-foreground">{headerStats?.total ?? apiCandidates.length}</span> всего кандидатов</span>
+                        <span className="cursor-help"><span className="font-medium text-foreground">{headerStats?.total ?? "—"}</span> всего кандидатов</span>
                       </TooltipTrigger>
                       <TooltipContent>Все кандидаты на вакансии — все источники, все этапы</TooltipContent>
                     </UITooltip>
                     <span>·</span>
                     <UITooltip>
                       <TooltipTrigger asChild>
-                        <span className="cursor-help"><span className={cn("font-medium", (headerStats?.pending ?? 0) > 0 ? "text-amber-700" : "text-foreground")}>{headerStats?.pending ?? 0}</span> ждут разбора</span>
+                        <span className="cursor-help"><span className={cn("font-medium", (headerStats?.pending ?? 0) > 0 ? "text-amber-700" : "text-foreground")}>{headerStats?.pending ?? "—"}</span> ждут разбора</span>
                       </TooltipTrigger>
                       <TooltipContent>Отклики с hh.ru, которые ещё не обработаны (нажмите «Разобрать»)</TooltipContent>
                     </UITooltip>
                     <span>·</span>
                     <UITooltip>
                       <TooltipTrigger asChild>
-                        <span className="cursor-help"><span className="font-medium text-foreground">{headerStats?.demoOpened ?? apiCandidates.filter(c => c.demoProgressJson != null).length}</span> открыли демо</span>
+                        <span className="cursor-help"><span className="font-medium text-foreground">{headerStats?.demoOpened ?? "—"}</span> открыли демо</span>
                       </TooltipTrigger>
                       <TooltipContent>Сколько кандидатов хотя бы зашли на демо-анкету</TooltipContent>
                     </UITooltip>
                     <span>·</span>
                     <UITooltip>
                       <TooltipTrigger asChild>
-                        <span className="cursor-help"><span className="font-medium text-foreground">{headerStats?.rejected ?? apiCandidates.filter(c => c.stage === "rejected").length}</span> отказ</span>
+                        <span className="cursor-help"><span className="font-medium text-foreground">{headerStats?.rejected ?? "—"}</span> отказ</span>
                       </TooltipTrigger>
                       <TooltipContent>Кандидаты со статусом «Отказ» в воронке</TooltipContent>
                     </UITooltip>
@@ -1856,20 +1930,19 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
             <Tabs value={activeTab} onValueChange={setActiveTab}>
               <div className="flex items-center justify-between gap-3 mb-3 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
                 <TabsList className="shrink-0">
-                  {/* Ф5.1: добавлен таб «Описание» (бывший AnketaTab — редактор вакансии).
-                      Таб «Анкета» теперь = публичная анкета для кандидата. */}
-                  {(status === "active" ? [
-                    { value: "description", icon: FileText, label: "Описание" },
-                    { value: "anketa", icon: ClipboardList, label: "Анкета" },
-                    { value: "course", icon: BookOpen, label: "Демонстрация" },
+                  {/* Запущенные вакансии (active|published) — фокус на работе
+                      с кандидатами: Кандидаты → Аналитика → Анкета → Демо.
+                      Черновики — фокус на настройке: Анкета → Демо → Кандидаты → Аналитика. */}
+                  {((status === "active" || status === "published") ? [
                     { value: "candidates", icon: Kanban, label: "Кандидаты" },
                     { value: "analytics", icon: BarChart3, label: "Аналитика" },
+                    { value: "anketa", icon: ClipboardList, label: "Анкета" },
+                    { value: "course", icon: BookOpen, label: "Демонстрация" },
                   ] : [
-                    { value: "candidates", icon: Kanban, label: "Кандидаты" },
-                    { value: "analytics", icon: BarChart3, label: "Аналитика" },
-                    { value: "description", icon: FileText, label: "Описание" },
                     { value: "anketa", icon: ClipboardList, label: "Анкета" },
                     { value: "course", icon: BookOpen, label: "Демонстрация" },
+                    { value: "candidates", icon: Kanban, label: "Кандидаты" },
+                    { value: "analytics", icon: BarChart3, label: "Аналитика" },
                   ]).map(tab => (
                     <TabsTrigger key={tab.value} value={tab.value} className="gap-1.5">
                       <tab.icon className="w-3.5 h-3.5" />{tab.label}
@@ -1889,12 +1962,7 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                         onProcessed={() => { refetchCandidates(); handleHhSync() }}
                       />
                     )}
-                    <CandidateFilters
-                      filters={filters}
-                      onFiltersChange={setFilters}
-                      candidates={columns.flatMap((c) => c.candidates)}
-                      vacancyPipeline={vacancyPipeline}
-                    />
+                    <CandidateFilters filters={filters} onFiltersChange={setFilters} candidates={columns.flatMap((c) => c.candidates)} />
                     {false && <SortMenu sortMode={sortMode} onSortChange={setSortMode} />}
                     {false && (
                     <DropdownMenu>
@@ -1924,9 +1992,7 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                     />
                   </div>
                 )}
-                {/* Ф5.1: тулбар «Заполнить из…» относится к редактору вакансии,
-                    переехал из таба anketa в новый description. */}
-                {activeTab === "description" && (
+                {activeTab === "anketa" && (
                   <div className="flex items-center gap-1.5 shrink-0">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
@@ -2022,38 +2088,8 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                 )}
               </div>
 
-              {/* Ф5.1: «Описание» — редактор вакансии (50+ полей AnketaData) + AI-ассистент. */}
-              <TabsContent value="description">
-                <AnketaTab
-                  vacancyId={id}
-                  descriptionJson={apiVacancy?.descriptionJson}
-                  onTitleChange={(t) => { if (t) setInternalName(t) }}
-                  onNavigateTab={(tab) => { setActiveTab(tab); window.scrollTo({ top: 0, behavior: "smooth" }) }}
-                  onScoreChange={setAdvisorScore}
-                />
-              </TabsContent>
-
-              {/* Ф5.1: «Анкета» — только публичная анкета для кандидата
-                  (text-обёртка + поля + дозапрос). Поля вакансии переехали
-                  в новый таб «Описание». */}
               <TabsContent value="anketa">
-                <div className="space-y-6 max-w-3xl">
-                  <div>
-                    <h2 className="text-lg font-semibold">Публичная анкета для кандидата</h2>
-                    <p className="text-sm text-muted-foreground">
-                      Что видит кандидат после прохождения демо-курса. Поля и тексты, которые он заполняет.
-                      Сами поля вакансии редактируются в табе{" "}
-                      <button
-                        type="button"
-                        onClick={() => setActiveTab("description")}
-                        className="text-primary hover:underline"
-                      >
-                        «Описание»
-                      </button>.
-                    </p>
-                  </div>
-                  <AnketaPublicSection vacancyId={id} descriptionJson={apiVacancy?.descriptionJson} />
-                </div>
+                <AnketaTab vacancyId={id} descriptionJson={apiVacancy?.descriptionJson} onTitleChange={(t) => { if (t) setInternalName(t) }} onNavigateTab={(tab) => { setActiveTab(tab); window.scrollTo({ top: 0, behavior: "smooth" }) }} onScoreChange={setAdvisorScore} />
               </TabsContent>
 
               <TabsContent value="candidates">
@@ -2096,7 +2132,7 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                   onAddCustomColumn={handleAddCustomColumn}
                   onRemoveColumn={handleRemoveColumn}
                   sortMode={sortMode}
-                  listSort={listSort}
+                  listSort={effectiveListSort}
                   onListSortChange={handleListSortChange}
                   selectedIds={selectedCandidateIds}
                   onSelectionChange={setSelectedCandidateIds}
@@ -2169,9 +2205,13 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                       to: s.stage,
                       pct,
                       hasData,
-                      // Тревогу показываем только если: (1) есть данные, (2) через
-                      // этап реально прошёл репрезентативный объём, (3) конверсия низкая.
-                      eligibleForAlarm: hasData && prev >= ALARM_MIN_PREV && pct <= ALARM_MAX_PCT,
+                      // Тревогу показываем только если: (1) есть данные на старте
+                      // перехода, (2) через этап реально прошёл репрезентативный
+                      // объём, (3) конверсия низкая, (4) на целевой этап реально
+                      // кто-то дошёл (s.count >= 1) — без этого пустой этап с 0
+                      // кандидатами всегда подсвечивается как «бутылочное горло»,
+                      // хотя на самом деле просто никто туда пока не классифицирован.
+                      eligibleForAlarm: hasData && prev >= ALARM_MIN_PREV && pct <= ALARM_MAX_PCT && s.count >= 1,
                     }
                   })
                   const eligibleAlarms = transitions.filter((t) => t.eligibleForAlarm)
@@ -2367,11 +2407,9 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                   {([
                     { value: "page"        as const, label: "Страница и брендинг", icon: Globe },
                     { value: "sources"     as const, label: "Источники",           icon: Link2 },
-                    { value: "funnel"      as const, label: "Воронка",             icon: Workflow },
                     { value: "messages"    as const, label: "Сообщения",           icon: MessageCircle },
-                    { value: "calls"       as const, label: "Звонки",              icon: Phone },
-                    { value: "ai"          as const, label: "AI и автоматизация",  icon: Sparkles },
-                    { value: "schedule"    as const, label: "Расписание",          icon: Clock },
+                    { value: "funnel"      as const, label: "Демо и воронка",      icon: Kanban },
+                    { value: "ai"          as const, label: "AI сценарии",         icon: Zap },
                     { value: "integrations" as const, label: "Интеграции",          icon: Settings },
                   ]).map((s) => {
                     const Icon = s.icon
@@ -2757,52 +2795,42 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
 
                   {/* Источники и UTM-ссылки */}
                   <UtmLinksSection vacancyId={id} vacancySlug={id} />
-
-                  {/* Ф4: «Авто-разбор откликов» переехал сюда из «AI сценарии». */}
-                  <VacancyAutoProcessingToggle vacancyId={id} />
                 </div>
                 )}
 
-                {/* ───────── ТАБ «Воронка» (Ф3, переименован из "pipeline" в Ф4) ─────────
-                    Источник правды pipeline: vacancies.description_json.pipeline.
-                    Парсится через parsePipeline в vacancyPipeline (выше).
-                    Сохранение — PUT /api/modules/hr/vacancies/[id]/pipeline. */}
-                {settingsSection === "funnel" && (
-                <FunnelTab
-                  vacancyId={id}
-                  initialPipeline={vacancyPipeline}
-                  onSaved={() => refetchVacancy()}
-                />
-                )}
-
-                {/* ───────── ТАБ «Сообщения» (Ф4) ─────────
-                    Содержит только сами сообщения. Раздел «Если кандидат хочет
-                    созвониться» (callIntent) переехал в «AI и автоматизация». */}
+                {/* ───────── ТАБ «Сообщения» ───────── */}
                 {settingsSection === "messages" && (
                 <div className="space-y-6 max-w-3xl">
                   <AutomationSettings
                     vacancyId={id}
                     descriptionJson={apiVacancy?.descriptionJson}
+                    vacancyTitle={apiVacancy?.title}
+                    salaryFrom={apiVacancy?.salaryMin}
+                    salaryTo={apiVacancy?.salaryMax}
                     aiProcessSettings={apiVacancy?.aiProcessSettings as { inviteMessage?: string; reInviteMessage?: string } | null | undefined}
-                    sections={["firstMessage", "templates"] satisfies AutomationSectionId[]}
+                    sections={["firstMessage", "callIntent", "templates"] satisfies AutomationSectionId[]}
                   />
                   <VacancyFollowupSettings vacancyId={id} />
                 </div>
                 )}
 
-                {/* ───────── ТАБ «Звонки» (Ф4, новый) ─────────
-                    Бот-звонарь и шаблоны сценариев обзвона.
-                    dialer-секция переехала сюда из «AI сценарии». */}
-                {settingsSection === "calls" && (
-                <CallsTab vacancyId={id} descriptionJson={apiVacancy?.descriptionJson} />
+                {/* ───────── ТАБ «Демо и воронка» ───────── */}
+                {settingsSection === "funnel" && (
+                <div className="space-y-6 max-w-3xl">
+                  <AutomationSettings
+                    vacancyId={id}
+                    descriptionJson={apiVacancy?.descriptionJson}
+                    vacancyTitle={apiVacancy?.title}
+                    salaryFrom={apiVacancy?.salaryMin}
+                    salaryTo={apiVacancy?.salaryMax}
+                    aiProcessSettings={apiVacancy?.aiProcessSettings as { inviteMessage?: string; reInviteMessage?: string } | null | undefined}
+                    sections={["pipeline", "enrichment"] satisfies AutomationSectionId[]}
+                  />
+                  <PostDemoSettings vacancyId={id} />
+                </div>
                 )}
 
-                {/* ───────── ТАБ «AI и автоматизация» (Ф4, переименован из «AI сценарии») ─────────
-                    Из таба ушли: бот-звонарь → «Звонки», расписание → «Расписание»,
-                    авто-разбор → «Источники», 5 пресетов «Демо→Звонок» → удалены в Ф1.
-                    Сюда приехали: «Если кандидат хочет созвониться» (callIntent) из
-                    «Сообщений», PostDemoSettings («После демонстрации») из старого
-                    «Демо и воронка». В Ф7 здесь появится связь с табом «Сценарий». */}
+                {/* ───────── ТАБ «AI сценарии» ───────── */}
                 {settingsSection === "ai" && (
                 <div className="space-y-6 max-w-3xl">
                   <VacancyAiProcessSettings
@@ -2814,19 +2842,14 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                   <AutomationSettings
                     vacancyId={id}
                     descriptionJson={apiVacancy?.descriptionJson}
+                    vacancyTitle={apiVacancy?.title}
+                    salaryFrom={apiVacancy?.salaryMin}
+                    salaryTo={apiVacancy?.salaryMax}
                     aiProcessSettings={apiVacancy?.aiProcessSettings as { inviteMessage?: string; reInviteMessage?: string } | null | undefined}
-                    sections={["callIntent", "autoActions"] satisfies AutomationSectionId[]}
+                    sections={["autoActions", "scenarioHire", "dialer"] satisfies AutomationSectionId[]}
                   />
-                  {/* Ф5: только пороги AI и превью. Поля формы (formFields)
-                      переехали в страницу «Анкета» (Публичная анкета). */}
-                  <PostDemoSettings vacancyId={id} sections={["thresholds", "preview"]} />
+                  <VacancyScheduleSettings vacancyId={id} />
                 </div>
-                )}
-
-                {/* ───────── ТАБ «Расписание» (Ф4, новый) ─────────
-                    Рабочие часы и нерабочие дни. Авто-разбор уехал в «Источники». */}
-                {settingsSection === "schedule" && (
-                <ScheduleTab vacancyId={id} />
                 )}
 
                 {/* ───────── ТАБ «Интеграции» ───────── */}
@@ -3240,7 +3263,6 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
           setDrawerOpen(open)
           if (!open) setDrawerCandidateId(null)
         }}
-        vacancyPipeline={vacancyPipeline}
         onToggleFavorite={handleToggleFavorite}
         onStageChange={(candidateId, newStage) => {
           // Sync kanban columns when stage changes in drawer

@@ -53,7 +53,7 @@ const DEFAULT_FORM_FIELDS: Record<FormFieldKey, { enabled: boolean; required: bo
   email:     { enabled: true, required: true },
   phone:     { enabled: true, required: true },
   telegram:  { enabled: true, required: false },
-  birthDate: { enabled: true, required: true },
+  birthDate: { enabled: true, required: false },
   city:      { enabled: true, required: false },
 }
 

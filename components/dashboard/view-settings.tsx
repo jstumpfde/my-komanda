@@ -30,10 +30,9 @@ const VIEW_MODES: Array<{ value: ViewMode; label: string }> = [
 
 const DISPLAY_TOGGLES: Array<{ key: keyof CardDisplaySettings; label: string }> = [
   { key: "showScore",         label: "AI скоринг" },
-  { key: "showProgress",      label: "Прогресс % демо" },
+  { key: "showProgress",      label: "Прогресс демо" },
   { key: "showResponseDate",  label: "Дата отклика" },
-  { key: "showSalaryFull",    label: "Зарплата (полностью)" },
-  { key: "showSalary",        label: "Зарплата (кратко)" },
+  { key: "showSalaryFull",    label: "Зарплата" },
   { key: "showCity",          label: "Город" },
 
   { key: "showSource",        label: "Источник" },

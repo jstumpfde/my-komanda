@@ -91,6 +91,27 @@ const DATE_PRESETS = [
   { id: "month", label: "Месяц" },
 ]
 
+// Сколько дней назад от сегодня для каждого пресета (включая текущий день).
+const DATE_PRESET_DAYS: Record<string, number> = {
+  today: 0,
+  "3days": 2,
+  week: 6,
+  month: 29,
+}
+
+/** YYYY-MM-DD для (сегодня минус N дней) в локальной таймзоне. */
+function presetDateFrom(presetId: string): string {
+  const n = DATE_PRESET_DAYS[presetId]
+  if (typeof n !== "number") return ""
+  const d = new Date()
+  d.setHours(0, 0, 0, 0)
+  d.setDate(d.getDate() - n)
+  const yyyy = d.getFullYear()
+  const mm = String(d.getMonth() + 1).padStart(2, "0")
+  const dd = String(d.getDate()).padStart(2, "0")
+  return `${yyyy}-${mm}-${dd}`
+}
+
 const EDUCATION_OPTIONS: Array<{ id: string; label: string }> = [
   { id: "secondary",   label: "Среднее" },
   { id: "specialized", label: "Среднее специальное" },
@@ -475,7 +496,15 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [], va
                   variant={filters.dateRange === p.id ? "default" : "outline"}
                   size="sm"
                   className="h-7 text-xs px-2.5"
-                  onClick={() => onFiltersChange({ ...filters, dateRange: filters.dateRange === p.id ? "" : p.id, dateFrom: "", dateTo: "" })}
+                  onClick={() => {
+                    const turningOff = filters.dateRange === p.id
+                    onFiltersChange({
+                      ...filters,
+                      dateRange: turningOff ? "" : p.id,
+                      dateFrom: turningOff ? "" : presetDateFrom(p.id),
+                      dateTo: "",
+                    })
+                  }}
                 >
                   {p.label}
                 </Button>
