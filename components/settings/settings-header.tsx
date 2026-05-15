@@ -1,16 +1,18 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useTheme } from "next-themes"
+import { useSession } from "next-auth/react"
+import { toast } from "sonner"
 import { useSidebar } from "@/components/ui/sidebar"
 import { Button } from "@/components/ui/button"
-import { Sun, Moon, Coffee, PanelLeftClose, PanelLeft, Bell, Building2, CreditCard, Users, Plug, Clock, User, LogOut, Palette, Sparkles, ScrollText } from "lucide-react"
+import { Sun, Moon, Coffee, PanelLeftClose, PanelLeft, Bell, Building2, CreditCard, Users, Plug, Clock, User, LogOut, Palette, Sparkles, ScrollText, ChevronDown, Loader2 } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth"
 import type { UserRole } from "@/lib/auth"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 
@@ -42,12 +44,36 @@ export function SettingsHeader() {
   const { theme, setTheme } = useTheme()
   const { state, toggleSidebar } = useSidebar()
   const pathname = usePathname()
-  const { user, role } = useAuth()
+  const { user, role, logout } = useAuth()
+  const { update: updateSession } = useSession()
   const visibleNav = navItems.filter(item => !item.roles || item.roles.includes(role))
   const [mounted, setMounted] = useState(false)
   const [notifications, setNotifications] = useState(NOTIFICATIONS)
+  const [localAvatar, setLocalAvatar] = useState<string | null>(null)
+  const [uploading, setUploading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => { setMounted(true) }, [])
+
+  const handleAvatarUpload = async (file: File) => {
+    if (!file.type.startsWith("image/")) { toast.error("Только изображения"); return }
+    if (file.size > 2 * 1024 * 1024) { toast.error("Максимум 2 МБ"); return }
+    setUploading(true)
+    try {
+      const fd = new FormData()
+      fd.append("file", file)
+      const res = await fetch("/api/team/avatar", { method: "POST", body: fd })
+      const data = await res.json().catch(() => ({})) as { avatarUrl?: string; error?: string }
+      if (!res.ok || !data.avatarUrl) throw new Error(data.error || "Ошибка загрузки")
+      setLocalAvatar(data.avatarUrl)
+      await updateSession?.().catch(() => {})
+      toast.success("Фото обновлено")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Ошибка")
+    } finally {
+      setUploading(false)
+    }
+  }
 
   const unreadCount = notifications.filter(n => !n.read).length
   const markAllRead = () => setNotifications(prev => prev.map(n => ({ ...n, read: true })))
@@ -65,19 +91,7 @@ export function SettingsHeader() {
         </Button>
 
         <div className="flex items-center gap-2">
-          {mounted && (
-            <div className="hidden md:flex items-center gap-1 bg-muted rounded-lg p-1">
-              <Button variant={theme === "light" ? "default" : "ghost"} size="icon" className="h-8 w-8" onClick={() => setTheme("light")} title="Светлая" style={theme === "light" ? { backgroundColor: "#C0622F", color: "#fff" } : undefined}>
-                <Sun className="h-4 w-4" />
-              </Button>
-              <Button variant={theme === "dark" ? "default" : "ghost"} size="icon" className="h-8 w-8" onClick={() => setTheme("dark")} title="Тёмная" style={theme === "dark" ? { backgroundColor: "#C0622F", color: "#fff" } : undefined}>
-                <Moon className="h-4 w-4" />
-              </Button>
-              <Button variant={theme === "warm" ? "default" : "ghost"} size="icon" className="h-8 w-8" onClick={() => setTheme("warm")} title="Кофе" style={theme === "warm" ? { backgroundColor: "#C0622F", color: "#fff" } : undefined}>
-                <Coffee className="h-4 w-4" />
-              </Button>
-            </div>
-          )}
+          {/* Theme switcher переехал в dropdown профиля (см. ниже). */}
 
           <Popover>
             <PopoverTrigger asChild>
@@ -110,31 +124,94 @@ export function SettingsHeader() {
             </PopoverContent>
           </Popover>
 
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="h-auto gap-2 rounded-full px-2 py-1">
-                <Avatar className="h-8 w-8">
-                  <AvatarFallback className="text-xs font-semibold">{initials}</AvatarFallback>
-                </Avatar>
-                <span className="hidden sm:inline text-sm font-medium text-foreground">{user?.name}</span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <div className="flex items-center gap-3 p-3 border-b">
-                <Avatar className="h-10 w-10">
-                  <AvatarFallback className="text-xs">{initials}</AvatarFallback>
-                </Avatar>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-foreground truncate">{user?.name}</p>
-                  <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0]
+              if (f) handleAvatarUpload(f)
+              e.target.value = ""
+            }}
+          />
+
+          <div className="flex items-center gap-0.5">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              title="Загрузить фото профиля"
+              className="relative h-8 w-8 rounded-full overflow-hidden ring-0 hover:ring-2 hover:ring-primary/30 transition-all disabled:opacity-50"
+            >
+              <Avatar className="h-8 w-8">
+                {(localAvatar || user?.avatar) && (
+                  <AvatarImage src={localAvatar || user?.avatar} alt={user?.name ?? ""} />
+                )}
+                <AvatarFallback className="text-xs font-semibold">{initials}</AvatarFallback>
+              </Avatar>
+              {uploading && (
+                <span className="absolute inset-0 flex items-center justify-center bg-black/40">
+                  <Loader2 className="w-3.5 h-3.5 text-white animate-spin" />
+                </span>
+              )}
+            </button>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-6 px-0" title="Меню профиля">
+                  <ChevronDown className="w-3.5 h-3.5 opacity-60" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <div className="flex items-center gap-3 p-3 border-b">
+                  <Avatar className="h-10 w-10">
+                    {(localAvatar || user?.avatar) && (
+                      <AvatarImage src={localAvatar || user?.avatar} alt={user?.name ?? ""} />
+                    )}
+                    <AvatarFallback className="text-xs">{initials}</AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-foreground truncate">{user?.name}</p>
+                    <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
+                  </div>
                 </div>
-              </div>
-              <DropdownMenuItem className="text-sm" asChild><Link href="/settings/profile">Профиль</Link></DropdownMenuItem>
-              <DropdownMenuItem className="text-sm" asChild><Link href="/settings/company">Настройки</Link></DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem className="text-sm cursor-pointer"><LogOut className="w-4 h-4 mr-2" />Выход</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+                <DropdownMenuItem className="text-sm cursor-pointer" asChild>
+                  <Link href="/settings/company"><Building2 className="w-4 h-4 mr-2" />Компания</Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem className="text-sm cursor-pointer" asChild>
+                  <Link href="/settings/profile"><User className="w-4 h-4 mr-2" />Профиль</Link>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                {mounted && (
+                  <>
+                    <DropdownMenuItem
+                      className={cn("text-sm cursor-pointer", theme === "light" && "bg-primary/10 text-primary")}
+                      onClick={(e) => { e.preventDefault(); setTheme("light") }}
+                    >
+                      <Sun className="w-4 h-4 mr-2" />Светлая
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      className={cn("text-sm cursor-pointer", theme === "dark" && "bg-primary/10 text-primary")}
+                      onClick={(e) => { e.preventDefault(); setTheme("dark") }}
+                    >
+                      <Moon className="w-4 h-4 mr-2" />Тёмная
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      className={cn("text-sm cursor-pointer", theme === "warm" && "bg-primary/10 text-primary")}
+                      onClick={(e) => { e.preventDefault(); setTheme("warm") }}
+                    >
+                      <Coffee className="w-4 h-4 mr-2" />Тёплая
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                  </>
+                )}
+                <DropdownMenuItem className="text-sm cursor-pointer" onClick={() => logout()}>
+                  <LogOut className="w-4 h-4 mr-2" />Выход
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
       </div>
 

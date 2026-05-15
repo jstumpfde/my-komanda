@@ -1,10 +1,12 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
-import { Bell, Moon, Sun, Coffee, LogOut, PanelLeftClose, PanelLeft, ChevronDown, ArrowLeft } from "lucide-react"
+import { Bell, Moon, Sun, Coffee, LogOut, PanelLeftClose, PanelLeft, ChevronDown, ArrowLeft, Building2, User as UserIcon, Loader2 } from "lucide-react"
 import { useTheme } from "next-themes"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useRouter, usePathname } from "next/navigation"
+import { useSession } from "next-auth/react"
+import { toast } from "sonner"
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuSeparator, DropdownMenuTrigger,
@@ -34,11 +36,46 @@ export function DashboardHeader() {
   const { theme, setTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
   const { state, toggleSidebar } = useSidebar()
-  const { user, role, realRole, isViewingAs, setRole, returnToAdmin } = useAuth()
+  const { user, role, realRole, isViewingAs, setRole, returnToAdmin, logout } = useAuth()
+  const { update: updateSession } = useSession()
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
   const router = useRouter()
   const pathname = usePathname()
+
+  // Локальный preview аватара после upload (до того как обновится сессия).
+  const [localAvatar, setLocalAvatar] = useState<string | null>(null)
+  const [uploading, setUploading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const handleAvatarUpload = async (file: File) => {
+    if (!file.type.startsWith("image/")) {
+      toast.error("Только изображения")
+      return
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error("Максимум 2 МБ")
+      return
+    }
+    setUploading(true)
+    try {
+      const fd = new FormData()
+      fd.append("file", file)
+      const res = await fetch("/api/team/avatar", { method: "POST", body: fd })
+      const data = await res.json().catch(() => ({})) as { avatarUrl?: string; error?: string }
+      if (!res.ok || !data.avatarUrl) throw new Error(data.error || "Ошибка загрузки")
+      setLocalAvatar(data.avatarUrl)
+      // Обновляем JWT-сессию, чтобы новый avatarUrl попал в useAuth().user.avatar
+      // во всех компонентах. Не блокирующий: если update() упадёт — localAvatar
+      // покрывает визуальный результат до следующей навигации.
+      await updateSession?.().catch(() => {})
+      toast.success("Фото обновлено")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Ошибка")
+    } finally {
+      setUploading(false)
+    }
+  }
 
   // Fetch notifications from API
   useEffect(() => {
@@ -169,18 +206,9 @@ export function DashboardHeader() {
               </div>
             )}
 
-            {/* Theme Switcher */}
-            <div className="hidden md:flex items-center gap-1 bg-muted rounded-lg p-1">
-              <Button variant={theme === "light" ? "default" : "ghost"} size="icon" className="h-8 w-8" onClick={() => setTheme("light")} title="Светлая" style={theme === "light" ? { backgroundColor: "#C0622F", color: "#fff" } : undefined}>
-                <Sun className="h-4 w-4" />
-              </Button>
-              <Button variant={theme === "dark" ? "default" : "ghost"} size="icon" className="h-8 w-8" onClick={() => setTheme("dark")} title="Тёмная" style={theme === "dark" ? { backgroundColor: "#C0622F", color: "#fff" } : undefined}>
-                <Moon className="h-4 w-4" />
-              </Button>
-              <Button variant={theme === "warm" ? "default" : "ghost"} size="icon" className="h-8 w-8" onClick={() => setTheme("warm")} title="Кофе" style={theme === "warm" ? { backgroundColor: "#C0622F", color: "#fff" } : undefined}>
-                <Coffee className="h-4 w-4" />
-              </Button>
-            </div>
+            {/* Theme Switcher переехал в dropdown профиля (см. ниже).
+                В хедере остался только колокольчик + аватар, чтобы освободить
+                место и не дублировать поверхностные действия. */}
 
             {/* Notifications */}
             <Popover>
@@ -223,34 +251,97 @@ export function DashboardHeader() {
               </PopoverContent>
             </Popover>
 
-            {/* User Avatar */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="h-10 w-10 rounded-full p-0">
-                  <Avatar className="h-10 w-10">
-                    {user.avatar && <AvatarImage src={user.avatar} alt={user.name} />}
-                    <AvatarFallback className="text-sm font-semibold">{initials}</AvatarFallback>
-                  </Avatar>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <div className="flex items-center gap-3 p-3 border-b">
-                  <Avatar className="h-10 w-10">
-                    {user.avatar && <AvatarImage src={user.avatar} alt={user.name} />}
-                    <AvatarFallback className="text-xs">{initials}</AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-foreground truncate">{user.name}</p>
-                    <p className="text-xs text-muted-foreground truncate">{user.email}</p>
-                    <Badge variant="secondary" className="text-[10px] mt-1 h-4 px-1.5">{ROLE_LABELS[role]}</Badge>
+            {/* Hidden file input — общий для аватара в хедере и в dropdown. */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0]
+                if (f) handleAvatarUpload(f)
+                e.target.value = ""
+              }}
+            />
+
+            {/* Avatar — клик открывает file picker (см. user request).
+                Dropdown открывается через chevron справа от аватара. */}
+            <div className="flex items-center gap-0.5">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+                title="Загрузить фото профиля"
+                className="relative h-10 w-10 rounded-full overflow-hidden ring-0 hover:ring-2 hover:ring-primary/30 transition-all disabled:opacity-50"
+              >
+                <Avatar className="h-10 w-10">
+                  {(localAvatar || user.avatar) && (
+                    <AvatarImage src={localAvatar || user.avatar} alt={user.name} />
+                  )}
+                  <AvatarFallback className="text-sm font-semibold">{initials}</AvatarFallback>
+                </Avatar>
+                {uploading && (
+                  <span className="absolute inset-0 flex items-center justify-center bg-black/40">
+                    <Loader2 className="w-4 h-4 text-white animate-spin" />
+                  </span>
+                )}
+              </button>
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-8 w-6 px-0" title="Меню профиля">
+                    <ChevronDown className="w-3.5 h-3.5 opacity-60" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <div className="flex items-center gap-3 p-3 border-b">
+                    <Avatar className="h-10 w-10">
+                      {(localAvatar || user.avatar) && (
+                        <AvatarImage src={localAvatar || user.avatar} alt={user.name} />
+                      )}
+                      <AvatarFallback className="text-xs">{initials}</AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-foreground truncate">{user.name}</p>
+                      <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+                      <Badge variant="secondary" className="text-[10px] mt-1 h-4 px-1.5">{ROLE_LABELS[role]}</Badge>
+                    </div>
                   </div>
-                </div>
-                <DropdownMenuItem className="text-sm" asChild><Link href="/settings/profile">Профиль</Link></DropdownMenuItem>
-                <DropdownMenuItem className="text-sm" asChild><Link href="/settings/company">Настройки</Link></DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem className="text-sm cursor-pointer"><LogOut className="w-4 h-4 mr-2" />Выход</DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                  <DropdownMenuItem className="text-sm cursor-pointer" asChild>
+                    <Link href="/settings/company"><Building2 className="w-4 h-4 mr-2" />Компания</Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem className="text-sm cursor-pointer" asChild>
+                    <Link href="/settings/profile"><UserIcon className="w-4 h-4 mr-2" />Профиль</Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  {/* Inline-переключатель темы — 3 варианта. Используем 3 строки
+                      вместо группы кнопок, чтобы помещалось в стандартный 224px
+                      dropdown и было кликабельно с тач-устройств. */}
+                  <DropdownMenuItem
+                    className={cn("text-sm cursor-pointer", theme === "light" && "bg-primary/10 text-primary")}
+                    onClick={(e) => { e.preventDefault(); setTheme("light") }}
+                  >
+                    <Sun className="w-4 h-4 mr-2" />Светлая
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className={cn("text-sm cursor-pointer", theme === "dark" && "bg-primary/10 text-primary")}
+                    onClick={(e) => { e.preventDefault(); setTheme("dark") }}
+                  >
+                    <Moon className="w-4 h-4 mr-2" />Тёмная
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className={cn("text-sm cursor-pointer", theme === "warm" && "bg-primary/10 text-primary")}
+                    onClick={(e) => { e.preventDefault(); setTheme("warm") }}
+                  >
+                    <Coffee className="w-4 h-4 mr-2" />Тёплая
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem className="text-sm cursor-pointer" onClick={() => logout()}>
+                    <LogOut className="w-4 h-4 mr-2" />Выход
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
         </div>
       </header>
