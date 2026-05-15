@@ -14,7 +14,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { hhVacancies, vacancies, hhTokens, hhResponses } from "@/lib/db/schema"
-import { and, eq, count, sql } from "drizzle-orm"
+import { and, eq, inArray, count, sql } from "drizzle-orm"
 import { HHClient } from "@/lib/hh/client"
 import { checkCronAuth } from "@/lib/cron/auth"
 import { processHhQueue } from "@/lib/hh/process-queue"
@@ -66,7 +66,11 @@ export async function POST(req: NextRequest) {
       .from(hhVacancies)
       .innerJoin(vacancies, eq(hhVacancies.localVacancyId, vacancies.id))
       .where(and(
-        eq(hhVacancies.status, "active"),
+        // hh.ru API возвращает 'open' для опубликованных вакансий (см.
+        // /api/integrations/hh/vacancies, status: item.status?.id ?? "open").
+        // Старое значение 'active' остаётся для ранее залинкованных вручную
+        // через /publish — обоих формата засчитываем как «живая вакансия».
+        inArray(hhVacancies.status, ["active", "open"]),
         eq(vacancies.autoProcessingEnabled, true),
       ))
 
