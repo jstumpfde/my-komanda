@@ -1,6 +1,7 @@
 "use client"
 
-import { Video as VideoIcon, Mic, Image as ImageIcon, FileText, FileQuestion } from "lucide-react"
+import { useState } from "react"
+import { Video as VideoIcon, Mic, Image as ImageIcon, FileText, FileQuestion, Loader2 } from "lucide-react"
 import type { Lesson, Block, Question } from "@/lib/course-types"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -173,35 +174,58 @@ function formatDuration(seconds: number | undefined): string {
 
 // ─── Renderers ────────────────────────────────────────────────────────────────
 
+function VideoPlayer({ url }: { url: string }) {
+  // Грузим видео целиком (preload="auto") — иначе для seek в первый кадр
+  // нужен range-запрос, который Safari/мобильные не всегда инициируют.
+  // Готовность видео ловим по canPlay (а не loadedMetadata: после
+  // canPlay браузер УЖЕ декодировал кадр и переход на currentTime=0.5
+  // отобразится мгновенно). До canPlay — спиннер вместо чёрного экрана.
+  const [ready, setReady] = useState(false)
+  return (
+    <div className="space-y-1">
+      <div
+        className="relative rounded-md bg-muted/50 mx-auto overflow-hidden"
+        style={{ maxWidth: 240, aspectRatio: "9 / 16" }}
+      >
+        <video
+          controls
+          preload="auto"
+          src={url}
+          playsInline
+          onCanPlay={(e) => {
+            const v = e.currentTarget
+            if (!ready && v.duration > 1 && Number.isFinite(v.duration)) {
+              v.currentTime = 0.5
+            }
+            setReady(true)
+          }}
+          className="block w-full h-full bg-black"
+          style={{ objectFit: "cover" }}
+        />
+        {!ready && (
+          <div className="absolute inset-0 flex items-center justify-center bg-muted/50 pointer-events-none">
+            <Loader2 className="w-6 h-6 text-muted-foreground animate-spin" />
+          </div>
+        )}
+      </div>
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-[10px] text-muted-foreground hover:text-primary underline-offset-2 hover:underline"
+      >
+        Открыть в новой вкладке ({url})
+      </a>
+    </div>
+  )
+}
+
 function MediaAnswerView({ media }: { media: MediaAnswer }) {
   // src на самом <video>/<audio> вместо <source type="..."> — браузер
   // сниффит mime по заголовкам ответа, что устойчивее к codec-строкам
   // вида "video/webm;codecs=vp8,opus".
   if (media.mediaType === "video") {
-    return (
-      <div className="space-y-1">
-        <video
-          controls
-          preload="metadata"
-          src={media.url}
-          playsInline
-          onLoadedMetadata={(e) => {
-            const v = e.currentTarget
-            if (v.duration > 1 && Number.isFinite(v.duration)) v.currentTime = 1
-          }}
-          className="rounded-md bg-black mx-auto block w-full"
-          style={{ maxWidth: 240, aspectRatio: "9 / 16", objectFit: "cover" }}
-        />
-        <a
-          href={media.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-[10px] text-muted-foreground hover:text-primary underline-offset-2 hover:underline"
-        >
-          Открыть в новой вкладке ({media.url})
-        </a>
-      </div>
-    )
+    return <VideoPlayer url={media.url} />
   }
   if (media.mediaType === "audio") {
     return (
