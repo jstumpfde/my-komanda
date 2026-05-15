@@ -190,7 +190,7 @@ function MediaAnswerView({ media }: { media: MediaAnswer }) {
             if (v.duration > 1 && Number.isFinite(v.duration)) v.currentTime = 1
           }}
           className="rounded-md bg-black mx-auto block w-full"
-          style={{ maxWidth: 320, aspectRatio: "9 / 16", objectFit: "cover" }}
+          style={{ maxWidth: 240, aspectRatio: "9 / 16", objectFit: "cover" }}
         />
         <a
           href={media.url}
