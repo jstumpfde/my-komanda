@@ -242,17 +242,17 @@ export function ListView({
   // ☐ — 28px, justify-end. ★ — 32px (w-8), justify-center, чтобы звёздочка
   // визуально была по центру ячейки с равным воздухом слева/справа.
   // -ml-3 на ★ и Кандидате схлопывает gap-4 до 4px edge-to-edge.
-  if (selectionEnabled) cols.push("28px")               // ☐ — фикс
-  cols.push("32px")                                     // ★ — фикс (w-8)
+  if (selectionEnabled) cols.push("24px")               // ☐ — фикс (компактнее)
+  cols.push("28px")                                     // ★ — фикс (w-7, ужато)
   cols.push("minmax(207px, 3.45fr)")                    // Кандидат — расширен ~15% за счёт Демо/AI
   if (showProgress) cols.push("minmax(95px, 1.2fr)")    // Демо
-  cols.push("50px")                                     // AI-рез. — AI-скор резюме (фикс, w-8 badge)
+  cols.push("60px")                                     // AI-резм. — AI-скор резюме (фикс, w-8 badge + место под header)
   if (showScore) cols.push("minmax(60px, 0.85fr)")      // AI
-  if (showSalary) cols.push("minmax(110px, 1.5fr)")     // Зарплата
+  if (showSalary) cols.push("minmax(95px, 1.1fr)")      // Зарплата — ужата (длинных чисел редко > 7 симв)
   if (showCity) cols.push("minmax(120px, 2fr)")         // Город
-  if (showResponseDate) cols.push("minmax(80px, 1fr)")  // Дата
-  cols.push("minmax(140px, 1.8fr)")                     // Статус
-  if (showSource) cols.push("60px")                     // Источник — фикс
+  if (showResponseDate) cols.push("minmax(70px, 0.7fr)") // Дата — "DD.MM.YY" укладывается в 70px
+  cols.push("minmax(130px, 1.3fr)")                     // Статус — ужат с 140/1.8fr до 130/1.3fr
+  if (showSource) cols.push("48px")                     // Источник — фикс (значки "hh"/"av" короткие)
   if (showActions) cols.push("80px")                    // Действия — фикс
 
   const gridStyle = { gridTemplateColumns: cols.join(" ") }
@@ -308,7 +308,7 @@ export function ListView({
     <div className="rounded-xl border border-border overflow-hidden bg-card">
       {/* Table Header */}
       <div
-        className="grid gap-4 pl-2 pr-4 py-2.5 bg-muted/60 border-b border-border text-[13px] font-medium text-muted-foreground tracking-normal items-center"
+        className="grid gap-3 pl-1 pr-4 py-2.5 bg-muted/60 border-b border-border text-[13px] font-medium text-muted-foreground tracking-normal items-center"
         style={gridStyle}
       >
         {selectionEnabled && (
@@ -347,7 +347,7 @@ export function ListView({
           )}
         </div>
         {showProgress && <SortHeader label="Демо" sortKey="progress" sort={sort} onToggle={handleSort} align="center" />}
-        <SortHeader label="AI-рез." sortKey="resumeScore" sort={sort} onToggle={handleSort} align="center" />
+        <SortHeader label="AI-резм." sortKey="resumeScore" sort={sort} onToggle={handleSort} align="center" />
         {showScore && <SortHeader label="AI-оцен." sortKey="aiScore" sort={sort} onToggle={handleSort} align="center" />}
         {showSalary && <SortHeader label="Зарплата" sortKey="salary" sort={sort} onToggle={handleSort} align="center" />}
         {showCity && <SortHeader label="Город" sortKey="city" sort={sort} onToggle={handleSort} align="left" />}
@@ -378,7 +378,7 @@ export function ListView({
             <div
               key={candidate.id}
               className={cn(
-                "grid gap-4 pl-2 pr-4 items-center hover:bg-muted/40 transition-colors min-h-[56px] text-[14px] cursor-pointer",
+                "grid gap-3 pl-1 pr-4 items-center hover:bg-muted/40 transition-colors min-h-[56px] text-[14px] cursor-pointer",
                 i % 2 === 0 ? "" : "bg-muted/20",
                 isSelected && "bg-primary/5 hover:bg-primary/10"
               )}

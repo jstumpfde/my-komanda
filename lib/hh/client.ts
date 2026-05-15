@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm"
 import { nanoid } from "nanoid"
 import { generateCandidateShortId } from "@/lib/short-id"
 import { extractHhResumeFields, toCandidateColumns } from "@/lib/hh/extract-resume-fields"
+import { screenResume } from "@/lib/ai-screen-resume"
 
 export interface HHVacancy {
   id: string
@@ -205,6 +206,21 @@ export class HHClient {
 
     if (!hhVacRow[0]) return { imported: 0 }
 
+    // Подтягиваем вакансию для AI-скоринга резюме (title/city + anketa).
+    // Один SELECT на весь батч — anketa не меняется между откликами.
+    const [vacRow] = await db
+      .select({
+        title:           vacancies.title,
+        city:            vacancies.city,
+        descriptionJson: vacancies.descriptionJson,
+      })
+      .from(vacancies)
+      .where(eq(vacancies.id, vacancyId))
+      .limit(1)
+    const anketa = vacRow
+      ? (((vacRow.descriptionJson as Record<string, unknown> | null)?.anketa as Record<string, unknown> | undefined) ?? {})
+      : {}
+
     const applications = await this.getApplications(hhVacRow[0].hhVacancyId)
     let imported = 0
 
@@ -267,6 +283,42 @@ export class HHClient {
         hhResumeId: resume.id,
         hhApplicationId: app.id,
       })
+
+      // AI-скоринг резюме при импорте — best-effort, не блокируем pipeline
+      // на сетевых/rate-limit ошибках. process-queue.ts при последующем
+      // разборе проверит resume_score IS NULL — если уже выставлен здесь,
+      // повторного вызова не будет (guard в lib/hh/process-queue.ts:368).
+      if (vacRow) {
+        try {
+          const result = await screenResume({
+            resume: {
+              name:            fullName,
+              city:            extracted.city ?? null,
+              salaryMin:       extracted.salaryMin ?? null,
+              experienceYears: extracted.experienceYears ?? null,
+              keySkills:       extracted.keySkills ?? null,
+              skills:          extracted.skills ?? null,
+              educationLevel:  extracted.educationLevel ?? null,
+              workFormat:      extracted.workFormat ?? null,
+            },
+            vacancy: {
+              title:                vacRow.title,
+              city:                 vacRow.city,
+              aiIdealProfile:       (anketa.aiIdealProfile as string | undefined) ?? null,
+              aiRequiredHardSkills: (anketa.aiRequiredHardSkills as string[] | undefined) ?? null,
+              aiStopFactors:        (anketa.aiStopFactors as string[] | undefined) ?? null,
+            },
+          })
+          if (result) {
+            await db.update(candidates)
+              .set({ resumeScore: result.score })
+              .where(eq(candidates.id, newCandidate.id))
+          }
+        } catch (err) {
+          console.warn(`[hh-import] screenResume failed for ${newCandidate.id}:`,
+            err instanceof Error ? err.message : err)
+        }
+      }
 
       imported++
     }
