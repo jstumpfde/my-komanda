@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { toast } from "sonner"
 import {
-  Play, Square, Loader2, Settings2, Zap, Shield, Gauge, AlertTriangle, Info,
+  Play, Square, Loader2, Settings2, Shield, Gauge, AlertTriangle, Info,
 } from "lucide-react"
 
 interface ProcessQueueResponse {
@@ -30,11 +30,10 @@ interface HhAutoProcessProps {
   variant?: "inline" | "card"
 }
 
-type SpeedPreset = "safe" | "standard" | "fast"
+type SpeedPreset = "safe" | "standard"
 const SPEED_OPTIONS: Array<{ value: SpeedPreset; seconds: number; label: string; icon: typeof Shield }> = [
-  { value: "safe",     seconds: 30, label: "Безопасно (30 сек / кандидат)", icon: Shield },
-  { value: "standard", seconds: 15, label: "Стандарт (15 сек)",             icon: Gauge },
-  { value: "fast",     seconds: 5,  label: "Быстро (5 сек, риск 429 от hh)", icon: Zap },
+  { value: "safe",     seconds: 60, label: "Безопасно (1 мин / кандидат)", icon: Shield },
+  { value: "standard", seconds: 30, label: "Стандарт (30 сек)",            icon: Gauge },
 ]
 
 const LIMIT_OPTIONS: Array<number | "all"> = [5, 10, 25, 50, "all"]
@@ -54,6 +53,7 @@ export function HhAutoProcess({
   const [limit, setLimit] = useState<number | "all">(5)
   const [speed, setSpeed] = useState<SpeedPreset>("safe")
   const [useMinScore, setUseMinScore] = useState<boolean>(false)
+  const [manualMode, setManualMode] = useState<boolean>(false)
   const [minScore, setMinScore] = useState<number>(defaultMinScore)
 
   const [autoProcessingEnabled, setAutoProcessingEnabled] = useState<boolean | null>(null)
@@ -104,9 +104,13 @@ export function HhAutoProcess({
   )
 
   const isAll = limit === "all"
-  const effectiveLimit = isAll
-    ? (pendingCount && pendingCount > 0 ? pendingCount : LIMIT_FALLBACK_MAX)
-    : limit
+  // В ручном режиме — пользовательский выбор количества. В автоматическом
+  // (default) — дефолт 5 кандидатов, блок выбора скрыт.
+  const effectiveLimit = !manualMode
+    ? 5
+    : isAll
+      ? (pendingCount && pendingCount > 0 ? pendingCount : LIMIT_FALLBACK_MAX)
+      : limit
   const estimatedMinutes = Math.max(1, Math.ceil((effectiveLimit * delaySeconds) / 60))
 
   const run = async () => {
@@ -176,9 +180,14 @@ export function HhAutoProcess({
 
   const settingsContent = (
     <div className="space-y-4">
-      {/* Блок выбора количества — только при ВЫКЛ авто-разборе. При ВКЛ
-          разбор идёт по cron-расписанию, явный лимит не нужен. */}
-      {!autoProcessingEnabled && (
+      {/* Тумблер ручного режима. ВЫКЛ (default) — разбор стартует с
+          дефолтом 5 кандидатов, блок выбора количества скрыт.
+          ВКЛ — показывается выбор 5/10/25/50/Все. */}
+      <div className="flex items-center justify-between">
+        <Label className="text-xs font-medium">Ручной разбор</Label>
+        <Switch checked={manualMode} onCheckedChange={setManualMode} />
+      </div>
+      {manualMode && (
         <div>
           <Label className="text-xs font-medium mb-1.5 block">Сколько обработать</Label>
           <div className="flex gap-1.5">
