@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { companies, users } from "@/lib/db/schema"
 import { requireAuth, apiError, apiSuccess } from "@/lib/api-helpers"
+import { seedDefaultFunnelStages } from "@/lib/funnel/seed-default-stages"
 
 export async function POST(req: NextRequest) {
   try {
@@ -34,6 +35,9 @@ export async function POST(req: NextRequest) {
         postalCode: body.postal_code || null,
       })
       .returning()
+
+    // Стандарт: каждая компания получает 9 стадий воронки сразу при создании.
+    await seedDefaultFunnelStages(company.id)
 
     return apiSuccess(company, 201)
   } catch (err) {
@@ -176,6 +180,11 @@ export async function PUT(req: NextRequest) {
         .update(users)
         .set({ companyId: created.id })
         .where(eq(users.id, user.id!))
+
+      // Стандарт: 9 стадий воронки создаются автоматически при первом
+      // создании компании пользователем (auto-create путь — когда юзер
+      // зарегистрировался без companyId и заполняет настройки компании).
+      await seedDefaultFunnelStages(created.id)
 
       return apiSuccess(created, 201)
     }
