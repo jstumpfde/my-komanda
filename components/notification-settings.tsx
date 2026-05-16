@@ -220,7 +220,12 @@ export function NotificationSettings({ module }: { module?: string }) {
         const isSingle = modules.length === 1
 
         return (
-          <Card key={mod.id} className="overflow-hidden">
+          /* shadow-none + bg-transparent + py-0/gap-0 — чтобы карточки
+             модулей визуально точно совпадали с верхним toggle «Все
+             уведомления» (тот же rounded-xl border без shadow и без bg-card).
+             Ширина уже совпадает (832px на 1280-вью), отличался только
+             визуальный стиль. */
+          <Card key={mod.id} className="overflow-hidden shadow-none hover:shadow-none bg-transparent py-0 gap-0">
             {/* Module header */}
             <button
               onClick={() => !isSingle && toggleModule(mod.id)}

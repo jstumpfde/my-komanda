@@ -61,3 +61,24 @@ export async function PATCH(
   if (!updated) return apiError("Счёт не найден", 404)
   return NextResponse.json(updated)
 }
+
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  let user: Awaited<ReturnType<typeof requireCompany>>
+  try {
+    user = await requireCompany()
+  } catch (e) {
+    return e as NextResponse
+  }
+
+  const { id } = await params
+  const [deleted] = await db
+    .delete(invoices)
+    .where(and(eq(invoices.id, id), eq(invoices.companyId, user.companyId)))
+    .returning({ id: invoices.id })
+
+  if (!deleted) return apiError("Счёт не найден", 404)
+  return NextResponse.json({ ok: true })
+}

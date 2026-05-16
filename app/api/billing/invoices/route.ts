@@ -71,28 +71,34 @@ export async function POST(req: NextRequest) {
 
     const multipliedAmount = (plan.price ?? 0) * periodMonths
 
-    const [invoice] = await db
-      .insert(invoices)
-      .values({
-        companyId: user.companyId,
-        invoiceNumber: number,
-        planId: planId ?? null,
-        amountKopecks: multipliedAmount,
-        amount: multipliedAmount,
-        status: "issued",
-        issuedAt: now,
-        dueDate: dueDateStr,
-        periodStart: periodStartStr,
-        periodEnd: periodEndStr,
-      })
-      .returning()
+    // Транзакция: invoice + subscription_history атомарно. Раньше при падении
+    // второго insert первый оставался в БД → пользователь видел «Ошибка
+    // создания счёта», но счёт в списке появлялся (см. drizzle/0103).
+    const invoice = await db.transaction(async (tx) => {
+      const [inv] = await tx
+        .insert(invoices)
+        .values({
+          companyId: user.companyId,
+          invoiceNumber: number,
+          planId: planId ?? null,
+          amountKopecks: multipliedAmount,
+          amount: multipliedAmount,
+          status: "issued",
+          issuedAt: now,
+          dueDate: dueDateStr,
+          periodStart: periodStartStr,
+          periodEnd: periodEndStr,
+        })
+        .returning()
 
-    // Create subscription_history entry
-    await db.insert(subscriptionHistory).values({
-      companyId: user.companyId,
-      planId: planId ?? null,
-      event: "invoice_created",
-      details: { invoiceId: invoice.id, amount: multipliedAmount, period },
+      await tx.insert(subscriptionHistory).values({
+        companyId: user.companyId,
+        planId: planId ?? null,
+        event: "invoice_created",
+        details: { invoiceId: inv.id, amount: multipliedAmount, period },
+      })
+
+      return inv
     })
 
     return NextResponse.json(invoice, { status: 201 })

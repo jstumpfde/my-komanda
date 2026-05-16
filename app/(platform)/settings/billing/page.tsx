@@ -16,7 +16,7 @@ import {
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import {
-  AlertTriangle, Clock, Download, CreditCard, CheckCircle2, XCircle, Plus, FileText, Loader2,
+  AlertTriangle, Clock, Download, CreditCard, CheckCircle2, XCircle, Plus, FileText, Loader2, Trash2,
 } from "lucide-react"
 
 // ─── Типы ─────────────────────────────────────────────────────────────────────
@@ -139,6 +139,26 @@ export default function BillingPage() {
 
   // Invoice creation dialog
   const [invoiceDialogOpen, setInvoiceDialogOpen] = useState(false)
+  const [deletingInvoiceId, setDeletingInvoiceId] = useState<string | null>(null)
+
+  async function handleDeleteInvoice(invoiceId: string, invoiceNumber: string) {
+    if (!window.confirm(`Удалить счёт ${invoiceNumber}?`)) return
+    setDeletingInvoiceId(invoiceId)
+    try {
+      const res = await fetch(`/api/billing/invoices/${invoiceId}`, { method: "DELETE" })
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({})) as { error?: string }
+        toast.error(d.error ?? "Ошибка удаления счёта")
+        return
+      }
+      setInvoices(prev => prev.filter(i => i.id !== invoiceId))
+      toast.success(`Счёт ${invoiceNumber} удалён`)
+    } catch {
+      toast.error("Ошибка сети")
+    } finally {
+      setDeletingInvoiceId(null)
+    }
+  }
   const [invoicePlanId, setInvoicePlanId] = useState("")
   const [invoicePeriod, setInvoicePeriod] = useState("month")
   const [creatingInvoice, setCreatingInvoice] = useState(false)
@@ -484,7 +504,7 @@ export default function BillingPage() {
                   <th className="text-left uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-2.5">Период</th>
                   <th className="text-right uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-2.5">Сумма</th>
                   <th className="text-center uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-2.5">Статус</th>
-                  <th className="w-[50px] px-4 py-2.5" />
+                  <th className="w-[90px] px-4 py-2.5" />
                 </tr>
               </thead>
               <tbody>
@@ -504,11 +524,25 @@ export default function BillingPage() {
                       </Badge>
                     </td>
                     <td className="px-4 py-2.5">
-                      <Button variant="ghost" size="icon" className="h-7 w-7" title="Скачать счёт" asChild>
-                        <a href={`/api/billing/invoices/${inv.id}/pdf`} download>
-                          <Download className="w-3.5 h-3.5" />
-                        </a>
-                      </Button>
+                      <div className="flex items-center gap-1 justify-end">
+                        <Button variant="ghost" size="icon" className="h-7 w-7" title="Скачать счёт" asChild>
+                          <a href={`/api/billing/invoices/${inv.id}/pdf`} download>
+                            <Download className="w-3.5 h-3.5" />
+                          </a>
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
+                          title="Удалить счёт"
+                          disabled={deletingInvoiceId === inv.id}
+                          onClick={() => handleDeleteInvoice(inv.id, inv.invoiceNumber)}
+                        >
+                          {deletingInvoiceId === inv.id
+                            ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            : <Trash2 className="w-3.5 h-3.5" />}
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 ))}
