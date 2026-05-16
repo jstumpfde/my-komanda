@@ -1,7 +1,7 @@
 "use client"
 
-import { useState } from "react"
-import { Video as VideoIcon, Mic, Image as ImageIcon, FileText, FileQuestion, Loader2 } from "lucide-react"
+import { useEffect, useRef, useState } from "react"
+import { Video as VideoIcon, Mic, Image as ImageIcon, FileText, FileQuestion, Loader2, PictureInPicture2 } from "lucide-react"
 import type { Lesson, Block, Question } from "@/lib/course-types"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -180,14 +180,68 @@ function VideoPlayer({ url }: { url: string }) {
   // Готовность видео ловим по canPlay (а не loadedMetadata: после
   // canPlay браузер УЖЕ декодировал кадр и переход на currentTime=0.5
   // отобразится мгновенно). До canPlay — спиннер вместо чёрного экрана.
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
   const [ready, setReady] = useState(false)
+  // PiP API доступен не везде (например, Firefox-mobile, старые WebKit).
+  // Считаем флаг на mount чтобы избежать гидрационного несовпадения.
+  const [pipAvailable, setPipAvailable] = useState(false)
+
+  useEffect(() => {
+    setPipAvailable(typeof document !== "undefined" && !!document.pictureInPictureEnabled)
+  }, [])
+
+  const togglePip = async () => {
+    const v = videoRef.current
+    if (!v) return
+    try {
+      if (document.pictureInPictureElement === v) {
+        await document.exitPictureInPicture()
+      } else {
+        await v.requestPictureInPicture()
+      }
+    } catch {
+      // Юзер может отменить prompt, или браузер заблокировать вызов
+      // без user-gesture — это нормально, молча игнорируем.
+    }
+  }
+
+  // Авто-PiP при скролле: когда видео уходит из viewport (intersectionRatio < 0.5)
+  // И сейчас играет — активируем PiP. Когда видео возвращается во viewport —
+  // НЕ выходим из PiP автоматически: юзер может специально хотеть и продолжать
+  // листать. Закрыть PiP может вручную (кнопкой или системным контролом).
+  useEffect(() => {
+    const container = containerRef.current
+    const v = videoRef.current
+    if (!container || !v) return
+    if (!pipAvailable) return
+
+    let triggered = false
+    const observer = new IntersectionObserver((entries) => {
+      const entry = entries[0]
+      if (!entry) return
+      const isPlaying = !v.paused && !v.ended && v.readyState >= 2
+      if (!entry.isIntersecting && isPlaying && !triggered && document.pictureInPictureElement !== v) {
+        triggered = true
+        v.requestPictureInPicture().catch(() => { triggered = false })
+      }
+      if (entry.isIntersecting) {
+        triggered = false  // вернулся во viewport — можно снова авто-PiP при следующем уходе
+      }
+    }, { threshold: [0, 0.5, 1] })
+    observer.observe(container)
+    return () => observer.disconnect()
+  }, [pipAvailable])
+
   return (
     <div className="space-y-1">
       <div
+        ref={containerRef}
         className="relative rounded-md bg-muted/50 mx-auto overflow-hidden"
         style={{ maxWidth: 240, aspectRatio: "9 / 16" }}
       >
         <video
+          ref={videoRef}
           controls
           preload="auto"
           src={url}
@@ -206,6 +260,16 @@ function VideoPlayer({ url }: { url: string }) {
           <div className="absolute inset-0 flex items-center justify-center bg-muted/50 pointer-events-none">
             <Loader2 className="w-6 h-6 text-muted-foreground animate-spin" />
           </div>
+        )}
+        {pipAvailable && (
+          <button
+            type="button"
+            onClick={togglePip}
+            title="Картинка в картинке"
+            className="absolute top-1.5 right-1.5 inline-flex items-center justify-center w-7 h-7 rounded-md bg-black/60 text-white hover:bg-black/80 transition-colors backdrop-blur-sm"
+          >
+            <PictureInPicture2 className="w-3.5 h-3.5" />
+          </button>
         )}
       </div>
       <a
