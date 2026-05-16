@@ -68,7 +68,9 @@ export default function DashboardPage() {
 
 function AuthenticatedDashboard() {
   const [cardSettings, setCardSettings] = useState<CardDisplaySettings>(defaultSettings)
-  const [viewMode, setViewMode] = useState<ViewMode>("funnel")
+  // Дефолт списка кандидатов — "list" (единый стандарт для всех страниц,
+  // см. также hooks/use-user-preferences.ts DEFAULT_PREFS.viewMode).
+  const [viewMode, setViewMode] = useState<ViewMode>("list")
   const [columns, setColumns] = useState<ColumnData[]>(emptyColumns)
   const [filters, setFilters] = useState<FilterState>({
     searchText: "",
