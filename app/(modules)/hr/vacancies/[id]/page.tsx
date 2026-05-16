@@ -541,10 +541,11 @@ export default function VacancyPage() {
       const s = apiVacancy.status as VacancyStatus
       setStatus(s)
       const isActive = s === "active" || s === "published"
-      // URL-таб «застрял» на анкете от прошлого визита, но вакансия уже
-      // опубликована — принудительно открываем «Кандидаты» и чистим ?tab,
-      // чтобы при следующем визите дефолт не залипал.
-      if (!tabAutoSyncedRef.current && isActive && urlTab === "anketa") {
+      // URL-таб «застрял» (anketa/settings/analytics) от прошлого визита,
+      // но вакансия уже опубликована — принудительно открываем «Кандидаты»
+      // и чистим ?tab, чтобы при следующем визите дефолт не залипал.
+      const STICKY_TABS = new Set(["anketa", "settings", "analytics"])
+      if (!tabAutoSyncedRef.current && isActive && urlTab && STICKY_TABS.has(urlTab)) {
         tabAutoSyncedRef.current = true
         setActiveTab("candidates")
         const sp = new URLSearchParams(window.location.search)
@@ -552,9 +553,9 @@ export default function VacancyPage() {
         const qs = sp.toString()
         router.replace(`${window.location.pathname}${qs ? "?" + qs : ""}`, { scroll: false })
       } else if (!urlTab) {
-        // URL без ?tab= — подгоняем дефолт под статус (при публикации
-        // черновика автоматически выходим из anketa/analytics).
-        setActiveTab(prev => prev === "anketa" || prev === "analytics" ? (isActive ? "candidates" : "anketa") : prev)
+        // URL без ?tab= — подгоняем дефолт под статус. Active/published →
+        // «Кандидаты»; draft и прочее → «Настройки».
+        setActiveTab(isActive ? "candidates" : "settings")
       }
     }
     // Load custom columns from description_json (skip hidden ones)
@@ -686,7 +687,10 @@ export default function VacancyPage() {
   const [brandCustomDomain, setBrandCustomDomain] = useState("")
   const [editingSlug, setEditingSlug] = useState(false)
   const [brandSaving, setBrandSaving] = useState(false)
-  const defaultTab = status === "active" ? "candidates" : "anketa"
+  // Дефолтный таб по статусу:
+  //   active/published → «Кандидаты» (главная работа с вакансией)
+  //   draft и прочее   → «Настройки» (вакансия ещё не настроена)
+  const defaultTab = (status === "active" || status === "published") ? "candidates" : "settings"
   const rawUrlTab = searchParams?.get("tab") ?? null
   // Старая ссылка `?tab=automation` → новая `?tab=settings&section=ai`
   const urlTab = rawUrlTab === "automation" ? "settings" : rawUrlTab
@@ -702,6 +706,19 @@ export default function VacancyPage() {
       ? (rawUrlSection as SettingsSectionId)
       : "page"
   const [activeTab, setActiveTab] = useState(urlTab ?? defaultTab)
+
+  // URL-sync: при любом изменении activeTab (клик таба → Tabs onValueChange →
+  // setActiveTab, и т.п.) обновляем ?tab=… в адресной строке. Без этого
+  // tabFromUrl на line 441 не обновляется → useListPaginated может остаться
+  // false при переключении на «Кандидаты», и список грузится без пагинации.
+  useEffect(() => {
+    const current = searchParams?.get("tab") ?? null
+    if (current === activeTab) return
+    const sp = new URLSearchParams(searchParams?.toString() ?? "")
+    sp.set("tab", activeTab)
+    router.replace(`${window.location.pathname}?${sp.toString()}`, { scroll: false })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab])
   const [settingsSection, setSettingsSection] = useState<SettingsSectionId>(initialSettingsSection)
   const [anPeriod, setAnPeriod] = useState("all")
   const [anSources, setAnSources] = useState<string[]>([])
