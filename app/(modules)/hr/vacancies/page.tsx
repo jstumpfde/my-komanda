@@ -29,7 +29,7 @@ import { VacancyStatusBadge, getVacancyStatusLabel } from "@/components/vacancie
 import {
   Plus, Briefcase, MapPin, List, LayoutGrid, Table2, Calendar, Banknote,
   Search, MoreHorizontal, Pencil, Copy, Archive, Trash2, ListFilter,
-  RotateCcw, X, Loader2,
+  RotateCcw, X, Loader2, ExternalLink,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
@@ -172,7 +172,10 @@ function RowContextMenu({
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
-      <ContextMenuContent className="w-44">
+      <ContextMenuContent className="w-52">
+        <ContextMenuItem onClick={() => window.open(`/hr/vacancies/${v.id}?tab=candidates`, "_blank")}>
+          <ExternalLink className="size-4 mr-2" />Открыть в новой вкладке
+        </ContextMenuItem>
         <ContextMenuItem onClick={() => window.location.href = `/hr/vacancies/${v.id}/edit`}>
           <Pencil className="size-4 mr-2" />Редактировать
         </ContextMenuItem>
@@ -213,7 +216,10 @@ function RowActions({
           <MoreHorizontal className="size-4" />
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-44">
+      <DropdownMenuContent align="end" className="w-52">
+        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); window.open(`/hr/vacancies/${v.id}?tab=candidates`, "_blank") }}>
+          <ExternalLink className="size-4 mr-2" />Открыть в новой вкладке
+        </DropdownMenuItem>
         <DropdownMenuItem onClick={(e) => { e.stopPropagation(); window.location.href = `/hr/vacancies/${v.id}/edit` }}>
           <Pencil className="size-4 mr-2" />Редактировать
         </DropdownMenuItem>
