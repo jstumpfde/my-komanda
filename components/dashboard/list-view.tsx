@@ -425,6 +425,7 @@ export function ListView({
               {/* Name + experience */}
               <div className="flex items-center gap-3 min-w-0 -ml-3">
                 <CandidateAvatar
+                  candidateId={candidate.id}
                   name={candidate.name}
                   photoUrl={candidate.photoUrl}
                   colorFrom={candidate.colorFrom}

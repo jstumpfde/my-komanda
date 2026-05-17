@@ -23,10 +23,12 @@
 
 import { and, asc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { hhResponses, candidates, followUpMessages } from "@/lib/db/schema"
+import { hhResponses, candidates, followUpMessages, hhCandidates } from "@/lib/db/schema"
 import { getValidToken } from "@/lib/hh-helpers"
 import { STOP_WORDS } from "@/lib/followup/should-stop"
 import { classifyCandidateResponse } from "@/lib/ai/classify-candidate-response"
+import { saveCandidatePhoto } from "@/lib/hh/save-candidate-photo"
+import { extractHhResumeFields } from "@/lib/hh/extract-resume-fields"
 
 const FAREWELL_MESSAGE = "Спасибо за отклик. Желаем удачи!"
 
@@ -338,6 +340,62 @@ export async function scanIncomingMessages(opts: {
         lastCheckAt: new Date(),
       }).where(eq(hhResponses.id, resp.id))
       continue
+    }
+
+    // Opportunistic backfill фото: если у кандидата всё ещё внешний hh-URL,
+    // пробуем direct fetch (CDN отдаёт серверу 200 пока подпись жива),
+    // на failure — fallback через hh API (GET /resumes/{id} даёт свежую
+    // подписанную ссылку). Любая ошибка не должна сбивать обработку
+    // сообщений — поэтому try/catch и continue.
+    try {
+      const [cand] = await db
+        .select({ photoUrl: candidates.photoUrl })
+        .from(candidates)
+        .where(eq(candidates.id, candidateId))
+        .limit(1)
+      if (cand?.photoUrl && cand.photoUrl.startsWith("https://img.hhcdn.ru")) {
+        let local = await saveCandidatePhoto(candidateId, cand.photoUrl)
+        if (!local) {
+          // Direct упал → подпись протухла. Берём resume_id из hh_candidates,
+          // если нет — достаём через negotiation (там всегда есть resume.id).
+          const [link] = await db
+            .select({ hhResumeId: hhCandidates.hhResumeId })
+            .from(hhCandidates)
+            .where(eq(hhCandidates.candidateId, candidateId))
+            .limit(1)
+          let resumeId: string | undefined = link?.hhResumeId
+          if (!resumeId) {
+            const negoRes = await fetch(
+              `https://api.hh.ru/negotiations/${resp.hhResponseId}`,
+              { headers: { Authorization: `Bearer ${accessToken}`, "User-Agent": "Company24.pro/1.0" } },
+            )
+            if (negoRes.ok) {
+              const nego = (await negoRes.json()) as { resume?: { id?: string } }
+              resumeId = typeof nego?.resume?.id === "string" ? nego.resume.id : undefined
+            }
+          }
+          if (resumeId) {
+            const resRes = await fetch(
+              `https://api.hh.ru/resumes/${resumeId}`,
+              { headers: { Authorization: `Bearer ${accessToken}`, "User-Agent": "Company24.pro/1.0" } },
+            )
+            if (resRes.ok) {
+              const resume = (await resRes.json()) as Record<string, unknown>
+              const fresh = extractHhResumeFields(resume)
+              if (fresh.photoUrl) {
+                local = await saveCandidatePhoto(candidateId, fresh.photoUrl)
+              }
+            }
+          }
+        }
+        if (local) {
+          await db.update(candidates).set({ photoUrl: local }).where(eq(candidates.id, candidateId))
+        }
+      }
+    } catch (err) {
+      console.warn("[scan-incoming] photo refresh failed", {
+        candidateId, err: err instanceof Error ? err.message : String(err),
+      })
     }
 
     // Обрабатываем сообщения по порядку. Если уже сделали rejection —
