@@ -46,11 +46,23 @@ export function getModuleGroups(moduleId: ModuleId, isClientLite?: boolean): Men
   const allItems = MODULE_REGISTRY[moduleId]?.menuItems ?? []
   const byHref = new Map(allItems.map((item) => [item.href, item]))
 
-  // Для клиентов (директор/HR-менеджер и т.д.) — внутри HR оставить только Вакансии
+  // Для клиентов (директор/HR-менеджер и т.д.) — внутри HR показываем
+  // только базовый набор: Дашборд HR, Вакансии, Настройки найма.
+  // Остальные пункты (Talent Pool, Аналитика, Календарь, ...) скрыты —
+  // это углублённый HR-инструмент для платформенных ролей.
   if (isClientLite && moduleId === 'hr') {
-    const vacancyItem = byHref.get('/hr/vacancies')
-    if (vacancyItem) {
-      return [{ label: 'Найм', items: [vacancyItem] }]
+    const wantedHrefs = ['/hr/dashboard', '/hr/vacancies', '/hr/hiring-settings']
+    const items = wantedHrefs.map(h => {
+      const item = byHref.get(h)
+      if (!item) return undefined
+      // Локально переименовываем «Дашборд» → «Дашборд HR», чтобы не
+      // путать с другими «Дашбордами» в сайдбаре. Registry не трогаем —
+      // там лейбл нужен в контексте админского полного меню.
+      if (h === '/hr/dashboard') return { ...item, label: 'Дашборд HR' }
+      return item
+    }).filter(Boolean) as MenuItem[]
+    if (items.length > 0) {
+      return [{ label: 'Найм', items }]
     }
   }
 
