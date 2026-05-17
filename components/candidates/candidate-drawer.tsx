@@ -779,7 +779,14 @@ export function CandidateDrawer({
   }, [candidate])
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
+    <Sheet open={open} onOpenChange={(next) => {
+      // Если карточку закрывают, а у нас активен PiP видео-визитки — выходим из PiP,
+      // иначе плавающее окно остаётся жить после уже закрытой карточки.
+      if (!next && typeof document !== "undefined" && document.pictureInPictureElement) {
+        document.exitPictureInPicture().catch(() => {})
+      }
+      onOpenChange(next)
+    }}>
       <SheetContent side="right" className="w-full sm:max-w-lg p-0 flex flex-col">
         {/* sr-only title/description: гарантируют наличие aria-labelledby
             и aria-describedby у Radix Dialog даже когда candidate ещё грузится

@@ -183,8 +183,8 @@ function VideoPlayer({ url }: { url: string }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const [ready, setReady] = useState(false)
-  // PiP API доступен не везде (например, Firefox-mobile, старые WebKit).
-  // Считаем флаг на mount чтобы избежать гидрационного несовпадения.
+  // PiP API недоступен в Firefox-mobile и старых WebKit — считаем флаг
+  // на mount, чтобы избежать гидрационного несовпадения.
   const [pipAvailable, setPipAvailable] = useState(false)
 
   useEffect(() => {
@@ -201,23 +201,19 @@ function VideoPlayer({ url }: { url: string }) {
         await v.requestPictureInPicture()
       }
     } catch {
-      // Юзер может отменить prompt, или браузер заблокировать вызов
-      // без user-gesture — это нормально, молча игнорируем.
+      // Юзер мог отменить prompt, либо браузер заблокировал без user-gesture
     }
   }
 
-  // Авто-PiP при скролле: когда видео уходит из viewport (intersectionRatio < 0.5)
-  // И сейчас играет — активируем PiP. Когда видео возвращается во viewport —
-  // НЕ выходим из PiP автоматически: юзер может специально хотеть и продолжать
-  // листать. Закрыть PiP может вручную (кнопкой или системным контролом).
+  // Авто-PiP при прокрутке внутри Sheet/Dialog: видео уходит из видимости
+  // и сейчас играет → активируем PiP. Скролл-контейнер ищем по
+  // [data-radix-scroll-area-viewport] либо [role="dialog"]; root=null →
+  // fallback на viewport браузера.
   useEffect(() => {
     const container = containerRef.current
     const v = videoRef.current
-    if (!container || !v) return
-    if (!pipAvailable) return
+    if (!container || !v || !pipAvailable) return
 
-    // Видео часто рендерится внутри Dialog со своим скроллом — IntersectionObserver
-    // c root=viewport никогда не сработает. Ищем ближайший скролл-контейнер.
     const scrollRoot =
       container.closest('[data-radix-scroll-area-viewport]') ??
       container.closest('[role="dialog"]') ??
@@ -233,7 +229,7 @@ function VideoPlayer({ url }: { url: string }) {
         v.requestPictureInPicture().catch(() => { triggered = false })
       }
       if (entry.isIntersecting) {
-        triggered = false  // вернулся во viewport — можно снова авто-PiP при следующем уходе
+        triggered = false
       }
     }, { root: scrollRoot, threshold: [0, 0.5, 1] })
     observer.observe(container)
