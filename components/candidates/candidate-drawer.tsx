@@ -489,6 +489,26 @@ export interface CandidateDrawerProps {
   vacancyPipeline?: VacancyPipelineV2 | null
 }
 
+// Ищем URL видео-визитки в anketaAnswers. Структура такая же, как
+// та, по которой считается hasVideoVizitka (см. api/.../answer/route.ts):
+// answers — массив или Record; у каждого entry поле answer = { mediaType: "video", url }.
+function findVideoVizitkaUrl(answers: unknown): string | null {
+  if (!answers) return null
+  const list: unknown[] = Array.isArray(answers)
+    ? answers
+    : typeof answers === "object" ? Object.values(answers as Record<string, unknown>) : []
+  for (const entry of list) {
+    if (!entry || typeof entry !== "object") continue
+    const ans = (entry as { answer?: unknown }).answer
+    if (!ans || typeof ans !== "object") continue
+    const a = ans as Record<string, unknown>
+    if (a.mediaType === "video" && typeof a.url === "string" && a.url.length > 0) {
+      return a.url
+    }
+  }
+  return null
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export function CandidateDrawer({
@@ -777,6 +797,24 @@ export function CandidateDrawer({
     const surveyContacts = pickSurveyContacts(candidate.surveyResponses)
     return { demo, demoBlocks: realBlocks, demoTotal, demoCompleted, demoPct, stageHistory, timeline, hasAnswers, blockMeta, surveyContacts }
   }, [candidate])
+
+  // Прелоад видео-визитки: пока юзер читает «Контакты», файл уже подкачивается
+  // в фоне, чтобы при переходе на таб «Ответы» спиннер был короче.
+  const videoVizitkaUrl = useMemo(
+    () => (candidate ? findVideoVizitkaUrl(candidate.anketaAnswers) : null),
+    [candidate],
+  )
+  useEffect(() => {
+    if (!open || !videoVizitkaUrl) return
+    const link = document.createElement("link")
+    link.rel = "preload"
+    link.as = "video"
+    link.href = videoVizitkaUrl
+    document.head.appendChild(link)
+    return () => {
+      link.parentNode?.removeChild(link)
+    }
+  }, [open, videoVizitkaUrl])
 
   return (
     <Sheet open={open} onOpenChange={(next) => {
