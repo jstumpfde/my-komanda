@@ -509,6 +509,7 @@ export default function BillingPage() {
               <thead>
                 <tr className="bg-muted/50 border-b">
                   <th className="text-left uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-2.5">Номер</th>
+                  <th className="text-left uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-2.5">Тип</th>
                   <th className="text-left uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-2.5">Дата</th>
                   <th className="text-left uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-2.5">Период</th>
                   <th className="text-right uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-2.5">Сумма</th>
@@ -517,15 +518,22 @@ export default function BillingPage() {
                 </tr>
               </thead>
               <tbody>
-                {invoices.map(inv => (
+                {invoices.map(inv => {
+                  // Для оплаченных показываем «Акт» (документ закрытия) и
+                  // период от даты оплаты + 1 месяц. Для остальных статусов
+                  // (issued/pending/draft/cancelled) — «Счёт» и прочерк
+                  // в колонке периода: оплаты нет → периода ещё нет.
+                  const isPaid = inv.status === "paid"
+                  const docType = isPaid ? "Акт" : "Счёт"
+                  const periodCell = isPaid && inv.paidAt
+                    ? `${formatDate(inv.paidAt)} — ${formatDate(addDaysIso(inv.paidAt, 30))}`
+                    : "—"
+                  return (
                   <tr key={inv.id} className="border-b border-border/50 last:border-0 hover:bg-muted/50 transition-colors">
                     <td className="px-4 py-2.5 font-mono text-sm">{inv.invoiceNumber}</td>
+                    <td className="px-4 py-2.5 text-sm text-muted-foreground">{docType}</td>
                     <td className="px-4 py-2.5 text-sm text-muted-foreground">{formatDate(inv.issuedAt ?? inv.createdAt)}</td>
-                    <td className="px-4 py-2.5 text-sm text-muted-foreground">
-                      {inv.periodStart && inv.periodEnd
-                        ? `${formatDate(inv.periodStart)} — ${formatDate(inv.periodEnd)}`
-                        : "—"}
-                    </td>
+                    <td className="px-4 py-2.5 text-sm text-muted-foreground">{periodCell}</td>
                     <td className="px-4 py-2.5 text-right text-sm font-medium">{formatKopecks(inv.amountKopecks)}</td>
                     <td className="px-4 py-2.5 text-center">
                       <Badge variant="outline" className={cn("text-xs", invoiceStatusClass(inv.status))}>
@@ -554,7 +562,8 @@ export default function BillingPage() {
                       </div>
                     </td>
                   </tr>
-                ))}
+                  )
+                })}
               </tbody>
             </table>
           </div>
