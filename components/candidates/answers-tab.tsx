@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { Video as VideoIcon, Mic, Image as ImageIcon, FileText, FileQuestion, Loader2, PictureInPicture2, Volume2, VolumeX } from "lucide-react"
+import { Video as VideoIcon, Mic, Image as ImageIcon, FileText, FileQuestion, Loader2, PictureInPicture2 } from "lucide-react"
 import type { Lesson, Block, Question } from "@/lib/course-types"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -183,7 +183,6 @@ function VideoPlayer({ url }: { url: string }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const [ready, setReady] = useState(false)
-  const [muted, setMuted] = useState(false)
   // PiP API доступен не везде (например, Firefox-mobile, старые WebKit).
   // Считаем флаг на mount чтобы избежать гидрационного несовпадения.
   const [pipAvailable, setPipAvailable] = useState(false)
@@ -191,20 +190,6 @@ function VideoPlayer({ url }: { url: string }) {
   useEffect(() => {
     setPipAvailable(typeof document !== "undefined" && !!document.pictureInPictureEnabled)
   }, [])
-
-  const togglePlay = () => {
-    const v = videoRef.current
-    if (!v) return
-    if (v.paused || v.ended) v.play().catch(() => {})
-    else v.pause()
-  }
-
-  const toggleMute = () => {
-    const v = videoRef.current
-    if (!v) return
-    v.muted = !v.muted
-    setMuted(v.muted)
-  }
 
   const togglePip = async () => {
     const v = videoRef.current
@@ -264,10 +249,10 @@ function VideoPlayer({ url }: { url: string }) {
       >
         <video
           ref={videoRef}
+          controls
           preload="auto"
           src={url}
           playsInline
-          onClick={togglePlay}
           onCanPlay={(e) => {
             const v = e.currentTarget
             if (!ready && v.duration > 1 && Number.isFinite(v.duration)) {
@@ -275,7 +260,7 @@ function VideoPlayer({ url }: { url: string }) {
             }
             setReady(true)
           }}
-          className="block w-full h-full bg-black cursor-pointer"
+          className="block w-full h-full bg-black"
           style={{ objectFit: "cover" }}
         />
         {!ready && (
@@ -283,26 +268,16 @@ function VideoPlayer({ url }: { url: string }) {
             <Loader2 className="w-6 h-6 text-muted-foreground animate-spin" />
           </div>
         )}
-        <div className="absolute top-1.5 right-1.5 flex items-center gap-1">
+        {pipAvailable && (
           <button
             type="button"
-            onClick={toggleMute}
-            title={muted ? "Включить звук" : "Выключить звук"}
-            className="inline-flex items-center justify-center w-7 h-7 rounded-md bg-black/75 text-white ring-1 ring-white/30 hover:bg-black/90 transition-colors backdrop-blur-sm"
+            onClick={togglePip}
+            title="Картинка в картинке"
+            className="absolute top-1.5 right-1.5 inline-flex items-center justify-center w-7 h-7 rounded-md bg-black/75 text-white ring-1 ring-white/30 hover:bg-black/90 transition-colors backdrop-blur-sm"
           >
-            {muted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+            <PictureInPicture2 className="w-4 h-4" />
           </button>
-          {pipAvailable && (
-            <button
-              type="button"
-              onClick={togglePip}
-              title="Картинка в картинке"
-              className="inline-flex items-center justify-center w-7 h-7 rounded-md bg-black/75 text-white ring-1 ring-white/30 hover:bg-black/90 transition-colors backdrop-blur-sm"
-            >
-              <PictureInPicture2 className="w-4 h-4" />
-            </button>
-          )}
-        </div>
+        )}
       </div>
       <a
         href={url}
