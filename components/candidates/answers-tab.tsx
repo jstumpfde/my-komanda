@@ -216,6 +216,13 @@ function VideoPlayer({ url }: { url: string }) {
     if (!container || !v) return
     if (!pipAvailable) return
 
+    // Видео часто рендерится внутри Dialog со своим скроллом — IntersectionObserver
+    // c root=viewport никогда не сработает. Ищем ближайший скролл-контейнер.
+    const scrollRoot =
+      container.closest('[data-radix-scroll-area-viewport]') ??
+      container.closest('[role="dialog"]') ??
+      null
+
     let triggered = false
     const observer = new IntersectionObserver((entries) => {
       const entry = entries[0]
@@ -228,7 +235,7 @@ function VideoPlayer({ url }: { url: string }) {
       if (entry.isIntersecting) {
         triggered = false  // вернулся во viewport — можно снова авто-PiP при следующем уходе
       }
-    }, { threshold: [0, 0.5, 1] })
+    }, { root: scrollRoot, threshold: [0, 0.5, 1] })
     observer.observe(container)
     return () => observer.disconnect()
   }, [pipAvailable])
@@ -266,9 +273,9 @@ function VideoPlayer({ url }: { url: string }) {
             type="button"
             onClick={togglePip}
             title="Картинка в картинке"
-            className="absolute top-1.5 right-1.5 inline-flex items-center justify-center w-7 h-7 rounded-md bg-black/60 text-white hover:bg-black/80 transition-colors backdrop-blur-sm"
+            className="absolute top-1.5 right-1.5 inline-flex items-center justify-center w-7 h-7 rounded-md bg-black/75 text-white ring-1 ring-white/30 hover:bg-black/90 transition-colors backdrop-blur-sm"
           >
-            <PictureInPicture2 className="w-3.5 h-3.5" />
+            <PictureInPicture2 className="w-4 h-4" />
           </button>
         )}
       </div>
