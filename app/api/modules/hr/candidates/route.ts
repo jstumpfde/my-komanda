@@ -216,6 +216,7 @@ export async function GET(req: NextRequest) {
           isFavorite: candidates.isFavorite,
           referredByShortId: candidates.referredByShortId,
           hhCandidateName: hhResponses.candidateName,
+          photoUrl: candidates.photoUrl,
         })
         .from(candidates)
         .innerJoin(vacancies, eq(candidates.vacancyId, vacancies.id))
