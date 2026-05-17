@@ -248,7 +248,19 @@ function VideoPlayer({ url }: { url: string }) {
           preload="metadata"
           src={url}
           playsInline
+          onProgress={(e) => {
+            // Не ждём полной загрузки и canPlay: как только в буфере есть
+            // 10 секунд — прячем спиннер. UX становится мгновенным даже на
+            // больших файлах (видео-визитки до 50 MB).
+            const v = e.currentTarget
+            if (v.buffered.length > 0 && v.buffered.end(0) >= 10) {
+              setReady(true)
+            }
+          }}
           onCanPlay={(e) => {
+            // Fallback для коротких видео (< 10s) — для них onProgress не
+            // успеет дойти до порога. Заодно подменяем чёрный первый кадр
+            // на живой через seek=0.5s (но только если юзер ещё не скрабил).
             const v = e.currentTarget
             if (!ready && v.duration > 1 && Number.isFinite(v.duration)) {
               v.currentTime = 0.5
