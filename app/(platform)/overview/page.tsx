@@ -1,37 +1,108 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useSession } from "next-auth/react"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Progress } from "@/components/ui/progress"
 import { cn } from "@/lib/utils"
 import { getOnboarding, isOnboardingComplete, remainingSteps } from "@/lib/onboarding"
 import Link from "next/link"
 import {
   Users, UserCheck, Calendar, AlertTriangle, ArrowRight,
-  Rocket, TrendingUp, Clock, Briefcase, CheckCircle2,
-  MessageSquare, Zap, Play, ExternalLink,
+  Rocket, Clock, Briefcase, Loader2,
 } from "lucide-react"
 
-const ACTIVITY_FEED = [
-  { time: "14:23", icon: "🟢", text: "Иванов А. завершил демонстрацию (94%)", sub: "Менеджер продаж" },
-  { time: "14:10", icon: "🔵", text: "Смирнова Е. выбрала слот: завтра 14:00", sub: "" },
-  { time: "13:45", icon: "⚡", text: "Новый отклик с hh.ru — Козлов И.", sub: "IT менеджер" },
-  { time: "13:20", icon: "✅", text: "Петров С. нанят", sub: "Руководитель отдела" },
-  { time: "12:50", icon: "🔴", text: "Морозов Д. не пришёл на интервью", sub: "Менеджер продаж" },
-  { time: "12:15", icon: "📨", text: "Бот отправил 3 сообщения (hh-чат)", sub: "" },
-  { time: "11:40", icon: "🟢", text: "Белова А. начала демонстрацию", sub: "Аккаунт-менеджер" },
+// ─── Типы ─────────────────────────────────────────────────────────────────────
+
+interface HrStats {
+  kpi: {
+    activeVacancies:  number
+    totalCandidates:  number
+    candidatesInWork: number
+    candidatesToday:  number
+    hiredThisMonth:   number
+    conversionRate:   number
+  }
+  vacancies: Array<{
+    id:             string
+    title:          string
+    candidateCount: number
+  }>
+  funnel: {
+    totals:    Record<string, number>
+    byVacancy: Record<string, Record<string, number>>
+  }
+}
+
+interface ActivityItem {
+  id:          string
+  action:      string
+  entityType:  string
+  entityId:    string | null
+  entityTitle: string | null
+  module:      string | null
+  details:     Record<string, unknown> | null
+  createdAt:   string | null
+  userId:      string | null
+  userName:    string | null
+}
+
+// ─── Стадии воронки (по real-enum, см. lib/db/schema.ts:380) ──────────────────
+
+const FUNNEL_STAGES: Array<{ key: string; label: string; color: string }> = [
+  { key: "new",         label: "Нов",  color: "#22d3ee" },
+  { key: "demo",        label: "Демо", color: "#3b82f6" },
+  { key: "scheduled",   label: "Назн", color: "#8b5cf6" },
+  { key: "interviewed", label: "Инт",  color: "#f59e0b" },
+  { key: "hired",       label: "Нан",  color: "#22c55e" },
 ]
 
-const TOP_VACANCIES = [
-  { title: "Менеджер по продажам", stages: { new: 3, awaiting: 2, demo: 2, hrDecision: 2, interview: 1, final: 1, hired: 1 }, total: 12 },
-  { title: "Руководитель отдела", stages: { new: 1, awaiting: 0, demo: 1, hrDecision: 1, interview: 1, final: 0, hired: 0 }, total: 4 },
-  { title: "Аккаунт-менеджер", stages: { new: 1, awaiting: 1, demo: 0, hrDecision: 1, interview: 1, final: 0, hired: 0 }, total: 4 },
-]
+// ─── Эмодзи для activity feed ─────────────────────────────────────────────────
+// Карта по (action, entityType). Если пары нет — fallback по action,
+// если и его нет — default-точка.
+
+function actionEmoji(a: Pick<ActivityItem, "action" | "entityType">): string {
+  const key = `${a.action}:${a.entityType}`
+  const map: Record<string, string> = {
+    "create:candidate":  "🟢",
+    "update:candidate":  "🔵",
+    "delete:candidate":  "🗑️",
+    "create:vacancy":    "📋",
+    "update:vacancy":    "✏️",
+    "delete:vacancy":    "🗑️",
+    "ai_request:vacancy": "⚡",
+    "ai_request:candidate": "⚡",
+  }
+  if (map[key]) return map[key]
+  if (a.action === "hired")   return "✅"
+  if (a.action === "rejected") return "🔴"
+  if (a.action === "ai_request") return "⚡"
+  if (a.action === "create") return "🟢"
+  if (a.action === "update") return "🔵"
+  if (a.action === "delete") return "🗑️"
+  return "•"
+}
+
+function actionLabel(a: ActivityItem): string {
+  const who = a.userName ?? "Кто-то"
+  const what = a.entityTitle ?? a.entityType
+  const verbs: Record<string, string> = {
+    create:      "создал",
+    update:      "обновил",
+    delete:      "удалил",
+    hired:       "нанят",
+    rejected:    "отклонён",
+    ai_request:  "запросил AI для",
+  }
+  const v = verbs[a.action] ?? a.action
+  return `${who} ${v} ${what}`
+}
+
+// ─── Утилиты ──────────────────────────────────────────────────────────────────
 
 function getGreeting(): string {
   const h = new Date().getHours()
@@ -45,9 +116,33 @@ function formatDate(): string {
   return new Date().toLocaleDateString("ru-RU", { weekday: "long", day: "numeric", month: "long" })
 }
 
+function formatTime(iso: string | null): string {
+  if (!iso) return ""
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return ""
+  return d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })
+}
+
+// Имя из session: берём первое слово (имя), чтобы поприветствовать.
+function firstName(full: string | null | undefined): string {
+  if (!full) return ""
+  const first = full.trim().split(/\s+/)[0]
+  return first || ""
+}
+
+// ─── Страница ─────────────────────────────────────────────────────────────────
+
 export default function OverviewPage() {
+  const { data: session } = useSession()
+
   const [obRemaining, setObRemaining] = useState(0)
   const [obDone, setObDone] = useState(true)
+
+  const [stats, setStats] = useState<HrStats | null>(null)
+  const [statsLoading, setStatsLoading] = useState(true)
+
+  const [activity, setActivity] = useState<ActivityItem[]>([])
+  const [activityLoading, setActivityLoading] = useState(true)
 
   useEffect(() => {
     const ob = getOnboarding()
@@ -55,17 +150,57 @@ export default function OverviewPage() {
     setObRemaining(remainingSteps(ob))
   }, [])
 
+  useEffect(() => {
+    fetch("/api/modules/hr/dashboard/stats")
+      .then(r => r.ok ? r.json() : Promise.reject(r))
+      .then((data: HrStats) => setStats(data))
+      .catch(() => setStats(null))
+      .finally(() => setStatsLoading(false))
+
+    fetch("/api/activity-log?limit=7&page=1")
+      .then(r => r.ok ? r.json() : Promise.reject(r))
+      .then((data: { items?: ActivityItem[] }) => setActivity(Array.isArray(data.items) ? data.items : []))
+      .catch(() => setActivity([]))
+      .finally(() => setActivityLoading(false))
+  }, [])
+
+  const name = firstName(session?.user?.name)
+
+  const kpiCandidatesToday = stats?.kpi.candidatesToday ?? 0
+  const kpiCandidatesInWork = stats?.kpi.candidatesInWork ?? 0
+  const kpiHiredThisMonth = stats?.kpi.hiredThisMonth ?? 0
+  // Интервью сегодня: endpoint отсутствует — показываем 0 (compromise #4)
+  const kpiInterviewsToday = 0
+
   const kpi = [
-    { label: "Новых откликов", value: 12, sub: "+3 за час", icon: Users, color: "text-blue-600 bg-blue-500/10" },
-    { label: "Ожидают решения HR", value: 5, sub: "требуют внимания", icon: AlertTriangle, color: "text-red-600 bg-red-500/10", alert: true },
-    { label: "Интервью сегодня", value: 2, sub: "14:00, 16:30", icon: Calendar, color: "text-purple-600 bg-purple-500/10" },
-    { label: "Нанято за месяц", value: 3, sub: "+50% к пред. месяцу", icon: UserCheck, color: "text-emerald-600 bg-emerald-500/10" },
+    { label: "Новых откликов",       value: kpiCandidatesToday,  sub: "за сегодня",        icon: Users,          color: "text-blue-600 bg-blue-500/10" },
+    { label: "Ожидают решения HR",   value: kpiCandidatesInWork, sub: "требуют внимания",  icon: AlertTriangle,  color: "text-red-600 bg-red-500/10", alert: kpiCandidatesInWork > 0 },
+    { label: "Интервью сегодня",     value: kpiInterviewsToday,  sub: "—",                  icon: Calendar,       color: "text-purple-600 bg-purple-500/10" },
+    { label: "Нанято за месяц",      value: kpiHiredThisMonth,   sub: "",                   icon: UserCheck,      color: "text-emerald-600 bg-emerald-500/10" },
   ]
 
-  const attentionItems = [
-    { text: "5 кандидатов ждут решения", href: "/", cta: "Посмотреть" },
-    { text: "2 интервью сегодня", href: "/interviews", cta: "Расписание" },
-  ]
+  // Attention deriv: если кто-то ждёт решения — кнопка ведёт на канд.
+  const attentionItems: Array<{ text: string; href: string; cta: string }> = []
+  if (kpiCandidatesInWork > 0) {
+    attentionItems.push({
+      text: `${kpiCandidatesInWork} кандидатов ждут решения`,
+      href: "/hr/vacancies",
+      cta: "Посмотреть",
+    })
+  }
+  if (kpiInterviewsToday > 0) {
+    attentionItems.push({
+      text: `${kpiInterviewsToday} интервью сегодня`,
+      href: "/interviews",
+      cta: "Расписание",
+    })
+  }
+
+  // Топ-3 вакансии по числу кандидатов, исключая пустые.
+  const topVacancies = (stats?.vacancies ?? [])
+    .filter(v => v.candidateCount > 0)
+    .sort((a, b) => b.candidateCount - a.candidateCount)
+    .slice(0, 3)
 
   return (
     <SidebarProvider defaultOpen={true}>
@@ -77,7 +212,7 @@ export default function OverviewPage() {
             {/* Greeting */}
             <div className="mb-6">
               <h1 className="text-2xl font-semibold text-foreground">
-                {getGreeting()}, Анна! ☀️
+                {getGreeting()}{name ? `, ${name}` : ""}! ☀️
               </h1>
               <p className="text-muted-foreground text-sm capitalize">{formatDate()}</p>
             </div>
@@ -105,11 +240,13 @@ export default function OverviewPage() {
                       <k.icon className="w-4 h-4" />
                     </div>
                     <div className="flex items-end gap-2">
-                      <span className="text-2xl font-bold text-foreground">{k.value}</span>
+                      <span className="text-2xl font-bold text-foreground">
+                        {statsLoading ? <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /> : k.value}
+                      </span>
                       {k.alert && <Badge className="bg-red-500 text-white text-[10px] animate-pulse mb-1">!</Badge>}
                     </div>
                     <p className="text-xs text-muted-foreground mt-1">{k.label}</p>
-                    <p className="text-[10px] text-muted-foreground/70">{k.sub}</p>
+                    {k.sub && <p className="text-[10px] text-muted-foreground/70">{k.sub}</p>}
                   </CardContent>
                 </Card>
               ))}
@@ -119,23 +256,25 @@ export default function OverviewPage() {
               {/* Left column — attention + vacancies */}
               <div className="lg:col-span-2 space-y-6">
                 {/* Attention block */}
-                <Card className="border-red-200 dark:border-red-800 bg-red-50/30 dark:bg-red-950/10">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-base flex items-center gap-2 text-red-700 dark:text-red-400">
-                      <AlertTriangle className="w-4 h-4" /> Требуют внимания
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-2">
-                    {attentionItems.map((item, i) => (
-                      <div key={i} className="flex items-center justify-between p-2.5 rounded-lg bg-white dark:bg-card border">
-                        <span className="text-sm text-foreground">{item.text}</span>
-                        <Button variant="ghost" size="sm" className="h-7 text-xs gap-1 text-primary" asChild>
-                          <Link href={item.href}>{item.cta} <ArrowRight className="w-3 h-3" /></Link>
-                        </Button>
-                      </div>
-                    ))}
-                  </CardContent>
-                </Card>
+                {attentionItems.length > 0 && (
+                  <Card className="border-red-200 dark:border-red-800 bg-red-50/30 dark:bg-red-950/10">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-base flex items-center gap-2 text-red-700 dark:text-red-400">
+                        <AlertTriangle className="w-4 h-4" /> Требуют внимания
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-2">
+                      {attentionItems.map((item, i) => (
+                        <div key={i} className="flex items-center justify-between p-2.5 rounded-lg bg-white dark:bg-card border">
+                          <span className="text-sm text-foreground">{item.text}</span>
+                          <Button variant="ghost" size="sm" className="h-7 text-xs gap-1 text-primary" asChild>
+                            <Link href={item.href}>{item.cta} <ArrowRight className="w-3 h-3" /></Link>
+                          </Button>
+                        </div>
+                      ))}
+                    </CardContent>
+                  </Card>
+                )}
 
                 {/* Top vacancies funnel */}
                 <Card>
@@ -145,36 +284,39 @@ export default function OverviewPage() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    {TOP_VACANCIES.map(v => (
-                      <div key={v.title} className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-medium text-foreground">{v.title}</span>
-                          <Badge variant="secondary" className="text-xs">{v.total} чел</Badge>
-                        </div>
-                        <div className="flex gap-1 h-6">
-                          {([
-                            { count: v.stages.new, color: "#22d3ee", label: "Нов" },
-                            { count: v.stages.awaiting, color: "#f59e0b", label: "Ожид" },
-                            { count: v.stages.demo, color: "#3b82f6", label: "Демо" },
-                            { count: v.stages.hrDecision, color: "#ef4444", label: "HR" },
-                            { count: v.stages.interview, color: "#8b5cf6", label: "Инт" },
-                            { count: v.stages.final, color: "#f97316", label: "Фин" },
-                            { count: v.stages.hired, color: "#22c55e", label: "Нан" },
-                          ]).map((s, i) => (
-                            s.count > 0 ? (
-                              <div
-                                key={i}
-                                className="rounded flex items-center justify-center text-white text-[10px] font-bold"
-                                style={{ backgroundColor: s.color, flex: s.count }}
-                                title={`${s.label}: ${s.count}`}
-                              >
-                                {s.count}
-                              </div>
-                            ) : null
-                          ))}
-                        </div>
-                      </div>
-                    ))}
+                    {statsLoading ? (
+                      <div className="flex items-center justify-center py-6"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
+                    ) : topVacancies.length === 0 ? (
+                      <p className="text-sm text-muted-foreground text-center py-4">Нет вакансий с кандидатами</p>
+                    ) : (
+                      topVacancies.map(v => {
+                        const perStage = stats?.funnel.byVacancy[v.id] ?? {}
+                        return (
+                          <div key={v.id} className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm font-medium text-foreground">{v.title}</span>
+                              <Badge variant="secondary" className="text-xs">{v.candidateCount} чел</Badge>
+                            </div>
+                            <div className="flex gap-1 h-6">
+                              {FUNNEL_STAGES.map(stage => {
+                                const cnt = perStage[stage.key] ?? 0
+                                if (cnt === 0) return null
+                                return (
+                                  <div
+                                    key={stage.key}
+                                    className="rounded flex items-center justify-center text-white text-[10px] font-bold"
+                                    style={{ backgroundColor: stage.color, flex: cnt }}
+                                    title={`${stage.label}: ${cnt}`}
+                                  >
+                                    {cnt}
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        )
+                      })
+                    )}
                   </CardContent>
                 </Card>
               </div>
@@ -187,18 +329,24 @@ export default function OverviewPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-1">
-                  {ACTIVITY_FEED.map((a, i) => (
-                    <div key={i} className="flex items-start gap-2.5 p-2 rounded-lg hover:bg-muted/30 transition-colors">
-                      <span className="text-base mt-0.5 shrink-0">{a.icon}</span>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm text-foreground leading-snug">{a.text}</p>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          <span className="text-[10px] text-muted-foreground">{a.time}</span>
-                          {a.sub && <span className="text-[10px] text-muted-foreground">· {a.sub}</span>}
+                  {activityLoading ? (
+                    <div className="flex items-center justify-center py-6"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
+                  ) : activity.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-4">Пока нет активности</p>
+                  ) : (
+                    activity.map(a => (
+                      <div key={a.id} className="flex items-start gap-2.5 p-2 rounded-lg hover:bg-muted/30 transition-colors">
+                        <span className="text-base mt-0.5 shrink-0">{actionEmoji(a)}</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-foreground leading-snug">{actionLabel(a)}</p>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span className="text-[10px] text-muted-foreground">{formatTime(a.createdAt)}</span>
+                            {a.module && <span className="text-[10px] text-muted-foreground">· {a.module}</span>}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    ))
+                  )}
                 </CardContent>
               </Card>
             </div>
