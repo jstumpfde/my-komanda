@@ -175,11 +175,10 @@ function formatDuration(seconds: number | undefined): string {
 // ─── Renderers ────────────────────────────────────────────────────────────────
 
 function VideoPlayer({ url }: { url: string }) {
-  // Грузим видео целиком (preload="auto") — иначе для seek в первый кадр
-  // нужен range-запрос, который Safari/мобильные не всегда инициируют.
-  // Готовность видео ловим по canPlay (а не loadedMetadata: после
-  // canPlay браузер УЖЕ декодировал кадр и переход на currentTime=0.5
-  // отобразится мгновенно). До canPlay — спиннер вместо чёрного экрана.
+  // preload="metadata" — грузим только заголовок, дальше браузер сам
+  // подтягивает байты через Range-запросы (nginx их отдаёт). На canPlay
+  // делаем currentTime=0.5 чтобы заменить чёрный первый кадр живым;
+  // до canPlay показываем спиннер.
   const videoRef = useRef<HTMLVideoElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const [ready, setReady] = useState(false)
@@ -246,7 +245,7 @@ function VideoPlayer({ url }: { url: string }) {
         <video
           ref={videoRef}
           controls
-          preload="auto"
+          preload="metadata"
           src={url}
           playsInline
           onCanPlay={(e) => {
