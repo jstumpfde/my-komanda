@@ -42,6 +42,7 @@ export async function PATCH(req: NextRequest) {
     const body = await req.json() as {
       companyId?: unknown
       name?: unknown
+      newEmail?: unknown
       currentPassword?: unknown
       newPassword?: unknown
     }
@@ -63,6 +64,29 @@ export async function PATCH(req: NextRequest) {
       if (!name) return apiError("Имя не может быть пустым", 400)
       if (name.length > 100) return apiError("Имя слишком длинное", 400)
       updates.name = name
+    }
+
+    // ── newEmail ───────────────────────────────────────────
+    // Директор/owner компании не может менять email напрямую — только
+    // через запрос платформенному админу (/api/support/requests, type=email_change).
+    // Остальные роли (hr_*, department_head, observer) меняют сами.
+    if (body.newEmail !== undefined) {
+      if (session.role === "director") {
+        return apiError("Директор может менять email только через запрос администратору", 403)
+      }
+      const newEmail = typeof body.newEmail === "string" ? body.newEmail.trim().toLowerCase() : ""
+      if (!newEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) {
+        return apiError("Некорректный email", 400)
+      }
+      const [conflict] = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.email, newEmail))
+        .limit(1)
+      if (conflict && conflict.id !== session.id) {
+        return apiError("Этот email уже занят", 409)
+      }
+      updates.email = newEmail
     }
 
     // ── password change ────────────────────────────────────

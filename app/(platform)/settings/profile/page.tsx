@@ -187,20 +187,37 @@ export default function ProfileSettingsPage() {
   const [emailSubmitting, setEmailSubmitting] = useState(false)
 
   const handleEmailChangeRequest = async () => {
-    if (!newEmail.trim()) { toast.error("Введите новый email"); return }
+    const trimmed = newEmail.trim()
+    if (!trimmed) { toast.error("Введите новый email"); return }
     setEmailSubmitting(true)
     try {
-      const res = await fetch("/api/support/requests", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "email_change", data: { newEmail: newEmail.trim(), reason: emailReason.trim() || undefined, currentEmail: displayEmail } }),
-      })
-      if (!res.ok) throw new Error()
-      toast.success("Запрос отправлен")
+      // Директор не может менять email сам — отправляем заявку платформ-админу.
+      // Остальные роли — прямой PATCH через /api/auth/me, без запроса.
+      if (isOwner) {
+        const res = await fetch("/api/support/requests", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type: "email_change", data: { newEmail: trimmed, reason: emailReason.trim() || undefined, currentEmail: displayEmail } }),
+        })
+        const json = await res.json().catch(() => ({}))
+        if (!res.ok) { toast.error(json.error ?? "Ошибка отправки запроса"); return }
+        toast.success("Запрос отправлен администратору")
+      } else {
+        const res = await fetch("/api/auth/me", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ newEmail: trimmed }),
+        })
+        const json = await res.json().catch(() => ({}))
+        if (!res.ok) { toast.error(json.error ?? "Не удалось изменить email"); return }
+        setProfile(prev => prev ? { ...prev, email: trimmed } : prev)
+        await updateSession({ email: trimmed })
+        toast.success("Email изменён")
+      }
       setEmailChangeOpen(false)
       setNewEmail("")
       setEmailReason("")
-    } catch { toast.error("Ошибка отправки запроса") }
+    } catch { toast.error("Ошибка сети") }
     finally { setEmailSubmitting(false) }
   }
 
@@ -457,22 +474,26 @@ export default function ProfileSettingsPage() {
 
             </div>
 
-      {/* ═══ Модалка: запрос смены email ═══ */}
+      {/* ═══ Модалка: смена email (запрос для директора, прямой PATCH для остальных) ═══ */}
       <Dialog open={emailChangeOpen} onOpenChange={setEmailChangeOpen}>
         <DialogContent className="sm:max-w-md">
-          <DialogHeader><DialogTitle>Запрос на изменение email</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>{isOwner ? "Запрос на изменение email" : "Изменить email"}</DialogTitle>
+          </DialogHeader>
           <div className="space-y-3 py-2">
             <div className="space-y-1.5">
               <Label className="text-xs">Новый email *</Label>
               <Input type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="new@example.com" className="h-9 text-sm bg-[var(--input-bg)]" />
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Причина (необязательно)</Label>
-              <Textarea value={emailReason} onChange={e => setEmailReason(e.target.value)} rows={2} placeholder="Почему нужно сменить email" className="text-sm bg-[var(--input-bg)]" />
-            </div>
+            {isOwner && (
+              <div className="space-y-1.5">
+                <Label className="text-xs">Причина (необязательно)</Label>
+                <Textarea value={emailReason} onChange={e => setEmailReason(e.target.value)} rows={2} placeholder="Почему нужно сменить email" className="text-sm bg-[var(--input-bg)]" />
+              </div>
+            )}
             <Button onClick={handleEmailChangeRequest} disabled={emailSubmitting || !newEmail.trim()} className="w-full">
               {emailSubmitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-              Отправить запрос
+              {isOwner ? "Отправить запрос" : "Изменить email"}
             </Button>
           </div>
         </DialogContent>
