@@ -258,7 +258,7 @@ export default function CompanySchedulePage() {
     : `${individualSchedules.length} ${individualSchedules.length === 1 ? "сотрудник" : individualSchedules.length < 5 ? "сотрудника" : "сотрудников"} с индивидуальным графиком`
 
   return (
-    <div className="max-w-3xl">
+    <div className="max-w-3xl mx-auto">
       <div className="flex flex-col gap-4 mb-5">
         <div>
           <h1 className="text-xl font-semibold text-foreground mb-0.5">Расписание компании</h1>
@@ -314,7 +314,7 @@ export default function CompanySchedulePage() {
             <CardContent className="p-0 border-t">
               {WEEKDAYS.map((day, i) => (
                 <div key={day.id} className={cn(
-                  "grid grid-cols-[44px_48px_1fr] items-center px-4 py-2 border-b border-border/50",
+                  "grid grid-cols-[44px_64px_1fr] items-center px-4 py-2 border-b border-border/50",
                 )}>
                   <div><Switch checked={schedule[i].enabled} onCheckedChange={(v) => updateDay(i, { enabled: v })} /></div>
                   <span className={cn("text-sm font-medium", !schedule[i].enabled && "text-muted-foreground")}>{day.short}</span>
@@ -337,7 +337,7 @@ export default function CompanySchedulePage() {
               ))}
               {/* Обед — встроен в блок рабочих дней последней строкой.
                   Та же grid-сетка, что и WEEKDAYS, чтобы все колонки совпали. */}
-              <div className="grid grid-cols-[44px_48px_1fr] items-center px-4 py-2 bg-muted/10">
+              <div className="grid grid-cols-[44px_64px_1fr] items-center px-4 py-2 bg-muted/10">
                 <div><Switch checked={lunchEnabled} onCheckedChange={setLunchEnabled} /></div>
                 <span className={cn("text-sm font-medium inline-flex items-center gap-1", !lunchEnabled && "text-muted-foreground")}>
                   <Coffee className="size-3.5 text-orange-600" />

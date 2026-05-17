@@ -9,7 +9,7 @@ export default function NotificationsSettingsPage() {
   const [allEnabled, setAllEnabled] = useState(true)
 
   return (
-    <>
+    <div className="max-w-3xl mx-auto">
       <div className="mb-4">
         <h1 className="text-xl font-semibold text-foreground mb-1">Уведомления</h1>
         <p className="text-muted-foreground text-sm">Настройте каналы и события уведомлений по модулям</p>
@@ -27,6 +27,6 @@ export default function NotificationsSettingsPage() {
       <div className={cn(!allEnabled && "opacity-50 pointer-events-none select-none")}>
         <NotificationSettings />
       </div>
-    </>
+    </div>
   )
 }
