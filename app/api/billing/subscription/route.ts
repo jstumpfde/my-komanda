@@ -37,8 +37,9 @@ export async function GET() {
   }
 
   return NextResponse.json({
-    status:       company.subscriptionStatus ?? "trial",
-    trialEndsAt:  company.trialEndsAt,
+    status:           company.subscriptionStatus ?? "trial",
+    trialEndsAt:      company.trialEndsAt,
+    companyCreatedAt: company.createdAt,
     daysRemaining,
     plan: plan ? {
       id:    plan.id,

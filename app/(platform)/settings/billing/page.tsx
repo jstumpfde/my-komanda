@@ -24,6 +24,7 @@ import {
 interface SubscriptionInfo {
   status: string
   trialEndsAt: string | null
+  companyCreatedAt: string | null
   daysRemaining: number | null
   plan: {
     id: string
@@ -31,6 +32,14 @@ interface SubscriptionInfo {
     price: number
     slug: string
   } | null
+}
+
+// Прибавляет к ISO-дате N календарных дней; формат сохраняем ISO,
+// дальше идёт через formatDate.
+function addDaysIso(iso: string, days: number): string {
+  const d = new Date(iso)
+  d.setDate(d.getDate() + days)
+  return d.toISOString()
 }
 
 interface PlanModule {
@@ -270,21 +279,21 @@ export default function BillingPage() {
 
       {/* Trial banner */}
       {subscription?.status === "trial" && (
-        <Alert className="border-amber-200 bg-amber-50 text-amber-800">
-          <Clock className="h-4 w-4 text-amber-600" />
+        <Alert className="items-center bg-secondary">
+          <Clock className="h-4 w-4 text-muted-foreground" />
           <AlertDescription className="flex items-center justify-between gap-4">
             <span>
               <strong>Пробный период:</strong>{" "}
-              {subscription.daysRemaining != null
-                ? `осталось ${subscription.daysRemaining} ${pluralDays(subscription.daysRemaining)}`
-                : subscription.trialEndsAt
-                  ? `до ${formatDate(subscription.trialEndsAt)}`
+              {subscription.companyCreatedAt
+                ? `активен с ${formatDate(subscription.companyCreatedAt)} по ${formatDate(addDaysIso(subscription.companyCreatedAt, 30))}`
+                : subscription.daysRemaining != null
+                  ? `осталось ${subscription.daysRemaining} ${pluralDays(subscription.daysRemaining)}`
                   : "активен"}
             </span>
             <Button
               size="sm"
               variant="outline"
-              className="border-amber-400 text-amber-800 hover:bg-amber-100 shrink-0"
+              className="shrink-0"
               onClick={() => document.getElementById("plans-section")?.scrollIntoView({ behavior: "smooth" })}
             >
               Выбрать тариф
