@@ -12,6 +12,7 @@ import { getValidToken } from "@/lib/hh-helpers"
 import { changeNegotiationState, getNegotiationMessages } from "@/lib/hh-api"
 import { generateCandidateShortId } from "@/lib/short-id"
 import { extractHhResumeFields, toCandidateColumns } from "@/lib/hh/extract-resume-fields"
+import { saveCandidatePhoto } from "@/lib/hh/save-candidate-photo"
 import { generateTouchSchedule } from "@/lib/followup/schedule"
 import { DEFAULT_FOLLOWUP_NOT_OPENED } from "@/lib/followup/default-messages"
 import { isFollowUpPreset } from "@/lib/followup/presets"
@@ -298,6 +299,14 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
         if (newCand) {
           candidateId = newCand.id
           newCandShortId = newCand.shortId ?? null
+          // Качаем hh-фото локально, чтобы фронт не упирался в 403 от img.hhcdn.ru
+          // (CDN режет браузерные Origin/Referer). На сервере подпись валидна.
+          if (typeof extractedCols.photoUrl === "string" && /^https?:\/\//.test(extractedCols.photoUrl)) {
+            const local = await saveCandidatePhoto(newCand.id, extractedCols.photoUrl)
+            if (local && local !== extractedCols.photoUrl) {
+              await db.update(candidates).set({ photoUrl: local }).where(eq(candidates.id, newCand.id))
+            }
+          }
         }
       } else if (candidateId) {
         // Защитный backfill: заполняем только пустые поля, заполненные не трогаем.
@@ -349,6 +358,14 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
           }
         } catch (err) {
           console.warn("[PQ] hh-resume backfill failed", err instanceof Error ? err.message : err)
+        }
+
+        // Если backfill попытался выставить hh-URL фото — сначала скачиваем
+        // локально, иначе сохранили бы битую для браузера ссылку (403).
+        if (typeof setFields.photoUrl === "string" && /^https?:\/\//.test(setFields.photoUrl)) {
+          const local = await saveCandidatePhoto(candidateId, setFields.photoUrl)
+          if (local) setFields.photoUrl = local
+          else delete setFields.photoUrl
         }
 
         await db.update(candidates).set(setFields).where(eq(candidates.id, candidateId))
