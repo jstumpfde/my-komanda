@@ -47,23 +47,20 @@ export function getModuleGroups(moduleId: ModuleId, isClientLite?: boolean): Men
   const byHref = new Map(allItems.map((item) => [item.href, item]))
 
   // Для клиентов (директор/HR-менеджер и т.д.) — внутри HR показываем
-  // только базовый набор: Дашборд HR, Вакансии, Настройки найма.
-  // Остальные пункты (Talent Pool, Аналитика, Календарь, ...) скрыты —
-  // это углублённый HR-инструмент для платформенных ролей.
+  // только базовый набор: Обзор, Вакансии, Настройки найма.
+  // «Обзор» — это платформенный /overview (не HR-страница), но в сайдбаре
+  // у client-lite ролей нет отдельной секции над модулями, поэтому кладём
+  // его в HR-группу первым пунктом. Остальные углублённые HR-пункты
+  // (Talent Pool, Аналитика, Календарь, ...) скрыты для платформенных ролей.
   if (isClientLite && moduleId === 'hr') {
-    const wantedHrefs = ['/hr/dashboard', '/hr/vacancies', '/hr/hiring-settings']
-    const items = wantedHrefs.map(h => {
-      const item = byHref.get(h)
-      if (!item) return undefined
-      // Локально переименовываем «Дашборд» → «Дашборд HR», чтобы не
-      // путать с другими «Дашбордами» в сайдбаре. Registry не трогаем —
-      // там лейбл нужен в контексте админского полного меню.
-      if (h === '/hr/dashboard') return { ...item, label: 'Дашборд HR' }
-      return item
-    }).filter(Boolean) as MenuItem[]
-    if (items.length > 0) {
-      return [{ label: 'Найм', items }]
-    }
+    const items: MenuItem[] = [
+      { label: 'Обзор', href: '/overview', icon: 'LayoutDashboard' },
+    ]
+    const vacancy = byHref.get('/hr/vacancies')
+    if (vacancy) items.push(vacancy)
+    const hiringSettings = byHref.get('/hr/hiring-settings')
+    if (hiringSettings) items.push(hiringSettings)
+    return [{ label: 'Найм', items }]
   }
 
   return groupDefs.map(({ label, hrefs, legacy }) => ({
