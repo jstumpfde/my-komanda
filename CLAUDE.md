@@ -6,7 +6,7 @@ Next.js 16.1.6 (App Router), TypeScript, Tailwind, shadcn/ui, pnpm, PostgreSQL 1
 ## Инфраструктура
 - Прод: 5.42.125.91, /var/www/my-komanda, PM2 my-komanda:3000
 - БД: postgresql://mykomanda:Comp2024!@localhost:5432/mykomanda
-- Рабочая ветка: deploy/pagination-clean (НЕ main)
+- Ветки: develop (разработка) → merge в main → деплой с main. main = прод-ветка.
 - GitHub: github.com/jstumpfde/my-komanda
 - AI прокси: CLAUDE_PROXY_URL=https://claude-proxy.jstumpf-de.workers.dev
 
@@ -18,7 +18,7 @@ Next.js 16.1.6 (App Router), TypeScript, Tailwind, shadcn/ui, pnpm, PostgreSQL 1
 ## КРИТИЧЕСКИЕ ПРАВИЛА
 
 ### Git
-- Рабочая ветка: deploy/pagination-clean
+- Рабочая ветка: develop. Прод-ветка: main. Перед мерджем develop → main всегда проверять `git log develop..origin/main` — на проде могут быть hotfix-коммиты, которых нет в develop (их нужно подтянуть в develop перед мерджем).
 - НИКОГДА не пушить в main напрямую
 - НИКОГДА не делать git pull origin main без проверки git log origin/main..HEAD
 - НИКОГДА не работать в двух Claude Code одновременно для одного проекта
@@ -32,7 +32,7 @@ Next.js 16.1.6 (App Router), TypeScript, Tailwind, shadcn/ui, pnpm, PostgreSQL 1
 - vacancies.status в БД = 'published' (не 'active') — но у Орлинка = 'active', не трогать
 
 ### Деплой
-- Деплой делает Юрий сам с сервера: git fetch && git reset --hard origin/deploy/pagination-clean && pnpm build && pm2 reload my-komanda
+- Деплой делает Юрий сам: ssh tz "cd /var/www/my-komanda && git fetch && git reset --hard origin/main && pnpm build && pm2 reload my-komanda"
 - НЕ пушить, НЕ деплоить самостоятельно без явной команды
 
 ### Тестирование
@@ -65,3 +65,9 @@ hooks/use-candidates.ts    — хук пагинации кандидатов
 - B6: фильтры в списке Орлинка не применяются
 - B8: неправильный порядок табов вакансии
 - B9: две параллельные системы статусов кандидатов
+
+## TODO (актуально на 18.05.2026)
+- [ ] Подтянуть 4 коммита с main в develop: git checkout develop && git merge origin/main
+- [ ] Удалить старую ветку deploy/pagination-clean (локально и на remote)
+- [ ] Удалить старую ветку feat/pagination-v1
+- [ ] Перевести стейджинг new.company24.pro с timestamped-ветки на develop
