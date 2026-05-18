@@ -446,6 +446,7 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
           <CardTitle className="text-base flex items-center gap-2">
             <Brain className="w-4 h-4" />
             Если кандидат хочет созвониться
+            <Badge variant="outline" className="text-[10px] h-4 px-1.5">Скоро</Badge>
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -468,8 +469,9 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
               ]).map(opt => (
                 <button
                   key={opt.value}
+                  disabled
                   className={cn(
-                    "w-full flex items-start gap-3 p-3 rounded-lg border text-left transition-all",
+                    "w-full flex items-start gap-3 p-3 rounded-lg border text-left transition-all opacity-50 cursor-not-allowed",
                     responseReaction === opt.value
                       ? "border-primary bg-primary/5 ring-2 ring-primary/20"
                       : "border-border hover:border-primary/30"
@@ -530,9 +532,13 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
                 checked={autoInvite}
                 onCheckedChange={(v) => setAutoInvite(v === true)}
                 className="mt-0.5"
+                disabled
               />
               <div className="flex-1">
-                <p className="text-sm font-medium">Авто-приглашение подходящих (AI-скор ≥ 70)</p>
+                <p className="text-sm font-medium flex items-center gap-2">
+                  Авто-приглашение подходящих (AI-скор ≥ 70)
+                  <Badge variant="outline" className="text-[10px] h-4 px-1.5">Скоро</Badge>
+                </p>
                 <p className="text-xs text-muted-foreground">Автоматическое приглашение на следующий этап</p>
               </div>
             </label>
@@ -556,9 +562,13 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
                 checked={notifyManager}
                 onCheckedChange={(v) => setNotifyManager(v === true)}
                 className="mt-0.5"
+                disabled
               />
               <div className="flex-1">
-                <p className="text-sm font-medium">Уведомлять менеджера о каждом действии</p>
+                <p className="text-sm font-medium flex items-center gap-2">
+                  Уведомлять менеджера о каждом действии
+                  <Badge variant="outline" className="text-[10px] h-4 px-1.5">Скоро</Badge>
+                </p>
                 <p className="text-xs text-muted-foreground">Получать уведомление при каждом авто-действии</p>
               </div>
             </label>
@@ -587,10 +597,13 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium">Автоматически запрашивать недостающие данные</p>
+              <p className="text-sm font-medium flex items-center gap-2">
+                Автоматически запрашивать недостающие данные
+                <Badge variant="outline" className="text-[10px] h-4 px-1.5">Скоро</Badge>
+              </p>
               <p className="text-xs text-muted-foreground">После прохождения демонстрации AI проверяет профиль и просит дополнить</p>
             </div>
-            <Switch checked={completenessEnabled} onCheckedChange={setCompletenessEnabled} />
+            <Switch checked={completenessEnabled} onCheckedChange={setCompletenessEnabled} disabled />
           </div>
           {completenessEnabled && (
             <div className="space-y-3 pl-4 border-l-2 border-primary/20">
@@ -681,6 +694,7 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
             <Phone className="w-4 h-4" />
             Звонки кандидатам
             <Badge variant="outline" className="text-[10px] ml-1">Бот-звонарь</Badge>
+            <Badge variant="outline" className="text-[10px] h-4 px-1.5">Скоро</Badge>
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -689,7 +703,7 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
               <p className="text-sm font-medium">Подключить бот-звонарь</p>
               <p className="text-xs text-muted-foreground">Бот автоматически позвонит кандидатам по выбранному сценарию</p>
             </div>
-            <Switch checked={dialerEnabled} onCheckedChange={setDialerEnabled} />
+            <Switch checked={dialerEnabled} onCheckedChange={setDialerEnabled} disabled />
           </div>
           {dialerEnabled && (
             <div className="space-y-3 pl-4 border-l-2 border-primary/20">
