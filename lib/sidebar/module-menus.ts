@@ -46,20 +46,15 @@ export function getModuleGroups(moduleId: ModuleId, isClientLite?: boolean): Men
   const allItems = MODULE_REGISTRY[moduleId]?.menuItems ?? []
   const byHref = new Map(allItems.map((item) => [item.href, item]))
 
-  // Для клиентов (директор/HR-менеджер и т.д.) — внутри HR показываем
-  // только базовый набор: Обзор, Вакансии, Настройки найма.
-  // «Обзор» — это платформенный /overview (не HR-страница), но в сайдбаре
-  // у client-lite ролей нет отдельной секции над модулями, поэтому кладём
-  // его в HR-группу первым пунктом. Остальные углублённые HR-пункты
-  // (Talent Pool, Аналитика, Календарь, ...) скрыты для платформенных ролей.
+  // Для клиентов (директор/HR-менеджер и т.д.) — внутри HR оставляем
+  // только «Вакансии». Пункты «Обзор» (/overview) и «Настройки найма»
+  // (/hr/hiring-settings) скрыты из клиентского сайдбара — роуты остаются
+  // доступны напрямую и в админских сайдбарах (platform_admin /
+  // platform_manager используют ветку ниже с полным MODULE_GROUP_DEFS).
   if (isClientLite && moduleId === 'hr') {
-    const items: MenuItem[] = [
-      { label: 'Обзор', href: '/overview', icon: 'LayoutDashboard' },
-    ]
+    const items: MenuItem[] = []
     const vacancy = byHref.get('/hr/vacancies')
     if (vacancy) items.push(vacancy)
-    const hiringSettings = byHref.get('/hr/hiring-settings')
-    if (hiringSettings) items.push(hiringSettings)
     return [{ label: 'Найм', items }]
   }
 
