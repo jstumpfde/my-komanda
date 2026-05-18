@@ -1,5 +1,29 @@
 # CLAUDE.md — my-komanda / Company24.pro
 
+## Словарь (для устранения путаницы)
+
+ВЕТКА (Git):
+- develop — для разработки и стейджинга
+- main — для прода
+
+СРЕДА:
+- Локально — мой Mac, ~/Projects/my-komanda
+- Стейджинг — new.company24.pro (запускается из ветки develop)
+- Прод — company24.pro (запускается из ветки main)
+
+ДОМЕН:
+- company24.pro → Прод
+- new.company24.pro → Стейджинг
+
+ТЕХНИЧЕСКОЕ:
+- Прод: /var/www/my-komanda + PM2 my-komanda (порт 3000)
+- Стейджинг: /var/www/my-komanda-new-staging + PM2 my-komanda-new-staging (порт 3001)
+
+ПРАВИЛО:
+- Код → "ветка develop/main"
+- Среда → "стейджинг/прод"
+- Браузер → "new.company24.pro / company24.pro"
+
 ## Стек
 Next.js 16.1.6 (App Router), TypeScript, Tailwind, shadcn/ui, pnpm, PostgreSQL 16, Drizzle ORM (НЕ Prisma)
 
