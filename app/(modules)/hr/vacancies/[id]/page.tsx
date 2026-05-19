@@ -2862,7 +2862,6 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                     aiProcessSettings={apiVacancy?.aiProcessSettings as { inviteMessage?: string; reInviteMessage?: string } | null | undefined}
                     sections={["firstMessage", "callIntent", "templates"] satisfies AutomationSectionId[]}
                   />
-                  <VacancyFollowupSettings vacancyId={id} />
                 </div>
                 )}
 
@@ -2889,18 +2888,19 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                     <h3 className="text-lg font-semibold text-foreground mb-1">Настройки дожима</h3>
                     <p className="text-sm text-muted-foreground">AI-фильтр откликов и цепочка касаний кандидатов, которые не открыли или не дошли до конца демо.</p>
                   </div>
-                </div>
-                )}
-
-                {/* ───────── ТАБ «AI сценарии» ───────── */}
-                {settingsSection === "ai" && (
-                <div className="space-y-6 max-w-3xl">
                   <VacancyAiProcessSettings
                     vacancyId={id}
                     initial={apiVacancy?.aiProcessSettings ?? null}
                     initialAiScoringEnabled={apiVacancy?.aiScoringEnabled ?? true}
                     onSaved={() => refetchVacancy()}
                   />
+                  <VacancyFollowupSettings vacancyId={id} />
+                </div>
+                )}
+
+                {/* ───────── ТАБ «AI сценарии» ───────── */}
+                {settingsSection === "ai" && (
+                <div className="space-y-6 max-w-3xl">
                   <AutomationSettings
                     vacancyId={id}
                     descriptionJson={apiVacancy?.descriptionJson}
