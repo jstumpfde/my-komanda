@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { candidates, vacancies, followUpCampaigns } from "@/lib/db/schema"
+import { STOP_WORDS } from "@/lib/followup/stop-words"
 
 export type StopReason =
   | "vacancy_closed"
@@ -14,12 +15,9 @@ export interface StopResult {
   reason?: StopReason
 }
 
-// Экспортируется для переиспользования в lib/hh/scan-incoming.ts.
-export const STOP_WORDS = [
-  "нет", "неинтересно", "не интересно", "не нужно", "не хочу", "не подходит",
-  "отказ", "остановит", "прекрат", "спасибо нет", "уже работаю", "нашел работу",
-  "нашла работу", "не актуально",
-]
+// Re-export для обратной совместимости (lib/hh/scan-incoming.ts всё ещё
+// импортирует STOP_WORDS отсюда — постепенно переедет на @/lib/followup/stop-words).
+export { STOP_WORDS }
 
 export async function shouldStopFollowUp(
   candidateId: string,

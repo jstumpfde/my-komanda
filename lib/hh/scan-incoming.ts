@@ -25,7 +25,7 @@ import { and, asc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { hhResponses, candidates, followUpMessages, hhCandidates } from "@/lib/db/schema"
 import { getValidToken } from "@/lib/hh-helpers"
-import { STOP_WORDS } from "@/lib/followup/should-stop"
+import { matchStopWord } from "@/lib/followup/stop-words"
 import { classifyCandidateResponse } from "@/lib/ai/classify-candidate-response"
 import { saveCandidatePhoto } from "@/lib/hh/save-candidate-photo"
 import { extractHhResumeFields } from "@/lib/hh/extract-resume-fields"
@@ -59,28 +59,6 @@ function extractText(m: HHMsg): string {
 
 function extractAuthorType(m: HHMsg): string {
   return m.author_type ?? m.author?.participant_type ?? m.author?.type ?? "unknown"
-}
-
-// Word-boundaries регекс по стоп-словам. Раньше использовался
-// .includes(w), что давало false positives на substring'ах: «интернет»
-// содержит «нет», «внеплановый» содержит «не», и т.п. После инцидента
-// 04.05.2026 (19 кандидатов ошибочно в rejected) — только полные слова
-// или точные многословные фразы, ограниченные whitespace.
-function matchStopWord(text: string): boolean {
-  // Нормализация: вся пунктуация → пробел, схлопываем пробелы.
-  const norm = text
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}\s]/gu, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-  if (!norm) return false
-  for (const w of STOP_WORDS) {
-    // Внутренние пробелы фразы становятся \s+ для устойчивости к множественным пробелам.
-    const escaped = w.toLowerCase().replace(/\s+/g, "\\s+")
-    const re = new RegExp(`(^|\\s)${escaped}(\\s|$)`, "u")
-    if (re.test(norm)) return true
-  }
-  return false
 }
 
 async function fetchNewApplicantMessages(
