@@ -39,7 +39,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Checkbox } from "@/components/ui/checkbox"
 import { Slider } from "@/components/ui/slider"
 import { Input } from "@/components/ui/input"
-import { Plus, Clock, Pause, Play, Archive, RotateCcw, Trash2, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, Zap, Globe, AlertTriangle, TrendingUp, Calendar, MapPin, DollarSign, Filter, X, Link2, Copy, Save, Sparkles, Eye, Check, Loader2, Download, ExternalLink, ClipboardList, ChevronLeft, ChevronRight, ChevronDown, CheckCircle2, XCircle, Users, Phone, Upload, RefreshCw, Activity, FileText } from "lucide-react"
+import { Plus, Clock, Pause, Play, Archive, RotateCcw, Trash2, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, MessageSquareText, Zap, Globe, AlertTriangle, TrendingUp, Calendar, MapPin, DollarSign, Filter, X, Link2, Copy, Save, Sparkles, Eye, Check, Loader2, Download, ExternalLink, ClipboardList, ChevronLeft, ChevronRight, ChevronDown, CheckCircle2, XCircle, Users, Phone, Upload, RefreshCw, Activity, FileText } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Label } from "@/components/ui/label"
@@ -697,7 +697,7 @@ export default function VacancyPage() {
   const rawUrlSection = rawUrlTab === "automation" ? "ai" : (searchParams?.get("section") ?? null)
   // Миграция старых section-значений на новые 6 табов.
   // general → page (стартовая вкладка с брендингом), automation → ai.
-  const SETTINGS_SECTION_IDS = ["page", "sources", "messages", "funnel", "ai", "integrations"] as const
+  const SETTINGS_SECTION_IDS = ["page", "sources", "messages", "funnel", "followup", "ai", "integrations"] as const
   type SettingsSectionId = typeof SETTINGS_SECTION_IDS[number]
   const initialSettingsSection: SettingsSectionId =
     rawUrlSection === "general" ? "page" :
@@ -2460,6 +2460,7 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                     { value: "sources"     as const, label: "Источники",           icon: Link2 },
                     { value: "messages"    as const, label: "Сообщения",           icon: MessageCircle },
                     { value: "funnel"      as const, label: "Демо и воронка",      icon: Kanban },
+                    { value: "followup"    as const, label: "Дожим",               icon: MessageSquareText },
                     { value: "ai"          as const, label: "AI сценарии",         icon: Zap },
                     { value: "integrations" as const, label: "Интеграции",          icon: Settings },
                   ]).map((s) => {
@@ -2878,6 +2879,16 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                     sections={["pipeline", "enrichment"] satisfies AutomationSectionId[]}
                   />
                   <PostDemoSettings vacancyId={id} />
+                </div>
+                )}
+
+                {/* ───────── ТАБ «Дожим» ───────── */}
+                {settingsSection === "followup" && (
+                <div className="space-y-6 max-w-3xl">
+                  <div>
+                    <h3 className="text-lg font-semibold text-foreground mb-1">Настройки дожима</h3>
+                    <p className="text-sm text-muted-foreground">AI-фильтр откликов и цепочка касаний кандидатов, которые не открыли или не дошли до конца демо.</p>
+                  </div>
                 </div>
                 )}
 
