@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server"
-import { eq, and, count, isNull, isNotNull, sql } from "drizzle-orm"
+import { eq, and, count, isNull, isNotNull } from "drizzle-orm"
 import { nanoid } from "nanoid"
 import { db } from "@/lib/db"
 import { vacancies } from "@/lib/db/schema"
