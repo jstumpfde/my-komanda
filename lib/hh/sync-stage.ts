@@ -16,19 +16,7 @@ import { and, eq } from "drizzle-orm"
 import { getValidToken } from "@/lib/hh-helpers"
 import { changeNegotiationState } from "@/lib/hh-api"
 import { getStageHhAction, parsePipeline, type StageSlug } from "@/lib/stages"
-
-const DEFAULT_REJECT_MESSAGE =
-  `Здравствуйте, {{name}}!\n\n` +
-  `Спасибо за отклик на вакансию «{{vacancy}}». ` +
-  `К сожалению, мы решили остановиться на других кандидатах. ` +
-  `Желаем удачи в поиске работы!`
-
-const DEFAULT_INVITE_MESSAGE =
-  `Здравствуйте, {{name}}!\n\n` +
-  `Спасибо за отклик на вакансию «{{vacancy}}». ` +
-  `Мы хотим познакомиться поближе и приглашаем пройти короткое демо-задание (10–15 минут):\n\n` +
-  `{{demo_link}}\n\n` +
-  `После прохождения мы свяжемся с вами для следующих шагов.`
+import { DEFAULT_REJECT_MESSAGE, DEFAULT_INVITE_MESSAGE } from "@/lib/hh/default-messages"
 
 function renderTemplate(tpl: string, vars: Record<string, string>): string {
   return tpl

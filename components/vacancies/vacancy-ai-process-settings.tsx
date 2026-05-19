@@ -11,6 +11,7 @@ import { Switch } from "@/components/ui/switch"
 import { Loader2, Save, Sparkles } from "lucide-react"
 import { toast } from "sonner"
 import type { VacancyAiProcessSettings as Settings } from "@/lib/db/schema"
+import { DEFAULT_REJECT_MESSAGE } from "@/lib/hh/default-messages"
 
 interface Props {
   vacancyId: string
@@ -19,8 +20,10 @@ interface Props {
   onSaved?: (settings: Settings, aiScoringEnabled: boolean) => void
 }
 
-const DEFAULT_INVITE = "Здравствуйте! Спасибо за отклик. Мы подготовили короткую демонстрацию должности — 15 минут, и вы узнаете всё о задачах, команде и доходе."
-const DEFAULT_REJECT = "Здравствуйте! Спасибо за интерес к нашей вакансии. К сожалению, на данный момент ваш опыт не совсем подходит под наши требования. Желаем удачи в поиске!"
+// DEFAULT_REJECT_MESSAGE — единый источник для UI placeholder/initial-state
+// и backend-fallback в sync-stage.ts / process-queue.ts. Поддерживает
+// плейсхолдеры {{name}}, {{vacancy}} — рендерятся в момент отправки.
+const DEFAULT_REJECT = DEFAULT_REJECT_MESSAGE
 
 export function VacancyAiProcessSettings({ vacancyId, initial, initialAiScoringEnabled, onSaved }: Props) {
   const [minScore, setMinScore] = useState<number>(initial?.minScore ?? 70)
@@ -167,6 +170,11 @@ export function VacancyAiProcessSettings({ vacancyId, initial, initialAiScoringE
             className="text-sm resize-y"
             disabled={!aiScoringEnabled}
           />
+          <p className="text-[11px] text-muted-foreground mt-1.5">
+            Поддерживает плейсхолдеры:{" "}
+            <code className="text-[10px] bg-muted px-1 py-0.5 rounded">{"{{name}}"}</code> — имя кандидата,{" "}
+            <code className="text-[10px] bg-muted px-1 py-0.5 rounded">{"{{vacancy}}"}</code> — название вакансии.
+          </p>
         </div>
 
         <div className="flex justify-end pt-1">
