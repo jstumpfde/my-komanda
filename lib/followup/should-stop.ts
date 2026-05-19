@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { candidates, vacancies, followUpCampaigns } from "@/lib/db/schema"
-import { STOP_WORDS } from "@/lib/followup/stop-words"
+import { STOP_WORDS, matchStopWord } from "@/lib/followup/stop-words"
 
 export type StopReason =
   | "vacancy_closed"
@@ -70,13 +70,43 @@ export async function shouldStopFollowUp(
     return { stop: true, reason: "demo_completed" }
   }
 
-  // Стоп-слова в последнем ответе кандидата (anketaAnswers — последний свободный ответ)
+  // Стоп-слова в anketa_answers.
+  //
+  // Структура поля шире, чем «массив {question, answer:string}»:
+  //   - top-level: jsonb массив ИЛИ объект ИЛИ null;
+  //   - каждый элемент массива: {answer, blockId, timeSpent, answeredAt}
+  //     ИЛИ голая строка (legacy: дата рождения, ISO timestamp);
+  //   - .answer: строка (свободный ответ), объект {viewed:true} (медиа-блок
+  //     просмотрен), объект {q-XXX: "текст",...} (мульти-вопрос), массив
+  //     строк (мульти-выбор), число, null.
+  //
+  // Старая логика «answers[last].answer.toLowerCase()» падала с
+  // TypeError, когда последний элемент — медиа-блок (.answer — объект),
+  // что верно почти для всех заполненных анкет (последний блок — это
+  // обычно просмотр финального видео). Поэтому проходим по всем
+  // элементам и извлекаем все доступные текстовые значения; matchStopWord
+  // защищает от substring false-positive'ов (инцидент 04.05.2026).
   if (campaign.stopOnReply) {
-    const answers = candidate.anketaAnswers as Array<{ answer?: string }> | null
-    const lastAnswer = answers?.[answers.length - 1]?.answer ?? ""
-    const lower = lastAnswer.toLowerCase()
-    if (STOP_WORDS.some(w => lower.includes(w))) {
-      return { stop: true, reason: "candidate_refused" }
+    const answers = candidate.anketaAnswers
+    if (Array.isArray(answers)) {
+      for (const item of answers) {
+        if (!item || typeof item !== "object") continue
+        const rawAnswer = (item as { answer?: unknown }).answer
+        if (typeof rawAnswer === "string") {
+          if (matchStopWord(rawAnswer)) {
+            return { stop: true, reason: "candidate_refused" }
+          }
+        } else if (Array.isArray(rawAnswer)) {
+          for (const v of rawAnswer) {
+            if (typeof v === "string" && matchStopWord(v)) {
+              return { stop: true, reason: "candidate_refused" }
+            }
+          }
+        }
+        // {viewed:true}, {q-XXX:...}, числа, null — игнорируем.
+        // Внутрь {q-XXX:"текст"} не лезем намеренно: это формальные
+        // ответы на вопросы анкеты, кандидат туда отказы не пишет.
+      }
     }
   }
 
