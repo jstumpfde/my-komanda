@@ -18,6 +18,7 @@ import { DEFAULT_FOLLOWUP_NOT_OPENED } from "@/lib/followup/default-messages"
 import { isFollowUpPreset } from "@/lib/followup/presets"
 import { canSendNow } from "@/lib/schedule/can-send-now"
 import { screenResume } from "@/lib/ai-screen-resume"
+import { trySyncRejectToHh } from "@/lib/hh/sync-stage"
 
 const DEMO_INVITE_MESSAGE = "Здравствуйте! Спасибо за отклик. Мы подготовили короткую демонстрацию должности — 15 минут, и вы узнаете всё о задачах, команде и доходе."
 
@@ -183,6 +184,17 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
     const baseMessage = effInviteMsg
     const hhAction = "invitation"
     const newStatus = "invited"
+
+    // Per-vacancy AI settings — нужны для minScore-фильтра и сообщений
+    // отказа. scopedAiSettings заполняется только когда передан localVacancyId
+    // (ручной запуск), для cron'а используем настройки конкретной вакансии.
+    const aiSettings: VacancyAiProcessSettings =
+      (localVac?.aiProcessSettings as VacancyAiProcessSettings | null) ?? scopedAiSettings
+
+    // Если AI-скоринг резюме дал score ниже порога — отклоняем кандидата
+    // (reject) или оставляем в "new" для ручного разбора (keep_new),
+    // НЕ отправляя приглашение и НЕ запуская дожим.
+    let belowThreshold: { score: number; threshold: number; action: "reject" | "keep_new" } | null = null
 
     try {
       let candidateToken: string | null = null
@@ -408,12 +420,111 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
               await db.update(candidates)
                 .set({ resumeScore: result.score })
                 .where(eq(candidates.id, candidateId))
+
+              // minScore-фильтр: если порог настроен и score ниже —
+              // помечаем кандидата как «ниже порога»; дальнейшая отправка
+              // приглашения и шедул дожима будут пропущены, а развилка
+              // reject/keep_new обработается ниже в одном месте.
+              const minScore = typeof aiSettings.minScore === "number" ? aiSettings.minScore : 0
+              if (minScore > 0 && result.score < minScore) {
+                const action: "reject" | "keep_new" =
+                  aiSettings.belowThresholdAction === "keep_new" ? "keep_new" : "reject"
+                belowThreshold = { score: result.score, threshold: minScore, action }
+              }
             }
           }
         } catch (err) {
           console.warn("[PQ] resume screening failed:", err instanceof Error ? err.message : err)
         }
       }
+
+      // Если кандидат не прошёл minScore — выполняем разветвление и
+      // выходим из обработки этого отклика. Приглашение и шедул дожима
+      // ниже под `if (!belowThreshold)` пропустятся.
+      if (belowThreshold && candidateId && localVac) {
+        try {
+          const [prev] = await db
+            .select({ stage: candidates.stage, stageHistory: candidates.stageHistory })
+            .from(candidates)
+            .where(eq(candidates.id, candidateId))
+            .limit(1)
+          const fromStage = prev?.stage ?? "new"
+          const history = (prev?.stageHistory as Array<Record<string, unknown>> | null) ?? []
+          const nowIso = new Date().toISOString()
+          const nowTs  = new Date()
+
+          if (belowThreshold.action === "reject") {
+            await db.update(candidates)
+              .set({
+                stage:                        "rejected",
+                autoProcessingStopped:        true,
+                autoProcessingStoppedReason:  "ai_min_score_below_threshold",
+                autoProcessingStoppedAt:      nowTs,
+                stageHistory: [...history, {
+                  from:      fromStage,
+                  to:        "rejected",
+                  at:        nowIso,
+                  reason:    "ai_min_score_below_threshold",
+                  score:     belowThreshold.score,
+                  threshold: belowThreshold.threshold,
+                }],
+                updatedAt: nowTs,
+              })
+              .where(eq(candidates.id, candidateId))
+
+            // Сообщение мягкого отказа через hh (discard_by_employer)
+            // с подстановкой имени/вакансии — переиспользуем sync-stage.
+            await trySyncRejectToHh(candidateId)
+          } else {
+            // keep_new: оставляем stage="new", но ставим автостоп —
+            // кандидат не попадёт в дальнейшую авто-обработку, ждёт ручного разбора.
+            await db.update(candidates)
+              .set({
+                autoProcessingStopped:        true,
+                autoProcessingStoppedReason:  "below_threshold_manual_review",
+                autoProcessingStoppedAt:      nowTs,
+                stageHistory: [...history, {
+                  from:      fromStage,
+                  to:        fromStage,
+                  at:        nowIso,
+                  reason:    "below_threshold_manual_review",
+                  score:     belowThreshold.score,
+                  threshold: belowThreshold.threshold,
+                }],
+                updatedAt: nowTs,
+              })
+              .where(eq(candidates.id, candidateId))
+          }
+
+          // hh_responses.status='invited' — отклик уходит из очереди разбора,
+          // повторно не подбирается. Решение по кандидату принято.
+          await db.update(hhResponses)
+            .set({ status: "invited", localCandidateId: candidateId })
+            .where(eq(hhResponses.id, resp.id))
+
+          console.log("[PQ] below-threshold", JSON.stringify({
+            tag:        "process-queue/below-threshold",
+            candidateId,
+            score:      belowThreshold.score,
+            threshold:  belowThreshold.threshold,
+            action:     belowThreshold.action,
+          }))
+
+          results.push({
+            id:     resp.hhResponseId,
+            name:   resp.candidateName,
+            action: belowThreshold.action === "reject" ? "ai_rejected" : "ai_kept_new",
+          })
+        } catch (btErr) {
+          console.error("[PQ] below-threshold handling failed:",
+            btErr instanceof Error ? btErr.message : btErr)
+        }
+      }
+
+      // Дальше — отправка приглашения и шедул дожима. Под minScore-блок
+      // (belowThreshold) ничего из этого не выполняется: кандидат уже либо
+      // в "rejected" с отправленным отказом, либо помечен ручным разбором.
+      if (!belowThreshold) {
 
       // Проверяем — отправляли ли работодателю уже что-то по этому отклику.
       let previouslyInvited = false
@@ -457,8 +568,8 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
         const demoUrl = `https://company24.pro/demo/${tokenForUrl}`
 
         const messageText = previouslyInvited
-          ? (scopedAiSettings.reInviteMessage?.trim() || scopedAiSettings.inviteMessage?.trim() || DEMO_INVITE_MESSAGE)
-          : (scopedAiSettings.inviteMessage?.trim() || DEMO_INVITE_MESSAGE)
+          ? (aiSettings.reInviteMessage?.trim() || aiSettings.inviteMessage?.trim() || DEMO_INVITE_MESSAGE)
+          : (aiSettings.inviteMessage?.trim() || DEMO_INVITE_MESSAGE)
 
         const replaced = messageText
           .replaceAll("[Имя]", candidateName)
@@ -532,6 +643,7 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
 
       invitedCount++
       results.push({ id: resp.hhResponseId, name: resp.candidateName, action: "invited" })
+      } // конец if (!belowThreshold) — отказ/keep_new обработан выше отдельной веткой
     } catch (err: unknown) {
       console.error("[PQ] FAIL", resp.candidateName, err instanceof Error ? err.message : err)
       results.push({
