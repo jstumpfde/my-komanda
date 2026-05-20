@@ -339,11 +339,15 @@ function TaskAnswerView({ block, answer }: { block: Block; answer: Record<string
     // Fallback — просто покажем JSON-ответ как пары ключ/значение
     return (
       <div className="space-y-1.5">
-        {Object.entries(answer).map(([k, v]) => {
+        {Object.entries(answer).map(([k, v], idx) => {
           const media = coerceMedia(v)
+          // Технический ключ q-1778... HR-у не нужен — показываем
+          // нейтральный «Ответ N» вместо. data-question-id оставляем
+          // в DOM для дебага.
+          const label = isTechnicalQuestionId(k) ? `Ответ ${idx + 1}` : k
           return (
-            <div key={k} className="text-sm break-words">
-              <span className="text-muted-foreground">{k}: </span>
+            <div key={k} className="text-sm break-words" data-question-id={k}>
+              <span className="text-muted-foreground">{label}: </span>
               {media ? (
                 <div className="mt-1"><MediaList media={media} /></div>
               ) : (
@@ -367,8 +371,8 @@ function TaskAnswerView({ block, answer }: { block: Block; answer: Record<string
           ? (v == null ? "" : Array.isArray(v) ? v.join(", ") : typeof v === "object" ? "" : String(v))
           : ""
         return (
-          <div key={q.id} className="space-y-1">
-            <p className="text-xs font-medium text-foreground break-words">{q.text || q.id}</p>
+          <div key={q.id} className="space-y-1" data-question-id={q.id}>
+            <p className="text-xs font-medium text-foreground break-words">{humaniseQuestionLabel(q.text, "Вопрос")}</p>
             {media ? (
               <div className="space-y-1">
                 <MediaList media={media} />
@@ -396,6 +400,19 @@ function pickFirstMediaType(media: MediaAnswer | MediaAnswer[]): MediaAnswer["me
 // и media (запись/загрузка). Все остальные — info/text/video/image/file/button —
 // это просмотр контента, не ответ. Их в табе «Ответы» показывать не нужно.
 const ANSWERABLE_BLOCK_TYPES = new Set<string>(["task", "media"])
+
+// Сессия 7a: технические идентификаторы вопросов (q-1778750542831,
+// q-..-0t, q-..-ky) HR-у в карточке не нужны. Если ничего человеческого
+// нет — показываем нейтральный fallback вместо ID.
+const TECH_QUESTION_ID_RE = /^q-\d+(?:-[a-z0-9]+)*$/i
+function isTechnicalQuestionId(s: string | null | undefined): boolean {
+  return typeof s === "string" && TECH_QUESTION_ID_RE.test(s)
+}
+function humaniseQuestionLabel(raw: string | null | undefined, fallback = "Вопрос"): string {
+  if (!raw) return fallback
+  if (isTechnicalQuestionId(raw)) return fallback
+  return raw
+}
 
 function isViewMarkerOnly(answer: unknown): boolean {
   if (!answer || typeof answer !== "object" || Array.isArray(answer)) return false
@@ -449,7 +466,9 @@ function EntryCard({ entry, blockMap }: { entry: AnketaEntry; blockMap: Map<stri
   const lessonTitle = mapped?.lesson?.title || ""
   const block = mapped?.block
 
-  const headerTitle = block?.taskTitle || block?.taskDescription || lessonTitle || blockId
+  // Технический blockId как fallback HR не нужен — лучше «Без названия».
+  // Сам ID остаётся в DOM data-атрибуте для дебага.
+  const headerTitle = block?.taskTitle || block?.taskDescription || lessonTitle || humaniseQuestionLabel(blockId, "Без названия")
   const directMedia = coerceMedia(ans)
   const Icon = directMedia
     ? (() => {
@@ -467,7 +486,7 @@ function EntryCard({ entry, blockMap }: { entry: AnketaEntry; blockMap: Map<stri
   }
 
   return (
-    <div className="p-3 rounded-lg border border-border/60 bg-muted/40 space-y-2 min-w-0">
+    <div className="p-3 rounded-lg border border-border/60 bg-muted/40 space-y-2 min-w-0" data-block-id={blockId}>
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-start gap-1.5 min-w-0">
           <Icon className="w-3.5 h-3.5 text-muted-foreground shrink-0 mt-0.5" />
