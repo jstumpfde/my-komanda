@@ -784,7 +784,7 @@ export default function VacancyPage() {
   // Сводные счётчики для шапки. Отдельный endpoint, не зависящий от фильтров,
   // чтобы «всего кандидатов» всегда показывало COUNT по vacancy_id, а не
   // длину apiCandidates (которая ужимается фильтрами / задержкой загрузки).
-  const [headerStats, setHeaderStats] = useState<{ total: number; pending: number; demoOpened: number; rejected: number } | null>(null)
+  const [headerStats, setHeaderStats] = useState<{ total: number; pending: number; awaitingReview: number; demoOpened: number; rejected: number } | null>(null)
   const loadHeaderStats = useCallback(async () => {
     if (!id) return
     try {
@@ -1264,6 +1264,10 @@ export default function VacancyPage() {
     city: "city",
     source: "source",
     favorite: "favorite",
+    // P0-8: «Очередь HR» — приоритет anketa_filled первыми.
+    // ListView не имеет колонки hrQueue, key используется только как
+    // невидимый дефолт первого открытия (см. инжект user-prefs ниже).
+    hrQueue: "hrQueue",
   }
 
   const handleListSortChange = useCallback((next: ListSortState | null) => {
@@ -1319,9 +1323,11 @@ export default function VacancyPage() {
     const hasUrlSort = !!(searchParams?.get("sort") || searchParams?.get("sortBy"))
     if (hasUrlSort) return
     const stored = userPrefs.listSort
+    // P0-8: дефолт первого открытия — hrQueue asc (anketa_filled первыми).
+    // Сохранённый выбор HR (stored) уважаем — это сделанный им явный выбор.
     const toApply: ListSortState = stored
       ? { key: stored.key as ListSortKey, dir: stored.dir }
-      : { key: "progress", dir: "desc" }
+      : { key: "hrQueue" as ListSortKey, dir: "asc" }
     handleListSortChange(toApply)
   }, [userPrefsLoaded, useListPaginated, userPrefs.listSort, searchParams, handleListSortChange])
 
@@ -1762,7 +1768,7 @@ export default function VacancyPage() {
                     <span>·</span>
                     <UITooltip>
                       <TooltipTrigger asChild>
-                        <span className="cursor-help"><span className={cn("font-medium", (headerStats?.pending ?? 0) > 0 ? "text-amber-700" : "text-foreground")}>{headerStats?.pending ?? "—"}</span> ждут разбора</span>
+                        <span className="cursor-help"><span className={cn("font-medium", (headerStats?.awaitingReview ?? 0) > 0 ? "text-amber-700" : "text-foreground")}>{headerStats?.awaitingReview ?? "—"}</span> ждут разбора</span>
                       </TooltipTrigger>
                       <TooltipContent>Отклики с hh.ru, которые ещё не обработаны (нажмите «Разобрать»)</TooltipContent>
                     </UITooltip>

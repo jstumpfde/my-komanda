@@ -7,10 +7,11 @@
 // при 275 в БД).
 //
 // Возвращает:
-//   total      — все кандидаты по vacancy_id (без фильтров)
-//   pending    — hh_responses со status='response', привязанные к hh_vacancy_id
-//   demoOpened — кандидаты с непустым demo_progress_json
-//   rejected   — кандидаты в стадии 'rejected'
+//   total           — все кандидаты по vacancy_id (без фильтров)
+//   pending         — hh_responses со status='response' (для кнопки «Разобрать»)
+//   awaitingReview  — candidates.stage='anketa_filled' (ждут решения HR, см. P0-8)
+//   demoOpened      — кандидаты с непустым demo_progress_json
+//   rejected        — кандидаты в стадии 'rejected'
 import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { db } from "@/lib/db"
@@ -47,6 +48,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     [demoOpenedRow],
     [rejectedRow],
     [pendingRow],
+    [awaitingReviewRow],
   ] = await Promise.all([
     db.select({ c: count() }).from(candidates).where(eq(candidates.vacancyId, vacancyId)),
     db.select({ c: count() }).from(candidates).where(and(
@@ -63,12 +65,21 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
           eq(hhResponses.status, "response"),
         ))
       : Promise.resolve([{ c: 0 }]),
+    // P0-8: реальное «ждут разбора HR» — это кандидаты с заполненной
+    // финальной анкетой, ожидающие решения. Раньше шапка показывала
+    // pending (hh-разбор) под этим лейблом, что вводило HR в заблуждение
+    // («0 ждут разбора» при 175 anketa_filled).
+    db.select({ c: count() }).from(candidates).where(and(
+      eq(candidates.vacancyId, vacancyId),
+      eq(candidates.stage, "anketa_filled"),
+    )),
   ])
 
   return NextResponse.json({
-    total:      totalRow?.c ?? 0,
-    pending:    pendingRow?.c ?? 0,
-    demoOpened: demoOpenedRow?.c ?? 0,
-    rejected:   rejectedRow?.c ?? 0,
+    total:           totalRow?.c ?? 0,
+    pending:         pendingRow?.c ?? 0,
+    awaitingReview:  awaitingReviewRow?.c ?? 0,
+    demoOpened:      demoOpenedRow?.c ?? 0,
+    rejected:        rejectedRow?.c ?? 0,
   })
 }

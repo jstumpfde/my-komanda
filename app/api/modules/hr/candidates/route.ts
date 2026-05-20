@@ -20,10 +20,11 @@ type SortKey =
   | "stage"
   | "city"
   | "source"
+  | "hrQueue"
 
 const ALLOWED_SORT_KEYS: ReadonlySet<SortKey> = new Set<SortKey>([
   "favorite", "aiScore", "resumeScore", "salary", "responseDate", "status", "progress",
-  "createdAt", "name", "stage", "city", "source",
+  "createdAt", "name", "stage", "city", "source", "hrQueue",
 ])
 
 const ALLOWED_PAGE_SIZES: ReadonlySet<number> = new Set<number>([20, 50, 100])
@@ -68,6 +69,21 @@ const STAGE_ORDER_SQL = sql`CASE ${candidates.stage}
   WHEN 'talent_pool' THEN 8
   WHEN 'rejected' THEN 9
   ELSE 99
+END`
+
+// P0-8: «Очередь HR» — приоритет показа anketa_filled первыми.
+// Самые «дорогие» кандидаты — те, кто прошёл демо и оставил анкету,
+// но ещё без решения HR. Остальные — по убыванию степени готовности.
+const HR_QUEUE_ORDER_SQL = sql`CASE ${candidates.stage}
+  WHEN 'anketa_filled'    THEN 1
+  WHEN 'decision'         THEN 2
+  WHEN 'interview'        THEN 2
+  WHEN 'demo_opened'      THEN 3
+  WHEN 'primary_contact'  THEN 4
+  WHEN 'new'              THEN 5
+  WHEN 'rejected'         THEN 99
+  WHEN 'hired'            THEN 99
+  ELSE 50
 END`
 
 // Абсолютное число пройденных блоков демо (status='completed', исключая
@@ -118,6 +134,15 @@ function buildOrderBy(key: SortKey | null, dir: "asc" | "desc"): SQL[] {
     case "createdAt":    return [wrap(candidates.createdAt), tiebreak]
     case "status":
     case "stage":        return [wrap(STAGE_ORDER_SQL), desc(candidates.createdAt), tiebreak]
+    case "hrQueue":      return [
+      // ASC: anketa_filled=1 первыми → новые внутри стадии первыми.
+      // P0-8: дефолт при первом открытии вакансии.
+      dir === "asc"
+        ? sql`${HR_QUEUE_ORDER_SQL} ASC`
+        : sql`${HR_QUEUE_ORDER_SQL} DESC`,
+      desc(candidates.createdAt),
+      tiebreak,
+    ]
     case "city": return [
       // NULL/пустые в конец независимо от направления — иначе они доминируют
       // и активная сортировка теряет смысл (как в client-side sort, line ~177).

@@ -17,6 +17,7 @@ import {
 } from "lucide-react"
 import { CandidatesProgressMiniTable } from "@/components/candidates/candidates-progress-mini-table"
 import { Greeting } from "./_components/greeting"
+import { AwaitingReviewBanner } from "./_components/awaiting-review-banner"
 
 // ─── Colors ─────────────────────────────────────────────────────────────────
 
@@ -251,6 +252,9 @@ function DashboardContent() {
 
             {/* ═══ Greeting ═══ */}
             <Greeting />
+
+            {/* ═══ Очередь HR (P0-8) ═══ */}
+            <AwaitingReviewBanner />
 
             {/* ═══ KPI pills ═══ */}
             <div className="flex flex-wrap gap-3">
