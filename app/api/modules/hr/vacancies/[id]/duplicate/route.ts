@@ -5,21 +5,27 @@ import { db } from "@/lib/db"
 import { vacancies, companies } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 
-function transliterate(text: string): string {
-  const map: Record<string, string> = {
-    а: "a", б: "b", в: "v", г: "g", д: "d", е: "e", ё: "yo",
-    ж: "zh", з: "z", и: "i", й: "y", к: "k", л: "l", м: "m",
-    н: "n", о: "o", п: "p", р: "r", с: "s", т: "t", у: "u",
-    ф: "f", х: "kh", ц: "ts", ч: "ch", ш: "sh", щ: "shch",
-    ъ: "", ы: "y", ь: "", э: "e", ю: "yu", я: "ya",
+async function generateDuplicateSlug(originalSlug: string | null | undefined): Promise<string> {
+  // Draft vacancies start as «Новая вакансия» → slug «novaya-vakansiya-…». Don't propagate.
+  if (!originalSlug || originalSlug.includes("novaya-vakansiya")) {
+    return `vacancy-${nanoid(8)}`
   }
-  return text
-    .toLowerCase()
-    .split("")
-    .map((c) => map[c] ?? (c.match(/[a-z0-9]/) ? c : "-"))
-    .join("")
-    .replace(/-{2,}/g, "-")
-    .replace(/^-|-$/g, "")
+
+  // Strip trailing -N so a copy of "marketolog-b2b-2" probes -3 rather than -2-2.
+  const base = originalSlug.replace(/-\d+$/, "")
+  if (!base) return `vacancy-${nanoid(8)}`
+
+  for (let counter = 2; counter < 100; counter++) {
+    const candidate = `${base}-${counter}`
+    const [existing] = await db
+      .select({ id: vacancies.id })
+      .from(vacancies)
+      .where(eq(vacancies.slug, candidate))
+      .limit(1)
+    if (!existing) return candidate
+  }
+
+  return `vacancy-${nanoid(8)}`
 }
 
 export async function POST(
@@ -41,7 +47,7 @@ export async function POST(
     }
 
     const newTitle = `${original.title} (копия)`
-    const slug = `${transliterate(newTitle)}-${nanoid(6)}`
+    const slug = await generateDuplicateSlug(original.slug)
 
     const [duplicate] = await db
       .insert(vacancies)
