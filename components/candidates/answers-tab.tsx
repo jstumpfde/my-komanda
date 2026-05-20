@@ -525,11 +525,30 @@ export function AnswersTab({ answers, demoLessons }: AnswersTabProps) {
     return true
   })
 
+  // Раздел «Предквалификация» (стаб Сессии 6, реальные ответы появятся
+  // в Сессии 6b после backend-логики отправки и AI-вердикта Haiku).
+  const prequalSection = (
+    <div className="rounded-md border bg-muted/30 p-3">
+      <div className="flex items-center gap-2 mb-1">
+        <p className="text-sm font-medium">Предквалификация</p>
+        <span className="text-[10px] uppercase tracking-wider text-muted-foreground bg-background border rounded px-1.5 py-0.5">
+          Скоро
+        </span>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Здесь появятся ответы кандидата на уточняющие вопросы и AI-вердикт. Настраивается в карточке вакансии → таб «Демо и воронка» → блок «Предквалификация».
+      </p>
+    </div>
+  )
+
   if (visible.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-        <FileQuestion className="w-10 h-10 mb-3 opacity-50" />
-        <p className="text-sm text-center">Кандидат пока не отвечал на вопросы</p>
+      <div className="space-y-3 min-w-0">
+        {prequalSection}
+        <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+          <FileQuestion className="w-10 h-10 mb-3 opacity-50" />
+          <p className="text-sm text-center">Кандидат пока не отвечал на вопросы</p>
+        </div>
       </div>
     )
   }
@@ -537,10 +556,18 @@ export function AnswersTab({ answers, demoLessons }: AnswersTabProps) {
   // space-y-3 для отступов; min-w-0 чтобы длинный контент не растягивал
   // ширину и не ломал вертикальный скролл родителя.
   return (
-    <div className="space-y-3 min-w-0">
-      {visible.map((entry, i) => (
-        <EntryCard key={i} entry={entry} blockMap={blockMap} />
-      ))}
+    <div className="space-y-4 min-w-0">
+      {prequalSection}
+      <div className="space-y-2">
+        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          Финальная анкета
+        </p>
+        <div className="space-y-3">
+          {visible.map((entry, i) => (
+            <EntryCard key={i} entry={entry} blockMap={blockMap} />
+          ))}
+        </div>
+      </div>
     </div>
   )
 }

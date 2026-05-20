@@ -649,83 +649,11 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
           Источник истины — таб «Воронка» (Ф3, components/vacancies/funnel-tab.tsx),
           сохраняется через PUT /api/modules/hr/vacancies/[id]/pipeline. */}
 
-      {/* ═══ 6. Автоматические действия ═══════════════════════ */}
-      {showSection("autoActions") && (
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Zap className="w-4 h-4" />
-              Автоматические действия
-            </CardTitle>
-            {automationSaving && (
-              <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                <Loader2 className="w-3 h-3 animate-spin" />
-                Сохранение…
-              </span>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-4">
-            <label className="flex items-start gap-3 cursor-pointer py-1">
-              <Checkbox
-                id="auto-invite"
-                checked={autoInvite}
-                onCheckedChange={(v) => setAutoInvite(v === true)}
-                className="mt-0.5"
-                disabled
-              />
-              <div className="flex-1">
-                <p className="text-sm font-medium flex items-center gap-2">
-                  Авто-приглашение подходящих (AI-скор ≥ 70)
-                  <Badge variant="outline" className="text-[10px] h-4 px-1.5">Скоро</Badge>
-                </p>
-                <p className="text-xs text-muted-foreground">Автоматическое приглашение на следующий этап</p>
-              </div>
-            </label>
-
-            <label className="flex items-start gap-3 cursor-pointer py-1">
-              <Checkbox
-                id="auto-reject"
-                checked={autoReject}
-                onCheckedChange={(v) => setAutoReject(v === true)}
-                className="mt-0.5"
-              />
-              <div className="flex-1">
-                <p className="text-sm font-medium">Авто-отказ неподходящим (AI-скор &lt; 40)</p>
-                <p className="text-xs text-muted-foreground">Автоматический вежливый отказ</p>
-              </div>
-            </label>
-
-            <label className="flex items-start gap-3 cursor-pointer py-1">
-              <Checkbox
-                id="notify-manager"
-                checked={notifyManager}
-                onCheckedChange={(v) => setNotifyManager(v === true)}
-                className="mt-0.5"
-                disabled
-              />
-              <div className="flex-1">
-                <p className="text-sm font-medium flex items-center gap-2">
-                  Уведомлять менеджера о каждом действии
-                  <Badge variant="outline" className="text-[10px] h-4 px-1.5">Скоро</Badge>
-                </p>
-                <p className="text-xs text-muted-foreground">Получать уведомление при каждом авто-действии</p>
-              </div>
-            </label>
-
-            <Separator />
-
-            <p className="text-[11px] text-muted-foreground">
-              Тексты приглашения и отказа теперь редактируются в табе{" "}
-              <span className="font-medium text-foreground">«Сообщения» → «Шаблоны сообщений»</span>{" "}
-              (поля «Приглашение на демонстрацию» и «Мягкий отказ»). Это унифицированное хранилище шаблонов.
-            </p>
-          </div>
-        </CardContent>
-      </Card>
-      )}
+      {/* ═══ 6. Автоматические действия ═══ удалено в Сессии 6.
+          Источник истины — блок «AI-фильтр откликов» в табе «Дожим»
+          (components/vacancies/vacancy-ai-process-settings.tsx).
+          AutomationSectionId.autoActions оставлен в типе ради
+          обратной совместимости sections={[...]}, но UI не рендерим. */}
 
       {/* ═══ 9. Дозапрос данных ═══════════════════════════════ */}
       {showSection("enrichment") && (

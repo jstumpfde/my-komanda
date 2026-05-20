@@ -57,6 +57,7 @@ import { UtmLinksSection } from "@/components/vacancies/utm-links-section"
 import { PostDemoSettings } from "@/components/vacancies/post-demo-settings"
 import { VacancyAiProcessSettings } from "@/components/vacancies/vacancy-ai-process-settings"
 import { VacancyFollowupSettings } from "@/components/vacancies/vacancy-followup-settings"
+import { VacancyPrequalificationSettings } from "@/components/vacancies/vacancy-prequalification-settings"
 import { BestPublicationTimeBlock } from "./components/BestPublicationTimeBlock"
 import {
   ResponsiveContainer,
@@ -2875,7 +2876,12 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                     salaryFrom={apiVacancy?.salaryMin}
                     salaryTo={apiVacancy?.salaryMax}
                     aiProcessSettings={apiVacancy?.aiProcessSettings as { inviteMessage?: string; reInviteMessage?: string } | null | undefined}
-                    sections={["pipeline", "enrichment"] satisfies AutomationSectionId[]}
+                    sections={["pipeline"] satisfies AutomationSectionId[]}
+                  />
+                  <VacancyPrequalificationSettings
+                    vacancyId={id}
+                    initial={apiVacancy?.aiProcessSettings ?? null}
+                    onSaved={() => refetchVacancy()}
                   />
                   <PostDemoSettings vacancyId={id} />
                 </div>
@@ -2908,7 +2914,7 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                     salaryFrom={apiVacancy?.salaryMin}
                     salaryTo={apiVacancy?.salaryMax}
                     aiProcessSettings={apiVacancy?.aiProcessSettings as { inviteMessage?: string; reInviteMessage?: string } | null | undefined}
-                    sections={["autoActions", "scenarioHire", "dialer"] satisfies AutomationSectionId[]}
+                    sections={["scenarioHire", "dialer"] satisfies AutomationSectionId[]}
                   />
                   <VacancyScheduleSettings vacancyId={id} />
                 </div>

@@ -300,12 +300,42 @@ export const vacancies = pgTable("vacancies", {
   updatedAt: timestamp("updated_at").defaultNow(),
 })
 
+export interface VacancyPrequalificationQuestion {
+  text:      string
+  required:  boolean   // false = информативный
+  criterion: string    // что считается «правильным ответом» для AI (опц.)
+}
+
+export interface VacancyPrequalificationConfig {
+  enabled?:      boolean
+  questions?:    VacancyPrequalificationQuestion[]   // max 3
+  reminderD1?:   string                              // напоминание Д+1
+  reminderD3?:   string                              // напоминание Д+3
+  fallbackDays?: number                              // default 5
+}
+
 export interface VacancyAiProcessSettings {
-  minScore?: number
+  /**
+   * Нижний порог скоринга. Резюме со score < этого — мягкий отказ.
+   * Legacy alias: minScore (читается как fallback при отсутствии нового поля).
+   */
+  minScoreLower?:        number
+  /** Verхний порог. Резюме со score >= этого — сразу invite. */
+  minScoreUpper?:        number
+  /** Что делать со средними резюме (lower..upper). По умолчанию prequalification. */
+  midRangeAction?:       "prequalification" | "direct_demo" | "keep_new"
+  /** Конфиг блока «Предквалификация» из таба «Демо и воронка». */
+  prequalification?:     VacancyPrequalificationConfig
+
+  // ── Legacy (Сессии 1-5), оставлены для совместимости ────────────────
+  /** @deprecated → переименовано в minScoreLower; пишем оба для backward compat. */
+  minScore?:             number
+  /** @deprecated → заменено на midRangeAction. */
   belowThresholdAction?: "reject" | "keep_new"
-  inviteMessage?: string
-  reInviteMessage?: string
-  rejectMessage?: string
+
+  inviteMessage?:    string
+  reInviteMessage?:  string
+  rejectMessage?:    string
 }
 
 export const demos = pgTable("demos", {
@@ -1769,6 +1799,24 @@ export const passwordResetTokens = pgTable("password_reset_tokens", {
 // Цепочка автоматических напоминаний кандидату с hh.ru, если он не открыл
 // демо или не допрошёл его до конца. Настраивается на уровне вакансии:
 // один из 4 пресетов (off/soft/standard/aggressive) и кастомные тексты.
+
+// Ответы кандидата на вопросы предквалификации (Сессия 6).
+// Заполняется backend'ом после получения ответа кандидата в hh-чате
+// и AI-вердикта Haiku. См. lib/prequalification/* (TODO в Сессии 6b).
+export const candidateQualificationAnswers = pgTable("candidate_qualification_answers", {
+  id:            uuid("id").primaryKey().defaultRandom(),
+  candidateId:   uuid("candidate_id").notNull().references(() => candidates.id, { onDelete: "cascade" }),
+  vacancyId:     uuid("vacancy_id").notNull().references(() => vacancies.id, { onDelete: "cascade" }),
+  questionText:  text("question_text").notNull(),
+  answerText:    text("answer_text"),
+  // 'passed' | 'failed' | 'unclear' | NULL (ещё ждём)
+  aiVerdict:     text("ai_verdict"),
+  aiReasoning:   text("ai_reasoning"),
+  // Snapshot значения required на момент создания записи. Если HR потом
+  // поменяет требование в настройках — этот ответ сохранит свою критичность.
+  isCritical:    boolean("is_critical").notNull().default(false),
+  createdAt:     timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+})
 
 export const followUpCampaigns = pgTable("follow_up_campaigns", {
   id:                   uuid("id").defaultRandom().primaryKey(),

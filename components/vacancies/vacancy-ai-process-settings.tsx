@@ -25,22 +25,40 @@ interface Props {
 // плейсхолдеры {{name}}, {{vacancy}} — рендерятся в момент отправки.
 const DEFAULT_REJECT = DEFAULT_REJECT_MESSAGE
 
+const DEFAULT_UPPER = 75
+const DEFAULT_LOWER = 40
+const MIN_GAP = 5   // min зазор между upper и lower
+
+type MidRangeAction = "prequalification" | "direct_demo" | "keep_new"
+
 export function VacancyAiProcessSettings({ vacancyId, initial, initialAiScoringEnabled, onSaved }: Props) {
-  const [minScore, setMinScore] = useState<number>(initial?.minScore ?? 70)
-  const [belowAction, setBelowAction] = useState<"reject" | "keep_new">(
-    initial?.belowThresholdAction ?? "reject",
+  // Master-toggle переключает aiScoringEnabled. Default OFF (Сессия 6).
+  const [aiScoringEnabled, setAiScoringEnabled] = useState<boolean>(initialAiScoringEnabled ?? false)
+
+  // Пороги. minScoreLower — новый ключ; minScore — legacy fallback.
+  const [upper, setUpper] = useState<number>(
+    initial?.minScoreUpper ?? DEFAULT_UPPER,
   )
-  // inviteMessage остался в типе settings и редактируется в табе «Сообщения»
-  // (automation-settings.tsx). Здесь убрали поле, чтобы не плодить две формы
-  // на одно поле — гонка двух форм затирала свежие правки старым state.
+  const [lower, setLower] = useState<number>(
+    initial?.minScoreLower ?? initial?.minScore ?? DEFAULT_LOWER,
+  )
+  const [midRangeAction, setMidRangeAction] = useState<MidRangeAction>(
+    initial?.midRangeAction ?? (
+      // Backward compat: legacy belowThresholdAction отвечал только за < lower,
+      // но для нового UI используем как стартовое значение midRangeAction.
+      initial?.belowThresholdAction === "keep_new" ? "keep_new" : "prequalification"
+    ),
+  )
   const [rejectMessage, setRejectMessage] = useState<string>(initial?.rejectMessage ?? DEFAULT_REJECT)
-  const [aiScoringEnabled, setAiScoringEnabled] = useState<boolean>(initialAiScoringEnabled ?? true)
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     if (!initial) return
-    if (typeof initial.minScore === "number") setMinScore(initial.minScore)
-    if (initial.belowThresholdAction) setBelowAction(initial.belowThresholdAction)
+    if (typeof initial.minScoreUpper === "number") setUpper(initial.minScoreUpper)
+    if (typeof initial.minScoreLower === "number") setLower(initial.minScoreLower)
+    else if (typeof initial.minScore === "number") setLower(initial.minScore)
+    if (initial.midRangeAction) setMidRangeAction(initial.midRangeAction)
+    else if (initial.belowThresholdAction === "keep_new") setMidRangeAction("keep_new")
     if (typeof initial.rejectMessage === "string" && initial.rejectMessage.length > 0) {
       setRejectMessage(initial.rejectMessage)
     }
@@ -50,6 +68,16 @@ export function VacancyAiProcessSettings({ vacancyId, initial, initialAiScoringE
     if (typeof initialAiScoringEnabled === "boolean") setAiScoringEnabled(initialAiScoringEnabled)
   }, [initialAiScoringEnabled])
 
+  // Гарантируем upper > lower + MIN_GAP.
+  const handleUpper = (v: number) => {
+    setUpper(v)
+    if (lower >= v - MIN_GAP) setLower(Math.max(0, v - MIN_GAP))
+  }
+  const handleLower = (v: number) => {
+    setLower(v)
+    if (upper <= v + MIN_GAP) setUpper(Math.min(100, v + MIN_GAP))
+  }
+
   const handleSave = async () => {
     setSaving(true)
     try {
@@ -57,15 +85,19 @@ export function VacancyAiProcessSettings({ vacancyId, initial, initialAiScoringE
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          minScore,
-          belowThresholdAction: belowAction,
+          minScoreUpper:        upper,
+          minScoreLower:        lower,
+          // backward compat — отправляем legacy minScore = lower тоже,
+          // чтобы старые читатели (если такие где-то ещё остались) работали.
+          minScore:             lower,
+          midRangeAction,
           rejectMessage,
           aiScoringEnabled,
         }),
       })
       const data = await res.json() as { ok?: boolean; settings?: Settings; aiScoringEnabled?: boolean; error?: string }
       if (!res.ok || !data.ok) throw new Error(data.error || "Не удалось сохранить")
-      toast.success("Настройки AI-обработки сохранены")
+      toast.success("Настройки AI-фильтра сохранены")
       if (data.settings) onSaved?.(data.settings, data.aiScoringEnabled ?? aiScoringEnabled)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Ошибка сохранения")
@@ -74,77 +106,107 @@ export function VacancyAiProcessSettings({ vacancyId, initial, initialAiScoringE
     }
   }
 
+  const disabled = !aiScoringEnabled
+
   return (
     <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="text-base flex items-center gap-2">
-          <Sparkles className="w-4 h-4" />
-          AI-обработка hh-откликов
-        </CardTitle>
-        <p className="text-xs text-muted-foreground">
-          Настройки прогона «Разобрать» — порог приглашения, действие при низком скоре и тексты сообщений.
-        </p>
-      </CardHeader>
-      <CardContent className="space-y-5">
-        <div className="flex items-center justify-between py-3 border-b">
+        <div className="flex items-start justify-between gap-3">
           <div>
-            <div className="font-medium text-sm">AI-скоринг при разборе</div>
-            <div className="text-xs text-muted-foreground mt-0.5">
-              AI оценивает каждого кандидата перед отправкой демо. Выключите если хотите экономить токены и слать всем подряд.
+            <CardTitle className="text-base flex items-center gap-2">
+              <Sparkles className="w-4 h-4" />
+              AI-фильтр откликов
+            </CardTitle>
+            <p className="text-xs text-muted-foreground mt-1">
+              AI оценивает резюме каждого кандидата перед действием. Выключите, если хотите экономить токены и обрабатывать всех одинаково.
+            </p>
+          </div>
+          <Switch checked={aiScoringEnabled} onCheckedChange={setAiScoringEnabled} />
+        </div>
+      </CardHeader>
+      <CardContent className={cn("space-y-5", disabled && "opacity-60")}>
+        {/* Два слайдера: верхний (сразу демо) и нижний (отказ). */}
+        <div className="space-y-4">
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <Label className="text-xs font-medium">Верхний порог (сразу демо)</Label>
+              <Badge variant="outline" className="h-5 px-1.5 text-[10px] tabular-nums">{upper}</Badge>
             </div>
+            <Slider
+              value={[upper]}
+              min={MIN_GAP}
+              max={100}
+              step={5}
+              onValueChange={v => handleUpper(v[0] ?? DEFAULT_UPPER)}
+              disabled={disabled}
+            />
           </div>
-          <Switch
-            checked={aiScoringEnabled}
-            onCheckedChange={setAiScoringEnabled}
-          />
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <Label className="text-xs font-medium">Нижний порог (отказ)</Label>
+              <Badge variant="outline" className="h-5 px-1.5 text-[10px] tabular-nums">{lower}</Badge>
+            </div>
+            <Slider
+              value={[lower]}
+              min={0}
+              max={100 - MIN_GAP}
+              step={5}
+              onValueChange={v => handleLower(v[0] ?? DEFAULT_LOWER)}
+              disabled={disabled}
+            />
+          </div>
+
+          <div className="text-[11px] text-muted-foreground bg-muted/40 rounded-md px-3 py-2 border space-y-0.5">
+            <div>🟢 ≥{upper} — сильное резюме, отправляем демо сразу</div>
+            <div>🟡 {lower}–{upper - 1} — среднее, требует уточнения</div>
+            <div>🔴 &lt;{lower} — не подходит, мягкий отказ</div>
+          </div>
         </div>
 
+        {/* Mid-range action — 3 radio. */}
         <div>
-          <div className="flex items-center justify-between mb-2">
-            <Label className="text-xs font-medium">Минимальный AI-скор для приглашения на демо</Label>
-            <Badge variant="outline" className="h-5 px-1.5 text-[10px] tabular-nums">{minScore}</Badge>
-          </div>
-          <Slider
-            value={[minScore]}
-            min={0}
-            max={95}
-            step={5}
-            onValueChange={v => setMinScore(v[0] ?? 70)}
-            disabled={!aiScoringEnabled}
-          />
-          <div className="flex justify-between text-[10px] text-muted-foreground mt-1">
-            <span>0 (без фильтра)</span>
-            <span>95 (только топ)</span>
-          </div>
-        </div>
-
-        <div>
-          <Label className="text-xs font-medium mb-2 block">Что делать с теми кто ниже порога</Label>
+          <Label className="text-xs font-medium mb-2 block">Что делать с теми кто между порогами ({lower}–{upper - 1})</Label>
           <div className="space-y-1.5">
             <label className="flex items-start gap-2 text-sm cursor-pointer p-2 rounded-md border hover:bg-muted/50">
               <input
                 type="radio"
-                name="below-threshold"
-                checked={belowAction === "reject"}
-                onChange={() => setBelowAction("reject")}
+                name="mid-range"
+                checked={midRangeAction === "prequalification"}
+                onChange={() => setMidRangeAction("prequalification")}
                 className="mt-0.5"
-                disabled={!aiScoringEnabled}
+                disabled={disabled}
               />
               <span>
-                <span className="font-medium">Перевести в «Отказ» + отправить текст отказа</span>
+                <span className="font-medium">Предквалификация (если включена в табе «Демо и воронка»)</span>
                 <span className="block text-xs text-muted-foreground mt-0.5">
-                  Кандидат сразу получит мягкий отказ в hh, карточка попадёт в стадию «Отказ».
+                  3 уточняющих вопроса перед демо. Если предкв выключена — таких кандидатов сразу шлём на демо.
                 </span>
               </span>
             </label>
             <label className="flex items-start gap-2 text-sm cursor-pointer p-2 rounded-md border hover:bg-muted/50">
               <input
                 type="radio"
-                name="below-threshold"
-                checked={belowAction === "keep_new"}
-                onChange={() => setBelowAction("keep_new")}
+                name="mid-range"
+                checked={midRangeAction === "direct_demo"}
+                onChange={() => setMidRangeAction("direct_demo")}
                 className="mt-0.5"
-                disabled={!aiScoringEnabled}
+                disabled={disabled}
+              />
+              <span>
+                <span className="font-medium">Сразу демо (без предквалификации)</span>
+                <span className="block text-xs text-muted-foreground mt-0.5">
+                  Все средние резюме получают приглашение на демо без уточнений.
+                </span>
+              </span>
+            </label>
+            <label className="flex items-start gap-2 text-sm cursor-pointer p-2 rounded-md border hover:bg-muted/50">
+              <input
+                type="radio"
+                name="mid-range"
+                checked={midRangeAction === "keep_new"}
+                onChange={() => setMidRangeAction("keep_new")}
+                className="mt-0.5"
+                disabled={disabled}
               />
               <span>
                 <span className="font-medium">Оставить в «Новый» для ручного разбора</span>
@@ -156,19 +218,16 @@ export function VacancyAiProcessSettings({ vacancyId, initial, initialAiScoringE
           </div>
         </div>
 
-        <p className="text-[11px] text-muted-foreground bg-muted/40 rounded-md px-2.5 py-2 border">
-          Текст первого сообщения настраивается в табе «Сообщения».
-        </p>
-
+        {/* Текст мягкого отказа (для тех кто <lower). */}
         <div>
-          <Label className="text-xs font-medium mb-1.5 block">Текст мягкого отказа</Label>
+          <Label className="text-xs font-medium mb-1.5 block">Текст мягкого отказа (для тех кто &lt;{lower})</Label>
           <Textarea
             value={rejectMessage}
             onChange={e => setRejectMessage(e.target.value)}
             rows={4}
             placeholder={DEFAULT_REJECT}
             className="text-sm resize-y"
-            disabled={!aiScoringEnabled}
+            disabled={disabled}
           />
           <p className="text-[11px] text-muted-foreground mt-1.5">
             Поддерживает плейсхолдеры:{" "}
@@ -186,4 +245,9 @@ export function VacancyAiProcessSettings({ vacancyId, initial, initialAiScoringE
       </CardContent>
     </Card>
   )
+}
+
+// helper: cn (используется внутри компонента, чтобы не плодить лишних импортов)
+function cn(...parts: Array<string | undefined | false>): string {
+  return parts.filter(Boolean).join(" ")
 }

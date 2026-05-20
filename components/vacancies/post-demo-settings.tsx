@@ -247,10 +247,15 @@ export function PostDemoSettings({ vacancyId, sections }: PostDemoSettingsProps)
             <div className="space-y-5">
               {/* Thresholds */}
               <div className="space-y-4">
-                <Label className="text-sm font-medium flex items-center gap-1.5">
-                  <Sparkles className="w-4 h-4 text-amber-500" />
-                  Пороги AI-скоринга
-                </Label>
+                <div>
+                  <Label className="text-sm font-medium flex items-center gap-1.5">
+                    <Sparkles className="w-4 h-4 text-amber-500" />
+                    Пороги после демо
+                  </Label>
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    Эти пороги применяются к результатам прохождения демонстрации, не к оценке резюме. Для скоринга резюме см. таб «Дожим» → блок «AI-фильтр откликов».
+                  </p>
+                </div>
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-muted-foreground">Верхний порог (зелёный)</span>

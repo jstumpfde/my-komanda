@@ -421,15 +421,35 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
                 .set({ resumeScore: result.score })
                 .where(eq(candidates.id, candidateId))
 
-              // minScore-фильтр: если порог настроен и score ниже —
-              // помечаем кандидата как «ниже порога»; дальнейшая отправка
-              // приглашения и шедул дожима будут пропущены, а развилка
-              // reject/keep_new обработается ниже в одном месте.
-              const minScore = typeof aiSettings.minScore === "number" ? aiSettings.minScore : 0
-              if (minScore > 0 && result.score < minScore) {
-                const action: "reject" | "keep_new" =
-                  aiSettings.belowThresholdAction === "keep_new" ? "keep_new" : "reject"
-                belowThreshold = { score: result.score, threshold: minScore, action }
+              // Два порога (Сессия 6):
+              //   score >= upper          → обычный invite (ничего не делаем здесь).
+              //   score <  lower          → мягкий отказ (belowThreshold action="reject").
+              //   lower ≤ score < upper   → mid-range, ветка по midRangeAction:
+              //     - "keep_new"          → belowThreshold action="keep_new"
+              //     - "direct_demo"       → invite (ничего)
+              //     - "prequalification"  → если prequalification.enabled — TODO
+              //       (отправка вопросов в Сессии 6b), пока fallback=invite.
+              //
+              // Legacy: minScore → minScoreLower (вычитываем для обратной
+              // совместимости со старым PATCH /ai-settings).
+              const lower = typeof aiSettings.minScoreLower === "number"
+                ? aiSettings.minScoreLower
+                : (typeof aiSettings.minScore === "number" ? aiSettings.minScore : 0)
+              const upper = typeof aiSettings.minScoreUpper === "number"
+                ? aiSettings.minScoreUpper
+                : 0
+
+              if (lower > 0 && result.score < lower) {
+                belowThreshold = { score: result.score, threshold: lower, action: "reject" }
+              } else if (upper > 0 && result.score < upper) {
+                const mid = aiSettings.midRangeAction ?? "prequalification"
+                if (mid === "keep_new") {
+                  belowThreshold = { score: result.score, threshold: upper, action: "keep_new" }
+                }
+                // mid === "direct_demo" → invite (ничего не помечаем).
+                // mid === "prequalification" → в этой сессии fallback на invite
+                //   (реальная отправка вопросов в Сессии 6b). Если предкв
+                //   выключена — по плану п.6 тоже invite.
               }
             }
           }
