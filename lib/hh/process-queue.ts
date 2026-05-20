@@ -627,10 +627,25 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
             // Мерджим кастомные тексты (могут быть короче 9) с дефолтами —
             // generateTouchSchedule адресует слоты по messageIndexes из пресета.
             const messages = mergeMessagesWithDefaults(campaign.customMessages, DEFAULT_FOLLOWUP_NOT_OPENED)
+            // Д0 = дата отклика на hh (negotiation.created_at).
+            // Если её нет в raw_data — fallback на момент разбора.
+            const rawCreatedAt = (raw as { created_at?: string } | null)?.created_at
+              ?? (raw?.["negotiation"] as { created_at?: string } | undefined)?.created_at
+            const parsedD0 = rawCreatedAt ? new Date(rawCreatedAt) : null
+            const d0Date   = parsedD0 && !Number.isNaN(parsedD0.getTime()) ? parsedD0 : new Date()
+            const d0Source: "hh_response" | "manual_review" =
+              parsedD0 && !Number.isNaN(parsedD0.getTime()) ? "hh_response" : "manual_review"
             // Свежий отклик — кандидат ещё не открыл демо, ставим ветку А.
-            const touches = generateTouchSchedule(
-              campaign.id, candidateId, campaign.preset, new Date(), messages, "not_opened",
-            )
+            const touches = generateTouchSchedule({
+              campaignId:  campaign.id,
+              candidateId,
+              preset:      campaign.preset,
+              d0Date,
+              d0Source,
+              messages,
+              branch:      "not_opened",
+              vacancy:     localVac,
+            })
             if (touches.length > 0) {
               await db.insert(followUpMessages).values(touches)
             }

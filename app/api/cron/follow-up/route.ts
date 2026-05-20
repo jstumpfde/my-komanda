@@ -32,67 +32,99 @@ export async function POST(req: NextRequest) {
 }
 
 // ─── Воронка дожима: обработка касаний follow_up_messages ─────────────────
-// Берём до 200 pending-касаний (scheduled_at <= NOW()), обрабатываем
-// параллельными батчами по 10 (баланс между throughput и нагрузкой на
-// hh API + БД). Между батчами — 100ms пауза, чтобы не выжечь rate limit
-// hh. Для каждого касания: стоп-триггеры → отправка через hh negotiations
+// Берём до LIMIT pending-касаний (scheduled_at <= NOW()) и шлём их
+// последовательно с soft-sleep между отправками. Это снижает риск бана
+// со стороны hh при больших пиках (например, при возобновлении вакансии
+// с пропущенными касаниями). Цель — интервал ≈ 3600/N секунд между
+// отправками в час (см. п.3 задачи Сессии 4), но cap'ы [MIN, MAX] не
+// дают cron'у залипнуть в одном run'е дольше RUN_BUDGET_MS.
+//
+// Для каждого касания: стоп-триггеры → отправка через hh negotiations
 // messages → запись sentAt + status. При ошибке — status=failed +
-// errorMessage.
+// errorMessage. Skipped (вне окна работы) остаются pending — следующий
+// cron в рабочее время подберёт.
 
-const BATCH_SIZE = 10
-const BATCH_DELAY_MS = 100
-const LIMIT = 200
+const LIMIT          = 200
+const MIN_DELAY_MS   = 2_000     // минимальная пауза между отправками
+const MAX_DELAY_MS   = 30_000    // больше нет смысла — следующий cron-тик подберёт
+const RUN_BUDGET_MS  = 90_000    // мягкий бюджет одного cron-call
 
 type TouchOutcome = "sent" | "cancelled" | "failed" | "skipped"
+
+interface TouchResult {
+  outcome: TouchOutcome
+  reason?: string
+}
 
 async function processCampaignTouches(now: Date) {
   const pending = await db
     .select()
     .from(followUpMessages)
     .where(and(eq(followUpMessages.status, "pending"), lte(followUpMessages.scheduledAt, now)))
+    .orderBy(followUpMessages.scheduledAt)
     .limit(LIMIT)
 
   let touchSent = 0
   let touchCancelled = 0
   let touchFailed = 0
   let touchSkipped = 0
+  const reasonBreakdown: Record<string, number> = {}
 
-  for (let i = 0; i < pending.length; i += BATCH_SIZE) {
-    const batch = pending.slice(i, i + BATCH_SIZE)
-    const outcomes = await Promise.all(batch.map(msg => processOneTouch(msg, now)))
-    for (const o of outcomes) {
-      if (o === "sent") touchSent++
-      else if (o === "cancelled") touchCancelled++
-      else if (o === "failed") touchFailed++
-      else touchSkipped++
+  // Расчёт интервала: 3600/N сек, но с cap'ами.
+  const targetDelayMs = pending.length > 0 ? Math.floor(3_600_000 / pending.length) : MIN_DELAY_MS
+  const sendDelayMs   = Math.max(MIN_DELAY_MS, Math.min(MAX_DELAY_MS, targetDelayMs))
+
+  const runStartedAt = Date.now()
+  let bailedEarly = false
+
+  for (let i = 0; i < pending.length; i++) {
+    if (Date.now() - runStartedAt > RUN_BUDGET_MS) {
+      // Не успеваем за бюджет — остальное подберёт следующий cron-тик.
+      bailedEarly = true
+      break
     }
-    // Пауза между батчами (не после последнего).
-    if (i + BATCH_SIZE < pending.length) {
-      await new Promise(r => setTimeout(r, BATCH_DELAY_MS))
+
+    const msg = pending[i]
+    const result = await processOneTouch(msg, now)
+    if (result.outcome === "sent")      touchSent++
+    else if (result.outcome === "cancelled") touchCancelled++
+    else if (result.outcome === "failed")    touchFailed++
+    else                                     touchSkipped++
+
+    if (result.reason) {
+      reasonBreakdown[result.reason] = (reasonBreakdown[result.reason] ?? 0) + 1
+    }
+
+    if (i < pending.length - 1) {
+      await new Promise(r => setTimeout(r, sendDelayMs))
     }
   }
 
   return {
-    processed: pending.length,
-    sent:      touchSent,
-    cancelled: touchCancelled,
-    failed:    touchFailed,
-    skipped:   touchSkipped,
+    processed:  pending.length,
+    sent:       touchSent,
+    cancelled:  touchCancelled,
+    failed:     touchFailed,
+    skipped:    touchSkipped,
+    sendDelayMs,
+    bailedEarly,
+    reasons:    reasonBreakdown,
   }
 }
 
 async function processOneTouch(
   msg: typeof followUpMessages.$inferSelect,
   now: Date,
-): Promise<TouchOutcome> {
+): Promise<TouchResult> {
   // Стоп-триггеры (вакансия закрыта / демо пройдено / отказ / автоматизация остановлена)
   const stopResult = await shouldStopFollowUp(msg.candidateId, msg.campaignId)
   if (stopResult.stop) {
+    const reason = stopResult.reason ?? "stopped"
     await db.update(followUpMessages).set({
       status: "cancelled",
-      errorMessage: stopResult.reason ?? "stopped",
+      errorMessage: reason,
     }).where(eq(followUpMessages.id, msg.id))
-    return "cancelled"
+    return { outcome: "cancelled", reason }
   }
 
   // Ищем привязанный hh-отклик и токен компании
@@ -103,7 +135,7 @@ async function processOneTouch(
     .limit(1)
   if (!campaign) {
     await db.update(followUpMessages).set({ status: "cancelled", errorMessage: "campaign_missing" }).where(eq(followUpMessages.id, msg.id))
-    return "cancelled"
+    return { outcome: "cancelled", reason: "campaign_missing" }
   }
 
   const [vacancy] = await db
@@ -123,13 +155,14 @@ async function processOneTouch(
     .limit(1)
   if (!vacancy) {
     await db.update(followUpMessages).set({ status: "cancelled", errorMessage: "vacancy_missing" }).where(eq(followUpMessages.id, msg.id))
-    return "cancelled"
+    return { outcome: "cancelled", reason: "vacancy_missing" }
   }
 
   // Проверка расписания: если сейчас вне окна — оставляем pending,
   // следующий cron в рабочее время подберёт. НЕ помечаем как failed.
-  if (!canSendNow(vacancy, now).allowed) {
-    return "skipped"
+  const check = canSendNow(vacancy, now)
+  if (!check.allowed) {
+    return { outcome: "skipped", reason: check.reason ?? "off_hours" }
   }
 
   const [hhResp] = await db
@@ -139,13 +172,13 @@ async function processOneTouch(
     .limit(1)
   if (!hhResp) {
     await db.update(followUpMessages).set({ status: "failed", errorMessage: "no_hh_response_link" }).where(eq(followUpMessages.id, msg.id))
-    return "failed"
+    return { outcome: "failed", reason: "no_hh_response_link" }
   }
 
   const tokenResult = await getValidToken(vacancy.companyId)
   if (!tokenResult) {
     await db.update(followUpMessages).set({ status: "failed", errorMessage: "no_hh_token" }).where(eq(followUpMessages.id, msg.id))
-    return "failed"
+    return { outcome: "failed", reason: "no_hh_token" }
   }
 
   // Подставляем переменные в текст касания (имя из кандидата, должность, ссылка)
@@ -178,22 +211,24 @@ async function processOneTouch(
     })
     if (!res.ok) {
       const errText = await res.text()
+      const reason  = `hh_${res.status}`
       await db.update(followUpMessages).set({
         status: "failed",
-        errorMessage: `hh_${res.status}: ${errText.slice(0, 200)}`,
+        errorMessage: `${reason}: ${errText.slice(0, 200)}`,
       }).where(eq(followUpMessages.id, msg.id))
-      return "failed"
+      return { outcome: "failed", reason }
     }
     await db.update(followUpMessages).set({
       status: "sent",
       sentAt: new Date(),
     }).where(eq(followUpMessages.id, msg.id))
-    return "sent"
+    return { outcome: "sent" }
   } catch (err) {
+    const reason = err instanceof Error ? err.message.slice(0, 200) : "unknown"
     await db.update(followUpMessages).set({
       status: "failed",
-      errorMessage: err instanceof Error ? err.message.slice(0, 200) : "unknown",
+      errorMessage: reason,
     }).where(eq(followUpMessages.id, msg.id))
-    return "failed"
+    return { outcome: "failed", reason: "exception" }
   }
 }

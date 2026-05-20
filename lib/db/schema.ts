@@ -1794,5 +1794,11 @@ export const followUpMessages = pgTable("follow_up_messages", {
   // Ветка дожима: 'not_opened' (А) | 'opened_not_finished' (Б).
   branch:       text("branch").notNull().default("not_opened"),
   errorMessage: text("error_message"),
-  createdAt:    timestamp("created_at").defaultNow().notNull(),
+  // Д0 цепочки — исходная точка отсчёта расписания касаний. Обычно
+  // совпадает с negotiation.created_at hh-отклика. scheduled_at от
+  // chain_d0 отличается на dayOffset + jitter + сдвиг окном работы.
+  chainD0:        timestamp("chain_d0", { withTimezone: true }),
+  // 'hh_response' | 'manual_review' | 'branch_switch'
+  chainD0Source:  text("chain_d0_source"),
+  createdAt:      timestamp("created_at").defaultNow().notNull(),
 })

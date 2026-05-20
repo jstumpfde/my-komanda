@@ -1,17 +1,21 @@
 import { addDays } from "date-fns"
 import { FOLLOWUP_PRESETS, FOLLOWUP_MESSAGE_SLOTS, type FollowUpPreset } from "./presets"
+import { adjustToWorkingWindow, type VacancySchedule } from "@/lib/schedule/can-send-now"
 
 export type FollowUpBranch = "not_opened" | "opened_not_finished"
+export type ChainD0Source  = "hh_response" | "manual_review" | "branch_switch"
 
 export interface ScheduledTouch {
-  campaignId: string
-  candidateId: string
-  scheduledAt: Date
-  touchNumber: number
-  channel: "hh"
-  messageText: string
-  status: "pending"
-  branch: FollowUpBranch
+  campaignId:     string
+  candidateId:    string
+  scheduledAt:    Date
+  touchNumber:    number
+  channel:        "hh"
+  messageText:    string
+  status:         "pending"
+  branch:         FollowUpBranch
+  chainD0:        Date
+  chainD0Source:  ChainD0Source
 }
 
 // Готовит массив длиной FOLLOWUP_MESSAGE_SLOTS, в котором пустые слоты
@@ -34,14 +38,41 @@ export function mergeMessagesWithDefaults(
   return out
 }
 
-export function generateTouchSchedule(
-  campaignId:  string,
-  candidateId: string,
-  preset:      FollowUpPreset,
-  startDate:   Date,
-  messages:    string[],
-  branch:      FollowUpBranch = "not_opened",
-): ScheduledTouch[] {
+export interface GenerateTouchScheduleParams {
+  campaignId:    string
+  candidateId:   string
+  preset:        FollowUpPreset
+  /**
+   * Д0 — точка отсчёта расписания касаний. Обычно дата отклика кандидата
+   * на hh (negotiation.created_at); fallback — момент ручного прогона.
+   */
+  d0Date:        Date
+  /** Откуда узнали Д0 — для аналитики причин fallback'а. */
+  d0Source:      ChainD0Source
+  messages:      string[]
+  branch?:       FollowUpBranch
+  /** Расписание вакансии — нужно для adjustToWorkingWindow. */
+  vacancy:       VacancySchedule
+}
+
+// Генерация ±15 минут jitter в миллисекундах. Используем простой
+// Math.random — для дожима достаточно «выглядеть нероботом», криптостойкость
+// не нужна.
+function jitterMs(): number {
+  return Math.round((Math.random() * 2 - 1) * 15 * 60_000)
+}
+
+// Прибавляет N дней к дате, сохраняя ВРЕМЯ суток (час+минуту) исходной даты.
+// addDays из date-fns делает то же самое — на чисто Date-арифметике hh:mm
+// автоматически сохраняется. Оставлено как явный хелпер для читаемости.
+function addDaysKeepingTime(date: Date, days: number): Date {
+  return addDays(date, days)
+}
+
+export function generateTouchSchedule(params: GenerateTouchScheduleParams): ScheduledTouch[] {
+  const { campaignId, candidateId, preset, d0Date, d0Source, messages, vacancy } = params
+  const branch = params.branch ?? "not_opened"
+
   if (preset === "off") return []
   const schedule = FOLLOWUP_PRESETS[preset]
   if (!schedule || schedule.days.length === 0) return []
@@ -50,15 +81,26 @@ export function generateTouchSchedule(
   return schedule.days.map((dayOffset, idx) => {
     const slot = schedule.messageIndexes[idx] ?? idx
     const text = messages[slot] ?? messages[messages.length - 1] ?? ""
+
+    // 1. От Д0 прибавляем dayOffset, сохраняя час/минуту Д0.
+    const base = addDaysKeepingTime(d0Date, dayOffset)
+    // 2. Случайный ±15-минутный сдвиг — снижает «роботность» рассылки.
+    const jittered = new Date(base.getTime() + jitterMs())
+    // 3. Переносим на ближайший слот в окне работы вакансии.
+    //    Если scheduleEnabled=false — применяется дефолт 09:00–20:00 МСК.
+    const { adjusted } = adjustToWorkingWindow(jittered, vacancy)
+
     return {
       campaignId,
       candidateId,
-      scheduledAt: addDays(startDate, dayOffset),
-      touchNumber: idx + 1,
-      channel:     "hh" as const,
-      messageText: text,
-      status:      "pending" as const,
+      scheduledAt:   adjusted,
+      touchNumber:   idx + 1,
+      channel:       "hh" as const,
+      messageText:   text,
+      status:        "pending" as const,
       branch,
+      chainD0:       d0Date,
+      chainD0Source: d0Source,
     }
   })
 }

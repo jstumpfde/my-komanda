@@ -16,7 +16,7 @@
 
 import { eq, and } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { followUpCampaigns, followUpMessages, candidates } from "@/lib/db/schema"
+import { followUpCampaigns, followUpMessages, candidates, vacancies } from "@/lib/db/schema"
 import { isFollowUpPreset } from "./presets"
 import { generateTouchSchedule, mergeMessagesWithDefaults } from "./schedule"
 import { DEFAULT_FOLLOWUP_OPENED_NOT_FINISHED } from "./default-messages"
@@ -62,14 +62,35 @@ export async function switchToBranchOpened(candidateId: string): Promise<{
   // mergeMessagesWithDefaults гарантирует массив длиной FOLLOWUP_MESSAGE_SLOTS,
   // чтобы preset.messageIndexes мог адресовать любой слот 0..8.
   const messagesB = mergeMessagesWithDefaults(campaign.customMessagesOpened, DEFAULT_FOLLOWUP_OPENED_NOT_FINISHED)
-  const touchesB = generateTouchSchedule(
-    campaign.id,
+
+  // Для adjustToWorkingWindow нужны расписание-поля вакансии (start/end/
+  // working_days/holidays). Один SELECT — это безболезненно, switch-branch
+  // дёргается раз на кандидата при открытии демо.
+  const [vac] = await db
+    .select({
+      scheduleEnabled:            vacancies.scheduleEnabled,
+      scheduleStart:              vacancies.scheduleStart,
+      scheduleEnd:                vacancies.scheduleEnd,
+      scheduleTimezone:           vacancies.scheduleTimezone,
+      scheduleWorkingDays:        vacancies.scheduleWorkingDays,
+      scheduleExcludedHolidayIds: vacancies.scheduleExcludedHolidayIds,
+      scheduleCustomHolidays:     vacancies.scheduleCustomHolidays,
+    })
+    .from(vacancies)
+    .where(eq(vacancies.id, cand.vacancyId))
+    .limit(1)
+
+  const touchesB = generateTouchSchedule({
+    campaignId:  campaign.id,
     candidateId,
-    campaign.preset,
-    new Date(),
-    messagesB,
-    "opened_not_finished",
-  )
+    preset:      campaign.preset,
+    // Д0 для ветки Б = момент открытия демо (отсчёт начинается отсюда).
+    d0Date:      new Date(),
+    d0Source:    "branch_switch",
+    messages:    messagesB,
+    branch:      "opened_not_finished",
+    vacancy:     vac ?? {},
+  })
   let scheduled = 0
   if (touchesB.length > 0) {
     const inserted = await db.insert(followUpMessages).values(touchesB).returning({ id: followUpMessages.id })
