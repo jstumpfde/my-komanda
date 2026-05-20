@@ -430,6 +430,10 @@ export const candidates = pgTable("candidates", {
   // v5: AI-классификатор ответов в hh-чате может выставить паузу автоматизации
   // (например, при rejection или wants_personal_contact).
   automationPaused: boolean("automation_paused").notNull().default(false),
+  // Сколько раз scan-incoming уже отправил кандидату эскалационный
+  // шаблон callIntent (vacancy.automation.callIntent.insistDemoMessages).
+  // После 3 — больше не реагируем на keywords. См. Сессия 5.
+  callIntentCount:  integer("call_intent_count").notNull().default(0),
   // v5: дубль по реферальной ссылке — какой short_id привёл этого кандидата.
   referredByShortId: text("referred_by_short_id"),
   // Альтернативные токены при дедупликации: один человек может зайти по

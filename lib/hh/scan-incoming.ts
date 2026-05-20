@@ -23,12 +23,29 @@
 
 import { and, asc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { hhResponses, candidates, followUpMessages, hhCandidates } from "@/lib/db/schema"
+import { hhResponses, candidates, followUpMessages, hhCandidates, vacancies } from "@/lib/db/schema"
 import { getValidToken } from "@/lib/hh-helpers"
 import { matchStopWord } from "@/lib/followup/stop-words"
 import { classifyCandidateResponse } from "@/lib/ai/classify-candidate-response"
 import { saveCandidatePhoto } from "@/lib/hh/save-candidate-photo"
 import { extractHhResumeFields } from "@/lib/hh/extract-resume-fields"
+import { matchCallIntentKeyword, renderInsistTemplate } from "@/lib/messaging/call-intent"
+
+// Дефолтные эскалационные шаблоны для callIntent (insist-demo).
+// Используются только если у вакансии не задан кастомный массив в
+// descriptionJson.automation.callIntent.insistDemoMessages.
+const DEFAULT_INSIST_DEMO_MESSAGES: [string, string, string] = [
+  "{Имя}, понял что хотите созвониться. Чтобы не тратить ваше и моё время, предлагаю сначала пройти короткую демонстрацию должности — там ответы на 90% типовых вопросов: {ссылка}",
+  "{Имя}, так как мы сейчас в работе, всё-таки предлагаю сначала ознакомиться с демонстрацией должности и ответить на вопросы. Ваши ответы попадут к нам, и после этого назначим время для звонка: {ссылка}",
+  "{Имя}, наша система сбора устроена так, что созваниваемся с кандидатом только после прохождения демонстрации должности и ответов на вопросы. Спасибо за понимание! Демонстрация: {ссылка}",
+]
+
+interface VacancyCallIntent {
+  enabled?:            boolean
+  mode?:               "slot-and-demo" | "slot-only" | "insist-demo"
+  keywords?:           string[]
+  insistDemoMessages?: string[]
+}
 
 const FAREWELL_MESSAGE = "Спасибо за отклик. Желаем удачи!"
 
@@ -376,6 +393,25 @@ export async function scanIncomingMessages(opts: {
       })
     }
 
+    // Грузим callIntent из вакансии (через candidate.vacancyId) — один раз
+    // на ответ. Также shortId / title для рендера эскалационных шаблонов.
+    const [candVac] = await db
+      .select({
+        candName:       candidates.name,
+        candShortId:    candidates.shortId,
+        candToken:      candidates.token,
+        callIntentCount: candidates.callIntentCount,
+        vacancyId:      candidates.vacancyId,
+        vacancyTitle:   vacancies.title,
+        descriptionJson: vacancies.descriptionJson,
+      })
+      .from(candidates)
+      .innerJoin(vacancies, eq(vacancies.id, candidates.vacancyId))
+      .where(eq(candidates.id, candidateId))
+      .limit(1)
+    const automation = (candVac?.descriptionJson as { automation?: Record<string, unknown> } | null)?.automation
+    const callIntent = (automation?.["callIntent"] as VacancyCallIntent | undefined) ?? {}
+
     // Обрабатываем сообщения по порядку. Если уже сделали rejection —
     // дальнейшие AI-вызовы пропускаем.
     let rejected = false
@@ -387,7 +423,8 @@ export async function scanIncomingMessages(opts: {
 
       const preview = text.slice(0, 120).replace(/\s+/g, " ")
 
-      // Шаг 1: regex.
+      // Шаг 1: regex stop_word → жёсткий отказ. Делаем до callIntent,
+      // потому что отказ важнее («не хочу созваниваться» = отказ).
       if (matchStopWord(text)) {
         const sent = await applyRejection({
           candidateId,
@@ -400,6 +437,38 @@ export async function scanIncomingMessages(opts: {
         rejected = true
         console.info(`[scan-incoming] ${candidateId} regex_stop_word farewell=${sent} text="${preview}"`)
         break
+      }
+
+      // Шаг 1.5: callIntent — keyword matching на «хочу созвон».
+      // Активируется только если у вакансии включён master-тумблер и
+      // выбран режим insist-demo (два других — бэклог).
+      if (callIntent.enabled && callIntent.mode === "insist-demo") {
+        const km = matchCallIntentKeyword(text, callIntent.keywords ?? [])
+        if (km.matched) {
+          const count = candVac?.callIntentCount ?? 0
+          if (count < 3) {
+            // Подставляем плейсхолдеры и шлём шаблон №(count+1).
+            const customs = Array.isArray(callIntent.insistDemoMessages) ? callIntent.insistDemoMessages : []
+            const tpl     = customs[count] ?? DEFAULT_INSIST_DEMO_MESSAGES[count]
+            const firstName = (candVac?.candName ?? "").trim().split(/\s+/)[0] || "Здравствуйте"
+            const tokenForUrl = candVac?.candShortId ?? candVac?.candToken ?? candidateId
+            const demoLink = `https://company24.pro/demo/${tokenForUrl}`
+            const message = renderInsistTemplate(tpl, {
+              name:     firstName,
+              vacancy:  candVac?.vacancyTitle ?? "",
+              demoLink,
+            })
+            const sentOk = await sendFarewell(accessToken, resp.hhResponseId, message)
+            await db.update(candidates)
+              .set({ callIntentCount: count + 1, updatedAt: new Date() })
+              .where(eq(candidates.id, candidateId))
+            console.info(`[scan-incoming] ${candidateId} call_intent_keyword="${km.word}" count=${count + 1} sent=${sentOk} text="${preview}"`)
+          } else {
+            console.info(`[scan-incoming] ${candidateId} call_intent_keyword="${km.word}" count=${count} (>= 3, silent) text="${preview}"`)
+          }
+          // Не пропускаем msg через AI — это не отказ, мы уже отреагировали.
+          continue
+        }
       }
 
       // Шаг 2: AI.
