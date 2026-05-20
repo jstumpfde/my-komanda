@@ -2748,8 +2748,8 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                     vacancyTitle={internalName || vacancyTitle}
                     vacancySlug={id}
                     vacancyCity={apiVacancy?.city ?? "Москва"}
-                    salaryFrom={80000}
-                    salaryTo={150000}
+                    salaryFrom={apiVacancy?.salaryMin}
+                    salaryTo={apiVacancy?.salaryMax}
                     brandOverride={{ companyName: brandCompanyName, color: brandColor, logo: brandLogo, slogan: brandSlogan }}
                   />
                 </div>
