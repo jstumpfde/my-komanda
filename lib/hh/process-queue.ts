@@ -13,7 +13,7 @@ import { changeNegotiationState, getNegotiationMessages } from "@/lib/hh-api"
 import { generateCandidateShortId } from "@/lib/short-id"
 import { extractHhResumeFields, toCandidateColumns } from "@/lib/hh/extract-resume-fields"
 import { saveCandidatePhoto } from "@/lib/hh/save-candidate-photo"
-import { generateTouchSchedule } from "@/lib/followup/schedule"
+import { generateTouchSchedule, mergeMessagesWithDefaults } from "@/lib/followup/schedule"
 import { DEFAULT_FOLLOWUP_NOT_OPENED } from "@/lib/followup/default-messages"
 import { isFollowUpPreset } from "@/lib/followup/presets"
 import { canSendNow } from "@/lib/schedule/can-send-now"
@@ -624,9 +624,9 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
             ))
             .limit(1)
           if (campaign && isFollowUpPreset(campaign.preset) && campaign.preset !== "off") {
-            const messages = (campaign.customMessages && campaign.customMessages.length > 0)
-              ? campaign.customMessages
-              : DEFAULT_FOLLOWUP_NOT_OPENED
+            // Мерджим кастомные тексты (могут быть короче 9) с дефолтами —
+            // generateTouchSchedule адресует слоты по messageIndexes из пресета.
+            const messages = mergeMessagesWithDefaults(campaign.customMessages, DEFAULT_FOLLOWUP_NOT_OPENED)
             // Свежий отклик — кандидат ещё не открыл демо, ставим ветку А.
             const touches = generateTouchSchedule(
               campaign.id, candidateId, campaign.preset, new Date(), messages, "not_opened",

@@ -18,7 +18,7 @@ import { eq, and } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { followUpCampaigns, followUpMessages, candidates } from "@/lib/db/schema"
 import { isFollowUpPreset } from "./presets"
-import { generateTouchSchedule } from "./schedule"
+import { generateTouchSchedule, mergeMessagesWithDefaults } from "./schedule"
 import { DEFAULT_FOLLOWUP_OPENED_NOT_FINISHED } from "./default-messages"
 
 export async function switchToBranchOpened(candidateId: string): Promise<{
@@ -59,9 +59,9 @@ export async function switchToBranchOpened(candidateId: string): Promise<{
     .returning({ id: followUpMessages.id })
 
   // Шаг 2: запланировать ветку Б.
-  const messagesB = (campaign.customMessagesOpened && campaign.customMessagesOpened.length > 0)
-    ? campaign.customMessagesOpened
-    : DEFAULT_FOLLOWUP_OPENED_NOT_FINISHED
+  // mergeMessagesWithDefaults гарантирует массив длиной FOLLOWUP_MESSAGE_SLOTS,
+  // чтобы preset.messageIndexes мог адресовать любой слот 0..8.
+  const messagesB = mergeMessagesWithDefaults(campaign.customMessagesOpened, DEFAULT_FOLLOWUP_OPENED_NOT_FINISHED)
   const touchesB = generateTouchSchedule(
     campaign.id,
     candidateId,
