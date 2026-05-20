@@ -14,13 +14,12 @@ import { toast } from "sonner"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import {
-  MessageSquare, Zap, Phone, Brain, Send, Pencil, Check,
-  FileText, ClipboardList, Sparkles, Loader2,
+  MessageSquare, Zap, Phone, Brain, Send, Check,
+  ClipboardList, Loader2, Plus, X,
 } from "lucide-react"
 
 // ─── Типы ────────────────────────────────────────────────────
 
-type MessageTone = "official" | "casual" | "custom"
 type ResponseReaction = "slot-and-demo" | "slot-only" | "insist-demo"
 
 // ScenarioType / StepType / SCENARIO_PRESETS («Последовательность взаимодействия») и
@@ -34,10 +33,14 @@ const DEFAULT_FIRST_MESSAGE = `[Имя], привет! Видели ваш от�
 Если после просмотра захотите пообщаться — сразу договоримся на звонок 🙂
 [ссылка]`
 
-const OFFICIAL_TEMPLATE = `Здравствуйте, [Имя].
-Благодарим за отклик на вакансию [должность]. Мы подготовили информационную презентацию о компании и должности (около 15 минут).
-Предлагаем вам ознакомиться с материалами по ссылке ниже. После просмотра вы сможете записаться на собеседование.
-[ссылка]`
+const DEFAULT_CALL_INTENT_KEYWORDS = ["созвон", "позвоните", "номер", "телефон", "голос"]
+const DEFAULT_INSIST_DEMO_MESSAGES: [string, string, string] = [
+  "{Имя}, понял что хотите созвониться. Чтобы не тратить ваше и моё время, предлагаю сначала пройти короткую демонстрацию должности — там ответы на 90% типовых вопросов: {ссылка}",
+  "{Имя}, так как мы сейчас в работе, всё-таки предлагаю сначала ознакомиться с демонстрацией должности и ответить на вопросы. Ваши ответы попадут к нам, и после этого назначим время для звонка: {ссылка}",
+  "{Имя}, наша система сбора устроена так, что созваниваемся с кандидатом только после прохождения демонстрации должности и ответов на вопросы. Спасибо за понимание! Демонстрация: {ссылка}",
+]
+const TEMPLATE_KEYS = ["salary", "demo_invite", "soft_reject", "info_request", "interview_invite"] as const
+type TemplateKey = typeof TEMPLATE_KEYS[number]
 
 // ─── Компонент ──────────────────────────────────────────────
 
@@ -79,7 +82,6 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
   })()
 
   // 1. Первое сообщение
-  const [tone, setTone] = useState<MessageTone>((initialAutomation.tone as MessageTone) || "casual")
   const [firstMessageDelay, setFirstMessageDelay] = useState(String(initialAutomation.delayMinutes ?? "3"))
   // Шаблон сообщения хранится в vacancies.ai_process_settings.inviteMessage —
   // его читает hh process-queue при отправке приглашения на демо.
@@ -154,10 +156,66 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
   // не трогаем (старое значение остаётся в automation.workingHours для архива
   // и обратной совместимости, но cron'ы уже его не читают).
 
-  // 2. Обработка ответа
-  const [responseReaction, setResponseReaction] = useState<ResponseReaction>(
-    (initialAutomation.responseReaction as ResponseReaction) || "slot-and-demo"
+  // 2. Обработка ответа — блок «Если кандидат хочет созвониться».
+  //
+  // Storage: descriptionJson.automation.callIntent = {
+  //   enabled, mode, keywords, insistDemoMessages: [s1, s2, s3]
+  // }
+  //
+  // Дефолт mode="insist-demo" (Сессия 5). enabled=false по умолчанию.
+  // Два других mode (slot-and-demo, slot-only) — UI present, но действий
+  // в backend нет (бэклог). Активны только при mode=insist-demo +
+  // enabled=true: scan-incoming подхватывает keywords и шлёт эскалацию.
+  const initialCallIntent =
+    (initialAutomation.callIntent as {
+      enabled?: boolean
+      mode?: ResponseReaction
+      keywords?: string[]
+      insistDemoMessages?: string[]
+    }) || {}
+  const [callIntentEnabled, setCallIntentEnabled]   = useState<boolean>(initialCallIntent.enabled ?? false)
+  const [callIntentMode,    setCallIntentMode]      = useState<ResponseReaction>(initialCallIntent.mode ?? "insist-demo")
+  const [callIntentKeywords, setCallIntentKeywords] = useState<string[]>(
+    Array.isArray(initialCallIntent.keywords) && initialCallIntent.keywords.length > 0
+      ? initialCallIntent.keywords
+      : DEFAULT_CALL_INTENT_KEYWORDS,
   )
+  const [keywordInput, setKeywordInput] = useState("")
+  const [insistMessages, setInsistMessages] = useState<[string, string, string]>(() => {
+    const src = initialCallIntent.insistDemoMessages
+    if (Array.isArray(src)) {
+      return [
+        src[0] ?? DEFAULT_INSIST_DEMO_MESSAGES[0],
+        src[1] ?? DEFAULT_INSIST_DEMO_MESSAGES[1],
+        src[2] ?? DEFAULT_INSIST_DEMO_MESSAGES[2],
+      ]
+    }
+    return [...DEFAULT_INSIST_DEMO_MESSAGES]
+  })
+
+  // Legacy responseReaction — оставлен в state ради обратной совместимости
+  // descriptionJson.automation.responseReaction, в UI больше не используется
+  // (заменён на callIntent.mode выше).
+  const responseReaction = (initialAutomation.responseReaction as ResponseReaction) || "slot-and-demo"
+
+  const addKeyword = () => {
+    const k = keywordInput.trim().toLowerCase()
+    if (!k) return
+    if (callIntentKeywords.includes(k)) {
+      toast.error("Это слово уже есть")
+      return
+    }
+    setCallIntentKeywords([...callIntentKeywords, k])
+    setKeywordInput("")
+  }
+  const removeKeyword = (idx: number) => {
+    setCallIntentKeywords(callIntentKeywords.filter((_, i) => i !== idx))
+  }
+  const updateInsistMessage = (idx: 0 | 1 | 2, text: string) => {
+    const next: [string, string, string] = [...insistMessages] as [string, string, string]
+    next[idx] = text
+    setInsistMessages(next)
+  }
 
   // 3. Цепочка дожима — переехала в отдельный компонент VacancyFollowupSettings
   // (API: /api/modules/hr/vacancies/[id]/followup-settings, таблица
@@ -264,10 +322,24 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
     return { ...globalTemplates, ...saved }
   })
 
-  // Тоны временно в разработке — не меняют текст рассылки.
-  void OFFICIAL_TEMPLATE
-  void tone
-  void setTone
+  // Master-тумблер и per-template чекбоксы для блока «Шаблоны сообщений».
+  // Storage: descriptionJson.automation.templatesMeta = {
+  //   masterEnabled: boolean,
+  //   enabled: { salary: bool, demo_invite: bool, soft_reject: bool, ... }
+  // }
+  // Дефолт: master OFF, все per-template ON.
+  const initialTemplatesMeta = (initialAutomation.templatesMeta as {
+    masterEnabled?: boolean
+    enabled?: Record<string, boolean>
+  } | undefined) || {}
+  const [templatesMasterEnabled, setTemplatesMasterEnabled] = useState<boolean>(initialTemplatesMeta.masterEnabled ?? false)
+  const [templatesEnabled, setTemplatesEnabled] = useState<Record<TemplateKey, boolean>>(() => {
+    const src = initialTemplatesMeta.enabled ?? {}
+    return TEMPLATE_KEYS.reduce((acc, k) => {
+      acc[k] = typeof src[k] === "boolean" ? src[k] : true
+      return acc
+    }, {} as Record<TemplateKey, boolean>)
+  })
 
   // Save all automation settings to API
   const saveSettings = useCallback(async () => {
@@ -288,6 +360,16 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
         autoReject,
         notifyManager,
         messageTemplates,
+        templatesMeta: {
+          masterEnabled: templatesMasterEnabled,
+          enabled:       templatesEnabled,
+        },
+        callIntent: {
+          enabled:            callIntentEnabled,
+          mode:               callIntentMode,
+          keywords:           callIntentKeywords,
+          insistDemoMessages: insistMessages,
+        },
         dialer: { enabled: dialerEnabled, scriptId: dialerScriptId, trigger: dialerTrigger },
         completenessCheck: { enabled: completenessEnabled, threshold: Number(completenessThreshold), channel: completenessChannel, delay: completenessDelay },
       }
@@ -313,7 +395,7 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
     } finally {
       setSaving(false)
     }
-  }, [vacancyId, descriptionJson, firstMessageDelay, responseReaction, autoInvite, autoReject, notifyManager, messageTemplates, dialerEnabled, dialerScriptId, dialerTrigger, completenessEnabled, completenessThreshold, completenessChannel, completenessDelay])
+  }, [vacancyId, descriptionJson, firstMessageDelay, responseReaction, autoInvite, autoReject, notifyManager, messageTemplates, templatesMasterEnabled, templatesEnabled, callIntentEnabled, callIntentMode, callIntentKeywords, insistMessages, dialerEnabled, dialerScriptId, dialerTrigger, completenessEnabled, completenessThreshold, completenessChannel, completenessDelay])
 
   return (
     <div className="space-y-6">
@@ -327,51 +409,26 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-5">
-          {/* Тон — пока не подключён к рассылке */}
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <Label className="text-sm font-medium">Тон сообщения</Label>
-              <Badge variant="outline" className="text-[10px] h-4 px-1.5">Скоро</Badge>
-            </div>
-            <div className="flex flex-wrap gap-2 opacity-60 pointer-events-none select-none" aria-disabled="true">
-              {([
-                { value: "official" as const, label: "Официальный", icon: FileText },
-                { value: "casual" as const, label: "Живой", icon: Sparkles },
-                { value: "custom" as const, label: "Свой текст", icon: Pencil },
-              ]).map(opt => (
-                <button
-                  key={opt.value}
-                  type="button"
-                  disabled
-                  className="flex items-center gap-2 px-4 py-2.5 rounded-lg border border-border text-sm font-medium text-muted-foreground"
-                >
-                  <opt.icon className="w-4 h-4" />
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-            <p className="text-[11px] text-muted-foreground">Функция в разработке. Сейчас рассылается текст ниже.</p>
-          </div>
-
-          {/* Задержка */}
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label className="text-sm font-medium">Задержка после отклика</Label>
-              <p className="text-xs text-muted-foreground">Время ожидания перед отправкой первого сообщения</p>
+          {/* Минимальная задержка перед первым сообщением.
+              Реальная задержка может быть больше: всё зависит от очереди cron'а
+              разбора hh-откликов (см. lib/hh/process-queue.ts). */}
+          <div className="flex items-start justify-between gap-3">
+            <div className="space-y-0.5 flex-1">
+              <Label className="text-sm font-medium">Минимальная задержка перед первым сообщением</Label>
+              <p className="text-xs text-muted-foreground">
+                Чтобы первое сообщение не выглядело как автоматика. Реальная задержка может быть больше из-за обработки очереди.
+              </p>
             </div>
             <Select value={firstMessageDelay} onValueChange={setFirstMessageDelay}>
-              <SelectTrigger className="w-[130px] h-9">
+              <SelectTrigger className="w-[140px] h-9 shrink-0">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="0">Сразу</SelectItem>
-                <SelectItem value="1">1 минута</SelectItem>
+                <SelectItem value="2">2 минуты</SelectItem>
                 <SelectItem value="3">3 минуты</SelectItem>
                 <SelectItem value="5">5 минут</SelectItem>
                 <SelectItem value="10">10 минут</SelectItem>
                 <SelectItem value="15">15 минут</SelectItem>
-                <SelectItem value="30">30 минут</SelectItem>
-                <SelectItem value="60">60 минут</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -439,59 +496,144 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
       </Card>
       )}
 
-      {/* ═══ 2. Если кандидат отвечает ═════════════════════════ */}
+      {/* ═══ 2. Если кандидат хочет созвониться ═════════════════ */}
       {showSection("callIntent") && (
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Brain className="w-4 h-4" />
-            Если кандидат хочет созвониться
-            <Badge variant="outline" className="text-[10px] h-4 px-1.5">Скоро</Badge>
-          </CardTitle>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Brain className="w-4 h-4" />
+                Если кандидат хочет созвониться
+              </CardTitle>
+              <p className="text-xs text-muted-foreground mt-1">
+                Парсер ключевых слов в ответе кандидата → отправляет один из трёх эскалационных шаблонов и продолжает дожимать на демо.
+              </p>
+            </div>
+            <Switch checked={callIntentEnabled} onCheckedChange={setCallIntentEnabled} />
+          </div>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="p-3 rounded-lg bg-muted/50 border border-border">
-            <p className="text-xs text-muted-foreground mb-1">Система определяет намерение по ключевым словам:</p>
+        <CardContent className={cn("space-y-4", !callIntentEnabled && "opacity-60")}>
+          {/* Ключевые слова — редактируемые чипсы. */}
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Ключевые слова</Label>
+            <p className="text-[11px] text-muted-foreground">
+              Если в ответе кандидата встречается одно из этих слов — система определяет это как «хочет созвониться».
+            </p>
             <div className="flex flex-wrap gap-1.5">
-              {["созвон", "позвоните", "номер", "телефон", "голос"].map(w => (
-                <Badge key={w} variant="secondary" className="text-xs font-mono">{w}</Badge>
+              {callIntentKeywords.map((w, idx) => (
+                <span
+                  key={`${w}-${idx}`}
+                  className="inline-flex items-center gap-1 rounded-full bg-secondary/80 px-2.5 py-1 text-xs font-mono"
+                >
+                  {w}
+                  <button
+                    type="button"
+                    onClick={() => removeKeyword(idx)}
+                    disabled={!callIntentEnabled}
+                    className="hover:text-destructive disabled:opacity-50 disabled:cursor-not-allowed"
+                    aria-label={`Удалить ${w}`}
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
               ))}
+            </div>
+            <div className="flex gap-2">
+              <Input
+                value={keywordInput}
+                onChange={e => setKeywordInput(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addKeyword() } }}
+                placeholder="Добавить слово…"
+                disabled={!callIntentEnabled}
+                className="h-9 text-sm"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={addKeyword}
+                disabled={!callIntentEnabled || !keywordInput.trim()}
+                className="gap-1.5"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Добавить
+              </Button>
             </div>
           </div>
 
+          {/* Реакция системы — выбор режима. */}
           <div className="space-y-2">
             <Label className="text-sm font-medium">Реакция системы</Label>
             <div className="space-y-2">
               {([
-                { value: "slot-and-demo" as const, label: "Предложить слот + мягко предложить демо параллельно", desc: "Максимальная конверсия" },
-                { value: "slot-only" as const, label: "Сразу дать слот без демо", desc: "Быстрый процесс" },
-                { value: "insist-demo" as const, label: "Настоять на демо перед звонком", desc: "Фильтрация немотивированных" },
+                { value: "slot-and-demo" as const, label: "Предложить слот + мягко предложить демо параллельно", desc: "Максимальная конверсия", soon: true },
+                { value: "slot-only"     as const, label: "Сразу дать слот без демо",                              desc: "Быстрый процесс",         soon: true },
+                { value: "insist-demo"   as const, label: "Настоять на демо перед звонком",                        desc: "Фильтрация немотивированных", soon: false },
               ]).map(opt => (
                 <button
                   key={opt.value}
-                  disabled
+                  type="button"
+                  disabled={!callIntentEnabled || opt.soon}
                   className={cn(
-                    "w-full flex items-start gap-3 p-3 rounded-lg border text-left transition-all opacity-50 cursor-not-allowed",
-                    responseReaction === opt.value
+                    "w-full flex items-start gap-3 p-3 rounded-lg border text-left transition-all",
+                    callIntentMode === opt.value && !opt.soon
                       ? "border-primary bg-primary/5 ring-2 ring-primary/20"
-                      : "border-border hover:border-primary/30"
+                      : "border-border hover:border-primary/30",
+                    (opt.soon || !callIntentEnabled) && "opacity-60 cursor-not-allowed",
                   )}
-                  onClick={() => setResponseReaction(opt.value)}
+                  onClick={() => !opt.soon && setCallIntentMode(opt.value)}
                 >
                   <div className={cn(
                     "w-4 h-4 rounded-full border-2 mt-0.5 shrink-0 flex items-center justify-center",
-                    responseReaction === opt.value ? "border-primary" : "border-muted-foreground/40"
+                    callIntentMode === opt.value && !opt.soon ? "border-primary" : "border-muted-foreground/40",
                   )}>
-                    {responseReaction === opt.value && <div className="w-2 h-2 rounded-full bg-primary" />}
+                    {callIntentMode === opt.value && !opt.soon && <div className="w-2 h-2 rounded-full bg-primary" />}
                   </div>
-                  <div>
-                    <p className="text-sm font-medium text-foreground">{opt.label}</p>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-foreground flex items-center gap-2">
+                      {opt.label}
+                      {opt.soon && <Badge variant="outline" className="text-[10px] h-4 px-1.5">Скоро</Badge>}
+                    </p>
                     <p className="text-xs text-muted-foreground">{opt.desc}</p>
                   </div>
                 </button>
               ))}
             </div>
           </div>
+
+          {/* Эскалационные шаблоны — только для insist-demo. */}
+          {callIntentMode === "insist-demo" && (
+            <div className="space-y-3 border-t pt-3">
+              <div className="flex items-center gap-2">
+                <Label className="text-sm font-medium">Эскалационные шаблоны</Label>
+                <Badge variant="secondary" className="text-[10px] h-4 px-1.5">3 текста</Badge>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                Каждый раз когда кандидат повторно пишет о звонке — отправляется следующий шаблон. После №3 — больше не реагируем на ключевые слова в рамках этой вакансии.
+              </p>
+              {insistMessages.map((text, idx) => (
+                <div key={idx} className="space-y-1.5">
+                  <Label className="text-xs font-medium">
+                    Шаблон №{idx + 1}{idx === 2 && " — финальный"}
+                  </Label>
+                  <Textarea
+                    value={text}
+                    onChange={e => updateInsistMessage(idx as 0 | 1 | 2, e.target.value)}
+                    rows={3}
+                    disabled={!callIntentEnabled}
+                    className="text-sm resize-y"
+                  />
+                </div>
+              ))}
+              <p className="text-[11px] text-muted-foreground">
+                Плейсхолдеры:{" "}
+                <code className="text-[10px] bg-muted px-1 py-0.5 rounded">{"{Имя}"}</code>,{" "}
+                <code className="text-[10px] bg-muted px-1 py-0.5 rounded">{"{должность}"}</code>,{" "}
+                <code className="text-[10px] bg-muted px-1 py-0.5 rounded">{"{ссылка}"}</code>.
+              </p>
+            </div>
+          )}
         </CardContent>
       </Card>
       )}
@@ -649,31 +791,51 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
       {showSection("templates") && (
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <MessageSquare className="w-4 h-4" />
-            Шаблоны сообщений
-          </CardTitle>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <CardTitle className="text-base flex items-center gap-2">
+                <MessageSquare className="w-4 h-4" />
+                Шаблоны сообщений
+              </CardTitle>
+              <p className="text-xs text-muted-foreground mt-1">
+                Master выключен — автоматика по шаблонам не работает. Кнопки «Копировать» доступны всегда (для ручного использования HR).
+              </p>
+            </div>
+            <Switch checked={templatesMasterEnabled} onCheckedChange={setTemplatesMasterEnabled} />
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          {Object.entries(templateLabels).map(([key, label]) => (
-            <div key={key} className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <Label className="text-xs font-medium">{label}</Label>
-                <Button variant="ghost" size="sm" className="h-6 text-[10px] gap-1 px-2" onClick={async () => {
-                  await navigator.clipboard.writeText(messageTemplates[key] || "")
-                  toast.success("Скопировано")
-                }}>
-                  Копировать
-                </Button>
+          {TEMPLATE_KEYS.map(key => {
+            const label = templateLabels[key]
+            return (
+              <div key={key} className="space-y-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <Checkbox
+                      checked={templatesEnabled[key]}
+                      onCheckedChange={(v) =>
+                        setTemplatesEnabled(prev => ({ ...prev, [key]: v === true }))
+                      }
+                      disabled={!templatesMasterEnabled}
+                    />
+                    <Label className="text-xs font-medium cursor-pointer">{label}</Label>
+                  </label>
+                  <Button variant="ghost" size="sm" className="h-6 text-[10px] gap-1 px-2" onClick={async () => {
+                    await navigator.clipboard.writeText(messageTemplates[key] || "")
+                    toast.success("Скопировано")
+                  }}>
+                    Копировать
+                  </Button>
+                </div>
+                <Textarea
+                  value={messageTemplates[key] || ""}
+                  onChange={e => setMessageTemplates(prev => ({ ...prev, [key]: e.target.value }))}
+                  rows={2}
+                  className="text-xs resize-none bg-[var(--input-bg)] border border-input"
+                />
               </div>
-              <Textarea
-                value={messageTemplates[key] || ""}
-                onChange={e => setMessageTemplates(prev => ({ ...prev, [key]: e.target.value }))}
-                rows={2}
-                className="text-xs resize-none bg-[var(--input-bg)] border border-input"
-              />
-            </div>
-          ))}
+            )
+          })}
           <div className="flex items-center justify-between">
             <p className="text-[11px] text-muted-foreground">
               Переменные: {"{имя}"}, {"{должность}"}, {"{зп_от}"}, {"{зп_до}"}, {"{ссылка_на_демонстрацию}"}, {"{дата_время}"}
