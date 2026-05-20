@@ -246,10 +246,10 @@ export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, salaryFrom,
                     <img src={brand.logoUrl} alt="" className="w-8 h-8 rounded-lg object-contain" />
                   ) : (
                     <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-xs" style={{ backgroundColor: brand.primaryColor }}>
-                      {brand.companyName[0]}
+                      {(brand.companyName.trim() || "Ваша компания").charAt(0)}
                     </div>
                   )}
-                  <span className="text-sm font-bold" style={{ color: brand.textColor }}>{brand.companyName}</span>
+                  <span className="text-sm font-bold" style={{ color: brand.textColor }}>{brand.companyName.trim() || "Ваша компания"}</span>
                 </div>
                 <h3 className="text-base font-bold" style={{ color: brand.textColor }}>{vacancyTitle}</h3>
                 <p className="text-xs" style={{ color: brand.textColor + "80" }}>

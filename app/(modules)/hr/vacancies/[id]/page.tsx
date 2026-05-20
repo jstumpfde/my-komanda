@@ -2520,7 +2520,7 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                           <Input
                             value={brandCompanyName}
                             onChange={(e) => setBrandCompanyName(e.target.value)}
-                            placeholder="Название вашей компании"
+                            placeholder="Название клиента"
                             className="h-9 text-sm"
                           />
                         </div>
