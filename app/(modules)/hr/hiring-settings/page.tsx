@@ -141,32 +141,10 @@ export default function HiringSettingsPage() {
     toast.success(checked ? "Выбор компании включён в анкете" : "Секция «Компания» скрыта")
   }
 
-  // ── Global message templates ──
-  const GLOBAL_TEMPLATE_DEFAULTS: Record<string, string> = {
-    salary: "Здравствуйте, {имя}! Зарплата на позиции {должность} составляет {зп_от} — {зп_до} ₽. Подробнее об условиях — в презентации должности: {ссылка_на_демонстрацию}",
-    demo_invite: "Здравствуйте, {имя}! Благодарим за интерес к позиции {должность}. Пожалуйста, ознакомьтесь с презентацией должности: {ссылка_на_демонстрацию}. После просмотра мы свяжемся с вами.",
-    soft_reject: "Здравствуйте, {имя}! Благодарим за интерес к позиции {должность}. К сожалению, на данный момент мы остановились на других кандидатах. Желаем успехов!",
-    info_request: "Здравствуйте, {имя}! Нам интересна ваша кандидатура на позицию {должность}. Не могли бы вы дополнительно рассказать о вашем опыте?",
-    interview_invite: "Здравствуйте, {имя}! Мы хотели бы пригласить вас на собеседование на позицию {должность}. Удобное время: {дата_время}. Формат: онлайн.",
-  }
-  const GLOBAL_TEMPLATE_LABELS: Record<string, string> = {
-    salary: "Вопрос о зарплате",
-    demo_invite: "Приглашение на демонстрацию",
-    soft_reject: "Мягкий отказ",
-    info_request: "Запрос доп. информации",
-    interview_invite: "Приглашение на собеседование",
-  }
-  const [globalTemplates, setGlobalTemplates] = useState<Record<string, string>>(GLOBAL_TEMPLATE_DEFAULTS)
+  // Сессия 7: глобальные шаблоны компании удалены. Чистка localStorage.
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem("mk_hr_message_templates")
-      if (saved) setGlobalTemplates(prev => ({ ...prev, ...JSON.parse(saved) }))
-    } catch {}
+    try { localStorage.removeItem("mk_hr_message_templates") } catch {}
   }, [])
-  const saveGlobalTemplates = () => {
-    localStorage.setItem("mk_hr_message_templates", JSON.stringify(globalTemplates))
-    toast.success("Шаблоны сообщений сохранены")
-  }
 
   // ── Feedback schedule ──
   const [feedbackEnabled, setFeedbackEnabled] = useState(false)
@@ -378,32 +356,10 @@ export default function HiringSettingsPage() {
               </CardContent>
             </Card>
 
-            {/* Global message templates */}
-            <Card className="mb-5 max-w-3xl">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium">Шаблоны сообщений компании</CardTitle>
-                <CardDescription>Шаблоны по умолчанию для всех вакансий. Можно переопределить в настройках каждой вакансии.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {Object.entries(GLOBAL_TEMPLATE_LABELS).map(([key, label]) => (
-                  <div key={key} className="space-y-1">
-                    <Label className="text-xs font-medium">{label}</Label>
-                    <Textarea
-                      value={globalTemplates[key] || ""}
-                      onChange={e => setGlobalTemplates(prev => ({ ...prev, [key]: e.target.value }))}
-                      rows={2}
-                      className="text-xs resize-none"
-                    />
-                  </div>
-                ))}
-                <p className="text-[11px] text-muted-foreground">
-                  Переменные: {"{имя}"}, {"{должность}"}, {"{зп_от}"}, {"{зп_до}"}, {"{ссылка_на_демонстрацию}"}, {"{дата_время}"}
-                </p>
-                <Button size="sm" className="h-8 text-xs gap-1.5" onClick={saveGlobalTemplates}>
-                  <Save className="w-3.5 h-3.5" />Сохранить шаблоны
-                </Button>
-              </CardContent>
-            </Card>
+            {/* «Шаблоны сообщений компании» удалены в Сессии 7.
+                Шаблоны на уровне компании больше не используются — на каждой
+                вакансии есть отдельный блок «Частые вопросы» (FAQ) в табе
+                «Сообщения», с собственным набором тем для копирования. */}
 
             {/* Feedback schedule */}
             <Card className="mb-5 max-w-3xl">

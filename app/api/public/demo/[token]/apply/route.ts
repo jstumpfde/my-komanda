@@ -5,6 +5,7 @@ import { db } from "@/lib/db"
 import { candidates, demos, hhCandidates } from "@/lib/db/schema"
 import { generateCandidateShortId, isShortId } from "@/lib/short-id"
 import { normalizePhone, normalizeEmail } from "@/lib/candidates/normalize-contacts"
+import { scheduleAnketaConfirmation } from "@/lib/messaging/anketa-confirmation"
 
 type AnketaPayload = {
   telegram?: string
@@ -132,6 +133,14 @@ export async function POST(
       }
 
       await db.update(candidates).set(updates).where(eq(candidates.id, existing.id))
+
+      // Сессия 7 п.8: планируем авто-сообщение «подтверждение после анкеты»
+      // в hh-чат. Не блокирует ответ — даже если schedule упадёт,
+      // вернём успех (анкета сохранена).
+      void scheduleAnketaConfirmation({
+        candidateId: existing.id,
+        vacancyId:   existing.vacancyId,
+      })
 
       return NextResponse.json({ success: true, id: existing.id })
     }

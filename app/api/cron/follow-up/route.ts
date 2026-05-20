@@ -116,15 +116,22 @@ async function processOneTouch(
   msg: typeof followUpMessages.$inferSelect,
   now: Date,
 ): Promise<TouchResult> {
-  // Стоп-триггеры (вакансия закрыта / демо пройдено / отказ / автоматизация остановлена)
-  const stopResult = await shouldStopFollowUp(msg.candidateId, msg.campaignId)
-  if (stopResult.stop) {
-    const reason = stopResult.reason ?? "stopped"
-    await db.update(followUpMessages).set({
-      status: "cancelled",
-      errorMessage: reason,
-    }).where(eq(followUpMessages.id, msg.id))
-    return { outcome: "cancelled", reason }
+  // Сессия 7: для branch='anketa_confirmation' пропускаем стоп-триггеры.
+  // shouldStopFollowUp среагировал бы на stage='anketa_filled' (демо
+  // пройдено) и отменил бы подтверждение — но именно эти кандидаты и
+  // должны его получить. Это «not a follow-up», а одиночное сообщение.
+  if (msg.branch !== "anketa_confirmation") {
+    // Стоп-триггеры (вакансия закрыта / демо пройдено / отказ /
+    // автоматизация остановлена) — только для обычной цепочки дожима.
+    const stopResult = await shouldStopFollowUp(msg.candidateId, msg.campaignId)
+    if (stopResult.stop) {
+      const reason = stopResult.reason ?? "stopped"
+      await db.update(followUpMessages).set({
+        status: "cancelled",
+        errorMessage: reason,
+      }).where(eq(followUpMessages.id, msg.id))
+      return { outcome: "cancelled", reason }
+    }
   }
 
   // Ищем привязанный hh-отклик и токен компании

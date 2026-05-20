@@ -39,8 +39,24 @@ const DEFAULT_INSIST_DEMO_MESSAGES: [string, string, string] = [
   "{Имя}, так как мы сейчас в работе, всё-таки предлагаю сначала ознакомиться с демонстрацией должности и ответить на вопросы. Ваши ответы попадут к нам, и после этого назначим время для звонка: {ссылка}",
   "{Имя}, наша система сбора устроена так, что созваниваемся с кандидатом только после прохождения демонстрации должности и ответов на вопросы. Спасибо за понимание! Демонстрация: {ссылка}",
 ]
-const TEMPLATE_KEYS = ["salary", "demo_invite", "soft_reject", "info_request", "interview_invite"] as const
-type TemplateKey = typeof TEMPLATE_KEYS[number]
+
+// FAQ — справочник готовых ответов для ручного копирования в hh-чат.
+// Заменил старые messageTemplates (Сессия 7).
+interface FaqItem { topic: string; text: string }
+const DEFAULT_FAQ: FaqItem[] = [
+  { topic: "Зарплата",       text: "Здравствуйте, {имя}! Зарплата на позиции {должность} составляет {зп_от} — {зп_до} ₽. Подробнее об условиях — в презентации должности: {ссылка_на_демонстрацию}" },
+  { topic: "Формат работы",  text: "Здравствуйте, {имя}! По «{должность}» формат работы — офис. Подробнее в демонстрации: {ссылка_на_демонстрацию}" },
+  { topic: "График",         text: "Здравствуйте, {имя}! График — Пн–Пт, 09:00–18:00. Подробнее о режиме работы в презентации: {ссылка_на_демонстрацию}" },
+  { topic: "Локация",        text: "Здравствуйте, {имя}! Офис находится в Москве. Точный адрес и условия — в демонстрации должности: {ссылка_на_демонстрацию}" },
+  { topic: "Оформление",     text: "Здравствуйте, {имя}! Оформление по ТК РФ с первого дня. Подробнее о социальном пакете — в презентации: {ссылка_на_демонстрацию}" },
+  { topic: "Опыт",           text: "Здравствуйте, {имя}! Требования к опыту по «{должность}» подробно описаны в демонстрации: {ссылка_на_демонстрацию}. После просмотра сможем оценить вашу кандидатуру точнее." },
+]
+const MAX_FAQ_ITEMS = 15
+
+// anketaConfirmation — автоматическое сообщение-подтверждение в hh
+// через N минут после отправки финальной анкеты (Сессия 7 п.8).
+const DEFAULT_ANKETA_CONFIRMATION_TEXT =
+  "{Имя}, спасибо! Мы получили ваши данные и ответы. В ближайшие дни рассмотрим кандидатуру и свяжемся. Хорошего дня!"
 
 // ─── Компонент ──────────────────────────────────────────────
 
@@ -296,50 +312,35 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
   const [dialerScriptId, setDialerScriptId] = useState(initialDialer.scriptId || "")
   const [dialerTrigger, setDialerTrigger] = useState(initialDialer.trigger || "after_screening")
 
-  // 7. Шаблоны сообщений (inherit from global)
-  const hardcodedDefaults: Record<string, string> = {
-    salary: "Здравствуйте, {имя}! Зарплата на позиции {должность} составляет {зп_от} — {зп_до} ₽. Подробнее об условиях — в презентации должности: {ссылка_на_демонстрацию}",
-    demo_invite: "Здравствуйте, {имя}! Благодарим за интерес к позиции {должность}. Пожалуйста, ознакомьтесь с презентацией должности: {ссылка_на_демонстрацию}. После просмотра мы свяжемся с вами.",
-    soft_reject: "Здравствуйте, {имя}! Благодарим за интерес к позиции {должность}. К сожалению, на данный момент мы остановились на других кандидатах. Желаем успехов!",
-    info_request: "Здравствуйте, {имя}! Нам интересна ваша кандидатура на позицию {должность}. Не могли бы вы дополнительно рассказать о вашем опыте?",
-    interview_invite: "Здравствуйте, {имя}! Мы хотели бы пригласить вас на собеседование на позицию {должность}. Удобное время: {дата_время}. Формат: онлайн.",
-  }
-  const globalTemplates = (() => {
-    try {
-      const saved = typeof window !== "undefined" ? localStorage.getItem("mk_hr_message_templates") : null
-      return saved ? { ...hardcodedDefaults, ...JSON.parse(saved) } : hardcodedDefaults
-    } catch { return hardcodedDefaults }
+  // 7. FAQ — справочник готовых ответов для ручного копирования (Сессия 7).
+  // Storage: descriptionJson.faq (массив { topic, text }).
+  // Дефолтный набор 6 тем заполняется миграцией 0110 для существующих
+  // вакансий; для новых — fallback на DEFAULT_FAQ при пустом массиве.
+  const initialFaq = (() => {
+    if (descriptionJson && typeof descriptionJson === "object" && descriptionJson !== null) {
+      const dj = descriptionJson as Record<string, unknown>
+      const raw = dj.faq
+      if (Array.isArray(raw) && raw.length > 0) {
+        return raw.map(r => ({
+          topic: typeof (r as { topic?: unknown })?.topic === "string" ? (r as { topic: string }).topic : "",
+          text:  typeof (r as { text?: unknown })?.text  === "string" ? (r as { text:  string }).text  : "",
+        }))
+      }
+    }
+    return DEFAULT_FAQ
   })()
-  const templateLabels: Record<string, string> = {
-    salary: "Вопрос о зарплате",
-    demo_invite: "Приглашение на демонстрацию",
-    soft_reject: "Мягкий отказ",
-    info_request: "Запрос доп. информации",
-    interview_invite: "Приглашение на собеседование",
-  }
-  const [messageTemplates, setMessageTemplates] = useState<Record<string, string>>(() => {
-    const saved = (initialAutomation.messageTemplates as Record<string, string>) || {}
-    return { ...globalTemplates, ...saved }
-  })
+  const [faq, setFaq] = useState<FaqItem[]>(initialFaq)
 
-  // Master-тумблер и per-template чекбоксы для блока «Шаблоны сообщений».
-  // Storage: descriptionJson.automation.templatesMeta = {
-  //   masterEnabled: boolean,
-  //   enabled: { salary: bool, demo_invite: bool, soft_reject: bool, ... }
-  // }
-  // Дефолт: master OFF, все per-template ON.
-  const initialTemplatesMeta = (initialAutomation.templatesMeta as {
-    masterEnabled?: boolean
-    enabled?: Record<string, boolean>
+  // anketaConfirmation — автоподтверждение в hh через N минут после
+  // отправки финальной анкеты (Сессия 7 п.8).
+  const initialAnketaConfirmation = (initialAutomation.anketaConfirmation as {
+    enabled?:      boolean
+    delayMinutes?: number
+    messageText?:  string
   } | undefined) || {}
-  const [templatesMasterEnabled, setTemplatesMasterEnabled] = useState<boolean>(initialTemplatesMeta.masterEnabled ?? false)
-  const [templatesEnabled, setTemplatesEnabled] = useState<Record<TemplateKey, boolean>>(() => {
-    const src = initialTemplatesMeta.enabled ?? {}
-    return TEMPLATE_KEYS.reduce((acc, k) => {
-      acc[k] = typeof src[k] === "boolean" ? src[k] : true
-      return acc
-    }, {} as Record<TemplateKey, boolean>)
-  })
+  const [anketaConfEnabled,  setAnketaConfEnabled]  = useState<boolean>(initialAnketaConfirmation.enabled ?? true)
+  const [anketaConfDelay,    setAnketaConfDelay]    = useState<string>(String(initialAnketaConfirmation.delayMinutes ?? 3))
+  const [anketaConfText,     setAnketaConfText]     = useState<string>(initialAnketaConfirmation.messageText ?? DEFAULT_ANKETA_CONFIRMATION_TEXT)
 
   // Save all automation settings to API
   const saveSettings = useCallback(async () => {
@@ -359,16 +360,16 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
         autoInvite,
         autoReject,
         notifyManager,
-        messageTemplates,
-        templatesMeta: {
-          masterEnabled: templatesMasterEnabled,
-          enabled:       templatesEnabled,
-        },
         callIntent: {
           enabled:            callIntentEnabled,
           mode:               callIntentMode,
           keywords:           callIntentKeywords,
           insistDemoMessages: insistMessages,
+        },
+        anketaConfirmation: {
+          enabled:      anketaConfEnabled,
+          delayMinutes: Number(anketaConfDelay),
+          messageText:  anketaConfText,
         },
         dialer: { enabled: dialerEnabled, scriptId: dialerScriptId, trigger: dialerTrigger },
         completenessCheck: { enabled: completenessEnabled, threshold: Number(completenessThreshold), channel: completenessChannel, delay: completenessDelay },
@@ -384,6 +385,9 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
           description_json: {
             ...currentJson,
             automation: automationData,
+            // FAQ хранится на корне descriptionJson, а не внутри automation
+            // (по плану Сессии 7 п.10).
+            faq: faq.filter(f => f.topic.trim() || f.text.trim()).slice(0, MAX_FAQ_ITEMS),
           },
         }),
       })
@@ -395,7 +399,7 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
     } finally {
       setSaving(false)
     }
-  }, [vacancyId, descriptionJson, firstMessageDelay, responseReaction, autoInvite, autoReject, notifyManager, messageTemplates, templatesMasterEnabled, templatesEnabled, callIntentEnabled, callIntentMode, callIntentKeywords, insistMessages, dialerEnabled, dialerScriptId, dialerTrigger, completenessEnabled, completenessThreshold, completenessChannel, completenessDelay])
+  }, [vacancyId, descriptionJson, firstMessageDelay, responseReaction, autoInvite, autoReject, notifyManager, faq, callIntentEnabled, callIntentMode, callIntentKeywords, insistMessages, anketaConfEnabled, anketaConfDelay, anketaConfText, dialerEnabled, dialerScriptId, dialerTrigger, completenessEnabled, completenessThreshold, completenessChannel, completenessDelay])
 
   return (
     <div className="space-y-6">
@@ -460,6 +464,52 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
                 {savingInvite ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
                 Сохранить
               </Button>
+            </div>
+          </div>
+
+          {/* Подтверждение после анкеты (Сессия 7). Через N минут после
+              отправки финальной анкеты — авто-сообщение в hh-чат. */}
+          <div className="space-y-3 border-t pt-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <Label className="text-sm font-medium">Подтверждение после анкеты</Label>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Авто-сообщение в hh-чат через N минут после того, как кандидат отправил финальную анкету.
+                </p>
+              </div>
+              <Switch checked={anketaConfEnabled} onCheckedChange={setAnketaConfEnabled} />
+            </div>
+            <div className={cn("space-y-3", !anketaConfEnabled && "opacity-60")}>
+              <div className="flex items-center justify-between gap-3">
+                <Label className="text-xs font-medium">Задержка</Label>
+                <Select value={anketaConfDelay} onValueChange={setAnketaConfDelay} disabled={!anketaConfEnabled}>
+                  <SelectTrigger className="w-[140px] h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="2">2 минуты</SelectItem>
+                    <SelectItem value="3">3 минуты</SelectItem>
+                    <SelectItem value="5">5 минут</SelectItem>
+                    <SelectItem value="10">10 минут</SelectItem>
+                    <SelectItem value="15">15 минут</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium">Текст сообщения</Label>
+                <textarea
+                  className="w-full border rounded-lg p-3 text-sm resize-none h-24 bg-background focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none leading-relaxed disabled:opacity-60"
+                  value={anketaConfText}
+                  onChange={e => setAnketaConfText(e.target.value)}
+                  placeholder={DEFAULT_ANKETA_CONFIRMATION_TEXT}
+                  disabled={!anketaConfEnabled}
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Плейсхолдеры:{" "}
+                  <code className="text-[10px] bg-muted px-1 py-0.5 rounded">{"{Имя}"}</code>,{" "}
+                  <code className="text-[10px] bg-muted px-1 py-0.5 rounded">{"{должность}"}</code>.
+                </p>
+              </div>
             </div>
           </div>
 
@@ -715,63 +765,81 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
       </Card>
       )}
 
-      {/* ═══ 7. Шаблоны сообщений ════════════════════════════ */}
+      {/* ═══ 7. Частые вопросы (FAQ) — Сессия 7 ═══════════════ */}
       {showSection("templates") && (
       <Card>
         <CardHeader className="pb-3">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <CardTitle className="text-base flex items-center gap-2">
-                <MessageSquare className="w-4 h-4" />
-                Шаблоны сообщений
-              </CardTitle>
-              <p className="text-xs text-muted-foreground mt-1">
-                Master выключен — автоматика по шаблонам не работает. Кнопки «Копировать» доступны всегда (для ручного использования HR).
-              </p>
-            </div>
-            <Switch checked={templatesMasterEnabled} onCheckedChange={setTemplatesMasterEnabled} />
-          </div>
+          <CardTitle className="text-base flex items-center gap-2">
+            <MessageSquare className="w-4 h-4" />
+            Частые вопросы кандидатов
+          </CardTitle>
+          <p className="text-xs text-muted-foreground mt-1">
+            Готовые ответы на типовые вопросы кандидатов. Для ручного копирования в чат hh.
+          </p>
         </CardHeader>
         <CardContent className="space-y-4">
-          {TEMPLATE_KEYS.map(key => {
-            const label = templateLabels[key]
-            return (
-              <div key={key} className="space-y-1.5">
-                <div className="flex items-center justify-between gap-2">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <Checkbox
-                      checked={templatesEnabled[key]}
-                      onCheckedChange={(v) =>
-                        setTemplatesEnabled(prev => ({ ...prev, [key]: v === true }))
-                      }
-                      disabled={!templatesMasterEnabled}
-                    />
-                    <Label className="text-xs font-medium cursor-pointer">{label}</Label>
-                  </label>
-                  <Button variant="ghost" size="sm" className="h-6 text-[10px] gap-1 px-2" onClick={async () => {
-                    await navigator.clipboard.writeText(messageTemplates[key] || "")
-                    toast.success("Скопировано")
-                  }}>
+          {faq.map((item, idx) => (
+            <div key={idx} className="space-y-1.5 rounded-md border bg-muted/20 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <Input
+                  value={item.topic}
+                  onChange={e => setFaq(prev => prev.map((f, i) => i === idx ? { ...f, topic: e.target.value } : f))}
+                  placeholder="Название темы"
+                  className="h-7 text-xs font-medium flex-1 max-w-[240px]"
+                />
+                <div className="flex items-center gap-1.5">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 text-[10px] gap-1 px-2"
+                    onClick={async () => {
+                      await navigator.clipboard.writeText(item.text)
+                      toast.success("Скопировано")
+                    }}
+                  >
                     Копировать
                   </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 text-[10px] gap-1 px-2 text-destructive hover:text-destructive"
+                    onClick={() => setFaq(prev => prev.filter((_, i) => i !== idx))}
+                    aria-label={`Удалить «${item.topic || "вопрос"}»`}
+                  >
+                    ✕ Удалить
+                  </Button>
                 </div>
-                <Textarea
-                  value={messageTemplates[key] || ""}
-                  onChange={e => setMessageTemplates(prev => ({ ...prev, [key]: e.target.value }))}
-                  rows={2}
-                  className="text-xs resize-none bg-[var(--input-bg)] border border-input"
-                />
               </div>
-            )
-          })}
+              <Textarea
+                value={item.text}
+                onChange={e => setFaq(prev => prev.map((f, i) => i === idx ? { ...f, text: e.target.value } : f))}
+                rows={2}
+                className="text-xs resize-y bg-[var(--input-bg)] border border-input"
+                placeholder="Текст ответа…"
+              />
+            </div>
+          ))}
           <div className="flex items-center justify-between">
             <p className="text-[11px] text-muted-foreground">
               Переменные: {"{имя}"}, {"{должность}"}, {"{зп_от}"}, {"{зп_до}"}, {"{ссылка_на_демонстрацию}"}, {"{дата_время}"}
             </p>
-            <Button variant="ghost" size="sm" className="h-6 text-[10px]" onClick={() => { setMessageTemplates({ ...globalTemplates }); toast.success("Сброшено к шаблонам компании") }}>
-              Сбросить к шаблонам компании
-            </Button>
+            {faq.length < MAX_FAQ_ITEMS && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs gap-1.5"
+                onClick={() => setFaq(prev => [...prev, { topic: "", text: "" }])}
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Добавить вопрос
+              </Button>
+            )}
           </div>
+          {faq.length === 0 && (
+            <p className="text-[11px] text-muted-foreground italic text-center py-2">
+              Нет тем. Нажмите «Добавить вопрос», чтобы создать первую.
+            </p>
+          )}
         </CardContent>
       </Card>
       )}

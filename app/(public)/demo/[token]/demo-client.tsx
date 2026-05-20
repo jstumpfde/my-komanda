@@ -1072,79 +1072,20 @@ export default function DemoPage() {
                   className="mx-auto h-12 w-auto object-contain mb-2"
                 />
               )}
-              {finalBlock === "manual" && (
-                <>
-                  <h1 className="text-2xl font-bold text-gray-900">
-                    {replaceName(settings.manualTitle ?? "Отлично, [Имя]! Вы прошли демонстрацию 🎉")}
-                  </h1>
-                  <p className="text-gray-600">
-                    {settings.manualText ?? "Мы изучим ваши ответы и свяжемся с вами в ближайшее время"}
-                  </p>
-                  {manualButtonEnabled && (
-                    <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
-                      <button
-                        type="button"
-                        className="w-full h-10 rounded-lg text-white text-sm font-medium"
-                        style={{ backgroundColor: brandColor }}
-                        onClick={() => setShowFarewell(true)}
-                      >
-                        {settings.manualButton ?? "Хорошо, жду!"}
-                      </button>
-                    </div>
-                  )}
-                </>
-              )}
-
-              {finalBlock === "green" && (
-                <>
-                  <h1 className="text-2xl font-bold text-gray-900">
-                    {settings.greenTitle ?? "Отлично! Выберите удобное время для встречи"}
-                  </h1>
-                  <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 space-y-2 text-left">
-                    <p className="text-xs text-gray-500 text-center">Выберите тип встречи:</p>
-                    {settings.meetPhone && (
-                      <button type="button" className="w-full p-3 rounded-lg border border-gray-200 bg-white text-sm text-gray-900 flex items-center gap-2">
-                        📞 Звонок
-                      </button>
-                    )}
-                    {settings.meetOnline && (
-                      <button type="button" className="w-full p-3 rounded-lg border border-gray-200 bg-white text-sm text-gray-900 flex items-center gap-2">
-                        🎥 Онлайн
-                      </button>
-                    )}
-                    {settings.meetOffice && (
-                      <button type="button" className="w-full p-3 rounded-lg border border-gray-200 bg-white text-sm text-gray-900 flex items-center gap-2">
-                        🏢 Офис{settings.officeAddress ? ` (${settings.officeAddress})` : ""}
-                      </button>
-                    )}
-                    {!settings.meetPhone && !settings.meetOnline && !settings.meetOffice && (
-                      <p className="text-sm text-gray-500 text-center">Мы свяжемся с вами для согласования встречи.</p>
-                    )}
-                  </div>
-                </>
-              )}
-
-              {finalBlock === "yellow" && (
-                <>
-                  <h1 className="text-2xl font-bold text-gray-900">
-                    {settings.yellowTitle ?? "Спасибо за прохождение!"}
-                  </h1>
-                  <p className="text-gray-600">
-                    {settings.yellowText ?? "Мы рассмотрим вашу анкету и свяжемся с вами в ближайшее время"}
-                  </p>
-                </>
-              )}
-
-              {finalBlock === "red" && (
-                <>
-                  <h1 className="text-2xl font-bold text-gray-900">
-                    {settings.redTitle ?? "Спасибо за интерес к вакансии"}
-                  </h1>
-                  <p className="text-gray-600">
-                    {settings.redText ?? "К сожалению, ваш профиль не соответствует требованиям данной позиции. Мы сохраним ваши данные и свяжемся, если появится подходящая вакансия."}
-                  </p>
-                </>
-              )}
+              {/* Сессия 7 п.7: единый экран благодарности независимо от AI-скоринга.
+                  Кандидат с любым скором видит один и тот же позитивный текст.
+                  Решение «подходит/не подходит» принимает HR внутри системы;
+                  AI-вердикт сохраняется в БД, стадия кандидата обновляется,
+                  но через UI лендинга кандидат об этом не узнаёт. */}
+              <h1 className="text-2xl font-bold text-gray-900">
+                Спасибо за интерес к вакансии!
+              </h1>
+              <p className="text-gray-600">
+                Мы получили все ваши данные и ответы. В ближайшие дни рассмотрим вашу кандидатуру и свяжемся.
+              </p>
+              <p className="text-gray-600">
+                Хорошего дня!
+              </p>
             </div>
           </div>
         </div>
