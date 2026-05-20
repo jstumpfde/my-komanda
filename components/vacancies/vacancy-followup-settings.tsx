@@ -6,13 +6,12 @@ import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
+import { Badge } from "@/components/ui/badge"
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion"
 import { Loader2, Save, MessageSquareText, RotateCcw } from "lucide-react"
-import { format, addDays } from "date-fns"
-import { ru } from "date-fns/locale"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
-import { FOLLOWUP_PRESETS, type FollowUpPreset } from "@/lib/followup/presets"
+import { FOLLOWUP_PRESETS, FOLLOWUP_MESSAGE_SLOTS, type FollowUpPreset } from "@/lib/followup/presets"
 import {
   DEFAULT_FOLLOWUP_NOT_OPENED,
   DEFAULT_FOLLOWUP_OPENED_NOT_FINISHED,
@@ -36,14 +35,31 @@ interface Props {
 const PRESET_ORDER: FollowUpPreset[] = ["off", "soft", "standard", "aggressive"]
 const MAX_MSG_LEN = 2000
 
-// Заполняем массив до требуемой длины — пустые слоты заменяем на defaults[i].
-function padWithDefaults(values: string[] | null, defaults: string[], count: number): string[] {
+// Возвращает массив длиной FOLLOWUP_MESSAGE_SLOTS, в котором пустые
+// слоты заменены дефолтами. Используется и для отображения textarea,
+// и для подсчёта «кастом vs стандарт» при сохранении.
+function buildSlotValues(custom: string[] | null, defaults: string[]): string[] {
   const out: string[] = []
-  for (let i = 0; i < count; i++) {
-    const v = values?.[i]
-    out.push(typeof v === "string" ? v : (defaults[i] ?? defaults[defaults.length - 1] ?? ""))
+  for (let i = 0; i < FOLLOWUP_MESSAGE_SLOTS; i++) {
+    const v = custom?.[i]
+    out.push(typeof v === "string" && v.length > 0 ? v : (defaults[i] ?? ""))
   }
   return out
+}
+
+// Для каждого слота 0..8 определяет, в какие дни текущего пресета он
+// уходит. Возвращает массив [{ slot, days: [1,7] }, ...].
+function slotsUsage(preset: FollowUpPreset): Map<number, number[]> {
+  const map = new Map<number, number[]>()
+  const cfg = FOLLOWUP_PRESETS[preset]
+  cfg.messageIndexes.forEach((slot, idx) => {
+    const day = cfg.days[idx]
+    if (day === undefined) return
+    const prev = map.get(slot) ?? []
+    prev.push(day)
+    map.set(slot, prev)
+  })
+  return map
 }
 
 export function VacancyFollowupSettings({ vacancyId }: Props) {
@@ -54,15 +70,14 @@ export function VacancyFollowupSettings({ vacancyId }: Props) {
   const [stopOnReply, setStopOnReply] = useState(true)
   const [stopOnVacancyClosed, setStopOnVacancyClosed] = useState(true)
 
-  // Кастомные тексты: null = "используем дефолты", array = "юзер настроил
-  // свои тексты". При onChange любого textarea state становится array
-  // и при сохранении уходит в PATCH. Кнопка «Вернуть к стандарту» делает
-  // обратно null и тоже отправляет null (явный сброс на бэке).
+  // Кастомные тексты: null = «используем дефолты», array = «юзер настроил».
+  // При onChange textarea state становится array; «Вернуть к стандарту»
+  // сбрасывает в null и явно отправляет null в PATCH.
   const [customA, setCustomA] = useState<string[] | null>(null)
   const [customB, setCustomB] = useState<string[] | null>(null)
-  // Флаги «юзер трогал поле в этой сессии» — нужны чтобы при handleSave
-  // не отправлять customMessages/customMessagesOpened если юзер их вообще
-  // не открывал (иначе можем затереть значения из БД).
+  // touchedA/touchedB — флаги «юзер взаимодействовал с этим набором
+  // в текущей сессии». Защищает от случайной перезаписи если юзер
+  // не открывал Accordion перед нажатием «Сохранить».
   const [touchedA, setTouchedA] = useState(false)
   const [touchedB, setTouchedB] = useState(false)
 
@@ -106,9 +121,6 @@ export function VacancyFollowupSettings({ vacancyId }: Props) {
       const data = await res.json() as { campaign?: Campaign; error?: string }
       if (!res.ok) throw new Error(data.error || "Не удалось сохранить")
       toast.success("Настройки воронки дожима сохранены")
-      // Сбрасываем «trace touched» — после успешного сохранения значения в БД
-      // совпадают с UI, и следующий save не должен повторно их отправлять, если
-      // юзер не редактировал заново.
       setTouchedA(false)
       setTouchedB(false)
       if (data.campaign) {
@@ -122,24 +134,21 @@ export function VacancyFollowupSettings({ vacancyId }: Props) {
     }
   }
 
-  const today = new Date()
-  const days = FOLLOWUP_PRESETS[preset].days
-  const touchCount = days.length
+  const presetCfg = FOLLOWUP_PRESETS[preset]
+  const usage = slotsUsage(preset)
+  const valuesA = buildSlotValues(customA, DEFAULT_FOLLOWUP_NOT_OPENED)
+  const valuesB = buildSlotValues(customB, DEFAULT_FOLLOWUP_OPENED_NOT_FINISHED)
 
-  // Значения для textarea: либо custom, либо подставленные дефолты.
-  const valuesA = padWithDefaults(customA, DEFAULT_FOLLOWUP_NOT_OPENED, touchCount)
-  const valuesB = padWithDefaults(customB, DEFAULT_FOLLOWUP_OPENED_NOT_FINISHED, touchCount)
-
-  const updateValueA = (idx: number, value: string) => {
+  const updateValueA = (slot: number, value: string) => {
     setTouchedA(true)
     const next = customA ? [...customA] : [...valuesA]
-    next[idx] = value
+    next[slot] = value
     setCustomA(next)
   }
-  const updateValueB = (idx: number, value: string) => {
+  const updateValueB = (slot: number, value: string) => {
     setTouchedB(true)
     const next = customB ? [...customB] : [...valuesB]
-    next[idx] = value
+    next[slot] = value
     setCustomB(next)
   }
   const resetA = () => { setTouchedA(true); setCustomA(null) }
@@ -187,151 +196,157 @@ export function VacancyFollowupSettings({ vacancyId }: Props) {
           </p>
         </div>
 
-        {days.length > 0 && (
+        {presetCfg.days.length > 0 && (
           <div className="rounded-md border bg-muted/30 p-3">
             <div className="text-xs font-medium text-muted-foreground mb-2">
-              Расписание касаний (от даты приглашения):
+              Расписание касаний (отсчёт у каждого кандидата идёт от его даты приглашения):
             </div>
-            <div className="flex flex-wrap gap-2">
-              {days.map((dayOffset, idx) => {
-                const date = addDays(today, dayOffset)
-                return (
-                  <div
-                    key={idx}
-                    className="rounded-md border bg-background px-2 py-1 text-xs"
-                    title={valuesA[idx] ?? ""}
-                  >
-                    <span className="font-medium">Д{dayOffset === 0 ? "0" : `+${dayOffset}`}</span>
-                    <span className="text-muted-foreground ml-1.5">
-                      {format(date, "d MMM", { locale: ru })}
-                    </span>
-                  </div>
-                )
-              })}
+            <div className="flex flex-wrap gap-1.5">
+              {presetCfg.days.map((dayOffset, idx) => (
+                <div
+                  key={idx}
+                  className="rounded-md border bg-background px-2 py-1 text-xs font-medium tabular-nums"
+                >
+                  Д+{dayOffset}
+                </div>
+              ))}
             </div>
           </div>
         )}
 
-        {touchCount > 0 && (
-          <Accordion type="multiple" className="rounded-md border">
-            <AccordionItem value="branch-a" className="px-3">
-              <AccordionTrigger className="text-sm">
-                <div className="flex-1 text-left">
-                  <div className="font-medium">Тексты для тех, кто не открыл демо</div>
-                  <div className="text-xs text-muted-foreground mt-0.5 font-normal">
-                    Ветка А — {touchCount} касан{touchCount === 1 ? "ие" : touchCount < 5 ? "ия" : "ий"}
-                    {customA ? " · кастом" : " · стандарт"}
-                  </div>
+        <Accordion type="multiple" className="rounded-md border">
+          <AccordionItem value="branch-a" className="px-3">
+            <AccordionTrigger className="text-sm">
+              <div className="flex-1 text-left">
+                <div className="font-medium">Тексты для тех, кто не открыл демо</div>
+                <div className="text-xs text-muted-foreground mt-0.5 font-normal">
+                  Ветка А · 9 шаблонов · {customA ? "кастом" : "стандарт"}
                 </div>
-              </AccordionTrigger>
-              <AccordionContent className="space-y-3 pt-1">
-                <p className="text-[11px] text-muted-foreground bg-muted/40 rounded-md px-2.5 py-2 border">
-                  Плейсхолдеры:{" "}
-                  <code className="text-[10px] bg-background px-1 py-0.5 rounded border">{"{Имя}"}</code>,{" "}
-                  <code className="text-[10px] bg-background px-1 py-0.5 rounded border">{"{должность}"}</code>,{" "}
-                  <code className="text-[10px] bg-background px-1 py-0.5 rounded border">{"{компания}"}</code>,{" "}
-                  <code className="text-[10px] bg-background px-1 py-0.5 rounded border">{"{ссылка}"}</code>.{" "}
-                  <span className="opacity-70">
-                    {"{{name}}"} и {"{{vacancy}}"} здесь не работают — это для текста отказа.
-                  </span>
-                </p>
-                {days.map((dayOffset, idx) => {
-                  const value = valuesA[idx] ?? ""
-                  const overLimit = value.length > MAX_MSG_LEN
-                  return (
-                    <div key={idx} className="space-y-1">
+              </div>
+            </AccordionTrigger>
+            <AccordionContent className="space-y-3 pt-1">
+              <p className="text-[11px] text-muted-foreground bg-muted/40 rounded-md px-2.5 py-2 border">
+                Плейсхолдеры:{" "}
+                <code className="text-[10px] bg-background px-1 py-0.5 rounded border">{"{Имя}"}</code>,{" "}
+                <code className="text-[10px] bg-background px-1 py-0.5 rounded border">{"{должность}"}</code>,{" "}
+                <code className="text-[10px] bg-background px-1 py-0.5 rounded border">{"{ссылка}"}</code>.
+                <br />
+                Светлым отмечены шаблоны, которые в текущем пресете не отправляются — но вы можете их подготовить заранее на случай смены пресета.
+              </p>
+              {valuesA.map((value, slot) => {
+                const usedDays = usage.get(slot) ?? []
+                const isUsed = usedDays.length > 0
+                const overLimit = value.length > MAX_MSG_LEN
+                return (
+                  <div key={slot} className={cn("space-y-1", !isUsed && "opacity-60")}>
+                    <div className="flex items-center justify-between gap-2">
                       <Label className="text-xs font-medium">
-                        Касание {idx + 1} — через {dayOffset === 0 ? "сразу" : `${dayOffset} д.`}
+                        Шаблон {slot + 1}
                       </Label>
-                      <Textarea
-                        value={value}
-                        onChange={e => updateValueA(idx, e.target.value)}
-                        rows={2}
-                        className="text-sm resize-y"
-                        disabled={loading || !enabled}
-                      />
-                      <div className={cn(
-                        "text-[10px] text-right tabular-nums",
-                        overLimit ? "text-destructive font-medium" : "text-muted-foreground",
-                      )}>
-                        {value.length} / {MAX_MSG_LEN}
-                      </div>
+                      {isUsed
+                        ? <Badge variant="secondary" className="h-5 text-[10px] font-normal">
+                            Отправляется {usedDays.map(d => `Д+${d}`).join(", ")}
+                          </Badge>
+                        : <Badge variant="outline" className="h-5 text-[10px] font-normal text-muted-foreground">
+                            Не используется в пресете «{presetCfg.label}»
+                          </Badge>}
                     </div>
-                  )
-                })}
-                <div className="flex justify-end">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={resetA}
-                    disabled={loading || (!customA && !touchedA)}
-                    className="gap-1.5 text-xs"
-                  >
-                    <RotateCcw className="w-3 h-3" />
-                    Вернуть к стандарту
-                  </Button>
-                </div>
-              </AccordionContent>
-            </AccordionItem>
+                    <Textarea
+                      value={value}
+                      onChange={e => updateValueA(slot, e.target.value)}
+                      rows={2}
+                      className="text-sm resize-y"
+                      disabled={loading || !enabled}
+                    />
+                    <div className={cn(
+                      "text-[10px] text-right tabular-nums",
+                      overLimit ? "text-destructive font-medium" : "text-muted-foreground",
+                    )}>
+                      {value.length} / {MAX_MSG_LEN}
+                    </div>
+                  </div>
+                )
+              })}
+              <div className="flex justify-end">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={resetA}
+                  disabled={loading || (!customA && !touchedA)}
+                  className="gap-1.5 text-xs"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  Вернуть к стандарту
+                </Button>
+              </div>
+            </AccordionContent>
+          </AccordionItem>
 
-            <AccordionItem value="branch-b" className="px-3 border-t">
-              <AccordionTrigger className="text-sm">
-                <div className="flex-1 text-left">
-                  <div className="font-medium">Тексты для тех, кто начал, но не дошёл до конца</div>
-                  <div className="text-xs text-muted-foreground mt-0.5 font-normal">
-                    Ветка Б — {touchCount} касан{touchCount === 1 ? "ие" : touchCount < 5 ? "ия" : "ий"}
-                    {customB ? " · кастом" : " · стандарт"}
-                  </div>
+          <AccordionItem value="branch-b" className="px-3 border-t">
+            <AccordionTrigger className="text-sm">
+              <div className="flex-1 text-left">
+                <div className="font-medium">Тексты для тех, кто начал, но не дошёл до конца</div>
+                <div className="text-xs text-muted-foreground mt-0.5 font-normal">
+                  Ветка Б · 9 шаблонов · {customB ? "кастом" : "стандарт"}
                 </div>
-              </AccordionTrigger>
-              <AccordionContent className="space-y-3 pt-1">
-                <p className="text-[11px] text-muted-foreground bg-muted/40 rounded-md px-2.5 py-2 border">
-                  Плейсхолдеры:{" "}
-                  <code className="text-[10px] bg-background px-1 py-0.5 rounded border">{"{Имя}"}</code>,{" "}
-                  <code className="text-[10px] bg-background px-1 py-0.5 rounded border">{"{должность}"}</code>,{" "}
-                  <code className="text-[10px] bg-background px-1 py-0.5 rounded border">{"{компания}"}</code>,{" "}
-                  <code className="text-[10px] bg-background px-1 py-0.5 rounded border">{"{ссылка}"}</code>.
-                </p>
-                {days.map((dayOffset, idx) => {
-                  const value = valuesB[idx] ?? ""
-                  const overLimit = value.length > MAX_MSG_LEN
-                  return (
-                    <div key={idx} className="space-y-1">
+              </div>
+            </AccordionTrigger>
+            <AccordionContent className="space-y-3 pt-1">
+              <p className="text-[11px] text-muted-foreground bg-muted/40 rounded-md px-2.5 py-2 border">
+                Плейсхолдеры:{" "}
+                <code className="text-[10px] bg-background px-1 py-0.5 rounded border">{"{Имя}"}</code>,{" "}
+                <code className="text-[10px] bg-background px-1 py-0.5 rounded border">{"{должность}"}</code>,{" "}
+                <code className="text-[10px] bg-background px-1 py-0.5 rounded border">{"{ссылка}"}</code>.
+              </p>
+              {valuesB.map((value, slot) => {
+                const usedDays = usage.get(slot) ?? []
+                const isUsed = usedDays.length > 0
+                const overLimit = value.length > MAX_MSG_LEN
+                return (
+                  <div key={slot} className={cn("space-y-1", !isUsed && "opacity-60")}>
+                    <div className="flex items-center justify-between gap-2">
                       <Label className="text-xs font-medium">
-                        Касание {idx + 1} — через {dayOffset === 0 ? "сразу" : `${dayOffset} д.`}
+                        Шаблон {slot + 1}
                       </Label>
-                      <Textarea
-                        value={value}
-                        onChange={e => updateValueB(idx, e.target.value)}
-                        rows={2}
-                        className="text-sm resize-y"
-                        disabled={loading || !enabled}
-                      />
-                      <div className={cn(
-                        "text-[10px] text-right tabular-nums",
-                        overLimit ? "text-destructive font-medium" : "text-muted-foreground",
-                      )}>
-                        {value.length} / {MAX_MSG_LEN}
-                      </div>
+                      {isUsed
+                        ? <Badge variant="secondary" className="h-5 text-[10px] font-normal">
+                            Отправляется {usedDays.map(d => `Д+${d}`).join(", ")}
+                          </Badge>
+                        : <Badge variant="outline" className="h-5 text-[10px] font-normal text-muted-foreground">
+                            Не используется в пресете «{presetCfg.label}»
+                          </Badge>}
                     </div>
-                  )
-                })}
-                <div className="flex justify-end">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={resetB}
-                    disabled={loading || (!customB && !touchedB)}
-                    className="gap-1.5 text-xs"
-                  >
-                    <RotateCcw className="w-3 h-3" />
-                    Вернуть к стандарту
-                  </Button>
-                </div>
-              </AccordionContent>
-            </AccordionItem>
-          </Accordion>
-        )}
+                    <Textarea
+                      value={value}
+                      onChange={e => updateValueB(slot, e.target.value)}
+                      rows={2}
+                      className="text-sm resize-y"
+                      disabled={loading || !enabled}
+                    />
+                    <div className={cn(
+                      "text-[10px] text-right tabular-nums",
+                      overLimit ? "text-destructive font-medium" : "text-muted-foreground",
+                    )}>
+                      {value.length} / {MAX_MSG_LEN}
+                    </div>
+                  </div>
+                )
+              })}
+              <div className="flex justify-end">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={resetB}
+                  disabled={loading || (!customB && !touchedB)}
+                  className="gap-1.5 text-xs"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  Вернуть к стандарту
+                </Button>
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
 
         <div className="space-y-3 pt-1">
           <label className="flex items-start justify-between gap-3 py-2 border-b cursor-pointer">
