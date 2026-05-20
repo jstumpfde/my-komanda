@@ -17,7 +17,7 @@ import { followUpCampaigns, followUpMessages, vacancies } from "@/lib/db/schema"
 
 const DEFAULT_DELAY_MINUTES = 3
 const DEFAULT_MESSAGE_TEXT =
-  "{Имя}, спасибо! Мы получили ваши данные и ответы. В ближайшие дни рассмотрим кандидатуру и свяжемся. Хорошего дня!"
+  "{{name}}, спасибо! Мы получили ваши данные и ответы. В ближайшие дни рассмотрим кандидатуру и свяжемся. Хорошего дня!"
 
 interface AnketaConfirmationConfig {
   enabled?:      boolean

@@ -12,6 +12,7 @@ import { CheckCircle2, ChevronRight, Loader2, Video as VideoIcon, Mic, Camera, S
 import type { Block, Lesson, Question } from "@/lib/course-types"
 import { resolveBrand } from "@/lib/brand-colors"
 import { VideoEmbed } from "@/components/blocks/VideoEmbed"
+import { renderTemplate } from "@/lib/template-renderer"
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -1057,7 +1058,7 @@ export default function DemoPage() {
         data.candidateName?.split(" ")[0] ||
         data.candidateName ||
         "кандидат"
-      const replaceName = (s: string) => s.replace(/\[Имя\]/g, firstName).replace(/\[имя\]/g, firstName)
+      const replaceName = (s: string) => renderTemplate(s, { name: firstName })
 
       const manualButtonEnabled = settings.manualButtonEnabled !== false
 

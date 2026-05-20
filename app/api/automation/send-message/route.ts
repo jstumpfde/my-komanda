@@ -4,6 +4,7 @@ import { db } from "@/lib/db"
 import { vacancies, candidates, companies } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { sendMail } from "@/lib/mail"
+import { renderTemplate } from "@/lib/template-renderer"
 
 interface AutomationSettings {
   tone?: "official" | "casual" | "custom"
@@ -17,12 +18,12 @@ interface AutomationSettings {
 }
 
 function replaceVariables(template: string, vars: Record<string, string>): string {
-  let result = template
-  result = result.replace(/\[Имя\]/g, vars.name || "")
-  result = result.replace(/\[должность\]/g, vars.position || "")
-  result = result.replace(/\[компания\]/g, vars.company || "")
-  result = result.replace(/\[ссылка\]/g, vars.link || "")
-  return result
+  return renderTemplate(template, {
+    name:      vars.name ?? "",
+    vacancy:   vars.position ?? "",
+    company:   vars.company ?? "",
+    demo_link: vars.link ?? "",
+  })
 }
 
 function isWithinWorkingHours(settings: AutomationSettings["workingHours"]): boolean {
@@ -111,13 +112,13 @@ export async function POST(req: NextRequest) {
 
 function getDefaultTemplate(tone: "official" | "casual" | "custom"): string {
   if (tone === "official") {
-    return `Здравствуйте, [Имя].
-Благодарим за отклик на вакансию [должность]. Мы подготовили информационную презентацию о компании и должности (около 15 минут).
+    return `Здравствуйте, {{name}}.
+Благодарим за отклик на вакансию {{vacancy}}. Мы подготовили информационную презентацию о компании и должности (около 15 минут).
 Предлагаем вам ознакомиться с материалами по ссылке ниже. После просмотра вы сможете записаться на собеседование.
-[ссылка]`
+{{demo_link}}`
   }
-  return `[Имя], привет! Видели ваш отклик на [должность] — выглядит интересно 👋
+  return `{{name}}, привет! Видели ваш отклик на {{vacancy}} — выглядит интересно 👋
 Чтобы не тратить ваше время на формальное интервью, сделали короткий обзор должности на 15 мин — там реальные цифры дохода и как устроена работа.
 Если после просмотра захотите пообщаться — сразу договоримся на звонок 🙂
-[ссылка]`
+{{demo_link}}`
 }

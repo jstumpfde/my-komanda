@@ -6,6 +6,7 @@ import { getValidToken } from "@/lib/hh-helpers"
 import { shouldStopFollowUp } from "@/lib/followup/should-stop"
 import { canSendNow } from "@/lib/schedule/can-send-now"
 import { checkCronAuth } from "@/lib/cron/auth"
+import { renderTemplate } from "@/lib/template-renderer"
 
 // POST /api/cron/follow-up
 // Отправляет очередную порцию касаний из follow_up_messages кандидатам
@@ -197,12 +198,12 @@ async function processOneTouch(
   const firstName = (cand?.name ?? "").trim().split(/\s+/)[0] || "Здравствуйте"
   const tokenForUrl = cand?.shortId ?? cand?.token ?? msg.candidateId
   const demoUrl = `https://company24.pro/demo/${tokenForUrl}`
-  const finalText = msg.messageText
-    .replaceAll("{Имя}", firstName).replaceAll("{имя}", firstName)
-    .replaceAll("[Имя]", firstName).replaceAll("[имя]", firstName)
-    .replaceAll("{должность}", vacancy.title || "").replaceAll("[должность]", vacancy.title || "")
-    .replaceAll("{компания}", "Company24").replaceAll("[компания]", "Company24")
-    .replaceAll("{ссылка}", demoUrl).replaceAll("[ссылка]", demoUrl)
+  const finalText = renderTemplate(msg.messageText, {
+    name:      firstName,
+    vacancy:   vacancy.title || "",
+    company:   "Company24",
+    demo_link: demoUrl,
+  })
 
   try {
     const form = new URLSearchParams()

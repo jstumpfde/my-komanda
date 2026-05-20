@@ -5,6 +5,7 @@ import { candidates } from "@/lib/db/schema"
 import { checkCronAuth } from "@/lib/cron/auth"
 import { getPrequalConfig, daysSinceSent, finalizePrequalification } from "@/lib/prequalification/finalize"
 import { sendCandidateMessage } from "@/lib/prequalification/start"
+import { renderTemplate } from "@/lib/template-renderer"
 
 // POST /api/cron/prequalification
 //
@@ -26,18 +27,15 @@ interface StageHistoryEntry {
   reason: string
 }
 
-const DEFAULT_REMINDER_D1 = "{Имя}, напомню — вы откликнулись на «{должность}». Ответьте, пожалуйста, на пару коротких вопросов, чтобы я мог двигаться дальше с вашей кандидатурой."
-const DEFAULT_REMINDER_D3 = "{Имя}, ещё раз напоминаю про вопросы по «{должность}». Если не получу ответ — отправлю вам общую демонстрацию должности без уточнений."
+const DEFAULT_REMINDER_D1 = "{{name}}, напомню — вы откликнулись на «{{vacancy}}». Ответьте, пожалуйста, на пару коротких вопросов, чтобы я мог двигаться дальше с вашей кандидатурой."
+const DEFAULT_REMINDER_D3 = "{{name}}, ещё раз напоминаю про вопросы по «{{vacancy}}». Если не получу ответ — отправлю вам общую демонстрацию должности без уточнений."
 
 function renderReminder(template: string, args: { name: string; vacancyTitle: string }): string {
   const firstName = (args.name || "").trim().split(/\s+/)[0] || "Здравствуйте"
-  return template
-    .replaceAll("{Имя}",        firstName)
-    .replaceAll("{имя}",        firstName)
-    .replaceAll("[Имя]",        firstName)
-    .replaceAll("[имя]",        firstName)
-    .replaceAll("{должность}",  args.vacancyTitle)
-    .replaceAll("[должность]",  args.vacancyTitle)
+  return renderTemplate(template, {
+    name:    firstName,
+    vacancy: args.vacancyTitle,
+  })
 }
 
 export async function POST(req: NextRequest) {

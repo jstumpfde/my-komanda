@@ -227,9 +227,9 @@ export function VacancyFollowupSettings({ vacancyId }: Props) {
             <AccordionContent className="space-y-3 pt-1">
               <p className="text-[11px] text-muted-foreground bg-muted/40 rounded-md px-2.5 py-2 border">
                 Плейсхолдеры:{" "}
-                <code className="text-[10px] bg-background px-1 py-0.5 rounded border">{"{Имя}"}</code>,{" "}
-                <code className="text-[10px] bg-background px-1 py-0.5 rounded border">{"{должность}"}</code>,{" "}
-                <code className="text-[10px] bg-background px-1 py-0.5 rounded border">{"{ссылка}"}</code>.
+                <code className="text-[10px] bg-background px-1 py-0.5 rounded border">{"{{name}}"}</code>,{" "}
+                <code className="text-[10px] bg-background px-1 py-0.5 rounded border">{"{{vacancy}}"}</code>,{" "}
+                <code className="text-[10px] bg-background px-1 py-0.5 rounded border">{"{{demo_link}}"}</code>.
                 <br />
                 Светлым отмечены шаблоны, которые в текущем пресете не отправляются — но вы можете их подготовить заранее на случай смены пресета.
               </p>
@@ -294,9 +294,9 @@ export function VacancyFollowupSettings({ vacancyId }: Props) {
             <AccordionContent className="space-y-3 pt-1">
               <p className="text-[11px] text-muted-foreground bg-muted/40 rounded-md px-2.5 py-2 border">
                 Плейсхолдеры:{" "}
-                <code className="text-[10px] bg-background px-1 py-0.5 rounded border">{"{Имя}"}</code>,{" "}
-                <code className="text-[10px] bg-background px-1 py-0.5 rounded border">{"{должность}"}</code>,{" "}
-                <code className="text-[10px] bg-background px-1 py-0.5 rounded border">{"{ссылка}"}</code>.
+                <code className="text-[10px] bg-background px-1 py-0.5 rounded border">{"{{name}}"}</code>,{" "}
+                <code className="text-[10px] bg-background px-1 py-0.5 rounded border">{"{{vacancy}}"}</code>,{" "}
+                <code className="text-[10px] bg-background px-1 py-0.5 rounded border">{"{{demo_link}}"}</code>.
               </p>
               {valuesB.map((value, slot) => {
                 const usedDays = usage.get(slot) ?? []

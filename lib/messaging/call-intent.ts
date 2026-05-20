@@ -33,17 +33,15 @@ export function matchCallIntentKeyword(text: string, keywords: readonly string[]
 }
 
 // Подставляем плейсхолдеры из шаблонов callIntent.insistDemoMessages.
-// Поддерживает {Имя}, {должность}, {ссылка} (как в задаче Сессии 5).
-// Для совместимости со старыми шаблонами также [Имя], [должность], [ссылка]
-// и {имя} (нижний регистр).
+// Делегируется в общий renderTemplate (lib/template-renderer.ts) —
+// поддерживает canonical {{name}}/{{vacancy}}/{{demo_link}} и весь legacy:
+// {Имя}/{имя}/[Имя], {должность}/[должность], {ссылка}/[ссылка].
+import { renderTemplate } from "@/lib/template-renderer"
+
 export function renderInsistTemplate(tpl: string, vars: { name: string; vacancy: string; demoLink: string }): string {
-  return tpl
-    .replaceAll("{Имя}",        vars.name)
-    .replaceAll("{имя}",        vars.name)
-    .replaceAll("[Имя]",        vars.name)
-    .replaceAll("[имя]",        vars.name)
-    .replaceAll("{должность}",  vars.vacancy)
-    .replaceAll("[должность]",  vars.vacancy)
-    .replaceAll("{ссылка}",     vars.demoLink)
-    .replaceAll("[ссылка]",     vars.demoLink)
+  return renderTemplate(tpl, {
+    name:      vars.name,
+    vacancy:   vars.vacancy,
+    demo_link: vars.demoLink,
+  })
 }

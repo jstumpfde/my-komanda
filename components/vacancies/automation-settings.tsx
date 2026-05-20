@@ -28,35 +28,35 @@ type ResponseReaction = "slot-and-demo" | "slot-only" | "insist-demo"
 
 // ─── Данные по-умолчанию ─────────────────────────────────────
 
-const DEFAULT_FIRST_MESSAGE = `[Имя], привет! Видели ваш отклик на [должность] — выглядит интересно 👋
+const DEFAULT_FIRST_MESSAGE = `{{name}}, привет! Видели ваш отклик на {{vacancy}} — выглядит интересно 👋
 Чтобы не тратить ваше время на формальное интервью, сделали короткий обзор должности на 15 мин — там реальные цифры дохода и как устроена работа.
 Если после просмотра захотите пообщаться — сразу договоримся на звонок 🙂
-[ссылка]`
+{{demo_link}}`
 
 const DEFAULT_CALL_INTENT_KEYWORDS = ["созвон", "позвоните", "номер", "телефон", "голос"]
 const DEFAULT_INSIST_DEMO_MESSAGES: [string, string, string] = [
-  "{Имя}, понял что хотите созвониться. Чтобы не тратить ваше и моё время, предлагаю сначала пройти короткую демонстрацию должности — там ответы на 90% типовых вопросов: {ссылка}",
-  "{Имя}, так как мы сейчас в работе, всё-таки предлагаю сначала ознакомиться с демонстрацией должности и ответить на вопросы. Ваши ответы попадут к нам, и после этого назначим время для звонка: {ссылка}",
-  "{Имя}, наша система сбора устроена так, что созваниваемся с кандидатом только после прохождения демонстрации должности и ответов на вопросы. Спасибо за понимание! Демонстрация: {ссылка}",
+  "{{name}}, понял что хотите созвониться. Чтобы не тратить ваше и моё время, предлагаю сначала пройти короткую демонстрацию должности — там ответы на 90% типовых вопросов: {{demo_link}}",
+  "{{name}}, так как мы сейчас в работе, всё-таки предлагаю сначала ознакомиться с демонстрацией должности и ответить на вопросы. Ваши ответы попадут к нам, и после этого назначим время для звонка: {{demo_link}}",
+  "{{name}}, наша система сбора устроена так, что созваниваемся с кандидатом только после прохождения демонстрации должности и ответов на вопросы. Спасибо за понимание! Демонстрация: {{demo_link}}",
 ]
 
 // FAQ — справочник готовых ответов для ручного копирования в hh-чат.
 // Заменил старые messageTemplates (Сессия 7).
 interface FaqItem { topic: string; text: string }
 const DEFAULT_FAQ: FaqItem[] = [
-  { topic: "Зарплата",       text: "Здравствуйте, {имя}! Зарплата на позиции {должность} составляет {зп_от} — {зп_до} ₽. Подробнее об условиях — в презентации должности: {ссылка_на_демонстрацию}" },
-  { topic: "Формат работы",  text: "Здравствуйте, {имя}! По «{должность}» формат работы — офис. Подробнее в демонстрации: {ссылка_на_демонстрацию}" },
-  { topic: "График",         text: "Здравствуйте, {имя}! График — Пн–Пт, 09:00–18:00. Подробнее о режиме работы в презентации: {ссылка_на_демонстрацию}" },
-  { topic: "Локация",        text: "Здравствуйте, {имя}! Офис находится в Москве. Точный адрес и условия — в демонстрации должности: {ссылка_на_демонстрацию}" },
-  { topic: "Оформление",     text: "Здравствуйте, {имя}! Оформление по ТК РФ с первого дня. Подробнее о социальном пакете — в презентации: {ссылка_на_демонстрацию}" },
-  { topic: "Опыт",           text: "Здравствуйте, {имя}! Требования к опыту по «{должность}» подробно описаны в демонстрации: {ссылка_на_демонстрацию}. После просмотра сможем оценить вашу кандидатуру точнее." },
+  { topic: "Зарплата",       text: "Здравствуйте, {{name}}! Зарплата на позиции {{vacancy}} составляет {{salary_from}} — {{salary_to}} ₽. Подробнее об условиях — в презентации должности: {{demo_link}}" },
+  { topic: "Формат работы",  text: "Здравствуйте, {{name}}! По «{{vacancy}}» формат работы — офис. Подробнее в демонстрации: {{demo_link}}" },
+  { topic: "График",         text: "Здравствуйте, {{name}}! График — Пн–Пт, 09:00–18:00. Подробнее о режиме работы в презентации: {{demo_link}}" },
+  { topic: "Локация",        text: "Здравствуйте, {{name}}! Офис находится в Москве. Точный адрес и условия — в демонстрации должности: {{demo_link}}" },
+  { topic: "Оформление",     text: "Здравствуйте, {{name}}! Оформление по ТК РФ с первого дня. Подробнее о социальном пакете — в презентации: {{demo_link}}" },
+  { topic: "Опыт",           text: "Здравствуйте, {{name}}! Требования к опыту по «{{vacancy}}» подробно описаны в демонстрации: {{demo_link}}. После просмотра сможем оценить вашу кандидатуру точнее." },
 ]
 const MAX_FAQ_ITEMS = 15
 
 // anketaConfirmation — автоматическое сообщение-подтверждение в hh
 // через N минут после отправки финальной анкеты (Сессия 7 п.8).
 const DEFAULT_ANKETA_CONFIRMATION_TEXT =
-  "{Имя}, спасибо! Мы получили ваши данные и ответы. В ближайшие дни рассмотрим кандидатуру и свяжемся. Хорошего дня!"
+  "{{name}}, спасибо! Мы получили ваши данные и ответы. В ближайшие дни рассмотрим кандидатуру и свяжемся. Хорошего дня!"
 
 // ─── Компонент ──────────────────────────────────────────────
 
@@ -451,7 +451,7 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
             />
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <div className="flex flex-wrap gap-1.5">
-                {["[Имя]", "[должность]", "[компания]", "[ссылка]"].map(v => (
+                {["{{name}}", "{{vacancy}}", "{{company}}", "{{demo_link}}"].map(v => (
                   <Badge key={v} variant="outline" className="text-xs cursor-default">{v}</Badge>
                 ))}
               </div>
@@ -506,8 +506,8 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
                 />
                 <p className="text-[11px] text-muted-foreground">
                   Плейсхолдеры:{" "}
-                  <code className="text-[10px] bg-muted px-1 py-0.5 rounded">{"{Имя}"}</code>,{" "}
-                  <code className="text-[10px] bg-muted px-1 py-0.5 rounded">{"{должность}"}</code>.
+                  <code className="text-[10px] bg-muted px-1 py-0.5 rounded">{"{{name}}"}</code>,{" "}
+                  <code className="text-[10px] bg-muted px-1 py-0.5 rounded">{"{{vacancy}}"}</code>.
                 </p>
               </div>
             </div>
@@ -520,14 +520,14 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
               className="w-full border rounded-lg p-3 text-sm resize-none h-36 bg-background focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none leading-relaxed"
               value={reInviteText}
               onChange={(e) => setReInviteText(e.target.value)}
-              placeholder="Здравствуйте, [Имя]! Извините — в прошлом сообщении была неактуальная ссылка. Вот рабочая: [ссылка]"
+              placeholder="Здравствуйте, {{name}}! Извините — в прошлом сообщении была неактуальная ссылка. Вот рабочая: {{demo_link}}"
             />
             <p className="text-[11px] text-muted-foreground">
               Используется для кандидатов, которым уже отправлялось сообщение ранее (например, после исправления битых ссылок).
             </p>
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <div className="flex flex-wrap gap-1.5">
-                {["[Имя]", "[должность]", "[компания]", "[ссылка]"].map(v => (
+                {["{{name}}", "{{vacancy}}", "{{company}}", "{{demo_link}}"].map(v => (
                   <Badge key={v} variant="outline" className="text-xs cursor-default">{v}</Badge>
                 ))}
               </div>
@@ -678,9 +678,9 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
               ))}
               <p className="text-[11px] text-muted-foreground">
                 Плейсхолдеры:{" "}
-                <code className="text-[10px] bg-muted px-1 py-0.5 rounded">{"{Имя}"}</code>,{" "}
-                <code className="text-[10px] bg-muted px-1 py-0.5 rounded">{"{должность}"}</code>,{" "}
-                <code className="text-[10px] bg-muted px-1 py-0.5 rounded">{"{ссылка}"}</code>.
+                <code className="text-[10px] bg-muted px-1 py-0.5 rounded">{"{{name}}"}</code>,{" "}
+                <code className="text-[10px] bg-muted px-1 py-0.5 rounded">{"{{vacancy}}"}</code>,{" "}
+                <code className="text-[10px] bg-muted px-1 py-0.5 rounded">{"{{demo_link}}"}</code>.
               </p>
             </div>
           )}
@@ -821,7 +821,7 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
           ))}
           <div className="flex items-center justify-between">
             <p className="text-[11px] text-muted-foreground">
-              Переменные: {"{имя}"}, {"{должность}"}, {"{зп_от}"}, {"{зп_до}"}, {"{ссылка_на_демонстрацию}"}, {"{дата_время}"}
+              Переменные: {"{{name}}"}, {"{{vacancy}}"}, {"{{salary_from}}"}, {"{{salary_to}}"}, {"{{demo_link}}"}, {"{{interview_at}}"}
             </p>
             {faq.length < MAX_FAQ_ITEMS && (
               <Button

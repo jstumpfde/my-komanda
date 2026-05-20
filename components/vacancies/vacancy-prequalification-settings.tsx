@@ -19,8 +19,8 @@ interface Props {
 }
 
 const MAX_QUESTIONS = 3
-const DEFAULT_REMINDER_D1 = "{Имя}, напомню — вы откликнулись на «{должность}». Ответьте, пожалуйста, на пару коротких вопросов, чтобы я мог двигаться дальше с вашей кандидатурой."
-const DEFAULT_REMINDER_D3 = "{Имя}, ещё раз напоминаю про вопросы по «{должность}». Если не получу ответ — отправлю вам общую демонстрацию должности без уточнений."
+const DEFAULT_REMINDER_D1 = "{{name}}, напомню — вы откликнулись на «{{vacancy}}». Ответьте, пожалуйста, на пару коротких вопросов, чтобы я мог двигаться дальше с вашей кандидатурой."
+const DEFAULT_REMINDER_D3 = "{{name}}, ещё раз напоминаю про вопросы по «{{vacancy}}». Если не получу ответ — отправлю вам общую демонстрацию должности без уточнений."
 
 function emptyQuestion(): VacancyPrequalificationQuestion {
   return { text: "", required: false, criterion: "" }
@@ -238,8 +238,8 @@ export function VacancyPrequalificationSettings({ vacancyId, initial, onSaved }:
           </div>
           <p className="text-[11px] text-muted-foreground">
             Плейсхолдеры:{" "}
-            <code className="text-[10px] bg-muted px-1 py-0.5 rounded">{"{Имя}"}</code>,{" "}
-            <code className="text-[10px] bg-muted px-1 py-0.5 rounded">{"{должность}"}</code>.
+            <code className="text-[10px] bg-muted px-1 py-0.5 rounded">{"{{name}}"}</code>,{" "}
+            <code className="text-[10px] bg-muted px-1 py-0.5 rounded">{"{{vacancy}}"}</code>.
           </p>
         </div>
 

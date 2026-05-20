@@ -12,6 +12,7 @@ import { Slider } from "@/components/ui/slider"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
+import { renderTemplate } from "@/lib/template-renderer"
 import {
   CheckCircle2, Calendar, Phone, Video, Building2, Save,
   Sparkles, Clock, Play, XCircle, ChevronDown, ClipboardList,
@@ -85,7 +86,7 @@ export function PostDemoSettings({ vacancyId, sections }: PostDemoSettingsProps)
   const [redOpen, setRedOpen] = useState(false)
 
   // Manual mode
-  const [manualTitle, setManualTitle] = useState("Отлично, [Имя]! Вы прошли демонстрацию 🎉")
+  const [manualTitle, setManualTitle] = useState("Отлично, {{name}}! Вы прошли демонстрацию 🎉")
   const [manualText, setManualText] = useState("Мы изучим ваши ответы и свяжемся с вами в ближайшее время")
   const [manualButton, setManualButton] = useState("Хорошо, жду!")
   const [manualButtonEnabled, setManualButtonEnabled] = useState(true)
@@ -388,7 +389,7 @@ export function PostDemoSettings({ vacancyId, sections }: PostDemoSettingsProps)
               <div className="space-y-2">
                 <Label className="text-xs">Заголовок</Label>
                 <Input value={manualTitle} onChange={e => setManualTitle(e.target.value)} className="h-8 text-sm" />
-                <p className="text-[10px] text-muted-foreground">[Имя] подставляется автоматически</p>
+                <p className="text-[10px] text-muted-foreground">{"{{name}}"} подставляется автоматически</p>
               </div>
               <div className="space-y-2">
                 <Label className="text-xs">Текст</Label>
@@ -539,7 +540,7 @@ export function PostDemoSettings({ vacancyId, sections }: PostDemoSettingsProps)
               ) : (
                 <>
                   <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto" />
-                  <h3 className="text-lg font-bold text-gray-900">{manualTitle.replace("[Имя]", "Иван")}</h3>
+                  <h3 className="text-lg font-bold text-gray-900">{renderTemplate(manualTitle, { name: "Иван" })}</h3>
                   <p className="text-sm text-gray-500">{manualText}</p>
                   {manualButtonEnabled && (
                     <div className="h-9 rounded-lg bg-primary flex items-center justify-center text-white text-sm font-medium">

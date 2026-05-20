@@ -17,23 +17,7 @@ import { getValidToken } from "@/lib/hh-helpers"
 import { changeNegotiationState } from "@/lib/hh-api"
 import { getStageHhAction, parsePipeline, type StageSlug } from "@/lib/stages"
 import { DEFAULT_REJECT_MESSAGE, DEFAULT_INVITE_MESSAGE } from "@/lib/hh/default-messages"
-
-function renderTemplate(tpl: string, vars: Record<string, string>): string {
-  return tpl
-    .replaceAll("{{name}}",      vars.name      ?? "")
-    .replaceAll("{{vacancy}}",   vars.vacancy   ?? "")
-    .replaceAll("{{demo_link}}", vars.demo_link ?? "")
-    // Совместимость со стилем сообщений из process-queue
-    // ([Имя], {имя}, [должность], …) — если HR использует их.
-    .replaceAll("[Имя]",         vars.name      ?? "")
-    .replaceAll("[имя]",         vars.name      ?? "")
-    .replaceAll("{Имя}",         vars.name      ?? "")
-    .replaceAll("{имя}",         vars.name      ?? "")
-    .replaceAll("[должность]",   vars.vacancy   ?? "")
-    .replaceAll("{должность}",   vars.vacancy   ?? "")
-    .replaceAll("[ссылка]",      vars.demo_link ?? "")
-    .replaceAll("{ссылка}",      vars.demo_link ?? "")
-}
+import { renderTemplate } from "@/lib/template-renderer"
 
 interface CandidateContext {
   id:        string

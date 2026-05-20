@@ -20,6 +20,7 @@ import { canSendNow } from "@/lib/schedule/can-send-now"
 import { screenResume } from "@/lib/ai-screen-resume"
 import { trySyncRejectToHh } from "@/lib/hh/sync-stage"
 import { startPrequalification } from "@/lib/prequalification/start"
+import { renderTemplate } from "@/lib/template-renderer"
 
 const DEMO_INVITE_MESSAGE = "Здравствуйте! Спасибо за отклик. Мы подготовили короткую демонстрацию должности — 15 минут, и вы узнаете всё о задачах, команде и доходе."
 
@@ -626,17 +627,12 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
           ? (aiSettings.reInviteMessage?.trim() || aiSettings.inviteMessage?.trim() || DEMO_INVITE_MESSAGE)
           : (aiSettings.inviteMessage?.trim() || DEMO_INVITE_MESSAGE)
 
-        const replaced = messageText
-          .replaceAll("[Имя]", candidateName)
-          .replaceAll("[имя]", candidateName)
-          .replaceAll("{имя}", candidateName)
-          .replaceAll("{Имя}", candidateName)
-          .replaceAll("[должность]", localVac.title || "")
-          .replaceAll("{должность}", localVac.title || "")
-          .replaceAll("[компания]", "Company24")
-          .replaceAll("{компания}", "Company24")
-          .replaceAll("[ссылка]", demoUrl)
-          .replaceAll("{ссылка}", demoUrl)
+        const replaced = renderTemplate(messageText, {
+          name:      candidateName,
+          vacancy:   localVac.title || "",
+          company:   "Company24",
+          demo_link: demoUrl,
+        })
 
         finalMessage = replaced.includes(demoUrl) ? replaced : replaced + "\n\n" + demoUrl
       }

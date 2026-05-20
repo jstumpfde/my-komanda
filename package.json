@@ -14,7 +14,8 @@
     "db:studio": "drizzle-kit studio",
     "db:push": "drizzle-kit push",
     "db:seed": "tsx lib/db/seed.ts",
-    "cleanup-trash": "tsx scripts/cleanup-trash.ts"
+    "cleanup-trash": "tsx scripts/cleanup-trash.ts",
+    "test": "tsx --test lib/template-renderer.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.82.0",
