@@ -19,6 +19,7 @@ import { isFollowUpPreset } from "@/lib/followup/presets"
 import { canSendNow } from "@/lib/schedule/can-send-now"
 import { screenResume } from "@/lib/ai-screen-resume"
 import { trySyncRejectToHh } from "@/lib/hh/sync-stage"
+import { startPrequalification } from "@/lib/prequalification/start"
 
 const DEMO_INVITE_MESSAGE = "Здравствуйте! Спасибо за отклик. Мы подготовили короткую демонстрацию должности — 15 минут, и вы узнаете всё о задачах, команде и доходе."
 
@@ -194,7 +195,12 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
     // Если AI-скоринг резюме дал score ниже порога — отклоняем кандидата
     // (reject) или оставляем в "new" для ручного разбора (keep_new),
     // НЕ отправляя приглашение и НЕ запуская дожим.
-    let belowThreshold: { score: number; threshold: number; action: "reject" | "keep_new" } | null = null
+    // Сессия 9: добавлен action="prequalification" — запуск опросника.
+    let belowThreshold: {
+      score: number
+      threshold: number
+      action: "reject" | "keep_new" | "prequalification"
+    } | null = null
 
     try {
       let candidateToken: string | null = null
@@ -445,11 +451,17 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
                 const mid = aiSettings.midRangeAction ?? "prequalification"
                 if (mid === "keep_new") {
                   belowThreshold = { score: result.score, threshold: upper, action: "keep_new" }
+                } else if (mid === "prequalification") {
+                  // Сессия 9: реальный запуск опросника. Если предкв
+                  // выключена в табе «Демо и воронка» или нет вопросов —
+                  // по плану п.6 fallback на direct_demo (просто invite).
+                  const pqEnabled = aiSettings.prequalification?.enabled === true
+                  const hasQuestions = (aiSettings.prequalification?.questions ?? []).some(q => q.text?.trim().length > 0)
+                  if (pqEnabled && hasQuestions) {
+                    belowThreshold = { score: result.score, threshold: upper, action: "prequalification" }
+                  }
                 }
                 // mid === "direct_demo" → invite (ничего не помечаем).
-                // mid === "prequalification" → в этой сессии fallback на invite
-                //   (реальная отправка вопросов в Сессии 6b). Если предкв
-                //   выключена — по плану п.6 тоже invite.
               }
             }
           }
@@ -495,6 +507,27 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
             // Сообщение мягкого отказа через hh (discard_by_employer)
             // с подстановкой имени/вакансии — переиспользуем sync-stage.
             await trySyncRejectToHh(candidateId)
+          } else if (belowThreshold.action === "prequalification") {
+            // Сессия 9: запускаем опросник. Стадию кандидата не меняем —
+            // ставим только prequalificationStatus='pending' внутри start.
+            // hh_responses обновим как 'invited' (отклик из очереди уходит,
+            // решение по нему уже принято — задать вопросы).
+            await db.update(candidates).set({
+              stageHistory: [...history, {
+                from:      fromStage,
+                to:        fromStage,
+                at:        nowIso,
+                reason:    "prequalification_started",
+                score:     belowThreshold.score,
+                threshold: belowThreshold.threshold,
+              }],
+              updatedAt: nowTs,
+            }).where(eq(candidates.id, candidateId))
+
+            const pqResult = await startPrequalification(candidateId)
+            if (!pqResult.started) {
+              console.warn("[PQ] prequalification start failed:", pqResult.reason)
+            }
           } else {
             // keep_new: оставляем stage="new", но ставим автостоп —
             // кандидат не попадёт в дальнейшую авто-обработку, ждёт ручного разбора.
@@ -533,7 +566,9 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
           results.push({
             id:     resp.hhResponseId,
             name:   resp.candidateName,
-            action: belowThreshold.action === "reject" ? "ai_rejected" : "ai_kept_new",
+            action: belowThreshold.action === "reject"          ? "ai_rejected"
+                  : belowThreshold.action === "prequalification" ? "ai_prequalification"
+                  : "ai_kept_new",
           })
         } catch (btErr) {
           console.error("[PQ] below-threshold handling failed:",

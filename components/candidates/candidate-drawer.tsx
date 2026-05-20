@@ -1055,7 +1055,7 @@ export function CandidateDrawer({
                 {derived.surveyContacts ? (
                   <SurveyContactsBlock contacts={derived.surveyContacts} />
                 ) : null}
-                <AnswersTab answers={candidate.anketaAnswers} demoLessons={candidate.demoLessons} />
+                <AnswersTab answers={candidate.anketaAnswers} demoLessons={candidate.demoLessons} candidateId={candidate.id} />
               </TabsContent>
 
               {/* ── Чат (только hh) ──────────────────────────────── */}

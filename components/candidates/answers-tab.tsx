@@ -26,6 +26,24 @@ type AnketaEntry =
 interface AnswersTabProps {
   answers: unknown
   demoLessons: unknown
+  candidateId?: string
+}
+
+interface QualificationAnswer {
+  id:           string
+  questionText: string
+  answerText:   string | null
+  aiVerdict:    "passed" | "failed" | "unclear" | null
+  aiReasoning:  string | null
+  isCritical:   boolean
+  createdAt:    string
+}
+
+interface QualificationData {
+  status:      "pending" | "passed" | "failed" | "no_answer" | null
+  sentAt:      string | null
+  completedAt: string | null
+  answers:     QualificationAnswer[]
 }
 
 // ─── Utils ────────────────────────────────────────────────────────────────────
@@ -523,7 +541,88 @@ function EntryCard({ entry, blockMap }: { entry: AnketaEntry; blockMap: Map<stri
 
 // ─── Main ────────────────────────────────────────────────────────────────────
 
-export function AnswersTab({ answers, demoLessons }: AnswersTabProps) {
+function PrequalificationSection({ candidateId }: { candidateId?: string }) {
+  const [data, setData] = useState<QualificationData | null>(null)
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (!candidateId) return
+    let cancelled = false
+    setLoading(true)
+    fetch(`/api/modules/hr/candidates/${candidateId}/qualification`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (!cancelled && d) setData(d as QualificationData) })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [candidateId])
+
+  // Если предкв не запускалась — раздел показываем как «не задействована»,
+  // но компактно (одна строка). Это даёт HR понять «у этого кандидата
+  // мидл-уровень не был, или ещё не дошло».
+  if (loading) {
+    return (
+      <div className="rounded-md border bg-muted/30 p-3">
+        <p className="text-xs text-muted-foreground">Загружаем результат предквалификации…</p>
+      </div>
+    )
+  }
+  if (!data || !data.status || data.answers.length === 0) {
+    return (
+      <div className="rounded-md border bg-muted/30 p-3">
+        <p className="text-sm font-medium mb-1">Предквалификация</p>
+        <p className="text-xs text-muted-foreground">Не запускалась для этого кандидата.</p>
+      </div>
+    )
+  }
+
+  const critical = data.answers.filter(a => a.isCritical)
+  const criticalPassed = critical.filter(a => a.aiVerdict === "passed").length
+  const verdictBadge = (v: QualificationAnswer["aiVerdict"]) => {
+    if (v === "passed") return <span className="text-[10px] inline-flex items-center gap-1 bg-emerald-500/10 text-emerald-700 border border-emerald-200 rounded px-1.5 py-0.5">🟢 Подходит</span>
+    if (v === "failed") return <span className="text-[10px] inline-flex items-center gap-1 bg-destructive/10 text-destructive border border-destructive/20 rounded px-1.5 py-0.5">🔴 Не подходит</span>
+    if (v === "unclear") return <span className="text-[10px] inline-flex items-center gap-1 bg-amber-500/10 text-amber-700 border border-amber-200 rounded px-1.5 py-0.5">⚪ Неясно</span>
+    return <span className="text-[10px] text-muted-foreground">Ожидаем ответ</span>
+  }
+  const summary = (() => {
+    if (data.status === "passed")    return `AI-вердикт: подходит (${criticalPassed} из ${critical.length} критичных вопросов прошли)`
+    if (data.status === "failed")    return "AI-вердикт: отказ"
+    if (data.status === "no_answer") return "Кандидат не ответил в срок — отправили демо без квалификации"
+    return "Ожидаем ответ кандидата"
+  })()
+
+  return (
+    <div className="rounded-md border bg-muted/30 p-3 space-y-3">
+      <div>
+        <p className="text-sm font-medium mb-0.5">Предквалификация</p>
+        <p className="text-xs text-muted-foreground">{summary}</p>
+      </div>
+      <div className="space-y-2">
+        {data.answers.map((a) => (
+          <div key={a.id} className="rounded-md border bg-background p-2.5 space-y-1.5">
+            <div className="flex items-start justify-between gap-2">
+              <p className="text-xs font-medium break-words">
+                {a.questionText}
+                {a.isCritical && <span className="ml-1.5 text-[10px] text-destructive">★ критичный</span>}
+              </p>
+              {verdictBadge(a.aiVerdict)}
+            </div>
+            {a.answerText && (
+              <p className="text-xs text-muted-foreground whitespace-pre-wrap break-words">
+                {a.answerText}
+              </p>
+            )}
+            {a.aiReasoning && (
+              <p className="text-[10px] text-muted-foreground/80 italic">AI: {a.aiReasoning}</p>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+export function AnswersTab({ answers, demoLessons, candidateId }: AnswersTabProps) {
   const entries = normalizeEntries(answers).filter(Boolean)
   const blockMap = buildBlockMap(demoLessons)
 
@@ -544,21 +643,8 @@ export function AnswersTab({ answers, demoLessons }: AnswersTabProps) {
     return true
   })
 
-  // Раздел «Предквалификация» (стаб Сессии 6, реальные ответы появятся
-  // в Сессии 6b после backend-логики отправки и AI-вердикта Haiku).
-  const prequalSection = (
-    <div className="rounded-md border bg-muted/30 p-3">
-      <div className="flex items-center gap-2 mb-1">
-        <p className="text-sm font-medium">Предквалификация</p>
-        <span className="text-[10px] uppercase tracking-wider text-muted-foreground bg-background border rounded px-1.5 py-0.5">
-          Скоро
-        </span>
-      </div>
-      <p className="text-xs text-muted-foreground">
-        Здесь появятся ответы кандидата на уточняющие вопросы и AI-вердикт. Настраивается в карточке вакансии → таб «Демо и воронка» → блок «Предквалификация».
-      </p>
-    </div>
-  )
+  // Раздел «Предквалификация» (Сессия 9). Реальные ответы и AI-вердикт.
+  const prequalSection = <PrequalificationSection candidateId={candidateId} />
 
   if (visible.length === 0) {
     return (

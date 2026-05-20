@@ -464,6 +464,12 @@ export const candidates = pgTable("candidates", {
   // шаблон callIntent (vacancy.automation.callIntent.insistDemoMessages).
   // После 3 — больше не реагируем на keywords. См. Сессия 5.
   callIntentCount:  integer("call_intent_count").notNull().default(0),
+  // Предквалификация (Сессия 6b/9). status: pending|passed|failed|no_answer
+  // или NULL если предкв не запускалась. sent_at — момент отправки вопросов,
+  // completed_at — момент финального решения.
+  prequalificationStatus:        text("prequalification_status"),
+  prequalificationSentAt:        timestamp("prequalification_sent_at", { withTimezone: true }),
+  prequalificationCompletedAt:   timestamp("prequalification_completed_at", { withTimezone: true }),
   // v5: дубль по реферальной ссылке — какой short_id привёл этого кандидата.
   referredByShortId: text("referred_by_short_id"),
   // Альтернативные токены при дедупликации: один человек может зайти по

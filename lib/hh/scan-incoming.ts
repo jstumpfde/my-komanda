@@ -30,6 +30,7 @@ import { classifyCandidateResponse } from "@/lib/ai/classify-candidate-response"
 import { saveCandidatePhoto } from "@/lib/hh/save-candidate-photo"
 import { extractHhResumeFields } from "@/lib/hh/extract-resume-fields"
 import { matchCallIntentKeyword, renderInsistTemplate } from "@/lib/messaging/call-intent"
+import { processPrequalificationAnswer } from "@/lib/prequalification/process-answer"
 
 // Дефолтные эскалационные шаблоны для callIntent (insist-demo).
 // Используются только если у вакансии не задан кастомный массив в
@@ -401,6 +402,7 @@ export async function scanIncomingMessages(opts: {
         candShortId:    candidates.shortId,
         candToken:      candidates.token,
         callIntentCount: candidates.callIntentCount,
+        prequalStatus:   candidates.prequalificationStatus,
         vacancyId:      candidates.vacancyId,
         vacancyTitle:   vacancies.title,
         descriptionJson: vacancies.descriptionJson,
@@ -437,6 +439,22 @@ export async function scanIncomingMessages(opts: {
         rejected = true
         console.info(`[scan-incoming] ${candidateId} regex_stop_word farewell=${sent} text="${preview}"`)
         break
+      }
+
+      // Шаг 1.4: Предквалификация (Сессия 9). Если у кандидата идёт опрос —
+      // парсим ответ через AI Haiku и обновляем qualification_answers.
+      // ВАЖНО: эта ветка ДО callIntent, потому что вопросы предкв тоже
+      // могут содержать слова из keywords. Если кандидат на стадии опроса,
+      // его ответ — это ответ на наши вопросы, а не запрос звонка.
+      if (candVac?.prequalStatus === "pending") {
+        const pq = await processPrequalificationAnswer({
+          candidateId,
+          answerText: text,
+        })
+        console.info(`[scan-incoming] ${candidateId} prequalification_answer processed=${pq.processed} finalized=${pq.finalized ?? false} verdict=${pq.verdict ?? "-"} text="${preview}"`)
+        // Какой бы ни был исход — этот msg уже потрачен на предкв,
+        // не пускаем в callIntent / AI rejection.
+        continue
       }
 
       // Шаг 1.5: callIntent — keyword matching на «хочу созвон».
