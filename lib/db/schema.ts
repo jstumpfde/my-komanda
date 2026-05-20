@@ -1517,6 +1517,28 @@ export const hhResponses = pgTable("hh_responses", {
 // Legacy alias — old code references hhTokens
 export const hhTokens = hhIntegrations
 
+// Async tracking разбора hh-очереди (Сессия 7).
+// POST /api/integrations/hh/process-queue создаёт строку и сразу возвращает
+// jobId; UI делает polling /status?jobId=...
+export const hhProcessJobs = pgTable("hh_process_jobs", {
+  id:                uuid("id").primaryKey().defaultRandom(),
+  companyId:         uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  vacancyId:         uuid("vacancy_id").references(() => vacancies.id, { onDelete: "set null" }),
+  status:            text("status").notNull().default("queued"), // 'queued'|'running'|'completed'|'failed'|'stopped'
+  limitRequested:    integer("limit_requested"),
+  delaySeconds:      integer("delay_seconds"),
+  processed:         integer("processed").notNull().default(0),
+  invited:           integer("invited").notNull().default(0),
+  rejected:          integer("rejected").notNull().default(0),
+  kept:              integer("kept").notNull().default(0),
+  deferredOffHours:  integer("deferred_off_hours").notNull().default(0),
+  results:           jsonb("results").notNull().default([]),
+  error:             text("error"),
+  createdAt:         timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  startedAt:         timestamp("started_at", { withTimezone: true }),
+  finishedAt:        timestamp("finished_at", { withTimezone: true }),
+})
+
 // ─── Learning Plans ─────────────────────────────────────────────────────────
 
 export const learningPlans = pgTable("learning_plans", {
