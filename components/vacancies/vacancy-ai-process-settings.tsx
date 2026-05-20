@@ -42,11 +42,13 @@ export function VacancyAiProcessSettings({ vacancyId, initial, initialAiScoringE
   const [lower, setLower] = useState<number>(
     initial?.minScoreLower ?? initial?.minScore ?? DEFAULT_LOWER,
   )
+  // Дефолт для НОВЫХ вакансий — "direct_demo" (P0-7): средние кандидаты
+  // сразу получают приглашение на демо без ручного разбора. Это снижает
+  // нагрузку на HR и повышает конверсию. Backward-compat: если в БД
+  // явно сохранён "keep_new" (legacy belowThresholdAction) — уважаем.
   const [midRangeAction, setMidRangeAction] = useState<MidRangeAction>(
     initial?.midRangeAction ?? (
-      // Backward compat: legacy belowThresholdAction отвечал только за < lower,
-      // но для нового UI используем как стартовое значение midRangeAction.
-      initial?.belowThresholdAction === "keep_new" ? "keep_new" : "prequalification"
+      initial?.belowThresholdAction === "keep_new" ? "keep_new" : "direct_demo"
     ),
   )
   const [rejectMessage, setRejectMessage] = useState<string>(initial?.rejectMessage ?? DEFAULT_REJECT)
@@ -166,6 +168,9 @@ export function VacancyAiProcessSettings({ vacancyId, initial, initialAiScoringE
         {/* Mid-range action — 3 radio. */}
         <div>
           <Label className="text-xs font-medium mb-2 block">Что делать с теми кто между порогами ({lower}–{upper - 1})</Label>
+          <div className="text-[11px] bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 rounded-md px-3 py-2 mb-2">
+            ✅ Рекомендуемое действие для средних кандидатов — сразу демо. Это снижает нагрузку на HR и повышает конверсию.
+          </div>
           <div className="space-y-1.5">
             <label className="flex items-start gap-2 text-sm cursor-pointer p-2 rounded-md border hover:bg-muted/50">
               <input

@@ -215,6 +215,9 @@ export function PostDemoSettings({ vacancyId, sections }: PostDemoSettingsProps)
           {/* Mode selection */}
           <div className="space-y-2">
             <Label className="text-sm font-medium">Режим</Label>
+            <div className="text-[11px] bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 rounded-md px-3 py-2">
+              ✅ Рекомендуемый режим — автоматический. Кандидаты сразу видят следующий шаг после демо без участия HR.
+            </div>
             <div className="space-y-2">
               {([
                 { value: "auto" as const, label: "Автоматический", desc: "Кандидат сам записывается на интервью по порогу AI-скоринга" },
