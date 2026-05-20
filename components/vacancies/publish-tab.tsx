@@ -28,17 +28,32 @@ interface PublishTabProps {
   }
 }
 
-function generateFullPageHtml(brand: BrandConfig, vacancy: { title: string; slug: string; city?: string; salaryFrom?: number; salaryTo?: number }): string {
-  const primary = brand.primaryColor
-  const bg = brand.bgColor
+interface BrandOverride {
+  companyName?: string
+  color?: string
+  logo?: string
+  slogan?: string
+}
+
+function generateFullPageHtml(
+  brand: BrandConfig,
+  vacancy: { title: string; slug: string; city?: string; salaryFrom?: number; salaryTo?: number },
+  override?: BrandOverride,
+): string {
+  const primary = override?.color || brand.primaryColor || "#3b82f6"
+  const bg = override?.color ? override.color + "10" : brand.bgColor
   const text = brand.textColor
-  const company = brand.companyName
-  const logoHtml = brand.logoUrl
-    ? `<img src="${brand.logoUrl}" alt="${company}" style="width:44px;height:44px;border-radius:12px;object-fit:contain" />`
-    : `<div style="width:44px;height:44px;border-radius:12px;background:${primary};display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:18px">${company[0]}</div>`
+  const rawCompany = override?.companyName || brand.companyName || ""
+  const company = rawCompany.trim() || "Ваша компания"
+  const logoUrl = override?.logo || brand.logoUrl
+  const initial = company.charAt(0) || "•"
+  const logoHtml = logoUrl
+    ? `<img src="${logoUrl}" alt="${company}" style="width:44px;height:44px;border-radius:12px;object-fit:contain" />`
+    : `<div style="width:44px;height:44px;border-radius:12px;background:${primary};display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:18px">${initial}</div>`
   const salary = vacancy.salaryFrom && vacancy.salaryTo
     ? `${vacancy.salaryFrom.toLocaleString("ru-RU")} – ${vacancy.salaryTo.toLocaleString("ru-RU")} ₽`
     : ""
+  const slogan = override?.slogan?.trim() || ""
 
   return `<!DOCTYPE html>
 <html lang="ru">
@@ -53,6 +68,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .logo{display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:32px}
 .logo-text{font-size:20px;font-weight:700;color:${text}}
 h1{font-size:28px;font-weight:800;color:${text};margin-bottom:8px;line-height:1.2}
+.slogan{color:${text}cc;font-size:15px;font-weight:500;margin-bottom:12px}
 .meta{color:${text}99;font-size:14px;margin-bottom:24px}
 .highlights{background:#fff;border-radius:16px;padding:24px;margin-bottom:24px;text-align:left}
 .highlight{display:flex;align-items:flex-start;gap:10px;margin-bottom:12px;font-size:14px;color:${text}}
@@ -70,7 +86,7 @@ h1{font-size:28px;font-weight:800;color:${text};margin-bottom:8px;line-height:1.
 <div class="container">
 <div class="logo">${logoHtml}<span class="logo-text">${company}</span></div>
 <h1>${vacancy.title}</h1>
-<p class="meta">${vacancy.city || ""}${salary ? " · " + salary : ""}</p>
+${slogan ? `<p class="slogan">${slogan}</p>\n` : ""}<p class="meta">${vacancy.city || ""}${salary ? " · " + salary : ""}</p>
 <div class="highlights">
 <div class="highlight"><span class="check">✓</span>Доход от ${vacancy.salaryFrom ? Math.round(vacancy.salaryFrom * 1.5).toLocaleString("ru-RU") + " ₽" : "конкурентный"} через 3 месяца</div>
 <div class="highlight"><span class="check">✓</span>Обучение и наставник с первого дня</div>
@@ -129,7 +145,7 @@ export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, salaryFrom,
   const [activeInstruction, setActiveInstruction] = useState<string | null>(null)
 
   useEffect(() => {
-    const base = getBrand()
+    const base = { ...getBrand() }
     if (brandOverride) {
       if (brandOverride.companyName) base.companyName = brandOverride.companyName
       if (brandOverride.color) { base.primaryColor = brandOverride.color; base.bgColor = brandOverride.color + "10" }
@@ -140,7 +156,7 @@ export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, salaryFrom,
 
   const handleCopyCode = async () => {
     if (!brand) return
-    const html = generateFullPageHtml(brand, { title: vacancyTitle, slug: vacancySlug, city: vacancyCity, salaryFrom, salaryTo })
+    const html = generateFullPageHtml(brand, { title: vacancyTitle, slug: vacancySlug, city: vacancyCity, salaryFrom, salaryTo }, brandOverride)
     await navigator.clipboard.writeText(html)
     setCopied(true)
     toast.success("HTML-код скопирован в буфер обмена")
@@ -149,7 +165,7 @@ export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, salaryFrom,
 
   const handlePreview = () => {
     if (!brand) return
-    const html = generateFullPageHtml(brand, { title: vacancyTitle, slug: vacancySlug, city: vacancyCity, salaryFrom, salaryTo })
+    const html = generateFullPageHtml(brand, { title: vacancyTitle, slug: vacancySlug, city: vacancyCity, salaryFrom, salaryTo }, brandOverride)
     const blob = new Blob([html], { type: "text/html" })
     const url = URL.createObjectURL(blob)
     window.open(url, "_blank")
@@ -158,7 +174,7 @@ export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, salaryFrom,
 
   const handleDownload = () => {
     if (!brand) return
-    const html = generateFullPageHtml(brand, { title: vacancyTitle, slug: vacancySlug, city: vacancyCity, salaryFrom, salaryTo })
+    const html = generateFullPageHtml(brand, { title: vacancyTitle, slug: vacancySlug, city: vacancyCity, salaryFrom, salaryTo }, brandOverride)
     const blob = new Blob([html], { type: "text/html" })
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
@@ -171,7 +187,7 @@ export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, salaryFrom,
 
   if (!brand) return null
 
-  const previewHtml = generateFullPageHtml(brand, { title: vacancyTitle, slug: vacancySlug, city: vacancyCity, salaryFrom, salaryTo })
+  const previewHtml = generateFullPageHtml(brand, { title: vacancyTitle, slug: vacancySlug, city: vacancyCity, salaryFrom, salaryTo }, brandOverride)
 
   return (
     <div className="space-y-6">
