@@ -121,7 +121,13 @@ async function processOneTouch(
   // shouldStopFollowUp среагировал бы на stage='anketa_filled' (демо
   // пройдено) и отменил бы подтверждение — но именно эти кандидаты и
   // должны его получить. Это «not a follow-up», а одиночное сообщение.
-  if (msg.branch !== "anketa_confirmation") {
+  //
+  // ТЗ-3 Ч.1: то же исключение для branch='anketa_auto_reply' (автоответ
+  // с предложением тестового задания) — отправляем именно тем, кто только
+  // что попал в anketa_filled.
+  const isOneOffPostAnketa =
+    msg.branch === "anketa_confirmation" || msg.branch === "anketa_auto_reply"
+  if (!isOneOffPostAnketa) {
     // Стоп-триггеры (вакансия закрыта / демо пройдено / отказ /
     // автоматизация остановлена) — только для обычной цепочки дожима.
     const stopResult = await shouldStopFollowUp(msg.candidateId, msg.campaignId)

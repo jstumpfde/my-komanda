@@ -6,6 +6,7 @@ import { candidates, demos, hhCandidates } from "@/lib/db/schema"
 import { generateCandidateShortId, isShortId } from "@/lib/short-id"
 import { normalizePhone, normalizeEmail } from "@/lib/candidates/normalize-contacts"
 import { scheduleAnketaConfirmation } from "@/lib/messaging/anketa-confirmation"
+import { scheduleAnketaAutoReply } from "@/lib/messaging/anketa-auto-reply"
 
 type AnketaPayload = {
   telegram?: string
@@ -142,6 +143,13 @@ export async function POST(
         vacancyId:   existing.vacancyId,
       })
 
+      // ТЗ-3 Ч.1: автоответ с тестовым заданием — отдельный одиночный
+      // touch (branch=anketa_auto_reply). Конфиг в post_demo_settings.
+      void scheduleAnketaAutoReply({
+        candidateId: existing.id,
+        vacancyId:   existing.vacancyId,
+      })
+
       return NextResponse.json({ success: true, id: existing.id })
     }
 
@@ -212,6 +220,16 @@ export async function POST(
       }
 
       await db.update(candidates).set(updates).where(eq(candidates.id, dup.id))
+
+      // ТЗ-3 Ч.1: автоответ и в dedup-ветке тоже (раньше пропускался).
+      // Совпадает с symmetric-fix к scheduleAnketaConfirmation выше.
+      if (!FINAL_STAGES.has(currentStage) && ANKETA_ELIGIBLE.has(currentStage)) {
+        void scheduleAnketaAutoReply({
+          candidateId: dup.id,
+          vacancyId:   demo.vacancyId,
+        })
+      }
+
       return NextResponse.json({ success: true, id: dup.id, deduplicated: true })
     }
 
