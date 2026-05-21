@@ -223,7 +223,7 @@ function AuthenticatedDashboard() {
           return col
         })
       )
-      toast.success(`${candidate.name} → ${nextColumn?.title}`, {
+      toast.success(`${candidate.name} → ${nextColumnId}`, {
         description: `Кандидат перемещён на следующий этап`,
       })
     }
