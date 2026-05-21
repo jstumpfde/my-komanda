@@ -58,7 +58,7 @@ import { PostDemoSettings } from "@/components/vacancies/post-demo-settings"
 import { VacancyAiProcessSettings } from "@/components/vacancies/vacancy-ai-process-settings"
 import { VacancyFollowupSettings } from "@/components/vacancies/vacancy-followup-settings"
 import { VacancyPrequalificationSettings } from "@/components/vacancies/vacancy-prequalification-settings"
-import { VacancySettingsProvider, VacancyTabPendingDot, VacancyStickySaveBar, type VacancyTabKey } from "@/components/vacancies/vacancy-settings-context"
+import { VacancySettingsProvider, VacancyTabPendingDot, VacancyStickySaveBar, useVacancySectionRegister, type VacancyTabKey } from "@/components/vacancies/vacancy-settings-context"
 import { BestPublicationTimeBlock } from "./components/BestPublicationTimeBlock"
 import {
   ResponsiveContainer,
@@ -2533,6 +2533,24 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                     <p className="text-sm text-muted-foreground">Настройка страницы вакансии для кандидатов</p>
                   </div>
 
+                    {/* P0-50: регистрируем секцию «Брендинг» в sticky-bar.
+                        logo НЕ включаем в watchedValues — он сохраняется авто-
+                        магически при upload/remove, sticky-бар на него не реагирует. */}
+                    <BrandingStickyRegister
+                      vacancyId={id}
+                      loaded={apiVacancy !== undefined && apiVacancy !== null}
+                      branding={{
+                        companyName: brandCompanyName,
+                        color: brandColor,
+                        slogan: brandSlogan,
+                        logo: "",
+                        domainLevel: brandDomainLevel,
+                        companySlug: brandCompanySlug,
+                        customDomain: brandCustomDomain,
+                      }}
+                      save={() => saveBranding()}
+                    />
+
                     {/* Брендинг страницы */}
                     <Card>
                       <CardHeader className="pb-3">
@@ -2757,12 +2775,6 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                             <div className="h-7 px-4 rounded-md text-xs text-white flex items-center font-medium" style={{ backgroundColor: brandColor }}>Откликнуться</div>
                             <div className="h-7 px-4 rounded-md text-xs border flex items-center" style={{ color: brandColor, borderColor: brandColor }}>Подробнее</div>
                           </div>
-                        </div>
-                        <div className="flex justify-end mt-4">
-                          <Button size="sm" className="gap-1.5 h-8 text-xs" onClick={() => saveBranding()} disabled={brandSaving}>
-                            {brandSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-                            Сохранить
-                          </Button>
                         </div>
                       </CardContent>
                     </Card>
@@ -3489,4 +3501,34 @@ function AnalyticsFilterButton(props: {
       </PopoverContent>
     </Popover>
   )
+}
+
+// P0-50 final: маленький register-компонент. Рендерится ВНУТРИ <VacancySettingsProvider>
+// в карточке «Брендинг», вызывает useVacancySectionRegister с актуальными
+// значениями + save-функцией главной страницы. Возвращает null — UI у него нет.
+//
+// Вынесен наружу, потому что useVacancySectionRegister должен видеть Provider
+// через useVacancySettings(). Главный компонент VacancyDetailPage этот provider
+// НЕ оборачивает целиком — только таб настроек. Поэтому регистрируем брендинг
+// здесь, через дочерний компонент, мониящийся при открытии таба «Брендинг».
+function BrandingStickyRegister({
+  vacancyId, loaded, branding, save,
+}: {
+  vacancyId: string
+  loaded: boolean
+  branding: {
+    companyName: string; color: string; slogan: string; logo: string
+    domainLevel: "free" | "subdomain" | "custom"
+    companySlug: string; customDomain: string
+  }
+  save: () => Promise<void>
+}) {
+  useVacancySectionRegister({
+    sectionKey: `branding:${vacancyId}`,
+    tabKey: "page",
+    loaded,
+    watchedValues: branding,
+    save,
+  })
+  return null
 }
