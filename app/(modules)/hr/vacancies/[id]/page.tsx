@@ -2483,12 +2483,12 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                 {/* Сабнав: 6 табов настроек вакансии */}
                 <div className="flex items-center gap-1 mb-4 border-b overflow-x-auto">
                   {([
-                    { value: "page"        as const, label: "Страница и брендинг", icon: Globe },
+                    { value: "page"        as const, label: "Брендинг",             icon: Globe },
                     { value: "sources"     as const, label: "Источники",           icon: Link2 },
                     { value: "messages"    as const, label: "Сообщения",           icon: MessageCircle },
-                    { value: "funnel"      as const, label: "Демо и воронка",      icon: Kanban },
+                    { value: "funnel"      as const, label: "Воронка",             icon: Kanban },
                     { value: "followup"    as const, label: "Дожим",               icon: MessageSquareText },
-                    { value: "ai"          as const, label: "AI сценарии",         icon: Zap },
+                    { value: "ai"          as const, label: "Расписание",          icon: Zap },
                     { value: "integrations" as const, label: "Интеграции",          icon: Settings },
                   ]).map((s) => {
                     const Icon = s.icon
@@ -2930,18 +2930,9 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                 </div>
                 )}
 
-                {/* ───────── ТАБ «AI сценарии» ───────── */}
+                {/* ───────── ТАБ «Расписание» (бывший «AI сценарии») ───────── */}
                 {settingsSection === "ai" && (
                 <div className="space-y-6 max-w-3xl">
-                  <AutomationSettings
-                    vacancyId={id}
-                    descriptionJson={apiVacancy?.descriptionJson}
-                    vacancyTitle={apiVacancy?.title}
-                    salaryFrom={apiVacancy?.salaryMin}
-                    salaryTo={apiVacancy?.salaryMax}
-                    aiProcessSettings={apiVacancy?.aiProcessSettings as { inviteMessage?: string; reInviteMessage?: string } | null | undefined}
-                    sections={["scenarioHire", "dialer"] satisfies AutomationSectionId[]}
-                  />
                   <VacancyScheduleSettings vacancyId={id} />
                 </div>
                 )}
@@ -2974,6 +2965,17 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                     </div>
                     <p className="text-[11px] text-muted-foreground mt-3">Любые webhook/API-настройки появятся здесь после подключения CRM.</p>
                   </div>
+
+                  {/* Бот-звонарь (перенесён из «AI сценарии» по ТЗ-1 Часть 1.2) */}
+                  <AutomationSettings
+                    vacancyId={id}
+                    descriptionJson={apiVacancy?.descriptionJson}
+                    vacancyTitle={apiVacancy?.title}
+                    salaryFrom={apiVacancy?.salaryMin}
+                    salaryTo={apiVacancy?.salaryMax}
+                    aiProcessSettings={apiVacancy?.aiProcessSettings as { inviteMessage?: string; reInviteMessage?: string } | null | undefined}
+                    sections={["dialer"] satisfies AutomationSectionId[]}
+                  />
                 </div>
                 )}
               </TabsContent>
