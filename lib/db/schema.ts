@@ -1921,3 +1921,18 @@ export const followUpMessages = pgTable("follow_up_messages", {
   chainD0Source:  text("chain_d0_source"),
   createdAt:      timestamp("created_at").defaultNow().notNull(),
 })
+
+// P0-30: журнал запусков критичных cron-эндпоинтов. Пишется каждым cron'ом
+// (recordCronRun из lib/cron/record-run.ts), читается health-check endpoint.
+export const cronRuns = pgTable("cron_runs", {
+  id:           uuid("id").primaryKey().defaultRandom(),
+  cronName:     text("cron_name").notNull(),
+  startedAt:    timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+  finishedAt:   timestamp("finished_at", { withTimezone: true }),
+  status:       text("status").notNull().default("running"), // 'running' | 'ok' | 'error' | 'busy'
+  durationMs:   integer("duration_ms"),
+  errorMessage: text("error_message"),
+  metadata:     jsonb("metadata"),
+}, (t) => [
+  index("cron_runs_name_started_idx").on(t.cronName, t.startedAt),
+])
