@@ -339,6 +339,16 @@ export interface VacancyAiProcessSettings {
   midRangeAction?:       "prequalification" | "direct_demo" | "keep_new"
   /** Конфиг блока «Предквалификация» из таба «Демо и воронка». */
   prequalification?:     VacancyPrequalificationConfig
+  /**
+   * ТЗ-3 Ч.2: глобальный режим воронки. Приоритет над midRangeAction.
+   *   - "direct_demo"       — кандидаты сразу получают demo-ссылку (дефолт).
+   *   - "prequal_then_demo" — сначала AI-вопросы предквалификации, при
+   *                          passed/no_answer → demo, при failed → reject.
+   *   - "prequal_only"      — только предквалификация без demo; после
+   *                          ответов кандидат → anketa_filled (для HR).
+   * По умолчанию "direct_demo" — для существующих вакансий ничего не меняется.
+   */
+  prequalificationMode?: "direct_demo" | "prequal_then_demo" | "prequal_only"
 
   // ── Legacy (Сессии 1-5), оставлены для совместимости ────────────────
   /** @deprecated → переименовано в minScoreLower; пишем оба для backward compat. */

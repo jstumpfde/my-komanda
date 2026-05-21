@@ -14,6 +14,7 @@
 import { eq, and } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { candidates, vacancies, candidateQualificationAnswers, hhResponses } from "@/lib/db/schema"
+import type { VacancyAiProcessSettings } from "@/lib/db/schema"
 import { trySyncRejectToHh, trySyncInviteToHh } from "@/lib/hh/sync-stage"
 
 interface FinalizeArgs {
@@ -46,8 +47,10 @@ export async function finalizePrequalification(args: FinalizeArgs): Promise<Fina
         stageHistory:     candidates.stageHistory,
         vacancyId:        candidates.vacancyId,
         prequalStatus:    candidates.prequalificationStatus,
+        aiSettings:       vacancies.aiProcessSettings,
       })
       .from(candidates)
+      .innerJoin(vacancies, eq(vacancies.id, candidates.vacancyId))
       .where(eq(candidates.id, args.candidateId))
       .limit(1)
     if (!cand) return { finalized: false, reason: "candidate_not_found" }
@@ -96,17 +99,31 @@ export async function finalizePrequalification(args: FinalizeArgs): Promise<Fina
       }).where(eq(candidates.id, args.candidateId))
       await trySyncRejectToHh(args.candidateId)
     } else {
-      // passed или no_answer: отправляем демо. status фиксируем, stage не трогаем
-      // — invite-flow ниже выставит primary_contact/demo_opened как обычно.
+      // passed или no_answer:
+      //   • prequal_only — demo не отправляется, кандидат → anketa_filled,
+      //     HR разбирает руками.
+      //   • остальные режимы (direct_demo / prequal_then_demo) — отправляем
+      //     demo. status фиксируем, stage не трогаем — invite-flow ниже
+      //     выставит primary_contact/demo_opened как обычно.
+      const aiSettings = (cand.aiSettings as VacancyAiProcessSettings | null) ?? null
+      const mode = aiSettings?.prequalificationMode ?? "direct_demo"
+      const skipDemo = mode === "prequal_only"
+      const toStage = skipDemo ? "anketa_filled" : fromStage
+
       await db.update(candidates).set({
         prequalificationStatus:      verdict,
         prequalificationCompletedAt: now,
-        stageHistory: [...history, { from: fromStage, to: fromStage, at: nowIso, reason }],
+        ...(skipDemo ? { stage: "anketa_filled" } : {}),
+        stageHistory: [...history, { from: fromStage, to: toStage, at: nowIso, reason }],
         updatedAt: now,
       }).where(eq(candidates.id, args.candidateId))
-      await trySyncInviteToHh(args.candidateId)
+
+      if (!skipDemo) {
+        await trySyncInviteToHh(args.candidateId)
+      }
 
       // hh_responses из очереди (если ещё лежит как response) → invited.
+      // Делаем и для prequal_only — отклик из очереди ушёл, решение принято.
       await db.update(hhResponses).set({ status: "invited" })
         .where(and(
           eq(hhResponses.localCandidateId, args.candidateId),

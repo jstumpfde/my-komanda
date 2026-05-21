@@ -446,7 +446,20 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
                 ? aiSettings.minScoreUpper
                 : 0
 
-              if (lower > 0 && result.score < lower) {
+              // ТЗ-3 Ч.2: глобальный режим воронки. Приоритет над midRangeAction.
+              //   - "prequal_then_demo" / "prequal_only" — запускаем предкв
+              //     для ВСЕХ кандидатов (если есть вопросы), независимо от
+              //     порогов. Лоу-скор reject выключен (P0-14).
+              //   - "direct_demo" (дефолт) — старая логика по midRangeAction.
+              const globalMode = aiSettings.prequalificationMode ?? "direct_demo"
+              const hasPqQuestions = (aiSettings.prequalification?.questions ?? []).some(q => q.text?.trim().length > 0)
+
+              if (globalMode === "prequal_then_demo" || globalMode === "prequal_only") {
+                if (hasPqQuestions) {
+                  belowThreshold = { score: result.score, threshold: upper || 0, action: "prequalification" }
+                }
+                // Нет вопросов → fallback на direct_demo (просто invite).
+              } else if (lower > 0 && result.score < lower) {
                 belowThreshold = { score: result.score, threshold: lower, action: "reject" }
               } else if (upper > 0 && result.score < upper) {
                 const mid = aiSettings.midRangeAction ?? "direct_demo"
@@ -457,8 +470,7 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
                   // выключена в табе «Демо и воронка» или нет вопросов —
                   // по плану п.6 fallback на direct_demo (просто invite).
                   const pqEnabled = aiSettings.prequalification?.enabled === true
-                  const hasQuestions = (aiSettings.prequalification?.questions ?? []).some(q => q.text?.trim().length > 0)
-                  if (pqEnabled && hasQuestions) {
+                  if (pqEnabled && hasPqQuestions) {
                     belowThreshold = { score: result.score, threshold: upper, action: "prequalification" }
                   }
                 }
