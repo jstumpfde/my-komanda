@@ -90,11 +90,20 @@ export async function POST(req: NextRequest) {
       companyId: user.companyId, userId: user.id, title: body.title.trim(), slug,
     })
 
+    // ТЗ-1 Часть 5 (P0-17): новые вакансии стартуют со всеми AI-фичами OFF.
+    // Schema defaults уже OFF (aiScoringEnabled, autoProcessingEnabled — false).
+    // aiProcessSettings задаём явно — там enabled=false и midRangeAction=direct_demo (P0-7).
     const insertValues: Record<string, unknown> = {
       companyId: user.companyId,
       title: body.title.trim(),
       status: "draft",
       slug,
+      aiScoringEnabled: false,
+      autoProcessingEnabled: false,
+      aiProcessSettings: {
+        enabled: false,
+        midRangeAction: "direct_demo",
+      },
     }
 
     // createdBy might be null for some auth flows — make it optional

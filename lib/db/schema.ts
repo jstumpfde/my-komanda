@@ -289,7 +289,7 @@ export const vacancies = pgTable("vacancies", {
   hhUrl: text("hh_url"),
   hhSyncedAt: timestamp("hh_synced_at"),
   aiProcessSettings: jsonb("ai_process_settings").default({}),
-  aiScoringEnabled: boolean("ai_scoring_enabled").notNull().default(true),
+  aiScoringEnabled: boolean("ai_scoring_enabled").notNull().default(false),
   // Авто-разбор hh-откликов: cron каждые 10 минут разбирает накопленные отклики
   // в рабочее время. Если выключено — клиент жмёт «Разобрать» вручную.
   autoProcessingEnabled:      boolean("auto_processing_enabled").notNull().default(false),

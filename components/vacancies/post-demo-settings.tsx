@@ -60,8 +60,9 @@ interface PostDemoSettingsProps {
 
 export function PostDemoSettings({ vacancyId, sections }: PostDemoSettingsProps) {
   const showSection = (id: PostDemoSection) => !sections || sections.includes(id)
-  const [enabled, setEnabled] = useState(true)
-  const [mode, setMode] = useState<PostDemoMode>("auto")
+  // ТЗ-1 Часть 5 (P0-17) + Часть 8 (P0-19b): новые вакансии стартуют с enabled=false, mode=manual.
+  const [enabled, setEnabled] = useState(false)
+  const [mode, setMode] = useState<PostDemoMode>("manual")
 
   // Thresholds
   const [upperThreshold, setUpperThreshold] = useState(75)
