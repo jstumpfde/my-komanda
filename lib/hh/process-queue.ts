@@ -449,7 +449,7 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
               if (lower > 0 && result.score < lower) {
                 belowThreshold = { score: result.score, threshold: lower, action: "reject" }
               } else if (upper > 0 && result.score < upper) {
-                const mid = aiSettings.midRangeAction ?? "prequalification"
+                const mid = aiSettings.midRangeAction ?? "direct_demo"
                 if (mid === "keep_new") {
                   belowThreshold = { score: result.score, threshold: upper, action: "keep_new" }
                 } else if (mid === "prequalification") {
