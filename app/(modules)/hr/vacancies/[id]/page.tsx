@@ -2895,6 +2895,7 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                     salaryTo={apiVacancy?.salaryMax}
                     aiProcessSettings={apiVacancy?.aiProcessSettings as { inviteMessage?: string; reInviteMessage?: string } | null | undefined}
                     sections={["firstMessage", "callIntent", "templates"] satisfies AutomationSectionId[]}
+                    tabKey="messages"
                   />
                 </div>
                 )}
@@ -2910,6 +2911,7 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                     salaryTo={apiVacancy?.salaryMax}
                     aiProcessSettings={apiVacancy?.aiProcessSettings as { inviteMessage?: string; reInviteMessage?: string } | null | undefined}
                     sections={["pipeline"] satisfies AutomationSectionId[]}
+                    tabKey="funnel"
                   />
                   <VacancyPrequalificationSettings
                     vacancyId={id}
@@ -2982,6 +2984,7 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                     salaryTo={apiVacancy?.salaryMax}
                     aiProcessSettings={apiVacancy?.aiProcessSettings as { inviteMessage?: string; reInviteMessage?: string } | null | undefined}
                     sections={["dialer"] satisfies AutomationSectionId[]}
+                    tabKey="integrations"
                   />
                 </div>
                 )}

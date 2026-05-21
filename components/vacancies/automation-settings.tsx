@@ -17,6 +17,7 @@ import {
   MessageSquare, Zap, Phone, Brain, Send, Check,
   ClipboardList, Loader2, Plus, X,
 } from "lucide-react"
+import { useVacancySectionRegister, type VacancyTabKey } from "./vacancy-settings-context"
 
 // ─── Типы ────────────────────────────────────────────────────
 
@@ -81,12 +82,24 @@ interface AutomationSettingsProps {
   aiProcessSettings?: { inviteMessage?: string; reInviteMessage?: string } | null
   /** Если задано — рендерятся только эти карточки. Иначе все. */
   sections?: AutomationSectionId[]
-  /** Показать глобальную кнопку «Сохранить настройки» внизу. По умолчанию true. */
+  /**
+   * Показать глобальную кнопку «Сохранить настройки» внизу.
+   * P0-50: при подключении к sticky-bar (tabKey задан) кнопка автоматически скрывается.
+   */
   showGlobalSave?: boolean
+  /**
+   * P0-50: какой таб настроек вакансии сейчас рендерит этот инстанс. Если
+   * задан — компонент регистрирует свои секции в VacancySettingsProvider,
+   * сохраняется через единую sticky-кнопку, локальные «Сохранить» скрываются.
+   * Если не задан — старое поведение (локальные кнопки).
+   */
+  tabKey?: VacancyTabKey
 }
 
-export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettings, sections, showGlobalSave = true }: AutomationSettingsProps) {
+export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettings, sections, showGlobalSave = true, tabKey }: AutomationSettingsProps) {
   const showSection = (id: AutomationSectionId): boolean => !sections || sections.includes(id)
+  // P0-50: при подключённом sticky-bar глобальную кнопку прячем.
+  const showLocalGlobalSave = showGlobalSave && !tabKey
 
   // Parse automation settings from descriptionJson
   const initialAutomation = (() => {
@@ -401,6 +414,65 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
     }
   }, [vacancyId, descriptionJson, firstMessageDelay, responseReaction, autoInvite, autoReject, notifyManager, faq, callIntentEnabled, callIntentMode, callIntentKeywords, insistMessages, anketaConfEnabled, anketaConfDelay, anketaConfText, dialerEnabled, dialerScriptId, dialerTrigger, completenessEnabled, completenessThreshold, completenessChannel, completenessDelay])
 
+  // ─── P0-50: регистрация секций в sticky-bar ───────────────────────
+  // Грузимся-готовы, когда descriptionJson распарсен (родитель передаёт
+  // его сразу при mount; undefined → ещё не подтянули).
+  const loadedReady = tabKey !== undefined && descriptionJson !== undefined
+  // tabKey ?? "messages" — useVacancySectionRegister всегда требует ключ;
+  // если tabKey не задан, loadedReady=false → секция фактически не
+  // регистрируется (loaded остаётся false).
+  const effectiveTab: VacancyTabKey = tabKey ?? "messages"
+
+  // 1. «Первое сообщение» — invite шаблон + задержка + anketaConfirmation.
+  //    invite шлётся в ai-settings, остальное — в descriptionJson через saveSettings.
+  useVacancySectionRegister({
+    sectionKey: `automation-${vacancyId}-${effectiveTab}-invite`,
+    tabKey: effectiveTab,
+    loaded: loadedReady && (sections?.includes("firstMessage") ?? true),
+    watchedValues: {
+      firstMessageText, firstMessageDelay,
+      anketaConfEnabled, anketaConfDelay, anketaConfText,
+    },
+    save: async () => {
+      // Сначала invite (PATCH ai-settings), затем общий saveSettings (PUT
+      // vacancy.descriptionJson). Если invite упал — saveSettings всё равно
+      // запустим, чтобы не потерять остальные изменения секции.
+      try { await saveInviteMessage() } catch { /* toast уже показан */ }
+      await saveSettings()
+    },
+  })
+
+  // 2. reInvite — текст для повторной отправки.
+  useVacancySectionRegister({
+    sectionKey: `automation-${vacancyId}-${effectiveTab}-reinvite`,
+    tabKey: effectiveTab,
+    loaded: loadedReady && (sections?.includes("firstMessage") ?? true),
+    watchedValues: { reInviteText },
+    save: saveReInviteMessage,
+  })
+
+  // 3. callIntent + templates (FAQ) — обе секции таба «Сообщения» через saveSettings.
+  useVacancySectionRegister({
+    sectionKey: `automation-${vacancyId}-${effectiveTab}-callintent`,
+    tabKey: effectiveTab,
+    loaded: loadedReady && (
+      (sections?.includes("callIntent") ?? true) || (sections?.includes("templates") ?? true)
+    ),
+    watchedValues: {
+      callIntentEnabled, callIntentMode, callIntentKeywords, insistMessages, faq,
+    },
+    save: saveSettings,
+  })
+
+  // 4. dialer (бот-звонарь) — таб «Интеграции».
+  useVacancySectionRegister({
+    sectionKey: `automation-${vacancyId}-${effectiveTab}-bot`,
+    tabKey: effectiveTab,
+    loaded: loadedReady && (sections?.includes("dialer") ?? true),
+    watchedValues: { dialerEnabled, dialerScriptId, dialerTrigger },
+    save: saveSettings,
+  })
+
   return (
     <div className="space-y-6">
       {/* ═══ 1. Первое сообщение ═══════════════════════════════ */}
@@ -455,15 +527,17 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
                   <Badge key={v} variant="outline" className="text-xs cursor-default">{v}</Badge>
                 ))}
               </div>
-              <Button
-                size="sm"
-                className="h-8 text-xs gap-1.5"
-                onClick={saveInviteMessage}
-                disabled={!inviteDirty || savingInvite}
-              >
-                {savingInvite ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                Сохранить
-              </Button>
+              {!tabKey && (
+                <Button
+                  size="sm"
+                  className="h-8 text-xs gap-1.5"
+                  onClick={saveInviteMessage}
+                  disabled={!inviteDirty || savingInvite}
+                >
+                  {savingInvite ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                  Сохранить
+                </Button>
+              )}
             </div>
           </div>
 
@@ -531,15 +605,17 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
                   <Badge key={v} variant="outline" className="text-xs cursor-default">{v}</Badge>
                 ))}
               </div>
-              <Button
-                size="sm"
-                className="h-8 text-xs gap-1.5"
-                onClick={saveReInviteMessage}
-                disabled={!reInviteDirty || savingReInvite}
-              >
-                {savingReInvite ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                Сохранить
-              </Button>
+              {!tabKey && (
+                <Button
+                  size="sm"
+                  className="h-8 text-xs gap-1.5"
+                  onClick={saveReInviteMessage}
+                  disabled={!reInviteDirty || savingReInvite}
+                >
+                  {savingReInvite ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                  Сохранить
+                </Button>
+              )}
             </div>
           </div>
         </CardContent>
@@ -893,7 +969,7 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
           components/vacancies/scenario-tab.tsx, lib/scenarios.ts). */}
 
       {/* Кнопка сохранения */}
-      {showGlobalSave && (
+      {showLocalGlobalSave && (
         <div className="flex justify-end mt-3">
           <Button size="sm" className="gap-1.5 h-8 text-xs" onClick={saveSettings} disabled={saving}>
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
