@@ -20,6 +20,30 @@ type BulkAction =
   | "talent_pool"
   | "set_stage"
   | "toggle_favorite"
+  | "restore"
+
+interface StageHistoryEntry {
+  from?: string | null
+  to?: string
+  at?: string
+  reason?: string
+  movedBy?: string
+  byUserId?: string
+  comment?: string
+}
+
+const RESTORE_FALLBACK_STAGE = "primary_contact"
+
+function computePrevStageForRestore(stageHistory: unknown): string {
+  const history = (Array.isArray(stageHistory) ? stageHistory : []) as StageHistoryEntry[]
+  for (let i = history.length - 1; i >= 0; i--) {
+    const entry = history[i]
+    if (entry?.to === "rejected" && typeof entry.from === "string" && entry.from.length > 0) {
+      return entry.from
+    }
+  }
+  return RESTORE_FALLBACK_STAGE
+}
 
 interface BulkBody {
   candidateIds?: unknown
@@ -59,7 +83,12 @@ export async function POST(req: NextRequest) {
 
     // Verify all candidates belong to user's company.
     const owned = await db
-      .select({ id: candidates.id, stage: candidates.stage, isFavorite: candidates.isFavorite })
+      .select({
+        id: candidates.id,
+        stage: candidates.stage,
+        isFavorite: candidates.isFavorite,
+        stageHistory: candidates.stageHistory,
+      })
       .from(candidates)
       .innerJoin(vacancies, eq(candidates.vacancyId, vacancies.id))
       .where(and(inArray(candidates.id, ids), eq(vacancies.companyId, user.companyId)))
@@ -149,6 +178,49 @@ export async function POST(req: NextRequest) {
         if (stage === "rejected") {
           void syncBulkRejectToHh(ownedIds)
         }
+        break
+      }
+
+      case "restore": {
+        // Возврат группы кандидатов из 'rejected'. Принимаем только тех,
+        // кто СЕЙЧАС в rejected. Для остальных — 400 (HR не должен случайно
+        // переместить активных кандидатов).
+        const notRejected = owned.filter((c) => c.stage !== "rejected")
+        if (notRejected.length > 0) {
+          return apiError(
+            `Restore is only valid for candidates in 'rejected' stage (${notRejected.length} candidate(s) are not)`,
+            400,
+          )
+        }
+        // Каждому кандидату своя prevStage из его stageHistory.
+        // Несколько UPDATE'ов внутри одной транзакции — bulk-restore это
+        // дешёвая операция, не нужна оптимизация в один SQL с CASE.
+        const result = await db.transaction(async (tx) => {
+          let cnt = 0
+          for (const c of owned) {
+            const prevStage = computePrevStageForRestore(c.stageHistory)
+            const history = (Array.isArray(c.stageHistory) ? c.stageHistory : []) as StageHistoryEntry[]
+            const restoreEntry: StageHistoryEntry = {
+              from:     "rejected",
+              to:       prevStage,
+              at:       now.toISOString(),
+              reason:   "manual_restore",
+              byUserId: user.id,
+            }
+            const upd = await tx
+              .update(candidates)
+              .set({
+                stage:        prevStage,
+                stageHistory: [...history, restoreEntry],
+                updatedAt:    now,
+              })
+              .where(eq(candidates.id, c.id))
+              .returning({ id: candidates.id })
+            cnt += upd.length
+          }
+          return cnt
+        })
+        affected = result
         break
       }
 
