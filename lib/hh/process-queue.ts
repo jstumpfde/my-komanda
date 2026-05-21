@@ -486,7 +486,7 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
           const nowIso = new Date().toISOString()
           const nowTs  = new Date()
 
-          if (belowThreshold.action === "reject") {
+          if (false /* P0-14 disabled: auto-rejection by AI score */) {
             await db.update(candidates)
               .set({
                 stage:                        "rejected",
