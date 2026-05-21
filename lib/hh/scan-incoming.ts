@@ -427,19 +427,19 @@ export async function scanIncomingMessages(opts: {
 
       // Шаг 1: regex stop_word → жёсткий отказ. Делаем до callIntent,
       // потому что отказ важнее («не хочу созваниваться» = отказ).
-      if (matchStopWord(text)) {
-        const sent = await applyRejection({
-          candidateId,
-          reason: "stop_word_regex",
-          hhResponseId: resp.hhResponseId,
-          accessToken,
-          sendFarewellFlag: true,
-        })
-        result.rejectedRegex++
-        rejected = true
-        console.info(`[scan-incoming] ${candidateId} regex_stop_word farewell=${sent} text="${preview}"`)
-        break
-      }
+// P0-14 disabled:       if (matchStopWord(text)) {
+// P0-14 disabled:         const sent = await applyRejection({
+// P0-14 disabled:           candidateId,
+// P0-14 disabled:           reason: "stop_word_regex",
+// P0-14 disabled:           hhResponseId: resp.hhResponseId,
+// P0-14 disabled:           accessToken,
+// P0-14 disabled:           sendFarewellFlag: true,
+// P0-14 disabled:         })
+// P0-14 disabled:         result.rejectedRegex++
+// P0-14 disabled:         rejected = true
+// P0-14 disabled:         console.info(`[scan-incoming] ${candidateId} regex_stop_word farewell=${sent} text="${preview}"`)
+// P0-14 disabled:         break
+// P0-14 disabled:       }
 
       // Шаг 1.4: Предквалификация (Сессия 9). Если у кандидата идёт опрос —
       // парсим ответ через AI Haiku и обновляем qualification_answers.
