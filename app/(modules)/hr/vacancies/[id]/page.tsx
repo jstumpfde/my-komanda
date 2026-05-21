@@ -15,7 +15,7 @@ import { KanbanBoard, type ViewMode } from "@/components/dashboard/kanban-board"
 import type { ListSortKey, ListSortState } from "@/components/dashboard/list-view"
 import { type CardDisplaySettings } from "@/components/dashboard/card-settings"
 import { ViewSettings } from "@/components/dashboard/view-settings"
-import { CandidateFilters, type FilterState } from "@/components/dashboard/candidate-filters"
+import { CandidateFilters, DEFAULT_FUNNEL_STATUSES, type FilterState } from "@/components/dashboard/candidate-filters"
 import { applyCandidateFilters } from "@/lib/candidate-filter"
 import { SortMenu } from "@/components/dashboard/sort-menu"
 import { Tooltip as UITooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip"
@@ -397,7 +397,7 @@ export default function VacancyPage() {
     router.replace(`${window.location.pathname}${qs ? "?" + qs : ""}`, { scroll: false })
   }, [router])
 
-  const [filters, setFilters] = useState<FilterState>({ searchText: "", cities: [], salaryMin: 0, salaryMax: 250000, scoreMin: 0, sources: [], workFormats: [], relocation: "any", businessTrips: "any", experienceMin: 0, experienceMax: 20, funnelStatuses: [], demoProgress: [], dateRange: "", dateFrom: "", dateTo: "", ageMin: 18, ageMax: 65, education: [], languages: [], otherLanguages: [], skills: [], industries: [] })
+  const [filters, setFilters] = useState<FilterState>({ searchText: "", cities: [], salaryMin: 0, salaryMax: 250000, scoreMin: 0, sources: [], workFormats: [], relocation: "any", businessTrips: "any", experienceMin: 0, experienceMax: 20, funnelStatuses: DEFAULT_FUNNEL_STATUSES.slice(), demoProgress: [], dateRange: "", dateFrom: "", dateTo: "", ageMin: 18, ageMax: 65, education: [], languages: [], otherLanguages: [], skills: [], industries: [] })
 
   // Маппинг русских лейблов фильтра прогресса демо → API-идентификаторы.
   // UI: candidate-filters.tsx:70 ["Не начал", "В процессе", "Завершил (≥85%)",

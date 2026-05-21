@@ -2,8 +2,47 @@ import { NextRequest } from "next/server"
 import { eq, and, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { demos, vacancies } from "@/lib/db/schema"
-import type { PostDemoSettings } from "@/lib/db/schema"
+import type { AnketaAutoReplySettings, PostDemoSettings } from "@/lib/db/schema"
+import { ANKETA_AUTO_REPLY_DELAYS } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
+
+const ANKETA_DELAY_SET = new Set<number>(ANKETA_AUTO_REPLY_DELAYS)
+
+function isHttpUrlOrEmpty(v: unknown): v is string {
+  if (typeof v !== "string") return false
+  if (v.length === 0) return true
+  try {
+    const u = new URL(v)
+    return u.protocol === "http:" || u.protocol === "https:"
+  } catch {
+    return false
+  }
+}
+
+function sanitizeAnketaAutoReply(
+  current: AnketaAutoReplySettings | undefined,
+  incoming: unknown,
+): AnketaAutoReplySettings | undefined {
+  if (!incoming || typeof incoming !== "object") return current
+  const src = incoming as Record<string, unknown>
+  const next: AnketaAutoReplySettings = { ...(current ?? {}) }
+
+  if (src.enabled !== undefined) next.enabled = Boolean(src.enabled)
+  if (src.delayMinutes !== undefined) {
+    const n = Number(src.delayMinutes)
+    if (Number.isFinite(n) && ANKETA_DELAY_SET.has(n)) {
+      next.delayMinutes = n as AnketaAutoReplySettings["delayMinutes"]
+    }
+  }
+  if (src.respectSchedule !== undefined) next.respectSchedule = Boolean(src.respectSchedule)
+  if (src.text !== undefined && typeof src.text === "string") {
+    next.text = src.text.slice(0, 2000)
+  }
+  if (src.testTaskUrl !== undefined && isHttpUrlOrEmpty(src.testTaskUrl)) {
+    next.testTaskUrl = (src.testTaskUrl as string).slice(0, 500)
+  }
+  return next
+}
 
 export { PUT as PATCH }
 
@@ -96,6 +135,14 @@ export async function PUT(
     if (body.manualButton !== undefined) settings.manualButton = trim(body.manualButton, 200)
     if (body.manualButtonEnabled !== undefined) settings.manualButtonEnabled = Boolean(body.manualButtonEnabled)
     if (body.greenButtonEnabled !== undefined) settings.greenButtonEnabled = Boolean(body.greenButtonEnabled)
+
+    if ((body as { anketaAutoReply?: unknown }).anketaAutoReply !== undefined) {
+      const sanitized = sanitizeAnketaAutoReply(
+        settings.anketaAutoReply,
+        (body as { anketaAutoReply?: unknown }).anketaAutoReply,
+      )
+      if (sanitized) settings.anketaAutoReply = sanitized
+    }
 
     if (body.formFields !== undefined && body.formFields && typeof body.formFields === "object") {
       const allowed = ["firstName", "lastName", "email", "phone", "telegram", "birthDate", "city"] as const

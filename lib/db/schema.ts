@@ -339,6 +339,16 @@ export interface VacancyAiProcessSettings {
   midRangeAction?:       "prequalification" | "direct_demo" | "keep_new"
   /** Конфиг блока «Предквалификация» из таба «Демо и воронка». */
   prequalification?:     VacancyPrequalificationConfig
+  /**
+   * ТЗ-3 Ч.2: глобальный режим воронки. Приоритет над midRangeAction.
+   *   - "direct_demo"       — кандидаты сразу получают demo-ссылку (дефолт).
+   *   - "prequal_then_demo" — сначала AI-вопросы предквалификации, при
+   *                          passed/no_answer → demo, при failed → reject.
+   *   - "prequal_only"      — только предквалификация без demo; после
+   *                          ответов кандидат → anketa_filled (для HR).
+   * По умолчанию "direct_demo" — для существующих вакансий ничего не меняется.
+   */
+  prequalificationMode?: "direct_demo" | "prequal_then_demo" | "prequal_only"
 
   // ── Legacy (Сессии 1-5), оставлены для совместимости ────────────────
   /** @deprecated → переименовано в minScoreLower; пишем оба для backward compat. */
@@ -396,7 +406,23 @@ export interface PostDemoSettings {
     birthDate?: { enabled: boolean; required: boolean }
     city?: { enabled: boolean; required: boolean }
   }
+  // ТЗ-3 Ч.1: автоответ после заполнения финальной анкеты с предложением
+  // тестового задания. Отдельный одиночный touch (branch=anketa_auto_reply),
+  // не цепочка дожима. Не путать с anketaConfirmation (короткое «спасибо»).
+  anketaAutoReply?: AnketaAutoReplySettings
 }
+
+export interface AnketaAutoReplySettings {
+  enabled?:         boolean   // тумблер ВКЛ/ВЫКЛ, default false
+  delayMinutes?:    5 | 15 | 30 | 60 | 240 | 1440   // default 60
+  respectSchedule?: boolean   // учитывать рабочее окно вакансии, default true
+  text?:            string    // текст сообщения с плейсхолдерами
+  testTaskUrl?:     string    // опциональная ссылка, дописывается в конец текста
+}
+
+export const ANKETA_AUTO_REPLY_DELAYS = [5, 15, 30, 60, 240, 1440] as const
+export const DEFAULT_ANKETA_AUTO_REPLY_TEXT =
+  "{{name}}, рассмотрели вашу анкету. Ваша кандидатура нам интересна. Предлагаем тестовое задание."
 
 export type FormFieldKey = "firstName" | "lastName" | "email" | "phone" | "telegram" | "birthDate" | "city"
 

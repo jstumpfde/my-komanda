@@ -59,6 +59,13 @@ export async function PUT(
         ? (body.midRangeAction as VacancyAiProcessSettings["midRangeAction"])
         : "prequalification"
     }
+    if (body.prequalificationMode !== undefined) {
+      const allowed: VacancyAiProcessSettings["prequalificationMode"][] =
+        ["direct_demo", "prequal_then_demo", "prequal_only"]
+      settings.prequalificationMode = allowed.includes(body.prequalificationMode as never)
+        ? (body.prequalificationMode as VacancyAiProcessSettings["prequalificationMode"])
+        : "direct_demo"
+    }
     if (body.prequalification !== undefined && body.prequalification !== null && typeof body.prequalification === "object") {
       const pq = body.prequalification
       settings.prequalification = {

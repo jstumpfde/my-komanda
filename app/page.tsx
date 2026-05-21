@@ -6,7 +6,7 @@ import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { KanbanBoard, type ViewMode } from "@/components/dashboard/kanban-board"
 import { CardSettings, type CardDisplaySettings } from "@/components/dashboard/card-settings"
-import { CandidateFilters, type FilterState } from "@/components/dashboard/candidate-filters"
+import { CandidateFilters, DEFAULT_FUNNEL_STATUSES, type FilterState } from "@/components/dashboard/candidate-filters"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Button } from "@/components/ui/button"
 import { Plus, Filter } from "lucide-react"
@@ -89,7 +89,7 @@ function AuthenticatedDashboard() {
     businessTrips: "any",
     experienceMin: 0,
     experienceMax: 20,
-    funnelStatuses: [],
+    funnelStatuses: DEFAULT_FUNNEL_STATUSES.slice(),
     demoProgress: [],
     dateRange: "",
     dateFrom: "",

@@ -500,7 +500,12 @@ export async function scanIncomingMessages(opts: {
         continue
       }
 
-      if (cls.intent === "rejection") {
+      // ТЗ-3 Ч.3: автоотказ применяется ТОЛЬКО при высокой уверенности AI
+      // (≥0.9). Иначе кандидат остаётся в текущей стадии — HR разберёт сам.
+      // Защищает от ложных срабатываний классификатора (51%-уверенный отказ).
+      const REJECTION_CONFIDENCE_THRESHOLD = 0.9
+
+      if (cls.intent === "rejection" && cls.confidence >= REJECTION_CONFIDENCE_THRESHOLD) {
         const sent = await applyRejection({
           candidateId,
           reason: "ai_rejection",
@@ -510,7 +515,10 @@ export async function scanIncomingMessages(opts: {
         })
         result.rejectedAi++
         rejected = true
-        console.info(`[scan-incoming] ${candidateId} ai_rejection conf=${cls.confidence} farewell=${sent} text="${preview}"`)
+        console.info(`[scan-incoming] ${candidateId} ai_rejection_applied conf=${cls.confidence} farewell=${sent} text="${preview}"`)
+      } else if (cls.intent === "rejection") {
+        // confidence < 0.9 — НЕ отказываем, только лог для HR.
+        console.info(`[scan-incoming] ${candidateId} ai_rejection_low_conf_SKIPPED conf=${cls.confidence} text="${preview}"`)
       } else if (cls.intent === "wants_personal_contact") {
         await applyWantsContact(candidateId)
         result.wantsContact++

@@ -15,6 +15,7 @@ import { renderTemplate } from "@/lib/template-renderer"
 import {
   CheckCircle2, Calendar, Phone, Video, Building2,
   Sparkles, Clock, Play, XCircle, ChevronDown, ClipboardList,
+  Send,
 } from "lucide-react"
 import { useVacancySectionRegister } from "./vacancy-settings-context"
 
@@ -45,7 +46,19 @@ const FIELD_LABELS: Record<FormFieldKey, string> = {
 
 const FIELD_ORDER: FormFieldKey[] = ["firstName", "lastName", "email", "phone", "telegram", "birthDate", "city"]
 
-export type PostDemoSection = "thresholds" | "formFields" | "preview"
+export type PostDemoSection = "thresholds" | "formFields" | "preview" | "anketaAutoReply"
+
+type AnketaAutoReplyDelay = 5 | 15 | 30 | 60 | 240 | 1440
+const ANKETA_DELAYS: { value: AnketaAutoReplyDelay; label: string }[] = [
+  { value: 5,    label: "5 минут" },
+  { value: 15,   label: "15 минут" },
+  { value: 30,   label: "30 минут" },
+  { value: 60,   label: "1 час" },
+  { value: 240,  label: "4 часа" },
+  { value: 1440, label: "24 часа" },
+]
+const DEFAULT_ANKETA_AUTO_REPLY_TEXT =
+  "{{name}}, рассмотрели вашу анкету. Ваша кандидатура нам интересна. Предлагаем тестовое задание."
 
 interface PostDemoSettingsProps {
   vacancyId: string
@@ -95,6 +108,13 @@ export function PostDemoSettings({ vacancyId, sections }: PostDemoSettingsProps)
   // Final form fields
   const [formFields, setFormFields] = useState<FormFieldsState>(DEFAULT_FORM_FIELDS)
 
+  // ТЗ-3 Ч.1: автоответ после заполнения анкеты
+  const [autoReplyEnabled, setAutoReplyEnabled] = useState(false)
+  const [autoReplyDelay, setAutoReplyDelay] = useState<AnketaAutoReplyDelay>(60)
+  const [autoReplyRespectSchedule, setAutoReplyRespectSchedule] = useState(true)
+  const [autoReplyText, setAutoReplyText] = useState(DEFAULT_ANKETA_AUTO_REPLY_TEXT)
+  const [autoReplyTestTaskUrl, setAutoReplyTestTaskUrl] = useState("")
+
   // Preview
   const [previewScore, setPreviewScore] = useState(80)
   const previewLevel = previewScore >= upperThreshold ? "green" : previewScore >= lowerThreshold ? "yellow" : "red"
@@ -131,6 +151,16 @@ export function PostDemoSettings({ vacancyId, sections }: PostDemoSettingsProps)
         if (typeof data.manualText === "string") setManualText(data.manualText)
         if (typeof data.manualButton === "string") setManualButton(data.manualButton)
         if (typeof data.manualButtonEnabled === "boolean") setManualButtonEnabled(data.manualButtonEnabled)
+        if (data.anketaAutoReply && typeof data.anketaAutoReply === "object") {
+          const ar = data.anketaAutoReply as Record<string, unknown>
+          if (typeof ar.enabled === "boolean") setAutoReplyEnabled(ar.enabled)
+          if (typeof ar.delayMinutes === "number" && ANKETA_DELAYS.some(d => d.value === ar.delayMinutes)) {
+            setAutoReplyDelay(ar.delayMinutes as AnketaAutoReplyDelay)
+          }
+          if (typeof ar.respectSchedule === "boolean") setAutoReplyRespectSchedule(ar.respectSchedule)
+          if (typeof ar.text === "string") setAutoReplyText(ar.text)
+          if (typeof ar.testTaskUrl === "string") setAutoReplyTestTaskUrl(ar.testTaskUrl)
+        }
         if (data.formFields && typeof data.formFields === "object") {
           const merged: FormFieldsState = { ...DEFAULT_FORM_FIELDS }
           for (const key of FIELD_ORDER) {
@@ -184,6 +214,13 @@ export function PostDemoSettings({ vacancyId, sections }: PostDemoSettingsProps)
         manualButton,
         manualButtonEnabled,
         formFields,
+        anketaAutoReply: {
+          enabled:         autoReplyEnabled,
+          delayMinutes:    autoReplyDelay,
+          respectSchedule: autoReplyRespectSchedule,
+          text:            autoReplyText,
+          testTaskUrl:     autoReplyTestTaskUrl,
+        },
       }
       const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}/post-demo-settings`, {
         method: "PUT",
@@ -500,6 +537,95 @@ export function PostDemoSettings({ vacancyId, sections }: PostDemoSettingsProps)
             })}
           </div>
           {/* ТЗ-1 Часть 2: локальная «Сохранить» убрана — глобальная sticky-кнопка. */}
+        </CardContent>
+      </Card>
+      )}
+
+      {showSection("anketaAutoReply") && (
+      /* ТЗ-3 Ч.1: автоответ после заполнения финальной анкеты */
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Send className="w-4 h-4" />
+                Автоответ после заполнения анкеты
+              </CardTitle>
+              <p className="text-xs text-muted-foreground mt-1">
+                Когда кандидат сдаёт финальную анкету, бот сам отправит ему сообщение
+                в hh-чат — например, с тестовым заданием. HR не разбирает руками.
+              </p>
+            </div>
+            <Switch checked={autoReplyEnabled} onCheckedChange={setAutoReplyEnabled} />
+          </div>
+        </CardHeader>
+        <CardContent className={cn("space-y-4", !autoReplyEnabled && "opacity-60 pointer-events-none")}>
+          <div className="space-y-2">
+            <Label className="text-xs">Задержка перед отправкой</Label>
+            <div className="flex flex-wrap gap-1.5">
+              {ANKETA_DELAYS.map(d => (
+                <button
+                  key={d.value}
+                  type="button"
+                  onClick={() => setAutoReplyDelay(d.value)}
+                  className={cn(
+                    "h-7 px-2.5 rounded-md border text-xs transition-colors",
+                    autoReplyDelay === d.value
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border hover:border-primary/30"
+                  )}
+                >
+                  {d.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between gap-3 rounded-lg border bg-muted/30 p-3">
+            <div>
+              <Label className="text-xs">Учитывать рабочее время вакансии</Label>
+              <p className="text-[10px] text-muted-foreground">
+                Если кандидат заполнил анкету ночью — отправим утром по расписанию из таба «Расписание».
+              </p>
+            </div>
+            <Switch checked={autoReplyRespectSchedule} onCheckedChange={setAutoReplyRespectSchedule} />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs">Текст сообщения</Label>
+            <textarea
+              className="w-full border rounded-lg p-2 text-sm resize-none h-20 bg-background focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+              value={autoReplyText}
+              onChange={e => setAutoReplyText(e.target.value.slice(0, 2000))}
+            />
+            <p className="text-[10px] text-muted-foreground">
+              Доступные плейсхолдеры:{" "}
+              <code className="text-[10px] bg-muted px-1 py-0.5 rounded">{"{{name}}"}</code>,{" "}
+              <code className="text-[10px] bg-muted px-1 py-0.5 rounded">{"{{vacancy}}"}</code>,{" "}
+              <code className="text-[10px] bg-muted px-1 py-0.5 rounded">{"{{company}}"}</code>,{" "}
+              <code className="text-[10px] bg-muted px-1 py-0.5 rounded">{"{{demo_link}}"}</code>
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs">Ссылка на тестовое задание (опционально)</Label>
+            <Input
+              type="url"
+              value={autoReplyTestTaskUrl}
+              onChange={e => setAutoReplyTestTaskUrl(e.target.value)}
+              placeholder="https://docs.google.com/..."
+              className="h-8 text-sm"
+            />
+            <p className="text-[10px] text-muted-foreground">
+              Если указана — будет дописана в конец сообщения отдельной строкой.
+            </p>
+          </div>
+
+          <div className="flex justify-end pt-1">
+            <Button size="sm" className="gap-1.5 h-8 text-xs" onClick={handleSave} disabled={saving}>
+              <Save className="w-4 h-4" /> {saving ? "Сохранение…" : "Сохранить настройки"}
+            </Button>
+          </div>
         </CardContent>
       </Card>
       )}

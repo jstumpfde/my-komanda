@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
@@ -11,6 +10,29 @@ import { Loader2, Save, ClipboardList, Plus, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import type { VacancyAiProcessSettings, VacancyPrequalificationQuestion } from "@/lib/db/schema"
+
+type PrequalificationMode = "direct_demo" | "prequal_then_demo" | "prequal_only"
+
+const MODE_OPTIONS: { value: PrequalificationMode; label: string; desc: string; recommended?: boolean }[] = [
+  {
+    value: "direct_demo",
+    label: "Сразу демо (без предквалификации)",
+    desc:  "Кандидат после AI-скоринга резюме получает demo-ссылку. Текущее поведение.",
+    recommended: true,
+  },
+  {
+    value: "prequal_then_demo",
+    label: "Сначала предквалификация → потом демо",
+    desc:  "AI задаёт уточняющие вопросы. Если прошёл — отправляем demo, иначе — HR разбирает.",
+    recommended: false,
+  },
+  {
+    value: "prequal_only",
+    label: "Только предквалификация (без демо)",
+    desc:  "Demo не отправляется. После ответов кандидат сразу в стадию «Анкета» — HR продолжает руками.",
+    recommended: false,
+  },
+]
 
 interface Props {
   vacancyId: string
@@ -29,7 +51,11 @@ function emptyQuestion(): VacancyPrequalificationQuestion {
 export function VacancyPrequalificationSettings({ vacancyId, initial, onSaved }: Props) {
   const cfg = initial?.prequalification
 
-  const [enabled, setEnabled] = useState<boolean>(cfg?.enabled ?? false)
+  // ТЗ-3 Ч.2: режим вместо тумблера. Старое значение enabled маппим на режим
+  // только для отображения — глобальное правило живёт в prequalificationMode.
+  const [mode, setMode] = useState<PrequalificationMode>(
+    initial?.prequalificationMode ?? "direct_demo"
+  )
   const [questions, setQuestions] = useState<VacancyPrequalificationQuestion[]>(
     () => (cfg?.questions ?? []).slice(0, MAX_QUESTIONS),
   )
@@ -39,9 +65,9 @@ export function VacancyPrequalificationSettings({ vacancyId, initial, onSaved }:
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
+    if (initial?.prequalificationMode) setMode(initial.prequalificationMode)
     const next = initial?.prequalification
     if (!next) return
-    if (typeof next.enabled === "boolean") setEnabled(next.enabled)
     if (Array.isArray(next.questions)) setQuestions(next.questions.slice(0, MAX_QUESTIONS))
     if (typeof next.reminderD1 === "string" && next.reminderD1.length > 0) setReminderD1(next.reminderD1)
     if (typeof next.reminderD3 === "string" && next.reminderD3.length > 0) setReminderD3(next.reminderD3)
@@ -66,8 +92,11 @@ export function VacancyPrequalificationSettings({ vacancyId, initial, onSaved }:
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          prequalificationMode: mode,
+          // Поддерживаем legacy enabled для совместимости с process-queue,
+          // который читает prequalification.enabled при midRangeAction.
           prequalification: {
-            enabled,
+            enabled: mode !== "direct_demo",
             questions,
             reminderD1,
             reminderD3,
@@ -86,25 +115,62 @@ export function VacancyPrequalificationSettings({ vacancyId, initial, onSaved }:
     }
   }
 
-  const disabled = !enabled
+  const disabled = mode === "direct_demo"
 
   return (
     <Card>
       <CardHeader className="pb-3">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <CardTitle className="text-base flex items-center gap-2">
-              <ClipboardList className="w-4 h-4" />
-              Предквалификация — уточняющие вопросы перед демо
-            </CardTitle>
-            <p className="text-xs text-muted-foreground mt-1">
-              AI задаёт до 3 уточняющих вопросов кандидатам со средним скорингом резюме (между нижним и верхним порогами). Ответы сохраняются в карточке. Кандидаты с сильным резюме попадают на демо сразу.
-            </p>
-          </div>
-          <Switch checked={enabled} onCheckedChange={setEnabled} />
-        </div>
+        <CardTitle className="text-base flex items-center gap-2">
+          <ClipboardList className="w-4 h-4" />
+          Предквалификация — уточняющие вопросы перед демо
+        </CardTitle>
+        <p className="text-xs text-muted-foreground mt-1">
+          AI задаёт до 3 уточняющих вопросов перед отправкой demo. Если режим
+          «Только предквалификация» — кандидат после ответов попадает к HR в
+          стадию «Анкета», без demo-ссылки.
+        </p>
       </CardHeader>
-      <CardContent className={cn("space-y-5", disabled && "opacity-60")}>
+      <CardContent className="space-y-5">
+        {/* Режим */}
+        <div className="space-y-2">
+          <Label className="text-sm font-medium">Режим предквалификации</Label>
+          <div className="space-y-2">
+            {MODE_OPTIONS.map(opt => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setMode(opt.value)}
+                className={cn(
+                  "w-full flex items-start gap-3 p-3 rounded-lg border text-left transition-all",
+                  mode === opt.value
+                    ? "border-primary bg-primary/5 ring-2 ring-primary/20"
+                    : "border-border hover:border-primary/30"
+                )}
+              >
+                <div className={cn(
+                  "w-4 h-4 rounded-full border-2 mt-0.5 shrink-0 flex items-center justify-center",
+                  mode === opt.value ? "border-primary" : "border-muted-foreground/40"
+                )}>
+                  {mode === opt.value && <div className="w-2 h-2 rounded-full bg-primary" />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-foreground flex items-center gap-2">
+                    {opt.label}
+                    {opt.recommended && (
+                      <Badge variant="outline" className="text-[10px] h-4 px-1.5 border-emerald-300 text-emerald-700">
+                        рекомендуется
+                      </Badge>
+                    )}
+                  </p>
+                  <p className="text-xs text-muted-foreground">{opt.desc}</p>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {!disabled && (
+        <div className={cn("space-y-5 border-t pt-4")}>
         {/* Конструктор вопросов */}
         <div className="space-y-3">
           <div className="flex items-center justify-between">
@@ -242,6 +308,8 @@ export function VacancyPrequalificationSettings({ vacancyId, initial, onSaved }:
             <code className="text-[10px] bg-muted px-1 py-0.5 rounded">{"{{vacancy}}"}</code>.
           </p>
         </div>
+        </div>
+        )}
 
         <div className="flex justify-end pt-1">
           <Button onClick={handleSave} disabled={saving} size="sm" className="gap-1.5">
