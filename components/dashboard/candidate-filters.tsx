@@ -18,8 +18,8 @@ import { cn } from "@/lib/utils"
 import type { Candidate } from "./candidate-card"
 import {
   PLATFORM_STAGES,
-  getEnabledStages,
-  getStageLabel,
+  ALL_STAGE_SLUGS,
+  type StageSlug,
   type VacancyPipelineV2,
 } from "@/lib/stages"
 
@@ -49,22 +49,15 @@ export interface FilterState {
   industries: string[]
 }
 
-const DEFAULT_FILTERS: FilterState = {
-  searchText: "", cities: [], salaryMin: 0, salaryMax: 250000, scoreMin: 0, sources: [], workFormats: [],
-  relocation: "any", businessTrips: "any", experienceMin: 0, experienceMax: 20, funnelStatuses: [], demoProgress: [],
-  dateRange: "", dateFrom: "", dateTo: "", ageMin: 18, ageMax: 65, education: [], languages: [], otherLanguages: [],
-  skills: [], industries: [],
-}
-
 interface CandidateFiltersProps {
   filters: FilterState
   onFiltersChange: (filters: FilterState) => void
   candidates?: Candidate[]
   /**
-   * Ф6: pipeline текущей вакансии. Если передан — чек-лист «Статус в воронке»
-   * рендерится из включённых стадий pipeline (с кастомными лейблами).
-   * Если null/undefined — fallback на захардкоженный FUNNEL_STATUSES для
-   * страниц, где нет привязки к одной вакансии.
+   * Ф6: pipeline текущей вакансии. ТЗ-3 Ч.4: больше НЕ влияет на выбор
+   * стадий — фильтр всегда показывает все 14 системных стадий из
+   * PLATFORM_STAGES. Проп оставлен для совместимости (custom-лейблы могут
+   * пригодиться позже).
    */
   vacancyPipeline?: VacancyPipelineV2 | null
 }
@@ -75,10 +68,25 @@ const WORK_FORMATS = [
   { id: "remote", label: "Удалёнка" },
 ]
 
-const FUNNEL_STATUSES = [
-  "Всего откликов", "Демо пройдено", "Интервью назначено",
-  "Интервью пройдено", "Оффер", "Нанят", "Отказ",
+// ТЗ-3 Ч.4: дефолтные «активные» стадии при первом открытии фильтра.
+// Терминальные (rejected) выключены — HR не видит отказы, пока сам не отметит.
+export const DEFAULT_FUNNEL_STATUSES: StageSlug[] = [
+  "new", "primary_contact", "demo_opened", "anketa_filled",
+  "ai_screening", "test_task_sent", "test_task_done",
+  "scheduled", "interview", "reference_check", "decision",
+  "offer_sent", "hired",
 ]
+
+// ТЗ-3 Ч.4: дефолт включает все «активные» стадии, кроме rejected/терминальных,
+// чтобы HR не видел отказы в списке пока сам не отметит чекбокс.
+const DEFAULT_FILTERS: FilterState = {
+  searchText: "", cities: [], salaryMin: 0, salaryMax: 250000, scoreMin: 0, sources: [], workFormats: [],
+  relocation: "any", businessTrips: "any", experienceMin: 0, experienceMax: 20,
+  funnelStatuses: DEFAULT_FUNNEL_STATUSES.slice(),
+  demoProgress: [],
+  dateRange: "", dateFrom: "", dateTo: "", ageMin: 18, ageMax: 65, education: [], languages: [], otherLanguages: [],
+  skills: [], industries: [],
+}
 
 const DEMO_PROGRESS = [
   "Не начал", "В процессе", "Завершил (≥85%)", "Завершил (<85%)",
@@ -429,41 +437,31 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [], va
 
           <Separator />
 
-          {/* 4. Funnel Status — динамический если есть pipeline, иначе legacy */}
+          {/* 4. Funnel Status — ТЗ-3 Ч.4: всегда из PLATFORM_STAGES (slug'и). */}
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-muted-foreground">Статус в воронке</label>
             <div className="space-y-1">
-              {vacancyPipeline ? (
-                getEnabledStages(vacancyPipeline).map((slug) => {
-                  const label = getStageLabel(slug, vacancyPipeline)
-                  return (
-                    <div key={slug} className="flex items-center gap-2">
-                      <Checkbox
-                        id={`funnel-${slug}`}
-                        checked={filters.funnelStatuses.includes(slug)}
-                        onCheckedChange={() => onFiltersChange({ ...filters, funnelStatuses: toggleArray(filters.funnelStatuses, slug) })}
-                      />
-                      <label htmlFor={`funnel-${slug}`} className="text-sm cursor-pointer flex items-center gap-2">
-                        <span>{label}</span>
-                        {PLATFORM_STAGES[slug].isTerminal && (
-                          <span className="text-[10px] text-muted-foreground">терминальная</span>
-                        )}
-                      </label>
-                    </div>
-                  )
-                })
-              ) : (
-                FUNNEL_STATUSES.map((s) => (
-                  <div key={s} className="flex items-center gap-2">
+              {ALL_STAGE_SLUGS.map((slug) => {
+                const stage = PLATFORM_STAGES[slug]
+                return (
+                  <div key={slug} className="flex items-center gap-2">
                     <Checkbox
-                      id={`funnel-${s}`}
-                      checked={filters.funnelStatuses.includes(s)}
-                      onCheckedChange={() => onFiltersChange({ ...filters, funnelStatuses: toggleArray(filters.funnelStatuses, s) })}
+                      id={`funnel-${slug}`}
+                      checked={filters.funnelStatuses.includes(slug)}
+                      onCheckedChange={() => onFiltersChange({
+                        ...filters,
+                        funnelStatuses: toggleArray(filters.funnelStatuses, slug),
+                      })}
                     />
-                    <label htmlFor={`funnel-${s}`} className="text-sm cursor-pointer">{s}</label>
+                    <label htmlFor={`funnel-${slug}`} className="text-sm cursor-pointer flex items-center gap-2">
+                      <span>{stage.defaultLabel}</span>
+                      {stage.isTerminal && (
+                        <span className="text-[10px] text-muted-foreground">терминальная</span>
+                      )}
+                    </label>
                   </div>
-                ))
-              )}
+                )
+              })}
             </div>
           </div>
 
