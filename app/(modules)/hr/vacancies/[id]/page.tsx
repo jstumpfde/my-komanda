@@ -58,6 +58,7 @@ import { PostDemoSettings } from "@/components/vacancies/post-demo-settings"
 import { VacancyAiProcessSettings } from "@/components/vacancies/vacancy-ai-process-settings"
 import { VacancyFollowupSettings } from "@/components/vacancies/vacancy-followup-settings"
 import { VacancyPrequalificationSettings } from "@/components/vacancies/vacancy-prequalification-settings"
+import { VacancySettingsProvider, VacancyTabPendingDot, VacancyStickySaveBar, type VacancyTabKey } from "@/components/vacancies/vacancy-settings-context"
 import { BestPublicationTimeBlock } from "./components/BestPublicationTimeBlock"
 import {
   ResponsiveContainer,
@@ -2480,6 +2481,7 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
               </TabsContent>
 
               <TabsContent value="settings">
+                <VacancySettingsProvider>
                 {/* Сабнав: 6 табов настроек вакансии */}
                 <div className="flex items-center gap-1 mb-4 border-b overflow-x-auto">
                   {([
@@ -2490,13 +2492,14 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                     { value: "followup"    as const, label: "Дожим",               icon: MessageSquareText },
                     { value: "ai"          as const, label: "Расписание",          icon: Zap },
                     { value: "integrations" as const, label: "Интеграции",          icon: Settings },
-                  ]).map((s) => {
+                  ] satisfies { value: VacancyTabKey; label: string; icon: typeof Globe }[]).map((s) => {
                     const Icon = s.icon
                     const active = settingsSection === s.value
                     return (
                       <button
                         key={s.value}
                         type="button"
+                        title="У вас есть несохранённые изменения в этом разделе"
                         onClick={() => {
                           setSettingsSection(s.value)
                           const sp = new URLSearchParams(window.location.search)
@@ -2513,6 +2516,7 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                       >
                         <Icon className="w-3.5 h-3.5" />
                         {s.label}
+                        <VacancyTabPendingDot tab={s.value} />
                       </button>
                     )
                   })}
@@ -2978,6 +2982,10 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                   />
                 </div>
                 )}
+
+                {/* Единая sticky-кнопка сохранения + beforeunload-защита */}
+                <VacancyStickySaveBar />
+                </VacancySettingsProvider>
               </TabsContent>
             </Tabs>
 

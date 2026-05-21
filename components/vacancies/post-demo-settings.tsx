@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
@@ -14,9 +13,10 @@ import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { renderTemplate } from "@/lib/template-renderer"
 import {
-  CheckCircle2, Calendar, Phone, Video, Building2, Save,
+  CheckCircle2, Calendar, Phone, Video, Building2,
   Sparkles, Clock, Play, XCircle, ChevronDown, ClipboardList,
 } from "lucide-react"
+import { useVacancySectionRegister } from "./vacancy-settings-context"
 
 type PostDemoMode = "auto" | "manual"
 
@@ -101,6 +101,7 @@ export function PostDemoSettings({ vacancyId, sections }: PostDemoSettingsProps)
 
   // Saving state
   const [saving, setSaving] = useState(false)
+  const [loaded, setLoaded] = useState(false)
 
   // Load saved settings on mount
   useEffect(() => {
@@ -109,7 +110,8 @@ export function PostDemoSettings({ vacancyId, sections }: PostDemoSettingsProps)
     fetch(`/api/modules/hr/vacancies/${vacancyId}/post-demo-settings`)
       .then(r => r.ok ? r.json() : null)
       .then(json => {
-        if (cancelled || !json) return
+        if (cancelled) return
+        if (!json) { setLoaded(true); return }
         const data = json.settings ?? {}
         if (!data || typeof data !== "object") return
         if (typeof data.enabled === "boolean") setEnabled(data.enabled)
@@ -145,6 +147,7 @@ export function PostDemoSettings({ vacancyId, sections }: PostDemoSettingsProps)
         }
       })
       .catch(err => console.error("[post-demo load]", err))
+      .finally(() => { if (!cancelled) setLoaded(true) })
     return () => { cancelled = true }
   }, [vacancyId])
 
@@ -196,6 +199,23 @@ export function PostDemoSettings({ vacancyId, sections }: PostDemoSettingsProps)
       setSaving(false)
     }
   }
+
+  // ТЗ-1 Часть 2: регистрируем сохранение в общем контексте sticky-кнопки.
+  // Все секции (thresholds + formFields + preview) шлются одним PUT'ом → одна регистрация.
+  useVacancySectionRegister({
+    sectionKey: `post-demo:${vacancyId}`,
+    tabKey: "funnel",
+    loaded,
+    watchedValues: {
+      enabled, mode, upperThreshold, lowerThreshold,
+      greenTitle, meetPhone, meetOnline, meetOffice, officeAddress,
+      yellowTitle, yellowText, redTitle, redText,
+      manualTitle, manualText, manualButton, manualButtonEnabled,
+      formFields,
+    },
+    save: handleSave,
+  })
+  void saving // saving остаётся для возможной локальной индикации; основная — в sticky bar.
 
   return (
     <div className="space-y-6">
@@ -427,11 +447,7 @@ export function PostDemoSettings({ vacancyId, sections }: PostDemoSettingsProps)
             </div>
           )}
 
-          <div className="flex justify-end mt-4">
-            <Button size="sm" className="gap-1.5 h-8 text-xs" onClick={handleSave} disabled={saving}>
-              <Save className="w-4 h-4" /> {saving ? "Сохранение…" : "Сохранить настройки"}
-            </Button>
-          </div>
+          {/* ТЗ-1 Часть 2: локальная «Сохранить» убрана — есть глобальная sticky-кнопка снизу-справа. */}
         </CardContent>
       </Card>
       )}
@@ -483,11 +499,7 @@ export function PostDemoSettings({ vacancyId, sections }: PostDemoSettingsProps)
               )
             })}
           </div>
-          <div className="flex justify-end mt-4">
-            <Button size="sm" className="gap-1.5 h-8 text-xs" onClick={handleSave} disabled={saving}>
-              <Save className="w-4 h-4" /> {saving ? "Сохранение…" : "Сохранить настройки"}
-            </Button>
-          </div>
+          {/* ТЗ-1 Часть 2: локальная «Сохранить» убрана — глобальная sticky-кнопка. */}
         </CardContent>
       </Card>
       )}
