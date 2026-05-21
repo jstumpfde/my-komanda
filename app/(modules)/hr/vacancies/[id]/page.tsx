@@ -2766,19 +2766,6 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                         </div>
                       </CardContent>
                     </Card>
-
-                  {/* Поля мини-формы */}
-                  <MiniFormBuilder vacancyId={id} descriptionJson={apiVacancy?.descriptionJson} />
-
-                  {/* HTML-страница */}
-                  <PublishTab
-                    vacancyTitle={internalName || vacancyTitle}
-                    vacancySlug={id}
-                    vacancyCity={apiVacancy?.city ?? "Москва"}
-                    salaryFrom={apiVacancy?.salaryMin}
-                    salaryTo={apiVacancy?.salaryMax}
-                    brandOverride={{ companyName: brandCompanyName, color: brandColor, logo: brandLogo, slogan: brandSlogan }}
-                  />
                 </div>
                 )}
 
@@ -2881,6 +2868,19 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
 
                   {/* Источники и UTM-ссылки */}
                   <UtmLinksSection vacancyId={id} vacancySlug={id} />
+
+                  {/* Поля мини-формы (перенесено из «Брендинг» по P0-38) */}
+                  <MiniFormBuilder vacancyId={id} descriptionJson={apiVacancy?.descriptionJson} />
+
+                  {/* HTML-страница (перенесено из «Брендинг» по P0-38) */}
+                  <PublishTab
+                    vacancyTitle={internalName || vacancyTitle}
+                    vacancySlug={id}
+                    vacancyCity={apiVacancy?.city ?? "Москва"}
+                    salaryFrom={apiVacancy?.salaryMin}
+                    salaryTo={apiVacancy?.salaryMax}
+                    brandOverride={{ companyName: brandCompanyName, color: brandColor, logo: brandLogo, slogan: brandSlogan }}
+                  />
                 </div>
                 )}
 
