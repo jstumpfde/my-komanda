@@ -784,17 +784,28 @@ export default function VacancyPage() {
   // Сводные счётчики для шапки. Отдельный endpoint, не зависящий от фильтров,
   // чтобы «всего кандидатов» всегда показывало COUNT по vacancy_id, а не
   // длину apiCandidates (которая ужимается фильтрами / задержкой загрузки).
-  const [headerStats, setHeaderStats] = useState<{ total: number; pending: number; awaitingReview: number; demoOpened: number; rejected: number } | null>(null)
+  const [headerStats, setHeaderStats] = useState<{ total: number; pending: number; freshCount: number; demoOpened: number; rejected: number } | null>(null)
   const loadHeaderStats = useCallback(async () => {
     if (!id) return
     try {
       const res = await fetch(`/api/modules/hr/vacancies/${id}/candidate-stats`)
       if (!res.ok) return
-      const data = await res.json() as { total: number; pending: number; demoOpened: number; rejected: number }
+      const data = await res.json() as { total: number; pending: number; freshCount: number; demoOpened: number; rejected: number }
       setHeaderStats(data)
     } catch { /* silent */ }
   }, [id])
-  useEffect(() => { loadHeaderStats() }, [loadHeaderStats])
+  useEffect(() => {
+    if (!id) return
+    // P0-9: сначала забираем freshCount (он считается ОТ предыдущего last_seen),
+    // и только потом UPSERT'им last_seen=NOW(). Иначе бейдж всегда был бы 0.
+    let cancelled = false
+    ;(async () => {
+      await loadHeaderStats()
+      if (cancelled) return
+      fetch(`/api/modules/hr/vacancies/${id}/mark-seen`, { method: "POST" }).catch(() => {})
+    })()
+    return () => { cancelled = true }
+  }, [id, loadHeaderStats])
 
   const loadHhSyncMeta = useCallback(async () => {
     const hhVacId = apiVacancy?.hhVacancyId
@@ -806,7 +817,8 @@ export default function VacancyPage() {
     } catch { /* silent */ }
   }, [apiVacancy?.hhVacancyId])
 
-  // Счётчик «ждут разбора» приходит из лёгкого /candidate-stats (headerStats.pending).
+  // headerStats.pending (hh-отклики со статусом 'response') используется
+  // на кнопке «Разобрать», freshCount — на бейдже «+N новых» в шапке.
   // Раньше тут был loadHhPending, который тянул /api/integrations/hh/responses
   // (~13.8 МБ — все hh-отклики компании) только ради этой цифры. Убран.
 
@@ -1765,13 +1777,21 @@ export default function VacancyPage() {
                       </TooltipTrigger>
                       <TooltipContent>Все кандидаты на вакансии — все источники, все этапы</TooltipContent>
                     </UITooltip>
-                    <span>·</span>
-                    <UITooltip>
-                      <TooltipTrigger asChild>
-                        <span className="cursor-help"><span className={cn("font-medium", (headerStats?.awaitingReview ?? 0) > 0 ? "text-amber-700" : "text-foreground")}>{headerStats?.awaitingReview ?? "—"}</span> ждут разбора</span>
-                      </TooltipTrigger>
-                      <TooltipContent>Отклики с hh.ru, которые ещё не обработаны (нажмите «Разобрать»)</TooltipContent>
-                    </UITooltip>
+                    {/* P0-9: бейдж дельты «свежих» (anketa_filled с прошлого
+                        захода HR в карточку). Старая строка «N ждут разбора»
+                        (P0-8) убрана — она создавала ложную тревогу при
+                        дефолте direct_demo, см. P0-7. */}
+                    {(headerStats?.freshCount ?? 0) > 0 && <>
+                      <span>·</span>
+                      <UITooltip>
+                        <TooltipTrigger asChild>
+                          <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 cursor-help">
+                            +{headerStats?.freshCount} новых
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent>Новые заполненные анкеты с прошлого захода в вакансию</TooltipContent>
+                      </UITooltip>
+                    </>}
                     <span>·</span>
                     <UITooltip>
                       <TooltipTrigger asChild>

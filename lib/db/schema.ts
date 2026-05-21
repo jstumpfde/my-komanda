@@ -8,6 +8,8 @@ import {
   date,
   jsonb,
   unique,
+  primaryKey,
+  index,
 } from "drizzle-orm/pg-core"
 
 // ─── Modules ──────────────────────────────────────────────────────────────────
@@ -175,6 +177,17 @@ export const userPreferences = pgTable("user_preferences", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 })
+
+// P0-9: пер-юзерный last_seen на вакансию для расчёта дельты «свежих»
+// кандидатов (бейдж «+N новых» в шапке + список на дашборде).
+export const userVacancyViews = pgTable("user_vacancy_views", {
+  userId:     uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  vacancyId:  uuid("vacancy_id").notNull().references(() => vacancies.id, { onDelete: "cascade" }),
+  lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  pk:           primaryKey({ columns: [t.userId, t.vacancyId] }),
+  byVacancyIdx: index("idx_user_vacancy_views_vacancy").on(t.vacancyId),
+}))
 
 // ─── Sales: CRM Компании ─────────────────────────────────────────────────────
 
