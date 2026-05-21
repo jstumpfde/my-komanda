@@ -2,6 +2,7 @@ import { eq, and, sql, count, avg } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { vacancies, candidates } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
+import { ACTIVE_VACANCY_STATUSES } from "@/lib/vacancies/filters"
 
 export async function GET() {
   try {
@@ -63,9 +64,16 @@ export async function GET() {
       .innerJoin(vacancies, eq(candidates.vacancyId, vacancies.id))
       .where(and(eq(vacancies.companyId, cid), eq(candidates.stage, "new"), sql`${candidates.createdAt} < ${threeDaysAgo}`))
 
+    // Активные вакансии — сумма по всем статусам, считающимся «активными»
+    // (см. lib/vacancies/filters.ts: 'active' и 'published').
+    const activeVacancies = ACTIVE_VACANCY_STATUSES.reduce(
+      (sum, s) => sum + (vacancyByStatus[s] || 0),
+      0,
+    )
+
     return apiSuccess({
       totalVacancies,
-      activeVacancies: vacancyByStatus["active"] || 0,
+      activeVacancies,
       totalCandidates: Number(candidateTotal?.cnt || 0),
       newThisWeek: Number(newThisWeek?.cnt || 0),
       avgAiScore: Math.round(Number(avgScore?.avg || 0)),

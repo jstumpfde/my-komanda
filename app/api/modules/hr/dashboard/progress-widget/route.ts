@@ -2,6 +2,7 @@ import { eq, and, isNull, desc, inArray } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { vacancies, candidates } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
+import { ACTIVE_VACANCY_STATUSES } from "@/lib/vacancies/filters"
 import {
   getDemoProgressPercent,
   getDemoProgressGroup,
@@ -29,7 +30,7 @@ export async function GET() {
       .from(vacancies)
       .where(and(
         eq(vacancies.companyId, companyId),
-        eq(vacancies.status, "published"),
+        inArray(vacancies.status, ACTIVE_VACANCY_STATUSES),
         isNull(vacancies.deletedAt),
       ))
       .orderBy(desc(vacancies.createdAt))

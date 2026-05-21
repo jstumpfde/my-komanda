@@ -2,6 +2,7 @@ import { eq, and, count, isNull, gte, inArray, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { vacancies, candidates } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
+import { ACTIVE_VACANCY_STATUSES } from "@/lib/vacancies/filters"
 
 export async function GET() {
   try {
@@ -26,7 +27,7 @@ export async function GET() {
         .from(vacancies)
         .where(and(
           eq(vacancies.companyId, companyId),
-          eq(vacancies.status, "published"),
+          inArray(vacancies.status, ACTIVE_VACANCY_STATUSES),
           isNull(vacancies.deletedAt),
         )),
 
@@ -100,7 +101,7 @@ export async function GET() {
         .leftJoin(candidates, eq(candidates.vacancyId, vacancies.id))
         .where(and(
           eq(vacancies.companyId, companyId),
-          eq(vacancies.status, "published"),
+          inArray(vacancies.status, ACTIVE_VACANCY_STATUSES),
           isNull(vacancies.deletedAt),
         ))
         .groupBy(vacancies.id)

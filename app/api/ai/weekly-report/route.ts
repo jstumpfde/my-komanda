@@ -1,7 +1,8 @@
-import { eq, and, sql, count, avg } from "drizzle-orm"
+import { eq, and, sql, count, avg, inArray } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { vacancies, candidates } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
+import { ACTIVE_VACANCY_STATUSES } from "@/lib/vacancies/filters"
 
 export async function GET() {
   try {
@@ -42,7 +43,7 @@ export async function GET() {
     const [emptyVacancies] = await db
       .select({ cnt: count() })
       .from(vacancies)
-      .where(and(eq(vacancies.companyId, cid), eq(vacancies.status, "active")))
+      .where(and(eq(vacancies.companyId, cid), inArray(vacancies.status, ACTIVE_VACANCY_STATUSES)))
 
     const newCount = Number(newCandidates?.cnt || 0)
     const screenCount = Number(screenings?.cnt || 0)
