@@ -61,6 +61,21 @@ export function calcDemoFraction(dp: DemoProgressData | null | undefined): DemoF
 
 export type DemoProgressVariant = "list" | "kanban"
 
+// P0-31: стадии, прошедшие точку «решение по демо». Только в них прогресс-бар
+// рендерится зелёным при 100%. Остальные стадии (включая demo_opened,
+// primary_contact, demo_in_progress и т.д.) → синий даже при 16/16,
+// чтобы зелёный сигнал означал «кандидат прошёл воронку дальше демо»,
+// а не просто «досмотрел видео».
+const GREEN_GATING_STAGES = new Set([
+  "decision",
+  "anketa_filled",
+  "ai_screening",
+  "test_task_sent",
+  "interview",
+  "offer",
+  "hired",
+])
+
 interface DemoProgressBarProps {
   /** Процент 0..100 при наличии данных, либо null — кандидат не приступал. */
   progressPercent: number | null
@@ -70,6 +85,12 @@ interface DemoProgressBarProps {
   totalBlocks?: number
   /** Если true — рядом с подписью процента показывается иконка видео-визитки. */
   hasVideoVizitka?: boolean
+  /**
+   * Стадия воронки кандидата (`candidate.stage`). Если задана — зелёный цвет
+   * при 100% включается только когда stage ∈ GREEN_GATING_STAGES.
+   * Если не передана — fallback на старое поведение (только cur/tot).
+   */
+  stage?: string | null
   /**
    * "list"   — узкая шкала ~80px справа подпись "{N}%" / "Не начато" / "Завершено".
    *             Цвета: пусто — серая, 1-99% — синяя, 100% — зелёная.
@@ -85,13 +106,20 @@ export function DemoProgressBar({
   completedBlocks,
   totalBlocks,
   hasVideoVizitka,
+  stage,
   variant = "list",
   className,
 }: DemoProgressBarProps) {
   const pct = progressPercent
   const hasData = pct !== null
+  // P0-31: при 100% — зелёный только если stage прошёл точку «decision».
+  // Если stage не передан (legacy-вызовы) — оставляем зелёный (backward-compat).
+  const stagePassedDecision = stage === undefined || stage === null
+    ? true
+    : GREEN_GATING_STAGES.has(stage)
 
   if (variant === "kanban") {
+    const at100 = pct === 100
     const barColor = !hasData
       ? "bg-muted-foreground/20"
       : pct === 0
@@ -100,7 +128,9 @@ export function DemoProgressBar({
           ? "bg-orange-500"
           : pct < 100
             ? "bg-emerald-500"
-            : "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]"
+            : (at100 && !stagePassedDecision
+                ? "bg-blue-500"
+                : "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]")
     const label = !hasData
       ? "Не начато"
       : `${completedBlocks ?? 0}/${totalBlocks ?? 0} · ${pct}%`
@@ -129,11 +159,15 @@ export function DemoProgressBar({
   const hasFraction = typeof completedBlocks === "number" && typeof totalBlocks === "number" && totalBlocks > 0
   const cur = completedBlocks ?? 0
   const tot = totalBlocks ?? 0
-  const isComplete = hasFraction && cur >= tot
+  // P0-31: «complete» теперь требует и cur>=tot, и stage>=decision (если stage передан).
+  const completedFraction = hasFraction && cur >= tot
+  const isComplete = completedFraction && stagePassedDecision
+  // Кандидат досмотрел демо, но воронка ещё не двинулась — рендерим синим.
+  const isCompletedButNotPassed = completedFraction && !stagePassedDecision
   const isStarted = hasFraction && cur > 0 && cur < tot
   const fillColor = isComplete
     ? "bg-emerald-500"
-    : isStarted
+    : (isStarted || isCompletedButNotPassed)
       ? "bg-blue-500"
       : "bg-transparent"
   // "Не начато" — когда нет данных вообще ИЛИ кандидат ещё не сделал ни одного шага.

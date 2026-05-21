@@ -170,6 +170,7 @@ export function CandidateCard({ candidate, settings, columnId, isLastColumn, onO
             completedBlocks={completed}
             totalBlocks={total}
             hasVideoVizitka={candidate.demoProgressJson?.hasVideoVizitka}
+            stage={candidate.stage}
           />
         )
       })()}

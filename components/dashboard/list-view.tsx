@@ -460,6 +460,7 @@ export function ListView({
                     completedBlocks={demoFraction.hasData ? demoFraction.current : undefined}
                     totalBlocks={demoFraction.hasData ? demoFraction.total : undefined}
                     hasVideoVizitka={candidate.demoProgressJson?.hasVideoVizitka}
+                    stage={candidate.stage}
                   />
                 </div>
               )}
