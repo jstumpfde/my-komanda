@@ -88,9 +88,17 @@ export async function PUT(
       settings.belowThresholdAction = body.belowThresholdAction === "keep_new" ? "keep_new" : "reject"
     }
     if (body.inviteMessage !== undefined) {
-      settings.inviteMessage = typeof body.inviteMessage === "string"
-        ? body.inviteMessage.slice(0, 2000)
-        : undefined
+      const text = typeof body.inviteMessage === "string" ? body.inviteMessage.slice(0, 2000) : ""
+      // P0-43: первое сообщение должно содержать плейсхолдер ссылки на демо.
+      // Принимаем {{demo_link}} (канон) и {ссылка} (легаси/русская форма).
+      // Пустое сообщение оставляем валидным — это «отключить firstMessage».
+      if (text.length > 0 && !/\{\{\s*demo_link\s*\}\}/.test(text) && !/\{\s*ссылка\s*\}/.test(text)) {
+        return apiError(
+          "Шаблон должен содержать плейсхолдер ссылки на демо ({{demo_link}} или {ссылка})",
+          400,
+        )
+      }
+      settings.inviteMessage = text || undefined
     }
     if (body.reInviteMessage !== undefined) {
       settings.reInviteMessage = typeof body.reInviteMessage === "string"
