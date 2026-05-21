@@ -26,3 +26,7 @@ node_modules
 
 # User uploads (videos, photos, files from candidates)
 public/uploads/
+
+# Backup files from hotfixes (e.g. *.bak, *.bak-postdemo-mode, *.bak-stopword)
+*.bak
+*.bak-*
