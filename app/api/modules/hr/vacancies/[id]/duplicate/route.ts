@@ -98,7 +98,7 @@ export async function POST(
     for (const d of originalDemos) {
       await db.insert(demos).values({
         vacancyId: duplicate.id,
-        title: d.title,
+        title: `${d.title} (копия)`,
         status: d.status,
         lessonsJson: d.lessonsJson,
         postDemoSettings: d.postDemoSettings,
