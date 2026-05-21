@@ -29,6 +29,7 @@ import {
   Star,
   X,
   Loader2,
+  RotateCcw,
 } from "lucide-react"
 
 export type BulkAction =
@@ -37,6 +38,7 @@ export type BulkAction =
   | "talent_pool"
   | "set_stage"
   | "toggle_favorite"
+  | "restore"
 
 interface StageOption {
   id: string
@@ -48,10 +50,18 @@ interface BulkActionsBarProps {
   stages: StageOption[]
   onClear: () => void
   onAction: (action: BulkAction, payload?: { stage?: string }) => Promise<void> | void
+  /**
+   * Если true — все выделенные кандидаты сейчас в стадии 'rejected'.
+   * Тогда вместо обычных действий показываем кнопку «Вернуть в воронку».
+   * Это единственный признак, что bulk_restore доступен — сервер дополнительно
+   * валидирует и вернёт 400 если хоть один не в rejected.
+   */
+  allRejected?: boolean
 }
 
-export function BulkActionsBar({ count, stages, onClear, onAction }: BulkActionsBarProps) {
+export function BulkActionsBar({ count, stages, onClear, onAction, allRejected = false }: BulkActionsBarProps) {
   const [confirmRejectOpen, setConfirmRejectOpen] = useState(false)
+  const [confirmRestoreOpen, setConfirmRestoreOpen] = useState(false)
   const [busy, setBusy] = useState<BulkAction | null>(null)
 
   if (count === 0) return null
@@ -97,8 +107,24 @@ export function BulkActionsBar({ count, stages, onClear, onAction }: BulkActions
 
         <div className="flex-1" />
 
-        {/* Right: 5 actions */}
+        {/* Right: actions. Если все выделенные в 'rejected' — показываем
+            только «Вернуть в воронку» (отдельный bulk-restore флоу),
+            обычный набор действий скрываем (отказать/пригласить/... нет
+            смысла на уже отказанных). */}
         <div className="flex items-center gap-1.5 flex-nowrap justify-end">
+          {allRejected ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-8 px-2.5 gap-1.5 text-sm text-emerald-700 border-emerald-300 hover:bg-emerald-500/10 hover:text-emerald-800 dark:text-emerald-300 dark:border-emerald-700"
+              disabled={!!busy}
+              onClick={() => setConfirmRestoreOpen(true)}
+            >
+              {busy === "restore" ? <Loader2 className="size-4 animate-spin" /> : <RotateCcw className="size-4" />}
+              <span className="hidden md:inline">Вернуть в воронку</span>
+            </Button>
+          ) : <>
           <Button
             type="button"
             size="sm"
@@ -173,8 +199,31 @@ export function BulkActionsBar({ count, stages, onClear, onAction }: BulkActions
             {busy === "toggle_favorite" ? <Loader2 className="size-4 animate-spin" /> : <Star className="size-4" />}
             <span className="hidden md:inline">В избранное</span>
           </Button>
+          </>}
         </div>
       </div>
+
+      <AlertDialog open={confirmRestoreOpen} onOpenChange={setConfirmRestoreOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Вернуть {count} {pluralize(count, "кандидата", "кандидатов", "кандидатов")} в воронку?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Каждый кандидат вернётся на стадию, с которой он был отклонён (по истории).
+              Если истории нет — на «Первичный контакт». Авто-обработка останется выключенной.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Отмена</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => { setConfirmRestoreOpen(false); void run("restore") }}
+            >
+              Вернуть
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={confirmRejectOpen} onOpenChange={setConfirmRejectOpen}>
         <AlertDialogContent>

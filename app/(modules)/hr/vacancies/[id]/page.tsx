@@ -1230,6 +1230,9 @@ export default function VacancyPage() {
           case "toggle_favorite":
             toast.success(data.isFavorite ? `В избранном: ${n}` : `Снято с избранного: ${n}`)
             break
+          case "restore":
+            toast.success(`Возвращено в воронку: ${n}`)
+            break
         }
         setSelectedCandidateIds(new Set())
         await refetchCandidates()
@@ -3391,10 +3394,27 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
         }}
       />
 
-      {/* Bulk actions floating bar — visible only when кандидаты выделены */}
+      {/* Bulk actions floating bar — visible only when кандидаты выделены.
+          allRejected включает режим bulk-restore: если ВСЕ выделенные
+          сейчас в 'rejected', вместо «Отказать/Пригласить/...» показываем
+          только «Вернуть в воронку». Считаем по уже подгруженным карточкам
+          (paginated.candidates + filtered.columns) — оба варианта режима
+          списка кладут кандидата в один из этих источников. */}
       <BulkActionsBar
         count={selectedCandidateIds.size}
         stages={columns.map((c) => ({ id: c.id, title: c.title }))}
+        allRejected={(() => {
+          if (selectedCandidateIds.size === 0) return false
+          const stageById = new Map<string, string>()
+          for (const c of paginated.candidates) stageById.set(c.id, c.stage ?? "")
+          for (const col of columns) for (const cand of col.candidates) {
+            if (!stageById.has(cand.id)) stageById.set(cand.id, col.id)
+          }
+          for (const id of selectedCandidateIds) {
+            if (stageById.get(id) !== "rejected") return false
+          }
+          return true
+        })()}
         onClear={() => setSelectedCandidateIds(new Set())}
         onAction={handleBulkAction}
       />
