@@ -10,9 +10,10 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
-import { Loader2, Save, Plus, Trash2, Clock, Calendar } from "lucide-react"
+import { Plus, Trash2, Clock, Calendar, Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { RU_HOLIDAYS } from "@/lib/schedule/holidays"
+import { useVacancySectionRegister } from "./vacancy-settings-context"
 
 interface CustomHoliday {
   from:  string
@@ -106,6 +107,15 @@ export function VacancyScheduleSettings({ vacancyId }: Props) {
       setSaving(false)
     }
   }
+
+  useVacancySectionRegister({
+    sectionKey: `schedule:${vacancyId}`,
+    tabKey: "ai",
+    loaded: !loading && data !== null,
+    watchedValues: data,
+    save,
+  })
+  void saving
 
   const toggleWorkingDay = (id: number) => {
     if (!data) return
@@ -320,13 +330,6 @@ export function VacancyScheduleSettings({ vacancyId }: Props) {
           </div>
         </CardContent>
       </Card>
-
-      <div className="flex justify-end">
-        <Button onClick={save} disabled={saving}>
-          {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
-          Сохранить расписание
-        </Button>
-      </div>
 
       <CustomHolidayDialog
         open={customDialogOpen}

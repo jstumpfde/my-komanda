@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion"
-import { Loader2, Save, MessageSquareText, RotateCcw } from "lucide-react"
+import { MessageSquareText, RotateCcw } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { FOLLOWUP_PRESETS, FOLLOWUP_MESSAGE_SLOTS, type FollowUpPreset } from "@/lib/followup/presets"
@@ -16,6 +16,7 @@ import {
   DEFAULT_FOLLOWUP_NOT_OPENED,
   DEFAULT_FOLLOWUP_OPENED_NOT_FINISHED,
 } from "@/lib/followup/default-messages"
+import { useVacancySectionRegister } from "./vacancy-settings-context"
 
 interface Campaign {
   id: string
@@ -133,6 +134,15 @@ export function VacancyFollowupSettings({ vacancyId }: Props) {
       setSaving(false)
     }
   }
+
+  useVacancySectionRegister({
+    sectionKey: `followup:${vacancyId}`,
+    tabKey: "followup",
+    loaded: !loading,
+    watchedValues: { enabled, preset, stopOnReply, stopOnVacancyClosed, customA, customB, touchedA, touchedB },
+    save: handleSave,
+  })
+  void saving
 
   const presetCfg = FOLLOWUP_PRESETS[preset]
   const usage = slotsUsage(preset)
@@ -367,13 +377,6 @@ export function VacancyFollowupSettings({ vacancyId }: Props) {
             </div>
             <Switch checked={stopOnVacancyClosed} onCheckedChange={setStopOnVacancyClosed} disabled={loading} />
           </label>
-        </div>
-
-        <div className="flex justify-end pt-1">
-          <Button onClick={handleSave} disabled={saving || loading} size="sm" className="gap-1.5">
-            {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-            Сохранить
-          </Button>
         </div>
       </CardContent>
     </Card>

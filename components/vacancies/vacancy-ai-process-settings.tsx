@@ -2,16 +2,16 @@
 
 import { useEffect, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Slider } from "@/components/ui/slider"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
-import { Loader2, Save, Sparkles } from "lucide-react"
+import { Sparkles } from "lucide-react"
 import { toast } from "sonner"
 import type { VacancyAiProcessSettings as Settings } from "@/lib/db/schema"
 import { DEFAULT_REJECT_MESSAGE } from "@/lib/hh/default-messages"
+import { useVacancySectionRegister } from "./vacancy-settings-context"
 
 interface Props {
   vacancyId: string
@@ -53,6 +53,8 @@ export function VacancyAiProcessSettings({ vacancyId, initial, initialAiScoringE
   )
   const [rejectMessage, setRejectMessage] = useState<string>(initial?.rejectMessage ?? DEFAULT_REJECT)
   const [saving, setSaving] = useState(false)
+  // P0-50: sticky-bar считывает loaded — пока initial не подсунули, секцию игнорим.
+  const loaded = initial !== undefined
 
   useEffect(() => {
     if (!initial) return
@@ -107,6 +109,15 @@ export function VacancyAiProcessSettings({ vacancyId, initial, initialAiScoringE
       setSaving(false)
     }
   }
+
+  useVacancySectionRegister({
+    sectionKey: `ai-process:${vacancyId}`,
+    tabKey: "followup",
+    loaded,
+    watchedValues: { aiScoringEnabled, upper, lower, midRangeAction, rejectMessage },
+    save: handleSave,
+  })
+  void saving
 
   const disabled = !aiScoringEnabled
 
@@ -241,12 +252,6 @@ export function VacancyAiProcessSettings({ vacancyId, initial, initialAiScoringE
           </p>
         </div>
 
-        <div className="flex justify-end pt-1">
-          <Button onClick={handleSave} disabled={saving} size="sm" className="gap-1.5">
-            {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-            Сохранить
-          </Button>
-        </div>
       </CardContent>
     </Card>
   )

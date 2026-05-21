@@ -52,11 +52,10 @@ import {
   Lock,
   User,
   Phone,
-  Save,
-  Loader2,
   ClipboardList,
 } from "lucide-react"
 import { toast } from "sonner"
+import { useVacancySectionRegister } from "./vacancy-settings-context"
 
 // ─── Типы ────────────────────────────────────────────────────
 
@@ -178,6 +177,8 @@ export function MiniFormBuilder({ vacancyId, descriptionJson }: MiniFormBuilderP
   const [customLabel, setCustomLabel] = useState("")
   const [customType, setCustomType] = useState<MiniFormFieldType>("text")
   const [customOptions, setCustomOptions] = useState("")
+  // P0-50: loaded = descriptionJson был передан (даже null после fetch). Если undefined — родитель ещё грузит.
+  const loaded = descriptionJson !== undefined
 
   // Parse initial fields from descriptionJson
   useEffect(() => {
@@ -279,6 +280,15 @@ export function MiniFormBuilder({ vacancyId, descriptionJson }: MiniFormBuilderP
     }
   }, [vacancyId, fields, descriptionJson])
 
+  useVacancySectionRegister({
+    sectionKey: `mini-form:${vacancyId}`,
+    tabKey: "sources",
+    loaded,
+    watchedValues: fields,
+    save: saveFields,
+  })
+  void saving
+
   return (
     <>
       <Card>
@@ -369,10 +379,6 @@ export function MiniFormBuilder({ vacancyId, descriptionJson }: MiniFormBuilderP
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-            <Button size="sm" className="gap-1.5 h-8 text-xs" onClick={saveFields} disabled={saving}>
-              {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-              Сохранить
-            </Button>
           </div>
         </CardContent>
       </Card>

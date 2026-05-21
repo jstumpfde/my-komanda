@@ -6,10 +6,11 @@ import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
-import { Loader2, Save, ClipboardList, Plus, Trash2 } from "lucide-react"
+import { ClipboardList, Plus, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import type { VacancyAiProcessSettings, VacancyPrequalificationQuestion } from "@/lib/db/schema"
+import { useVacancySectionRegister } from "./vacancy-settings-context"
 
 type PrequalificationMode = "direct_demo" | "prequal_then_demo" | "prequal_only"
 
@@ -63,6 +64,7 @@ export function VacancyPrequalificationSettings({ vacancyId, initial, onSaved }:
   const [reminderD3, setReminderD3] = useState<string>(cfg?.reminderD3 ?? DEFAULT_REMINDER_D3)
   const [fallbackDays, setFallbackDays] = useState<number>(cfg?.fallbackDays ?? 5)
   const [saving, setSaving] = useState(false)
+  const loaded = initial !== undefined
 
   useEffect(() => {
     if (initial?.prequalificationMode) setMode(initial.prequalificationMode)
@@ -114,6 +116,15 @@ export function VacancyPrequalificationSettings({ vacancyId, initial, onSaved }:
       setSaving(false)
     }
   }
+
+  useVacancySectionRegister({
+    sectionKey: `prequal:${vacancyId}`,
+    tabKey: "funnel",
+    loaded,
+    watchedValues: { mode, questions, reminderD1, reminderD3, fallbackDays },
+    save: handleSave,
+  })
+  void saving
 
   const disabled = mode === "direct_demo"
 
@@ -310,13 +321,6 @@ export function VacancyPrequalificationSettings({ vacancyId, initial, onSaved }:
         </div>
         </div>
         )}
-
-        <div className="flex justify-end pt-1">
-          <Button onClick={handleSave} disabled={saving} size="sm" className="gap-1.5">
-            {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-            Сохранить
-          </Button>
-        </div>
       </CardContent>
     </Card>
   )
