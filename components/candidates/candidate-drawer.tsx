@@ -15,6 +15,16 @@ import { Textarea } from "@/components/ui/textarea"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import {
   Phone,
   Mail,
   MapPin,
@@ -34,6 +44,7 @@ import {
   X,
   FileQuestion,
   Play,
+  RotateCcw,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
@@ -526,6 +537,9 @@ export function CandidateDrawer({
   const [notes, setNotes] = useState<CandidateNote[]>([])
   const [loadingCandidate, setLoadingCandidate] = useState(false)
   const [changingStage, setChangingStage] = useState<string | null>(null)
+  const [restoring, setRestoring] = useState(false)
+  const [confirmRestoreOpen, setConfirmRestoreOpen] = useState(false)
+  const [restoreTargetStage, setRestoreTargetStage] = useState<string | null>(null)
   const [noteText, setNoteText] = useState("")
   const [savingNote, setSavingNote] = useState(false)
   const [scoringAi, setScoringAi] = useState(false)
@@ -707,6 +721,53 @@ export function CandidateDrawer({
       toast.error("Не удалось изменить стадию")
     } finally {
       setChangingStage(null)
+    }
+  }
+
+  // Восстановление кандидата из стадии "rejected". prevStage определяет
+  // сервер (по stage_history), но для confirm-диалога рассчитываем тут же
+  // на клиенте — чтобы сразу показать HR'у куда именно вернётся кандидат.
+  const computeRestoreTargetStage = (): string => {
+    if (!candidate) return "primary_contact"
+    const history = (Array.isArray(candidate.stageHistory) ? candidate.stageHistory : []) as StageHistoryEntry[]
+    for (let i = history.length - 1; i >= 0; i--) {
+      const entry = history[i]
+      if (entry?.to === "rejected" && typeof entry.from === "string" && entry.from.length > 0) {
+        return entry.from
+      }
+    }
+    return "primary_contact"
+  }
+
+  const openRestoreConfirm = () => {
+    if (!candidate || candidate.stage !== "rejected" || restoring) return
+    setRestoreTargetStage(computeRestoreTargetStage())
+    setConfirmRestoreOpen(true)
+  }
+
+  const handleRestore = async () => {
+    if (!candidate || restoring) return
+    setRestoring(true)
+    try {
+      const res = await fetch(`/api/modules/hr/candidates/${candidate.id}/restore`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      })
+      const data = await res.json() as { stage?: string; error?: string }
+      if (!res.ok) {
+        toast.error(data.error || "Не удалось вернуть кандидата")
+        return
+      }
+      const newStage = data.stage ?? "primary_contact"
+      setCandidate((prev) => prev ? { ...prev, stage: newStage } : prev)
+      onStageChange?.(candidate.id, newStage)
+      toast.success(`Кандидат возвращён в воронку: ${getStageLabel(newStage, vacancyPipeline)}`)
+      setConfirmRestoreOpen(false)
+    } catch {
+      toast.error("Ошибка сети")
+    } finally {
+      setRestoring(false)
     }
   }
 
@@ -993,8 +1054,20 @@ export function CandidateDrawer({
                   </div>
                 )}
                 {isRejected && (
-                  <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-sm text-destructive font-medium text-center">
-                    Кандидат получил отказ
+                  <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 space-y-2">
+                    <p className="text-sm text-destructive font-medium text-center">
+                      Кандидат получил отказ
+                    </p>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="w-full gap-2"
+                      disabled={restoring}
+                      onClick={openRestoreConfirm}
+                    >
+                      {restoring ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
+                      Вернуть в воронку
+                    </Button>
                   </div>
                 )}
 
@@ -1368,6 +1441,30 @@ export function CandidateDrawer({
           </div>
         )}
       </SheetContent>
+
+      <AlertDialog open={confirmRestoreOpen} onOpenChange={setConfirmRestoreOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Вернуть кандидата в воронку?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {restoreTargetStage
+                ? `Кандидат будет перемещён на стадию: «${getStageLabel(restoreTargetStage, vacancyPipeline)}».`
+                : "Кандидат будет перемещён обратно в воронку."}
+              {" "}Автоматическая обработка (если была остановлена) останется выключенной — включите её отдельно, если нужно.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={restoring}>Отмена</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={restoring}
+              onClick={(e) => { e.preventDefault(); void handleRestore() }}
+            >
+              {restoring ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-2" /> : null}
+              Вернуть
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Sheet>
   )
 }
