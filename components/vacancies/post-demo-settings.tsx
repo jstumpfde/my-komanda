@@ -500,10 +500,6 @@ export function PostDemoSettings({ vacancyId, sections }: PostDemoSettingsProps)
                   <>
                     <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto" />
                     <h3 className="text-lg font-bold text-gray-900">{greenTitle}</h3>
-                    <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
-                      <Sparkles className="w-4 h-4 text-amber-500" />
-                      AI-скоринг: <span className="font-bold text-emerald-600">{previewScore}%</span>
-                    </div>
                     <div className="space-y-2 text-left">
                       <p className="text-xs text-gray-500">Выберите тип встречи:</p>
                       <div className="space-y-1.5">
@@ -520,20 +516,12 @@ export function PostDemoSettings({ vacancyId, sections }: PostDemoSettingsProps)
                   <>
                     <Clock className="w-12 h-12 text-amber-500 mx-auto" />
                     <h3 className="text-lg font-bold text-gray-900">{yellowTitle}</h3>
-                    <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
-                      <Sparkles className="w-4 h-4 text-amber-500" />
-                      AI-скоринг: <span className="font-bold text-amber-600">{previewScore}%</span>
-                    </div>
                     <p className="text-sm text-gray-500">{yellowText}</p>
                   </>
                 ) : (
                   <>
                     <XCircle className="w-12 h-12 text-red-400 mx-auto" />
                     <h3 className="text-lg font-bold text-gray-900">{redTitle}</h3>
-                    <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
-                      <Sparkles className="w-4 h-4 text-amber-500" />
-                      AI-скоринг: <span className="font-bold text-red-600">{previewScore}%</span>
-                    </div>
                     <p className="text-sm text-gray-500">{redText}</p>
                   </>
                 )
