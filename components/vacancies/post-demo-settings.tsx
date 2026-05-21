@@ -9,13 +9,14 @@ import { Switch } from "@/components/ui/switch"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Slider } from "@/components/ui/slider"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { renderTemplate } from "@/lib/template-renderer"
 import {
   CheckCircle2, Calendar, Phone, Video, Building2,
   Sparkles, Clock, Play, XCircle, ChevronDown, ClipboardList,
-  Send,
+  Send, Save,
 } from "lucide-react"
 import { useVacancySectionRegister } from "./vacancy-settings-context"
 
