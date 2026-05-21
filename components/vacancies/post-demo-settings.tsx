@@ -212,32 +212,44 @@ export function PostDemoSettings({ vacancyId, sections }: PostDemoSettingsProps)
               <Switch checked={enabled} onCheckedChange={setEnabled} />
             </div>
           </div>
+          {/* ТЗ-1 Часть 7 (P0-23): подсказка только когда блок выключен. */}
+          {!enabled && (
+            <p className="text-[11px] text-muted-foreground mt-2 bg-muted/40 rounded-md px-3 py-2 border">
+              Блок выключен. Кандидат после демо видит стандартный экран благодарности.
+            </p>
+          )}
         </CardHeader>
         <CardContent className={cn("space-y-5", !enabled && "opacity-50 pointer-events-none")}>
           {/* Mode selection */}
           <div className="space-y-2">
             <Label className="text-sm font-medium">Режим</Label>
-            <div className="text-[11px] bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 rounded-md px-3 py-2">
-              ✅ Рекомендуемый режим — автоматический. Кандидаты сразу видят следующий шаг после демо без участия HR.
-            </div>
             <div className="space-y-2">
               {([
-                { value: "auto" as const, label: "Автоматический", desc: "Кандидат сам записывается на интервью по порогу AI-скоринга" },
-                { value: "manual" as const, label: "Ручной", desc: "HR связывается сам после просмотра результатов" },
+                { value: "auto" as const, label: "Автоматический", desc: "Кандидат сам записывается на интервью по порогу AI-скоринга", disabled: true },
+                { value: "manual" as const, label: "Ручной", desc: "HR связывается сам после просмотра результатов", disabled: false },
               ]).map(opt => (
                 <button
                   key={opt.value}
+                  type="button"
+                  disabled={opt.disabled}
+                  title={opt.disabled ? "Скоро будет доступно" : undefined}
                   className={cn(
                     "w-full flex items-start gap-3 p-3 rounded-lg border text-left transition-all",
-                    mode === opt.value ? "border-primary bg-primary/5 ring-2 ring-primary/20" : "border-border hover:border-primary/30"
+                    mode === opt.value ? "border-primary bg-primary/5 ring-2 ring-primary/20" : "border-border hover:border-primary/30",
+                    opt.disabled && "opacity-50 cursor-not-allowed hover:border-border"
                   )}
-                  onClick={() => setMode(opt.value)}
+                  onClick={() => { if (!opt.disabled) setMode(opt.value) }}
                 >
                   <div className={cn("w-4 h-4 rounded-full border-2 mt-0.5 shrink-0 flex items-center justify-center", mode === opt.value ? "border-primary" : "border-muted-foreground/40")}>
                     {mode === opt.value && <div className="w-2 h-2 rounded-full bg-primary" />}
                   </div>
-                  <div>
-                    <p className="text-sm font-medium text-foreground">{opt.label}</p>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-foreground flex items-center gap-2">
+                      {opt.label}
+                      {opt.disabled && (
+                        <span className="text-[10px] bg-amber-100 text-amber-700 rounded-full px-2 py-0.5 font-normal">Скоро</span>
+                      )}
+                    </p>
                     <p className="text-xs text-muted-foreground">{opt.desc}</p>
                   </div>
                 </button>
@@ -486,7 +498,7 @@ export function PostDemoSettings({ vacancyId, sections }: PostDemoSettingsProps)
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Превью финального экрана</CardTitle>
           {mode === "auto" && (
-            <div className="flex items-center gap-3 mt-2">
+            <div className={cn("flex items-center gap-3 mt-2", !enabled && "opacity-50 pointer-events-none")}>
               <Label className="text-xs text-muted-foreground">Тестовый балл:</Label>
               <Slider value={[previewScore]} onValueChange={([v]) => setPreviewScore(v)} min={0} max={100} step={1} className="w-32" />
               <span className={cn("text-sm font-bold", previewLevel === "green" ? "text-emerald-600" : previewLevel === "yellow" ? "text-amber-600" : "text-red-600")}>{previewScore}%</span>
