@@ -7,7 +7,7 @@
 import { db } from "@/lib/db"
 import { hhResponses, candidates, vacancies, followUpCampaigns, followUpMessages, hhCandidates } from "@/lib/db/schema"
 import type { VacancyAiProcessSettings } from "@/lib/db/schema"
-import { and, asc, eq, isNull } from "drizzle-orm"
+import { and, asc, eq, inArray, isNull } from "drizzle-orm"
 import { getValidToken } from "@/lib/hh-helpers"
 import { changeNegotiationState, getNegotiationMessages } from "@/lib/hh-api"
 import { generateCandidateShortId } from "@/lib/short-id"
@@ -162,6 +162,28 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
         })
         continue
       }
+    }
+
+    // Атомарный claim: переводим hh_response в 'invited' ДО реальной работы
+    // (но ПОСЛЕ off-hours проверки, чтобы defer-flow по-прежнему оставлял
+    // отклик в 'response'). Если CAS вернул 0 строк — другой cron-проход
+    // уже забрал этот отклик. Пропускаем.
+    //
+    // Без этой защиты наблюдался баг (Петренко, 21.05.2026): два cron-прохода
+    // выбирали один и тот же hh_response в status='response', оба вызывали
+    // changeNegotiationState, и кандидат получал приветственное сообщение
+    // дважды с разницей в минуту.
+    //
+    // Дальше нижестоящий код всё ещё делает финальный UPDATE status='invited'
+    // (вместе с localCandidateId) — это no-op, не критично.
+    const claimed = await db
+      .update(hhResponses)
+      .set({ status: "invited" })
+      .where(and(eq(hhResponses.id, resp.id), eq(hhResponses.status, "response")))
+      .returning({ id: hhResponses.id })
+    if (claimed.length === 0) {
+      results.push({ id: resp.hhResponseId, name: resp.candidateName, action: "already_claimed" })
+      continue
     }
 
     const raw = resp.rawData as {
@@ -687,6 +709,29 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
             ))
             .limit(1)
           if (campaign && isFollowUpPreset(campaign.preset) && campaign.preset !== "off") {
+            // Дедупликация: если у кандидата уже есть pending/sent касания
+            // в этой кампании — touches уже расписаны прошлым проходом
+            // process-queue. Повторно вставлять нельзя, иначе кандидат
+            // получит каждое касание дважды. Этот баг наблюдался для
+            // candidate f1e08a44-2a36-46f4-bd29-7d52d419a6f5 — приветственное
+            // сообщение с demo-ссылкой пришло дважды (08:25 и 08:26) после
+            // того как два cron-прогона hh-import нашли один и тот же
+            // hh_response в status='response' до того как первый успел
+            // обновить статус на 'invited'.
+            const [existingTouch] = await db
+              .select({ id: followUpMessages.id })
+              .from(followUpMessages)
+              .where(and(
+                eq(followUpMessages.candidateId, candidateId),
+                eq(followUpMessages.campaignId, campaign.id),
+                inArray(followUpMessages.status, ["pending", "sent"]),
+              ))
+              .limit(1)
+            if (existingTouch) {
+              console.info(`[PQ] follow-up touches already exist for ${candidateId} / campaign ${campaign.id}, skip insert`)
+              // Кампания всё равно стартанула, дальше invitedCount++ и т.д.
+              // Прерываем только вставку touches, продолжаем обработку.
+            } else {
             // Мерджим кастомные тексты (могут быть короче 9) с дефолтами —
             // generateTouchSchedule адресует слоты по messageIndexes из пресета.
             const messages = mergeMessagesWithDefaults(campaign.customMessages, DEFAULT_FOLLOWUP_NOT_OPENED)
@@ -712,6 +757,7 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
             if (touches.length > 0) {
               await db.insert(followUpMessages).values(touches)
             }
+            } // конец else (вставка touches, если дедуп не сработал)
           }
         } catch (followUpErr) {
           console.error("[PQ] schedule follow-up failed:",
