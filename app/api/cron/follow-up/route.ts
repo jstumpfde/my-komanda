@@ -125,8 +125,14 @@ async function processOneTouch(
   // ТЗ-3 Ч.1: то же исключение для branch='anketa_auto_reply' (автоответ
   // с предложением тестового задания) — отправляем именно тем, кто только
   // что попал в anketa_filled.
+  //
+  // #21: branch='first_msg_2'/'first_msg_3' — Сообщения 2 и 3 серии
+  // первых сообщений. Стоп-триггеры пропускаем (это не дожим), но
+  // дополнительно проверяем что демо ещё не открыто — иначе
+  // дальнейшие приветственные сообщения теряют смысл.
+  const isChainStep = msg.branch === "first_msg_2" || msg.branch === "first_msg_3"
   const isOneOffPostAnketa =
-    msg.branch === "anketa_confirmation" || msg.branch === "anketa_auto_reply"
+    msg.branch === "anketa_confirmation" || msg.branch === "anketa_auto_reply" || isChainStep
   if (!isOneOffPostAnketa) {
     // Стоп-триггеры (вакансия закрыта / демо пройдено / отказ /
     // автоматизация остановлена) — только для обычной цепочки дожима.
@@ -138,6 +144,29 @@ async function processOneTouch(
         errorMessage: reason,
       }).where(eq(followUpMessages.id, msg.id))
       return { outcome: "cancelled", reason }
+    }
+  }
+
+  // #21: для chain-сообщений (first_msg_2/first_msg_3) если кандидат уже
+  // открыл демо — дальнейшие приветственные теряют смысл, отменяем.
+  // Также проверяем rejected/hired стадии — туда тоже не шлём.
+  if (isChainStep) {
+    const [cand] = await db
+      .select({ stage: candidates.stage, demoOpenedAt: candidates.demoOpenedAt, autoStopped: candidates.autoProcessingStopped })
+      .from(candidates)
+      .where(eq(candidates.id, msg.candidateId))
+      .limit(1)
+    if (!cand) {
+      await db.update(followUpMessages).set({ status: "cancelled", errorMessage: "candidate_missing" }).where(eq(followUpMessages.id, msg.id))
+      return { outcome: "cancelled", reason: "candidate_missing" }
+    }
+    if (cand.demoOpenedAt) {
+      await db.update(followUpMessages).set({ status: "cancelled", errorMessage: "demo_opened" }).where(eq(followUpMessages.id, msg.id))
+      return { outcome: "cancelled", reason: "demo_opened" }
+    }
+    if (cand.stage === "rejected" || cand.stage === "hired" || cand.autoStopped) {
+      await db.update(followUpMessages).set({ status: "cancelled", errorMessage: "stage_terminal" }).where(eq(followUpMessages.id, msg.id))
+      return { outcome: "cancelled", reason: "stage_terminal" }
     }
   }
 

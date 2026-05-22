@@ -61,6 +61,7 @@ import { VacancyPrequalificationSettings } from "@/components/vacancies/vacancy-
 import { VacancyStopWordsSettings } from "@/components/vacancies/vacancy-stop-words-settings"
 import { FinalScreensSettings, type FinalScreensConfig } from "@/components/vacancies/final-screens-settings"
 import { RecoveryMessageSettings } from "@/components/vacancies/recovery-message-settings"
+import { FirstMessagesChainEditor } from "@/components/vacancies/first-messages-chain-editor"
 import { VacancySettingsProvider, VacancyTabPendingDot, VacancyStickySaveBar, useVacancySectionRegister, useSafeSubTabSwitch, type VacancyTabKey } from "@/components/vacancies/vacancy-settings-context"
 import { BestPublicationTimeBlock } from "./components/BestPublicationTimeBlock"
 import {
@@ -2977,6 +2978,26 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                 {/* ───────── ТАБ «Сообщения» ───────── */}
                 {settingsSection === "messages" && (
                 <div className="space-y-6 max-w-3xl">
+                  {/* #21: серия первых сообщений. Рендерится первой — это
+                      замена старого блока «Первое сообщение» (он останется
+                      в AutomationSettings как fallback для backward compat,
+                      его текстовый шаблон используется как chain[0] если
+                      chain пустой). Цепочка пишет также в
+                      ai_process_settings.inviteMessage, поэтому
+                      процесс отправки msg1 продолжает работать. */}
+                  <FirstMessagesChainEditor
+                    vacancyId={id}
+                    initial={(apiVacancy as { firstMessagesChain?: Array<{ enabled: boolean; delaySeconds: number; text: string }> } | undefined)?.firstMessagesChain ?? []}
+                    fallbackFirstMessage={(apiVacancy?.aiProcessSettings as { inviteMessage?: string } | null | undefined)?.inviteMessage ?? ""}
+                    fallbackFirstDelaySeconds={(() => {
+                      const dj = apiVacancy?.descriptionJson as { automation?: { delaySeconds?: number; delayMinutes?: number } } | null | undefined
+                      const a = dj?.automation
+                      if (typeof a?.delaySeconds === "number") return a.delaySeconds
+                      if (typeof a?.delayMinutes === "number") return a.delayMinutes * 60
+                      return 180
+                    })()}
+                    onSaved={() => refetchVacancy()}
+                  />
                   <AutomationSettings
                     vacancyId={id}
                     descriptionJson={apiVacancy?.descriptionJson}

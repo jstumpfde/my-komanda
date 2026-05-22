@@ -298,18 +298,19 @@ export const vacancies = pgTable("vacancies", {
     "не интересует","не актуально","не актуальна","отменяю","отказ",
     "отказываюсь","не рассматриваю",
   ]),
-  // P0-28: кеш AI-оценки вакансии (vacancy-advisor). NULL = ещё не считали.
-  // input_hash — SHA-256 от ключевых полей анкеты, по которому решаем,
-  // устарел ли кеш. Auto-refresh НЕ делаем — кнопка ручная.
+  // P0-28: кеш AI-оценки вакансии (vacancy-advisor).
   aiQualityScore:        integer("ai_quality_score"),
   aiQualityDetails:      jsonb("ai_quality_details"),
   aiQualityAnalyzedAt:   timestamp("ai_quality_analyzed_at", { withTimezone: true }),
   aiQualityInputHash:    text("ai_quality_input_hash"),
-  // #46: «Аварийное повторное сообщение». Default OFF, текст пустой.
-  // process-queue использует только если recoveryMessageEnabled=true И
-  // recoveryMessageText непустой. Никаких hardcoded fallback'ов.
+  // #46: Аварийное повторное сообщение. Default OFF, текст пустой.
   recoveryMessageEnabled: boolean("recovery_message_enabled").notNull().default(false),
   recoveryMessageText:    text("recovery_message_text").notNull().default(""),
+  // #21: серия из до 3 первых сообщений с тумблерами и задержками.
+  firstMessagesChain: jsonb("first_messages_chain")
+    .$type<Array<{ enabled: boolean; delaySeconds: number; text: string }>>()
+    .notNull()
+    .default([]),
   // Авто-разбор hh-откликов: cron каждые 10 минут разбирает накопленные отклики
   // в рабочее время. Если выключено — клиент жмёт «Разобрать» вручную.
   autoProcessingEnabled:      boolean("auto_processing_enabled").notNull().default(false),
