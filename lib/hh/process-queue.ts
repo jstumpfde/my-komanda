@@ -164,21 +164,27 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
       }
     }
 
-    // Атомарный claim: переводим hh_response в 'invited' ДО реальной работы
+    // Атомарный claim: переводим hh_response в 'claimed' ДО реальной работы
     // (но ПОСЛЕ off-hours проверки, чтобы defer-flow по-прежнему оставлял
     // отклик в 'response'). Если CAS вернул 0 строк — другой cron-проход
     // уже забрал этот отклик. Пропускаем.
+    //
+    // #45: раньше тут сразу выставляли 'invited', и hh-счётчик «новых» в
+    // нашей шапке (он считает status='response') моментально показывал 0,
+    // хотя сообщения ещё отправлялись по 1 в минуту в течение часа.
+    // Промежуточный 'claimed' означает «забрано из очереди, сообщение
+    // ещё не ушло»; getVacancyStats считает hhNew = response+claimed,
+    // поэтому счётчик уменьшается в темпе реальной отправки.
+    // Финальный UPDATE status='invited' ниже выставляется ПОСЛЕ успешного
+    // changeNegotiationState (или ниже по той же транзакции с локальной БД).
     //
     // Без этой защиты наблюдался баг (Петренко, 21.05.2026): два cron-прохода
     // выбирали один и тот же hh_response в status='response', оба вызывали
     // changeNegotiationState, и кандидат получал приветственное сообщение
     // дважды с разницей в минуту.
-    //
-    // Дальше нижестоящий код всё ещё делает финальный UPDATE status='invited'
-    // (вместе с localCandidateId) — это no-op, не критично.
     const claimed = await db
       .update(hhResponses)
-      .set({ status: "invited" })
+      .set({ status: "claimed" })
       .where(and(eq(hhResponses.id, resp.id), eq(hhResponses.status, "response")))
       .returning({ id: hhResponses.id })
     if (claimed.length === 0) {

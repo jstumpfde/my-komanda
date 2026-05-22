@@ -110,7 +110,11 @@ export async function getVacancyStats(vacancyId: string): Promise<VacancyStats> 
     ])
     for (const row of hhRows) {
       hhTotal += row.cnt
-      if (row.status === "response") hhNew += row.cnt
+      // #45: 'claimed' — промежуточный статус («забран в обработку, ещё
+      // не отправлен»). Считаем его как «новый», чтобы счётчик в шапке
+      // уменьшался в темпе реальной отправки, а не моментально после
+      // клейма всего батча.
+      if (row.status === "response" || row.status === "claimed") hhNew += row.cnt
     }
     const at = lastSync?.[0]?.at
     hhLastSyncAt = at ? new Date(at).toISOString() : null

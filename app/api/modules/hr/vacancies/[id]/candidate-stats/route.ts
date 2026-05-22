@@ -17,7 +17,7 @@ import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { db } from "@/lib/db"
 import { candidates, vacancies, hhResponses, userVacancyViews } from "@/lib/db/schema"
-import { and, count, eq, isNotNull, gt, sql } from "drizzle-orm"
+import { and, count, eq, inArray, isNotNull, gt, sql } from "drizzle-orm"
 
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   const session = await auth()
@@ -80,10 +80,12 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
       eq(candidates.vacancyId, vacancyId),
       eq(candidates.stage, "rejected"),
     )),
+    // #45: pending = response + claimed. 'claimed' — промежуточный
+    // статус, выставленный process-queue до отправки первого сообщения.
     vac.hhVacancyId
       ? db.select({ c: count() }).from(hhResponses).where(and(
           eq(hhResponses.hhVacancyId, vac.hhVacancyId),
-          eq(hhResponses.status, "response"),
+          inArray(hhResponses.status, ["response", "claimed"]),
         ))
       : Promise.resolve([{ c: 0 }]),
     lastSeenSql
