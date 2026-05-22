@@ -7,6 +7,7 @@ import { db } from "@/lib/db"
 import { users } from "@/lib/db/schema"
 import type { UserRole } from "@/lib/auth"
 import { VKProvider } from "@/lib/auth/vk-provider"
+import { isPlatformAdminEmail } from "@/lib/platform/auth"
 
 // Expose a stable ref so the JWT callback can read the DB
 // (needed when updateSession() is called after onboarding saves companyId)
@@ -34,6 +35,7 @@ declare module "next-auth" {
       role: UserRole
       companyId: string | null
       avatarUrl: string | null
+      isPlatformAdmin: boolean
     }
   }
 
@@ -160,6 +162,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       session.user.role = token.role as UserRole
       session.user.companyId = (token.companyId as string | null) ?? null
       session.user.avatarUrl = (token.avatarUrl as string | null) ?? null
+      session.user.isPlatformAdmin = isPlatformAdminEmail(session.user.email)
       return session
     },
   },
