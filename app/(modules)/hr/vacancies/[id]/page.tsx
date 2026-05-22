@@ -2464,20 +2464,50 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                         </CardHeader>
                         <CardContent className="space-y-1.5">
                           {transitions.map((t) => {
-                            // Подсветка «теряем больше всего» — только для самой низкой
-                            // конверсии среди eligibleForAlarm-этапов. Если данных мало
-                            // или процент в пределах нормы — не подсвечиваем.
-                            const isWorst = t.eligibleForAlarm && t.pct === minPct && eligibleAlarms.length > 1
+                            // #54: смягчённая шкала цвета. Раньше любая
+                            // конверсия <30% подсвечивалась как «бутылочное
+                            // горло» красным — для свежей вакансии 4% это
+                            // нормально, не надо пугать.
+                            //  < 1%   — оранжевый (есть проблема)
+                            //  1–5%   — нейтральный серый (норма для свежих)
+                            //  5–20%  — зелёный (хорошо)
+                            //  > 20%  — emerald (отлично)
+                            // Подсветка «теряем больше всего» теперь только
+                            // для самой низкой и только если она в зоне <1%.
+                            const tone =
+                              !t.hasData       ? "empty"   :
+                              t.pct < 1        ? "warn"    :
+                              t.pct <= 5       ? "neutral" :
+                              t.pct <= 20      ? "good"    :
+                                                 "great"
+                            const isWorst = tone === "warn" && t.eligibleForAlarm && t.pct === minPct && eligibleAlarms.length > 1
+                            const barClass = {
+                              empty:   "bg-muted",
+                              warn:    "bg-orange-500",
+                              neutral: "bg-slate-400",
+                              good:    "bg-emerald-500",
+                              great:   "bg-emerald-600",
+                            }[tone]
+                            const textClass = {
+                              empty:   "text-muted-foreground",
+                              warn:    "text-orange-700 dark:text-orange-400",
+                              neutral: "text-foreground",
+                              good:    "text-emerald-700 dark:text-emerald-400",
+                              great:   "text-emerald-700 dark:text-emerald-400",
+                            }[tone]
+                            const rowClass = isWorst
+                              ? "bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800"
+                              : "bg-muted/30"
                             return (
-                              <div key={t.from + t.to} className={cn("flex items-center gap-3 px-3 py-2 rounded-lg text-sm", isWorst ? "bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800" : "bg-muted/30")}>
+                              <div key={t.from + t.to} className={cn("flex items-center gap-3 px-3 py-2 rounded-lg text-sm", rowClass)}>
                                 <span className="text-muted-foreground w-[200px] shrink-0 text-xs">{t.from} → {t.to}</span>
                                 <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-                                  <div className={cn("h-full rounded-full", isWorst ? "bg-red-500" : "bg-primary")} style={{ width: `${t.hasData ? t.pct : 0}%` }} />
+                                  <div className={cn("h-full rounded-full", barClass)} style={{ width: `${t.hasData ? t.pct : 0}%` }} />
                                 </div>
-                                <span className={cn("text-xs font-semibold w-12 text-right", isWorst ? "text-red-600" : t.hasData ? "text-foreground" : "text-muted-foreground")}>
+                                <span className={cn("text-xs font-semibold w-12 text-right", textClass)}>
                                   {t.hasData ? `${t.pct}%` : "—"}
                                 </span>
-                                {isWorst && <div className="flex items-center gap-1 text-red-600 shrink-0"><AlertTriangle className="w-3.5 h-3.5" /><span className="text-xs font-medium">Здесь теряем больше всего</span></div>}
+                                {isWorst && <div className="flex items-center gap-1 text-orange-600 dark:text-orange-400 shrink-0"><AlertTriangle className="w-3.5 h-3.5" /><span className="text-xs font-medium">Здесь теряем больше всего</span></div>}
                               </div>
                             )
                           })}
