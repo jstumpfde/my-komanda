@@ -39,7 +39,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Checkbox } from "@/components/ui/checkbox"
 import { Slider } from "@/components/ui/slider"
 import { Input } from "@/components/ui/input"
-import { Plus, Clock, Pause, Play, Archive, RotateCcw, Trash2, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, MessageSquareText, Zap, Globe, AlertTriangle, TrendingUp, Calendar, MapPin, DollarSign, Filter, X, Link2, Copy, Save, Sparkles, Eye, Check, Loader2, Download, ExternalLink, ClipboardList, ChevronLeft, ChevronRight, ChevronDown, CheckCircle2, XCircle, Users, Phone, Upload, RefreshCw, Activity, FileText, Bot } from "lucide-react"
+import { Plus, Clock, Pause, Play, Archive, RotateCcw, Trash2, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, MessageSquareText, Zap, Globe, AlertTriangle, TrendingUp, Calendar, MapPin, DollarSign, Filter, X, Link2, Copy, Save, Sparkles, Eye, Check, Loader2, Download, ExternalLink, ClipboardList, ChevronLeft, ChevronRight, ChevronDown, CheckCircle2, XCircle, Users, Phone, Upload, RefreshCw, Activity, FileText, Bot, Workflow } from "lucide-react"
 import { AiChatbotSettings } from "@/components/vacancies/ai-chatbot-settings"
 import { VacancyStopFactorsSettings } from "@/components/vacancies/vacancy-stop-factors-settings"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -64,6 +64,7 @@ import { VacancyStopWordsSettings } from "@/components/vacancies/vacancy-stop-wo
 import { FinalScreensSettings, type FinalScreensConfig } from "@/components/vacancies/final-screens-settings"
 import { RecoveryMessageSettings } from "@/components/vacancies/recovery-message-settings"
 import { FirstMessagesChainEditor } from "@/components/vacancies/first-messages-chain-editor"
+import { FunnelBuilder } from "@/components/vacancies/funnel-builder"
 import { VacancySettingsProvider, VacancyTabPendingDot, VacancyStickySaveBar, useVacancySectionRegister, useSafeSubTabSwitch, type VacancyTabKey } from "@/components/vacancies/vacancy-settings-context"
 import { BestPublicationTimeBlock } from "./components/BestPublicationTimeBlock"
 import {
@@ -708,7 +709,7 @@ export default function VacancyPage() {
   const rawUrlSection = rawUrlTab === "automation" ? "ai" : (searchParams?.get("section") ?? null)
   // Миграция старых section-значений на новые 6 табов.
   // general → page (стартовая вкладка с брендингом), automation → ai.
-  const SETTINGS_SECTION_IDS = ["page", "sources", "messages", "funnel", "followup", "aichatbot", "ai", "integrations"] as const
+  const SETTINGS_SECTION_IDS = ["page", "sources", "messages", "funnel", "funnel-builder", "followup", "aichatbot", "ai", "integrations"] as const
   type SettingsSectionId = typeof SETTINGS_SECTION_IDS[number]
   const initialSettingsSection: SettingsSectionId =
     rawUrlSection === "general" ? "page" :
@@ -2614,14 +2615,15 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                   {/* #18: Воронка перед Сообщениями — HR сначала проектирует
                       стадии и AI-фильтр, потом уже настраивает тексты. */}
                   {([
-                    { value: "page"        as const, label: "Брендинг",             icon: Globe },
-                    { value: "sources"     as const, label: "Источники",           icon: Link2 },
-                    { value: "funnel"      as const, label: "Воронка",             icon: Kanban },
-                    { value: "messages"    as const, label: "Сообщения",           icon: MessageCircle },
-                    { value: "followup"    as const, label: "Дожим",               icon: MessageSquareText },
-                    { value: "aichatbot"   as const, label: "AI чат-бот",          icon: Bot },
-                    { value: "ai"          as const, label: "Расписание",          icon: Zap },
-                    { value: "integrations" as const, label: "Интеграции",          icon: Settings },
+                    { value: "page"           as const, label: "Брендинг",                       icon: Globe },
+                    { value: "sources"        as const, label: "Источники",                     icon: Link2 },
+                    { value: "funnel"         as const, label: "Воронка",                       icon: Kanban },
+                    { value: "funnel-builder" as const, label: "Конструктор воронки [Beta]",    icon: Workflow },
+                    { value: "messages"       as const, label: "Сообщения",                     icon: MessageCircle },
+                    { value: "followup"       as const, label: "Дожим",                         icon: MessageSquareText },
+                    { value: "aichatbot"      as const, label: "AI чат-бот",                    icon: Bot },
+                    { value: "ai"             as const, label: "Расписание",                    icon: Zap },
+                    { value: "integrations"   as const, label: "Интеграции",                    icon: Settings },
                   ] satisfies { value: VacancyTabKey; label: string; icon: typeof Globe }[]).map((s) => (
                     <SettingsSubNavButton
                       key={s.value}
@@ -3037,6 +3039,14 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                 {/* ───────── ТАБ «Сообщения» ───────── */}
                 {settingsSection === "messages" && (
                 <div className="space-y-6 max-w-3xl">
+                  {(apiVacancy as { funnelBuilderEnabled?: boolean } | undefined)?.funnelBuilderEnabled && (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50/60 dark:bg-amber-950/20 p-3 flex items-start gap-2">
+                      <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                      <div className="text-xs text-amber-900 dark:text-amber-200">
+                        Конструктор воронки активен. Изменения здесь синхронизируются с конструктором.
+                      </div>
+                    </div>
+                  )}
                   {/* #62: предупреждение для случая когда включён AI-агент.
                       Обработка пока не подключена (см. ai-chatbot tab), но
                       когда заработает — все блоки ниже будут заглушены
@@ -3098,6 +3108,14 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                 {/* ───────── ТАБ «Демо и воронка» ───────── */}
                 {settingsSection === "funnel" && (
                 <div className="space-y-6 max-w-3xl">
+                  {(apiVacancy as { funnelBuilderEnabled?: boolean } | undefined)?.funnelBuilderEnabled && (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50/60 dark:bg-amber-950/20 p-3 flex items-start gap-2">
+                      <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                      <div className="text-xs text-amber-900 dark:text-amber-200">
+                        Конструктор воронки активен. Изменения здесь синхронизируются с конструктором.
+                      </div>
+                    </div>
+                  )}
                   <AutomationSettings
                     vacancyId={id}
                     descriptionJson={apiVacancy?.descriptionJson}
@@ -3136,9 +3154,24 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                 </div>
                 )}
 
+                {/* ───────── ТАБ «Конструктор воронки [Beta]» ───────── */}
+                {settingsSection === "funnel-builder" && (
+                <div className="space-y-6 max-w-3xl">
+                  <FunnelBuilder vacancyId={id} />
+                </div>
+                )}
+
                 {/* ───────── ТАБ «Дожим» ───────── */}
                 {settingsSection === "followup" && (
                 <div className="space-y-6 max-w-3xl">
+                  {(apiVacancy as { funnelBuilderEnabled?: boolean } | undefined)?.funnelBuilderEnabled && (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50/60 dark:bg-amber-950/20 p-3 flex items-start gap-2">
+                      <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                      <div className="text-xs text-amber-900 dark:text-amber-200">
+                        Конструктор воронки активен. Изменения здесь синхронизируются с конструктором.
+                      </div>
+                    </div>
+                  )}
                   <div>
                     <h3 className="text-lg font-semibold text-foreground mb-1">Настройки дожима</h3>
                     <p className="text-sm text-muted-foreground">AI-фильтр откликов и цепочка касаний кандидатов, которые не открыли или не дошли до конца демо.</p>
@@ -3167,6 +3200,14 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                 {/* ───────── ТАБ «AI чат-бот» ───────── */}
                 {settingsSection === "aichatbot" && (
                 <div className="space-y-6 max-w-3xl">
+                  {(apiVacancy as { funnelBuilderEnabled?: boolean } | undefined)?.funnelBuilderEnabled && (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50/60 dark:bg-amber-950/20 p-3 flex items-start gap-2">
+                      <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                      <div className="text-xs text-amber-900 dark:text-amber-200">
+                        Конструктор воронки активен. Изменения здесь синхронизируются с конструктором.
+                      </div>
+                    </div>
+                  )}
                   <AiChatbotSettings vacancyId={id} onSaved={() => refetchVacancy()} />
                 </div>
                 )}
