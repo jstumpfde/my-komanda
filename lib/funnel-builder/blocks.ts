@@ -1,22 +1,38 @@
-// Метаданные блоков конструктора воронки (MVP — 5 блоков).
-// Хардкод — не в БД, чтобы менять label/icon без миграций.
+// Метаданные блоков конструктора воронки.
+// Хардкод — не в БД, чтобы менять label/icon/доступность без миграций.
 // В БД (funnel_config_json) лежит только { type, order, enabled }.
 
 import {
   Bot,
+  Brain,
+  Calendar,
+  CheckCircle2,
   ClipboardList,
+  FileText,
+  Filter,
   MessageCircle,
   PlayCircle,
-  RotateCcw,
+  Repeat,
+  ShieldAlert,
+  Sparkles,
+  Zap,
   type LucideIcon,
 } from "lucide-react"
 
 export type FunnelBlockType =
+  | "ai_resume_score"
+  | "stop_factors_resume"
   | "first_message"
+  | "prequalification"
   | "demo"
   | "anketa"
+  | "ai_anketa_score"
+  | "auto_reply_test_task"
+  | "stop_words_chat"
   | "dozhim"
   | "ai_chatbot"
+  | "interview"
+  | "thank_you_screen"
 
 export interface FunnelBlockMeta {
   type:             FunnelBlockType
@@ -28,6 +44,22 @@ export interface FunnelBlockMeta {
 }
 
 export const BLOCK_META: Record<FunnelBlockType, FunnelBlockMeta> = {
+  ai_resume_score: {
+    type:             "ai_resume_score",
+    label:            "AI-скоринг резюме",
+    description:      "AI оценивает резюме при импорте 0–100",
+    icon:             Brain,
+    required:         false,
+    incompatibleWith: [],
+  },
+  stop_factors_resume: {
+    type:             "stop_factors_resume",
+    label:            "Стоп-факторы по резюме",
+    description:      "Город / опыт / возраст → автоотказ",
+    icon:             Filter,
+    required:         false,
+    incompatibleWith: [],
+  },
   first_message: {
     type:             "first_message",
     label:            "Первое сообщение",
@@ -36,10 +68,18 @@ export const BLOCK_META: Record<FunnelBlockType, FunnelBlockMeta> = {
     required:         true,
     incompatibleWith: [],
   },
+  prequalification: {
+    type:             "prequalification",
+    label:            "Предквалификация",
+    description:      "AI-опрос перед демо для отсева",
+    icon:             ClipboardList,
+    required:         false,
+    incompatibleWith: [],
+  },
   demo: {
     type:             "demo",
     label:            "Демонстрация",
-    description:      "Презентация вакансии — кандидат смотрит видео и материалы",
+    description:      "Видео-обзор должности и материалы",
     icon:             PlayCircle,
     required:         true,
     incompatibleWith: [],
@@ -47,16 +87,40 @@ export const BLOCK_META: Record<FunnelBlockType, FunnelBlockMeta> = {
   anketa: {
     type:             "anketa",
     label:            "Анкета",
-    description:      "Сбор данных кандидата после демо",
-    icon:             ClipboardList,
+    description:      "Финальная анкета кандидата после демо",
+    icon:             FileText,
     required:         true,
+    incompatibleWith: [],
+  },
+  ai_anketa_score: {
+    type:             "ai_anketa_score",
+    label:            "AI-скрининг анкеты",
+    description:      "AI оценивает ответы кандидата 0–100",
+    icon:             Sparkles,
+    required:         false,
+    incompatibleWith: [],
+  },
+  auto_reply_test_task: {
+    type:             "auto_reply_test_task",
+    label:            "Автоответ с тест. заданием",
+    description:      "Сообщение через N минут после анкеты",
+    icon:             Zap,
+    required:         false,
+    incompatibleWith: [],
+  },
+  stop_words_chat: {
+    type:             "stop_words_chat",
+    label:            "Стоп-слова в чате",
+    description:      "Триггер автоотказа по словам кандидата",
+    icon:             ShieldAlert,
+    required:         false,
     incompatibleWith: [],
   },
   dozhim: {
     type:             "dozhim",
     label:            "Дожим",
-    description:      "Серия напоминаний кандидатам, которые не дошли до конца",
-    icon:             RotateCcw,
+    description:      "Цепочка касаний для не-открывших и не-завершивших",
+    icon:             Repeat,
     required:         false,
     incompatibleWith: [],
   },
@@ -66,16 +130,40 @@ export const BLOCK_META: Record<FunnelBlockType, FunnelBlockMeta> = {
     description:      "AI-агент общается с кандидатами вместо обычных сообщений",
     icon:             Bot,
     required:         false,
-    incompatibleWith: ["first_message", "dozhim"],
+    incompatibleWith: ["first_message", "dozhim", "auto_reply_test_task"],
+  },
+  interview: {
+    type:             "interview",
+    label:            "Интервью",
+    description:      "Приглашение на встречу",
+    icon:             Calendar,
+    required:         true,
+    incompatibleWith: [],
+  },
+  thank_you_screen: {
+    type:             "thank_you_screen",
+    label:            "Финальный экран",
+    description:      "Спасибо-экран после прохождения воронки",
+    icon:             CheckCircle2,
+    required:         true,
+    incompatibleWith: [],
   },
 }
 
 export const BLOCK_TYPES: FunnelBlockType[] = [
+  "ai_resume_score",
+  "stop_factors_resume",
   "first_message",
+  "prequalification",
   "demo",
   "anketa",
+  "ai_anketa_score",
+  "auto_reply_test_task",
+  "stop_words_chat",
   "dozhim",
   "ai_chatbot",
+  "interview",
+  "thank_you_screen",
 ]
 
 export interface FunnelBlock {
@@ -89,17 +177,28 @@ export interface FunnelConfig {
 }
 
 // Конфигурация по умолчанию: все обязательные блоки включены,
-// опциональные — выключены. Используется когда vacancy.funnel_config_json
+// типичные опциональные — выключены. Используется когда vacancy.funnel_config_json
 // ещё пустой ({ "blocks": [] }), чтобы UI не показывал пустоту.
+//
+// Также используется при normalizeFunnelConfig() для дополнения недостающих
+// блоков — что важно после расширения списка типов: старые вакансии с 5
+// блоками в БД будут автоматически дополнены новыми типами при чтении.
 export function getDefaultFunnelConfig(): FunnelConfig {
+  const defaultsByType: Partial<Record<FunnelBlockType, boolean>> = {
+    first_message:    true,
+    demo:             true,
+    anketa:           true,
+    interview:        true,
+    thank_you_screen: true,
+    dozhim:           true,
+    // Прочее — false (опционально, HR включит через UI).
+  }
   return {
-    blocks: [
-      { type: "first_message", order: 1, enabled: true  },
-      { type: "demo",          order: 2, enabled: true  },
-      { type: "anketa",        order: 3, enabled: true  },
-      { type: "dozhim",        order: 4, enabled: true  },
-      { type: "ai_chatbot",    order: 5, enabled: false },
-    ],
+    blocks: BLOCK_TYPES.map((type, idx) => ({
+      type,
+      order:   idx + 1,
+      enabled: Boolean(defaultsByType[type] ?? BLOCK_META[type].required),
+    })),
   }
 }
 
@@ -131,6 +230,106 @@ export function normalizeFunnelConfig(raw: unknown): FunnelConfig {
   // Перенумеровываем подряд от 1 чтобы значения order были чистыми.
   blocks.forEach((b, idx) => { b.order = idx + 1 })
   return { blocks }
+}
+
+// Шаблоны воронок: пресеты для быстрого старта.
+// При применении: enabled = enabledBlocks.includes(type) (плюс required всегда true),
+// порядок берётся из BLOCK_TYPES (дефолтный). Конфликты по incompatibleWith —
+// разрешаются автоматически (приоритет — тому что в шаблоне явно указано).
+
+export interface FunnelTemplate {
+  name:           string
+  description:    string
+  enabledBlocks:  FunnelBlockType[]
+}
+
+export const FUNNEL_TEMPLATES: Record<string, FunnelTemplate> = {
+  simple: {
+    name:        "Простой найм",
+    description: "Базовый сценарий: сообщение → демо → анкета → интервью",
+    enabledBlocks: [
+      "first_message",
+      "demo",
+      "anketa",
+      "interview",
+      "thank_you_screen",
+    ],
+  },
+  with_test: {
+    name:        "С тестовым заданием",
+    description: "AI-отсев + тестовое после анкеты",
+    enabledBlocks: [
+      "ai_resume_score",
+      "stop_factors_resume",
+      "first_message",
+      "demo",
+      "anketa",
+      "ai_anketa_score",
+      "auto_reply_test_task",
+      "interview",
+      "thank_you_screen",
+    ],
+  },
+  with_chatbot: {
+    name:        "С AI чат-ботом",
+    description: "AI-агент вместо обычных сообщений",
+    enabledBlocks: [
+      "ai_resume_score",
+      "demo",
+      "anketa",
+      "ai_chatbot",
+      "interview",
+      "thank_you_screen",
+    ],
+  },
+  full: {
+    name:        "Полный сценарий",
+    description: "Все возможности (кроме взаимоисключающих с AI чат-ботом)",
+    enabledBlocks: [
+      "ai_resume_score",
+      "stop_factors_resume",
+      "first_message",
+      "prequalification",
+      "demo",
+      "anketa",
+      "ai_anketa_score",
+      "auto_reply_test_task",
+      "stop_words_chat",
+      "dozhim",
+      "interview",
+      "thank_you_screen",
+    ],
+  },
+}
+
+// Применить шаблон к существующему набору блоков: оставляем тот же набор
+// типов (все 13), включаем только те что в template.enabledBlocks или required.
+// При конфликте по incompatibleWith — отключаем конфликтующие.
+export function applyFunnelTemplate(
+  template:        FunnelTemplate,
+  currentBlocks?:  FunnelBlock[],  // зарезервировано — сейчас не используем
+): FunnelBlock[] {
+  void currentBlocks
+  const targetEnabled = new Set<FunnelBlockType>(template.enabledBlocks)
+  // Required всегда включены.
+  for (const t of BLOCK_TYPES) {
+    if (BLOCK_META[t].required) targetEnabled.add(t)
+  }
+  // Снять конфликты: если включён блок с incompatibleWith — выкл всё что в списке.
+  for (const t of Array.from(targetEnabled)) {
+    const meta = BLOCK_META[t]
+    if (!meta) continue
+    for (const conflict of meta.incompatibleWith) {
+      // Required — приоритетнее (не выключаем required даже из-за конфликта).
+      if (BLOCK_META[conflict]?.required) continue
+      targetEnabled.delete(conflict)
+    }
+  }
+  return BLOCK_TYPES.map((type, idx) => ({
+    type,
+    order:   idx + 1,
+    enabled: targetEnabled.has(type),
+  }))
 }
 
 // Валидация: обязательные блоки должны быть enabled=true.

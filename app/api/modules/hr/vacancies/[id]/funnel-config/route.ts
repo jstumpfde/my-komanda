@@ -73,23 +73,61 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
       if (err) return NextResponse.json({ error: err }, { status: 400 })
       updates.funnelConfigJson = nextConfig
 
-      // Двойная запись в старые поля совместимости.
+      // ── Двойная запись в старые поля совместимости ──────────────────
+      // Цель: HR использует конструктор, но cron'ы и старые UI продолжают
+      // читать legacy-поля (aiChatbotEnabled, aiScoringEnabled,
+      // aiProcessSettings.*). Поэтому каждое изменение блока зеркалим
+      // в соответствующий legacy-источник.
+      //
+      // Маппинг блоков → legacy-полей (hard = колонка таблицы,
+      // soft = ключ внутри aiProcessSettings JSON, без cron-эффекта):
+      //   ai_chatbot           → vacancies.aiChatbotEnabled   (hard)
+      //   ai_resume_score      → vacancies.aiScoringEnabled   (hard)
+      //   dozhim               → aiProcessSettings.followupEnabled       (soft)
+      //   prequalification     → aiProcessSettings.prequalEnabled        (soft)
+      //   ai_anketa_score      → aiProcessSettings.aiAnketaScoreEnabled  (soft)
+      //   auto_reply_test_task → aiProcessSettings.testTaskAutoReplyEnabled (soft)
+      //   stop_words_chat      → aiProcessSettings.stopWordsChatEnabled  (soft)
+      //   stop_factors_resume  → aiProcessSettings.stopFactorsEnabled    (soft)
+      //   first_message        → aiProcessSettings.firstMessageEnabled   (soft, required = всегда true)
+      //   interview            → aiProcessSettings.interviewEnabled      (soft)
+      //   thank_you_screen     → aiProcessSettings.thankYouScreenEnabled (soft)
+      //   demo / anketa        — required, источника правды как такового
+      //                          нет: всегда включены, не зеркалим.
       const findBlock = (t: FunnelBlockType): FunnelBlock | undefined =>
         nextConfig.blocks.find(b => b.type === t)
+      const enabledOf = (t: FunnelBlockType): boolean | undefined => findBlock(t)?.enabled
 
-      const ai = findBlock("ai_chatbot")
-      if (ai) updates.aiChatbotEnabled = ai.enabled
+      // Hard-колонки.
+      const aiChatbot = enabledOf("ai_chatbot")
+      if (aiChatbot !== undefined) updates.aiChatbotEnabled = aiChatbot
 
-      // Дожим: aiProcessSettings.followupEnabled — мягкий флаг.
-      // Если его нет — добавляем; cron'ы по нему не ходят, но конструктор
-      // и UI смогут увидеть согласованное состояние. Реальная схема
-      // дожима живёт в followUpCampaigns; её не трогаем.
-      const dozhim = findBlock("dozhim")
-      if (dozhim) {
-        const prev = (current.aiProcessSettings && typeof current.aiProcessSettings === "object")
-          ? current.aiProcessSettings as Record<string, unknown>
-          : {}
-        updates.aiProcessSettings = { ...prev, followupEnabled: dozhim.enabled }
+      const aiResumeScore = enabledOf("ai_resume_score")
+      if (aiResumeScore !== undefined) updates.aiScoringEnabled = aiResumeScore
+
+      // Soft-флаги внутри aiProcessSettings. Сохраняем все существующие
+      // ключи (...prev), не падаем если объект пустой или не объект.
+      const prev = (current.aiProcessSettings && typeof current.aiProcessSettings === "object")
+        ? current.aiProcessSettings as Record<string, unknown>
+        : {}
+      const softMap: Array<[FunnelBlockType, string]> = [
+        ["dozhim",               "followupEnabled"],
+        ["prequalification",     "prequalEnabled"],
+        ["ai_anketa_score",      "aiAnketaScoreEnabled"],
+        ["auto_reply_test_task", "testTaskAutoReplyEnabled"],
+        ["stop_words_chat",      "stopWordsChatEnabled"],
+        ["stop_factors_resume",  "stopFactorsEnabled"],
+        ["first_message",        "firstMessageEnabled"],
+        ["interview",            "interviewEnabled"],
+        ["thank_you_screen",     "thankYouScreenEnabled"],
+      ]
+      const softUpdates: Record<string, unknown> = {}
+      for (const [blockType, key] of softMap) {
+        const v = enabledOf(blockType)
+        if (v !== undefined) softUpdates[key] = v
+      }
+      if (Object.keys(softUpdates).length > 0) {
+        updates.aiProcessSettings = { ...prev, ...softUpdates }
       }
     }
 
