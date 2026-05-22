@@ -837,9 +837,22 @@ export default function VacancyPage() {
         fetch("/api/integrations/hh/vacancies"),
         fetch("/api/integrations/hh/responses"),
       ])
+
+      // P0-54: cron делает 2 шага (импорт + processQueue), но ручной handleHhSync
+      // раньше делал только импорт. В результате свежие hh_responses оставались
+      // в status='response' до следующего cron-прогона, и первое сообщение
+      // не уходило сразу после нажатия «Синхронизировать». Дёргаем разбор
+      // fire-and-forget — endpoint async, отдаёт {jobId, status:queued}
+      // мгновенно; реальная обработка идёт в фоне.
+      void fetch("/api/integrations/hh/process-queue", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ vacancyId: id, limit: 50, delaySeconds: 2 }),
+      }).catch(() => { /* silent — основной toast о синке всё равно покажем */ })
+
       await Promise.all([loadHhSyncMeta(), loadHeaderStats()])
       refetchCandidates(); refetchVacancy()
-      toast.success("Синхронизировано с hh.ru")
+      toast.success("Синхронизировано с hh.ru. Разбор запущен в фоне.")
     } catch { toast.error("Ошибка синхронизации") }
     finally { setHhSyncing(false) }
   }
@@ -2016,9 +2029,6 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                     {activeTab === "candidates" && hhConnected === true && apiVacancy?.hhVacancyId && hhSyncMeta && (
                       <HhAutoProcess
                         vacancyId={id}
-                        defaultMinScore={
-                          ((apiVacancy?.aiProcessSettings as { minScore?: number } | null)?.minScore) ?? 70
-                        }
                         onProcessed={() => { refetchCandidates(); handleHhSync() }}
                       />
                     )}

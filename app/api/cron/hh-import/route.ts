@@ -18,6 +18,7 @@ import { and, eq, inArray, count, sql } from "drizzle-orm"
 import { HHClient } from "@/lib/hh/client"
 import { checkCronAuth } from "@/lib/cron/auth"
 import { processHhQueue } from "@/lib/hh/process-queue"
+import { runCleanup as runHhCleanup } from "@/app/api/cron/hh-cleanup-stuck/route"
 
 // Лимит откликов в обработку за один вызов cron'а — на компанию.
 // 50 — компромисс: hh API per-employer rate-limit ≈ 60 rps, в коде
@@ -52,9 +53,24 @@ export async function POST(req: NextRequest) {
   let processed = 0
   let deferredOffHours = 0
   let skipped   = 0
+  let orphanedCleanup = 0
   const errors: string[] = []
 
   try {
+    // P0-53: до основного прохода чистим "застрявшие" hh_responses —
+    // status='response' с linked candidate в стадии rejected/hired или
+    // autoProcessingStopped=true. Это позволяет основному processHhQueue
+    // ниже не упираться в ORDER BY createdAt ASC LIMIT 50 на старых
+    // stopped-откликах и доходить до свежих.
+    try {
+      const cleanupRes = await runHhCleanup()
+      orphanedCleanup = cleanupRes.orphaned
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error("[hh-import] cleanup failed:", msg)
+      errors.push(`cleanup: ${msg}`)
+    }
+
     // Все активные hh-вакансии всех компаний с включённым авто-разбором.
     const activeRows = await db
       .select({
@@ -155,6 +171,7 @@ export async function POST(req: NextRequest) {
     processed,
     deferredOffHours,
     skipped,
+    orphanedCleanup,
     errors,
   })
 }

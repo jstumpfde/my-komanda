@@ -7,7 +7,7 @@
 import { db } from "@/lib/db"
 import { hhResponses, candidates, vacancies, followUpCampaigns, followUpMessages, hhCandidates } from "@/lib/db/schema"
 import type { VacancyAiProcessSettings } from "@/lib/db/schema"
-import { and, asc, eq, inArray, isNull } from "drizzle-orm"
+import { and, asc, eq, inArray, isNull, isNotNull, notInArray, or } from "drizzle-orm"
 import { getValidToken } from "@/lib/hh-helpers"
 import { changeNegotiationState, getNegotiationMessages } from "@/lib/hh-api"
 import { generateCandidateShortId } from "@/lib/short-id"
@@ -96,14 +96,43 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
   const effDelayMs = Math.max(0, (reqDelaySeconds ?? 30) * 1000)
   const effInviteMsg = scopedAiSettings.inviteMessage?.trim() || DEMO_INVITE_MESSAGE
 
+  // P0-53: исключаем "застрявшие" отклики — те, чей привязанный кандидат уже
+  // в терминальной стадии (rejected/hired) или с auto_processing_stopped=true.
+  // Без этого фильтра cron берёт ORDER BY createdAt ASC LIMIT 50 → первые 50
+  // оказываются старыми stopped/rejected (silent-skip внутри цикла) → cron
+  // НИКОГДА не доходит до свежих кандидатов. Сегодня (22.05.2026) этот баг
+  // оставил 50 свежих откликов без первого сообщения.
+  const stuckRows = await db
+    .select({ id: candidates.id })
+    .from(candidates)
+    .innerJoin(vacancies, eq(vacancies.id, candidates.vacancyId))
+    .where(and(
+      eq(vacancies.companyId, companyId),
+      or(
+        inArray(candidates.stage, ["rejected", "hired"]),
+        eq(candidates.autoProcessingStopped, true),
+      ),
+    ))
+  const stuckIds = stuckRows.map(r => r.id)
+
+  const baseWhere = and(
+    eq(hhResponses.companyId, companyId),
+    eq(hhResponses.status, "response"),
+    hhVacancyFilter ? eq(hhResponses.hhVacancyId, hhVacancyFilter) : undefined,
+    // localCandidateId NULL = свежий, ещё не linked → пропускаем; иначе —
+    // не должен быть в списке stuck.
+    stuckIds.length > 0
+      ? or(
+          isNull(hhResponses.localCandidateId),
+          notInArray(hhResponses.localCandidateId, stuckIds),
+        )
+      : undefined,
+  )
+
   const newResponses = await db
     .select()
     .from(hhResponses)
-    .where(
-      hhVacancyFilter
-        ? and(eq(hhResponses.companyId, companyId), eq(hhResponses.status, "response"), eq(hhResponses.hhVacancyId, hhVacancyFilter))
-        : and(eq(hhResponses.companyId, companyId), eq(hhResponses.status, "response"))
-    )
+    .where(baseWhere)
     .orderBy(asc(hhResponses.createdAt))
     .limit(limit)
 
