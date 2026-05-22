@@ -234,6 +234,33 @@ export const TERMINAL_STAGE_SLUGS: StageSlug[] = ALL_STAGE_SLUGS.filter(
   s => PLATFORM_STAGES[s].isTerminal,
 )
 
+// #13/#14: группы стадий для метрик. Используется в lib/vacancy-stats.ts,
+// в шапке вакансии и в аналитике/дашборде.
+//
+//   inProgress — кандидат в активной части воронки (сообщение отправлено,
+//                демо открыто, анкета сдана и т.д. — НЕ new, НЕ rejected,
+//                НЕ hired). Метрика "в работе".
+//   anketaFilled — кандидаты, заполнившие финальную анкету
+//                  (anketa_filled и всё что идёт ПОСЛЕ).
+//   demoOpened — открыли демо (demo_opened и далее, кроме rejected).
+//                Эта группа шире чем reзonate demo_progress_json IS NOT NULL.
+export const IN_PROGRESS_STAGE_SLUGS: StageSlug[] = [
+  "primary_contact", "demo_opened", "anketa_filled",
+  "ai_screening", "test_task_sent", "test_task_done",
+  "scheduled", "interview", "reference_check", "decision",
+  "offer_sent",
+]
+export const ANKETA_FILLED_STAGE_SLUGS: StageSlug[] = [
+  "anketa_filled", "ai_screening", "test_task_sent", "test_task_done",
+  "scheduled", "interview", "reference_check", "decision",
+  "offer_sent", "hired",
+]
+export const DEMO_OPENED_STAGE_SLUGS: StageSlug[] = [
+  "demo_opened", "anketa_filled", "ai_screening", "test_task_sent",
+  "test_task_done", "scheduled", "interview", "reference_check",
+  "decision", "offer_sent", "hired",
+]
+
 // ───────────────────────────────────────────────────────────────────
 // Legacy slug → читаемый лейбл
 // ───────────────────────────────────────────────────────────────────
