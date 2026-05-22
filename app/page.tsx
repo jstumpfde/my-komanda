@@ -9,7 +9,7 @@ import { CardSettings, type CardDisplaySettings } from "@/components/dashboard/c
 import { CandidateFilters, DEFAULT_FUNNEL_STATUSES, type FilterState } from "@/components/dashboard/candidate-filters"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Button } from "@/components/ui/button"
-import { Plus, Filter } from "lucide-react"
+import {Plus} from "lucide-react"
 import { toast } from "sonner"
 import { defaultColumnColors, getNextColumnId, PROGRESS_BY_COLUMN, type CandidateAction } from "@/lib/column-config"
 import type { Candidate } from "@/components/dashboard/candidate-card"

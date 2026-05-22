@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { db } from "@/lib/db"
 import { candidates, vacancies } from "@/lib/db/schema"
-import { eq, and, count, sql } from "drizzle-orm"
+import {eq, and, count} from "drizzle-orm"
 
 const STAGES = [
   { key: "new",         label: "Новый",              color: "#94a3b8" },

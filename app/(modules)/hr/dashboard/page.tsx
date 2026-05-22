@@ -16,7 +16,6 @@ import {
   Sparkles, Activity, Calendar,
 } from "lucide-react"
 import { CandidatesProgressMiniTable } from "@/components/candidates/candidates-progress-mini-table"
-import { Greeting } from "./_components/greeting"
 import { AwaitingReviewBanner } from "./_components/awaiting-review-banner"
 
 // ─── Colors ─────────────────────────────────────────────────────────────────

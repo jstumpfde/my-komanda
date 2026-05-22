@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input"
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog"
-import { Plus, FolderKanban, CheckSquare, Clock, Users } from "lucide-react"
+import {Plus, FolderKanban, Clock} from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 

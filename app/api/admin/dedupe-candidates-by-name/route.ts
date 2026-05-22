@@ -15,7 +15,7 @@
 //   }
 
 import { NextRequest } from "next/server"
-import { eq, and } from "drizzle-orm"
+import {eq} from "drizzle-orm"
 import { db } from "@/lib/db"
 import { candidates, hhCandidates } from "@/lib/db/schema"
 import { requirePlatformAdmin, apiError, apiSuccess } from "@/lib/api-helpers"

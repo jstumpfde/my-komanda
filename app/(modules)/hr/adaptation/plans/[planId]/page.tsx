@@ -13,7 +13,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Switch } from "@/components/ui/switch"
-import { Loader2, Plus, ChevronLeft, GripVertical, Pencil, Trash2, BookOpen, CheckSquare, Video, ClipboardList, Users, Play } from "lucide-react"
+import {Loader2, Plus, ChevronLeft, GripVertical, Pencil, Trash2, BookOpen, CheckSquare, Video, ClipboardList, Users} from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 

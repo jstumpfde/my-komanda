@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { db } from "@/lib/db"
 import { aiChatMessages } from "@/lib/db/schema"
-import { eq, and, desc } from "drizzle-orm"
+import {eq, and} from "drizzle-orm"
 import { getClaudeMessagesUrl } from "@/lib/claude-proxy"
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY

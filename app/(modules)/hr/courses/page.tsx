@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { BookOpen, Plus, Clock, Users, Award, Filter, ChevronRight, Layers, Sparkles } from "lucide-react"
+import {BookOpen, Plus, Clock, ChevronRight, Layers, Sparkles} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"

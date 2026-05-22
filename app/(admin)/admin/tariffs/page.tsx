@@ -14,7 +14,7 @@ import { Separator } from "@/components/ui/separator"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
-import { DEFAULT_TARIFFS, formatPrice, type Tariff, type TariffFeatures } from "@/lib/tariff-types"
+import {DEFAULT_TARIFFS, type Tariff, type TariffFeatures} from "@/lib/tariff-types"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import {
   Plus, Pencil, Trash2, Check, X, Shield, Save, UserPlus, Archive,

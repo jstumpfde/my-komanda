@@ -3,7 +3,7 @@ import Image from "next/image"
 
 import { useState, useRef, useEffect } from "react"
 import { usePathname } from "next/navigation"
-import { MessageCircle, X, Send, Loader2, Mic, Square, Maximize2, Minimize2, BookmarkPlus, Check, Volume2, VolumeX } from "lucide-react"
+import {X, Send, Loader2, Mic, Square, Maximize2, Minimize2, BookmarkPlus, Check, Volume2, VolumeX} from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"

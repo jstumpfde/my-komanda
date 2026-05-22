@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { db } from "@/lib/db"
 import { internalProjects, projectApplications } from "@/lib/db/schema"
-import { eq, desc, and, count } from "drizzle-orm"
+import {eq, desc, count} from "drizzle-orm"
 
 // GET /api/modules/hr/marketplace
 export async function GET(req: Request) {

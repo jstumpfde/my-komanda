@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { requireCompany } from "@/lib/api-helpers"
 import { db } from "@/lib/db"
 import { tasks } from "@/lib/db/schema"
-import { eq, and, sql } from "drizzle-orm"
+import {eq} from "drizzle-orm"
 
 export async function GET() {
   let user

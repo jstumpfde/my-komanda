@@ -1,8 +1,8 @@
 import { NextRequest } from "next/server"
 import { db } from "@/lib/db"
 import { companies, users, plans } from "@/lib/db/schema"
-import { eq, ilike, or, inArray, count, asc, desc, and } from "drizzle-orm"
-import { requirePlatformAdmin, apiError, apiSuccess } from "@/lib/api-helpers"
+import {ilike, or, inArray, count, asc, desc, and} from "drizzle-orm"
+import {requirePlatformAdmin, apiSuccess} from "@/lib/api-helpers"
 
 // GET /api/admin/clients
 // Query params:

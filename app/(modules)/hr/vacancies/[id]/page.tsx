@@ -22,7 +22,6 @@ import { Tooltip as UITooltip, TooltipTrigger, TooltipContent } from "@/componen
 import type { CandidateSortMode } from "@/lib/candidate-sort"
 import { CandidateDrawer } from "@/components/candidates/candidate-drawer"
 import { BulkActionsBar, type BulkAction } from "@/components/dashboard/bulk-actions-bar"
-import { CandidatesProgressList } from "@/components/candidates/candidates-progress-list"
 import { AddCandidateDialog } from "@/components/dashboard/add-candidate-dialog"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
@@ -39,7 +38,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Checkbox } from "@/components/ui/checkbox"
 import { Slider } from "@/components/ui/slider"
 import { Input } from "@/components/ui/input"
-import { Plus, Clock, Pause, Play, Archive, RotateCcw, Trash2, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, MessageSquareText, Zap, Globe, AlertTriangle, TrendingUp, Calendar, MapPin, DollarSign, Filter, X, Link2, Copy, Save, Sparkles, Eye, Check, Loader2, Download, ExternalLink, ClipboardList, ChevronLeft, ChevronRight, ChevronDown, CheckCircle2, XCircle, Users, Phone, Upload, RefreshCw, Activity, FileText, Bot, Workflow } from "lucide-react"
+import {Clock, Pause, Play, Archive, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, MessageSquareText, Zap, Globe, AlertTriangle, TrendingUp, Filter, X, Link2, Copy, Save, Sparkles, Eye, Check, Loader2, Download, ExternalLink, ClipboardList, ChevronLeft, ChevronRight, ChevronDown, Users, Upload, RefreshCw, Bot, Workflow} from "lucide-react"
 import { AiChatbotSettings } from "@/components/vacancies/ai-chatbot-settings"
 import { VacancyStopFactorsSettings } from "@/components/vacancies/vacancy-stop-factors-settings"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -48,7 +47,6 @@ import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
 import { defaultColumnColors, COLUMN_ORDER, type CandidateAction, getNextColumnId, PROGRESS_BY_COLUMN } from "@/lib/column-config"
 import type { Candidate } from "@/components/dashboard/candidate-card"
-import { HhVacancyBanner } from "@/components/vacancies/hh-vacancy-banner"
 import { VacancyStatusBadge } from "@/components/vacancies/vacancy-status-badge"
 import { HhAutoProcess } from "@/components/hh/hh-auto-process"
 import { AutomationSettings, type AutomationSectionId } from "@/components/vacancies/automation-settings"
@@ -66,7 +64,6 @@ import { RecoveryMessageSettings } from "@/components/vacancies/recovery-message
 import { FirstMessagesChainEditor } from "@/components/vacancies/first-messages-chain-editor"
 import { FunnelBuilder } from "@/components/vacancies/funnel-builder"
 import { VacancySettingsProvider, VacancyTabPendingDot, VacancyStickySaveBar, useVacancySectionRegister, useSafeSubTabSwitch, type VacancyTabKey } from "@/components/vacancies/vacancy-settings-context"
-import { BestPublicationTimeBlock } from "./components/BestPublicationTimeBlock"
 import {
   ResponsiveContainer,
   BarChart,

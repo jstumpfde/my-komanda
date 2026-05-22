@@ -1,9 +1,7 @@
 "use client"
 
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { cn } from "@/lib/utils"
 import { Users, MoreHorizontal, Pencil, Archive, RotateCcw, Phone, Mail, MessageCircle, Star } from "lucide-react"
 import {
   DropdownMenu,

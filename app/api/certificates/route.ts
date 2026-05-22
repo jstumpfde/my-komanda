@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { requireCompany } from "@/lib/api-helpers"
 import { db } from "@/lib/db"
 import { certificates, courses } from "@/lib/db/schema"
-import { eq, and, desc } from "drizzle-orm"
+import {eq, desc} from "drizzle-orm"
 
 export async function GET() {
   let user: { companyId: string; id?: string }

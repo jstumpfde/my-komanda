@@ -5,7 +5,7 @@ import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Plus, Mail, Eye, MousePointerClick, UserMinus } from "lucide-react"
+import {Plus, Mail, Eye, UserMinus} from "lucide-react"
 
 const kpiCards = [
   { title: "Подписчиков", value: "4 821", icon: Mail, color: "text-blue-500", bg: "bg-blue-50" },

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
-import { invoices, subscriptionHistory, companies, plans } from "@/lib/db/schema"
+import {invoices, subscriptionHistory, plans} from "@/lib/db/schema"
 import { eq, count } from "drizzle-orm"
 import { apiError, requireCompany } from "@/lib/api-helpers"
 

@@ -5,8 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { Badge } from "@/components/ui/badge"
-import { Copy, Check, Send, MessageCircle, Mail, Phone } from "lucide-react"
+import {Copy, Check, MessageCircle, Mail, Phone} from "lucide-react"
 import { toast } from "sonner"
 
 interface SendDemoDialogProps {

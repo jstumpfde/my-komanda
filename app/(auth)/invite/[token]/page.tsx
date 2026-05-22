@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation"
 import { db } from "@/lib/db"
-import { inviteLinks, companies, users } from "@/lib/db/schema"
+import {inviteLinks, companies} from "@/lib/db/schema"
 import { eq, and, or, isNull, gt } from "drizzle-orm"
 import { auth } from "@/auth"
 import AcceptInviteClient from "./accept-client"

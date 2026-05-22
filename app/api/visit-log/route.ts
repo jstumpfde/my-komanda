@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { db } from "@/lib/db"
 import { visitLog, userSessions, users } from "@/lib/db/schema"
-import { eq, and, desc, gte, sql } from "drizzle-orm"
+import {eq, and, desc, gte} from "drizzle-orm"
 
 // POST — record a page visit
 export async function POST(req: NextRequest) {

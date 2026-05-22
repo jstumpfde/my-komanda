@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { db } from "@/lib/db"
 import { reskillingAssessments, reskillingPlans } from "@/lib/db/schema"
-import { eq, desc, and } from "drizzle-orm"
+import {eq, desc} from "drizzle-orm"
 
 // GET /api/modules/hr/reskilling?type=assessments|plans
 export async function GET(req: Request) {

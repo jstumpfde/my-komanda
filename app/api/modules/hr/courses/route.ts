@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { requireCompany } from "@/lib/api-helpers"
 import { db } from "@/lib/db"
-import { courses, lessons } from "@/lib/db/schema"
+import {courses} from "@/lib/db/schema"
 import { eq, desc, sql } from "drizzle-orm"
 
 export async function GET() {

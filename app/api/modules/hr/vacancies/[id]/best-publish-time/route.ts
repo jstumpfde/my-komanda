@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { db } from "@/lib/db"
-import { hhResponses, vacancies } from "@/lib/db/schema"
+import {vacancies} from "@/lib/db/schema"
 import { eq, sql } from "drizzle-orm"
 
 const DAY_NAMES = ["Воскресенье", "Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота"]

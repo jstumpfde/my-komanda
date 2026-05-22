@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server"
-import { eq, and, ilike, or, sql } from "drizzle-orm"
+import {eq, and, ilike, or} from "drizzle-orm"
 import { db } from "@/lib/db"
 import { salesDeals, salesCompanies, salesContacts, users } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"

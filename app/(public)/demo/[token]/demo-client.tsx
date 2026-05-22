@@ -12,7 +12,6 @@ import { CheckCircle2, ChevronRight, Loader2, Video as VideoIcon, Mic, Camera, S
 import type { Block, Lesson, Question } from "@/lib/course-types"
 import { resolveBrand } from "@/lib/brand-colors"
 import { VideoEmbed } from "@/components/blocks/VideoEmbed"
-import { renderTemplate } from "@/lib/template-renderer"
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 

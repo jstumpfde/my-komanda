@@ -6,7 +6,7 @@ import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { CALL_HISTORY, CALL_RESULTS, RESULT_MAP, CALL_SCRIPTS, formatDuration, SENTIMENT_EMOJI } from "@/lib/dialer/demo-data"
+import {CALL_HISTORY, CALL_RESULTS, RESULT_MAP, formatDuration, SENTIMENT_EMOJI} from "@/lib/dialer/demo-data"
 
 export default function DialerHistoryPage() {
   const [filterScript, setFilterScript] = useState("all")

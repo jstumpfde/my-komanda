@@ -7,7 +7,7 @@ import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { ArrowLeft, Building2, Clock, Lock } from "lucide-react"
+import {ArrowLeft, Clock, Lock} from "lucide-react"
 import {
   B2B_ACCOUNTS, B2B_DEALS, INFLUENCE_MAP, ENGAGEMENT_MAP,
   TIER_BADGES, RISK_COLORS, formatValueShort,

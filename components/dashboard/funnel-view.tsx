@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { MapPin, Briefcase, Circle, ChevronDown, CheckCircle2, XCircle, ArrowRight, ThumbsUp, Clock } from "lucide-react"
+import {MapPin, ChevronDown, CheckCircle2, XCircle, ArrowRight, ThumbsUp, Clock} from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { db } from "@/lib/db"
 import { flightRiskScores, flightRiskFactors, retentionActions } from "@/lib/db/schema"
-import { eq, desc, and, count, sql } from "drizzle-orm"
+import {eq, desc, and, count} from "drizzle-orm"
 
 // GET /api/modules/hr/flight-risk — дашборд flight risk
 export async function GET(req: Request) {

@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { Megaphone, Plus } from "lucide-react"
+import {Plus} from "lucide-react"
 import { CAMPAIGNS, CHANNEL_MAP, MARKETING_CHANNELS } from "@/lib/marketing/demo-data"
 
 const STATUSES: Record<string, { label: string; cls: string }> = {

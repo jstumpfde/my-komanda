@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
-import { ChevronDown, ChevronUp, Plus, X, Save, Loader2, Trash2, GripVertical, Eye, Copy, FileDown, Sparkles, RefreshCw, Check, PenLine, Upload, File, FileSpreadsheet, FileImage } from "lucide-react"
+import {ChevronDown, ChevronUp, Plus, X, Save, Loader2, Trash2, Eye, Copy, FileDown, Sparkles, RefreshCw, Check, PenLine, Upload, File, FileSpreadsheet, FileImage} from "lucide-react"
 import { toast } from "sonner"
 import { POSITION_CATEGORIES } from "@/lib/position-classifier"
 // AnketaPublicSection переехал в отдельный таб «Анкета» (Ф5.1) и рендерится

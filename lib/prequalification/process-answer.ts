@@ -13,7 +13,7 @@ import { eq, and, isNull } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { candidateQualificationAnswers, candidates } from "@/lib/db/schema"
 import { screenPrequalificationAnswers } from "@/lib/ai-screen-prequalification"
-import { allQuestionsAnswered, finalizePrequalification } from "./finalize"
+import {finalizePrequalification} from "./finalize"
 
 interface ProcessResult {
   processed:  boolean

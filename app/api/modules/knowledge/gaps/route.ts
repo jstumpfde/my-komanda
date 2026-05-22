@@ -2,7 +2,7 @@ import { NextRequest } from "next/server"
 import { and, desc, eq, gte, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { knowledgeQuestionLogs } from "@/lib/db/schema"
-import { apiError, apiSuccess, requireCompany } from "@/lib/api-helpers"
+import {apiSuccess, requireCompany} from "@/lib/api-helpers"
 
 // GET  /api/modules/knowledge/gaps
 // Возвращает топ неотвеченных вопросов за 7 дней + общий счётчик.

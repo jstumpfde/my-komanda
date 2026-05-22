@@ -5,7 +5,7 @@ import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Settings2, TrendingDown } from "lucide-react"
+import {Settings2} from "lucide-react"
 
 const channelBudgets = [
   { channel: "Яндекс Директ", plan: 65000, fact: 52400 },

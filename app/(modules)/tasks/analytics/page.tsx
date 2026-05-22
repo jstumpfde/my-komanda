@@ -4,7 +4,7 @@ import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Badge } from "@/components/ui/badge"
-import { BarChart3, CheckCircle2, Clock, AlertTriangle, TrendingUp, Users } from "lucide-react"
+import {BarChart3, CheckCircle2, Clock, AlertTriangle, Users} from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Progress } from "@/components/ui/progress"
 
