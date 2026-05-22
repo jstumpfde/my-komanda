@@ -49,4 +49,24 @@ export const BLOCK_SETTINGS_REGISTRY: Partial<Record<FunnelBlockType, BlockSetti
     title:       "Анкета",
     description: "Финальные экраны после видео и после анкеты",
   },
+  video_intro: {
+    component:   null,
+    title:       "Видео-визитка",
+    description: "Кандидат снимает короткое видео о себе",
+  },
+  test_task: {
+    component:   null,
+    title:       "Тестовое задание",
+    description: "Отдельная ступень: задание → ответ → AI-проверка",
+  },
+  reference_check: {
+    component:   null,
+    title:       "Реф-чек",
+    description: "Звонок предыдущему работодателю кандидата",
+  },
+  offer: {
+    component:   null,
+    title:       "Оффер",
+    description: "Генерация документа об оффере + электронная подпись",
+  },
 }
