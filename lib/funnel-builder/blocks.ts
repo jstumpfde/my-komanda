@@ -232,6 +232,106 @@ export function normalizeFunnelConfig(raw: unknown): FunnelConfig {
   return { blocks }
 }
 
+// Шаблоны воронок: пресеты для быстрого старта.
+// При применении: enabled = enabledBlocks.includes(type) (плюс required всегда true),
+// порядок берётся из BLOCK_TYPES (дефолтный). Конфликты по incompatibleWith —
+// разрешаются автоматически (приоритет — тому что в шаблоне явно указано).
+
+export interface FunnelTemplate {
+  name:           string
+  description:    string
+  enabledBlocks:  FunnelBlockType[]
+}
+
+export const FUNNEL_TEMPLATES: Record<string, FunnelTemplate> = {
+  simple: {
+    name:        "Простой найм",
+    description: "Базовый сценарий: сообщение → демо → анкета → интервью",
+    enabledBlocks: [
+      "first_message",
+      "demo",
+      "anketa",
+      "interview",
+      "thank_you_screen",
+    ],
+  },
+  with_test: {
+    name:        "С тестовым заданием",
+    description: "AI-отсев + тестовое после анкеты",
+    enabledBlocks: [
+      "ai_resume_score",
+      "stop_factors_resume",
+      "first_message",
+      "demo",
+      "anketa",
+      "ai_anketa_score",
+      "auto_reply_test_task",
+      "interview",
+      "thank_you_screen",
+    ],
+  },
+  with_chatbot: {
+    name:        "С AI чат-ботом",
+    description: "AI-агент вместо обычных сообщений",
+    enabledBlocks: [
+      "ai_resume_score",
+      "demo",
+      "anketa",
+      "ai_chatbot",
+      "interview",
+      "thank_you_screen",
+    ],
+  },
+  full: {
+    name:        "Полный сценарий",
+    description: "Все возможности (кроме взаимоисключающих с AI чат-ботом)",
+    enabledBlocks: [
+      "ai_resume_score",
+      "stop_factors_resume",
+      "first_message",
+      "prequalification",
+      "demo",
+      "anketa",
+      "ai_anketa_score",
+      "auto_reply_test_task",
+      "stop_words_chat",
+      "dozhim",
+      "interview",
+      "thank_you_screen",
+    ],
+  },
+}
+
+// Применить шаблон к существующему набору блоков: оставляем тот же набор
+// типов (все 13), включаем только те что в template.enabledBlocks или required.
+// При конфликте по incompatibleWith — отключаем конфликтующие.
+export function applyFunnelTemplate(
+  template:        FunnelTemplate,
+  currentBlocks?:  FunnelBlock[],  // зарезервировано — сейчас не используем
+): FunnelBlock[] {
+  void currentBlocks
+  const targetEnabled = new Set<FunnelBlockType>(template.enabledBlocks)
+  // Required всегда включены.
+  for (const t of BLOCK_TYPES) {
+    if (BLOCK_META[t].required) targetEnabled.add(t)
+  }
+  // Снять конфликты: если включён блок с incompatibleWith — выкл всё что в списке.
+  for (const t of Array.from(targetEnabled)) {
+    const meta = BLOCK_META[t]
+    if (!meta) continue
+    for (const conflict of meta.incompatibleWith) {
+      // Required — приоритетнее (не выключаем required даже из-за конфликта).
+      if (BLOCK_META[conflict]?.required) continue
+      targetEnabled.delete(conflict)
+    }
+  }
+  return BLOCK_TYPES.map((type, idx) => ({
+    type,
+    order:   idx + 1,
+    enabled: targetEnabled.has(type),
+  }))
+}
+
 // Валидация: обязательные блоки должны быть enabled=true.
 export function validateFunnelConfig(cfg: FunnelConfig): string | null {
   for (const b of cfg.blocks) {

@@ -22,7 +22,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
-import { GripVertical, Settings2 } from "lucide-react"
+import { ChevronDown, GripVertical, Settings2 } from "lucide-react"
 
 import {
   AlertDialog,
@@ -43,6 +43,12 @@ import {
 } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import {
@@ -59,7 +65,9 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import {
+  applyFunnelTemplate,
   BLOCK_META,
+  FUNNEL_TEMPLATES,
   type FunnelBlock,
   type FunnelBlockType,
   type FunnelConfig,
@@ -86,6 +94,7 @@ export function FunnelBuilder({ vacancyId }: FunnelBuilderProps) {
   const [saving, setSaving] = useState(false)
   const [pendingConflict, setPendingConflict] = useState<PendingIncompatibility | null>(null)
   const [openBlockType, setOpenBlockType] = useState<FunnelBlockType | null>(null)
+  const [pendingTemplate, setPendingTemplate] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -175,6 +184,16 @@ export function FunnelBuilder({ vacancyId }: FunnelBuilderProps) {
     await applyBlocks(next)
   }
 
+  const confirmTemplate = async () => {
+    if (!pendingTemplate) return
+    const tpl = FUNNEL_TEMPLATES[pendingTemplate]
+    setPendingTemplate(null)
+    if (!tpl) return
+    const next = applyFunnelTemplate(tpl, blocks)
+    await applyBlocks(next)
+    toast.success(`Шаблон «${tpl.name}» применён`, { duration: 1500 })
+  }
+
   const confirmConflict = async () => {
     if (!pendingConflict) return
     const { type, conflictTypes } = pendingConflict
@@ -220,13 +239,37 @@ export function FunnelBuilder({ vacancyId }: FunnelBuilderProps) {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-4 gap-2">
           <Label className="text-sm font-medium">Использовать конструктор воронки</Label>
-          <Switch
-            checked={Boolean(enabled)}
-            onCheckedChange={handleToggleBuilder}
-            disabled={enabled === null || saving}
-          />
+          <div className="flex items-center gap-2">
+            {enabled && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" disabled={saving}>
+                    Применить шаблон
+                    <ChevronDown className="ml-1 h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-72">
+                  {Object.entries(FUNNEL_TEMPLATES).map(([key, template]) => (
+                    <DropdownMenuItem
+                      key={key}
+                      onSelect={() => setPendingTemplate(key)}
+                      className="flex flex-col items-start gap-0.5 py-2"
+                    >
+                      <span className="text-sm font-medium">{template.name}</span>
+                      <span className="text-xs text-muted-foreground">{template.description}</span>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+            <Switch
+              checked={Boolean(enabled)}
+              onCheckedChange={handleToggleBuilder}
+              disabled={enabled === null || saving}
+            />
+          </div>
         </div>
 
         {enabled && (
@@ -282,6 +325,28 @@ export function FunnelBuilder({ vacancyId }: FunnelBuilderProps) {
           <AlertDialogFooter>
             <AlertDialogCancel>Отмена</AlertDialogCancel>
             <AlertDialogAction onClick={confirmConflict}>Включить</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={pendingTemplate !== null}
+        onOpenChange={(open) => { if (!open) setPendingTemplate(null) }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {pendingTemplate && `Применить шаблон «${FUNNEL_TEMPLATES[pendingTemplate]?.name}»?`}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Текущие настройки блоков воронки будут перезаписаны значениями
+              из шаблона. Сами настройки внутри блоков (тексты сообщений, пороги
+              и т. п.) сохранятся — изменится только список включённых блоков.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Отмена</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmTemplate}>Применить</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
