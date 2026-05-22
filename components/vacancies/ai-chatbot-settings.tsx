@@ -53,6 +53,7 @@ const DEFAULT_SETTINGS: Settings = {
 }
 
 interface Metrics { total: number; sent: number; escalated: number; rejected: number }
+interface QuotaUsage { today: number; limit: number; pct: number }
 
 export function AiChatbotSettings({ vacancyId }: { vacancyId: string }) {
   const [enabled, setEnabled] = useState(false)
@@ -65,6 +66,7 @@ export function AiChatbotSettings({ vacancyId }: { vacancyId: string }) {
   const [tgModalOpen, setTgModalOpen] = useState(false)
   const [tgTesting, setTgTesting] = useState(false)
   const [metrics, setMetrics] = useState<Metrics | null>(null)
+  const [quota, setQuota] = useState<QuotaUsage | null>(null)
 
   const triggersAny = Object.values(settings.triggers).some(Boolean)
   const canEnable = prompt.trim().length > 0
@@ -88,7 +90,10 @@ export function AiChatbotSettings({ vacancyId }: { vacancyId: string }) {
   useEffect(() => {
     fetch(`/api/modules/hr/vacancies/${vacancyId}/ai-chatbot/metrics`)
       .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d?.metrics) setMetrics(d.metrics) })
+      .then(d => {
+        if (d?.metrics) setMetrics(d.metrics)
+        if (d?.quotaUsage) setQuota(d.quotaUsage)
+      })
       .catch(() => {})
   }, [vacancyId])
 
@@ -317,6 +322,23 @@ export function AiChatbotSettings({ vacancyId }: { vacancyId: string }) {
               <div><p className="text-[11px] text-muted-foreground">Автоответов</p><p className="text-xl font-bold text-emerald-600">{metrics.sent}</p></div>
               <div><p className="text-[11px] text-muted-foreground">Эскалаций к HR</p><p className="text-xl font-bold text-amber-600">{metrics.escalated}</p></div>
               <div><p className="text-[11px] text-muted-foreground">Отказов сгенерировано</p><p className="text-xl font-bold text-red-600">{metrics.rejected}</p></div>
+            </div>
+          )}
+          {quota && (
+            <div className="pt-4 mt-4 border-t space-y-1.5">
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="text-muted-foreground">Квота AI-вызовов сегодня (по компании)</span>
+                <span className="tabular-nums">{quota.today} / {quota.limit}</span>
+              </div>
+              <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                <div
+                  className={
+                    "h-full transition-all " +
+                    (quota.pct >= 90 ? "bg-red-500" : quota.pct >= 70 ? "bg-amber-500" : "bg-emerald-500")
+                  }
+                  style={{ width: `${quota.pct}%` }}
+                />
+              </div>
             </div>
           )}
         </CardContent>
