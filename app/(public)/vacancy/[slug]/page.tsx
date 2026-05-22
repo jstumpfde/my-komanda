@@ -128,8 +128,8 @@ function VacancyPageInner({ params }: { params: Promise<{ slug: string }> }) {
         return
       }
       setScreen("done")
-    } catch (err: any) {
-      toast.error(err.message || "Не удалось отправить отклик")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Не удалось отправить отклик")
     } finally {
       setSubmitting(false)
     }
