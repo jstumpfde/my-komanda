@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import {
-  Plug, RefreshCw, Loader2, CheckCircle2, XCircle, Clock, Building2,
+  Plug, RefreshCw, Loader2, CheckCircle2, XCircle, Clock, Building2, Stethoscope, AlertCircle, Mail, IdCard,
 } from "lucide-react"
 
 interface HHStatus {
@@ -16,6 +16,27 @@ interface HHStatus {
   employerName?: string
   lastSyncedAt?: string
   connectedAt?: string
+}
+
+interface HHDiagnostic {
+  tokenStatus:    "valid" | "expired" | "missing"
+  hhAccountInfo?: {
+    employerId:     string
+    employerName:   string | null
+    managerId:      string | null
+    isActive:       boolean
+    connectedAt:    string | null
+    lastSyncedAt:   string | null
+    tokenExpiresAt: string | null
+  }
+  vacancies: Array<{
+    hhVacancyId:    string
+    vacancyTitle:   string
+    localVacancyId: string | null
+    hasAccess:      boolean
+    errorReason?:   string
+  }>
+  reconnectUrl: string
 }
 
 function formatDate(d: string | null | undefined): string {
@@ -28,6 +49,9 @@ export function IntegrationsContent() {
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
   const [disconnecting, setDisconnecting] = useState(false)
+  const [diagnostic, setDiagnostic] = useState<HHDiagnostic | null>(null)
+  const [diagnosing, setDiagnosing] = useState(false)
+  const [diagnosticOpen, setDiagnosticOpen] = useState(false)
 
   useEffect(() => {
     fetch("/api/integrations/hh/status")
@@ -68,9 +92,27 @@ export function IntegrationsContent() {
     try {
       await fetch("/api/integrations/hh/status", { method: "DELETE" })
       setStatus({ connected: false })
+      setDiagnostic(null)
+      setDiagnosticOpen(false)
       toast.success("hh.ru отключён")
     } catch { toast.error("Ошибка отключения") }
     finally { setDisconnecting(false) }
+  }
+
+  const handleDiagnostic = async () => {
+    setDiagnosing(true)
+    setDiagnosticOpen(true)
+    try {
+      const res = await fetch("/api/integrations/hh/diagnostic")
+      if (!res.ok) throw new Error("HTTP " + res.status)
+      const data = (await res.json()) as HHDiagnostic
+      setDiagnostic(data)
+    } catch (err) {
+      toast.error("Не удалось загрузить диагностику hh.ru")
+      console.error(err)
+    } finally {
+      setDiagnosing(false)
+    }
   }
 
   return (
@@ -118,6 +160,15 @@ export function IntegrationsContent() {
                   {syncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
                   Синхронизировать
                 </Button>
+                <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={handleDiagnostic} disabled={diagnosing}>
+                  {diagnosing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Stethoscope className="w-3.5 h-3.5" />}
+                  Диагностика
+                </Button>
+                <Button variant="outline" size="sm" className="gap-1.5 text-xs" asChild>
+                  <a href="/api/integrations/hh/connect">
+                    <Plug className="w-3.5 h-3.5" />Переподключить
+                  </a>
+                </Button>
                 <Button variant="ghost" size="sm" className="gap-1.5 text-xs text-destructive hover:text-destructive" onClick={handleDisconnect} disabled={disconnecting}>
                   {disconnecting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <XCircle className="w-3.5 h-3.5" />}
                   Отключить
@@ -132,6 +183,116 @@ export function IntegrationsContent() {
             )}
           </div>
         </div>
+
+        {/* Diagnostic panel */}
+        {diagnosticOpen && (
+          <div className="mt-5 border-t border-border pt-5">
+            {diagnosing && !diagnostic ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Запрашиваем данные у hh.ru…
+              </div>
+            ) : diagnostic ? (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-semibold text-foreground">Диагностика интеграции</h4>
+                  <button
+                    onClick={() => setDiagnosticOpen(false)}
+                    className="text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    Скрыть
+                  </button>
+                </div>
+                {/* Account info */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                  <div className="flex items-center gap-2">
+                    <span className="text-muted-foreground">Статус токена:</span>
+                    {diagnostic.tokenStatus === "valid" ? (
+                      <Badge variant="outline" className="text-xs bg-emerald-500/10 text-emerald-700 border-emerald-200">
+                        <CheckCircle2 className="w-3 h-3 mr-1" />Валидный
+                      </Badge>
+                    ) : diagnostic.tokenStatus === "expired" ? (
+                      <Badge variant="outline" className="text-xs bg-amber-500/10 text-amber-700 border-amber-200">
+                        <AlertCircle className="w-3 h-3 mr-1" />Истёк / отозван
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-xs text-muted-foreground">
+                        Не подключён
+                      </Badge>
+                    )}
+                  </div>
+                  {diagnostic.hhAccountInfo && (
+                    <>
+                      <div className="flex items-center gap-2">
+                        <Building2 className="w-3.5 h-3.5 text-muted-foreground" />
+                        <span className="text-muted-foreground">Работодатель:</span>
+                        <span className="text-foreground">
+                          {diagnostic.hhAccountInfo.employerName ?? diagnostic.hhAccountInfo.employerId}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <IdCard className="w-3.5 h-3.5 text-muted-foreground" />
+                        <span className="text-muted-foreground">Employer ID:</span>
+                        <span className="text-foreground font-mono text-xs">{diagnostic.hhAccountInfo.employerId}</span>
+                      </div>
+                      {diagnostic.hhAccountInfo.managerId && (
+                        <div className="flex items-center gap-2">
+                          <Mail className="w-3.5 h-3.5 text-muted-foreground" />
+                          <span className="text-muted-foreground">Manager ID:</span>
+                          <span className="text-foreground font-mono text-xs">{diagnostic.hhAccountInfo.managerId}</span>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+
+                {/* Vacancies access table */}
+                {diagnostic.vacancies.length > 0 && (
+                  <div>
+                    <div className="text-xs font-medium text-muted-foreground mb-2">
+                      Доступ к привязанным вакансиям ({diagnostic.vacancies.length})
+                    </div>
+                    <div className="rounded-lg border border-border divide-y divide-border">
+                      {diagnostic.vacancies.map(v => (
+                        <div key={v.hhVacancyId} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate text-foreground">{v.vacancyTitle}</div>
+                            <div className="text-xs text-muted-foreground font-mono">hh:{v.hhVacancyId}</div>
+                          </div>
+                          {v.hasAccess ? (
+                            <Badge variant="outline" className="text-xs bg-emerald-500/10 text-emerald-700 border-emerald-200 shrink-0">
+                              <CheckCircle2 className="w-3 h-3 mr-1" />Доступ есть
+                            </Badge>
+                          ) : (
+                            <div className="flex flex-col items-end gap-0.5 shrink-0">
+                              <Badge variant="outline" className="text-xs bg-red-500/10 text-red-700 border-red-200">
+                                <XCircle className="w-3 h-3 mr-1" />Нет доступа
+                              </Badge>
+                              {v.errorReason && (
+                                <span className="text-[10px] text-muted-foreground max-w-[200px] truncate" title={v.errorReason}>
+                                  {v.errorReason}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Если у вакансии «Нет доступа» — hh-аккаунт, к которому привязана компания, не имеет прав на эту вакансию.
+                      Нажмите «Переподключить» и войдите под аккаунтом-работодателем с доступом к нужной вакансии.
+                    </p>
+                  </div>
+                )}
+                {diagnostic.vacancies.length === 0 && (
+                  <p className="text-sm text-muted-foreground">
+                    Привязанных hh-вакансий не найдено.
+                  </p>
+                )}
+              </div>
+            ) : null}
+          </div>
+        )}
       </Card>
 
       {/* Hint */}
