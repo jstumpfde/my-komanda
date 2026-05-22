@@ -75,6 +75,7 @@ interface VacancyRow {
   createdAt: string
   candidateCount: number
   decisionCount: number
+  inProgressCount?: number
 }
 
 interface DashboardStats {
@@ -375,10 +376,14 @@ function DashboardContent() {
                           </p>
                         </div>
                         <div className="flex items-center gap-1.5 shrink-0">
-                          <Badge variant="secondary" className="text-[10px] h-5">{v.candidateCount} откл.</Badge>
-                          {v.decisionCount > 0 && (
-                            <Badge className="text-[10px] h-5 bg-emerald-100 text-emerald-700 border-0">
-                              {v.decisionCount} фин.
+                          {/* #34: «откл./фин.» переименовано в более понятное
+                              «откликов · в работе». В работе = stage IN
+                              (primary_contact..offer_sent) — кандидат активно
+                              в воронке. */}
+                          <Badge variant="secondary" className="text-[10px] h-5">{v.candidateCount} откликов</Badge>
+                          {(v.inProgressCount ?? 0) > 0 && (
+                            <Badge className="text-[10px] h-5 bg-blue-100 text-blue-700 border-0">
+                              {v.inProgressCount} в работе
                             </Badge>
                           )}
                         </div>
