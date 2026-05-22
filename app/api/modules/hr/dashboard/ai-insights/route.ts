@@ -52,7 +52,7 @@ export async function GET() {
           eq(vacancies.companyId, companyId),
           isNull(vacancies.deletedAt),
           eq(candidates.stage, "primary_contact"),
-          sql`${candidates.updatedAt} < ${oneDayAgo}`,
+          sql`${candidates.updatedAt} < ${oneDayAgo.toISOString()}`,
         )),
 
       // 3) High AI-score in anketa_filled
