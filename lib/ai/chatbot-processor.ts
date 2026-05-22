@@ -42,6 +42,8 @@ export interface ProcessVacancy {
   aiChatbotEnabled?: boolean | null
   aiChatbotSettings: unknown
   aiChatbotPrompt:   string | null
+  salaryMin?:        number | null
+  salaryMax?:        number | null
 }
 
 export interface ProcessInput {
@@ -519,6 +521,28 @@ export async function processChatbotMessage(input: ProcessInput): Promise<Proces
       notificationType: "ai_chatbot_escalation_error",
     })
     return { handled: true, action: "escalated", category, confidence, escalationReason: "empty_reply" }
+  }
+
+  // #64 третий слой: post-filter AI reply. Если ответ нарушает правила —
+  // НЕ отправляем кандидату, а эскалируем HR.
+  const salaryRange = (vacancy.salaryMin || vacancy.salaryMax)
+    ? `${vacancy.salaryMin ?? "?"} — ${vacancy.salaryMax ?? "?"} ₽`
+    : null
+  const postCheck = await validateAiReply(reply, { vacancyName: vacancy.title, salaryRange })
+  if (postCheck.category !== "clean" && postCheck.confidence >= POST_FILTER_CONFIDENCE) {
+    await logMessage({
+      candidateId, vacancyId, incoming: incomingText,
+      category, confidence,
+      reply, sent: false, escalated: true, reason: "security_unauthorized_reply",
+    })
+    await escalate({
+      companyId, vacancyId, vacancyTitle, candidateId, candidateInfo,
+      incomingMessage: incomingText, reason: "security_unauthorized_reply",
+      category, confidence: postCheck.confidence,
+      telegramChannel, severity: "danger",
+      notificationType: "ai_security_unauthorized_reply",
+    })
+    return { handled: true, action: "escalated", category, confidence: postCheck.confidence, escalationReason: "security_unauthorized_reply" }
   }
 
   await logMessage({
