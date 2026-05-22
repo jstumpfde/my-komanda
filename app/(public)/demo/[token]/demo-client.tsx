@@ -1007,8 +1007,18 @@ export default function DemoPage() {
   }
 
   if (finished) {
-    // Если HR выключил пост-демо блок — показываем стандартный экран «спасибо»
-    // вместо кастомного флоу (анкета + динамический финальный экран).
+    // #25: порядок экранов после прохождения уроков:
+    //   1. (если postDemoSettings.enabled === false) → статичный «спасибо»,
+    //      минуя анкету и финальный экран. Выход.
+    //   2. (если showFarewell) → прощальный экран после ручного клика. Выход.
+    //   3. (если formSubmitted) → ФИНАЛЬНЫЙ «Спасибо!» (afterAnketa
+    //      из finalScreens, fallback DEMO_DEFAULT_AFTER_ANKETA).
+    //   4. (если !anketaIntroDismissed) → ПРОМЕЖУТОЧНЫЙ экран после видео
+    //      (afterVideo из finalScreens, кнопка → переход в анкету).
+    //   5. иначе → форма анкеты.
+    // Это даёт последовательность: уроки → промежуточный → анкета →
+    // submit → финальный. Два разных «Спасибо» — оба редактируемые
+    // через FinalScreensSettings в табе «Воронка».
     if (data.postDemoSettings?.enabled === false) {
       return (
         <div className="flex min-h-screen items-center justify-center px-4" style={{ backgroundColor: bgColor }}>
