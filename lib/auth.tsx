@@ -55,7 +55,10 @@ const STORAGE_VIEW_ROLE = "hireflow-view-role"
 
 const FALLBACK_USER: User = {
   id: "",
-  name: "Загрузка...",
+  // #29: было "Загрузка..." — пугало пользователя при первом заходе, что
+  // система не помнит его. Пустая строка позволяет UI решать fallback
+  // (например, в dashboard: `${greeting}!` без имени).
+  name: "",
   email: "",
   role: "platform_admin",
 }
