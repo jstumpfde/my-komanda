@@ -132,6 +132,8 @@ export const companies = pgTable("companies", {
   // Privacy policy (per-company, ФЗ-152) — null = используется дефолтный шаблон
   privacyPolicyHtml:        text("privacy_policy_html"),
   privacyPolicyUpdatedAt:   timestamp("privacy_policy_updated_at"),
+  // Безопасность AI-чат-бота: глобальный kill switch на всю компанию.
+  aiChatbotKilled:          boolean("ai_chatbot_killed").notNull().default(false),
   createdAt:          timestamp("created_at").defaultNow(),
   updatedAt:          timestamp("updated_at").defaultNow(),
 })

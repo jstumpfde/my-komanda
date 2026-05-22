@@ -16,7 +16,8 @@ import { Slider } from "@/components/ui/slider"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Bot, Wand2, Eye, Shield, Send, Loader2, Save } from "lucide-react"
+import { Textarea } from "@/components/ui/textarea"
+import { Bot, Wand2, Eye, Shield, Send, Loader2, Save, Pencil } from "lucide-react"
 import { toast } from "sonner"
 
 interface Triggers {
@@ -43,6 +44,7 @@ interface Settings {
   dailyMessageLimit: number
   stopWordsOverride: boolean
   telegramChannel: string
+  autoRejectOnAbuse: boolean
 }
 const DEFAULT_SETTINGS: Settings = {
   triggers: DEFAULT_TRIGGERS,
@@ -50,6 +52,7 @@ const DEFAULT_SETTINGS: Settings = {
   dailyMessageLimit: 5,
   stopWordsOverride: true,
   telegramChannel: "",
+  autoRejectOnAbuse: false,
 }
 
 interface Metrics { total: number; sent: number; escalated: number; rejected: number }
@@ -63,10 +66,14 @@ export function AiChatbotSettings({ vacancyId }: { vacancyId: string }) {
   const [saving, setSaving] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [promptOpen, setPromptOpen] = useState(false)
+  const [promptEditOpen, setPromptEditOpen] = useState(false)
+  const [promptDraft, setPromptDraft] = useState("")
   const [tgModalOpen, setTgModalOpen] = useState(false)
   const [tgTesting, setTgTesting] = useState(false)
   const [metrics, setMetrics] = useState<Metrics | null>(null)
   const [quota, setQuota] = useState<QuotaUsage | null>(null)
+  const [auditing, setAuditing] = useState(false)
+  const [auditResult, setAuditResult] = useState<{ ranAt: string; issuesCount: number; summary: string } | null>(null)
 
   const triggersAny = Object.values(settings.triggers).some(Boolean)
   const canEnable = prompt.trim().length > 0
@@ -136,6 +143,26 @@ export function AiChatbotSettings({ vacancyId }: { vacancyId: string }) {
       toast.error(e instanceof Error ? e.message : "Ошибка генерации")
     } finally {
       setGenerating(false)
+    }
+  }
+
+  const runAudit = async () => {
+    setAuditing(true)
+    try {
+      const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}/ai-chatbot/watcher-audit`, { method: "POST" })
+      const data = await res.json() as { ok?: boolean; issues?: unknown[]; summary?: string; ranAt?: string; error?: string }
+      if (!res.ok || !data.ok) throw new Error(data.error || "audit_failed")
+      const issuesCount = Array.isArray(data.issues) ? data.issues.length : 0
+      setAuditResult({
+        ranAt:        data.ranAt ?? new Date().toISOString(),
+        issuesCount,
+        summary:      data.summary ?? "",
+      })
+      toast.success(`Аудит выполнен: найдено ${issuesCount} проблем`)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Не удалось запустить аудит")
+    } finally {
+      setAuditing(false)
     }
   }
 
@@ -232,6 +259,9 @@ export function AiChatbotSettings({ vacancyId }: { vacancyId: string }) {
             <Button size="sm" variant="outline" disabled={!prompt} onClick={() => setPromptOpen(true)} className="gap-1.5 h-8 text-xs">
               <Eye className="w-3.5 h-3.5" /> Просмотр промпта
             </Button>
+            <Button size="sm" variant="outline" disabled={!prompt} onClick={() => { setPromptDraft(prompt); setPromptEditOpen(true) }} className="gap-1.5 h-8 text-xs">
+              <Pencil className="w-3.5 h-3.5" /> Редактировать промпт
+            </Button>
           </div>
         </CardContent>
       </Card>
@@ -270,6 +300,13 @@ export function AiChatbotSettings({ vacancyId }: { vacancyId: string }) {
               <p className="text-[11px] text-muted-foreground mt-0.5">Если в ответе кандидата встречается стоп-слово — AI не отвечает, эскалация HR'у.</p>
             </div>
             <Switch checked={settings.stopWordsOverride} onCheckedChange={v => setSettings(s => ({ ...s, stopWordsOverride: v }))} />
+          </div>
+          <div className="flex items-center justify-between gap-3 rounded-lg border bg-muted/30 p-3">
+            <div>
+              <Label className="text-sm">Автоотказ при оскорблениях</Label>
+              <p className="text-[11px] text-muted-foreground mt-0.5">При confidence ≥ 0.7 кандидат с матом будет автоматически отклонён.</p>
+            </div>
+            <Switch checked={settings.autoRejectOnAbuse} onCheckedChange={v => setSettings(s => ({ ...s, autoRejectOnAbuse: v }))} />
           </div>
           <div className="flex justify-end">
             <Button size="sm" variant="outline" onClick={() => save()} disabled={saving} className="gap-1.5 h-8 text-xs">
@@ -344,11 +381,68 @@ export function AiChatbotSettings({ vacancyId }: { vacancyId: string }) {
         </CardContent>
       </Card>
 
+      {/* AI-наблюдатель */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-semibold flex items-center gap-2"><Shield className="w-4 h-4" /> AI-наблюдатель</CardTitle>
+          <CardDescription>Раз в час второй AI проверяет работу первого. Подозрительные паттерны попадают в уведомления HR.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {auditResult ? (
+            <p className="text-[11px] text-muted-foreground">
+              Последний аудит: {new Date(auditResult.ranAt).toLocaleString("ru-RU")}, найдено {auditResult.issuesCount} проблем
+              {auditResult.summary ? ` — ${auditResult.summary}` : ""}
+            </p>
+          ) : (
+            <p className="text-[11px] text-muted-foreground">Аудит ещё не запускался в этой сессии.</p>
+          )}
+          <Button size="sm" variant="outline" onClick={runAudit} disabled={auditing} className="gap-1.5 h-8 text-xs">
+            {auditing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Shield className="w-3.5 h-3.5" />}
+            Запустить аудит сейчас
+          </Button>
+        </CardContent>
+      </Card>
+
       {/* Modal: prompt preview */}
       <Dialog open={promptOpen} onOpenChange={setPromptOpen}>
         <DialogContent className="sm:max-w-2xl max-h-[80vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Системный промпт</DialogTitle></DialogHeader>
           <pre className="text-xs whitespace-pre-wrap bg-muted p-3 rounded">{prompt}</pre>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal: prompt edit */}
+      <Dialog open={promptEditOpen} onOpenChange={setPromptEditOpen}>
+        <DialogContent className="sm:max-w-3xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Редактирование системного промпта</DialogTitle></DialogHeader>
+          <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded p-2">
+            Изменяя промпт вы берёте на себя ответственность за поведение AI.
+          </p>
+          <Textarea
+            value={promptDraft}
+            onChange={e => setPromptDraft(e.target.value)}
+            rows={20}
+            className="text-xs font-mono"
+          />
+          <p className="text-[11px] text-muted-foreground">{promptDraft.length} символов</p>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button size="sm" variant="outline" onClick={() => setPromptEditOpen(false)}>
+              Отмена
+            </Button>
+            <Button
+              size="sm"
+              disabled={saving || !promptDraft.trim()}
+              onClick={async () => {
+                setPrompt(promptDraft)
+                await save({ prompt: promptDraft })
+                setPromptEditOpen(false)
+              }}
+              className="gap-1.5"
+            >
+              {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+              Сохранить
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
 

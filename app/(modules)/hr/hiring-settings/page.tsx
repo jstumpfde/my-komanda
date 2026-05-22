@@ -141,6 +141,34 @@ export default function HiringSettingsPage() {
     toast.success(checked ? "Выбор компании включён в анкете" : "Секция «Компания» скрыта")
   }
 
+  // ── AI-чат-бот kill switch (глобально на компанию) ──
+  const [aiChatbotKilled, setAiChatbotKilled] = useState(false)
+  const [aiKillSaving, setAiKillSaving] = useState(false)
+  useEffect(() => {
+    fetch("/api/modules/hr/company/ai-chatbot-kill-switch")
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d && typeof d.killed === "boolean") setAiChatbotKilled(d.killed) })
+      .catch(() => {})
+  }, [])
+  const toggleAiChatbotKill = async (checked: boolean) => {
+    setAiKillSaving(true)
+    setAiChatbotKilled(checked)
+    try {
+      const res = await fetch("/api/modules/hr/company/ai-chatbot-kill-switch", {
+        method:  "PUT",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ killed: checked }),
+      })
+      if (!res.ok) throw new Error("save_failed")
+      toast.success(checked ? "AI-чат-бот заблокирован для всей компании" : "AI-чат-бот разблокирован")
+    } catch {
+      setAiChatbotKilled(!checked)
+      toast.error("Не удалось сохранить")
+    } finally {
+      setAiKillSaving(false)
+    }
+  }
+
   // Сессия 7: глобальные шаблоны компании удалены. Чистка localStorage.
   useEffect(() => {
     try { localStorage.removeItem("mk_hr_message_templates") } catch {}
@@ -347,6 +375,32 @@ export default function HiringSettingsPage() {
             {topTab === "integrations" ? (
               <IntegrationsContent />
             ) : (<>
+
+            {/* Аварийное отключение AI */}
+            <Card className={cn("mb-5 max-w-3xl border-2", aiChatbotKilled ? "border-red-300 bg-red-50/40 dark:bg-red-950/20" : "border-amber-200")}>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                  <ShieldAlert className="size-4 text-red-600" />
+                  Аварийное отключение AI
+                </CardTitle>
+                <CardDescription>Глобальный рубильник AI-чат-бота на уровне компании.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium">Заблокировать AI-чат-бота для всех вакансий</p>
+                    <p className="text-[11px] text-amber-700 mt-0.5">
+                      При включении ВСЕ вакансии перестанут использовать AI-агента. Используйте только в аварии.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={aiChatbotKilled}
+                    onCheckedChange={toggleAiChatbotKill}
+                    disabled={aiKillSaving}
+                  />
+                </div>
+              </CardContent>
+            </Card>
 
             {/* General toggles */}
             <Card className="mb-5 max-w-3xl">
