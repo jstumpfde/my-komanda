@@ -22,7 +22,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
-import { ChevronDown, GripVertical, Plus, Settings, Settings2, Star } from "lucide-react"
+import { ChevronDown, Clock3, GripVertical, Plus, RotateCcw, Settings, Settings2, Star } from "lucide-react"
 
 import {
   AlertDialog,
@@ -108,6 +108,7 @@ export function FunnelBuilder({ vacancyId }: FunnelBuilderProps) {
   const [pendingCompanyTplId, setPendingCompanyTplId] = useState<string | null>(null)
   const [saveDialogOpen, setSaveDialogOpen] = useState(false)
   const [manageDialogOpen, setManageDialogOpen] = useState(false)
+  const [resetConfirmOpen, setResetConfirmOpen] = useState(false)
 
   const reloadCompanyTemplates = async () => {
     try {
@@ -266,12 +267,35 @@ export function FunnelBuilder({ vacancyId }: FunnelBuilderProps) {
 
   const itemIds = useMemo(() => blocks.map((b) => b.type), [blocks])
 
+  // T3: счётчик «N из M блоков включено» в шапке.
+  const enabledCount = useMemo(() => blocks.filter((b) => b.enabled).length, [blocks])
+
+  // T3: сброс к дефолту компании (или встроенному «Простой» если default не задан).
+  const handleReset = async () => {
+    const defaultTpl = companyTemplates.find((t) => t.isDefault)
+    if (defaultTpl) {
+      const normalized = normalizeFunnelConfig(defaultTpl.configJson)
+      await applyBlocks(normalized.blocks)
+      toast.success(`Воронка сброшена к шаблону «${defaultTpl.name}»`, { duration: 1500 })
+      return
+    }
+    const simple = FUNNEL_TEMPLATES.simple
+    const next = applyFunnelTemplate(simple, blocks)
+    await applyBlocks(next)
+    toast.success("Воронка сброшена к шаблону «Простой найм»", { duration: 1500 })
+  }
+
   return (
     <Card>
       <CardHeader>
         <div className="flex items-center gap-2">
           <CardTitle>Конструктор воронки</CardTitle>
           <Badge variant="outline">Beta</Badge>
+          {enabled && (
+            <span className="ml-auto text-xs text-muted-foreground">
+              {enabledCount} из {blocks.length} блоков включено
+            </span>
+          )}
         </div>
         <CardDescription>
           Экспериментальный режим. Перетаскивайте блоки чтобы изменить порядок.
@@ -346,6 +370,18 @@ export function FunnelBuilder({ vacancyId }: FunnelBuilderProps) {
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
+            )}
+            {enabled && (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={saving}
+                onClick={() => setResetConfirmOpen(true)}
+                title="Сбросить к дефолту"
+              >
+                <RotateCcw className="h-4 w-4" />
+                <span className="sr-only">Сбросить к дефолту</span>
+              </Button>
             )}
             <Switch
               checked={Boolean(enabled)}
@@ -457,6 +493,28 @@ export function FunnelBuilder({ vacancyId }: FunnelBuilderProps) {
         </AlertDialogContent>
       </AlertDialog>
 
+      <AlertDialog
+        open={resetConfirmOpen}
+        onOpenChange={setResetConfirmOpen}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Сбросить воронку?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {companyTemplates.find((t) => t.isDefault)
+                ? `Воронка будет приведена к шаблону компании по умолчанию — «${companyTemplates.find((t) => t.isDefault)?.name}».`
+                : "Воронка будет приведена к встроенному шаблону «Простой найм» (шаблон компании по умолчанию не задан)."}
+              {" "}Настройки внутри блоков сохранятся, изменится только список
+              включённых блоков и порядок.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Отмена</AlertDialogCancel>
+            <AlertDialogAction onClick={() => { void handleReset() }}>Сбросить</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <SaveFunnelTemplateDialog
         open={saveDialogOpen}
         onOpenChange={setSaveDialogOpen}
@@ -516,12 +574,21 @@ function SortableBlockCard({ block, saving, onToggle, onOpenSettings }: Sortable
     useSortable({ id: block.type })
 
   const style: React.CSSProperties = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity:   isDragging ? 0.5 : 1,
+    transform:  CSS.Transform.toString(transform),
+    // T3: дольше плавный transition при reorder — dnd-kit отдаёт transition
+    // только во время drag, но если он null/undefined — оставляем нативный.
+    transition: transition ?? "transform 200ms ease",
+    opacity:    isDragging ? 0.5 : 1,
   }
 
   const Icon = meta.icon
+
+  // T3: блоки, у которых ещё нет UI настроек (нет entry в реестре или
+  // entry.component === null) — показываем badge «Скоро» вместо/в дополнение
+  // к обычным badges. Кнопка настроек остаётся (Sheet всё равно покажет
+  // «В разработке»), но дизайн сообщает HR что это work-in-progress.
+  const settingsEntry = BLOCK_SETTINGS_REGISTRY[block.type]
+  const hasSettingsUi = settingsEntry?.component != null
 
   return (
     <div
@@ -540,10 +607,15 @@ function SortableBlockCard({ block, saving, onToggle, onOpenSettings }: Sortable
       </button>
       <Icon className="h-5 w-5 text-muted-foreground shrink-0" />
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <span className="text-sm font-medium truncate">{meta.label}</span>
           {meta.required && (
             <Badge variant="secondary" className="text-[10px]">обязательный</Badge>
+          )}
+          {!hasSettingsUi && (
+            <Badge variant="outline" className="text-[10px] gap-1 border-amber-300 text-amber-700 bg-amber-50">
+              <Clock3 className="h-3 w-3" />Скоро
+            </Badge>
           )}
         </div>
         <p className="text-xs text-muted-foreground truncate">{meta.description}</p>
