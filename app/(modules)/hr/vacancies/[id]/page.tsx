@@ -39,7 +39,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Checkbox } from "@/components/ui/checkbox"
 import { Slider } from "@/components/ui/slider"
 import { Input } from "@/components/ui/input"
-import { Plus, Clock, Pause, Play, Archive, RotateCcw, Trash2, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, MessageSquareText, Zap, Globe, AlertTriangle, TrendingUp, Calendar, MapPin, DollarSign, Filter, X, Link2, Copy, Save, Sparkles, Eye, Check, Loader2, Download, ExternalLink, ClipboardList, ChevronLeft, ChevronRight, ChevronDown, CheckCircle2, XCircle, Users, Phone, Upload, RefreshCw, Activity, FileText } from "lucide-react"
+import { Plus, Clock, Pause, Play, Archive, RotateCcw, Trash2, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, MessageSquareText, Zap, Globe, AlertTriangle, TrendingUp, Calendar, MapPin, DollarSign, Filter, X, Link2, Copy, Save, Sparkles, Eye, Check, Loader2, Download, ExternalLink, ClipboardList, ChevronLeft, ChevronRight, ChevronDown, CheckCircle2, XCircle, Users, Phone, Upload, RefreshCw, Activity, FileText, Bot } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Label } from "@/components/ui/label"
@@ -57,6 +57,7 @@ import { UtmLinksSection } from "@/components/vacancies/utm-links-section"
 import { PostDemoSettings } from "@/components/vacancies/post-demo-settings"
 import { VacancyAiProcessSettings } from "@/components/vacancies/vacancy-ai-process-settings"
 import { VacancyFollowupSettings } from "@/components/vacancies/vacancy-followup-settings"
+import { AiChatbotSettings } from "@/components/vacancies/ai-chatbot-settings"
 import { VacancyPrequalificationSettings } from "@/components/vacancies/vacancy-prequalification-settings"
 import { VacancySettingsProvider, VacancyTabPendingDot, VacancyStickySaveBar, useVacancySectionRegister, type VacancyTabKey } from "@/components/vacancies/vacancy-settings-context"
 import { BestPublicationTimeBlock } from "./components/BestPublicationTimeBlock"
@@ -699,7 +700,7 @@ export default function VacancyPage() {
   const rawUrlSection = rawUrlTab === "automation" ? "ai" : (searchParams?.get("section") ?? null)
   // Миграция старых section-значений на новые 6 табов.
   // general → page (стартовая вкладка с брендингом), automation → ai.
-  const SETTINGS_SECTION_IDS = ["page", "sources", "messages", "funnel", "followup", "ai", "integrations"] as const
+  const SETTINGS_SECTION_IDS = ["page", "sources", "messages", "funnel", "followup", "aichatbot", "ai", "integrations"] as const
   type SettingsSectionId = typeof SETTINGS_SECTION_IDS[number]
   const initialSettingsSection: SettingsSectionId =
     rawUrlSection === "general" ? "page" :
@@ -2493,6 +2494,7 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                     { value: "messages"    as const, label: "Сообщения",           icon: MessageCircle },
                     { value: "funnel"      as const, label: "Воронка",             icon: Kanban },
                     { value: "followup"    as const, label: "Дожим",               icon: MessageSquareText },
+                    { value: "aichatbot"   as const, label: "AI чат-бот",          icon: Bot },
                     { value: "ai"          as const, label: "Расписание",          icon: Zap },
                     { value: "integrations" as const, label: "Интеграции",          icon: Settings },
                   ] satisfies { value: VacancyTabKey; label: string; icon: typeof Globe }[]).map((s) => {
@@ -2948,6 +2950,13 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                     onSaved={() => refetchVacancy()}
                   />
                   <VacancyFollowupSettings vacancyId={id} />
+                </div>
+                )}
+
+                {/* ───────── ТАБ «AI чат-бот» ───────── */}
+                {settingsSection === "aichatbot" && (
+                <div className="space-y-6 max-w-3xl">
+                  <AiChatbotSettings vacancyId={id} />
                 </div>
                 )}
 
