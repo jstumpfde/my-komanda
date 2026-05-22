@@ -91,6 +91,14 @@ interface FunnelConfigResponse {
   funnelConfigJson:     FunnelConfig
 }
 
+interface PlatformFunnelTemplate {
+  id:          string
+  name:        string
+  description: string | null
+  industry:    string | null
+  configJson:  unknown
+}
+
 interface PendingIncompatibility {
   type:           FunnelBlockType
   conflictTypes:  FunnelBlockType[]
@@ -109,6 +117,9 @@ export function FunnelBuilder({ vacancyId }: FunnelBuilderProps) {
   const [saveDialogOpen, setSaveDialogOpen] = useState(false)
   const [manageDialogOpen, setManageDialogOpen] = useState(false)
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false)
+  // Group 16: пер-платформенные шаблоны воронки (is_published=true).
+  const [platformTemplates, setPlatformTemplates] = useState<PlatformFunnelTemplate[]>([])
+  const [pendingPlatformTplId, setPendingPlatformTplId] = useState<string | null>(null)
 
   const reloadCompanyTemplates = async () => {
     try {
@@ -121,8 +132,20 @@ export function FunnelBuilder({ vacancyId }: FunnelBuilderProps) {
     }
   }
 
+  const reloadPlatformTemplates = async () => {
+    try {
+      const res = await fetch("/api/modules/hr/funnel-templates/platform")
+      if (!res.ok) return
+      const data = await res.json() as { templates?: PlatformFunnelTemplate[] }
+      setPlatformTemplates(data.templates ?? [])
+    } catch {
+      // тихо — это не критично
+    }
+  }
+
   useEffect(() => {
     void reloadCompanyTemplates()
+    void reloadPlatformTemplates()
   }, [])
 
   useEffect(() => {
@@ -235,6 +258,16 @@ export function FunnelBuilder({ vacancyId }: FunnelBuilderProps) {
     toast.success(`Шаблон «${tpl.name}» применён`, { duration: 1500 })
   }
 
+  const confirmPlatformTemplate = async () => {
+    if (!pendingPlatformTplId) return
+    const tpl = platformTemplates.find((t) => t.id === pendingPlatformTplId)
+    setPendingPlatformTplId(null)
+    if (!tpl) return
+    const normalized = normalizeFunnelConfig(tpl.configJson)
+    await applyBlocks(normalized.blocks)
+    toast.success(`Шаблон «${tpl.name}» применён`, { duration: 1500 })
+  }
+
   const confirmConflict = async () => {
     if (!pendingConflict) return
     const { type, conflictTypes } = pendingConflict
@@ -330,6 +363,33 @@ export function FunnelBuilder({ vacancyId }: FunnelBuilderProps) {
                             <span className="truncate">{tpl.name}</span>
                             {tpl.isDefault && (
                               <Star className="h-3 w-3 fill-amber-400 text-amber-500 shrink-0 ml-auto" />
+                            )}
+                          </span>
+                          {tpl.description && (
+                            <span className="text-xs text-muted-foreground line-clamp-2">{tpl.description}</span>
+                          )}
+                        </DropdownMenuItem>
+                      ))}
+                      <DropdownMenuSeparator />
+                    </>
+                  )}
+                  {platformTemplates.length > 0 && (
+                    <>
+                      <DropdownMenuLabel className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                        Платформенные шаблоны
+                      </DropdownMenuLabel>
+                      {platformTemplates.map((tpl) => (
+                        <DropdownMenuItem
+                          key={tpl.id}
+                          onSelect={() => setPendingPlatformTplId(tpl.id)}
+                          className="flex flex-col items-start gap-0.5 py-2"
+                        >
+                          <span className="text-sm font-medium flex items-center gap-1.5 w-full">
+                            <span className="truncate">{tpl.name}</span>
+                            {tpl.industry && (
+                              <Badge variant="outline" className="ml-auto text-[10px] shrink-0">
+                                {tpl.industry}
+                              </Badge>
                             )}
                           </span>
                           {tpl.description && (
@@ -489,6 +549,28 @@ export function FunnelBuilder({ vacancyId }: FunnelBuilderProps) {
           <AlertDialogFooter>
             <AlertDialogCancel>Отмена</AlertDialogCancel>
             <AlertDialogAction onClick={confirmCompanyTemplate}>Применить</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={pendingPlatformTplId !== null}
+        onOpenChange={(open) => { if (!open) setPendingPlatformTplId(null) }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {pendingPlatformTplId && `Применить шаблон «${platformTemplates.find((t) => t.id === pendingPlatformTplId)?.name ?? ""}»?`}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Это платформенный шаблон Company24 — рекомендованный набор блоков
+              для вашей отрасли. Текущий набор включённых блоков и их порядок
+              будут заменены. Настройки внутри блоков сохранятся.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Отмена</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmPlatformTemplate}>Применить</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

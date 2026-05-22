@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useEffect, useState, useTransition } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -16,8 +16,23 @@ import {
   actionRestoreAllChatbots,
   actionAddGlobalStopWord,
   actionRegenerateAiPrompts,
+  actionMineTemplateFromVacancy,
+  actionUpdatePlatformTemplate,
+  actionDeletePlatformTemplate,
 } from "./actions"
-import { AlertTriangle, Loader2, ShieldAlert } from "lucide-react"
+import {
+  AlertTriangle, Loader2, ShieldAlert, LibraryBig, Plus, Pencil, Trash2,
+} from "lucide-react"
+import {
+  Select as SelectPrimitive,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { Switch } from "@/components/ui/switch"
+import { Textarea } from "@/components/ui/textarea"
+import { Label } from "@/components/ui/label"
 
 interface MigrationItem {
   id: string
@@ -54,13 +69,46 @@ interface ActionItem {
   executedBy: string | null
 }
 
+interface TemplateItem {
+  id: string
+  name: string
+  description: string | null
+  industry: string | null
+  sourceVacancyId: string | null
+  sourceCompanyId: string | null
+  isPublished: boolean
+  createdAt: string | null
+}
+
+interface MinableVacancy {
+  id: string
+  title: string
+  companyId: string
+  companyName: string
+}
+
 interface Props {
   migrations: MigrationItem[]
   companies: CompanyItem[]
   companiesTotal: number
   vacancies: VacancyItem[]
   recentActions: ActionItem[]
+  templates: TemplateItem[]
+  minableVacancies: MinableVacancy[]
 }
+
+const INDUSTRY_OPTIONS = [
+  "Салоны красоты",
+  "Медицина",
+  "IT",
+  "Общепит",
+  "Торговля",
+  "Производство",
+  "Логистика",
+  "Финансы",
+  "Образование",
+  "Другое",
+] as const
 
 function fmtDate(s: string | null): string {
   if (!s) return "—"
@@ -77,6 +125,8 @@ export function PlatformAdminClient({
   companiesTotal,
   vacancies,
   recentActions,
+  templates,
+  minableVacancies,
 }: Props) {
   return (
     <div className="container mx-auto p-6 max-w-7xl">
@@ -95,6 +145,7 @@ export function PlatformAdminClient({
           <TabsTrigger value="migrations">Migrations</TabsTrigger>
           <TabsTrigger value="companies">Companies ({companiesTotal})</TabsTrigger>
           <TabsTrigger value="vacancies">AI vacancies ({vacancies.length})</TabsTrigger>
+          <TabsTrigger value="templates">Templates ({templates.length})</TabsTrigger>
           <TabsTrigger value="emergency" className="text-red-600">Emergency</TabsTrigger>
           <TabsTrigger value="logs">Logs</TabsTrigger>
         </TabsList>
@@ -107,6 +158,9 @@ export function PlatformAdminClient({
         </TabsContent>
         <TabsContent value="vacancies" className="mt-4">
           <VacanciesTab items={vacancies} />
+        </TabsContent>
+        <TabsContent value="templates" className="mt-4">
+          <TemplatesTab items={templates} minableVacancies={minableVacancies} />
         </TabsContent>
         <TabsContent value="emergency" className="mt-4">
           <EmergencyTab />
@@ -413,6 +467,353 @@ function EmergencyTab() {
         </DialogContent>
       </Dialog>
     </>
+  )
+}
+
+// ─── Group 16: Templates ─────────────────────────────────────────────────────
+
+function TemplatesTab({
+  items, minableVacancies,
+}: {
+  items: TemplateItem[]
+  minableVacancies: MinableVacancy[]
+}) {
+  const [mineOpen, setMineOpen] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [pending, startTransition] = useTransition()
+
+  const editing = items.find(t => t.id === editingId) ?? null
+
+  const onDelete = (id: string) => {
+    if (!confirm("Удалить шаблон?")) return
+    startTransition(async () => {
+      try {
+        await actionDeletePlatformTemplate(id)
+      } catch (e) {
+        alert(e instanceof Error ? e.message : String(e))
+      }
+    })
+  }
+
+  const onTogglePublish = (item: TemplateItem) => {
+    startTransition(async () => {
+      try {
+        await actionUpdatePlatformTemplate(item.id, { isPublished: !item.isPublished })
+      } catch (e) {
+        alert(e instanceof Error ? e.message : String(e))
+      }
+    })
+  }
+
+  return (
+    <>
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <LibraryBig className="w-5 h-5" />
+              Platform funnel templates
+            </CardTitle>
+            <p className="text-sm text-muted-foreground mt-1">
+              Шаблоны воронки, доступные всем компаниям (при is_published=true).
+            </p>
+          </div>
+          <Button onClick={() => setMineOpen(true)} disabled={minableVacancies.length === 0}>
+            <Plus className="w-4 h-4 mr-2" />
+            Создать шаблон из вакансии
+          </Button>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Industry</TableHead>
+                <TableHead>Source</TableHead>
+                <TableHead>Created</TableHead>
+                <TableHead>Published</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {items.map(t => (
+                <TableRow key={t.id}>
+                  <TableCell>
+                    <div className="font-medium">{t.name}</div>
+                    {t.description && (
+                      <div className="text-xs text-muted-foreground line-clamp-1">{t.description}</div>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {t.industry ? <Badge variant="outline">{t.industry}</Badge> : <span className="text-muted-foreground">—</span>}
+                  </TableCell>
+                  <TableCell className="text-xs font-mono text-muted-foreground">
+                    {t.sourceVacancyId ? t.sourceVacancyId.slice(0, 8) : "manual"}
+                  </TableCell>
+                  <TableCell className="text-xs">{fmtDate(t.createdAt)}</TableCell>
+                  <TableCell>
+                    <Switch
+                      checked={t.isPublished}
+                      onCheckedChange={() => onTogglePublish(t)}
+                      disabled={pending}
+                    />
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Button variant="ghost" size="icon" onClick={() => setEditingId(t.id)} disabled={pending}>
+                      <Pencil className="w-4 h-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" onClick={() => onDelete(t.id)} disabled={pending}>
+                      <Trash2 className="w-4 h-4 text-destructive" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+              {items.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center text-muted-foreground py-6">
+                    Платформенных шаблонов пока нет. Создайте первый из существующей вакансии.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      <MineTemplateDialog
+        open={mineOpen}
+        onOpenChange={setMineOpen}
+        minableVacancies={minableVacancies}
+      />
+
+      <EditTemplateDialog
+        template={editing}
+        onClose={() => setEditingId(null)}
+      />
+    </>
+  )
+}
+
+function MineTemplateDialog({
+  open, onOpenChange, minableVacancies,
+}: {
+  open: boolean
+  onOpenChange: (o: boolean) => void
+  minableVacancies: MinableVacancy[]
+}) {
+  const [vacancyId, setVacancyId] = useState("")
+  const [name, setName] = useState("")
+  const [description, setDescription] = useState("")
+  const [industry, setIndustry] = useState<string>("")
+  const [isPublished, setIsPublished] = useState(true)
+  const [pending, startTransition] = useTransition()
+  const [error, setError] = useState<string | null>(null)
+
+  function reset() {
+    setVacancyId(""); setName(""); setDescription(""); setIndustry(""); setIsPublished(true); setError(null)
+  }
+
+  function submit() {
+    setError(null)
+    if (!vacancyId) { setError("Выберите вакансию"); return }
+    if (!name.trim()) { setError("Введите название шаблона"); return }
+    startTransition(async () => {
+      try {
+        await actionMineTemplateFromVacancy({
+          sourceVacancyId: vacancyId,
+          name:            name.trim(),
+          description:     description.trim() || null,
+          industry:        industry || null,
+          isPublished,
+        })
+        reset()
+        onOpenChange(false)
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e))
+      }
+    })
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o) reset(); onOpenChange(o) }}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Создать шаблон из вакансии</DialogTitle>
+          <DialogDescription>
+            Скопирует funnel_config_json выбранной вакансии в новый платформенный шаблон.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <Label className="text-sm font-medium">Вакансия-источник</Label>
+            <SelectPrimitive value={vacancyId} onValueChange={setVacancyId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Выберите вакансию..." />
+              </SelectTrigger>
+              <SelectContent className="max-h-[300px]">
+                {minableVacancies.map(v => (
+                  <SelectItem key={v.id} value={v.id}>
+                    {v.title} <span className="text-muted-foreground">— {v.companyName}</span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </SelectPrimitive>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-sm font-medium">Название шаблона</Label>
+            <Input
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="напр. «Для салонов красоты»"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-sm font-medium">Отрасль</Label>
+            <SelectPrimitive value={industry} onValueChange={setIndustry}>
+              <SelectTrigger>
+                <SelectValue placeholder="Выберите отрасль..." />
+              </SelectTrigger>
+              <SelectContent>
+                {INDUSTRY_OPTIONS.map(opt => (
+                  <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                ))}
+              </SelectContent>
+            </SelectPrimitive>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-sm font-medium">Описание</Label>
+            <Textarea
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              placeholder="Что это за шаблон и кому подойдёт"
+              rows={3}
+            />
+          </div>
+
+          <div className="flex items-center justify-between rounded-lg border p-3">
+            <div className="text-sm">
+              <div className="font-medium">Опубликовать</div>
+              <div className="text-muted-foreground text-xs">
+                Шаблон станет виден всем компаниям
+              </div>
+            </div>
+            <Switch checked={isPublished} onCheckedChange={setIsPublished} />
+          </div>
+
+          {error && (
+            <div className="text-sm text-destructive">{error}</div>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => { reset(); onOpenChange(false) }} disabled={pending}>
+            Отмена
+          </Button>
+          <Button onClick={submit} disabled={pending}>
+            {pending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+            Создать
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function EditTemplateDialog({
+  template, onClose,
+}: {
+  template: TemplateItem | null
+  onClose: () => void
+}) {
+  const [name, setName] = useState("")
+  const [description, setDescription] = useState("")
+  const [industry, setIndustry] = useState<string>("")
+  const [pending, startTransition] = useTransition()
+  const [error, setError] = useState<string | null>(null)
+
+  // Сбросить форму когда открываем для нового шаблона.
+  useEffect(() => {
+    setName(template?.name ?? "")
+    setDescription(template?.description ?? "")
+    setIndustry(template?.industry ?? "")
+    setError(null)
+  }, [template?.id])
+
+  if (!template) return null
+
+  function submit() {
+    if (!template) return
+    setError(null)
+    if (!name.trim()) { setError("Название не может быть пустым"); return }
+    startTransition(async () => {
+      try {
+        await actionUpdatePlatformTemplate(template.id, {
+          name:        name.trim(),
+          description: description.trim() || null,
+          industry:    industry || null,
+        })
+        onClose()
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e))
+      }
+    })
+  }
+
+  return (
+    <Dialog open={true} onOpenChange={(o) => { if (!o) onClose() }}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Редактировать шаблон</DialogTitle>
+          <DialogDescription>
+            Конфигурация воронки шаблона не меняется через UI — только метаданные.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <Label className="text-sm font-medium">Название</Label>
+            <Input value={name} onChange={e => setName(e.target.value)} />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-sm font-medium">Отрасль</Label>
+            <SelectPrimitive value={industry} onValueChange={setIndustry}>
+              <SelectTrigger>
+                <SelectValue placeholder="—" />
+              </SelectTrigger>
+              <SelectContent>
+                {INDUSTRY_OPTIONS.map(opt => (
+                  <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                ))}
+              </SelectContent>
+            </SelectPrimitive>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-sm font-medium">Описание</Label>
+            <Textarea
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              rows={3}
+            />
+          </div>
+
+          {error && <div className="text-sm text-destructive">{error}</div>}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={pending}>Отмена</Button>
+          <Button onClick={submit} disabled={pending}>
+            {pending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+            Сохранить
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 
