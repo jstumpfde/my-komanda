@@ -152,11 +152,18 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ inviteMessage: firstMessageText }),
       })
-      if (!res.ok) throw new Error("Ошибка сохранения")
+      if (!res.ok) {
+        // P0-43 fix: парсим тело ответа, чтобы показать конкретный текст
+        // (валидация demo_link и пр.). Бросаем дальше — это сигнал для
+        // sticky-bar register'а НЕ сбрасывать baseline и НЕ вызывать
+        // следующий saveSettings (а то «Сохранено» затрёт ошибку).
+        const body = await res.json().catch(() => null) as { error?: string } | null
+        const msg = body?.error || "Не удалось сохранить"
+        toast.error(msg)
+        throw new Error(msg)
+      }
       setSavedInviteMessage(firstMessageText)
       toast.success("Сохранено")
-    } catch {
-      toast.error("Не удалось сохранить")
     } finally {
       setSavingInvite(false)
     }
@@ -170,11 +177,14 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ reInviteMessage: reInviteText }),
       })
-      if (!res.ok) throw new Error("Ошибка сохранения")
+      if (!res.ok) {
+        const body = await res.json().catch(() => null) as { error?: string } | null
+        const msg = body?.error || "Не удалось сохранить"
+        toast.error(msg)
+        throw new Error(msg)
+      }
       setSavedReInviteMessage(reInviteText)
       toast.success("Сохранено")
-    } catch {
-      toast.error("Не удалось сохранить")
     } finally {
       setSavingReInvite(false)
     }
@@ -434,10 +444,11 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
       anketaConfEnabled, anketaConfDelay, anketaConfText,
     },
     save: async () => {
-      // Сначала invite (PATCH ai-settings), затем общий saveSettings (PUT
-      // vacancy.descriptionJson). Если invite упал — saveSettings всё равно
-      // запустим, чтобы не потерять остальные изменения секции.
-      try { await saveInviteMessage() } catch { /* toast уже показан */ }
+      // P0-43 fix: invite сначала. Если валидация упала (400) — throw
+      // прокидывается в sticky-bar, секция остаётся dirty, saveSettings
+      // НЕ вызывается (иначе success-toast «Настройки сохранены» затрёт
+      // ошибку и пользователь решит, что всё ОК).
+      await saveInviteMessage()
       await saveSettings()
     },
   })

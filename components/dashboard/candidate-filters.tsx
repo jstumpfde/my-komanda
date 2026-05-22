@@ -7,6 +7,8 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Slider } from "@/components/ui/slider"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
+import { Switch } from "@/components/ui/switch"
+import { Label } from "@/components/ui/label"
 import {
   Popover,
   PopoverContent,
@@ -253,6 +255,29 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [], va
       </PopoverTrigger>
       <PopoverContent className="w-80 p-0" align="start">
         <div className="max-h-[75vh] overflow-y-auto p-4 space-y-4">
+          {/* P0-37 part 5: тумблер «Показать отказы». По дефолту ВЫКЛ — HR не
+              видит отказы пока сам не включит. Состояние тумблера выводим из
+              filters.funnelStatuses (включение «rejected» в массиве =
+              тумблер ВКЛ). Так при handleReset → DEFAULT_FILTERS без
+              "rejected" тумблер сам сбрасывается. */}
+          <div className="flex items-center justify-between gap-2">
+            <Label htmlFor="show-rejections" className="text-sm font-medium cursor-pointer">
+              Показать отказы
+            </Label>
+            <Switch
+              id="show-rejections"
+              checked={filters.funnelStatuses.includes("rejected")}
+              onCheckedChange={(v) => onFiltersChange({
+                ...filters,
+                funnelStatuses: v
+                  ? (filters.funnelStatuses.includes("rejected")
+                      ? filters.funnelStatuses
+                      : [...filters.funnelStatuses, "rejected"])
+                  : filters.funnelStatuses.filter(s => s !== "rejected"),
+              })}
+            />
+          </div>
+          <Separator />
           <div className="flex items-center justify-between mb-1">
             <h3 className="font-semibold text-sm">Поиск кандидатов</h3>
             {hasActiveFilters && (
