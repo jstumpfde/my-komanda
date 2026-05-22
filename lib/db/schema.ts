@@ -2079,3 +2079,20 @@ export const companyFunnelTemplates = pgTable("company_funnel_templates", {
 }, (t) => [
   index("idx_cft_company").on(t.companyId),
 ])
+
+// Group 16: библиотека пер-платформенных шаблонов воронки.
+// Создаёт platform-admin (через /admin/platform → Templates). Видна всем
+// HR компаниям через GET /api/modules/hr/funnel-templates/platform
+// (только is_published=true). source_* — для аудита.
+export const platformFunnelTemplates = pgTable("platform_funnel_templates", {
+  id:               uuid("id").primaryKey().defaultRandom(),
+  name:             text("name").notNull(),
+  description:      text("description"),
+  industry:         text("industry"),
+  configJson:       jsonb("config_json").notNull(),
+  sourceVacancyId:  uuid("source_vacancy_id").references(() => vacancies.id, { onDelete: "set null" }),
+  sourceCompanyId:  uuid("source_company_id").references(() => companies.id, { onDelete: "set null" }),
+  isPublished:      boolean("is_published").notNull().default(false),
+  createdAt:        timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt:        timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+})

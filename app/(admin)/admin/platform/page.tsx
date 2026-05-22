@@ -2,12 +2,13 @@
 // Server component: загружает данные для всех табов и передаёт в клиент.
 // Защита уже есть в layout.tsx (email whitelist).
 
-import { desc, eq, sql, count } from "drizzle-orm"
+import { asc, desc, eq, sql, count } from "drizzle-orm"
 import { db } from "@/lib/db"
 import {
   companies,
   vacancies,
   platformEmergencyActions,
+  platformFunnelTemplates,
 } from "@/lib/db/schema"
 import { listMigrationsWithStatus } from "@/lib/platform/settings-migrations"
 import { PlatformAdminClient } from "./platform-admin-client"
@@ -66,6 +67,35 @@ export default async function PlatformAdminPage() {
     .select({ count: count() })
     .from(companies)
 
+  // Group 16: platform templates + список вакансий с включённым конструктором
+  // (для майнинга — копирования funnel_config_json в шаблон).
+  const templateRows = await db
+    .select({
+      id:               platformFunnelTemplates.id,
+      name:             platformFunnelTemplates.name,
+      description:      platformFunnelTemplates.description,
+      industry:         platformFunnelTemplates.industry,
+      sourceVacancyId:  platformFunnelTemplates.sourceVacancyId,
+      sourceCompanyId:  platformFunnelTemplates.sourceCompanyId,
+      isPublished:      platformFunnelTemplates.isPublished,
+      createdAt:        platformFunnelTemplates.createdAt,
+    })
+    .from(platformFunnelTemplates)
+    .orderBy(desc(platformFunnelTemplates.isPublished), asc(platformFunnelTemplates.name))
+
+  const minableVacanciesRows = await db
+    .select({
+      id:           vacancies.id,
+      title:        vacancies.title,
+      companyId:    vacancies.companyId,
+      companyName:  companies.name,
+    })
+    .from(vacancies)
+    .innerJoin(companies, eq(companies.id, vacancies.companyId))
+    .where(eq(vacancies.funnelBuilderEnabled, true))
+    .orderBy(desc(vacancies.updatedAt))
+    .limit(500)
+
   return (
     <PlatformAdminClient
       migrations={migrations.map(m => ({
@@ -82,6 +112,11 @@ export default async function PlatformAdminPage() {
         ...a,
         executedAt: a.executedAt ? a.executedAt.toISOString() : null,
       }))}
+      templates={templateRows.map(t => ({
+        ...t,
+        createdAt: t.createdAt ? t.createdAt.toISOString() : null,
+      }))}
+      minableVacancies={minableVacanciesRows}
     />
   )
 }

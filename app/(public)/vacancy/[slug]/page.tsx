@@ -6,8 +6,6 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import {
   Select as SelectPrimitive,
@@ -16,11 +14,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Switch } from "@/components/ui/switch"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
   MapPin, Banknote, CheckCircle2, ArrowRight, Briefcase,
-  Building2, Loader2,
+  Building2, Loader2, Calendar,
 } from "lucide-react"
 import type { MiniFormField } from "@/components/vacancies/mini-form-builder"
 import { FORMAT_LABELS, EMPLOYMENT_LABELS } from "@/lib/vacancy-types"
@@ -55,17 +52,20 @@ function VacancyPageInner({ params }: { params: Promise<{ slug: string }> }) {
   const [screen, setScreen] = useState<ScreenState>("loading")
   const [vacancy, setVacancy] = useState<VacancyData | null>(null)
   const [name, setName] = useState("")
-  const [contact, setContact] = useState("")
-  const [contactType, setContactType] = useState<"phone" | "telegram">("phone")
   const [submitting, setSubmitting] = useState(false)
   const [extraFields, setExtraFields] = useState<Record<string, string>>({})
 
-  const miniFormFields: MiniFormField[] =
-    vacancy?.descriptionJson &&
-    typeof vacancy.descriptionJson === "object" &&
-    Array.isArray((vacancy.descriptionJson as Record<string, unknown>).miniFormFields)
-      ? ((vacancy.descriptionJson as Record<string, unknown>).miniFormFields as MiniFormField[])
-      : []
+  const descriptionJson = vacancy?.descriptionJson && typeof vacancy.descriptionJson === "object"
+    ? (vacancy.descriptionJson as Record<string, unknown>)
+    : null
+
+  const miniFormFields: MiniFormField[] = Array.isArray(descriptionJson?.miniFormFields)
+    ? (descriptionJson!.miniFormFields as MiniFormField[])
+    : []
+
+  const companyDescriptionText = typeof descriptionJson?.companyDescription === "string"
+    ? (descriptionJson!.companyDescription as string)
+    : ""
 
   useEffect(() => {
     fetch(`/api/public/vacancy/${slug}`)
@@ -80,7 +80,6 @@ function VacancyPageInner({ params }: { params: Promise<{ slug: string }> }) {
       .catch(() => setScreen("error"))
   }, [slug])
 
-  // Track UTM click
   useEffect(() => {
     if (utmSource && screen === "landing") {
       fetch(`/api/public/vacancy/${slug}/track`, {
@@ -124,7 +123,6 @@ function VacancyPageInner({ params }: { params: Promise<{ slug: string }> }) {
       const data = await res.json()
       const token = data?.data?.token ?? data?.token
       if (token) {
-        // Редирект на персональную демонстрацию
         window.location.href = `/demo/${token}`
         return
       }
@@ -148,7 +146,7 @@ function VacancyPageInner({ params }: { params: Promise<{ slug: string }> }) {
     return (
       <div className="min-h-screen flex items-center justify-center p-4" style={{ backgroundColor: bgColor }}>
         <div className="text-center space-y-4">
-          <h1 className="text-2xl font-bold text-foreground">Вакансия не найдена</h1>
+          <h1 className="text-2xl font-bold">Вакансия не найдена</h1>
           <p className="text-muted-foreground">Возможно, вакансия была закрыта или ссылка устарела.</p>
         </div>
       </div>
@@ -160,7 +158,7 @@ function VacancyPageInner({ params }: { params: Promise<{ slug: string }> }) {
       <div className="min-h-screen flex items-center justify-center p-4" style={{ backgroundColor: bgColor, color: textColor }}>
         <div className="max-w-md w-full text-center space-y-6">
           <CheckCircle2 className="w-16 h-16 mx-auto" style={{ color: accentColor }} />
-          <h1 className="text-2xl font-bold text-foreground">Спасибо за отклик!</h1>
+          <h1 className="text-2xl font-bold">Спасибо за отклик!</h1>
           <p className="text-muted-foreground">
             Мы получили вашу заявку и свяжемся с вами в ближайшее время.
           </p>
@@ -180,183 +178,229 @@ function VacancyPageInner({ params }: { params: Promise<{ slug: string }> }) {
   }
 
   const salary = formatSalary(v.salaryMin, v.salaryMax)
+  const hasMeta = v.city || v.format || v.employment || salary
+
+  // Описание: предпочитаем companyDescription (plain text из анкеты),
+  // иначе fallback на description (HTML).
+  const hasPlainDescription = companyDescriptionText.trim().length > 0
+  const hasHtmlDescription = !hasPlainDescription && !!v.description?.trim()
 
   return (
     <div className="min-h-screen flex flex-col" style={{ backgroundColor: bgColor, color: textColor }}>
-      <div className="flex-1 flex flex-col items-center justify-center p-4">
-        <div className="max-w-lg w-full space-y-6">
-          {/* Компания */}
-          <div className="flex justify-center">
-            <div className="flex items-center gap-2">
-              {v.companyLogo ? (
-                <img src={v.companyLogo} alt={v.companyName} className="h-11 w-11 rounded-xl object-contain" />
-              ) : (
-                <div
-                  className="w-11 h-11 rounded-xl flex items-center justify-center text-white font-bold text-lg"
-                  style={{ backgroundColor: accentColor }}
-                >
-                  {v.companyName[0]}
-                </div>
-              )}
-              <span className="text-xl font-bold" style={{ color: textColor }}>{v.companyName}</span>
+      {/* ── Шапка: логотип + название компании ───────────────────── */}
+      <header className="border-b" style={{ borderColor: `${textColor}15` }}>
+        <div className="mx-auto max-w-3xl px-4 sm:px-6 py-5 flex items-center gap-3">
+          {v.companyLogo ? (
+            <img
+              src={v.companyLogo}
+              alt={v.companyName}
+              className="h-11 w-11 rounded-xl object-contain bg-white/40"
+            />
+          ) : (
+            <div
+              className="h-11 w-11 rounded-xl flex items-center justify-center text-white font-bold text-lg"
+              style={{ backgroundColor: accentColor }}
+            >
+              {v.companyName[0]}
             </div>
-          </div>
-
-          {/* Заголовок */}
-          <div className="text-center space-y-3">
-            <h1 className="text-3xl sm:text-4xl font-bold text-foreground">{v.title}</h1>
-            <div className="flex flex-wrap items-center justify-center gap-3 text-muted-foreground">
-              {v.city && (
-                <span className="flex items-center gap-1 text-sm">
-                  <MapPin className="w-4 h-4" /> {v.city}
-                </span>
-              )}
-              {salary && (
-                <>
-                  {v.city && <span className="text-border">·</span>}
-                  <span className="flex items-center gap-1 text-sm">
-                    <Banknote className="w-4 h-4" /> {salary}
-                  </span>
-                </>
-              )}
+          )}
+          <div className="min-w-0">
+            <div className="font-semibold leading-tight truncate" style={{ color: textColor }}>
+              {v.companyName}
             </div>
+            <div className="text-xs opacity-60">Открытая вакансия</div>
           </div>
+        </div>
+      </header>
 
-          {/* Информация о вакансии */}
-          <Card className="border-none">
-            <CardContent className="pt-6 pb-6 space-y-4">
-              {/* Формат и занятость */}
+      {/* ── Контент ─────────────────────────────────────────────── */}
+      <main className="flex-1">
+        <div className="mx-auto max-w-3xl px-4 sm:px-6 py-8 sm:py-12 space-y-8">
+          {/* Заголовок + мета */}
+          <section className="space-y-4">
+            <h1 className="text-3xl sm:text-4xl font-bold leading-tight">{v.title}</h1>
+            {hasMeta && (
               <div className="flex flex-wrap gap-2">
+                {v.city && (
+                  <span
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium"
+                    style={{ backgroundColor: `${textColor}0d` }}
+                  >
+                    <MapPin className="w-3.5 h-3.5" /> {v.city}
+                  </span>
+                )}
                 {v.format && (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium bg-muted">
+                  <span
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium"
+                    style={{ backgroundColor: `${textColor}0d` }}
+                  >
                     <Building2 className="w-3.5 h-3.5" />
                     {FORMAT_LABELS[v.format] || v.format}
                   </span>
                 )}
                 {v.employment && (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium bg-muted">
+                  <span
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium"
+                    style={{ backgroundColor: `${textColor}0d` }}
+                  >
                     <Briefcase className="w-3.5 h-3.5" />
                     {EMPLOYMENT_LABELS[v.employment] || v.employment}
                   </span>
                 )}
+                {salary && (
+                  <span
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold"
+                    style={{ backgroundColor: `${accentColor}15`, color: accentColor }}
+                  >
+                    <Banknote className="w-3.5 h-3.5" /> {salary}
+                  </span>
+                )}
               </div>
+            )}
+          </section>
 
-              {/* Описание */}
-              {v.description && (
-                <div
-                  className="text-sm text-foreground/80 leading-relaxed prose prose-sm max-w-none"
-                  dangerouslySetInnerHTML={{ __html: v.description }}
+          {/* Описание */}
+          {(hasPlainDescription || hasHtmlDescription) && (
+            <section>
+              <h2 className="text-xl font-semibold mb-4">О вакансии</h2>
+              {hasPlainDescription ? (
+                <div className="space-y-4 text-base leading-relaxed">
+                  {companyDescriptionText
+                    .split(/\n{2,}/)
+                    .map((para, idx) => (
+                      <p key={idx} className="whitespace-pre-line">
+                        {para.trim()}
+                      </p>
+                    ))}
+                </div>
+              ) : (
+                <article
+                  className="prose prose-base max-w-none prose-headings:font-semibold prose-headings:mt-6 prose-headings:mb-3 prose-p:leading-relaxed prose-li:my-1"
+                  dangerouslySetInnerHTML={{ __html: v.description! }}
                 />
               )}
-            </CardContent>
-          </Card>
+            </section>
+          )}
 
-          {/* CTA / Форма */}
+          {/* ── CTA или форма ──────────────────────────────────── */}
           {screen === "landing" && (
-            <Button
-              size="lg"
-              className="w-full h-14 text-base font-semibold text-white rounded-xl shadow-lg"
-              style={{ backgroundColor: accentColor }}
-              onClick={() => setScreen("form")}
-            >
-              Откликнуться
-              <ArrowRight className="w-5 h-5 ml-2" />
-            </Button>
+            <section className="pt-2">
+              <Button
+                size="lg"
+                className="w-full sm:w-auto h-14 px-8 text-base font-semibold text-white rounded-xl shadow-lg"
+                style={{ backgroundColor: accentColor }}
+                onClick={() => setScreen("form")}
+              >
+                Откликнуться
+                <ArrowRight className="w-5 h-5 ml-2" />
+              </Button>
+              <p className="mt-3 text-sm opacity-60">
+                Заполнение займёт меньше минуты
+              </p>
+            </section>
           )}
 
           {screen === "form" && (
-            <Card className="border-none">
-              <CardContent className="pt-6 pb-6 space-y-4">
-                {/* Системное: Имя */}
-                <div className="space-y-1.5">
-                  <Label className="text-sm">Имя <span className="text-destructive">*</span></Label>
-                  <Input
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="Имя Фамилия"
-                    autoFocus
-                  />
-                </div>
-
-                {/* Динамические поля из miniFormFields */}
-                {miniFormFields.map((field) => (
-                  <div key={field.id} className="space-y-1.5">
-                    <Label className="text-sm">
-                      {field.label}
-                      {field.required && <span className="text-destructive"> *</span>}
+            <section>
+              <Card>
+                <CardContent className="p-6 space-y-5">
+                  <div className="space-y-1.5">
+                    <Label className="text-sm font-medium">
+                      Имя <span className="text-destructive">*</span>
                     </Label>
-
-                    {field.type === "text" && (
-                      <Input
-                        value={extraFields[field.id] || ""}
-                        onChange={(e) => setExtraFields((prev) => ({ ...prev, [field.id]: e.target.value }))}
-                        placeholder={field.placeholder}
-                      />
-                    )}
-
-                    {field.type === "number" && (
-                      <Input
-                        type="number"
-                        value={extraFields[field.id] || ""}
-                        onChange={(e) => setExtraFields((prev) => ({ ...prev, [field.id]: e.target.value }))}
-                        placeholder={field.placeholder}
-                      />
-                    )}
-
-                    {field.type === "select" && field.options && (
-                      <SelectPrimitive
-                        value={extraFields[field.id] || ""}
-                        onValueChange={(v) => setExtraFields((prev) => ({ ...prev, [field.id]: v }))}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Выберите..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {field.options.map((opt) => (
-                            <SelectItem key={opt} value={opt}>
-                              {opt}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </SelectPrimitive>
-                    )}
-
-                    {field.type === "boolean" && (
-                      <div className="flex items-center gap-2 pt-1">
-                        <Checkbox
-                          id={`extra-${field.id}`}
-                          checked={extraFields[field.id] === "true"}
-                          onCheckedChange={(checked) =>
-                            setExtraFields((prev) => ({ ...prev, [field.id]: checked ? "true" : "false" }))
-                          }
-                        />
-                        <Label htmlFor={`extra-${field.id}`} className="text-sm cursor-pointer">
-                          Да
-                        </Label>
-                      </div>
-                    )}
+                    <Input
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      placeholder="Имя Фамилия"
+                      autoFocus
+                    />
                   </div>
-                ))}
 
-                <Button
-                  className="w-full h-12 text-white font-semibold"
-                  style={{ backgroundColor: accentColor }}
-                  onClick={handleSubmit}
-                  disabled={submitting}
-                >
-                  {submitting ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <>Отправить отклик <ArrowRight className="w-4 h-4 ml-2" /></>
-                  )}
-                </Button>
-              </CardContent>
-            </Card>
+                  {miniFormFields.map((field) => (
+                    <div key={field.id} className="space-y-1.5">
+                      <Label className="text-sm font-medium">
+                        {field.label}
+                        {field.required && <span className="text-destructive"> *</span>}
+                      </Label>
+
+                      {field.type === "text" && (
+                        <Input
+                          value={extraFields[field.id] || ""}
+                          onChange={(e) => setExtraFields((prev) => ({ ...prev, [field.id]: e.target.value }))}
+                          placeholder={field.placeholder}
+                        />
+                      )}
+
+                      {field.type === "number" && (
+                        <Input
+                          type="number"
+                          value={extraFields[field.id] || ""}
+                          onChange={(e) => setExtraFields((prev) => ({ ...prev, [field.id]: e.target.value }))}
+                          placeholder={field.placeholder}
+                        />
+                      )}
+
+                      {field.type === "select" && field.options && (
+                        <SelectPrimitive
+                          value={extraFields[field.id] || ""}
+                          onValueChange={(val) => setExtraFields((prev) => ({ ...prev, [field.id]: val }))}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Выберите..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {field.options.map((opt) => (
+                              <SelectItem key={opt} value={opt}>
+                                {opt}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </SelectPrimitive>
+                      )}
+
+                      {field.type === "boolean" && (
+                        <div className="flex items-center gap-2 pt-1">
+                          <Checkbox
+                            id={`extra-${field.id}`}
+                            checked={extraFields[field.id] === "true"}
+                            onCheckedChange={(checked) =>
+                              setExtraFields((prev) => ({ ...prev, [field.id]: checked ? "true" : "false" }))
+                            }
+                          />
+                          <Label htmlFor={`extra-${field.id}`} className="text-sm cursor-pointer">
+                            Да
+                          </Label>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+
+                  <Button
+                    className="w-full h-12 text-white font-semibold"
+                    style={{ backgroundColor: accentColor }}
+                    onClick={handleSubmit}
+                    disabled={submitting}
+                  >
+                    {submitting ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <>Отправить отклик <ArrowRight className="w-4 h-4 ml-2" /></>
+                    )}
+                  </Button>
+                </CardContent>
+              </Card>
+            </section>
           )}
-
-          <p className="text-center text-xs text-muted-foreground/50">Powered by Company24</p>
         </div>
-      </div>
+      </main>
+
+      {/* ── Footer ──────────────────────────────────────────────── */}
+      <footer
+        className="border-t py-6 text-center text-xs opacity-60"
+        style={{ borderColor: `${textColor}15` }}
+      >
+        Powered by Company24.pro
+      </footer>
     </div>
   )
 }

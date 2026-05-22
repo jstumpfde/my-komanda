@@ -7,14 +7,18 @@ import {
   Brain,
   Calendar,
   CheckCircle2,
+  ClipboardCheck,
   ClipboardList,
+  FileSignature,
   FileText,
   Filter,
   MessageCircle,
+  Phone,
   PlayCircle,
   Repeat,
   ShieldAlert,
   Sparkles,
+  Video,
   Zap,
   type LucideIcon,
 } from "lucide-react"
@@ -33,6 +37,10 @@ export type FunnelBlockType =
   | "ai_chatbot"
   | "interview"
   | "thank_you_screen"
+  | "video_intro"
+  | "test_task"
+  | "reference_check"
+  | "offer"
 
 export interface FunnelBlockMeta {
   type:             FunnelBlockType
@@ -148,6 +156,38 @@ export const BLOCK_META: Record<FunnelBlockType, FunnelBlockMeta> = {
     required:         true,
     incompatibleWith: [],
   },
+  video_intro: {
+    type:             "video_intro",
+    label:            "Видео-визитка",
+    description:      "Кандидат снимает короткое видео о себе",
+    icon:             Video,
+    required:         false,
+    incompatibleWith: [],
+  },
+  test_task: {
+    type:             "test_task",
+    label:            "Тестовое задание",
+    description:      "Отдельная ступень: задание → ответ → AI-проверка",
+    icon:             ClipboardCheck,
+    required:         false,
+    incompatibleWith: [],
+  },
+  reference_check: {
+    type:             "reference_check",
+    label:            "Реф-чек",
+    description:      "Звонок предыдущему работодателю кандидата",
+    icon:             Phone,
+    required:         false,
+    incompatibleWith: [],
+  },
+  offer: {
+    type:             "offer",
+    label:            "Оффер",
+    description:      "Генерация документа об оффере + электронная подпись",
+    icon:             FileSignature,
+    required:         false,
+    incompatibleWith: [],
+  },
 }
 
 export const BLOCK_TYPES: FunnelBlockType[] = [
@@ -156,13 +196,17 @@ export const BLOCK_TYPES: FunnelBlockType[] = [
   "first_message",
   "prequalification",
   "demo",
+  "video_intro",
   "anketa",
   "ai_anketa_score",
   "auto_reply_test_task",
+  "test_task",
   "stop_words_chat",
   "dozhim",
   "ai_chatbot",
   "interview",
+  "reference_check",
+  "offer",
   "thank_you_screen",
 ]
 
@@ -297,6 +341,22 @@ export const FUNNEL_TEMPLATES: Record<string, FunnelTemplate> = {
       "stop_words_chat",
       "dozhim",
       "interview",
+      "thank_you_screen",
+    ],
+  },
+  full_with_test: {
+    name:        "Полный с тестовым",
+    description: "С видео-визиткой, тестовым заданием и реф-чеком",
+    enabledBlocks: [
+      "ai_resume_score",
+      "first_message",
+      "demo",
+      "video_intro",
+      "anketa",
+      "test_task",
+      "reference_check",
+      "interview",
+      "offer",
       "thank_you_screen",
     ],
   },
