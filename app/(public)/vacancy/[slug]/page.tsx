@@ -275,19 +275,19 @@ function VacancyPageInner({ params }: { params: Promise<{ slug: string }> }) {
                     )
                   }
                   return (
-                    <article className="space-y-6">
+                    <article className="space-y-7">
                       {sections.map((section, i) => (
                         <section key={i} className="space-y-3">
                           {section.title && (
-                            <h3 className="text-xl sm:text-2xl font-semibold mt-6 mb-2">
+                            <h3 className="text-xl sm:text-2xl font-bold tracking-tight mt-6 mb-2">
                               {section.title}
                             </h3>
                           )}
                           {section.paragraphs.map((para, j) => (
                             <p
                               key={j}
-                              className="text-base leading-relaxed whitespace-pre-line"
-                              style={{ color: `${textColor}e6` }}
+                              className="text-[15px] sm:text-base leading-7 whitespace-pre-line"
+                              style={{ color: `${textColor}d9` }}
                             >
                               {para}
                             </p>

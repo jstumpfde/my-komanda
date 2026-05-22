@@ -576,7 +576,7 @@ function TagInputWithSuggestions({ tags, onChange, placeholder, suggestions, cus
 
 // ─── Question constructor ───────────────────────────────────────────────────
 
-function QuestionEditor({ questions, onChange }: {
+export function QuestionEditor({ questions, onChange }: {
   questions: Question[]; onChange: (q: Question[]) => void
 }) {
   const [expandedId, setExpandedId] = useState<string | null>(null)

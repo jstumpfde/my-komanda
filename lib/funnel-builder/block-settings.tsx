@@ -4,22 +4,26 @@
 
 "use client"
 
-import { useEffect, useState, type ComponentType } from "react"
+import { useCallback, useEffect, useState, type ComponentType } from "react"
 import { Loader2 } from "lucide-react"
+import { toast } from "sonner"
 
 import { AiChatbotSettings } from "@/components/vacancies/ai-chatbot-settings"
+import { QuestionEditor } from "@/components/vacancies/anketa-tab"
 import { FinalScreensSettings, type FinalScreensConfig } from "@/components/vacancies/final-screens-settings"
 import { FirstMessagesChainEditor } from "@/components/vacancies/first-messages-chain-editor"
 import { OfferSettings } from "@/components/vacancies/offer-settings"
 import { PostDemoSettings } from "@/components/vacancies/post-demo-settings"
 import { ReferenceCheckSettings } from "@/components/vacancies/reference-check-settings"
 import { TestTaskSettings } from "@/components/vacancies/test-task-settings"
+import { useVacancySectionRegister } from "@/components/vacancies/vacancy-settings-context"
 import { VacancyAiProcessSettings } from "@/components/vacancies/vacancy-ai-process-settings"
 import { VacancyFollowupSettings } from "@/components/vacancies/vacancy-followup-settings"
 import { VacancyPrequalificationSettings } from "@/components/vacancies/vacancy-prequalification-settings"
 import { VacancyScheduleSettings } from "@/components/vacancies/vacancy-schedule-settings"
 import { VacancyStopFactorsSettings } from "@/components/vacancies/vacancy-stop-factors-settings"
 import { VacancyStopWordsSettings } from "@/components/vacancies/vacancy-stop-words-settings"
+import type { Question } from "@/lib/course-types"
 import type { VacancyAiProcessSettings as VacancyAiProcessSettingsData, VacancyStopFactors } from "@/lib/db/schema"
 
 import type { FunnelBlockType } from "./blocks"
@@ -41,12 +45,17 @@ export interface BlockSettingsEntry {
 // вакансии данные приходят из родителя; в Sheet конструктора родителя нет,
 // поэтому делаем точечный fetch и прокидываем initial.
 
+interface AnketaShape {
+  questions?: Question[]
+  [k: string]: unknown
+}
+
 interface VacancyShape {
   aiProcessSettings:    VacancyAiProcessSettingsData | null
   aiScoringEnabled:     boolean
   stopFactorsJson:      VacancyStopFactors | null
   stopWordsJson:        string[] | null
-  descriptionJson:      { finalScreens?: FinalScreensConfig } | null
+  descriptionJson:      { finalScreens?: FinalScreensConfig; anketa?: AnketaShape } | null
 }
 
 function useVacancyData(vacancyId: string): { data: VacancyShape | null; loaded: boolean } {
@@ -146,8 +155,62 @@ function ThankYouScreenSettingsWrapped({ vacancyId, onSaved }: BlockSettingsProp
 function DemoPreviewSettingsWrapped({ vacancyId }: BlockSettingsProps) {
   return <PostDemoSettings vacancyId={vacancyId} sections={["preview"]} />
 }
-function AnketaFormFieldsSettingsWrapped({ vacancyId }: BlockSettingsProps) {
-  return <PostDemoSettings vacancyId={vacancyId} sections={["formFields"]} />
+// Полноценный редактор анкеты в Sheet: PostDemoSettings(formFields) сверху,
+// а ниже — QuestionEditor (тот же, что в табе «Анкета»). Каждая часть
+// регистрирует свой saver в VacancySettingsProvider, поэтому общая кнопка
+// «Сохранить» в подвале Sheet сохраняет обе.
+function AnketaFullSettingsWrapped({ vacancyId, onSaved }: BlockSettingsProps) {
+  const { data, loaded } = useVacancyData(vacancyId)
+  const initialQuestions = (data?.descriptionJson?.anketa?.questions ?? []) as Question[]
+  const [questions, setQuestions] = useState<Question[]>(initialQuestions)
+  const [hydrated, setHydrated] = useState(false)
+  useEffect(() => {
+    if (loaded && !hydrated) {
+      setQuestions(initialQuestions)
+      setHydrated(true)
+    }
+  }, [loaded, hydrated, initialQuestions])
+
+  const saveQuestions = useCallback(async () => {
+    const current = data?.descriptionJson?.anketa ?? {}
+    const nextAnketa = { ...current, questions }
+    const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ description_json: { anketa: nextAnketa } }),
+    })
+    if (!res.ok) {
+      toast.error("Не удалось сохранить вопросы анкеты")
+      throw new Error("save questions failed")
+    }
+    toast.success("Вопросы анкеты сохранены")
+    onSaved?.()
+  }, [data?.descriptionJson?.anketa, questions, vacancyId, onSaved])
+
+  useVacancySectionRegister({
+    sectionKey:    `funnel-builder-anketa-questions:${vacancyId}`,
+    tabKey:        "funnel-builder",
+    loaded:        hydrated,
+    watchedValues: questions,
+    save:          saveQuestions,
+  })
+
+  if (!loaded) return <LoadingSpinner />
+  return (
+    <div className="space-y-8">
+      <section className="space-y-3">
+        <h3 className="text-sm font-semibold">Поля анкеты</h3>
+        <PostDemoSettings vacancyId={vacancyId} sections={["formFields"]} />
+      </section>
+      <section className="space-y-3">
+        <h3 className="text-sm font-semibold">Вопросы анкеты</h3>
+        <p className="text-xs text-muted-foreground">
+          Эти вопросы кандидат увидит после загрузки видео-визитки.
+        </p>
+        <QuestionEditor questions={questions} onChange={setQuestions} />
+      </section>
+    </div>
+  )
 }
 function AiAnketaScoreSettingsWrapped({ vacancyId }: BlockSettingsProps) {
   return <PostDemoSettings vacancyId={vacancyId} sections={["thresholds"]} />
@@ -187,12 +250,9 @@ export const BLOCK_SETTINGS_REGISTRY: Partial<Record<FunnelBlockType, BlockSetti
     description: "Превью демо-страницы и режим (auto/manual)",
   },
   anketa: {
-    component:   AnketaFormFieldsSettingsWrapped,
+    component:   AnketaFullSettingsWrapped,
     title:       "Анкета",
-    description: "Какие поля кандидат заполняет в финальной анкете",
-    // TODO: AnketaTab (редактор вопросов) сильно завязан на родительский
-    // контекст. Пока в Sheet — только конфиг полей через PostDemoSettings.
-    // Редактор вопросов остаётся в табе «Анкета» вакансии.
+    description: "Поля анкеты + вопросы, которые HR задаёт кандидату",
   },
   ai_anketa_score: {
     component:   AiAnketaScoreSettingsWrapped,
