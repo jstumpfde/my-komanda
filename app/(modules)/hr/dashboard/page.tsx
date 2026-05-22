@@ -12,8 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth"
 import {
-  Briefcase, Users, UserCheck, Clock, TrendingUp, Plus, ChevronRight,
-  Sparkles, Activity, Calendar, BarChart3,
+  Briefcase, Users, UserCheck, TrendingUp, Plus, ChevronRight,
+  Sparkles, Activity, Calendar,
 } from "lucide-react"
 import { CandidatesProgressMiniTable } from "@/components/candidates/candidates-progress-mini-table"
 import { Greeting } from "./_components/greeting"
@@ -135,22 +135,6 @@ function ComingSoon({ children }: { children: ReactNode }) {
         <span className="rounded-full bg-foreground/85 text-background text-[11px] font-medium px-3 py-1 shadow">
           Скоро
         </span>
-      </div>
-    </div>
-  )
-}
-
-// ─── KPI Pill ───────────────────────────────────────────────────────────────
-
-function KpiPill({ icon: Icon, label, value }: { icon: ElementType; label: string; value: number | null }) {
-  return (
-    <div className="border rounded-xl shadow-sm hover:shadow-md transition-shadow p-4 inline-flex items-center gap-3 w-fit">
-      <div className="w-10 h-10 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 flex items-center justify-center shrink-0">
-        <Icon className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-      </div>
-      <div className="flex flex-col">
-        <span className="text-xs text-muted-foreground leading-none">{label}</span>
-        <span className="text-2xl font-bold leading-tight mt-1">{value === null ? "…" : value}</span>
       </div>
     </div>
   )
@@ -336,24 +320,24 @@ function DashboardContent() {
             {/* ═══ Очередь HR (P0-8) ═══ */}
             <AwaitingReviewBanner />
 
-            {/* ═══ KPI pills ═══ */}
-            <div className="flex flex-wrap gap-3">
-              <KpiPill icon={Briefcase} label="Активные вакансии" value={kpi?.activeVacancies ?? null} />
-              <KpiPill icon={Users} label="Кандидатов сегодня" value={kpi?.candidatesToday ?? null} />
-              <KpiPill icon={Users} label="Кандидатов в работе" value={kpi?.candidatesInWork ?? null} />
+            {/* ═══ KPI pills — #50/#51 ═══
+                Раньше было 2 ряда (KpiPill + Metric цветной), путано.
+                Юрий: один ряд понятных метрик, реагируют на фильтр вакансии.
+                «Кандидатов сегодня» → «Откликов сегодня» (это hh-отклики
+                за день). «Кандидатов в работе» → «Прошли демо» (count
+                stage IN demo_opened+, см. /api/.../stats #49). Убраны
+                «Ср. время закрытия» (Скоро-плейсхолдер) и «Всего
+                кандидатов» (бесполезно при наличии «Прошли демо»). */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+              <Metric icon={Briefcase} label="Активных вакансий" value={kpi?.activeVacancies ?? "—"} bg="bg-emerald-500" />
+              <Metric icon={Users} label="Откликов сегодня" value={kpi?.candidatesToday ?? "—"} bg="bg-blue-500" />
+              <Metric icon={UserCheck} label="Прошли демо" value={kpi?.candidatesInWork ?? "—"} bg="bg-violet-500" />
+              <Metric icon={Activity} label="Нанято за месяц" value={kpi?.hiredThisMonth ?? "—"} bg="bg-orange-500" />
+              <Metric icon={TrendingUp} label="Конверсия воронки" value={kpi ? `${kpi.conversionRate}%` : "—"} bg="bg-indigo-500" />
             </div>
 
             {/* ═══ AI-ассистент — #33: активирован SQL-инсайтами ═══ */}
             <AiInsights selectedVacancyId={selectedVacancyId} />
-
-            {/* ═══ 5 Metrics ═══ */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-              <Metric icon={Briefcase} label="Активных вакансий" value={kpi?.activeVacancies ?? "—"} bg="bg-emerald-400" />
-              <Metric icon={Users} label="Всего кандидатов" value={kpi?.totalCandidates ?? "—"} bg="bg-blue-400" />
-              <Metric icon={UserCheck} label="Нанято за месяц" value={kpi?.hiredThisMonth ?? "—"} bg="bg-violet-600" />
-              <Metric icon={Clock} label="Ср. время закрытия" value="—" trend="Скоро" bg="bg-orange-400" />
-              <Metric icon={TrendingUp} label="Конверсия воронки" value={kpi ? `${kpi.conversionRate}%` : "—"} bg="bg-indigo-400" />
-            </div>
 
             {/* ═══ Live progress widget ═══ */}
             <div className="border rounded-xl shadow-sm hover:shadow-md transition-shadow p-6">
