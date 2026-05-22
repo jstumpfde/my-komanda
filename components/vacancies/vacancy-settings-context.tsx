@@ -198,8 +198,10 @@ export function VacancyTabPendingDot({ tab }: { tab: VacancyTabKey }) {
 }
 
 /**
- * Sticky-кнопка «Сохранить настройки» в правом-нижнем углу. Видна только
- * когда есть несохранённые изменения. z-40 — выше контента, ниже модалок.
+ * Sticky-кнопка «Сохранить настройки». Прилипает к низу viewport, но
+ * горизонтально ограничена max-w-3xl — той же шириной, что и блоки настроек
+ * вакансии, — поэтому кнопка стоит у правого края блока, а не у правого
+ * края окна. z-40 — выше контента, ниже модалок.
  */
 export function VacancyStickySaveBar() {
   const ctx = useVacancySettings()
@@ -209,13 +211,12 @@ export function VacancyStickySaveBar() {
     : "Сохранить настройки"
   return (
     <div className={cn(
-      "fixed bottom-4 right-4 z-40",
-      "shadow-lg shadow-primary/20 rounded-lg",
+      "sticky bottom-4 z-40 mt-6 max-w-3xl flex justify-end pointer-events-none",
     )}>
       <Button
         onClick={() => { void ctx.saveAll() }}
         disabled={ctx.saving}
-        className="gap-2 h-11 px-5 text-sm"
+        className="pointer-events-auto gap-2 h-11 px-5 text-sm shadow-lg shadow-primary/20"
       >
         {ctx.saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
         {label}
