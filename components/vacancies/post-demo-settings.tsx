@@ -50,14 +50,21 @@ const FIELD_ORDER: FormFieldKey[] = ["firstName", "lastName", "email", "phone", 
 
 export type PostDemoSection = "thresholds" | "formFields" | "preview" | "anketaAutoReply"
 
-type AnketaAutoReplyDelay = 5 | 15 | 30 | 60 | 240 | 1440
+// #59: новые пресеты задержки автоответа. Раньше было только минутное
+// разрешение (5/15/30/60/240/1440). Юрий: после анкеты HR хочет
+// «живую» реакцию (10–30 секунд), но также бывают сценарии «через 1 час»
+// для офисных вакансий. 4ч/24ч убраны как слишком долгие — кандидат к
+// этому моменту охлаждается.
+type AnketaAutoReplyDelay = 10 | 30 | 60 | 180 | 300 | 900 | 1800 | 3600
 const ANKETA_DELAYS: { value: AnketaAutoReplyDelay; label: string }[] = [
-  { value: 5,    label: "5 минут" },
-  { value: 15,   label: "15 минут" },
-  { value: 30,   label: "30 минут" },
-  { value: 60,   label: "1 час" },
-  { value: 240,  label: "4 часа" },
-  { value: 1440, label: "24 часа" },
+  { value: 10,   label: "10 секунд" },
+  { value: 30,   label: "30 секунд" },
+  { value: 60,   label: "1 минута" },
+  { value: 180,  label: "3 минуты" },
+  { value: 300,  label: "5 минут" },
+  { value: 900,  label: "15 минут" },
+  { value: 1800, label: "30 минут" },
+  { value: 3600, label: "1 час" },
 ]
 const DEFAULT_ANKETA_AUTO_REPLY_TEXT =
   "{{name}}, рассмотрели вашу анкету. Ваша кандидатура нам интересна. Предлагаем тестовое задание."
@@ -112,7 +119,9 @@ export function PostDemoSettings({ vacancyId, sections }: PostDemoSettingsProps)
 
   // ТЗ-3 Ч.1: автоответ после заполнения анкеты
   const [autoReplyEnabled, setAutoReplyEnabled] = useState(false)
-  const [autoReplyDelay, setAutoReplyDelay] = useState<AnketaAutoReplyDelay>(60)
+  // #59: дефолт 180с (3 минуты) — раньше было 60 (трактовалось как 1 час).
+  // Backward-compat — см. load-блок ниже, где old `delayMinutes` конвертится.
+  const [autoReplyDelay, setAutoReplyDelay] = useState<AnketaAutoReplyDelay>(180)
   const [autoReplyRespectSchedule, setAutoReplyRespectSchedule] = useState(true)
   const [autoReplyText, setAutoReplyText] = useState(DEFAULT_ANKETA_AUTO_REPLY_TEXT)
   const [autoReplyTestTaskUrl, setAutoReplyTestTaskUrl] = useState("")
@@ -157,8 +166,23 @@ export function PostDemoSettings({ vacancyId, sections }: PostDemoSettingsProps)
         if (data.anketaAutoReply && typeof data.anketaAutoReply === "object") {
           const ar = data.anketaAutoReply as Record<string, unknown>
           if (typeof ar.enabled === "boolean") setAutoReplyEnabled(ar.enabled)
-          if (typeof ar.delayMinutes === "number" && ANKETA_DELAYS.some(d => d.value === ar.delayMinutes)) {
-            setAutoReplyDelay(ar.delayMinutes as AnketaAutoReplyDelay)
+          // #59: новое поле delaySeconds (источник правды). Backward-compat:
+          // если есть только старое delayMinutes — конвертируем в секунды и
+          // мапим на ближайший пресет.
+          let seconds: number | null = null
+          if (typeof ar.delaySeconds === "number") seconds = ar.delaySeconds
+          else if (typeof ar.delayMinutes === "number") seconds = ar.delayMinutes * 60
+          if (seconds !== null) {
+            const exact = ANKETA_DELAYS.find(d => d.value === seconds)
+            if (exact) {
+              setAutoReplyDelay(exact.value)
+            } else {
+              // Не попали в пресет — выбираем ближайший по абс. разнице.
+              const closest = ANKETA_DELAYS.reduce((a, b) =>
+                Math.abs(b.value - seconds!) < Math.abs(a.value - seconds!) ? b : a
+              )
+              setAutoReplyDelay(closest.value)
+            }
           }
           if (typeof ar.respectSchedule === "boolean") setAutoReplyRespectSchedule(ar.respectSchedule)
           if (typeof ar.text === "string") setAutoReplyText(ar.text)
@@ -219,7 +243,10 @@ export function PostDemoSettings({ vacancyId, sections }: PostDemoSettingsProps)
         formFields,
         anketaAutoReply: {
           enabled:         autoReplyEnabled,
-          delayMinutes:    autoReplyDelay,
+          // #59: пишем секунды как источник правды. Старое delayMinutes
+          // оставляем для backward-compat — серверной части и старых клиентов.
+          delaySeconds:    autoReplyDelay,
+          delayMinutes:    Math.max(1, Math.round(autoReplyDelay / 60)),
           respectSchedule: autoReplyRespectSchedule,
           text:            autoReplyText,
           testTaskUrl:     autoReplyTestTaskUrl,

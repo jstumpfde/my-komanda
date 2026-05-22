@@ -437,12 +437,19 @@ export interface PostDemoSettings {
 
 export interface AnketaAutoReplySettings {
   enabled?:         boolean   // тумблер ВКЛ/ВЫКЛ, default false
-  delayMinutes?:    5 | 15 | 30 | 60 | 240 | 1440   // default 60
+  // #59: новые пресеты в секундах (10с/30с/1м/3м/5м/15м/30м/1ч).
+  delaySeconds?:    10 | 30 | 60 | 180 | 300 | 900 | 1800 | 3600
+  // Legacy в минутах — оставлен для backward-compat при чтении старых
+  // descriptionJson. Новые клиенты пишут delaySeconds; читатели сначала
+  // смотрят delaySeconds, потом делают fallback на delayMinutes * 60.
+  delayMinutes?:    5 | 15 | 30 | 60 | 240 | 1440
   respectSchedule?: boolean   // учитывать рабочее окно вакансии, default true
   text?:            string    // текст сообщения с плейсхолдерами
   testTaskUrl?:     string    // опциональная ссылка, дописывается в конец текста
 }
 
+export const ANKETA_AUTO_REPLY_DELAYS_SECONDS = [10, 30, 60, 180, 300, 900, 1800, 3600] as const
+// Legacy — больше не используется в UI, оставлен для совместимости.
 export const ANKETA_AUTO_REPLY_DELAYS = [5, 15, 30, 60, 240, 1440] as const
 export const DEFAULT_ANKETA_AUTO_REPLY_TEXT =
   "{{name}}, рассмотрели вашу анкету. Ваша кандидатура нам интересна. Предлагаем тестовое задание."

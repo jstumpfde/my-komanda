@@ -3,10 +3,11 @@ import { eq, and, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { demos, vacancies } from "@/lib/db/schema"
 import type { AnketaAutoReplySettings, PostDemoSettings } from "@/lib/db/schema"
-import { ANKETA_AUTO_REPLY_DELAYS } from "@/lib/db/schema"
+import { ANKETA_AUTO_REPLY_DELAYS, ANKETA_AUTO_REPLY_DELAYS_SECONDS } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 
 const ANKETA_DELAY_SET = new Set<number>(ANKETA_AUTO_REPLY_DELAYS)
+const ANKETA_DELAY_SECONDS_SET = new Set<number>(ANKETA_AUTO_REPLY_DELAYS_SECONDS)
 
 function isHttpUrlOrEmpty(v: unknown): v is string {
   if (typeof v !== "string") return false
@@ -28,6 +29,14 @@ function sanitizeAnketaAutoReply(
   const next: AnketaAutoReplySettings = { ...(current ?? {}) }
 
   if (src.enabled !== undefined) next.enabled = Boolean(src.enabled)
+  // #59: новое поле — delaySeconds (источник правды).
+  if (src.delaySeconds !== undefined) {
+    const n = Number(src.delaySeconds)
+    if (Number.isFinite(n) && ANKETA_DELAY_SECONDS_SET.has(n)) {
+      next.delaySeconds = n as AnketaAutoReplySettings["delaySeconds"]
+    }
+  }
+  // Legacy — оставляем приём delayMinutes для backward-compat (старые клиенты).
   if (src.delayMinutes !== undefined) {
     const n = Number(src.delayMinutes)
     if (Number.isFinite(n) && ANKETA_DELAY_SET.has(n)) {
