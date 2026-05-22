@@ -306,9 +306,14 @@ export default function HiringSettingsPage() {
             <div className="mb-5">
               <div className="flex items-center gap-2 mb-1">
                 <Settings className="size-5 text-muted-foreground" />
-                <h1 className="text-xl font-bold tracking-tight">Настройки найма</h1>
+                <h1 className="text-xl font-bold tracking-tight">Дефолты компании</h1>
               </div>
-              <p className="text-sm text-muted-foreground">Общие настройки для всех вакансий</p>
+              {/* #37: чёткое позиционирование страницы — это дефолты для НОВЫХ
+                  вакансий, каждая вакансия может их переопределить локально. */}
+              <p className="text-sm text-muted-foreground">
+                Эти настройки применяются ко всем новым вакансиям при создании.
+                В каждой вакансии их можно изменить отдельно.
+              </p>
             </div>
 
             {/* Top-level tabs: Основные | Интеграции */}
@@ -831,13 +836,19 @@ export default function HiringSettingsPage() {
               <TabsContent value="stopfactors">
                 <div className="space-y-4 max-w-3xl">
 
-                  {/* Стоп-факторы по умолчанию */}
+                  {/* #37: переименовано — это критерии отсева на этапе
+                      AI-скоринга резюме (город, возраст, опыт), а не
+                      стоп-слова в чате (#22, отдельная фича в каждой
+                      вакансии). */}
                   <Card>
                     <CardHeader>
                       <CardTitle className="text-base flex items-center gap-2">
-                        <ShieldAlert className="size-4" />Стоп-факторы по умолчанию
+                        <ShieldAlert className="size-4" />Стоп-факторы для нового резюме
                       </CardTitle>
-                      <CardDescription>Применяются ко всем новым вакансиям автоматически</CardDescription>
+                      <CardDescription>
+                        Критерии отсева на этапе AI-скоринга резюме (НЕ стоп-слова в чате).
+                        Применяется к новым вакансиям. В вакансии можно изменить.
+                      </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-2">
 
