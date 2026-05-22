@@ -290,6 +290,12 @@ export const vacancies = pgTable("vacancies", {
   hhSyncedAt: timestamp("hh_synced_at"),
   aiProcessSettings: jsonb("ai_process_settings").default({}),
   aiScoringEnabled: boolean("ai_scoring_enabled").notNull().default(false),
+  // #21: серия из до 3 первых сообщений с тумблерами и задержками.
+  // Пустой массив = fallback на старое ai_process_settings.inviteMessage.
+  firstMessagesChain: jsonb("first_messages_chain")
+    .$type<Array<{ enabled: boolean; delaySeconds: number; text: string }>>()
+    .notNull()
+    .default([]),
   // Авто-разбор hh-откликов: cron каждые 10 минут разбирает накопленные отклики
   // в рабочее время. Если выключено — клиент жмёт «Разобрать» вручную.
   autoProcessingEnabled:      boolean("auto_processing_enabled").notNull().default(false),

@@ -529,34 +529,12 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
           {/* Рабочие часы и нерабочие дни редактируются в отдельной секции
               «Расписание» под цепочкой дожима — см. VacancyScheduleSettings. */}
 
-          {/* Шаблон */}
-          <div className="space-y-2">
-            <Label className="text-sm font-medium">Шаблон сообщения</Label>
-            <textarea
-              className="w-full border rounded-lg p-3 text-sm resize-none h-36 bg-background focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none leading-relaxed"
-              value={firstMessageText}
-              onChange={(e) => setFirstMessageText(e.target.value)}
-              placeholder="Текст первого сообщения..."
-            />
-            <div className="flex items-center justify-between gap-3 flex-wrap">
-              <div className="flex flex-wrap gap-1.5">
-                {["{{name}}", "{{vacancy}}", "{{company}}", "{{demo_link}}"].map(v => (
-                  <Badge key={v} variant="outline" className="text-xs cursor-default">{v}</Badge>
-                ))}
-              </div>
-              {!tabKey && (
-                <Button
-                  size="sm"
-                  className="h-8 text-xs gap-1.5"
-                  onClick={saveInviteMessage}
-                  disabled={!inviteDirty || savingInvite}
-                >
-                  {savingInvite ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                  Сохранить
-                </Button>
-              )}
-            </div>
-          </div>
+          {/* #21: блок «Шаблон сообщения» переехал в FirstMessagesChainEditor.
+              Один textarea заменён на серию из 3 шагов с тумблерами и
+              задержками. См. components/vacancies/first-messages-chain-editor.tsx.
+              Эта Card теперь содержит только глобальную задержку (используется
+              как fallback для chain[0] если массив пустой) и блок reInvite ниже.
+          */}
 
           {/* #19: блок «Подтверждение после анкеты» УДАЛЁН отсюда. Его
               функция дублирует «Автоответ после заполнения анкеты» в табе

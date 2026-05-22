@@ -697,6 +697,25 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
       if (candidateId) updatePayload.localCandidateId = candidateId
       await db.update(hhResponses).set(updatePayload).where(eq(hhResponses.id, resp.id))
 
+      // #21: планирование msg2/msg3 серии первых сообщений. Msg1 уже
+      // отправлен выше через changeNegotiationState. baseAt = сейчас,
+      // cumulative задержки из vacancy.first_messages_chain. Если chain
+      // пустой или содержит только msg1 — scheduleFirstMessagesChain
+      // вернёт scheduled=0, ничего не сделает.
+      if (candidateId && localVac) {
+        try {
+          const { scheduleFirstMessagesChain } = await import("@/lib/messaging/first-messages-chain")
+          await scheduleFirstMessagesChain({
+            candidateId,
+            vacancyId: localVac.id,
+            baseAt:    new Date(),
+          })
+        } catch (chainErr) {
+          console.error("[PQ] schedule first-messages-chain failed:",
+            chainErr instanceof Error ? chainErr.message : chainErr)
+        }
+      }
+
       // Старт воронки дожима.
       if (candidateId && localVac) {
         try {
