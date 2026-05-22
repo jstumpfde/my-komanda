@@ -290,9 +290,7 @@ export const vacancies = pgTable("vacancies", {
   hhSyncedAt: timestamp("hh_synced_at"),
   aiProcessSettings: jsonb("ai_process_settings").default({}),
   aiScoringEnabled: boolean("ai_scoring_enabled").notNull().default(false),
-  // P0-22: editable стоп-слова на уровне вакансии. matchStopWordList ищет
-  // по подстроке без учёта регистра. Дефолт совпадает с историческим
-  // STOP_WORDS из lib/followup/stop-words.ts.
+  // P0-22: editable стоп-слова на уровне вакансии.
   stopWordsJson: jsonb("stop_words_json").$type<string[]>().notNull().default([
     "нет","неактуально","не подходит","спасибо","неинтересно","не интересно",
     "не интересует","не актуально","не актуальна","отменяю","отказ",
@@ -303,7 +301,7 @@ export const vacancies = pgTable("vacancies", {
   aiQualityDetails:      jsonb("ai_quality_details"),
   aiQualityAnalyzedAt:   timestamp("ai_quality_analyzed_at", { withTimezone: true }),
   aiQualityInputHash:    text("ai_quality_input_hash"),
-  // #46: Аварийное повторное сообщение. Default OFF, текст пустой.
+  // #46: Аварийное повторное сообщение.
   recoveryMessageEnabled: boolean("recovery_message_enabled").notNull().default(false),
   recoveryMessageText:    text("recovery_message_text").notNull().default(""),
   // #21: серия из до 3 первых сообщений с тумблерами и задержками.
@@ -311,6 +309,10 @@ export const vacancies = pgTable("vacancies", {
     .$type<Array<{ enabled: boolean; delaySeconds: number; text: string }>>()
     .notNull()
     .default([]),
+  // #15: AI чат-бот кандидатов. Фаза 1 — scaffold.
+  aiChatbotEnabled:  boolean("ai_chatbot_enabled").notNull().default(false),
+  aiChatbotSettings: jsonb("ai_chatbot_settings").notNull().default({}),
+  aiChatbotPrompt:   text("ai_chatbot_prompt").notNull().default(""),
   // Авто-разбор hh-откликов: cron каждые 10 минут разбирает накопленные отклики
   // в рабочее время. Если выключено — клиент жмёт «Разобрать» вручную.
   autoProcessingEnabled:      boolean("auto_processing_enabled").notNull().default(false),

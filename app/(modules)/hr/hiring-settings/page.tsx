@@ -306,9 +306,14 @@ export default function HiringSettingsPage() {
             <div className="mb-5">
               <div className="flex items-center gap-2 mb-1">
                 <Settings className="size-5 text-muted-foreground" />
-                <h1 className="text-xl font-bold tracking-tight">Настройки найма</h1>
+                <h1 className="text-xl font-bold tracking-tight">Дефолты компании</h1>
               </div>
-              <p className="text-sm text-muted-foreground">Общие настройки для всех вакансий</p>
+              {/* #37: чёткое позиционирование страницы — это дефолты для НОВЫХ
+                  вакансий, каждая вакансия может их переопределить локально. */}
+              <p className="text-sm text-muted-foreground">
+                Эти настройки применяются ко всем новым вакансиям при создании.
+                В каждой вакансии их можно изменить отдельно.
+              </p>
             </div>
 
             {/* Top-level tabs: Основные | Интеграции */}
@@ -489,6 +494,82 @@ export default function HiringSettingsPage() {
               {/* ═══ TAB 1: Расписание ═══ */}
               <TabsContent value="schedule">
                 <div className="space-y-4 max-w-3xl">
+
+                  {/* #41: Способы проведения интервью + часовой пояс +
+                      placeholder-блоки интеграций. */}
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-sm font-medium flex items-center gap-2">
+                        <Clock className="size-4 text-muted-foreground" />Способы проведения интервью
+                      </CardTitle>
+                      <CardDescription>HR выбирает что использовать при назначении встречи кандидату.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-2">
+                      {[
+                        { id: "zoom",      label: "Видео-звонок Zoom" },
+                        { id: "meet",      label: "Видео-звонок Google Meet" },
+                        { id: "telegram",  label: "Видео-звонок Telegram" },
+                        { id: "phone",     label: "Звонок по телефону" },
+                        { id: "office",    label: "Встреча в офисе" },
+                      ].map(t => (
+                        <label key={t.id} className="flex items-center gap-2 text-sm">
+                          <input type="checkbox" defaultChecked className="rounded" />
+                          {t.label}
+                        </label>
+                      ))}
+                      <div className="space-y-1.5 pt-2">
+                        <Label className="text-xs text-muted-foreground">Адрес офиса (если выбран офис)</Label>
+                        <Textarea
+                          placeholder="Москва, ул. Тверская, 1, БЦ «Альфа», 3 этаж"
+                          rows={2}
+                          className="text-sm bg-[var(--input-bg)]"
+                        />
+                      </div>
+                      <div className="space-y-1.5 pt-2">
+                        <Label className="text-xs text-muted-foreground">Часовой пояс HR</Label>
+                        <Select defaultValue="Europe/Moscow">
+                          <SelectTrigger className="h-9 text-sm bg-[var(--input-bg)] w-full"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Europe/Kaliningrad">Калининград (UTC+2)</SelectItem>
+                            <SelectItem value="Europe/Moscow">Москва (UTC+3)</SelectItem>
+                            <SelectItem value="Europe/Samara">Самара (UTC+4)</SelectItem>
+                            <SelectItem value="Asia/Yekaterinburg">Екатеринбург (UTC+5)</SelectItem>
+                            <SelectItem value="Asia/Omsk">Омск (UTC+6)</SelectItem>
+                            <SelectItem value="Asia/Krasnoyarsk">Красноярск (UTC+7)</SelectItem>
+                            <SelectItem value="Asia/Irkutsk">Иркутск (UTC+8)</SelectItem>
+                            <SelectItem value="Asia/Yakutsk">Якутск (UTC+9)</SelectItem>
+                            <SelectItem value="Asia/Vladivostok">Владивосток (UTC+10)</SelectItem>
+                            <SelectItem value="Asia/Magadan">Магадан (UTC+11)</SelectItem>
+                            <SelectItem value="Asia/Kamchatka">Камчатка (UTC+12)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* #41: интеграции календарей и Zoom — заглушки «Скоро». */}
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-sm font-medium flex items-center gap-2">
+                        <Plug className="size-4 text-muted-foreground" />Интеграции календарей
+                        <Badge variant="outline" className="text-[10px] h-5 px-1.5 ml-1">Скоро</Badge>
+                      </CardTitle>
+                      <CardDescription>Двусторонняя синхронизация слотов и автосоздание встреч.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-2">
+                      {[
+                        { id: "gcal",    label: "Google Calendar" },
+                        { id: "outlook", label: "Outlook Calendar" },
+                        { id: "yandex",  label: "Яндекс Календарь" },
+                        { id: "zoom",    label: "Zoom OAuth" },
+                      ].map(i => (
+                        <div key={i.id} className="flex items-center justify-between rounded-lg border p-3">
+                          <span className="text-sm">{i.label}</span>
+                          <Button size="sm" variant="outline" disabled className="h-7 text-xs">Подключить</Button>
+                        </div>
+                      ))}
+                    </CardContent>
+                  </Card>
 
                   {/* Слоты интервью */}
                   <Card>
@@ -848,13 +929,19 @@ export default function HiringSettingsPage() {
               <TabsContent value="stopfactors">
                 <div className="space-y-4 max-w-3xl">
 
-                  {/* Стоп-факторы по умолчанию */}
+                  {/* #37: переименовано — это критерии отсева на этапе
+                      AI-скоринга резюме (город, возраст, опыт), а не
+                      стоп-слова в чате (#22, отдельная фича в каждой
+                      вакансии). */}
                   <Card>
                     <CardHeader>
                       <CardTitle className="text-base flex items-center gap-2">
-                        <ShieldAlert className="size-4" />Стоп-факторы по умолчанию
+                        <ShieldAlert className="size-4" />Стоп-факторы для нового резюме
                       </CardTitle>
-                      <CardDescription>Применяются ко всем новым вакансиям автоматически</CardDescription>
+                      <CardDescription>
+                        Критерии отсева на этапе AI-скоринга резюме (НЕ стоп-слова в чате).
+                        Применяется к новым вакансиям. В вакансии можно изменить.
+                      </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-2">
 
