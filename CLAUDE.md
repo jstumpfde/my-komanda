@@ -90,6 +90,56 @@ hooks/use-candidates.ts    — хук пагинации кандидатов
 - B8: неправильный порядок табов вакансии
 - B9: две параллельные системы статусов кандидатов
 
+## Platform-level operations (Group 14)
+
+Скрытый раздел /admin/platform и набор API-эндпоинтов для платформенного
+администратора. Эндпоинты защищены заголовком X-Platform-Admin-Key (значение
+из env PLATFORM_ADMIN_KEY). UI защищён списком email в PLATFORM_ADMIN_EMAILS
+(разделитель ","), при несовпадении возвращается 404 (не 403 — скрываем).
+
+### Env переменные
+- PLATFORM_ADMIN_KEY — секрет для curl-ов на /api/platform/*
+- PLATFORM_ADMIN_EMAILS — белый список email через запятую для /admin/platform
+
+### Settings migrations runner
+Идемпотентные миграции данных/настроек, журнал — таблица
+platform_settings_migrations. Список миграций — в
+lib/platform/settings-migrations.ts (SETTINGS_MIGRATIONS).
+
+```bash
+curl -X POST https://company24.pro/api/platform/run-migrations \
+  -H "X-Platform-Admin-Key: $PLATFORM_ADMIN_KEY"
+```
+
+### Emergency broadcast
+Срочные действия на всех компаниях. Каждое логируется в
+platform_emergency_actions.
+
+```bash
+# Аварийно вырубить AI-чат-бот у всех компаний (companies.ai_chatbot_killed=true)
+curl -X POST https://company24.pro/api/platform/emergency/kill-all-ai-chatbots \
+  -H "X-Platform-Admin-Key: $PLATFORM_ADMIN_KEY"
+
+# Восстановить
+curl -X POST https://company24.pro/api/platform/emergency/restore-all-ai-chatbots \
+  -H "X-Platform-Admin-Key: $PLATFORM_ADMIN_KEY"
+
+# Добавить стоп-слово всем вакансиям, где его ещё нет
+curl -X POST https://company24.pro/api/platform/emergency/add-stop-word \
+  -H "X-Platform-Admin-Key: $PLATFORM_ADMIN_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"word":"спасибо за общение"}'
+
+# Сбросить ai_chatbot_prompt у всех вакансий с включённым AI чат-ботом
+curl -X POST https://company24.pro/api/platform/emergency/regenerate-ai-prompts \
+  -H "X-Platform-Admin-Key: $PLATFORM_ADMIN_KEY"
+```
+
+### Admin UI
+Открыть https://company24.pro/admin/platform под аккаунтом из
+PLATFORM_ADMIN_EMAILS. Табы: Migrations, Companies, AI vacancies, Emergency
+(требует ввод «CONFIRM»), Logs.
+
 ## TODO (актуально на 18.05.2026)
 - [ ] Подтянуть 4 коммита с main в develop: git checkout develop && git merge origin/main
 - [ ] Удалить старую ветку deploy/pagination-clean (локально и на remote)

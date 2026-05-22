@@ -2014,6 +2014,37 @@ export const followUpMessages = pgTable("follow_up_messages", {
   createdAt:      timestamp("created_at").defaultNow().notNull(),
 })
 
+// Group 14: журнал «миграций настроек платформы». Runner в
+// lib/platform/settings-migrations.ts перед каждой попыткой apply() ищет
+// запись по id — если она уже есть, миграция считается применённой
+// и пропускается. Это делает массовые правки настроек безопасно
+// повторяемыми (идемпотентными).
+export const platformSettingsMigrations = pgTable("platform_settings_migrations", {
+  id:             text("id").primaryKey(),
+  description:    text("description").notNull(),
+  appliedAt:      timestamp("applied_at", { withTimezone: true }),
+  affectedCount:  integer("affected_count").notNull().default(0),
+  rollbackData:   jsonb("rollback_data"),
+  createdBy:      text("created_by"),
+  notes:          text("notes"),
+}, (t) => [
+  index("idx_psm_applied").on(t.appliedAt),
+])
+
+// Group 14: журнал «emergency broadcast» действий — kill switch AI-чат-бота
+// у всех компаний, добавление глобального стоп-слова и т.п. Любой POST на
+// /api/platform/emergency/* пишет сюда строку с payload и result.
+export const platformEmergencyActions = pgTable("platform_emergency_actions", {
+  id:           uuid("id").primaryKey().defaultRandom(),
+  actionType:   text("action_type").notNull(),
+  payload:      jsonb("payload"),
+  executedAt:   timestamp("executed_at", { withTimezone: true }).notNull().defaultNow(),
+  executedBy:   text("executed_by"),
+  result:       jsonb("result"),
+}, (t) => [
+  index("idx_pea_executed").on(t.executedAt),
+])
+
 // P0-30: журнал запусков критичных cron-эндпоинтов. Пишется каждым cron'ом
 // (recordCronRun из lib/cron/record-run.ts), читается health-check endpoint.
 export const cronRuns = pgTable("cron_runs", {
