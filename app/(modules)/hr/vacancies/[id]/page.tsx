@@ -1690,11 +1690,15 @@ export default function VacancyPage() {
       return m[c] || c
     })
     .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "company"
+  // #55: раньше для free-домена показывали `company24.pro/c/{slug}/{vacancy}`,
+  // но такого роута нет — кнопка «Предпросмотр»/«Открыть» дёргала 404.
+  // Реальный публичный роут — /vacancy/[slug]. На custom/subdomain пока
+  // используем тот же путь (subdomain-роутинг будет в отдельной задаче).
   const publicPageUrl = brandDomainLevel === "custom" && brandCustomDomain
-    ? `https://${brandCustomDomain}/v/${vacancySlugOrId}`
+    ? `https://${brandCustomDomain}/vacancy/${vacancySlugOrId}`
     : brandDomainLevel === "subdomain"
-    ? `https://${companySlugDisplay}.company24.pro/v/${vacancySlugOrId}`
-    : `https://company24.pro/c/${companySlugDisplay}/${vacancySlugOrId}`
+    ? `https://${companySlugDisplay}.company24.pro/vacancy/${vacancySlugOrId}`
+    : `https://company24.pro/vacancy/${vacancySlugOrId}`
 
   // ── Loading / 404 guard ────────────────────────────────────
   const isLoadingVacancy = vacancyLoading || (!apiVacancy && !vacancyError)
@@ -2762,7 +2766,7 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                             <div className="flex-1 min-w-0">
                               <p className="text-sm font-medium">Бесплатный</p>
                               <p className="text-xs text-muted-foreground mt-0.5">
-                                Ваши ссылки: <span className="font-mono text-foreground">company24.pro/c/{companySlugDisplay}/...</span>
+                                Ваши ссылки: <span className="font-mono text-foreground">company24.pro/vacancy/...</span>
                               </p>
                               {brandDomainLevel === "free" && (
                                 <div className="flex items-center gap-2 mt-2">
@@ -2796,7 +2800,7 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                                 <span className="text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 rounded-full px-2 py-0.5">Тариф Бизнес</span>
                               </div>
                               <p className="text-xs text-muted-foreground mt-0.5">
-                                Ваши ссылки: <span className="font-mono text-foreground">{companySlugDisplay}.company24.pro/v/...</span>
+                                Ваши ссылки: <span className="font-mono text-foreground">{companySlugDisplay}.company24.pro/vacancy/...</span>
                               </p>
                               {brandDomainLevel === "subdomain" && (
                                 <div className="mt-2 space-y-1.5">
