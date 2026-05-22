@@ -207,7 +207,7 @@ export const MODULE_REGISTRY: Record<ModuleId, ModuleConfig> = {
   },
   dialer: {
     id: 'dialer',
-    name: 'Бот-звонарь',
+    name: 'AI-агент',
     description: 'AI-агент для исходящих звонков по скриптам',
     icon: 'PhoneOutgoing',
     basePath: '/dialer',

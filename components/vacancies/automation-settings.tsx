@@ -319,7 +319,7 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
   const [completenessChannel, setCompletenessChannel] = useState(initialCompleteness.channel || "email")
   const [completenessDelay, setCompletenessDelay] = useState(initialCompleteness.delay || "1hour")
 
-  // 8. Бот-звонарь
+  // 8. AI-агент (#24: переименован с «Бот-звонарь»)
   const initialDialer = (initialAutomation.dialer as { enabled?: boolean; scriptId?: string; trigger?: string }) || {}
   const [dialerEnabled, setDialerEnabled] = useState(initialDialer.enabled ?? false)
   const [dialerScriptId, setDialerScriptId] = useState(initialDialer.scriptId || "")
@@ -920,22 +920,22 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
       </Card>
       )}
 
-      {/* ═══ 8. Бот-звонарь ══════════════════════════════════ */}
+      {/* ═══ 8. AI-агент (звонки кандидатам). #24: переименован с
+             «Бот-звонарь». Сама фича всё ещё «Скоро». ════════════ */}
       {showSection("dialer") && (
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
             <Phone className="w-4 h-4" />
             Звонки кандидатам
-            <Badge variant="outline" className="text-[10px] ml-1">Бот-звонарь</Badge>
             <Badge variant="outline" className="text-[10px] h-4 px-1.5">Скоро</Badge>
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium">Подключить бот-звонарь</p>
-              <p className="text-xs text-muted-foreground">Бот автоматически позвонит кандидатам по выбранному сценарию</p>
+              <p className="text-sm font-medium">Подключить AI агента</p>
+              <p className="text-xs text-muted-foreground">Агент автоматически будет звонить кандидатам по выбранному сценарию</p>
             </div>
             <Switch checked={dialerEnabled} onCheckedChange={setDialerEnabled} disabled />
           </div>
@@ -955,9 +955,9 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
               <div className="space-y-1.5">
                 <Label className="text-xs">ID скрипта звонка</Label>
                 <Input value={dialerScriptId} onChange={e => setDialerScriptId(e.target.value)}
-                  placeholder="Выберите скрипт в модуле Бот-звонарь" className="h-9 text-sm bg-[var(--input-bg)] border border-input" />
+                  placeholder="Выберите скрипт в модуле AI-агент" className="h-9 text-sm bg-[var(--input-bg)] border border-input" />
               </div>
-              <a href="/dialer" className="text-xs text-primary hover:underline">Настроить скрипты в модуле Бот-звонарь →</a>
+              <a href="/dialer" className="text-xs text-primary hover:underline">Настроить скрипты в модуле AI-агент →</a>
             </div>
           )}
         </CardContent>

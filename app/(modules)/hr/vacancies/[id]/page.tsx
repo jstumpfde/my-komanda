@@ -2989,7 +2989,7 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                     <p className="text-[11px] text-muted-foreground mt-3">Любые webhook/API-настройки появятся здесь после подключения CRM.</p>
                   </div>
 
-                  {/* Бот-звонарь (перенесён из «AI сценарии» по ТЗ-1 Часть 1.2) */}
+                  {/* AI-агент (перенесён из «AI сценарии» по ТЗ-1 Часть 1.2; #24: переименован с «Бот-звонарь») */}
                   <AutomationSettings
                     vacancyId={id}
                     descriptionJson={apiVacancy?.descriptionJson}
