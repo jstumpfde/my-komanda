@@ -95,10 +95,19 @@ interface DashboardStats {
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
+// #31: time-aware приветствие в Москве, единый источник правды.
+// 4 варианта: ночь (0-4) / утро (5-11) / день (12-17) / вечер (18-23).
 function getGreeting(): string {
-  const h = new Date().getHours()
-  if (h < 12) return "Доброе утро"
-  if (h < 18) return "Добрый день"
+  const parts = new Intl.DateTimeFormat("ru-RU", {
+    timeZone: "Europe/Moscow",
+    hour: "numeric",
+    hour12: false,
+  }).formatToParts(new Date())
+  const hourStr = parts.find(p => p.type === "hour")?.value ?? "0"
+  const h = (parseInt(hourStr, 10) || 0) % 24
+  if (h <= 4) return "Доброй ночи"
+  if (h <= 11) return "Доброе утро"
+  if (h <= 17) return "Добрый день"
   return "Добрый вечер"
 }
 
@@ -172,6 +181,8 @@ function DashboardContent() {
   const { user } = useAuth()
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [loaded, setLoaded] = useState(false)
+  // #30: фильтр по вакансии. "all" = показывать всё (default).
+  const [selectedVacancyId, setSelectedVacancyId] = useState<string>("all")
 
   useEffect(() => {
     let cancelled = false
@@ -188,7 +199,14 @@ function DashboardContent() {
 
   const kpi = stats?.kpi
   const vacancies = stats?.vacancies ?? []
-  const funnelTotals = stats?.funnel?.totals ?? {}
+  // #30: если выбрана конкретная вакансия — используем её срез из byVacancy,
+  // иначе общий totals.
+  const funnelTotals = (() => {
+    if (selectedVacancyId !== "all" && stats?.funnel?.byVacancy?.[selectedVacancyId]) {
+      return stats.funnel.byVacancy[selectedVacancyId]
+    }
+    return stats?.funnel?.totals ?? {}
+  })()
 
   const funnel = FUNNEL_STAGES.map(s => ({
     label: s.label,
@@ -200,7 +218,9 @@ function DashboardContent() {
 
   // Header subtitle
   const headerSubtitle = (() => {
-    if (!loaded) return "Загрузка данных…"
+    // #29: не показываем «Загрузка» — оставляем подзаголовок пустым до
+    // прихода данных, чтобы первый рендер был спокойным.
+    if (!loaded) return ""
     if (!kpi) return "Не удалось загрузить данные"
     const today = kpi.candidatesToday ?? 0
     const inWork = kpi.candidatesInWork ?? 0
@@ -223,35 +243,45 @@ function DashboardContent() {
         <main className="flex-1 overflow-auto bg-background">
           <div className="py-6 space-y-5" style={{ paddingLeft: 56, paddingRight: 56 }}>
 
-            {/* ═══ Header ═══ */}
+            {/* ═══ Header ═══
+                #29: имя из SSR-сессии. Если пустое (первый mount) — показываем
+                просто «{приветствие}!» без имени, чтобы не пугать «Загрузка».
+                #31: убран дублирующий <Greeting /> ниже (он рендерил то же
+                самое второй раз).
+                #32: убран фильтр «Этот месяц» — Юрий говорит непонятно что
+                он фильтрует. Фильтр «Все вакансии» теперь стоит в правом
+                верхнем углу один, как просили. */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
-                <h1 className="text-xl font-semibold">{getGreeting()}, {user.name.split(" ")[0]}!</h1>
+                <h1 className="text-xl font-semibold">
+                  {user.name
+                    ? `${getGreeting()}, ${user.name.split(" ")[0]}!`
+                    : `${getGreeting()}!`}
+                </h1>
                 <p className="text-sm text-muted-foreground" suppressHydrationWarning>{getDateString()}</p>
-                <p className="text-sm text-muted-foreground mt-0.5">{headerSubtitle}</p>
+                {headerSubtitle && (
+                  <p className="text-sm text-muted-foreground mt-0.5">{headerSubtitle}</p>
+                )}
               </div>
               <div className="flex items-center gap-2">
-                <Select disabled value="all">
-                  <SelectTrigger className="h-8 w-[180px] text-xs" title="Скоро">
+                {/* #30: активирован фильтр вакансий. По умолчанию "all" —
+                    показываем все. При выборе одной — фильтруем клиентскую
+                    voronku/active-vacancies по vacancyId. */}
+                <Select value={selectedVacancyId} onValueChange={setSelectedVacancyId}>
+                  <SelectTrigger className="h-8 w-[200px] text-xs">
                     <SelectValue placeholder="Все вакансии" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Все вакансии</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select disabled value="month">
-                  <SelectTrigger className="h-8 w-[140px] text-xs" title="Скоро">
-                    <SelectValue placeholder="Период" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="month">Этот месяц</SelectItem>
+                    {vacancies.map(v => (
+                      <SelectItem key={v.id} value={v.id} className="text-xs">
+                        {v.title}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
             </div>
-
-            {/* ═══ Greeting ═══ */}
-            <Greeting />
 
             {/* ═══ Очередь HR (P0-8) ═══ */}
             <AwaitingReviewBanner />
@@ -263,20 +293,8 @@ function DashboardContent() {
               <KpiPill icon={Users} label="Кандидатов в работе" value={kpi?.candidatesInWork ?? null} />
             </div>
 
-            {/* ═══ AI Assistant — Скоро ═══ */}
-            <ComingSoon>
-              <div className="rounded-lg border bg-gradient-to-br from-[#EEEDFE] to-[#E6F1FB] dark:from-[#1a1830] dark:to-[#172030] p-5">
-                <div className="flex items-center gap-2 mb-3">
-                  <Sparkles className="w-4 h-4" style={{ color: C.purple }} />
-                  <h2 className="text-sm font-semibold">AI-ассистент</h2>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
-                  {[1, 2, 3, 4].map(i => (
-                    <div key={i} className="bg-white dark:bg-gray-900 rounded-md p-3 h-20" />
-                  ))}
-                </div>
-              </div>
-            </ComingSoon>
+            {/* ═══ AI-ассистент — #33: активирован SQL-инсайтами ═══ */}
+            <AiInsights selectedVacancyId={selectedVacancyId} />
 
             {/* ═══ 5 Metrics ═══ */}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
@@ -453,50 +471,11 @@ function DashboardContent() {
               </ComingSoon>
             </div>
 
-            {/* ═══ Goals + Sources — Скоро ═══ */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-              <ComingSoon>
-                <div className="border rounded-xl shadow-sm p-6">
-                  <h3 className="text-lg font-semibold mb-4">Цели месяца</h3>
-                  <div className="space-y-4">
-                    {[1, 2, 3, 4].map(i => (
-                      <div key={i}>
-                        <div className="h-3 bg-muted/30 rounded w-1/2 mb-2" />
-                        <div className="h-2.5 bg-muted/30 rounded-full" />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </ComingSoon>
-
-              <ComingSoon>
-                <div className="border rounded-xl shadow-sm p-6">
-                  <h3 className="text-lg font-semibold mb-4">Источники откликов</h3>
-                  <div className="flex items-center gap-6">
-                    <div className="w-[140px] h-[140px] shrink-0 rounded-full bg-muted/30" />
-                    <div className="space-y-2 flex-1">
-                      {[1, 2, 3, 4].map(i => (
-                        <div key={i} className="flex items-center gap-2">
-                          <div className="w-2.5 h-2.5 rounded-full bg-muted/50" />
-                          <div className="h-3 bg-muted/30 rounded flex-1" />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </ComingSoon>
-            </div>
-
-            {/* ═══ Dynamics — Скоро ═══ */}
-            <ComingSoon>
-              <div className="border rounded-xl shadow-sm p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold">Динамика за период</h3>
-                  <BarChart3 className="w-4 h-4 text-muted-foreground" />
-                </div>
-                <div className="h-[250px] bg-muted/20 rounded-md" />
-              </div>
-            </ComingSoon>
+            {/* #36: блоки «Цели месяца», «Источники откликов», «Динамика
+                за период» были placeholder'ами «Скоро» — удалены, чтобы
+                HR не видел неработающий шум на дашборде. Когда виджеты
+                будут готовы — вернутся через систему «Добавить виджет»
+                (отдельная будущая задача). */}
 
           </div>
         </main>
@@ -507,4 +486,65 @@ function DashboardContent() {
 
 export default function HRDashboardPage() {
   return <DashboardContent />
+}
+
+// #33: AI-ассистент — 4 карточки с SQL-инсайтами из БД (без LLM-вызовов).
+// Endpoint /api/modules/hr/dashboard/ai-insights. selectedVacancyId сейчас
+// игнорируется на сервере (для будущего расширения).
+interface AiInsight {
+  key:         string
+  title:       string
+  value:       string
+  description: string
+  link:        string | null
+}
+
+function AiInsights({ selectedVacancyId }: { selectedVacancyId: string }) {
+  const [insights, setInsights] = useState<AiInsight[] | null>(null)
+  void selectedVacancyId // зарезервировано для будущего ?vacancyId=
+  useEffect(() => {
+    let cancelled = false
+    fetch("/api/modules/hr/dashboard/ai-insights")
+      .then(r => r.ok ? r.json() : null)
+      .then((d: { insights?: AiInsight[] } | null) => {
+        if (cancelled) return
+        if (d?.insights && Array.isArray(d.insights)) setInsights(d.insights)
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [])
+
+  return (
+    <div className="rounded-lg border bg-gradient-to-br from-[#EEEDFE] to-[#E6F1FB] dark:from-[#1a1830] dark:to-[#172030] p-5">
+      <div className="flex items-center gap-2 mb-3">
+        <Sparkles className="w-4 h-4" style={{ color: C.purple }} />
+        <h2 className="text-sm font-semibold">AI-ассистент</h2>
+        <span className="text-[10px] text-muted-foreground">инсайты из ваших данных</span>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+        {!insights ? (
+          [1, 2, 3, 4].map(i => (
+            <div key={i} className="bg-white dark:bg-gray-900 rounded-md p-3 h-20 animate-pulse" />
+          ))
+        ) : (
+          insights.map(ins => {
+            const card = (
+              <div className="bg-white dark:bg-gray-900 rounded-md p-3 h-full flex flex-col">
+                <p className="text-[11px] text-muted-foreground">{ins.title}</p>
+                <p className="text-xl font-bold mt-0.5">{ins.value}</p>
+                <p className="text-[11px] text-muted-foreground mt-auto line-clamp-2">{ins.description}</p>
+              </div>
+            )
+            return ins.link ? (
+              <Link key={ins.key} href={ins.link} className="hover:scale-[1.02] transition-transform">
+                {card}
+              </Link>
+            ) : (
+              <div key={ins.key}>{card}</div>
+            )
+          })
+        )}
+      </div>
+    </div>
+  )
 }
