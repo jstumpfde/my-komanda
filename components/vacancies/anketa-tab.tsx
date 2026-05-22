@@ -1041,9 +1041,18 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange, onNavigat
     toast.success("Анкета заполнена! Проверьте и дополните.")
   }, [onTitleChange])
 
+  // P0-27 fix: re-sync извне затирал локальные правки пользователя при любом
+  // refetch (saveBranding, save вакансии и т.п. → новый descriptionJson →
+  // setData затирает несохранённые поля). dataDirtyRef переехал сюда из
+  // блока autosave, чтобы быть доступным здесь раньше. Теперь догоняемся
+  // только если правок нет (== синхронизировано с сервером). Если есть —
+  // оставляем локальный state, save их допишет, после успеха ref сбросится.
+  const dataDirtyRef = useRef(false)
   useEffect(() => {
     const saved = (descriptionJson as Record<string, unknown>)?.anketa as Record<string, unknown> | undefined
-    if (saved) setData(prev => ({ ...prev, ...migrateAnketa(saved) }))
+    if (!saved) return
+    if (dataDirtyRef.current) return
+    setData(prev => ({ ...prev, ...migrateAnketa(saved) }))
   }, [descriptionJson])
 
   // Auto-trigger AI parsing if sessionStorage has text from create-vacancy-dialog
@@ -1096,23 +1105,33 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange, onNavigat
   }, [data])
 
   // ── Save ──
+  // P0-27 fix: PATCH со server-side merge ({...currentJson, ...body.description_json})
+  // вместо PUT-перезаписи. Раньше save брал stale `existing = descriptionJson`
+  // из closure и при race condition с параллельным PUT (например attachments
+  // autosave ниже) — одно из сохранений затирало другое. Теперь шлём ТОЛЬКО
+  // ключ anketa: сервер сам мерджит с актуальным descriptionJson из БД.
+  // После успешного save сбрасываем dirty-флаг, чтобы re-sync эффект мог
+  // догнать локальный state из свежего refetch'а.
   const save = useCallback(async () => {
     setSaving(true)
     try {
-      const existing = (descriptionJson as Record<string, unknown>) ?? {}
       const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}`, {
-        method: "PUT",
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ description_json: { ...existing, anketa: data } }),
+        body: JSON.stringify({ description_json: { anketa: data } }),
       })
-      if (!res.ok) throw new Error("Ошибка сохранения")
+      if (!res.ok) {
+        const body = await res.json().catch(() => null) as { error?: string } | null
+        throw new Error(body?.error || "Ошибка сохранения")
+      }
+      dataDirtyRef.current = false
       toast.success("Анкета сохранена")
-    } catch {
-      toast.error("Не удалось сохранить анкету")
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Не удалось сохранить анкету")
     } finally {
       setSaving(false)
     }
-  }, [data, descriptionJson, vacancyId])
+  }, [data, vacancyId])
 
   // Прокидываем saving в page.tsx, чтобы кнопка «Сохранить» в шапке таба
   // умела показать spinner. На первом рендере (false) — состояние совпадает.
@@ -1321,7 +1340,9 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange, onNavigat
     toast.success("Данные из документа добавлены в анкету")
   }, [])
 
-  // Save attachments with autosave
+  // Save attachments with autosave.
+  // P0-27 fix: PATCH со server-merge — раньше параллельный PUT с stale
+  // descriptionJson затирал свежие правки анкеты (или наоборот).
   useEffect(() => {
     const existing = (descriptionJson as Record<string, unknown>) ?? {}
     const currentAttachments = Array.isArray(existing.attachments) ? existing.attachments as Attachment[] : []
@@ -1329,9 +1350,9 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange, onNavigat
     const timer = setTimeout(async () => {
       try {
         await fetch(`/api/modules/hr/vacancies/${vacancyId}`, {
-          method: "PUT",
+          method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ description_json: { ...existing, attachments } }),
+          body: JSON.stringify({ description_json: { attachments } }),
         })
       } catch {}
     }, 1500)
@@ -1339,8 +1360,8 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange, onNavigat
   }, [attachments, descriptionJson, vacancyId])
 
   // ── Autosave ──
+  // dataDirtyRef объявлен выше (рядом с re-sync эффектом). Здесь только таймер.
   const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const dataDirtyRef = useRef(false)
   const scheduleAutosave = useCallback(() => {
     if (autosaveTimer.current) clearTimeout(autosaveTimer.current)
     autosaveTimer.current = setTimeout(() => save(), 2000)
