@@ -22,7 +22,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
-import { ChevronDown, GripVertical, Settings2 } from "lucide-react"
+import { ChevronDown, Clock3, GripVertical, Plus, RotateCcw, Settings, Settings2, Star } from "lucide-react"
 
 import {
   AlertDialog,
@@ -47,6 +47,8 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Label } from "@/components/ui/label"
@@ -68,11 +70,17 @@ import {
   applyFunnelTemplate,
   BLOCK_META,
   FUNNEL_TEMPLATES,
+  normalizeFunnelConfig,
   type FunnelBlock,
   type FunnelBlockType,
   type FunnelConfig,
 } from "@/lib/funnel-builder/blocks"
 import { BLOCK_SETTINGS_REGISTRY } from "@/lib/funnel-builder/block-settings"
+import {
+  ManageFunnelTemplatesDialog,
+  SaveFunnelTemplateDialog,
+  type CompanyFunnelTemplate,
+} from "./company-funnel-templates-dialogs"
 
 export interface FunnelBuilderProps {
   vacancyId: string
@@ -95,6 +103,27 @@ export function FunnelBuilder({ vacancyId }: FunnelBuilderProps) {
   const [pendingConflict, setPendingConflict] = useState<PendingIncompatibility | null>(null)
   const [openBlockType, setOpenBlockType] = useState<FunnelBlockType | null>(null)
   const [pendingTemplate, setPendingTemplate] = useState<string | null>(null)
+  // Group 15: пер-компанийная библиотека шаблонов воронки.
+  const [companyTemplates, setCompanyTemplates] = useState<CompanyFunnelTemplate[]>([])
+  const [pendingCompanyTplId, setPendingCompanyTplId] = useState<string | null>(null)
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false)
+  const [manageDialogOpen, setManageDialogOpen] = useState(false)
+  const [resetConfirmOpen, setResetConfirmOpen] = useState(false)
+
+  const reloadCompanyTemplates = async () => {
+    try {
+      const res = await fetch("/api/modules/hr/company-funnel-templates")
+      if (!res.ok) return
+      const data = await res.json() as { templates?: CompanyFunnelTemplate[] }
+      setCompanyTemplates(data.templates ?? [])
+    } catch {
+      // тихо — это не критично
+    }
+  }
+
+  useEffect(() => {
+    void reloadCompanyTemplates()
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -194,6 +223,18 @@ export function FunnelBuilder({ vacancyId }: FunnelBuilderProps) {
     toast.success(`Шаблон «${tpl.name}» применён`, { duration: 1500 })
   }
 
+  const confirmCompanyTemplate = async () => {
+    if (!pendingCompanyTplId) return
+    const tpl = companyTemplates.find((t) => t.id === pendingCompanyTplId)
+    setPendingCompanyTplId(null)
+    if (!tpl) return
+    // Шаблон компании хранит готовый набор блоков — нормализуем (на случай
+    // если список типов изменился с момента сохранения) и применяем целиком.
+    const normalized = normalizeFunnelConfig(tpl.configJson)
+    await applyBlocks(normalized.blocks)
+    toast.success(`Шаблон «${tpl.name}» применён`, { duration: 1500 })
+  }
+
   const confirmConflict = async () => {
     if (!pendingConflict) return
     const { type, conflictTypes } = pendingConflict
@@ -226,12 +267,35 @@ export function FunnelBuilder({ vacancyId }: FunnelBuilderProps) {
 
   const itemIds = useMemo(() => blocks.map((b) => b.type), [blocks])
 
+  // T3: счётчик «N из M блоков включено» в шапке.
+  const enabledCount = useMemo(() => blocks.filter((b) => b.enabled).length, [blocks])
+
+  // T3: сброс к дефолту компании (или встроенному «Простой» если default не задан).
+  const handleReset = async () => {
+    const defaultTpl = companyTemplates.find((t) => t.isDefault)
+    if (defaultTpl) {
+      const normalized = normalizeFunnelConfig(defaultTpl.configJson)
+      await applyBlocks(normalized.blocks)
+      toast.success(`Воронка сброшена к шаблону «${defaultTpl.name}»`, { duration: 1500 })
+      return
+    }
+    const simple = FUNNEL_TEMPLATES.simple
+    const next = applyFunnelTemplate(simple, blocks)
+    await applyBlocks(next)
+    toast.success("Воронка сброшена к шаблону «Простой найм»", { duration: 1500 })
+  }
+
   return (
     <Card>
       <CardHeader>
         <div className="flex items-center gap-2">
           <CardTitle>Конструктор воронки</CardTitle>
           <Badge variant="outline">Beta</Badge>
+          {enabled && (
+            <span className="ml-auto text-xs text-muted-foreground">
+              {enabledCount} из {blocks.length} блоков включено
+            </span>
+          )}
         </div>
         <CardDescription>
           Экспериментальный режим. Перетаскивайте блоки чтобы изменить порядок.
@@ -250,7 +314,35 @@ export function FunnelBuilder({ vacancyId }: FunnelBuilderProps) {
                     <ChevronDown className="ml-1 h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-72">
+                <DropdownMenuContent align="end" className="w-80">
+                  {companyTemplates.length > 0 && (
+                    <>
+                      <DropdownMenuLabel className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                        Шаблоны компании
+                      </DropdownMenuLabel>
+                      {companyTemplates.map((tpl) => (
+                        <DropdownMenuItem
+                          key={tpl.id}
+                          onSelect={() => setPendingCompanyTplId(tpl.id)}
+                          className="flex flex-col items-start gap-0.5 py-2"
+                        >
+                          <span className="text-sm font-medium flex items-center gap-1.5 w-full">
+                            <span className="truncate">{tpl.name}</span>
+                            {tpl.isDefault && (
+                              <Star className="h-3 w-3 fill-amber-400 text-amber-500 shrink-0 ml-auto" />
+                            )}
+                          </span>
+                          {tpl.description && (
+                            <span className="text-xs text-muted-foreground line-clamp-2">{tpl.description}</span>
+                          )}
+                        </DropdownMenuItem>
+                      ))}
+                      <DropdownMenuSeparator />
+                    </>
+                  )}
+                  <DropdownMenuLabel className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                    Встроенные
+                  </DropdownMenuLabel>
                   {Object.entries(FUNNEL_TEMPLATES).map(([key, template]) => (
                     <DropdownMenuItem
                       key={key}
@@ -261,8 +353,35 @@ export function FunnelBuilder({ vacancyId }: FunnelBuilderProps) {
                       <span className="text-xs text-muted-foreground">{template.description}</span>
                     </DropdownMenuItem>
                   ))}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onSelect={() => setSaveDialogOpen(true)}
+                    className="flex items-center gap-2 py-2"
+                  >
+                    <Plus className="h-4 w-4" />
+                    <span className="text-sm">Сохранить текущую как шаблон…</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onSelect={() => setManageDialogOpen(true)}
+                    className="flex items-center gap-2 py-2"
+                  >
+                    <Settings className="h-4 w-4" />
+                    <span className="text-sm">Управление шаблонами…</span>
+                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
+            )}
+            {enabled && (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={saving}
+                onClick={() => setResetConfirmOpen(true)}
+                title="Сбросить к дефолту"
+              >
+                <RotateCcw className="h-4 w-4" />
+                <span className="sr-only">Сбросить к дефолту</span>
+              </Button>
             )}
             <Switch
               checked={Boolean(enabled)}
@@ -351,6 +470,64 @@ export function FunnelBuilder({ vacancyId }: FunnelBuilderProps) {
         </AlertDialogContent>
       </AlertDialog>
 
+      <AlertDialog
+        open={pendingCompanyTplId !== null}
+        onOpenChange={(open) => { if (!open) setPendingCompanyTplId(null) }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {pendingCompanyTplId && `Применить шаблон «${companyTemplates.find((t) => t.id === pendingCompanyTplId)?.name ?? ""}»?`}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Текущий набор включённых блоков и их порядок будут заменены
+              сохранённым шаблоном. Настройки внутри блоков (тексты, пороги,
+              сценарии AI и т. п.) сохранятся — изменится только список
+              включённых блоков и порядок.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Отмена</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmCompanyTemplate}>Применить</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={resetConfirmOpen}
+        onOpenChange={setResetConfirmOpen}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Сбросить воронку?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {companyTemplates.find((t) => t.isDefault)
+                ? `Воронка будет приведена к шаблону компании по умолчанию — «${companyTemplates.find((t) => t.isDefault)?.name}».`
+                : "Воронка будет приведена к встроенному шаблону «Простой найм» (шаблон компании по умолчанию не задан)."}
+              {" "}Настройки внутри блоков сохранятся, изменится только список
+              включённых блоков и порядок.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Отмена</AlertDialogCancel>
+            <AlertDialogAction onClick={() => { void handleReset() }}>Сбросить</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <SaveFunnelTemplateDialog
+        open={saveDialogOpen}
+        onOpenChange={setSaveDialogOpen}
+        currentBlocks={blocks}
+        onSaved={() => { void reloadCompanyTemplates() }}
+      />
+
+      <ManageFunnelTemplatesDialog
+        open={manageDialogOpen}
+        onOpenChange={setManageDialogOpen}
+        onChanged={() => { void reloadCompanyTemplates() }}
+      />
+
       <Sheet
         open={openBlockType !== null}
         onOpenChange={(open) => { if (!open) setOpenBlockType(null) }}
@@ -397,12 +574,21 @@ function SortableBlockCard({ block, saving, onToggle, onOpenSettings }: Sortable
     useSortable({ id: block.type })
 
   const style: React.CSSProperties = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity:   isDragging ? 0.5 : 1,
+    transform:  CSS.Transform.toString(transform),
+    // T3: дольше плавный transition при reorder — dnd-kit отдаёт transition
+    // только во время drag, но если он null/undefined — оставляем нативный.
+    transition: transition ?? "transform 200ms ease",
+    opacity:    isDragging ? 0.5 : 1,
   }
 
   const Icon = meta.icon
+
+  // T3: блоки, у которых ещё нет UI настроек (нет entry в реестре или
+  // entry.component === null) — показываем badge «Скоро» вместо/в дополнение
+  // к обычным badges. Кнопка настроек остаётся (Sheet всё равно покажет
+  // «В разработке»), но дизайн сообщает HR что это work-in-progress.
+  const settingsEntry = BLOCK_SETTINGS_REGISTRY[block.type]
+  const hasSettingsUi = settingsEntry?.component != null
 
   return (
     <div
@@ -421,10 +607,15 @@ function SortableBlockCard({ block, saving, onToggle, onOpenSettings }: Sortable
       </button>
       <Icon className="h-5 w-5 text-muted-foreground shrink-0" />
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <span className="text-sm font-medium truncate">{meta.label}</span>
           {meta.required && (
             <Badge variant="secondary" className="text-[10px]">обязательный</Badge>
+          )}
+          {!hasSettingsUi && (
+            <Badge variant="outline" className="text-[10px] gap-1 border-amber-300 text-amber-700 bg-amber-50">
+              <Clock3 className="h-3 w-3" />Скоро
+            </Badge>
           )}
         </div>
         <p className="text-xs text-muted-foreground truncate">{meta.description}</p>
