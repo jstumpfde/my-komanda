@@ -140,15 +140,62 @@ export async function PATCH(
     const { id } = await params
 
     // Аккуратно достаём тело — для restore-вызовов оно может отсутствовать
-    let body: { automation?: VacancyAutomationSettings } = {}
+    let body: {
+      automation?:      VacancyAutomationSettings
+      description_json?: Record<string, unknown>
+    } = {}
     try {
       const text = await req.text()
       if (text && text.trim().length > 0) {
-        body = JSON.parse(text) as { automation?: VacancyAutomationSettings }
+        body = JSON.parse(text) as typeof body
       }
     } catch {
       // Тело не JSON — считаем как пустое (восстановление)
       body = {}
+    }
+
+    // P0-50 hotfix: ветка 0 — обновление description_json. Saver'ы брендинга
+    // (а также любые другие саб-секции, складывающие свои данные в
+    // descriptionJson через PATCH) попадали раньше в "восстановление из
+    // корзины" и тело игнорировалось — toast "Сохранено" показывался, но
+    // в БД ничего не писалось. Здесь делаем merge на уровне корня объекта:
+    // переданные ключи перезаписывают существующие, остальные сохраняются.
+    if (body.description_json && typeof body.description_json === "object") {
+      const [existing] = await db
+        .select({ id: vacancies.id, descriptionJson: vacancies.descriptionJson })
+        .from(vacancies)
+        .where(and(eq(vacancies.id, id), eq(vacancies.companyId, user.companyId)))
+        .limit(1)
+
+      if (!existing) return apiError("Vacancy not found", 404)
+
+      const currentJson = (existing.descriptionJson && typeof existing.descriptionJson === "object" && existing.descriptionJson !== null)
+        ? existing.descriptionJson as Record<string, unknown>
+        : {}
+
+      const nextJson = { ...currentJson, ...body.description_json }
+
+      const [updated] = await db
+        .update(vacancies)
+        .set({ descriptionJson: nextJson, updatedAt: new Date() })
+        .where(and(eq(vacancies.id, id), eq(vacancies.companyId, user.companyId)))
+        .returning()
+
+      if (!updated) return apiError("Vacancy not found", 404)
+
+      logActivity({
+        companyId: user.companyId,
+        userId: user.id!,
+        action: "update",
+        entityType: "vacancy",
+        entityId: id,
+        entityTitle: updated.title,
+        module: "hr",
+        details: { changedFields: Object.keys(body.description_json) },
+        request: req,
+      })
+
+      return apiSuccess(updated)
     }
 
     // Ветка 1: обновление настроек автоматизации

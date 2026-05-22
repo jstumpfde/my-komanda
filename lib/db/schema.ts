@@ -290,6 +290,21 @@ export const vacancies = pgTable("vacancies", {
   hhSyncedAt: timestamp("hh_synced_at"),
   aiProcessSettings: jsonb("ai_process_settings").default({}),
   aiScoringEnabled: boolean("ai_scoring_enabled").notNull().default(false),
+  // P0-22: editable стоп-слова на уровне вакансии. matchStopWordList ищет
+  // по подстроке без учёта регистра. Дефолт совпадает с историческим
+  // STOP_WORDS из lib/followup/stop-words.ts.
+  stopWordsJson: jsonb("stop_words_json").$type<string[]>().notNull().default([
+    "нет","неактуально","не подходит","спасибо","неинтересно","не интересно",
+    "не интересует","не актуально","не актуальна","отменяю","отказ",
+    "отказываюсь","не рассматриваю",
+  ]),
+  // P0-28: кеш AI-оценки вакансии (vacancy-advisor). NULL = ещё не считали.
+  // input_hash — SHA-256 от ключевых полей анкеты, по которому решаем,
+  // устарел ли кеш. Auto-refresh НЕ делаем — кнопка ручная.
+  aiQualityScore:        integer("ai_quality_score"),
+  aiQualityDetails:      jsonb("ai_quality_details"),
+  aiQualityAnalyzedAt:   timestamp("ai_quality_analyzed_at", { withTimezone: true }),
+  aiQualityInputHash:    text("ai_quality_input_hash"),
   // Авто-разбор hh-откликов: cron каждые 10 минут разбирает накопленные отклики
   // в рабочее время. Если выключено — клиент жмёт «Разобрать» вручную.
   autoProcessingEnabled:      boolean("auto_processing_enabled").notNull().default(false),

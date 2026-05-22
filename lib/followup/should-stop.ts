@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { candidates, vacancies, followUpCampaigns } from "@/lib/db/schema"
-import { STOP_WORDS, matchStopWord } from "@/lib/followup/stop-words"
+import { STOP_WORDS, matchStopWord, matchStopWordList } from "@/lib/followup/stop-words"
 
 export type StopReason =
   | "vacancy_closed"
@@ -87,18 +87,38 @@ export async function shouldStopFollowUp(
   // элементам и извлекаем все доступные текстовые значения; matchStopWord
   // защищает от substring false-positive'ов (инцидент 04.05.2026).
   if (campaign.stopOnReply) {
+    // P0-22: тянем editable список из vacancies.stop_words_json. Если он
+    // пустой/невалидный — fallback на исторический matchStopWord (word-boundary),
+    // чтобы не потерять защиту при пустой колонке.
+    let vacancyStopWords: string[] | null = null
+    try {
+      const [vac] = await db
+        .select({ stopWordsJson: vacancies.stopWordsJson })
+        .from(vacancies)
+        .where(eq(vacancies.id, candidate.vacancyId))
+        .limit(1)
+      if (Array.isArray(vac?.stopWordsJson) && vac.stopWordsJson.length > 0) {
+        vacancyStopWords = vac.stopWordsJson.filter((s): s is string => typeof s === "string")
+      }
+    } catch { /* silent — fallback ниже */ }
+
+    const matchAny = (text: string): boolean =>
+      vacancyStopWords
+        ? matchStopWordList(text, vacancyStopWords) !== null
+        : matchStopWord(text)
+
     const answers = candidate.anketaAnswers
     if (Array.isArray(answers)) {
       for (const item of answers) {
         if (!item || typeof item !== "object") continue
         const rawAnswer = (item as { answer?: unknown }).answer
         if (typeof rawAnswer === "string") {
-          if (matchStopWord(rawAnswer)) {
+          if (matchAny(rawAnswer)) {
             return { stop: true, reason: "candidate_refused" }
           }
         } else if (Array.isArray(rawAnswer)) {
           for (const v of rawAnswer) {
-            if (typeof v === "string" && matchStopWord(v)) {
+            if (typeof v === "string" && matchAny(v)) {
               return { stop: true, reason: "candidate_refused" }
             }
           }

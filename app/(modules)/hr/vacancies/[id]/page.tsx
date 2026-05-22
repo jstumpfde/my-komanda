@@ -58,6 +58,7 @@ import { PostDemoSettings } from "@/components/vacancies/post-demo-settings"
 import { VacancyAiProcessSettings } from "@/components/vacancies/vacancy-ai-process-settings"
 import { VacancyFollowupSettings } from "@/components/vacancies/vacancy-followup-settings"
 import { VacancyPrequalificationSettings } from "@/components/vacancies/vacancy-prequalification-settings"
+import { VacancyStopWordsSettings } from "@/components/vacancies/vacancy-stop-words-settings"
 import { VacancySettingsProvider, VacancyTabPendingDot, VacancyStickySaveBar, useVacancySectionRegister, useSafeSubTabSwitch, type VacancyTabKey } from "@/components/vacancies/vacancy-settings-context"
 import { BestPublicationTimeBlock } from "./components/BestPublicationTimeBlock"
 import {
@@ -554,9 +555,12 @@ export default function VacancyPage() {
         sp.delete("tab")
         const qs = sp.toString()
         router.replace(`${window.location.pathname}${qs ? "?" + qs : ""}`, { scroll: false })
-      } else if (!urlTab) {
-        // URL без ?tab= — подгоняем дефолт под статус. Active/published →
-        // «Кандидаты»; draft и прочее → «Настройки».
+      } else if (!urlTab && !tabAutoSyncedRef.current) {
+        // P0-50 hotfix: ref-guard на ветке без ?tab= тоже. Раньше каждый
+        // refetch apiVacancy без ?tab= тащил setActiveTab("candidates"),
+        // и после сохранения брендинга (refetchVacancy после успешного PATCH)
+        // юзера выкидывало с таба «Брендинг». Теперь — только первый mount.
+        tabAutoSyncedRef.current = true
         setActiveTab(isActive ? "candidates" : "settings")
       }
     }
@@ -1097,7 +1101,6 @@ export default function VacancyPage() {
 
   const saveBranding = async (updates?: { companyName?: string; color?: string; slogan?: string; logo?: string }) => {
     setBrandSaving(true)
-    const existing = (apiVacancy?.descriptionJson as Record<string, unknown>) || {}
     const branding = {
       companyName: updates?.companyName ?? brandCompanyName,
       color: updates?.color ?? brandColor,
@@ -1108,14 +1111,28 @@ export default function VacancyPage() {
       customDomain: brandCustomDomain,
     }
     try {
-      await fetch(`/api/modules/hr/vacancies/${id}`, {
+      // P0-50 hotfix: PATCH делает server-side merge по корню descriptionJson
+      // (см. /api/modules/hr/vacancies/[id]/route.ts:148). Передаём только
+      // branding, остальные ключи descriptionJson сервер сохранит сам.
+      const res = await fetch(`/api/modules/hr/vacancies/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ description_json: { ...existing, branding } }),
+        body: JSON.stringify({ description_json: { branding } }),
       })
+      if (!res.ok) {
+        const body = await res.json().catch(() => null) as { error?: string } | null
+        const msg = body?.error || "Не удалось сохранить брендинг"
+        toast.error(msg)
+        throw new Error(msg)
+      }
+      // refetchVacancy перечитает descriptionJson — initial-load эффект
+      // (page.tsx:577) ещё раз выставит state из БД, гарантируя что после
+      // Cmd+R пользователь увидит то же самое.
+      refetchVacancy()
       toast.success("Брендинг сохранён")
-    } catch { /* silent */ }
-    setBrandSaving(false)
+    } finally {
+      setBrandSaving(false)
+    }
   }
 
   const handleAddCustomColumn = async (name: string, color: string, afterColumnId?: string) => {
@@ -2232,6 +2249,8 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                 <AnketaTab
                   vacancyId={id}
                   descriptionJson={apiVacancy?.descriptionJson}
+                  aiQualityDetails={(apiVacancy as { aiQualityDetails?: unknown } | undefined)?.aiQualityDetails}
+                  aiQualityAnalyzedAt={(apiVacancy as { aiQualityAnalyzedAt?: string | null } | undefined)?.aiQualityAnalyzedAt ?? null}
                   onTitleChange={(t) => { if (t) setInternalName(t) }}
                   onNavigateTab={(tab) => { setActiveTab(tab); window.scrollTo({ top: 0, behavior: "smooth" }) }}
                   onScoreChange={setAdvisorScore}
@@ -2985,6 +3004,12 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                   <VacancyPrequalificationSettings
                     vacancyId={id}
                     initial={apiVacancy?.aiProcessSettings ?? null}
+                    onSaved={() => refetchVacancy()}
+                  />
+                  {/* P0-22: editable стоп-слова, единый источник для дожима и hh-чата. */}
+                  <VacancyStopWordsSettings
+                    vacancyId={id}
+                    initial={(apiVacancy as { stopWordsJson?: string[] } | undefined)?.stopWordsJson ?? null}
                     onSaved={() => refetchVacancy()}
                   />
                   <PostDemoSettings vacancyId={id} />

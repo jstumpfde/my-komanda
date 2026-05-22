@@ -1,10 +1,32 @@
 import { NextRequest } from "next/server"
 import Anthropic from "@anthropic-ai/sdk"
+import { createHash } from "crypto"
+import { eq, and } from "drizzle-orm"
+import { db } from "@/lib/db"
+import { vacancies } from "@/lib/db/schema"
 import { getClaudeApiUrl } from "@/lib/claude-proxy"
 import { requireAuth, apiError, apiSuccess } from "@/lib/api-helpers"
 import { AI_SAFETY_PROMPT, checkAiRateLimit, handleAiError } from "@/lib/ai-safety"
 import { checkRateLimit } from "@/lib/rate-limit"
 import { findBenchmark, adjustBenchmark, assessSalary, formatSalary, suggestTitles, marketStats, type SalaryBenchmark } from "@/lib/salary-benchmarks"
+
+// P0-28: ключевые поля анкеты, по которым считается inputHash. Любое
+// изменение из этого списка инвалидирует кеш AI-анализа. Не включаем
+// company-description (она почти не меняется) и focusedField (он чисто
+// UI'ный — фокус инпута).
+function computeInputHash(vacancyData: Record<string, unknown> | undefined): string {
+  if (!vacancyData) return ""
+  const keysOrdered = [
+    "vacancyTitle", "positionCategory", "positionCity",
+    "workFormats", "employment", "salaryFrom", "salaryTo", "bonus",
+    "responsibilities", "requirements",
+    "requiredSkills", "desiredSkills", "unacceptableSkills",
+    "stopFactors", "conditions", "conditionsCustom",
+    "experienceMin", "experienceIdeal",
+  ]
+  const seed = keysOrdered.map(k => `${k}:${JSON.stringify(vacancyData[k] ?? null)}`).join("|")
+  return createHash("sha256").update(seed).digest("hex")
+}
 
 const client = new Anthropic({ baseURL: getClaudeApiUrl() })
 
@@ -276,6 +298,40 @@ export async function POST(req: NextRequest) {
 
   const focusedField = (body.focusedField as string) || ""
 
+  // P0-28: кеш. Если передан vacancyId — пробуем достать сохранённый
+  // результат и сравнить hash. Если совпал и не force=true → возвращаем
+  // кеш без вызова Claude. focusedField меняется при каждом фокусе инпута —
+  // его специально НЕ включаем в хеш, иначе кеш будет инвалидироваться
+  // на каждый клик. Для focusedField всё равно работает старый путь
+  // (Claude вызывается), но только когда оно прислано НЕпустым.
+  const vacancyId = typeof body.vacancyId === "string" ? body.vacancyId : null
+  const force = body.force === true
+  const inputHash = computeInputHash(vacancyData)
+
+  if (vacancyId && !force && !focusedField) {
+    try {
+      const [cached] = await db
+        .select({
+          score:      vacancies.aiQualityScore,
+          details:    vacancies.aiQualityDetails,
+          analyzedAt: vacancies.aiQualityAnalyzedAt,
+          hash:       vacancies.aiQualityInputHash,
+        })
+        .from(vacancies)
+        .where(and(eq(vacancies.id, vacancyId), eq(vacancies.companyId, tenantId)))
+        .limit(1)
+      if (cached?.details && cached.hash === inputHash) {
+        return apiSuccess({
+          ...(cached.details as AdvisorResponse),
+          _cached:     true,
+          _analyzedAt: cached.analyzedAt?.toISOString() ?? null,
+        })
+      }
+    } catch (err) {
+      console.warn("[vacancy-advisor] cache lookup failed:", err instanceof Error ? err.message : err)
+    }
+  }
+
   try {
     const prompt = buildPrompt(vacancyData, body, focusedField)
 
@@ -322,7 +378,28 @@ ${AI_SAFETY_PROMPT}`,
       }
     }
 
-    return apiSuccess(parsed)
+    // P0-28: сохраняем результат в кеш. Не блокирующий — даже если запись
+    // не прошла, юзер получит свежий результат. Кешируем только когда
+    // запрос НЕ focusedField-driven, чтобы не перезаписывать общий анализ
+    // ответом на конкретное поле.
+    const analyzedAt = new Date()
+    if (vacancyId && !focusedField) {
+      try {
+        await db.update(vacancies)
+          .set({
+            aiQualityScore:      parsed.score,
+            aiQualityDetails:    parsed,
+            aiQualityAnalyzedAt: analyzedAt,
+            aiQualityInputHash:  inputHash,
+            updatedAt:           analyzedAt,
+          })
+          .where(and(eq(vacancies.id, vacancyId), eq(vacancies.companyId, tenantId)))
+      } catch (err) {
+        console.warn("[vacancy-advisor] cache save failed:", err instanceof Error ? err.message : err)
+      }
+    }
+
+    return apiSuccess({ ...parsed, _cached: false, _analyzedAt: analyzedAt.toISOString() })
   } catch (err) {
     // AI failed — return static fallback
     console.error("Vacancy advisor AI error:", handleAiError(err))
