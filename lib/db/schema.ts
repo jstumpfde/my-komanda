@@ -316,6 +316,14 @@ export const vacancies = pgTable("vacancies", {
   aiChatbotPrompt:   text("ai_chatbot_prompt").notNull().default(""),
   // #61: per-vacancy стоп-факторы.
   stopFactorsJson:   jsonb("stop_factors_json").$type<VacancyStopFactors>().notNull().default({}),
+  // Funnel Builder MVP: экспериментальный конструктор воронки (см. drizzle/0127).
+  // funnelBuilderEnabled выключен по умолчанию; cron'ы и старые компоненты
+  // продолжают читать существующие поля (aiChatbotEnabled и т.д.).
+  funnelBuilderEnabled: boolean("funnel_builder_enabled").notNull().default(false),
+  funnelConfigJson:     jsonb("funnel_config_json")
+    .$type<{ blocks: Array<{ type: string; order: number; enabled: boolean }> }>()
+    .notNull()
+    .default({ blocks: [] }),
   // Авто-разбор hh-откликов: cron каждые 10 минут разбирает накопленные отклики
   // в рабочее время. Если выключено — клиент жмёт «Разобрать» вручную.
   autoProcessingEnabled:      boolean("auto_processing_enabled").notNull().default(false),
