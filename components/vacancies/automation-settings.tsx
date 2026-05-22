@@ -81,6 +81,16 @@ interface AutomationSettingsProps {
   vacancyId: string
   descriptionJson?: unknown
   aiProcessSettings?: { inviteMessage?: string; reInviteMessage?: string } | null
+  /**
+   * #60: текущая серия первых сообщений из vacancies.first_messages_chain.
+   * Если chain[0].enabled=true и текст не пустой — старый блок «Минимальная
+   * задержка перед первым сообщением» (legacy automation.delaySeconds)
+   * скрывается, потому что cron берёт задержку из chain[0].delaySeconds.
+   */
+  firstMessagesChain?: Array<{ enabled: boolean; delaySeconds: number; text: string }>
+  vacancyTitle?: string
+  salaryFrom?: number | null
+  salaryTo?: number | null
   /** Если задано — рендерятся только эти карточки. Иначе все. */
   sections?: AutomationSectionId[]
   /**
@@ -97,10 +107,19 @@ interface AutomationSettingsProps {
   tabKey?: VacancyTabKey
 }
 
-export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettings, sections, showGlobalSave = true, tabKey }: AutomationSettingsProps) {
+export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettings, firstMessagesChain, sections, showGlobalSave = true, tabKey }: AutomationSettingsProps) {
   const showSection = (id: AutomationSectionId): boolean => !sections || sections.includes(id)
   // P0-50: при подключённом sticky-bar глобальную кнопку прячем.
   const showLocalGlobalSave = showGlobalSave && !tabKey
+  // #60: серия активна, если есть хотя бы шаг 0, он включён, и текст не
+  // пустой. Тогда старый блок «Минимальная задержка» дублирует chain[0]
+  // и должен скрываться, чтобы HR не путался.
+  const chainActive = Boolean(
+    firstMessagesChain
+      && firstMessagesChain.length > 0
+      && firstMessagesChain[0]?.enabled
+      && (firstMessagesChain[0]?.text ?? "").trim().length > 0
+  )
 
   // Parse automation settings from descriptionJson
   const initialAutomation = (() => {
@@ -514,31 +533,40 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
         <CardContent className="space-y-5">
           {/* Минимальная задержка перед первым сообщением.
               Реальная задержка может быть больше: всё зависит от очереди cron'а
-              разбора hh-откликов (см. lib/hh/process-queue.ts). */}
-          <div className="flex items-start justify-between gap-3">
-            <div className="space-y-0.5 flex-1">
-              <Label className="text-sm font-medium">Минимальная задержка перед первым сообщением</Label>
-              <p className="text-xs text-muted-foreground">
-                Чтобы первое сообщение не выглядело как автоматика. Реальная задержка может быть больше из-за обработки очереди.
-              </p>
+              разбора hh-откликов (см. lib/hh/process-queue.ts).
+              #60: когда серия первых сообщений включена — этот блок дублирует
+              chain[0].delaySeconds. Показываем плашку-подсказку, сам Select
+              скрываем, чтобы HR не редактировал «мёртвое» поле. */}
+          {chainActive ? (
+            <div className="rounded-lg border border-dashed bg-muted/30 p-3 text-xs text-muted-foreground">
+              Минимальная задержка перед первым сообщением управляется в блоке
+              «Серия первых сообщений» выше — задержка берётся из Сообщения 1.
+              Этот старый параметр больше не используется.
             </div>
-            {/* #20: значения в секундах. 15с/30с/1м — для "живого" общения,
-                3м-1ч — для более естественной задержки. */}
-            <Select value={firstMessageDelay} onValueChange={setFirstMessageDelay}>
-              <SelectTrigger className="w-[140px] h-9 shrink-0">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="15">15 секунд</SelectItem>
-                <SelectItem value="30">30 секунд</SelectItem>
-                <SelectItem value="60">1 минута</SelectItem>
-                <SelectItem value="180">3 минуты</SelectItem>
-                <SelectItem value="900">15 минут</SelectItem>
-                <SelectItem value="1800">30 минут</SelectItem>
-                <SelectItem value="3600">1 час</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          ) : (
+            <div className="flex items-start justify-between gap-3">
+              <div className="space-y-0.5 flex-1">
+                <Label className="text-sm font-medium">Минимальная задержка перед первым сообщением</Label>
+                <p className="text-xs text-muted-foreground">
+                  Чтобы первое сообщение не выглядело как автоматика. Реальная задержка может быть больше из-за обработки очереди.
+                </p>
+              </div>
+              <Select value={firstMessageDelay} onValueChange={setFirstMessageDelay}>
+                <SelectTrigger className="w-[140px] h-9 shrink-0">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="15">15 секунд</SelectItem>
+                  <SelectItem value="30">30 секунд</SelectItem>
+                  <SelectItem value="60">1 минута</SelectItem>
+                  <SelectItem value="180">3 минуты</SelectItem>
+                  <SelectItem value="900">15 минут</SelectItem>
+                  <SelectItem value="1800">30 минут</SelectItem>
+                  <SelectItem value="3600">1 час</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           {/* Рабочие часы и нерабочие дни редактируются в отдельной секции
               «Расписание» под цепочкой дожима — см. VacancyScheduleSettings. */}
