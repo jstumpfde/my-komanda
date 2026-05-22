@@ -6,7 +6,7 @@
 
 import { db } from "@/lib/db"
 import { hhResponses, candidates, vacancies, followUpCampaigns, followUpMessages, hhCandidates } from "@/lib/db/schema"
-import type { VacancyAiProcessSettings } from "@/lib/db/schema"
+import type { VacancyAiProcessSettings, VacancyStopFactors } from "@/lib/db/schema"
 import { and, asc, eq, inArray, isNull, isNotNull, notInArray, or } from "drizzle-orm"
 import { getValidToken } from "@/lib/hh-helpers"
 import { changeNegotiationState, getNegotiationMessages } from "@/lib/hh-api"
@@ -21,6 +21,7 @@ import { screenResume } from "@/lib/ai-screen-resume"
 import { trySyncRejectToHh } from "@/lib/hh/sync-stage"
 import { startPrequalification } from "@/lib/prequalification/start"
 import { renderTemplate } from "@/lib/template-renderer"
+import { matchStopFactors, type StopFactorMatch } from "@/lib/funnel-builder/stop-factors-matcher"
 
 const DEMO_INVITE_MESSAGE = "Здравствуйте! Спасибо за отклик. Мы подготовили короткую демонстрацию должности — 15 минут, и вы узнаете всё о задачах, команде и доходе."
 
@@ -447,11 +448,42 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
         await db.update(candidates).set(setFields).where(eq(candidates.id, candidateId))
       }
 
+      // #61: per-vacancy стоп-факторы (city/age/experience/format/citizenship/
+      // salaryExpectation). Применяем ДО AI-скоринга — это экономит токены и
+      // соответствует семантике «жёстких» стопов: AI не должен «перезаписывать»
+      // явное HR-правило «не из Москвы / не моложе 18». Если фактор сработал —
+      // далее обработка кандидата идёт по ветке rejected (см. блок ниже).
+      let stopFactorMatch: StopFactorMatch | null = null
+      if (candidateId && localVac) {
+        const factors = (localVac as { stopFactorsJson?: VacancyStopFactors | null }).stopFactorsJson
+        if (factors && Object.keys(factors).length > 0) {
+          // hh-резюме отдаёт age напрямую или только birth_date. Берём оба
+          // источника, чтобы фактор «возраст» срабатывал по полному резюме.
+          const rawAgeUnknown = (raw?.resume?.["age"]) as unknown
+          let candAge: number | null = typeof rawAgeUnknown === "number" ? rawAgeUnknown : null
+          if (candAge == null && typeof extracted.birthDate === "string") {
+            const m = /^(\d{4})/.exec(extracted.birthDate)
+            if (m) candAge = new Date().getUTCFullYear() - Number(m[1])
+          }
+          const salaryRaw = (raw?.resume?.["salary"]) as { amount?: unknown } | null | undefined
+          const salaryAmount = typeof salaryRaw?.amount === "number" ? salaryRaw.amount : null
+
+          stopFactorMatch = matchStopFactors({
+            city:              candidateCity ?? null,
+            age:               candAge,
+            experienceYears:   extracted.experienceYears ?? null,
+            workFormat:        extracted.workFormat ?? null,
+            relocationReady:   extracted.relocationReady ?? null,
+            salaryExpectation: salaryAmount,
+          }, factors)
+        }
+      }
+
       // AI-скоринг резюме (resume_score) — выставляется ОДИН РАЗ при первом
       // приёме отклика. Если кандидат уже оценён ранее (resume_score IS NOT
       // NULL) — пропускаем, чтобы не тратить токены повторно. Полный AI-скор
       // (aiScore) считается отдельно после завершения демо.
-      if (candidateId && localVac) {
+      if (candidateId && localVac && !stopFactorMatch) {
         try {
           const [scoreRow] = await db
             .select({ resumeScore: candidates.resumeScore })
@@ -646,10 +678,85 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
         }
       }
 
+      // #61: обработка стоп-фактора. Идёт ПОСЛЕ belowThreshold, но семантически
+      // независимо — фактор и AI не пересекаются (AI не запускался под
+      // !stopFactorMatch). Логика: отправляем кастомный rejectionText через
+      // hh discard и переводим кандидата в rejected с reason="stop_factor:{f}".
+      if (stopFactorMatch && candidateId && localVac) {
+        try {
+          const [prev] = await db
+            .select({ stage: candidates.stage, stageHistory: candidates.stageHistory })
+            .from(candidates)
+            .where(eq(candidates.id, candidateId))
+            .limit(1)
+          const fromStage = prev?.stage ?? "new"
+          const history = (prev?.stageHistory as Array<Record<string, unknown>> | null) ?? []
+          const nowIso = new Date().toISOString()
+          const nowTs  = new Date()
+
+          await db.update(candidates)
+            .set({
+              stage:                       "rejected",
+              autoProcessingStopped:       true,
+              autoProcessingStoppedReason: `stop_factor:${stopFactorMatch.factor}`,
+              autoProcessingStoppedAt:     nowTs,
+              stageHistory: [...history, {
+                from:    fromStage,
+                to:      "rejected",
+                at:      nowIso,
+                reason:  `stop_factor:${stopFactorMatch.factor}`,
+              }],
+              updatedAt: nowTs,
+            })
+            .where(eq(candidates.id, candidateId))
+
+          // Отправляем кастомный текст отказа через hh (discard_by_employer).
+          // Не используем trySyncRejectToHh — он берёт rejectMessage из
+          // aiProcessSettings, а тут нужен factor-specific rejectionText.
+          const nameParts = (resp.candidateName || "").trim().split(/\s+/)
+          const greetingName = nameParts[1] || nameParts[0] || "Здравствуйте"
+          const messageText = renderTemplate(stopFactorMatch.rejectionText, {
+            name:    greetingName,
+            vacancy: localVac.title || "",
+            company: "Company24",
+          })
+          try {
+            await changeNegotiationState(
+              tokenResult.accessToken,
+              resp.hhResponseId,
+              "discard",
+              messageText,
+            )
+          } catch (hhErr) {
+            console.warn("[PQ] stop-factor hh discard failed:",
+              hhErr instanceof Error ? hhErr.message : hhErr)
+          }
+
+          await db.update(hhResponses)
+            .set({ status: "invited", localCandidateId: candidateId })
+            .where(eq(hhResponses.id, resp.id))
+
+          console.log("[PQ] stop-factor reject", JSON.stringify({
+            tag:         "process-queue/stop-factor",
+            candidateId,
+            factor:      stopFactorMatch.factor,
+          }))
+
+          results.push({
+            id:     resp.hhResponseId,
+            name:   resp.candidateName,
+            action: `stop_factor_${stopFactorMatch.factor}`,
+          })
+        } catch (sfErr) {
+          console.error("[PQ] stop-factor handling failed:",
+            sfErr instanceof Error ? sfErr.message : sfErr)
+        }
+      }
+
       // Дальше — отправка приглашения и шедул дожима. Под minScore-блок
       // (belowThreshold) ничего из этого не выполняется: кандидат уже либо
       // в "rejected" с отправленным отказом, либо помечен ручным разбором.
-      if (!belowThreshold) {
+      if (!belowThreshold && !stopFactorMatch) {
 
       // Проверяем — отправляли ли работодателю уже что-то по этому отклику.
       let previouslyInvited = false
@@ -834,7 +941,7 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
 
       invitedCount++
       results.push({ id: resp.hhResponseId, name: resp.candidateName, action: "invited" })
-      } // конец if (!belowThreshold) — отказ/keep_new обработан выше отдельной веткой
+      } // конец if (!belowThreshold && !stopFactorMatch) — отказ/keep_new/стоп-фактор обработан выше отдельной веткой
     } catch (err: unknown) {
       console.error("[PQ] FAIL", resp.candidateName, err instanceof Error ? err.message : err)
       results.push({
