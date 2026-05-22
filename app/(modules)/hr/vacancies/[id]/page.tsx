@@ -58,7 +58,7 @@ import { PostDemoSettings } from "@/components/vacancies/post-demo-settings"
 import { VacancyAiProcessSettings } from "@/components/vacancies/vacancy-ai-process-settings"
 import { VacancyFollowupSettings } from "@/components/vacancies/vacancy-followup-settings"
 import { VacancyPrequalificationSettings } from "@/components/vacancies/vacancy-prequalification-settings"
-import { VacancySettingsProvider, VacancyTabPendingDot, VacancyStickySaveBar, useVacancySectionRegister, type VacancyTabKey } from "@/components/vacancies/vacancy-settings-context"
+import { VacancySettingsProvider, VacancyTabPendingDot, VacancyStickySaveBar, useVacancySectionRegister, useSafeSubTabSwitch, type VacancyTabKey } from "@/components/vacancies/vacancy-settings-context"
 import { BestPublicationTimeBlock } from "./components/BestPublicationTimeBlock"
 import {
   ResponsiveContainer,
@@ -2551,34 +2551,23 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                     { value: "followup"    as const, label: "Дожим",               icon: MessageSquareText },
                     { value: "ai"          as const, label: "Расписание",          icon: Zap },
                     { value: "integrations" as const, label: "Интеграции",          icon: Settings },
-                  ] satisfies { value: VacancyTabKey; label: string; icon: typeof Globe }[]).map((s) => {
-                    const Icon = s.icon
-                    const active = settingsSection === s.value
-                    return (
-                      <button
-                        key={s.value}
-                        type="button"
-                        title="У вас есть несохранённые изменения в этом разделе"
-                        onClick={() => {
-                          setSettingsSection(s.value)
-                          const sp = new URLSearchParams(window.location.search)
-                          sp.set("tab", "settings")
-                          sp.set("section", s.value)
-                          router.replace(`${window.location.pathname}?${sp.toString()}`, { scroll: false })
-                        }}
-                        className={cn(
-                          "inline-flex items-center gap-1.5 px-3 py-2 text-sm border-b-2 -mb-px transition-colors whitespace-nowrap shrink-0",
-                          active
-                            ? "border-primary text-foreground font-medium"
-                            : "border-transparent text-muted-foreground hover:text-foreground"
-                        )}
-                      >
-                        <Icon className="w-3.5 h-3.5" />
-                        {s.label}
-                        <VacancyTabPendingDot tab={s.value} />
-                      </button>
-                    )
-                  })}
+                  ] satisfies { value: VacancyTabKey; label: string; icon: typeof Globe }[]).map((s) => (
+                    <SettingsSubNavButton
+                      key={s.value}
+                      tab={s.value}
+                      label={s.label}
+                      Icon={s.icon}
+                      active={settingsSection === s.value}
+                      currentTab={settingsSection as VacancyTabKey}
+                      onSwitch={() => {
+                        setSettingsSection(s.value)
+                        const sp = new URLSearchParams(window.location.search)
+                        sp.set("tab", "settings")
+                        sp.set("section", s.value)
+                        router.replace(`${window.location.pathname}?${sp.toString()}`, { scroll: false })
+                      }}
+                    />
+                  ))}
                 </div>
 
                 {/* ───────── ТАБ «Страница и брендинг» ───────── */}
@@ -3587,4 +3576,38 @@ function BrandingStickyRegister({
     save,
   })
   return null
+}
+
+// #11: кнопка саб-таба настроек, перехватывающая клик через
+// useSafeSubTabSwitch. Если в текущем подтабе есть несохранённые
+// изменения — confirm-диалог даёт три исхода: сохранить и перейти,
+// перейти без сохранения, остаться. Компонент рендерится внутри
+// <VacancySettingsProvider>, поэтому hook сработает.
+function SettingsSubNavButton({
+  tab, label, Icon, active, currentTab, onSwitch,
+}: {
+  tab: VacancyTabKey
+  label: string
+  Icon: typeof Globe
+  active: boolean
+  currentTab: VacancyTabKey
+  onSwitch: () => void
+}) {
+  const safeSwitch = useSafeSubTabSwitch(currentTab)
+  return (
+    <button
+      type="button"
+      onClick={() => safeSwitch(tab, onSwitch)}
+      className={cn(
+        "inline-flex items-center gap-1.5 px-3 py-2 text-sm border-b-2 -mb-px transition-colors whitespace-nowrap shrink-0",
+        active
+          ? "border-primary text-foreground font-medium"
+          : "border-transparent text-muted-foreground hover:text-foreground"
+      )}
+    >
+      <Icon className="w-3.5 h-3.5" />
+      {label}
+      <VacancyTabPendingDot tab={tab} />
+    </button>
+  )
 }
