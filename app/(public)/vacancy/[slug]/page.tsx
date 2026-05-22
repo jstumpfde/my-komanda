@@ -22,6 +22,7 @@ import {
 import type { MiniFormField } from "@/components/vacancies/mini-form-builder"
 import { FORMAT_LABELS, EMPLOYMENT_LABELS } from "@/lib/vacancy-types"
 import { resolveBrand } from "@/lib/brand-colors"
+import { formatDescription } from "@/lib/public-vacancy/format-description"
 
 interface VacancyData {
   id: string
@@ -264,15 +265,38 @@ function VacancyPageInner({ params }: { params: Promise<{ slug: string }> }) {
             <section>
               <h2 className="text-xl font-semibold mb-4">О вакансии</h2>
               {hasPlainDescription ? (
-                <div className="space-y-4 text-base leading-relaxed">
-                  {companyDescriptionText
-                    .split(/\n{2,}/)
-                    .map((para, idx) => (
-                      <p key={idx} className="whitespace-pre-line">
-                        {para.trim()}
+                (() => {
+                  const sections = formatDescription(companyDescriptionText)
+                  if (sections.length === 0) {
+                    return (
+                      <p className="text-base leading-relaxed whitespace-pre-line">
+                        {companyDescriptionText}
                       </p>
-                    ))}
-                </div>
+                    )
+                  }
+                  return (
+                    <article className="space-y-6">
+                      {sections.map((section, i) => (
+                        <section key={i} className="space-y-3">
+                          {section.title && (
+                            <h3 className="text-xl sm:text-2xl font-semibold mt-6 mb-2">
+                              {section.title}
+                            </h3>
+                          )}
+                          {section.paragraphs.map((para, j) => (
+                            <p
+                              key={j}
+                              className="text-base leading-relaxed whitespace-pre-line"
+                              style={{ color: `${textColor}e6` }}
+                            >
+                              {para}
+                            </p>
+                          ))}
+                        </section>
+                      ))}
+                    </article>
+                  )
+                })()
               ) : (
                 <article
                   className="prose prose-base max-w-none prose-headings:font-semibold prose-headings:mt-6 prose-headings:mb-3 prose-p:leading-relaxed prose-li:my-1"
