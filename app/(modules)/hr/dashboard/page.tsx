@@ -339,22 +339,8 @@ function DashboardContent() {
             {/* ═══ AI-ассистент — #33: активирован SQL-инсайтами ═══ */}
             <AiInsights selectedVacancyId={selectedVacancyId} />
 
-            {/* ═══ Live progress widget ═══ */}
-            <div className="border rounded-xl shadow-sm hover:shadow-md transition-shadow p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold flex items-center gap-2">
-                  <Activity className="w-4 h-4" style={{ color: C.green }} />
-                  Прогресс кандидатов сейчас
-                </h3>
-                <Link
-                  href="/hr/candidates"
-                  className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
-                >
-                  Все <ChevronRight className="w-3 h-3" />
-                </Link>
-              </div>
-              <CandidatesProgressMiniTable limit={5} vacancyId={selectedVacancyId} />
-            </div>
+            {/* ═══ Live progress widget — #52: раскрывающийся ═══ */}
+            <ProgressWidget selectedVacancyId={selectedVacancyId} />
 
             {/* ═══ Funnel + Active Vacancies ═══
                 #49: блок «Активные вакансии» справа не показываем, когда
@@ -542,6 +528,44 @@ function DashboardContent() {
 
 export default function HRDashboardPage() {
   return <DashboardContent />
+}
+
+// ─── Прогресс кандидатов сейчас — #52 ─────────────────────────────────────
+// По умолчанию 5 строк. Кнопка «Показать все» раскрывает до 20.
+// Фильтр vacancyId передаётся из шапки (#49).
+function ProgressWidget({ selectedVacancyId }: { selectedVacancyId: string }) {
+  const [expanded, setExpanded] = useState(false)
+  return (
+    <div className="border rounded-xl shadow-sm hover:shadow-md transition-shadow p-6">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg font-semibold flex items-center gap-2">
+          <Activity className="w-4 h-4" style={{ color: C.green }} />
+          Прогресс кандидатов сейчас
+        </h3>
+        <Link
+          href="/hr/candidates"
+          className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+        >
+          Все <ChevronRight className="w-3 h-3" />
+        </Link>
+      </div>
+      <CandidatesProgressMiniTable
+        limit={5}
+        vacancyId={selectedVacancyId}
+        expanded={expanded}
+        maxExpanded={20}
+      />
+      <div className="mt-3 flex justify-center">
+        <button
+          type="button"
+          onClick={() => setExpanded(v => !v)}
+          className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors px-3 py-1 rounded-md hover:bg-muted/40"
+        >
+          {expanded ? "Свернуть" : "Показать все"}
+        </button>
+      </div>
+    </div>
+  )
 }
 
 // #33: AI-ассистент — 4 карточки с SQL-инсайтами из БД (без LLM-вызовов).
