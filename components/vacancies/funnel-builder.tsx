@@ -25,6 +25,16 @@ import { CSS } from "@dnd-kit/utilities"
 import { GripVertical, Settings2 } from "lucide-react"
 
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import {
   Card,
   CardContent,
   CardDescription,
@@ -35,6 +45,12 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import {
   BLOCK_META,
   type FunnelBlock,
@@ -51,10 +67,16 @@ interface FunnelConfigResponse {
   funnelConfigJson:     FunnelConfig
 }
 
+interface PendingIncompatibility {
+  type:           FunnelBlockType
+  conflictTypes:  FunnelBlockType[]
+}
+
 export function FunnelBuilder({ vacancyId }: FunnelBuilderProps) {
   const [enabled, setEnabled] = useState<boolean | null>(null)
   const [blocks, setBlocks] = useState<FunnelBlock[]>([])
   const [saving, setSaving] = useState(false)
+  const [pendingConflict, setPendingConflict] = useState<PendingIncompatibility | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -111,14 +133,49 @@ export function FunnelBuilder({ vacancyId }: FunnelBuilderProps) {
     toast.success(next ? "Конструктор включён" : "Конструктор выключен", { duration: 1500 })
   }
 
-  const handleToggleBlock = async (type: FunnelBlockType) => {
+  const applyBlocks = async (next: FunnelBlock[]) => {
     const prev = blocks
-    const next = blocks.map((b) =>
-      b.type === type ? { ...b, enabled: !b.enabled } : b,
-    )
     setBlocks(next)
     const ok = await saveConfig({ blocks: next })
     if (!ok) setBlocks(prev)
+  }
+
+  const handleToggleBlock = async (type: FunnelBlockType) => {
+    const block = blocks.find((b) => b.type === type)
+    if (!block) return
+    const meta = BLOCK_META[type]
+    if (meta.required && block.enabled) return // required нельзя выключить
+
+    const turningOn = !block.enabled
+
+    // Включение блока с incompatibleWith — спросить подтверждение.
+    if (turningOn && meta.incompatibleWith.length > 0) {
+      const conflicts = meta.incompatibleWith.filter((conflictType) => {
+        const conflictBlock = blocks.find((b) => b.type === conflictType)
+        return conflictBlock?.enabled
+      })
+      if (conflicts.length > 0) {
+        setPendingConflict({ type, conflictTypes: conflicts })
+        return
+      }
+    }
+
+    const next = blocks.map((b) =>
+      b.type === type ? { ...b, enabled: turningOn } : b,
+    )
+    await applyBlocks(next)
+  }
+
+  const confirmConflict = async () => {
+    if (!pendingConflict) return
+    const { type, conflictTypes } = pendingConflict
+    setPendingConflict(null)
+    const next = blocks.map((b) => {
+      if (b.type === type) return { ...b, enabled: true }
+      if (conflictTypes.includes(b.type)) return { ...b, enabled: false }
+      return b
+    })
+    await applyBlocks(next)
   }
 
   const sensors = useSensors(
@@ -132,14 +189,11 @@ export function FunnelBuilder({ vacancyId }: FunnelBuilderProps) {
     const oldIndex = blocks.findIndex((b) => b.type === active.id)
     const newIndex = blocks.findIndex((b) => b.type === over.id)
     if (oldIndex < 0 || newIndex < 0) return
-    const prev = blocks
     const reordered = arrayMove(blocks, oldIndex, newIndex).map((b, idx) => ({
       ...b,
       order: idx + 1,
     }))
-    setBlocks(reordered)
-    const ok = await saveConfig({ blocks: reordered })
-    if (!ok) setBlocks(prev)
+    await applyBlocks(reordered)
   }
 
   const itemIds = useMemo(() => blocks.map((b) => b.type), [blocks])
@@ -193,6 +247,34 @@ export function FunnelBuilder({ vacancyId }: FunnelBuilderProps) {
           </div>
         )}
       </CardContent>
+
+      <AlertDialog
+        open={pendingConflict !== null}
+        onOpenChange={(open) => { if (!open) setPendingConflict(null) }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {pendingConflict && `Включить «${BLOCK_META[pendingConflict.type].label}»?`}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingConflict && (
+                <>
+                  Включение «{BLOCK_META[pendingConflict.type].label}» отключит{" "}
+                  {pendingConflict.conflictTypes
+                    .map((t) => `«${BLOCK_META[t].label}»`)
+                    .join(" и ")}
+                  . Продолжить?
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Отмена</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmConflict}>Включить</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   )
 }
@@ -241,11 +323,25 @@ function SortableBlockCard({ block, saving, onToggle }: SortableBlockCardProps) 
         </div>
         <p className="text-xs text-muted-foreground truncate">{meta.description}</p>
       </div>
-      <Switch
-        checked={block.enabled}
-        onCheckedChange={onToggle}
-        disabled={meta.required || saving}
-      />
+      {meta.required ? (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              {/* span обёртка нужна — disabled Switch не ловит hover */}
+              <span className="inline-flex">
+                <Switch checked={block.enabled} disabled />
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>Обязательный блок</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      ) : (
+        <Switch
+          checked={block.enabled}
+          onCheckedChange={onToggle}
+          disabled={saving}
+        />
+      )}
       <Button
         type="button"
         variant="ghost"
