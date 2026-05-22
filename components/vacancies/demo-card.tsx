@@ -120,7 +120,6 @@ export function DemoCard({ demo, onBack, onUpdate }: DemoCardProps) {
   const save = useCallback((lessons: Lesson[]) => {
     setSaveStatus("saving")
     const updated = { ...demoRef.current, lessons, updatedAt: new Date() }
-    console.log("[DemoCard] save →", updated.id, "lessons:", lessons.length, "blocks:", lessons.reduce((a, l) => a + l.blocks.length, 0))
     onUpdate(updated)
     if (debounceRef.current) clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => setSaveStatus("saved"), 1000)
@@ -140,7 +139,6 @@ export function DemoCard({ demo, onBack, onUpdate }: DemoCardProps) {
       const blockId = el.dataset.blockEditor
       if (blockId) {
         patches[blockId] = el.innerHTML
-        console.log("[DemoCard] flush blockId:", blockId, "html length:", el.innerHTML.length)
       }
     })
     if (Object.keys(patches).length === 0) return current.lessons
@@ -161,7 +159,6 @@ export function DemoCard({ demo, onBack, onUpdate }: DemoCardProps) {
     onUpdate(updated)
     setSaveStatus("saved")
     toast.success("Демонстрация сохранена")
-    console.log("[DemoCard] saveNow — flushed", flushedLessons.length, "lessons")
   }
 
   // Sync contentEditable before switching lessons — flush directly to onUpdate, no debounce
@@ -170,7 +167,6 @@ export function DemoCard({ demo, onBack, onUpdate }: DemoCardProps) {
     const flushedLessons = flushContentEditables()
     // 2. Persist immediately (bypass debounce — DOM elements unmount right after setActiveLessonId)
     const updated = { ...demoRef.current, lessons: flushedLessons, updatedAt: new Date() }
-    console.log("[DemoCard] switchLesson → flush & save before switch to", id, "blocks saved:", flushedLessons.reduce((a, l) => a + l.blocks.length, 0))
     onUpdate(updated)
     // 3. Switch lesson
     setActiveLessonId(id)
@@ -832,7 +828,6 @@ function BlockEditor({ block, onUpdate }: { block: Block; onUpdate: (p: Partial<
   useEffect(() => {
     if (editorRef.current) {
       editorRef.current.innerHTML = cleanHtml(block.content || "")
-      console.log("[BlockEditor] mounted block:", block.id, "content length:", (block.content || "").length)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []) // intentionally run only on mount — key prop handles remount on block change
@@ -894,7 +889,6 @@ function BlockEditor({ block, onUpdate }: { block: Block; onUpdate: (p: Partial<
   const syncContent = useCallback(() => {
     if (editorRef.current) {
       const html = editorRef.current.innerHTML
-      console.log("[BlockEditor] syncContent block:", block.id, "html length:", html.length)
       onUpdateRef.current({ content: html })
     }
   }, [block.id])
