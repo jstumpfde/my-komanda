@@ -69,6 +69,8 @@ export function AiChatbotSettings({ vacancyId }: { vacancyId: string }) {
   const [tgTesting, setTgTesting] = useState(false)
   const [metrics, setMetrics] = useState<Metrics | null>(null)
   const [quota, setQuota] = useState<QuotaUsage | null>(null)
+  const [auditing, setAuditing] = useState(false)
+  const [auditResult, setAuditResult] = useState<{ ranAt: string; issuesCount: number; summary: string } | null>(null)
 
   const triggersAny = Object.values(settings.triggers).some(Boolean)
   const canEnable = prompt.trim().length > 0
@@ -138,6 +140,26 @@ export function AiChatbotSettings({ vacancyId }: { vacancyId: string }) {
       toast.error(e instanceof Error ? e.message : "Ошибка генерации")
     } finally {
       setGenerating(false)
+    }
+  }
+
+  const runAudit = async () => {
+    setAuditing(true)
+    try {
+      const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}/ai-chatbot/watcher-audit`, { method: "POST" })
+      const data = await res.json() as { ok?: boolean; issues?: unknown[]; summary?: string; ranAt?: string; error?: string }
+      if (!res.ok || !data.ok) throw new Error(data.error || "audit_failed")
+      const issuesCount = Array.isArray(data.issues) ? data.issues.length : 0
+      setAuditResult({
+        ranAt:        data.ranAt ?? new Date().toISOString(),
+        issuesCount,
+        summary:      data.summary ?? "",
+      })
+      toast.success(`Аудит выполнен: найдено ${issuesCount} проблем`)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Не удалось запустить аудит")
+    } finally {
+      setAuditing(false)
     }
   }
 
@@ -350,6 +372,28 @@ export function AiChatbotSettings({ vacancyId }: { vacancyId: string }) {
               </div>
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      {/* AI-наблюдатель */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-semibold flex items-center gap-2"><Shield className="w-4 h-4" /> AI-наблюдатель</CardTitle>
+          <CardDescription>Раз в час второй AI проверяет работу первого. Подозрительные паттерны попадают в уведомления HR.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {auditResult ? (
+            <p className="text-[11px] text-muted-foreground">
+              Последний аудит: {new Date(auditResult.ranAt).toLocaleString("ru-RU")}, найдено {auditResult.issuesCount} проблем
+              {auditResult.summary ? ` — ${auditResult.summary}` : ""}
+            </p>
+          ) : (
+            <p className="text-[11px] text-muted-foreground">Аудит ещё не запускался в этой сессии.</p>
+          )}
+          <Button size="sm" variant="outline" onClick={runAudit} disabled={auditing} className="gap-1.5 h-8 text-xs">
+            {auditing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Shield className="w-3.5 h-3.5" />}
+            Запустить аудит сейчас
+          </Button>
         </CardContent>
       </Card>
 
