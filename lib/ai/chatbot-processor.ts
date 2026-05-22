@@ -14,7 +14,7 @@
 
 import { and, eq, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { candidates } from "@/lib/db/schema"
+import { candidates, companies } from "@/lib/db/schema"
 import { callClaudeHaiku, callClaudeSonnet } from "@/lib/ai/client"
 import { matchStopWord } from "@/lib/followup/stop-words"
 import { createNotification } from "@/lib/notifications"
@@ -296,6 +296,18 @@ export async function processChatbotMessage(input: ProcessInput): Promise<Proces
   const threshold = typeof settings.confidenceThreshold === "number" ? settings.confidenceThreshold : 0.7
   const dailyLimit = typeof settings.dailyMessageLimit === "number" ? settings.dailyMessageLimit : 5
   const stopwordsOn = settings.stopWordsOverride !== false
+
+  // Kill switch: аварийное отключение AI-чат-бота на уровне всей компании.
+  // Если включён — бот молча выходит, не обрабатывая сообщение.
+  const [companyRow] = await db
+    .select({ killed: companies.aiChatbotKilled })
+    .from(companies)
+    .where(eq(companies.id, companyId))
+    .limit(1)
+  if (companyRow?.killed) {
+    console.log(`[chatbot] kill switch active for company=${companyId}, skipping`)
+    return { handled: false, action: "skipped", escalationReason: "company_kill_switch" }
+  }
 
   // Защита: бот не должен трогать остановленных / финальных кандидатов.
   const [c] = await db
