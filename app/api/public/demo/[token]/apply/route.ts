@@ -5,7 +5,9 @@ import { db } from "@/lib/db"
 import { candidates, demos, hhCandidates } from "@/lib/db/schema"
 import { generateCandidateShortId, isShortId } from "@/lib/short-id"
 import { normalizePhone, normalizeEmail } from "@/lib/candidates/normalize-contacts"
-import { scheduleAnketaConfirmation } from "@/lib/messaging/anketa-confirmation"
+// #19: scheduleAnketaConfirmation больше не вызываем — функция оставлена
+// для совместимости с уже запланированными follow_up_messages, но новые
+// записи теперь идут только через scheduleAnketaAutoReply (таб «Воронка»).
 import { scheduleAnketaAutoReply } from "@/lib/messaging/anketa-auto-reply"
 
 type AnketaPayload = {
@@ -135,14 +137,10 @@ export async function POST(
 
       await db.update(candidates).set(updates).where(eq(candidates.id, existing.id))
 
-      // Сессия 7 п.8: планируем авто-сообщение «подтверждение после анкеты»
-      // в hh-чат. Не блокирует ответ — даже если schedule упадёт,
-      // вернём успех (анкета сохранена).
-      void scheduleAnketaConfirmation({
-        candidateId: existing.id,
-        vacancyId:   existing.vacancyId,
-      })
-
+      // #19: scheduleAnketaConfirmation удалён — старый блок «Подтверждение
+      // после анкеты» в табе «Сообщения» больше нет. Единственный канал
+      // авто-сообщения после анкеты — scheduleAnketaAutoReply (ниже),
+      // настраивается в табе «Воронка» через PostDemoSettings.
       // ТЗ-3 Ч.1: автоответ с тестовым заданием — отдельный одиночный
       // touch (branch=anketa_auto_reply). Конфиг в post_demo_settings.
       void scheduleAnketaAutoReply({

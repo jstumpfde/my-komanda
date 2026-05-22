@@ -344,16 +344,11 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
   })()
   const [faq, setFaq] = useState<FaqItem[]>(initialFaq)
 
-  // anketaConfirmation — автоподтверждение в hh через N минут после
-  // отправки финальной анкеты (Сессия 7 п.8).
-  const initialAnketaConfirmation = (initialAutomation.anketaConfirmation as {
-    enabled?:      boolean
-    delayMinutes?: number
-    messageText?:  string
-  } | undefined) || {}
-  const [anketaConfEnabled,  setAnketaConfEnabled]  = useState<boolean>(initialAnketaConfirmation.enabled ?? true)
-  const [anketaConfDelay,    setAnketaConfDelay]    = useState<string>(String(initialAnketaConfirmation.delayMinutes ?? 3))
-  const [anketaConfText,     setAnketaConfText]     = useState<string>(initialAnketaConfirmation.messageText ?? DEFAULT_ANKETA_CONFIRMATION_TEXT)
+  // anketaConfirmation — устаревший блок (#19). UI удалён 22.05.2026, поле
+  // descriptionJson.automation.anketaConfirmation остаётся в БД для совместимости
+  // с уже запланированными follow_up_messages, но новые записи не пишем.
+  // Источник истины для авто-сообщения после анкеты — anketaAutoReply в
+  // demos.post_demo_settings (рендерится в табе «Воронка»).
 
   // Save all automation settings to API
   const saveSettings = useCallback(async () => {
@@ -379,11 +374,13 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
           keywords:           callIntentKeywords,
           insistDemoMessages: insistMessages,
         },
-        anketaConfirmation: {
-          enabled:      anketaConfEnabled,
-          delayMinutes: Number(anketaConfDelay),
-          messageText:  anketaConfText,
-        },
+        // #19: anketaConfirmation не пишем — UI блок удалён. Если в БД уже
+        // лежит старая запись — она будет затёрта ниже через PUT всего
+        // descriptionJson; чтобы не терять её для уже запланированных
+        // follow_up_messages, сохраним существующее значение из БД как есть.
+        ...((currentJson.automation as Record<string, unknown> | undefined)?.anketaConfirmation
+          ? { anketaConfirmation: (currentJson.automation as Record<string, unknown>).anketaConfirmation }
+          : {}),
         dialer: { enabled: dialerEnabled, scriptId: dialerScriptId, trigger: dialerTrigger },
         completenessCheck: { enabled: completenessEnabled, threshold: Number(completenessThreshold), channel: completenessChannel, delay: completenessDelay },
       }
@@ -412,7 +409,7 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
     } finally {
       setSaving(false)
     }
-  }, [vacancyId, descriptionJson, firstMessageDelay, responseReaction, autoInvite, autoReject, notifyManager, faq, callIntentEnabled, callIntentMode, callIntentKeywords, insistMessages, anketaConfEnabled, anketaConfDelay, anketaConfText, dialerEnabled, dialerScriptId, dialerTrigger, completenessEnabled, completenessThreshold, completenessChannel, completenessDelay])
+  }, [vacancyId, descriptionJson, firstMessageDelay, responseReaction, autoInvite, autoReject, notifyManager, faq, callIntentEnabled, callIntentMode, callIntentKeywords, insistMessages, dialerEnabled, dialerScriptId, dialerTrigger, completenessEnabled, completenessThreshold, completenessChannel, completenessDelay])
 
   // ─── P0-50: регистрация секций в sticky-bar ───────────────────────
   // Грузимся-готовы, когда descriptionJson распарсен (родитель передаёт
@@ -423,15 +420,16 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
   // регистрируется (loaded остаётся false).
   const effectiveTab: VacancyTabKey = tabKey ?? "messages"
 
-  // 1. «Первое сообщение» — invite шаблон + задержка + anketaConfirmation.
+  // 1. «Первое сообщение» — invite шаблон + задержка.
   //    invite шлётся в ai-settings, остальное — в descriptionJson через saveSettings.
+  //    #19: anketaConfirmation удалён — отслеживать его в watchedValues
+  //    больше не нужно (поле остаётся в БД as-is).
   useVacancySectionRegister({
     sectionKey: `automation-${vacancyId}-${effectiveTab}-invite`,
     tabKey: effectiveTab,
     loaded: loadedReady && (sections?.includes("firstMessage") ?? true),
     watchedValues: {
       firstMessageText, firstMessageDelay,
-      anketaConfEnabled, anketaConfDelay, anketaConfText,
     },
     save: async () => {
       // Сначала invite (PATCH ai-settings), затем общий saveSettings (PUT
@@ -541,51 +539,13 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
             </div>
           </div>
 
-          {/* Подтверждение после анкеты (Сессия 7). Через N минут после
-              отправки финальной анкеты — авто-сообщение в hh-чат. */}
-          <div className="space-y-3 border-t pt-4">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <Label className="text-sm font-medium">Подтверждение после анкеты</Label>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Авто-сообщение в hh-чат через N минут после того, как кандидат отправил финальную анкету.
-                </p>
-              </div>
-              <Switch checked={anketaConfEnabled} onCheckedChange={setAnketaConfEnabled} />
-            </div>
-            <div className={cn("space-y-3", !anketaConfEnabled && "opacity-60")}>
-              <div className="flex items-center justify-between gap-3">
-                <Label className="text-xs font-medium">Задержка</Label>
-                <Select value={anketaConfDelay} onValueChange={setAnketaConfDelay} disabled={!anketaConfEnabled}>
-                  <SelectTrigger className="w-[140px] h-9">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="2">2 минуты</SelectItem>
-                    <SelectItem value="3">3 минуты</SelectItem>
-                    <SelectItem value="5">5 минут</SelectItem>
-                    <SelectItem value="10">10 минут</SelectItem>
-                    <SelectItem value="15">15 минут</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs font-medium">Текст сообщения</Label>
-                <textarea
-                  className="w-full border rounded-lg p-3 text-sm resize-none h-24 bg-background focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none leading-relaxed disabled:opacity-60"
-                  value={anketaConfText}
-                  onChange={e => setAnketaConfText(e.target.value)}
-                  placeholder={DEFAULT_ANKETA_CONFIRMATION_TEXT}
-                  disabled={!anketaConfEnabled}
-                />
-                <p className="text-[11px] text-muted-foreground">
-                  Плейсхолдеры:{" "}
-                  <code className="text-[10px] bg-muted px-1 py-0.5 rounded">{"{{name}}"}</code>,{" "}
-                  <code className="text-[10px] bg-muted px-1 py-0.5 rounded">{"{{vacancy}}"}</code>.
-                </p>
-              </div>
-            </div>
-          </div>
+          {/* #19: блок «Подтверждение после анкеты» УДАЛЁН отсюда. Его
+              функция дублирует «Автоответ после заполнения анкеты» в табе
+              «Воронка» (PostDemoSettings → anketaAutoReply). Старое поле
+              automation.anketaConfirmation в descriptionJson сохраняется
+              в БД как есть для уже запланированных follow_up_messages с
+              branch='anketa_confirmation' (cron их корректно достреливает),
+              но новые анкеты планируют только anketaAutoReply. */}
 
           {/* Шаблон для повторной отправки */}
           <div className="space-y-2">
