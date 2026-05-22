@@ -2704,47 +2704,69 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                             </div>
                           </div>
                         </div>
+                        {/* #56: современный UX — клик прямо на картинку
+                            открывает file dialog, hover показывает overlay
+                            с кнопками «Заменить»/«Удалить». Если пусто —
+                            плейсхолдер тоже кликабельный (label.htmlFor). */}
                         <div className="space-y-1.5">
                           <Label className="text-xs">Логотип</Label>
                           <div className="flex items-center gap-3">
+                            <input
+                              id="brand-logo-input"
+                              type="file"
+                              accept="image/png,image/svg+xml,image/jpeg,image/webp"
+                              className="hidden"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0]
+                                if (!file) return
+                                if (file.size > 2 * 1024 * 1024) {
+                                  toast.error("Файл слишком большой (макс. 2 МБ)")
+                                  e.target.value = ""
+                                  return
+                                }
+                                const reader = new FileReader()
+                                reader.onload = () => {
+                                  const base64 = reader.result as string
+                                  setBrandLogo(base64)
+                                  saveBranding({ logo: base64 })
+                                }
+                                reader.readAsDataURL(file)
+                                e.target.value = ""
+                              }}
+                            />
                             {brandLogo ? (
-                              <div className="relative">
-                                <img src={brandLogo} alt="Логотип" className="max-h-[60px] object-contain rounded-md border" />
-                                <button
-                                  className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center hover:bg-red-600"
-                                  onClick={() => { setBrandLogo(""); saveBranding({ logo: "" }) }}
-                                >
-                                  <X className="w-3 h-3" />
-                                </button>
+                              <div className="relative group">
+                                <img
+                                  src={brandLogo}
+                                  alt="Логотип"
+                                  className="max-h-[60px] min-h-[60px] object-contain rounded-md border bg-background px-2"
+                                />
+                                <div className="absolute inset-0 rounded-md bg-black/55 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                                  <label
+                                    htmlFor="brand-logo-input"
+                                    className="px-2 py-1 rounded bg-white/90 text-foreground text-[11px] font-medium cursor-pointer hover:bg-white"
+                                  >
+                                    Заменить
+                                  </label>
+                                  <button
+                                    type="button"
+                                    className="px-2 py-1 rounded bg-red-500 text-white text-[11px] font-medium hover:bg-red-600"
+                                    onClick={() => { setBrandLogo(""); saveBranding({ logo: "" }) }}
+                                  >
+                                    Удалить
+                                  </button>
+                                </div>
                               </div>
                             ) : (
-                              <div className="h-14 w-24 rounded-lg border-2 border-dashed border-border flex items-center justify-center bg-muted/50">
-                                <span className="text-[10px] text-muted-foreground">Логотип</span>
-                              </div>
+                              <label
+                                htmlFor="brand-logo-input"
+                                className="h-14 w-24 rounded-lg border-2 border-dashed border-border flex flex-col items-center justify-center bg-muted/50 cursor-pointer hover:bg-muted hover:border-primary/40 transition-colors"
+                              >
+                                <Upload className="w-4 h-4 text-muted-foreground mb-0.5" />
+                                <span className="text-[10px] text-muted-foreground">Загрузить</span>
+                              </label>
                             )}
-                            <div className="flex flex-col gap-1">
-                              <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => {
-                                const input = document.createElement("input")
-                                input.type = "file"
-                                input.accept = "image/png,image/svg+xml,image/jpeg,image/webp"
-                                input.onchange = (e) => {
-                                  const file = (e.target as HTMLInputElement).files?.[0]
-                                  if (!file) return
-                                  if (file.size > 2 * 1024 * 1024) { toast.error("Файл слишком большой (макс. 2 МБ)"); return }
-                                  const reader = new FileReader()
-                                  reader.onload = () => {
-                                    const base64 = reader.result as string
-                                    setBrandLogo(base64)
-                                    saveBranding({ logo: base64 })
-                                  }
-                                  reader.readAsDataURL(file)
-                                }
-                                input.click()
-                              }}>
-                                Загрузить
-                              </Button>
-                              <span className="text-[10px] text-muted-foreground">PNG, SVG, JPG до 2 МБ</span>
-                            </div>
+                            <span className="text-[10px] text-muted-foreground">PNG, SVG, JPG до 2 МБ</span>
                           </div>
                         </div>
                         <div className="space-y-1.5">
