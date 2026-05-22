@@ -17,7 +17,16 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
-import { Bot, Wand2, Eye, Shield, Send, Loader2, Save, Pencil } from "lucide-react"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Bot, Wand2, Eye, Shield, Send, Loader2, Save, Pencil, AlertCircle, Undo2 } from "lucide-react"
 import { toast } from "sonner"
 
 interface Triggers {
@@ -38,13 +47,29 @@ const TRIGGER_LIST: { key: keyof Triggers; label: string }[] = [
   { key: "interviewScheduling", label: "Согласование времени интервью (осторожно)" },
 ]
 
+type AbuseSensitivity = "soft" | "moderate" | "strict"
+type AbuseAction = "escalate" | "needs_review" | "auto_reject" | "warn_and_continue"
+
+interface AbuseFilter {
+  enabled: boolean
+  sensitivity: AbuseSensitivity
+  action: AbuseAction
+}
+
 interface Settings {
   triggers: Triggers
   confidenceThreshold: number  // 0..1
   dailyMessageLimit: number
   stopWordsOverride: boolean
   telegramChannel: string
+  /** @deprecated — заменено abuseFilter, оставлено для backward-compat. */
   autoRejectOnAbuse: boolean
+  abuseFilter: AbuseFilter
+}
+const DEFAULT_ABUSE_FILTER: AbuseFilter = {
+  enabled: false,
+  sensitivity: "moderate",
+  action: "escalate",
 }
 const DEFAULT_SETTINGS: Settings = {
   triggers: DEFAULT_TRIGGERS,
@@ -53,6 +78,18 @@ const DEFAULT_SETTINGS: Settings = {
   stopWordsOverride: true,
   telegramChannel: "",
   autoRejectOnAbuse: false,
+  abuseFilter: DEFAULT_ABUSE_FILTER,
+}
+
+interface AbuseHistoryItem {
+  id: string
+  createdAt: string
+  candidateId: string
+  candidateName: string | null
+  reason: string
+  action: AbuseAction | "escalate"
+  incomingMessage: string
+  canUndo: boolean
 }
 
 interface Metrics { total: number; sent: number; escalated: number; rejected: number }
@@ -74,6 +111,9 @@ export function AiChatbotSettings({ vacancyId }: { vacancyId: string }) {
   const [quota, setQuota] = useState<QuotaUsage | null>(null)
   const [auditing, setAuditing] = useState(false)
   const [auditResult, setAuditResult] = useState<{ ranAt: string; issuesCount: number; summary: string } | null>(null)
+  const [abuseHistory, setAbuseHistory] = useState<AbuseHistoryItem[]>([])
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [undoingId, setUndoingId] = useState<string | null>(null)
 
   const triggersAny = Object.values(settings.triggers).some(Boolean)
   const canEnable = prompt.trim().length > 0
@@ -86,7 +126,13 @@ export function AiChatbotSettings({ vacancyId }: { vacancyId: string }) {
       .then(d => {
         if (off || !d) return
         if (typeof d.enabled === "boolean") setEnabled(d.enabled)
-        if (d.settings && typeof d.settings === "object") setSettings(s => ({ ...s, ...d.settings }))
+        if (d.settings && typeof d.settings === "object") {
+          setSettings(s => ({
+            ...s,
+            ...d.settings,
+            abuseFilter: { ...DEFAULT_ABUSE_FILTER, ...(d.settings.abuseFilter ?? {}) },
+          }))
+        }
         if (typeof d.prompt === "string") setPrompt(d.prompt)
       })
       .finally(() => { if (!off) setLoading(false) })
@@ -103,6 +149,39 @@ export function AiChatbotSettings({ vacancyId }: { vacancyId: string }) {
       })
       .catch(() => {})
   }, [vacancyId])
+
+  // История срабатываний фильтра оскорблений (#79)
+  const loadAbuseHistory = useCallback(() => {
+    setHistoryLoading(true)
+    fetch(`/api/modules/hr/vacancies/${vacancyId}/ai-chatbot/abuse-history`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (Array.isArray(d?.items)) setAbuseHistory(d.items as AbuseHistoryItem[])
+      })
+      .catch(() => {})
+      .finally(() => setHistoryLoading(false))
+  }, [vacancyId])
+
+  useEffect(() => { loadAbuseHistory() }, [loadAbuseHistory])
+
+  const undoAbuseAction = async (messageId: string) => {
+    setUndoingId(messageId)
+    try {
+      const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}/ai-chatbot/undo-action`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ messageId }),
+      })
+      const data = await res.json() as { ok?: boolean; error?: string }
+      if (!res.ok || !data.ok) throw new Error(data.error || "undo_failed")
+      toast.success("Решение отменено, кандидат восстановлен")
+      loadAbuseHistory()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Не удалось отменить")
+    } finally {
+      setUndoingId(null)
+    }
+  }
 
   const save = useCallback(async (overrides?: Partial<{ enabled: boolean; settings: Settings; prompt: string }>) => {
     setSaving(true)
@@ -301,12 +380,92 @@ export function AiChatbotSettings({ vacancyId }: { vacancyId: string }) {
             </div>
             <Switch checked={settings.stopWordsOverride} onCheckedChange={v => setSettings(s => ({ ...s, stopWordsOverride: v }))} />
           </div>
-          <div className="flex items-center justify-between gap-3 rounded-lg border bg-muted/30 p-3">
-            <div>
-              <Label className="text-sm">Автоотказ при оскорблениях</Label>
-              <p className="text-[11px] text-muted-foreground mt-0.5">При confidence ≥ 0.7 кандидат с матом будет автоматически отклонён.</p>
+          {/* #79 Расширенный фильтр оскорблений */}
+          <div className="space-y-4 rounded-lg border bg-muted/30 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <Label className="text-sm">Фильтр оскорблений</Label>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  Чувствительность и действие при срабатывании. Заменяет старый автоотказ.
+                </p>
+              </div>
+              <Switch
+                checked={settings.abuseFilter.enabled}
+                onCheckedChange={v => setSettings(s => ({
+                  ...s,
+                  abuseFilter: { ...s.abuseFilter, enabled: v },
+                  // Backward-compat: гасим устаревший флаг.
+                  autoRejectOnAbuse: v && s.abuseFilter.action === "auto_reject",
+                }))}
+              />
             </div>
-            <Switch checked={settings.autoRejectOnAbuse} onCheckedChange={v => setSettings(s => ({ ...s, autoRejectOnAbuse: v }))} />
+
+            {settings.abuseFilter.enabled && (
+              <>
+                <div className="space-y-2">
+                  <Label className="text-xs">Чувствительность</Label>
+                  <RadioGroup
+                    value={settings.abuseFilter.sensitivity}
+                    onValueChange={v => setSettings(s => ({
+                      ...s,
+                      abuseFilter: { ...s.abuseFilter, sensitivity: v as AbuseSensitivity },
+                    }))}
+                    className="space-y-1.5"
+                  >
+                    <div className="flex items-start gap-2">
+                      <RadioGroupItem value="soft" id="abuse-soft" className="mt-0.5" />
+                      <Label htmlFor="abuse-soft" className="text-xs font-normal cursor-pointer">
+                        <span className="font-medium">Мягко</span> — только явный мат и угрозы (порог 0.9)
+                      </Label>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <RadioGroupItem value="moderate" id="abuse-moderate" className="mt-0.5" />
+                      <Label htmlFor="abuse-moderate" className="text-xs font-normal cursor-pointer">
+                        <span className="font-medium">Умеренно</span> — мат и оскорбления (порог 0.7) — по умолчанию
+                      </Label>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <RadioGroupItem value="strict" id="abuse-strict" className="mt-0.5" />
+                      <Label htmlFor="abuse-strict" className="text-xs font-normal cursor-pointer">
+                        <span className="font-medium">Строго</span> — грубость, пассивная агрессия (порог 0.5)
+                      </Label>
+                    </div>
+                  </RadioGroup>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Действие при срабатывании</Label>
+                  <Select
+                    value={settings.abuseFilter.action}
+                    onValueChange={v => setSettings(s => ({
+                      ...s,
+                      abuseFilter: { ...s.abuseFilter, action: v as AbuseAction },
+                      autoRejectOnAbuse: s.abuseFilter.enabled && v === "auto_reject",
+                    }))}
+                  >
+                    <SelectTrigger className="h-8 text-sm bg-[var(--input-bg)]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="escalate">Только эскалировать HR (без действий)</SelectItem>
+                      <SelectItem value="needs_review">Перевести в «Требует решения»</SelectItem>
+                      <SelectItem value="auto_reject">Автоматический отказ</SelectItem>
+                      <SelectItem value="warn_and_continue">Предупредить кандидата и продолжить</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <Alert className="bg-background">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription className="text-[11px] leading-relaxed">
+                    <span className="font-medium">Считается оскорблением:</span> мат, прямые угрозы,
+                    расистские и сексистские высказывания.{" "}
+                    <span className="font-medium">Не считается:</span> эмоциональные ответы без мата,
+                    несогласие, требования объяснений.
+                  </AlertDescription>
+                </Alert>
+              </>
+            )}
           </div>
           <div className="flex justify-end">
             <Button size="sm" variant="outline" onClick={() => save()} disabled={saving} className="gap-1.5 h-8 text-xs">
@@ -314,6 +473,66 @@ export function AiChatbotSettings({ vacancyId }: { vacancyId: string }) {
               Сохранить
             </Button>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* #79 История срабатываний фильтра оскорблений */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+            <Shield className="w-4 h-4" /> История срабатываний фильтра оскорблений
+          </CardTitle>
+          <CardDescription>
+            Последние 20 решений. Для автоотказов и перевода в «требует решения» можно отменить и восстановить кандидата.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {historyLoading ? (
+            <p className="text-[12px] text-muted-foreground">Загрузка…</p>
+          ) : abuseHistory.length === 0 ? (
+            <p className="text-[12px] text-muted-foreground">Срабатываний пока не было.</p>
+          ) : (
+            <ul className="space-y-2">
+              {abuseHistory.map(item => (
+                <li
+                  key={item.id}
+                  className="rounded-lg border bg-muted/30 p-3 text-[12px] space-y-1"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 space-y-0.5">
+                      <div className="font-medium truncate">
+                        {item.candidateName ?? "Кандидат"}
+                      </div>
+                      <div className="text-muted-foreground">
+                        {new Date(item.createdAt).toLocaleString("ru-RU")} ·{" "}
+                        {item.action === "auto_reject" && "автоотказ"}
+                        {item.action === "needs_review" && "требует решения"}
+                        {item.action === "warn_and_continue" && "предупреждение"}
+                        {item.action === "escalate" && "эскалация"}
+                      </div>
+                    </div>
+                    {item.canUndo && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={undoingId === item.id}
+                        onClick={() => void undoAbuseAction(item.id)}
+                        className="h-7 gap-1.5 text-[11px] shrink-0"
+                      >
+                        {undoingId === item.id
+                          ? <Loader2 className="w-3 h-3 animate-spin" />
+                          : <Undo2 className="w-3 h-3" />}
+                        Отменить
+                      </Button>
+                    )}
+                  </div>
+                  <div className="text-muted-foreground italic line-clamp-2">
+                    «{item.incomingMessage}»
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
         </CardContent>
       </Card>
 

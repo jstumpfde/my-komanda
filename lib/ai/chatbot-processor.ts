@@ -26,13 +26,36 @@ export type IntentCategory =
   | "call_request" | "demo_check_in" | "interview_scheduling"
   | "rejection_signal" | "other"
 
+export type AbuseSensitivity = "soft" | "moderate" | "strict"
+export type AbuseAction = "escalate" | "needs_review" | "auto_reject" | "warn_and_continue"
+
+export interface AbuseFilterSettings {
+  enabled?: boolean
+  sensitivity?: AbuseSensitivity
+  action?: AbuseAction
+}
+
+export const DEFAULT_ABUSE_FILTER: Required<AbuseFilterSettings> = {
+  enabled:     false,
+  sensitivity: "moderate",
+  action:      "escalate",
+}
+
+export function getAbuseThreshold(sensitivity: AbuseSensitivity | string | undefined): number {
+  if (sensitivity === "soft") return 0.9
+  if (sensitivity === "strict") return 0.5
+  return 0.7
+}
+
 export interface ChatbotSettings {
   triggers?: Record<string, boolean>
   confidenceThreshold?: number
   dailyMessageLimit?: number
   stopWordsOverride?: boolean
   telegramChannel?: string
+  /** @deprecated — заменено abuseFilter. Оставлено для backward-compat. */
   autoRejectOnAbuse?: boolean
+  abuseFilter?: AbuseFilterSettings
 }
 
 export interface ProcessVacancy {
@@ -87,8 +110,14 @@ const ESCALATION_REASON_LABEL: Record<string, string> = {
   security_injection:    "Попытка prompt-injection",
   security_code:         "Вредоносный код во входящем сообщении",
   security_abuse:        "Мат / оскорбления / угрозы",
+  security_abuse_escalate:          "Оскорбления (эскалация)",
+  security_abuse_needs_review:      "Оскорбления (требует решения)",
+  security_abuse_auto_reject:       "Оскорбления (автоотказ)",
+  security_abuse_warn_and_continue: "Оскорбления (предупреждение, продолжение)",
   security_unauthorized_reply: "AI-ответ нарушил правила (post-filter)",
 }
+
+const ABUSE_WARNING_PREFIX = "⚠️ Просим воздержаться от оскорблений в общении.\n\n"
 
 const INCOMING_SECURITY_CONFIDENCE = 0.7
 const POST_FILTER_CONFIDENCE       = 0.6
@@ -328,19 +357,23 @@ export async function processChatbotMessage(input: ProcessInput): Promise<Proces
   // 0. Pre-filter безопасности (#64, #65, #66): Haiku-классификатор для
   // injection / code / abuse. Срабатывает раньше всех остальных правил,
   // чтобы вредоносное сообщение никогда не доходило до основного AI.
-  const incomingSec = await classifyIncomingMessage(incomingText)
-  if (incomingSec.category !== "normal" && incomingSec.confidence >= INCOMING_SECURITY_CONFIDENCE) {
-    const reasonKey =
-      incomingSec.category === "injection" ? "security_injection" :
-      incomingSec.category === "code"      ? "security_code"      :
-                                             "security_abuse"
-    const notifType =
-      incomingSec.category === "injection" ? "ai_security_injection_attempt" :
-      incomingSec.category === "code"      ? "ai_security_code_attempt"      :
-                                             "ai_security_abuse"
-    const severity =
-      incomingSec.category === "abuse" ? "warning" : "danger"
+  const abuseFilter: Required<AbuseFilterSettings> = {
+    enabled:     settings.abuseFilter?.enabled ?? (settings.autoRejectOnAbuse === true),
+    sensitivity: settings.abuseFilter?.sensitivity ?? "moderate",
+    action:      settings.abuseFilter?.action
+      ?? (settings.autoRejectOnAbuse === true ? "auto_reject" : "escalate"),
+  }
 
+  const incomingSec = await classifyIncomingMessage(incomingText)
+
+  // Injection / code — стандартный путь (всегда эскалация).
+  if (
+    (incomingSec.category === "injection" || incomingSec.category === "code") &&
+    incomingSec.confidence >= INCOMING_SECURITY_CONFIDENCE
+  ) {
+    const reasonKey = incomingSec.category === "injection" ? "security_injection" : "security_code"
+    const notifType =
+      incomingSec.category === "injection" ? "ai_security_injection_attempt" : "ai_security_code_attempt"
     await logMessage({
       candidateId, vacancyId, incoming: incomingText,
       category: "other", confidence: incomingSec.confidence,
@@ -350,23 +383,117 @@ export async function processChatbotMessage(input: ProcessInput): Promise<Proces
       companyId, vacancyId, vacancyTitle, candidateId, candidateInfo,
       incomingMessage: incomingText, reason: reasonKey,
       confidence: incomingSec.confidence,
-      telegramChannel, severity,
+      telegramChannel, severity: "danger",
       notificationType: notifType,
     })
-
-    if (incomingSec.category === "abuse" && settings.autoRejectOnAbuse === true) {
-      await db.update(candidates).set({
-        stage: "rejected",
-        autoProcessingStopped: true,
-        autoProcessingStoppedReason: "abuse_in_chat",
-        autoProcessingStoppedAt: new Date(),
-        automationPaused: true,
-        updatedAt: new Date(),
-      }).where(eq(candidates.id, candidateId))
-      return { handled: true, action: "rejected", confidence: incomingSec.confidence, escalationReason: reasonKey }
-    }
-
     return { handled: true, action: "escalated", confidence: incomingSec.confidence, escalationReason: reasonKey }
+  }
+
+  // Abuse — расширенный путь (#79): чувствительность + выбор действия.
+  let abuseWarningPrefix = ""
+  if (incomingSec.category === "abuse" && abuseFilter.enabled) {
+    const abuseThreshold = getAbuseThreshold(abuseFilter.sensitivity)
+    if (incomingSec.confidence >= abuseThreshold) {
+      const action = abuseFilter.action
+      const reasonKey = `security_abuse_${action}`
+      const notifType = "ai_security_abuse"
+
+      if (action === "auto_reject") {
+        await db.update(candidates).set({
+          stage: "rejected",
+          autoProcessingStopped: true,
+          autoProcessingStoppedReason: "abuse_in_chat",
+          autoProcessingStoppedAt: new Date(),
+          automationPaused: true,
+          updatedAt: new Date(),
+        }).where(eq(candidates.id, candidateId))
+        await logMessage({
+          candidateId, vacancyId, incoming: incomingText,
+          category: "other", confidence: incomingSec.confidence,
+          reply: null, sent: false, escalated: true, reason: reasonKey,
+        })
+        await escalate({
+          companyId, vacancyId, vacancyTitle, candidateId, candidateInfo,
+          incomingMessage: incomingText, reason: reasonKey,
+          confidence: incomingSec.confidence,
+          telegramChannel, severity: "warning",
+          notificationType: notifType,
+        })
+        return { handled: true, action: "rejected", confidence: incomingSec.confidence, escalationReason: reasonKey }
+      }
+
+      if (action === "needs_review") {
+        await db.update(candidates).set({
+          autoProcessingStopped: true,
+          autoProcessingStoppedReason: "abuse_in_chat",
+          autoProcessingStoppedAt: new Date(),
+          automationPaused: true,
+          updatedAt: new Date(),
+        }).where(eq(candidates.id, candidateId))
+        await logMessage({
+          candidateId, vacancyId, incoming: incomingText,
+          category: "other", confidence: incomingSec.confidence,
+          reply: null, sent: false, escalated: true, reason: reasonKey,
+        })
+        await escalate({
+          companyId, vacancyId, vacancyTitle, candidateId, candidateInfo,
+          incomingMessage: incomingText, reason: reasonKey,
+          confidence: incomingSec.confidence,
+          telegramChannel, severity: "warning",
+          notificationType: notifType,
+        })
+        return { handled: true, action: "escalated", confidence: incomingSec.confidence, escalationReason: reasonKey }
+      }
+
+      if (action === "warn_and_continue") {
+        // Запишем уведомление HR + установим префикс предупреждения,
+        // который будет добавлен к финальному AI-ответу. Не прерываем pipeline.
+        abuseWarningPrefix = ABUSE_WARNING_PREFIX
+        await escalate({
+          companyId, vacancyId, vacancyTitle, candidateId, candidateInfo,
+          incomingMessage: incomingText, reason: reasonKey,
+          confidence: incomingSec.confidence,
+          telegramChannel, severity: "info",
+          notificationType: notifType,
+        })
+        // Логируем без short-circuit. Полная запись будет добавлена ниже
+        // в момент отправки ответа (sent_at / generated_reply / reason).
+      } else {
+        // escalate (default) — только уведомление, без действий.
+        await logMessage({
+          candidateId, vacancyId, incoming: incomingText,
+          category: "other", confidence: incomingSec.confidence,
+          reply: null, sent: false, escalated: true, reason: reasonKey,
+        })
+        await escalate({
+          companyId, vacancyId, vacancyTitle, candidateId, candidateInfo,
+          incomingMessage: incomingText, reason: reasonKey,
+          confidence: incomingSec.confidence,
+          telegramChannel, severity: "warning",
+          notificationType: notifType,
+        })
+        return { handled: true, action: "escalated", confidence: incomingSec.confidence, escalationReason: reasonKey }
+      }
+    }
+  } else if (
+    incomingSec.category === "abuse" &&
+    !abuseFilter.enabled &&
+    incomingSec.confidence >= INCOMING_SECURITY_CONFIDENCE
+  ) {
+    // Фильтр выключен — поведение по-старому: эскалация без действий.
+    await logMessage({
+      candidateId, vacancyId, incoming: incomingText,
+      category: "other", confidence: incomingSec.confidence,
+      reply: null, sent: false, escalated: true, reason: "security_abuse",
+    })
+    await escalate({
+      companyId, vacancyId, vacancyTitle, candidateId, candidateInfo,
+      incomingMessage: incomingText, reason: "security_abuse",
+      confidence: incomingSec.confidence,
+      telegramChannel, severity: "warning",
+      notificationType: "ai_security_abuse",
+    })
+    return { handled: true, action: "escalated", confidence: incomingSec.confidence, escalationReason: "security_abuse" }
   }
 
   // 1. Стоп-слова перебивают AI: rejected без AI-вызова.
@@ -557,12 +684,14 @@ export async function processChatbotMessage(input: ProcessInput): Promise<Proces
     return { handled: true, action: "escalated", category, confidence: postCheck.confidence, escalationReason: "security_unauthorized_reply" }
   }
 
+  const finalReply = abuseWarningPrefix ? abuseWarningPrefix + reply : reply
   await logMessage({
     candidateId, vacancyId, incoming: incomingText,
     category, confidence,
-    reply, sent: true, escalated: false, reason: null,
+    reply: finalReply, sent: true, escalated: !!abuseWarningPrefix,
+    reason: abuseWarningPrefix ? "security_abuse_warn_and_continue" : null,
   })
-  return { handled: true, action: "sent", reply, category, confidence }
+  return { handled: true, action: "sent", reply: finalReply, category, confidence }
 }
 
 // Удержание прежнего экспорта для обратной совместимости с уже написанными
