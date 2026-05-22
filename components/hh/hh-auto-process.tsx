@@ -2,14 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Slider } from "@/components/ui/slider"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { toast } from "sonner"
 import {
-  Play, Square, Loader2, Settings2, Shield, Gauge, AlertTriangle, Info,
+  Play, Square, Loader2, Settings2, Shield, Gauge, Info,
 } from "lucide-react"
 
 interface EnqueueResponse {
@@ -33,7 +31,6 @@ const POLL_INTERVAL_MS = 2000
 interface HhAutoProcessProps {
   vacancyId?: string
   pendingCount?: number
-  defaultMinScore?: number
   onProcessed?: () => void
   /** "inline" — компактная кнопка с поповером (по умолчанию), "card" — большая карточка. */
   variant?: "inline" | "card"
@@ -51,7 +48,6 @@ const LIMIT_FALLBACK_MAX = 8
 export function HhAutoProcess({
   vacancyId,
   pendingCount,
-  defaultMinScore = 70,
   onProcessed,
   variant = "inline",
 }: HhAutoProcessProps) {
@@ -61,9 +57,7 @@ export function HhAutoProcess({
 
   const [limit, setLimit] = useState<number | "all">(5)
   const [speed, setSpeed] = useState<SpeedPreset>("safe")
-  const [useMinScore, setUseMinScore] = useState<boolean>(false)
   const [manualMode, setManualMode] = useState<boolean>(false)
-  const [minScore, setMinScore] = useState<number>(defaultMinScore)
 
   const [autoProcessingEnabled, setAutoProcessingEnabled] = useState<boolean | null>(null)
   const [autoProcessingSaving, setAutoProcessingSaving] = useState(false)
@@ -131,7 +125,6 @@ export function HhAutoProcess({
         vacancyId,
         limit:        Number.isFinite(Number(effectiveLimit)) ? Number(effectiveLimit) : 5,
         delaySeconds: Number.isFinite(Number(delaySeconds))   ? Number(delaySeconds)   : 30,
-        minScore:     useMinScore ? (Number.isFinite(Number(minScore)) ? Number(minScore) : 70) : 0,
       }
       // 1. Enqueue. Бэкенд возвращает {jobId, status:queued} мгновенно
       //   (<500мс), реальный разбор идёт в фоне.
@@ -288,31 +281,12 @@ export function HhAutoProcess({
         </div>
       )}
 
-      <div>
-        <div className="flex items-center justify-between mb-1.5">
-          <Label className="text-xs font-medium">Использовать минимальный AI-скор</Label>
-          <Switch checked={useMinScore} onCheckedChange={setUseMinScore} />
-        </div>
-        {useMinScore && (
-          <>
-            <div className="flex items-center justify-between mb-1.5">
-              <Label className="text-xs text-muted-foreground">Порог приглашения</Label>
-              <Badge variant="outline" className="h-5 px-1.5 text-[10px] tabular-nums">{minScore}</Badge>
-            </div>
-            <Slider
-              value={[minScore]}
-              min={0}
-              max={95}
-              step={5}
-              onValueChange={v => setMinScore(v[0] ?? 70)}
-            />
-            <div className="flex justify-between text-[10px] text-muted-foreground mt-1">
-              <span>0</span>
-              <span>95</span>
-            </div>
-          </>
-        )}
-      </div>
+      {/* P0-52: Тумблер «Использовать минимальный AI-скор» и слайдер «Порог
+          приглашения» удалены. Источник истины — таб «Воронка» вакансии
+          (vacancy_ai_settings.minScoreLower/Upper). Раньше payload.minScore
+          в любом случае игнорировался бэкендом — но UI запутывал HR'ов и
+          провоцировал баги уровня P0-53 (старый порог 70 + новый 50 →
+          50 кандидатов с auto_processing_stopped=true). */}
 
       {isAll ? (
         <div className="flex items-start gap-2 rounded border border-red-300 bg-red-50 px-2.5 py-2 text-[11px] leading-snug text-red-900 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
@@ -383,7 +357,7 @@ export function HhAutoProcess({
       <div>
         <h3 className="text-sm font-medium">🤖 Автоматический разбор откликов с hh.ru</h3>
         <p className="text-xs text-muted-foreground mt-1">
-          AI оценит резюме под вакансию: при score ≥ {minScore} → приглашение и карточка в канбане.
+          AI оценит резюме под вакансию. Пороги настраиваются в табе «Воронка» вакансии.
         </p>
       </div>
       {settingsContent}

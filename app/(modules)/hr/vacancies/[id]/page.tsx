@@ -2016,9 +2016,6 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                     {activeTab === "candidates" && hhConnected === true && apiVacancy?.hhVacancyId && hhSyncMeta && (
                       <HhAutoProcess
                         vacancyId={id}
-                        defaultMinScore={
-                          ((apiVacancy?.aiProcessSettings as { minScore?: number } | null)?.minScore) ?? 70
-                        }
                         onProcessed={() => { refetchCandidates(); handleHhSync() }}
                       />
                     )}
