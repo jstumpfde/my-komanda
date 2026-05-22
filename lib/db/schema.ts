@@ -313,6 +313,9 @@ export const vacancies = pgTable("vacancies", {
   aiChatbotEnabled:  boolean("ai_chatbot_enabled").notNull().default(false),
   aiChatbotSettings: jsonb("ai_chatbot_settings").notNull().default({}),
   aiChatbotPrompt:   text("ai_chatbot_prompt").notNull().default(""),
+  // #61: per-vacancy стоп-факторы. См. drizzle/0125_vacancy_stop_factors.sql
+  // и компонент components/vacancies/vacancy-stop-factors-settings.tsx.
+  stopFactorsJson:   jsonb("stop_factors_json").$type<VacancyStopFactors>().notNull().default({}),
   // Авто-разбор hh-откликов: cron каждые 10 минут разбирает накопленные отклики
   // в рабочее время. Если выключено — клиент жмёт «Разобрать» вручную.
   autoProcessingEnabled:      boolean("auto_processing_enabled").notNull().default(false),
@@ -340,6 +343,55 @@ export interface VacancyPrequalificationQuestion {
   text:      string
   required:  boolean   // false = информативный
   criterion: string    // что считается «правильным ответом» для AI (опц.)
+}
+
+// #61: per-vacancy стоп-факторы. Все поля опциональны — отсутствие ключа
+// = выключен. enabled=false тоже = выключен. См. drizzle/0125.
+export interface VacancyStopFactorCity {
+  enabled:         boolean
+  allowedCities?:  string[]   // если кандидат НЕ из списка → стоп
+  allowRelocation?: boolean   // и НЕ отметил «готов к переезду»
+  rejectionText?:  string
+}
+export interface VacancyStopFactorFormat {
+  enabled:         boolean
+  allowedFormats?: Array<"office" | "hybrid" | "remote">
+  rejectionText?:  string
+}
+export interface VacancyStopFactorAge {
+  enabled:         boolean
+  minAge?:         number
+  maxAge?:         number
+  rejectionText?:  string
+}
+export interface VacancyStopFactorExperience {
+  enabled:         boolean
+  minYears?:       number
+  rejectionText?:  string
+}
+export interface VacancyStopFactorDocuments {
+  enabled:         boolean
+  required?:       string[]   // напр. ["med_book", "driver_license_b"]
+  rejectionText?:  string
+}
+export interface VacancyStopFactorCitizenship {
+  enabled:         boolean
+  allowed?:        string[]   // напр. ["RU", "BY"]
+  rejectionText?:  string
+}
+export interface VacancyStopFactorSalary {
+  enabled:         boolean
+  maxAmount?:      number     // в рублях
+  rejectionText?:  string
+}
+export interface VacancyStopFactors {
+  city?:               VacancyStopFactorCity
+  format?:             VacancyStopFactorFormat
+  age?:                VacancyStopFactorAge
+  experience?:         VacancyStopFactorExperience
+  documents?:          VacancyStopFactorDocuments
+  citizenship?:        VacancyStopFactorCitizenship
+  salaryExpectation?:  VacancyStopFactorSalary
 }
 
 export interface VacancyPrequalificationConfig {
