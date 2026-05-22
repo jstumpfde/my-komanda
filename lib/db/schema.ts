@@ -298,6 +298,13 @@ export const vacancies = pgTable("vacancies", {
     "не интересует","не актуально","не актуальна","отменяю","отказ",
     "отказываюсь","не рассматриваю",
   ]),
+  // P0-28: кеш AI-оценки вакансии (vacancy-advisor). NULL = ещё не считали.
+  // input_hash — SHA-256 от ключевых полей анкеты, по которому решаем,
+  // устарел ли кеш. Auto-refresh НЕ делаем — кнопка ручная.
+  aiQualityScore:        integer("ai_quality_score"),
+  aiQualityDetails:      jsonb("ai_quality_details"),
+  aiQualityAnalyzedAt:   timestamp("ai_quality_analyzed_at", { withTimezone: true }),
+  aiQualityInputHash:    text("ai_quality_input_hash"),
   // Авто-разбор hh-откликов: cron каждые 10 минут разбирает накопленные отклики
   // в рабочее время. Если выключено — клиент жмёт «Разобрать» вручную.
   autoProcessingEnabled:      boolean("auto_processing_enabled").notNull().default(false),

@@ -969,6 +969,9 @@ export interface AnketaTabHandle {
 interface AnketaTabProps {
   vacancyId: string
   descriptionJson: unknown
+  /** P0-28: pre-warmed AI-кеш из vacancies.ai_quality_*. */
+  aiQualityDetails?: unknown
+  aiQualityAnalyzedAt?: string | null
   onTitleChange?: (title: string) => void
   onNavigateTab?: (tab: string) => void
   onScoreChange?: (score: { score: number; label: string }) => void
@@ -977,7 +980,7 @@ interface AnketaTabProps {
   registerHandle?: (handle: AnketaTabHandle) => void
 }
 
-export function AnketaTab({ vacancyId, descriptionJson, onTitleChange, onNavigateTab, onScoreChange, onSavingChange, registerHandle }: AnketaTabProps) {
+export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQualityAnalyzedAt, onTitleChange, onNavigateTab, onScoreChange, onSavingChange, registerHandle }: AnketaTabProps) {
   const [data, setData] = useState<AnketaData>(() => {
     const saved = (descriptionJson as Record<string, unknown>)?.anketa as Record<string, unknown> | undefined
     return saved ? migrateAnketa(saved) : emptyAnketa()
@@ -2335,9 +2338,12 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange, onNavigat
     </div>
     {/* ── AI Advisor Panel ── */}
     <VacancyAdvisor
+      vacancyId={vacancyId}
       vacancyData={data as unknown as Record<string, unknown>}
       companyDescription={companyDescription}
       focusedField={advisorFocusedField}
+      initialResult={aiQualityDetails as never}
+      initialAnalyzedAt={aiQualityAnalyzedAt ?? null}
       onScoreChange={onScoreChange}
       onApplySuggestion={(field, value) => {
         if (field === "vacancyTitle") {

@@ -1,6 +1,8 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react"
+import { formatDistanceToNow } from "date-fns"
+import { ru } from "date-fns/locale"
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -54,9 +56,14 @@ interface AdvisorResult {
 }
 
 interface VacancyAdvisorProps {
+  vacancyId?: string
   vacancyData: Record<string, unknown>
   companyDescription?: string
   focusedField?: string
+  /** P0-28: предварительно прогретый кеш-результат — если родитель уже
+   *  загрузил его из БД, можем показать без AI-запроса. */
+  initialResult?: AdvisorResult | null
+  initialAnalyzedAt?: string | null
   onScrollToSection?: (sectionId: string) => void
   onApplySuggestion?: (field: string, value: unknown) => void
   onScoreChange?: (score: { score: number; label: string }) => void
@@ -87,8 +94,10 @@ const EXPERIENCE_INSIGHTS: Record<string, { label: string; volumePercent: number
 
 // ── Component ────────────────────────────────────────────────────────────────
 
-export function VacancyAdvisor({ vacancyData, companyDescription, focusedField, onScrollToSection, onApplySuggestion, onScoreChange }: VacancyAdvisorProps) {
-  const [result, setResult] = useState<AdvisorResult | null>(null)
+export function VacancyAdvisor({ vacancyId, vacancyData, companyDescription, focusedField, initialResult, initialAnalyzedAt, onScrollToSection, onApplySuggestion, onScoreChange }: VacancyAdvisorProps) {
+  const [result, setResult] = useState<AdvisorResult | null>(initialResult ?? null)
+  const [analyzedAt, setAnalyzedAt] = useState<string | null>(initialAnalyzedAt ?? null)
+  const [cached, setCached] = useState<boolean>(Boolean(initialResult))
   const [loading, setLoading] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -119,16 +128,18 @@ export function VacancyAdvisor({ vacancyData, companyDescription, focusedField, 
     }
   }, [vacancyData])
 
-  const fetchAnalysis = useCallback(async (signal?: AbortSignal) => {
+  const fetchAnalysis = useCallback(async (signal?: AbortSignal, opts?: { force?: boolean }) => {
     setLoading(true)
     try {
       const res = await fetch("/api/ai/vacancy-advisor", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          vacancyId,
           vacancyData,
           companyDescription: companyDescription || "",
           focusedField: focusedField || "",
+          force: Boolean(opts?.force),
         }),
         signal,
       })
@@ -136,8 +147,11 @@ export function VacancyAdvisor({ vacancyData, companyDescription, focusedField, 
         if (res.status === 429) return // silently skip rate-limited
         throw new Error("API error")
       }
-      const data = await res.json() as AdvisorResult
-      setResult(data)
+      const data = await res.json() as AdvisorResult & { _cached?: boolean; _analyzedAt?: string | null }
+      const { _cached, _analyzedAt, ...rest } = data
+      setResult(rest)
+      setCached(Boolean(_cached))
+      setAnalyzedAt(_analyzedAt ?? new Date().toISOString())
       lastDataHash.current = dataHash
     } catch (err) {
       if ((err as Error).name === "AbortError") return
@@ -145,9 +159,12 @@ export function VacancyAdvisor({ vacancyData, companyDescription, focusedField, 
     } finally {
       setLoading(false)
     }
-  }, [vacancyData, companyDescription, focusedField, dataHash])
+  }, [vacancyId, vacancyData, companyDescription, focusedField, dataHash])
 
-  // Debounced fetch on data change
+  // P0-28: focused-field-driven запросы оставляем (контекстный совет к
+  // конкретному инпуту), но НЕ кэшируются — сервер вернёт fresh fallback.
+  // Дебаунс срабатывает только при изменении dataHash относительно
+  // последнего сохранённого, или если фокус сменился.
   useEffect(() => {
     if (dataHash === lastDataHash.current && !focusedField) return
 
@@ -165,9 +182,18 @@ export function VacancyAdvisor({ vacancyData, companyDescription, focusedField, 
     }
   }, [dataHash, focusedField, fetchAnalysis])
 
-  // Initial fetch
+  // P0-28: безусловный initial fetch удалён. Если есть initialResult из
+  // БД-кеша — показываем сразу без вызова Claude. Если нет кеша —
+  // первый debounced fetch выше (на любое реальное изменение dataHash)
+  // запросит анализ и закеширует. Пока нет ни кеша, ни правок — пользователю
+  // показываем "пусто, нажмите Обновить".
   useEffect(() => {
-    fetchAnalysis()
+    if (!result && !initialResult && !loading && lastDataHash.current === "") {
+      // Помечаем начальный dataHash, чтобы debounced effect не дёрнул AI
+      // сразу же при первом mount'е. Если пользователь сразу что-то поменяет —
+      // dataHash сдвинется, и анализ запустится.
+      lastDataHash.current = dataHash
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -372,17 +398,23 @@ export function VacancyAdvisor({ vacancyData, companyDescription, focusedField, 
           onFillRequirements={onApplySuggestion ? (text) => onApplySuggestion("requirements", text) : undefined}
         />
 
-        {/* Refresh */}
-        <div className="pt-1">
+        {/* P0-28: дата последнего анализа + force-refresh. */}
+        <div className="pt-1 space-y-1">
+          {analyzedAt && (
+            <p className="text-[10px] text-muted-foreground text-center">
+              {cached ? "Из кеша · " : ""}
+              Проанализировано {formatDistanceToNow(new Date(analyzedAt), { addSuffix: true, locale: ru })}
+            </p>
+          )}
           <Button
             variant="ghost"
             size="sm"
             className="w-full text-xs h-7 text-muted-foreground"
-            onClick={() => fetchAnalysis()}
+            onClick={() => fetchAnalysis(undefined, { force: true })}
             disabled={loading}
           >
             {loading ? <Loader2 className="w-3 h-3 animate-spin mr-1.5" /> : <RefreshCw className="w-3 h-3 mr-1.5" />}
-            Обновить анализ
+            Переанализировать (тратит токены)
           </Button>
         </div>
       </div>

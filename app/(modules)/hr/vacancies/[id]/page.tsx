@@ -2183,6 +2183,8 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                 <AnketaTab
                   vacancyId={id}
                   descriptionJson={apiVacancy?.descriptionJson}
+                  aiQualityDetails={(apiVacancy as { aiQualityDetails?: unknown } | undefined)?.aiQualityDetails}
+                  aiQualityAnalyzedAt={(apiVacancy as { aiQualityAnalyzedAt?: string | null } | undefined)?.aiQualityAnalyzedAt ?? null}
                   onTitleChange={(t) => { if (t) setInternalName(t) }}
                   onNavigateTab={(tab) => { setActiveTab(tab); window.scrollTo({ top: 0, behavior: "smooth" }) }}
                   onScoreChange={setAdvisorScore}
