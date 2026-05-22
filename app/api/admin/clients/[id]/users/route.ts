@@ -2,7 +2,7 @@ import { NextRequest } from "next/server"
 import { db } from "@/lib/db"
 import { users } from "@/lib/db/schema"
 import { eq } from "drizzle-orm"
-import { requirePlatformAdmin, apiError, apiSuccess } from "@/lib/api-helpers"
+import {requirePlatformAdmin, apiSuccess} from "@/lib/api-helpers"
 
 type Params = { params: Promise<{ id: string }> }
 

@@ -3,12 +3,11 @@
 import { useState, use } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
-import { Calendar, Clock, Video, Building2, Phone, CheckCircle2, Globe, ExternalLink } from "lucide-react"
-import { getBrand, brandCssVars, type BrandConfig } from "@/lib/branding"
+import {Calendar, Clock, Video, Building2, Phone, CheckCircle2, Globe} from "lucide-react"
+import {getBrand, type BrandConfig} from "@/lib/branding"
 
 const MEETING_TYPES = [
   { id: "online", label: "Онлайн", icon: Video, desc: "Яндекс Телемост" },

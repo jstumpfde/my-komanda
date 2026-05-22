@@ -7,7 +7,7 @@
 import { db } from "@/lib/db"
 import { hhResponses, candidates, vacancies, followUpCampaigns, followUpMessages, hhCandidates } from "@/lib/db/schema"
 import type { VacancyAiProcessSettings, VacancyStopFactors } from "@/lib/db/schema"
-import { and, asc, eq, inArray, isNull, isNotNull, notInArray, or } from "drizzle-orm"
+import {and, asc, eq, inArray, isNull, notInArray, or} from "drizzle-orm"
 import { getValidToken } from "@/lib/hh-helpers"
 import { changeNegotiationState, getNegotiationMessages } from "@/lib/hh-api"
 import { generateCandidateShortId } from "@/lib/short-id"

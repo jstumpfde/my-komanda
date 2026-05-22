@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useEffect, useCallback, useId, forwardRef, useImperativeHandle } from "react"
+import {useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle} from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
@@ -29,7 +29,7 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 import type { Demo, Block, BlockType, Lesson } from "@/lib/course-types"
-import { VARIABLES, BLOCK_TYPE_META, createBlock } from "@/lib/course-types"
+import {BLOCK_TYPE_META, createBlock} from "@/lib/course-types"
 import { TEMPLATE_VARIABLES } from "@/lib/templates/demo-templates"
 import { LibraryDialog } from "./library-dialog"
 

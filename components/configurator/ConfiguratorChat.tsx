@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from "react"
 import { BarChart3, Zap, Target, Send, Sparkles } from "lucide-react"
-import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { RoutinePreviewCard, type RoutinePreview } from "./RoutinePreviewCard"
 

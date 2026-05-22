@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import {
   RadarChart, PolarGrid, PolarAngleAxis, Radar, ResponsiveContainer, Legend, Tooltip,
 } from "recharts"
-import { ArrowLeft, Star, TrendingUp, AlertTriangle, CheckCircle2, Play } from "lucide-react"
+import {ArrowLeft, Star, AlertTriangle, CheckCircle2, Play} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"

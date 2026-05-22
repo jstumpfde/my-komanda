@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
-import { Rocket, Users, Flame, TrendingUp, Plus, Mail, Send, Pause } from "lucide-react"
+import {Rocket, Flame, TrendingUp, Plus, Mail, Send} from "lucide-react"
 
 // ─── Mock data ─────────────────────────────────────────
 const CAMPAIGNS_KPI = [

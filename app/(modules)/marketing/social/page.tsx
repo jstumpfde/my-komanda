@@ -4,9 +4,8 @@ import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Plus, Link, Unlink, Users, Heart, FileText } from "lucide-react"
+import {Plus, Link, Unlink} from "lucide-react"
 
 const accounts = [
   {

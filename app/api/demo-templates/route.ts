@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server"
-import { eq, or, isNull } from "drizzle-orm"
+import {eq, or} from "drizzle-orm"
 import { db } from "@/lib/db"
 import { demoTemplates } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"

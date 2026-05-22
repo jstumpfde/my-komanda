@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { useParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { ChevronLeft, ChevronRight, X, Loader2, FileText } from "lucide-react"
+import {ChevronLeft, ChevronRight, Loader2, FileText} from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Block, Lesson } from "@/lib/course-types"
 

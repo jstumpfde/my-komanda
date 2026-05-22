@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server"
-import { eq, and, count } from "drizzle-orm"
+import {eq, and} from "drizzle-orm"
 import { db } from "@/lib/db"
-import { knowledgeCategories, knowledgeArticles } from "@/lib/db/schema"
+import {knowledgeCategories} from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 
 export async function GET() {

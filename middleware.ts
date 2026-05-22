@@ -1,5 +1,5 @@
 import { auth } from "@/auth"
-import { hasAnyModule, HR_MODULE_SLUGS } from "@/lib/modules/access"
+import {HR_MODULE_SLUGS} from "@/lib/modules/access"
 
 // Node.js runtime — нужен для DB-запросов в middleware
 export const runtime = "nodejs"

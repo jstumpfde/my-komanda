@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { and, eq, inArray, isNotNull, lt, or } from "drizzle-orm"
+import {and, eq, inArray, isNotNull, or} from "drizzle-orm"
 import { db } from "@/lib/db"
 import {
   companies,

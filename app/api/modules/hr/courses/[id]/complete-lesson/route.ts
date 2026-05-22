@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { requireCompany } from "@/lib/api-helpers"
 import { db } from "@/lib/db"
-import { courses, lessons, courseEnrollments, lessonCompletions, certificates } from "@/lib/db/schema"
+import {lessons, courseEnrollments, lessonCompletions, certificates} from "@/lib/db/schema"
 import { eq, and, count } from "drizzle-orm"
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {

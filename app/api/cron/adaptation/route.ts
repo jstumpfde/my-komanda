@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
-import { eq, and, isNull, inArray } from "drizzle-orm"
+import {eq, and, inArray} from "drizzle-orm"
 import { db } from "@/lib/db"
-import { adaptationAssignments, adaptationSteps, stepCompletions, adaptationPlans } from "@/lib/db/schema"
+import {adaptationAssignments, adaptationSteps, stepCompletions} from "@/lib/db/schema"
 import { checkCronAuth } from "@/lib/cron/auth"
 
 // POST /api/cron/adaptation — Protected by X-Cron-Secret header.

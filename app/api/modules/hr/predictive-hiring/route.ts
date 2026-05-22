@@ -3,7 +3,6 @@ import { auth } from "@/auth"
 import { db } from "@/lib/db"
 import { predictiveHiringAlerts, flightRiskScores, vacancies } from "@/lib/db/schema"
 import { eq, desc, and } from "drizzle-orm"
-import { randomUUID } from "crypto"
 
 // GET /api/modules/hr/predictive-hiring
 export async function GET(req: Request) {

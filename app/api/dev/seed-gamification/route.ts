@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { eq, isNull } from "drizzle-orm"
+import {isNull} from "drizzle-orm"
 import { db } from "@/lib/db"
 import { badges } from "@/lib/db/schema"
 

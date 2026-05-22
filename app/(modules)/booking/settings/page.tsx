@@ -5,9 +5,8 @@ import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Badge } from "@/components/ui/badge"
-import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Settings, Clock, CalendarDays, Bell, Check, Lock } from "lucide-react"
+import {Clock, CalendarDays, Bell, Check, Lock} from "lucide-react"
 import { BOOKING_MODES } from "@/lib/booking/constants"
 
 export default function BookingSettingsPage() {

@@ -3,8 +3,7 @@
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
+import {Card, CardContent} from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Plus, ExternalLink, Pencil, BarChart2 } from "lucide-react"
 

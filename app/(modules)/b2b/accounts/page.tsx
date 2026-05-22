@@ -6,7 +6,7 @@ import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
-import { Building2, ArrowRight } from "lucide-react"
+import {ArrowRight} from "lucide-react"
 import { useRouter } from "next/navigation"
 import { B2B_ACCOUNTS, INFLUENCE_MAP, ENGAGEMENT_MAP, TIER_BADGES, formatValueShort } from "@/lib/b2b/demo-data"
 
