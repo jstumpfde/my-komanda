@@ -10,6 +10,7 @@ import {
   unique,
   primaryKey,
   index,
+  real,
 } from "drizzle-orm/pg-core"
 
 // ─── Modules ──────────────────────────────────────────────────────────────────
@@ -290,6 +291,11 @@ export const vacancies = pgTable("vacancies", {
   hhSyncedAt: timestamp("hh_synced_at"),
   aiProcessSettings: jsonb("ai_process_settings").default({}),
   aiScoringEnabled: boolean("ai_scoring_enabled").notNull().default(false),
+  // #15 AI чат-бот кандидатов. settings — JSON со всеми флагами триггеров,
+  // confidenceThreshold, dailyMessageLimit, stopWordsOverride, telegramChannel.
+  aiChatbotEnabled:  boolean("ai_chatbot_enabled").notNull().default(false),
+  aiChatbotSettings: jsonb("ai_chatbot_settings").notNull().default({}),
+  aiChatbotPrompt:   text("ai_chatbot_prompt").notNull().default(""),
   // Авто-разбор hh-откликов: cron каждые 10 минут разбирает накопленные отклики
   // в рабочее время. Если выключено — клиент жмёт «Разобрать» вручную.
   autoProcessingEnabled:      boolean("auto_processing_enabled").notNull().default(false),
