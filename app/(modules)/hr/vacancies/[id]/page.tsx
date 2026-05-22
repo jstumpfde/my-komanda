@@ -2487,11 +2487,13 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                 <VacancySettingsProvider>
                 {/* Сабнав: 6 табов настроек вакансии */}
                 <div className="flex items-center gap-1 mb-4 border-b overflow-x-auto">
+                  {/* #18: Воронка перед Сообщениями — HR сначала проектирует
+                      стадии и AI-фильтр, потом уже настраивает тексты. */}
                   {([
                     { value: "page"        as const, label: "Брендинг",             icon: Globe },
                     { value: "sources"     as const, label: "Источники",           icon: Link2 },
-                    { value: "messages"    as const, label: "Сообщения",           icon: MessageCircle },
                     { value: "funnel"      as const, label: "Воронка",             icon: Kanban },
+                    { value: "messages"    as const, label: "Сообщения",           icon: MessageCircle },
                     { value: "followup"    as const, label: "Дожим",               icon: MessageSquareText },
                     { value: "ai"          as const, label: "Расписание",          icon: Zap },
                     { value: "integrations" as const, label: "Интеграции",          icon: Settings },
