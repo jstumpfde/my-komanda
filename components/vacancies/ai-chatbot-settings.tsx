@@ -1,8 +1,15 @@
 "use client"
 
-// #15 Фаза 1: scaffolding для AI-чат-бота. Всё disabled.
-// Реальные сохранения и логика — в Фазах 2-6.
+// #62: AI чат-бот для общения с кандидатами. Раньше всё было disabled —
+// теперь админ может включить и редактировать настройки. Бэк (scan-incoming
+// / process-queue) пока НЕ подключён к этим настройкам, поэтому оставлен
+// бейдж «В разработке» — это предупреждение, что обработка не работает.
+//
+// Взаимоисключение с legacy-сообщениями: когда aiChatbotEnabled=true для
+// вакансии, родитель скрывает блоки «Серия первых сообщений», «Цепочка
+// дожима» и «Аварийное повторное» (см. page.tsx, секция «Сообщения»).
 
+import { useEffect, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Switch } from "@/components/ui/switch"
 import { Button } from "@/components/ui/button"
@@ -11,7 +18,9 @@ import { Label } from "@/components/ui/label"
 import { Slider } from "@/components/ui/slider"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { Bot, Wand2, Eye, Shield, Send } from "lucide-react"
+import { Bot, Wand2, Eye, Shield, Send, Loader2, Save, AlertTriangle } from "lucide-react"
+import { toast } from "sonner"
+import { cn } from "@/lib/utils"
 
 const TRIGGERS = [
   { id: "salary",        label: "Вопросы о зарплате",                        defaultOn: true  },
@@ -23,11 +32,101 @@ const TRIGGERS = [
   { id: "interviewSlot", label: "Согласование времени интервью (осторожно)", defaultOn: false },
 ]
 
-export function AiChatbotSettings({ vacancyId: _vacancyId }: { vacancyId: string }) {
+interface ChatbotSettings {
+  triggers?:           Record<string, boolean>
+  confidenceThreshold?: number   // 0..100
+  dailyLimitPerCandidate?: number
+  stopWordsBreak?:     boolean
+  telegramChannel?:    string
+}
+
+interface AiChatbotSettingsProps {
+  vacancyId: string
+  /** Вызывается после успешного сохранения — родитель может рефетчить вакансию. */
+  onSaved?: () => void
+}
+
+export function AiChatbotSettings({ vacancyId, onSaved }: AiChatbotSettingsProps) {
+  const [loaded, setLoaded] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [enabled, setEnabled] = useState(false)
+  const [settings, setSettings] = useState<ChatbotSettings>({})
+
+  // Local state for UI controls, дефолты подтягиваем из TRIGGERS.
+  const [triggers, setTriggers] = useState<Record<string, boolean>>(
+    Object.fromEntries(TRIGGERS.map(t => [t.id, t.defaultOn])),
+  )
+  const [confidence, setConfidence] = useState(70)
+  const [dailyLimit, setDailyLimit] = useState(5)
+  const [stopWordsBreak, setStopWordsBreak] = useState(true)
+  const [telegramChannel, setTelegramChannel] = useState("")
+
+  useEffect(() => {
+    let cancelled = false
+    fetch(`/api/modules/hr/vacancies/${vacancyId}/ai-chatbot`)
+      .then(r => (r.ok ? r.json() : null))
+      .then((d: { enabled?: boolean; settings?: ChatbotSettings } | null) => {
+        if (cancelled || !d) return
+        setEnabled(Boolean(d.enabled))
+        const s = d.settings ?? {}
+        setSettings(s)
+        if (s.triggers && typeof s.triggers === "object") {
+          setTriggers(prev => ({ ...prev, ...s.triggers }))
+        }
+        if (typeof s.confidenceThreshold === "number") setConfidence(s.confidenceThreshold)
+        if (typeof s.dailyLimitPerCandidate === "number") setDailyLimit(s.dailyLimitPerCandidate)
+        if (typeof s.stopWordsBreak === "boolean") setStopWordsBreak(s.stopWordsBreak)
+        if (typeof s.telegramChannel === "string") setTelegramChannel(s.telegramChannel)
+      })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setLoaded(true) })
+    return () => { cancelled = true }
+  }, [vacancyId])
+
+  const save = async (overrides?: { enabled?: boolean }) => {
+    setSaving(true)
+    try {
+      const payload = {
+        enabled: overrides?.enabled ?? enabled,
+        settings: {
+          triggers,
+          confidenceThreshold: confidence,
+          dailyLimitPerCandidate: dailyLimit,
+          stopWordsBreak,
+          telegramChannel,
+        },
+      }
+      const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}/ai-chatbot`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+      if (!res.ok) {
+        toast.error("Не удалось сохранить настройки")
+        return
+      }
+      const data = await res.json().catch(() => null) as { enabled?: boolean; settings?: ChatbotSettings } | null
+      if (data) {
+        setEnabled(Boolean(data.enabled))
+        if (data.settings) setSettings(data.settings)
+      }
+      toast.success("AI-агент сохранён")
+      onSaved?.()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleToggleEnabled = (next: boolean) => {
+    setEnabled(next)
+    // Сохраняем сразу — главный тумблер должен реагировать мгновенно.
+    void save({ enabled: next })
+  }
+
   return (
-    <div className="space-y-6 max-w-3xl">
+    <div className={cn("space-y-6 max-w-3xl", !loaded && "opacity-60")}>
       {/* Header card — главный тумблер */}
-      <Card className="opacity-95">
+      <Card>
         <CardHeader>
           <div className="flex items-start justify-between gap-3">
             <div>
@@ -39,24 +138,45 @@ export function AiChatbotSettings({ vacancyId: _vacancyId }: { vacancyId: string
                 </Badge>
               </CardTitle>
               <CardDescription className="mt-1">
-                Пока недоступно — фича в разработке. Будет активирована в ближайшие дни.
+                Можно включить и сохранить настройки, но обработка входящих
+                сообщений AI-агентом пока не выполняется — это будет на
+                следующей неделе. Сейчас включение НЕ отменяет работу обычной
+                цепочки сообщений.
               </CardDescription>
             </div>
-            <Switch checked={false} disabled />
+            <Switch checked={enabled} onCheckedChange={handleToggleEnabled} disabled={saving} />
           </div>
         </CardHeader>
+        {enabled && (
+          <CardContent>
+            <div className="rounded-lg border border-amber-200 bg-amber-50/60 dark:bg-amber-950/20 p-3 flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+              <div className="text-xs text-amber-900 dark:text-amber-200">
+                AI-агент включён. Когда обработка заработает (Фазы 4-6), для этой
+                вакансии будут отключены: «Серия первых сообщений», «Цепочка
+                дожима», «Аварийное повторное сообщение». Сейчас они продолжают
+                работать как обычно.
+              </div>
+            </div>
+          </CardContent>
+        )}
       </Card>
 
       {/* Когда AI отвечает */}
-      <Card className="pointer-events-none opacity-60">
+      <Card>
         <CardHeader>
           <CardTitle className="text-sm font-semibold">Когда AI отвечает кандидату</CardTitle>
           <CardDescription>Триггеры, на которые бот реагирует автоматически.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-2">
           {TRIGGERS.map(t => (
-            <label key={t.id} className="flex items-center gap-2 text-sm">
-              <input type="checkbox" defaultChecked={t.defaultOn} disabled className="rounded" />
+            <label key={t.id} className="flex items-center gap-2 text-sm cursor-pointer">
+              <input
+                type="checkbox"
+                checked={triggers[t.id] ?? t.defaultOn}
+                onChange={(e) => setTriggers(prev => ({ ...prev, [t.id]: e.target.checked }))}
+                className="rounded"
+              />
               {t.label}
             </label>
           ))}
@@ -64,7 +184,7 @@ export function AiChatbotSettings({ vacancyId: _vacancyId }: { vacancyId: string
       </Card>
 
       {/* Промпт */}
-      <Card className="pointer-events-none opacity-60">
+      <Card>
         <CardHeader>
           <CardTitle className="text-sm font-semibold">Промпт для агента</CardTitle>
           <CardDescription>
@@ -85,11 +205,14 @@ export function AiChatbotSettings({ vacancyId: _vacancyId }: { vacancyId: string
               <Eye className="w-3.5 h-3.5" /> Просмотр промпта
             </Button>
           </div>
+          <p className="text-[11px] text-muted-foreground">
+            Генерация промпта появится с обработкой в Фазах 4-6.
+          </p>
         </CardContent>
       </Card>
 
       {/* Безопасность */}
-      <Card className="pointer-events-none opacity-60">
+      <Card>
         <CardHeader>
           <CardTitle className="text-sm font-semibold flex items-center gap-2">
             <Shield className="w-4 h-4" /> Безопасность
@@ -99,9 +222,9 @@ export function AiChatbotSettings({ vacancyId: _vacancyId }: { vacancyId: string
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <Label className="text-xs">Порог уверенности AI</Label>
-              <span className="text-xs text-muted-foreground tabular-nums">0.7</span>
+              <span className="text-xs text-muted-foreground tabular-nums">{(confidence / 100).toFixed(2)}</span>
             </div>
-            <Slider value={[70]} min={0} max={100} step={5} disabled />
+            <Slider value={[confidence]} onValueChange={([v]) => setConfidence(v)} min={0} max={100} step={5} />
             <p className="text-[11px] text-muted-foreground">
               Если AI не уверен ниже порога — пишет в Telegram HR.
             </p>
@@ -109,7 +232,12 @@ export function AiChatbotSettings({ vacancyId: _vacancyId }: { vacancyId: string
           <Separator />
           <div className="space-y-1.5">
             <Label className="text-xs">Лимит сообщений в день на одного кандидата</Label>
-            <Input type="number" defaultValue={5} disabled className="h-8 text-sm bg-[var(--input-bg)] w-32" />
+            <Input
+              type="number"
+              value={dailyLimit}
+              onChange={(e) => setDailyLimit(Math.max(0, Math.min(50, Number(e.target.value) || 0)))}
+              className="h-8 text-sm bg-[var(--input-bg)] w-32"
+            />
           </div>
           <div className="flex items-center justify-between gap-3 rounded-lg border bg-muted/30 p-3">
             <div>
@@ -118,13 +246,13 @@ export function AiChatbotSettings({ vacancyId: _vacancyId }: { vacancyId: string
                 Если в ответе кандидата встречается стоп-слово — AI не отвечает, эскалация HR'у.
               </p>
             </div>
-            <Switch checked disabled />
+            <Switch checked={stopWordsBreak} onCheckedChange={setStopWordsBreak} />
           </div>
         </CardContent>
       </Card>
 
       {/* Telegram канал */}
-      <Card className="pointer-events-none opacity-60">
+      <Card>
         <CardHeader>
           <CardTitle className="text-sm font-semibold flex items-center gap-2">
             <Send className="w-4 h-4" /> Telegram-канал HR для AI-эскалаций
@@ -135,16 +263,27 @@ export function AiChatbotSettings({ vacancyId: _vacancyId }: { vacancyId: string
           <div className="space-y-1.5">
             <Label className="text-xs">Канал</Label>
             <Input
-              defaultValue="@company_hr_alerts"
-              disabled
+              value={telegramChannel}
+              onChange={(e) => setTelegramChannel(e.target.value.slice(0, 200))}
+              placeholder="@company_hr_alerts"
               className="h-8 text-sm bg-[var(--input-bg)]"
             />
           </div>
           <Button size="sm" variant="outline" disabled className="gap-1.5 h-8 text-xs">
-            Подключить Telegram
+            Подключить Telegram (Скоро)
           </Button>
         </CardContent>
       </Card>
+
+      <div className="flex justify-end">
+        <Button size="sm" onClick={() => save()} disabled={saving} className="gap-1.5">
+          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+          Сохранить настройки
+        </Button>
+      </div>
+
+      {/* settings spread на случай если в БД есть неучтённые ключи (forward-compat) */}
+      {Object.keys(settings).length > 0 && null}
     </div>
   )
 }

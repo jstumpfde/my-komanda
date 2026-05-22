@@ -3036,6 +3036,21 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                 {/* ───────── ТАБ «Сообщения» ───────── */}
                 {settingsSection === "messages" && (
                 <div className="space-y-6 max-w-3xl">
+                  {/* #62: предупреждение для случая когда включён AI-агент.
+                      Обработка пока не подключена (см. ai-chatbot tab), но
+                      когда заработает — все блоки ниже будут заглушены
+                      AI-агентом. Сейчас они продолжают работать. */}
+                  {(apiVacancy as { aiChatbotEnabled?: boolean } | undefined)?.aiChatbotEnabled && (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50/60 dark:bg-amber-950/20 p-3 flex items-start gap-2">
+                      <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                      <div className="text-xs text-amber-900 dark:text-amber-200">
+                        <strong>AI чат-бот включён для этой вакансии.</strong> Когда
+                        обработка заработает (на следующей неделе), блоки ниже
+                        будут отключены — за общение с кандидатом отвечает агент.
+                        Сейчас они продолжают работать как обычно.
+                      </div>
+                    </div>
+                  )}
                   {/* #21: серия первых сообщений. Рендерится первой — это
                       замена старого блока «Первое сообщение» (он останется
                       в AutomationSettings как fallback для backward compat,
@@ -3119,6 +3134,17 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                     <h3 className="text-lg font-semibold text-foreground mb-1">Настройки дожима</h3>
                     <p className="text-sm text-muted-foreground">AI-фильтр откликов и цепочка касаний кандидатов, которые не открыли или не дошли до конца демо.</p>
                   </div>
+                  {/* #62: предупреждение когда AI-агент включён. */}
+                  {(apiVacancy as { aiChatbotEnabled?: boolean } | undefined)?.aiChatbotEnabled && (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50/60 dark:bg-amber-950/20 p-3 flex items-start gap-2">
+                      <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                      <div className="text-xs text-amber-900 dark:text-amber-200">
+                        <strong>AI чат-бот включён.</strong> Когда обработка заработает,
+                        цепочка дожима будет отключена для этой вакансии — общение
+                        ведёт агент. Сейчас цепочка продолжает работать.
+                      </div>
+                    </div>
+                  )}
                   <VacancyAiProcessSettings
                     vacancyId={id}
                     initial={apiVacancy?.aiProcessSettings ?? null}
@@ -3129,9 +3155,9 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                 </div>
                 )}
 
-                {/* ───────── ТАБ «AI чат-бот» (#15 Фаза 1, всё disabled) ───────── */}
+                {/* ───────── ТАБ «AI чат-бот» (#62: открыто для админа) ───────── */}
                 {settingsSection === "aichatbot" && (
-                <AiChatbotSettings vacancyId={id} />
+                <AiChatbotSettings vacancyId={id} onSaved={() => refetchVacancy()} />
                 )}
 
                 {/* ───────── ТАБ «Расписание» (бывший «AI сценарии») ───────── */}
