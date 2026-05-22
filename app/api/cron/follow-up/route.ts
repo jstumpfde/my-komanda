@@ -185,6 +185,7 @@ async function processOneTouch(
     .select({
       companyId:                  vacancies.companyId,
       title:                      vacancies.title,
+      aiChatbotEnabled:           vacancies.aiChatbotEnabled,
       scheduleEnabled:            vacancies.scheduleEnabled,
       scheduleStart:              vacancies.scheduleStart,
       scheduleEnd:                vacancies.scheduleEnd,
@@ -199,6 +200,16 @@ async function processOneTouch(
   if (!vacancy) {
     await db.update(followUpMessages).set({ status: "cancelled", errorMessage: "vacancy_missing" }).where(eq(followUpMessages.id, msg.id))
     return { outcome: "cancelled", reason: "vacancy_missing" }
+  }
+
+  // #15 phase 5/6: если у вакансии включён AI-чат-бот — он сам ведёт диалог,
+  // дожимные касания не нужны. Cancel оставшиеся pending, не отправляем.
+  if (vacancy.aiChatbotEnabled === true) {
+    await db.update(followUpMessages).set({
+      status: "cancelled",
+      errorMessage: "ai_chatbot_active",
+    }).where(eq(followUpMessages.id, msg.id))
+    return { outcome: "cancelled", reason: "ai_chatbot_active" }
   }
 
   // Проверка расписания: если сейчас вне окна — оставляем pending,

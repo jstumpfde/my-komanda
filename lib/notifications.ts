@@ -13,6 +13,8 @@ export async function createNotification(params: {
   body?: string
   severity?: "info" | "warning" | "danger" | "success"
   href?: string
+  sourceType?: string
+  sourceId?: string
 }) {
   try {
     await db.insert(notifications).values({
@@ -23,6 +25,8 @@ export async function createNotification(params: {
       body: params.body || null,
       severity: params.severity || "info",
       href: params.href || null,
+      sourceType: params.sourceType || null,
+      sourceId: params.sourceId || null,
     })
   } catch (err) {
     console.error("[notifications] create error:", err)

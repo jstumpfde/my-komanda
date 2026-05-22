@@ -27,6 +27,7 @@ import { hhResponses, candidates, followUpMessages, hhCandidates, vacancies } fr
 import { getValidToken } from "@/lib/hh-helpers"
 import { matchStopWord } from "@/lib/followup/stop-words"
 import { classifyCandidateResponse } from "@/lib/ai/classify-candidate-response"
+import { processChatbotMessage } from "@/lib/ai/chatbot-processor"
 import { saveCandidatePhoto } from "@/lib/hh/save-candidate-photo"
 import { extractHhResumeFields } from "@/lib/hh/extract-resume-fields"
 import { matchCallIntentKeyword, renderInsistTemplate } from "@/lib/messaging/call-intent"
@@ -406,6 +407,10 @@ export async function scanIncomingMessages(opts: {
         vacancyId:      candidates.vacancyId,
         vacancyTitle:   vacancies.title,
         descriptionJson: vacancies.descriptionJson,
+        companyId:      vacancies.companyId,
+        aiChatbotEnabled:  vacancies.aiChatbotEnabled,
+        aiChatbotSettings: vacancies.aiChatbotSettings,
+        aiChatbotPrompt:   vacancies.aiChatbotPrompt,
       })
       .from(candidates)
       .innerJoin(vacancies, eq(vacancies.id, candidates.vacancyId))
@@ -424,6 +429,48 @@ export async function scanIncomingMessages(opts: {
       if (rejected || wantsContact) break
 
       const preview = text.slice(0, 120).replace(/\s+/g, " ")
+
+      // #15 phase 5/6: AI чат-бот. Если у вакансии включён бот И есть промпт —
+      // отдаём сообщение ему. processChatbotMessage сам решает: ответить, эскалировать,
+      // отклонить или пропустить. handled=true означает «AI взял на себя» —
+      // дальше в legacy-классификацию не идём для этого сообщения.
+      if (candVac?.aiChatbotEnabled === true && (candVac?.aiChatbotPrompt ?? "").trim().length > 0) {
+        try {
+          const cb = await processChatbotMessage({
+            candidateId,
+            vacancyId:    candVac.vacancyId,
+            incomingText: text,
+            vacancy: {
+              id:                candVac.vacancyId,
+              title:             candVac.vacancyTitle ?? "",
+              companyId:         candVac.companyId,
+              aiChatbotEnabled:  candVac.aiChatbotEnabled,
+              aiChatbotSettings: candVac.aiChatbotSettings,
+              aiChatbotPrompt:   candVac.aiChatbotPrompt,
+            },
+          })
+          if (cb.handled) {
+            if (cb.action === "sent" && cb.reply) {
+              const ok = await sendFarewell(accessToken, resp.hhResponseId, cb.reply)
+              console.info(`[scan-incoming] ${candidateId} ai_chatbot_sent ok=${ok} cat=${cb.category} conf=${cb.confidence?.toFixed(2)} text="${preview}"`)
+            } else if (cb.action === "escalated") {
+              console.info(`[scan-incoming] ${candidateId} ai_chatbot_escalated reason=${cb.escalationReason} cat=${cb.category ?? "-"} text="${preview}"`)
+            } else if (cb.action === "rejected") {
+              if (cb.escalationReason === "stop_word") {
+                rejected = true
+                result.rejectedRegex++
+              }
+              console.info(`[scan-incoming] ${candidateId} ai_chatbot_rejected reason=${cb.escalationReason} text="${preview}"`)
+            } else {
+              console.info(`[scan-incoming] ${candidateId} ai_chatbot_skipped reason=${cb.escalationReason} text="${preview}"`)
+            }
+            continue
+          }
+        } catch (err) {
+          console.warn(`[scan-incoming] ${candidateId} ai_chatbot_error fallback_to_legacy:`, err instanceof Error ? err.message : err)
+          // fallthrough в legacy-классификацию
+        }
+      }
 
       // Шаг 1: regex stop_word → жёсткий отказ. Делаем до callIntent,
       // потому что отказ важнее («не хочу созваниваться» = отказ).

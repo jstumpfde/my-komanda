@@ -59,6 +59,7 @@ import { UtmLinksSection } from "@/components/vacancies/utm-links-section"
 import { PostDemoSettings } from "@/components/vacancies/post-demo-settings"
 import { VacancyAiProcessSettings } from "@/components/vacancies/vacancy-ai-process-settings"
 import { VacancyFollowupSettings } from "@/components/vacancies/vacancy-followup-settings"
+import { AiChatbotSettings } from "@/components/vacancies/ai-chatbot-settings"
 import { VacancyPrequalificationSettings } from "@/components/vacancies/vacancy-prequalification-settings"
 import { VacancyStopWordsSettings } from "@/components/vacancies/vacancy-stop-words-settings"
 import { FinalScreensSettings, type FinalScreensConfig } from "@/components/vacancies/final-screens-settings"
@@ -708,7 +709,7 @@ export default function VacancyPage() {
   const rawUrlSection = rawUrlTab === "automation" ? "ai" : (searchParams?.get("section") ?? null)
   // Миграция старых section-значений на новые 6 табов.
   // general → page (стартовая вкладка с брендингом), automation → ai.
-  const SETTINGS_SECTION_IDS = ["page", "sources", "messages", "funnel", "followup", "ai", "integrations"] as const
+  const SETTINGS_SECTION_IDS = ["page", "sources", "messages", "funnel", "followup", "aichatbot", "ai", "integrations"] as const
   type SettingsSectionId = typeof SETTINGS_SECTION_IDS[number]
   const initialSettingsSection: SettingsSectionId =
     rawUrlSection === "general" ? "page" :
@@ -3164,9 +3165,11 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                 </div>
                 )}
 
-                {/* ───────── ТАБ «AI чат-бот» (#62: открыто для админа) ───────── */}
+                {/* ───────── ТАБ «AI чат-бот» ───────── */}
                 {settingsSection === "aichatbot" && (
-                <AiChatbotSettings vacancyId={id} onSaved={() => refetchVacancy()} />
+                <div className="space-y-6 max-w-3xl">
+                  <AiChatbotSettings vacancyId={id} onSaved={() => refetchVacancy()} />
+                </div>
                 )}
 
                 {/* ───────── ТАБ «Расписание» (бывший «AI сценарии») ───────── */}

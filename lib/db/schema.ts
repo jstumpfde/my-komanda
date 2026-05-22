@@ -10,6 +10,7 @@ import {
   unique,
   primaryKey,
   index,
+  real,
 } from "drizzle-orm/pg-core"
 
 // ─── Modules ──────────────────────────────────────────────────────────────────
@@ -309,12 +310,11 @@ export const vacancies = pgTable("vacancies", {
     .$type<Array<{ enabled: boolean; delaySeconds: number; text: string }>>()
     .notNull()
     .default([]),
-  // #15: AI чат-бот кандидатов. Фаза 1 — scaffold.
+  // #15: AI чат-бот кандидатов.
   aiChatbotEnabled:  boolean("ai_chatbot_enabled").notNull().default(false),
   aiChatbotSettings: jsonb("ai_chatbot_settings").notNull().default({}),
   aiChatbotPrompt:   text("ai_chatbot_prompt").notNull().default(""),
-  // #61: per-vacancy стоп-факторы. См. drizzle/0125_vacancy_stop_factors.sql
-  // и компонент components/vacancies/vacancy-stop-factors-settings.tsx.
+  // #61: per-vacancy стоп-факторы.
   stopFactorsJson:   jsonb("stop_factors_json").$type<VacancyStopFactors>().notNull().default({}),
   // Авто-разбор hh-откликов: cron каждые 10 минут разбирает накопленные отклики
   // в рабочее время. Если выключено — клиент жмёт «Разобрать» вручную.
