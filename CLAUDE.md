@@ -137,8 +137,103 @@ curl -X POST https://company24.pro/api/platform/emergency/regenerate-ai-prompts 
 
 ### Admin UI
 Открыть https://company24.pro/admin/platform под аккаунтом из
-PLATFORM_ADMIN_EMAILS. Табы: Migrations, Companies, AI vacancies, Emergency
-(требует ввод «CONFIRM»), Logs.
+PLATFORM_ADMIN_EMAILS. Табы:
+1. **Migrations** — список SETTINGS_MIGRATIONS, идемпотентный runner
+2. **Companies** — все компании платформы с счётчиками вакансий/AI
+3. **AI Vacancies** — активные вакансии с включённым AI чат-ботом
+4. **Emergency** — четыре broadcast-действия с двойным подтверждением (ввод «CONFIRM»):
+   - Kill all AI chatbots / Restore all
+   - Add global stop word
+   - Force regenerate all AI prompts
+5. **Logs** — последние 50 записей platform_emergency_actions
+6. **Templates** — mining воронки из существующей вакансии или ручное создание platform-шаблона
+
+Tables: platform_settings_migrations, platform_emergency_actions, platform_funnel_templates
+
+## AI Chatbot Architecture (Group 22)
+
+4-уровневая security-архитектура AI чат-бота:
+
+1. **Executor (Sonnet 4.6)** — главный респондер, использует vacancy.aiChatbotPrompt
+2. **Pre-filter (Haiku)** — проверяет входящие сообщения кандидата ДО Executor
+   - Категории: injection / code / abuse
+   - Настраиваемая чувствительность к abuse: soft (0.9) / moderate (0.7) / strict (0.5)
+   - Настраиваемое действие при abuse: escalate / needs_review / auto_reject / warn_and_continue
+3. **Post-filter (Haiku)** — проверяет ответ Executor ДО отправки кандидату
+   - Блокирует: unauthorized_promise / system_leak / role_break / offtopic
+4. **AI Watcher** — периодический аудит последних 20 сообщений на вакансию
+   - Ручной триггер: POST /api/modules/hr/vacancies/[id]/ai-chatbot/watcher-audit
+   - Cron-эндпоинт: /api/cron/ai-chatbot-watcher (расписание пока не настроено)
+
+Kill switch:
+- Per-vacancy: vacancy.aiChatbotEnabled
+- Per-company: companies.aiChatbotKilled (перекрывает все вакансии)
+- Platform-wide: POST /api/platform/emergency/kill-all-ai-chatbots
+
+Abuse history с undo:
+- GET /api/modules/hr/vacancies/[id]/ai-chatbot/abuse-history
+- POST /api/modules/hr/vacancies/[id]/ai-chatbot/undo-action
+
+## Funnel Builder (Group 22)
+
+Визуальный drag-and-drop конструктор воронки на 17 блоков (feature flag: vacancy.funnelBuilderEnabled).
+
+Типы блоков: ai_resume_score, stop_factors_resume, first_message, prequalification, demo, video_intro, anketa, ai_anketa_score, auto_reply_test_task, stop_words_chat, dozhim, ai_chatbot, interview, thank_you_screen, test_task, reference_check, offer.
+
+Реестр настроек: lib/funnel-builder/block-settings.tsx — мапит тип блока на React-компонент, открываемый в Sheet по клику на шестерёнку.
+
+Шаблоны:
+- **Built-in** (захардкожены в lib/funnel-builder/blocks.ts): simple / with_test / with_chatbot / full / full_with_test
+- **Company-level** (таблица company_funnel_templates) — HR создаёт и применяет к вакансиям; один default на компанию
+- **Platform-level** (таблица platform_funnel_templates) — Юрий публикует через Platform Admin → Templates; видно всем HR через /api/modules/hr/funnel-templates/platform
+
+Dual-write: при сохранении funnel config HR-ом legacy-поля (aiChatbotEnabled, aiScoringEnabled, aiProcessSettings.*) тоже обновляются — существующие cron-ы работают без рефакторинга.
+
+## Stop Factors (Group 22)
+
+Per-vacancy стоп-факторы в vacancy.stopFactorsJson:
+- city / format / age / experience / documents / citizenship / salaryExpectation
+
+Автоматически применяются в lib/hh/process-queue.ts ДО AI-скоринга через lib/funnel-builder/stop-factors-matcher.ts. При совпадении:
+1. Отправить отказ через hh discard_by_employer
+2. Пометить стадию кандидата как rejected
+3. Поставить autoProcessingStoppedReason = "stop_factor:{factor}"
+
+## Environment Variables
+
+- DATABASE_URL — postgresql://mykomanda:Comp2024!@localhost:5432/mykomanda
+- NEXTAUTH_SECRET — secret for next-auth sessions
+- ANTHROPIC_API_KEY — для AI чат-бота, скоринга, watcher
+- CLAUDE_PROXY_URL — https://claude-proxy.jstumpf-de.workers.dev
+- PLATFORM_ADMIN_KEY — секрет для emergency broadcast эндпоинтов
+- PLATFORM_ADMIN_EMAILS — comma-separated emails, кто видит /admin/platform
+- CRON_SECRET — для авторизации cron-эндпоинтов
+- HH_CLIENT_ID / HH_CLIENT_SECRET — hh.ru OAuth
+
+## Deployment Commands
+
+Стандартный деплой (после мерджа feature-ветки в develop):
+
+На Mac:
+```bash
+cd /Users/juri/Projects/my-komanda
+git checkout develop
+git pull origin develop
+git merge --no-ff feature/branch-name -m "merge: ..."
+pnpm build
+git push origin develop
+```
+
+На сервере (5.42.125.91):
+```bash
+cd /var/www/my-komanda
+git pull origin develop
+# Если есть миграция:
+sudo -u postgres psql -d mykomanda -f /var/www/my-komanda/drizzle/NNNN_*.sql
+pnpm build
+pm2 reload my-komanda --update-env  # --update-env когда менялись ENV
+curl -s -o /dev/null -w "HTTP %{http_code}\n" https://company24.pro/hr/vacancies
+```
 
 ## TODO (актуально на 18.05.2026)
 - [ ] Подтянуть 4 коммита с main в develop: git checkout develop && git merge origin/main
