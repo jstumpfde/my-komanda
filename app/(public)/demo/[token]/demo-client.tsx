@@ -129,7 +129,25 @@ interface DemoData {
   // Ф5: текст-обёртка финальной анкеты, vacancies.description_json.anketaIntro.
   // Пустые поля или null → показываем дефолты.
   anketaIntro?: { title: string; description: string } | null
+  // #16/#25: два редактируемых финальных экрана.
+  finalScreens?: {
+    afterVideo:  { title: string; subtitle: string; button: string }
+    afterAnketa: { title: string; subtitle: string }
+  } | null
   prefill?: { first_name: string | null; last_name: string | null; city: string | null }
+}
+
+// Дефолты должны совпадать с DEFAULT_AFTER_VIDEO/DEFAULT_AFTER_ANKETA из
+// components/vacancies/final-screens-settings.tsx (UI настроек). Если HR
+// оставил поле пустым — используется дефолт.
+const DEMO_DEFAULT_AFTER_VIDEO = {
+  title:    "Спасибо за прохождение!",
+  subtitle: "Заполните короткую анкету и мы свяжемся в чате",
+  button:   "Заполнить анкету",
+}
+const DEMO_DEFAULT_AFTER_ANKETA = {
+  title:    "Спасибо!",
+  subtitle: "Мы изучим вашу анкету и свяжемся в чате",
 }
 
 interface FlatLesson {
@@ -636,6 +654,10 @@ export default function DemoPage() {
   const [formSubmitted, setFormSubmitted] = useState(false)
   const [formSubmitting, setFormSubmitting] = useState(false)
   const [showFarewell, setShowFarewell] = useState(false)
+  // #16: промежуточный экран после видео-уроков ДО анкеты. Default true —
+  // показываем экран, кандидат нажимает кнопку → setAnketaIntroDismissed(true)
+  // и попадает в анкету. Это снимает «шок» от резкого появления формы.
+  const [anketaIntroDismissed, setAnketaIntroDismissed] = useState(false)
   const [formFirst, setFormFirst] = useState("")
   const [formLast, setFormLast] = useState("")
   const [formEmail, setFormEmail] = useState("")
@@ -1030,37 +1052,12 @@ export default function DemoPage() {
       )
     }
 
-    // Thank you after form submit — динамический блок из post-demo settings
+    // Thank you after form submit — динамический блок из post-demo settings.
+    // #17/#25: упростили — без выбора времени интервью, единый текст из
+    // finalScreens.afterAnketa (fallback на DEMO_DEFAULT_AFTER_ANKETA).
     if (formSubmitted) {
-      const settings: PostDemoSettings = data.postDemoSettings ?? {}
-      const mode = settings.mode ?? "auto"
-      const aiScore = data.aiScore
-      const upper = settings.upperThreshold ?? 75
-      const lower = settings.lowerThreshold ?? 50
-
-      let finalBlock: "green" | "yellow" | "red" | "manual"
-      if (mode === "manual") {
-        finalBlock = "manual"
-      } else if (aiScore !== null && aiScore >= upper) {
-        finalBlock = "green"
-      } else if (aiScore !== null && aiScore >= lower) {
-        finalBlock = "yellow"
-      } else {
-        finalBlock = "red"
-      }
-
-      // Приоритет: имя из анкеты (то, что кандидат сам подтвердил),
-      // затем prefill из hh resume, и только в крайнем случае split candidateName,
-      // который для hh-источника часто идёт как «Фамилия Имя» — split[0] даёт фамилию.
-      const firstName =
-        formFirst.trim() ||
-        data.prefill?.first_name ||
-        data.candidateName?.split(" ")[0] ||
-        data.candidateName ||
-        "кандидат"
-      const replaceName = (s: string) => renderTemplate(s, { name: firstName })
-
-      const manualButtonEnabled = settings.manualButtonEnabled !== false
+      const afterAnketaTitle    = data.finalScreens?.afterAnketa?.title?.trim() || DEMO_DEFAULT_AFTER_ANKETA.title
+      const afterAnketaSubtitle = data.finalScreens?.afterAnketa?.subtitle?.trim() || DEMO_DEFAULT_AFTER_ANKETA.subtitle
 
       return (
         <div className="flex min-h-screen items-center justify-center px-4 py-8" style={{ backgroundColor: bgColor }}>
@@ -1073,21 +1070,41 @@ export default function DemoPage() {
                   className="mx-auto h-12 w-auto object-contain mb-2"
                 />
               )}
-              {/* Сессия 7 п.7: единый экран благодарности независимо от AI-скоринга.
-                  Кандидат с любым скором видит один и тот же позитивный текст.
-                  Решение «подходит/не подходит» принимает HR внутри системы;
-                  AI-вердикт сохраняется в БД, стадия кандидата обновляется,
-                  но через UI лендинга кандидат об этом не узнаёт. */}
-              <h1 className="text-2xl font-bold text-gray-900">
-                Спасибо за интерес к вакансии!
-              </h1>
-              <p className="text-gray-600">
-                Мы получили все ваши данные и ответы. В ближайшие дни рассмотрим вашу кандидатуру и свяжемся.
-              </p>
-              <p className="text-gray-600">
-                Хорошего дня!
-              </p>
+              <h1 className="text-2xl font-bold text-gray-900">{afterAnketaTitle}</h1>
+              <p className="text-gray-600 whitespace-pre-line">{afterAnketaSubtitle}</p>
             </div>
+          </div>
+        </div>
+      )
+    }
+
+    // #16: промежуточный экран после видео-визитки, ДО анкеты. Кнопка
+    // переводит в форму. Если кандидат уже нажал её (anketaIntroDismissed
+    // = true) или анкета уже частично заполнена — экран скипается.
+    if (!anketaIntroDismissed) {
+      const introTitle    = data.finalScreens?.afterVideo?.title?.trim() || DEMO_DEFAULT_AFTER_VIDEO.title
+      const introSubtitle = data.finalScreens?.afterVideo?.subtitle?.trim() || DEMO_DEFAULT_AFTER_VIDEO.subtitle
+      const introButton   = data.finalScreens?.afterVideo?.button?.trim() || DEMO_DEFAULT_AFTER_VIDEO.button
+      return (
+        <div className="flex min-h-screen items-center justify-center px-4 py-8" style={{ backgroundColor: bgColor }}>
+          <div className="w-full max-w-md space-y-6 text-center">
+            {data.companyLogo && (
+              <img
+                src={data.companyLogo}
+                alt={data.companyName}
+                className="mx-auto h-12 w-auto object-contain mb-2"
+              />
+            )}
+            <h1 className="text-2xl font-bold text-gray-900">{introTitle}</h1>
+            <p className="text-gray-600 whitespace-pre-line">{introSubtitle}</p>
+            <button
+              type="button"
+              onClick={() => setAnketaIntroDismissed(true)}
+              className="inline-flex items-center justify-center rounded-lg px-6 py-3 text-sm font-semibold text-white shadow-sm transition-colors"
+              style={{ backgroundColor: data.brandPrimaryColor || "#3b82f6" }}
+            >
+              {introButton}
+            </button>
           </div>
         </div>
       )
