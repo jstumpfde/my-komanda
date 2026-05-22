@@ -9,6 +9,9 @@ import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu"
@@ -118,6 +121,12 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
   const [saveTemplateName, setSaveTemplateName] = useState("")
   const [saveTemplateCategory, setSaveTemplateCategory] = useState("Общее")
   const [savedTemplates, setSavedTemplates] = useState<{ title: string; category: string; lessons: Lesson[] }[]>([])
+  // #26: новая UX-модель диалога — radio "Новый" / "Заменить" + dropdown +
+  // подтверждение перед заменой. Стейт описывает текущий выбор.
+  const [saveMode, setSaveMode] = useState<"new" | "replace">("new")
+  const [replaceTargetIdx, setReplaceTargetIdx] = useState<number | null>(null)
+  const [replaceComboOpen, setReplaceComboOpen] = useState(false)
+  const [replaceConfirmIdx, setReplaceConfirmIdx] = useState<number | null>(null)
   const [savedModules, setSavedModules] = useState<Lesson[]>([])
 
   useEffect(() => {
@@ -545,41 +554,202 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
         savedTemplates={savedTemplates}
       />
 
-      {/* Save as template dialog */}
-      <Dialog open={saveTemplateOpen} onOpenChange={(o) => { setSaveTemplateOpen(o); if (!o) { setSaveTemplateName(""); setSaveTemplateCategory("Общее") } }}>
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader><DialogTitle>Сохранить в библиотеку</DialogTitle></DialogHeader>
-          <div className="grid gap-3 py-2">
-            <Input value={saveTemplateName} onChange={(e) => setSaveTemplateName(e.target.value)} placeholder="Название шаблона" autoFocus />
-            <Input value={saveTemplateCategory} onChange={(e) => setSaveTemplateCategory(e.target.value)} placeholder="Категория (напр. Продажи)" />
-            {savedTemplates.length > 0 && (
-              <div className="space-y-1 border-t pt-3">
-                <p className="text-xs text-muted-foreground mb-1">Или обновить существующий:</p>
-                <div className="max-h-40 overflow-y-auto space-y-1">
-                  {savedTemplates.map((t, i) => (
-                    <button key={i} type="button"
-                      className="w-full flex items-center justify-between text-left px-2 py-1.5 rounded hover:bg-muted text-sm"
-                      onClick={() => {
-                        const next = savedTemplates.map((x, j) => j === i ? { ...x, lessons: demo.lessons } : x)
-                        persistTemplates(next)
-                        setSaveTemplateOpen(false)
-                        toast.success(`Шаблон «${t.title}» обновлён`)
-                      }}>
-                      <span className="truncate">{t.title}</span>
-                      <span className="text-[10px] text-muted-foreground">{t.lessons.length} ур.</span>
-                    </button>
-                  ))}
-                </div>
+      {/* #26: Save-to-library диалог. Два режима: «Сохранить как новый» /
+          «Заменить существующий». При замене — отдельный confirm. */}
+      <Dialog open={saveTemplateOpen} onOpenChange={(o) => {
+        setSaveTemplateOpen(o)
+        if (o) {
+          // Дефолт названия = title + дата (YYYY-MM-DD). Если поле уже
+          // заполнено — не трогаем.
+          if (!saveTemplateName.trim()) {
+            const today = new Date().toISOString().slice(0, 10)
+            const base = (demo.title || "Демонстрация").trim()
+            setSaveTemplateName(`${base} ${today}`)
+          }
+          setSaveMode("new")
+          setReplaceTargetIdx(null)
+        } else {
+          setSaveTemplateName("")
+          setSaveTemplateCategory("Общее")
+          setSaveMode("new")
+          setReplaceTargetIdx(null)
+        }
+      }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle>Сохранить демо в библиотеку</DialogTitle></DialogHeader>
+          <div className="grid gap-4 py-2">
+            <RadioGroup
+              value={saveMode}
+              onValueChange={(v) => setSaveMode(v === "replace" ? "replace" : "new")}
+              className="gap-3"
+            >
+              {/* Режим 1: новый шаблон */}
+              <div className={cn(
+                "rounded-lg border p-3",
+                saveMode === "new" ? "border-primary bg-primary/5" : "border-border",
+              )}>
+                <label className="flex items-start gap-2 cursor-pointer">
+                  <RadioGroupItem value="new" className="mt-0.5" />
+                  <div className="flex-1 space-y-2">
+                    <span className="text-sm font-medium">Сохранить как новый</span>
+                    {saveMode === "new" && (
+                      <div className="space-y-2 pt-1">
+                        <Input
+                          value={saveTemplateName}
+                          onChange={(e) => setSaveTemplateName(e.target.value)}
+                          placeholder="Название шаблона"
+                          autoFocus
+                        />
+                        <Input
+                          value={saveTemplateCategory}
+                          onChange={(e) => setSaveTemplateCategory(e.target.value)}
+                          placeholder="Категория (напр. Продажи)"
+                        />
+                      </div>
+                    )}
+                  </div>
+                </label>
               </div>
-            )}
-            <Button onClick={() => {
-              if (!saveTemplateName.trim()) { toast.error("Укажите название"); return }
-              const next = [...savedTemplates, { title: saveTemplateName.trim(), category: saveTemplateCategory.trim() || "Общее", lessons: demo.lessons }]
-              persistTemplates(next)
-              setSaveTemplateOpen(false)
-              setSaveTemplateName("")
-              toast.success("Шаблон сохранён в библиотеку")
-            }}>Сохранить как новый</Button>
+
+              {/* Режим 2: заменить существующий */}
+              <div className={cn(
+                "rounded-lg border p-3",
+                saveMode === "replace" ? "border-primary bg-primary/5" : "border-border",
+                savedTemplates.length === 0 && "opacity-50",
+              )}>
+                <label className={cn(
+                  "flex items-start gap-2",
+                  savedTemplates.length === 0 ? "cursor-not-allowed" : "cursor-pointer",
+                )}>
+                  <RadioGroupItem
+                    value="replace"
+                    className="mt-0.5"
+                    disabled={savedTemplates.length === 0}
+                  />
+                  <div className="flex-1 space-y-2">
+                    <span className="text-sm font-medium">
+                      Заменить существующий
+                      {savedTemplates.length === 0 && (
+                        <span className="ml-2 text-[10px] text-muted-foreground font-normal">
+                          (нет сохранённых шаблонов)
+                        </span>
+                      )}
+                    </span>
+                    {saveMode === "replace" && savedTemplates.length > 0 && (
+                      <Popover open={replaceComboOpen} onOpenChange={setReplaceComboOpen}>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="w-full justify-between h-9 text-sm font-normal"
+                          >
+                            {replaceTargetIdx !== null
+                              ? savedTemplates[replaceTargetIdx]?.title
+                              : <span className="text-muted-foreground">Выберите шаблон для замены…</span>}
+                            <ChevronRight className="w-3.5 h-3.5 shrink-0 opacity-50" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                          <Command>
+                            {savedTemplates.length > 5 && (
+                              <CommandInput placeholder="Поиск шаблона…" className="h-9 text-sm" />
+                            )}
+                            <CommandList className="max-h-60">
+                              <CommandEmpty className="py-2 text-center text-xs text-muted-foreground">
+                                Не найдено
+                              </CommandEmpty>
+                              <CommandGroup>
+                                {savedTemplates.map((t, i) => (
+                                  <CommandItem
+                                    key={i}
+                                    value={t.title}
+                                    onSelect={() => {
+                                      setReplaceTargetIdx(i)
+                                      setReplaceComboOpen(false)
+                                    }}
+                                    className="text-sm"
+                                  >
+                                    <div className="flex items-center justify-between w-full">
+                                      <span className="truncate">{t.title}</span>
+                                      <span className="text-[10px] text-muted-foreground ml-2 shrink-0">
+                                        {t.lessons.length} ур.
+                                      </span>
+                                    </div>
+                                  </CommandItem>
+                                ))}
+                              </CommandGroup>
+                            </CommandList>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
+                    )}
+                  </div>
+                </label>
+              </div>
+            </RadioGroup>
+
+            <div className="flex justify-end gap-2 pt-2 border-t">
+              <Button variant="ghost" size="sm" onClick={() => setSaveTemplateOpen(false)}>
+                Отмена
+              </Button>
+              <Button
+                size="sm"
+                disabled={saveMode === "replace" && replaceTargetIdx === null}
+                onClick={() => {
+                  if (saveMode === "new") {
+                    if (!saveTemplateName.trim()) { toast.error("Укажите название"); return }
+                    const next = [
+                      ...savedTemplates,
+                      { title: saveTemplateName.trim(), category: saveTemplateCategory.trim() || "Общее", lessons: demo.lessons },
+                    ]
+                    persistTemplates(next)
+                    setSaveTemplateOpen(false)
+                    toast.success("Шаблон сохранён в библиотеку")
+                  } else {
+                    // Replace mode — открыть confirm.
+                    if (replaceTargetIdx !== null) setReplaceConfirmIdx(replaceTargetIdx)
+                  }
+                }}
+              >
+                {saveMode === "new" ? "Создать новый" : "Заменить выбранный"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* #26: Confirm-диалог замены. Двойное подтверждение, чтобы HR не
+          затёр чужой шаблон по ошибке. */}
+      <Dialog open={replaceConfirmIdx !== null} onOpenChange={(o) => { if (!o) setReplaceConfirmIdx(null) }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Заменить шаблон?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Вы уверены, что хотите заменить «{replaceConfirmIdx !== null ? savedTemplates[replaceConfirmIdx]?.title : ""}»?
+            Старая версия шаблона будет потеряна.
+          </p>
+          <div className="flex justify-end gap-2 mt-2">
+            <Button variant="outline" size="sm" onClick={() => setReplaceConfirmIdx(null)}>
+              Отмена
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => {
+                if (replaceConfirmIdx === null) return
+                const t = savedTemplates[replaceConfirmIdx]
+                const next = savedTemplates.map((x, j) =>
+                  j === replaceConfirmIdx ? { ...x, lessons: demo.lessons } : x
+                )
+                persistTemplates(next)
+                setReplaceConfirmIdx(null)
+                setSaveTemplateOpen(false)
+                toast.success(`Шаблон «${t?.title}» обновлён`)
+              }}
+            >
+              Заменить
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

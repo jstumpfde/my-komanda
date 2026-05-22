@@ -361,33 +361,41 @@ export default function HiringSettingsPage() {
                 вакансии есть отдельный блок «Частые вопросы» (FAQ) в табе
                 «Сообщения», с собственным набором тем для копирования. */}
 
-            {/* Feedback schedule */}
-            <Card className="mb-5 max-w-3xl">
+            {/* Feedback schedule.
+                #43: блок 30/60/90 опросов закрыт плашкой «Скоро» — фича из
+                модуля Adaptation (15-й модуль Company24 OS), сейчас не
+                подключена. Юрий не хочет показывать неработающее. Старая
+                логика state и saveFeedbackSchedule оставлена для будущего
+                включения — UI заблокирован overlay'ем. */}
+            <Card className="mb-5 max-w-3xl relative overflow-hidden">
               <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium">Автоматический сбор обратной связи</CardTitle>
-                <CardDescription>Опросы новых сотрудников на контрольных точках адаптации</CardDescription>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <CardTitle className="text-sm font-medium">Автоматический сбор обратной связи</CardTitle>
+                    <CardDescription>Опросы новых сотрудников на контрольных точках адаптации</CardDescription>
+                  </div>
+                  <Badge variant="outline" className="text-[10px] h-5 px-1.5 shrink-0">Скоро</Badge>
+                </div>
               </CardHeader>
-              <CardContent className="space-y-3">
+              <CardContent className="space-y-3 pointer-events-none opacity-40 select-none">
                 <div className="flex items-center justify-between">
                   <p className="text-sm">Включить автоматические опросы</p>
-                  <Switch checked={feedbackEnabled} onCheckedChange={v => saveFeedbackSchedule({ enabled: v })} />
+                  <Switch checked={false} disabled />
                 </div>
-                {feedbackEnabled && (
-                  <div className="space-y-2 pl-4 border-l-2 border-primary/20">
-                    <label className="flex items-center gap-2 text-sm">
-                      <input type="checkbox" checked={feedback30} onChange={e => saveFeedbackSchedule({ d30: e.target.checked })} className="rounded" />
-                      30 дней — «Как проходит адаптация?»
-                    </label>
-                    <label className="flex items-center gap-2 text-sm">
-                      <input type="checkbox" checked={feedback60} onChange={e => saveFeedbackSchedule({ d60: e.target.checked })} className="rounded" />
-                      60 дней — «Чувствуете ли уверенность?»
-                    </label>
-                    <label className="flex items-center gap-2 text-sm">
-                      <input type="checkbox" checked={feedback90} onChange={e => saveFeedbackSchedule({ d90: e.target.checked })} className="rounded" />
-                      90 дней — «Оправдались ли ожидания?»
-                    </label>
-                  </div>
-                )}
+                <div className="space-y-2 pl-4 border-l-2 border-primary/20 opacity-60">
+                  <label className="flex items-center gap-2 text-sm">
+                    <input type="checkbox" checked={false} disabled className="rounded" />
+                    30 дней — «Как проходит адаптация?»
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input type="checkbox" checked={false} disabled className="rounded" />
+                    60 дней — «Чувствуете ли уверенность?»
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input type="checkbox" checked={false} disabled className="rounded" />
+                    90 дней — «Оправдались ли ожидания?»
+                  </label>
+                </div>
               </CardContent>
             </Card>
 
@@ -719,21 +727,30 @@ export default function HiringSettingsPage() {
               {/* ═══ TAB 3: Сообщения ═══ */}
               <TabsContent value="messages">
                 <div className="space-y-4 max-w-3xl">
-                  <Card>
+                  {/* #44: блок «Шаблоны сообщений» закрыт плашкой «Скоро».
+                      Шаблоны на уровне компании пока демо-заглушка — они
+                      не подключены к диалогу отправки в карточке кандидата.
+                      Будем доделывать вместе с этим диалогом отдельной
+                      задачей. UI оставляем виден, но кликать нельзя. */}
+                  <Card className="relative overflow-hidden">
                     <CardHeader>
                       <div className="flex items-center justify-between">
                         <div>
                           <CardTitle className="text-base flex items-center gap-2">
                             <MessageSquare className="size-4" />Шаблоны сообщений
+                            <Badge variant="outline" className="text-[10px] h-5 px-1.5 ml-1">Скоро</Badge>
                           </CardTitle>
-                          <CardDescription className="mt-1">Создайте шаблоны для быстрого использования в вакансиях</CardDescription>
+                          <CardDescription className="mt-1">
+                            Шаблоны сообщений компании — общая библиотека для использования
+                            во всех вакансиях. Скоро.
+                          </CardDescription>
                         </div>
-                        <Button size="sm" className="gap-1.5" onClick={openNewTemplate}>
+                        <Button size="sm" className="gap-1.5" disabled>
                           <Plus className="size-3.5" />Создать шаблон
                         </Button>
                       </div>
                     </CardHeader>
-                    <CardContent>
+                    <CardContent className="pointer-events-none opacity-40 select-none">
                       <div className="rounded-md border">
                         <table className="w-full text-sm">
                           <thead className="bg-muted/50 border-b">
@@ -754,10 +771,10 @@ export default function HiringSettingsPage() {
                                 <td className="py-2.5 px-4 text-muted-foreground">{CHANNEL_LABELS[t.channel]}</td>
                                 <td className="py-2.5 px-4 text-right">
                                   <div className="flex items-center justify-end gap-1">
-                                    <Button variant="ghost" size="icon" className="size-7" onClick={() => openEditTemplate(t)}>
+                                    <Button variant="ghost" size="icon" className="size-7" disabled>
                                       <Pencil className="size-3.5" />
                                     </Button>
-                                    <Button variant="ghost" size="icon" className="size-7" disabled={t.isSystem} onClick={() => deleteTemplate(t.id)}>
+                                    <Button variant="ghost" size="icon" className="size-7" disabled>
                                       <Trash2 className="size-3.5" />
                                     </Button>
                                   </div>
