@@ -177,6 +177,28 @@ function Metric({
 
 // ─── Page ───────────────────────────────────────────────────────────────────
 
+// #47: ключ для localStorage. Сохраняем { name, savedAt } чтобы при первом
+// рендере страницы (до прихода session) сразу показать имя из прошлого захода.
+const HR_USER_CACHE_KEY = "hr_user_cache"
+
+interface HrUserCache {
+  name: string
+  savedAt: number
+}
+
+function readHrUserCache(): HrUserCache | null {
+  if (typeof window === "undefined") return null
+  try {
+    const raw = localStorage.getItem(HR_USER_CACHE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as Partial<HrUserCache>
+    if (typeof parsed.name === "string" && parsed.name.length > 0) {
+      return { name: parsed.name, savedAt: parsed.savedAt ?? 0 }
+    }
+  } catch {}
+  return null
+}
+
 function DashboardContent() {
   const router = useRouter()
   const { user } = useAuth()
@@ -184,6 +206,27 @@ function DashboardContent() {
   const [loaded, setLoaded] = useState(false)
   // #30: фильтр по вакансии. "all" = показывать всё (default).
   const [selectedVacancyId, setSelectedVacancyId] = useState<string>("all")
+  // #47: имя из localStorage для мгновенного первого рендера. Заменяется на
+  // user.name как только сессия подтянулась.
+  const [cachedName, setCachedName] = useState<string>("")
+
+  useEffect(() => {
+    const c = readHrUserCache()
+    if (c) setCachedName(c.name)
+  }, [])
+
+  // #47: когда сессия загрузилась — сохранить актуальное имя в localStorage,
+  // чтобы при следующем заходе оно было сразу.
+  useEffect(() => {
+    if (!user.name) return
+    if (typeof window === "undefined") return
+    try {
+      const current = readHrUserCache()
+      if (current?.name !== user.name) {
+        localStorage.setItem(HR_USER_CACHE_KEY, JSON.stringify({ name: user.name, savedAt: Date.now() }))
+      }
+    } catch {}
+  }, [user.name])
 
   useEffect(() => {
     let cancelled = false
@@ -197,6 +240,9 @@ function DashboardContent() {
       .finally(() => { if (!cancelled) setLoaded(true) })
     return () => { cancelled = true }
   }, [])
+
+  // #47: эффективное имя — реальное user.name из сессии, иначе из кеша.
+  const effectiveName = user.name || cachedName
 
   const kpi = stats?.kpi
   const vacancies = stats?.vacancies ?? []
@@ -255,8 +301,8 @@ function DashboardContent() {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
                 <h1 className="text-xl font-semibold">
-                  {user.name
-                    ? `${getGreeting()}, ${user.name.split(" ")[0]}!`
+                  {effectiveName
+                    ? `${getGreeting()}, ${effectiveName.split(" ")[0]}!`
                     : `${getGreeting()}!`}
                 </h1>
                 <p className="text-sm text-muted-foreground" suppressHydrationWarning>{getDateString()}</p>
