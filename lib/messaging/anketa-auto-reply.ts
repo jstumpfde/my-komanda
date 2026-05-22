@@ -29,8 +29,11 @@ import {
 } from "@/lib/db/schema"
 import { adjustToWorkingWindow } from "@/lib/schedule/can-send-now"
 
-const ALLOWED_DELAYS = new Set<number>([5, 15, 30, 60, 240, 1440])
-const DEFAULT_DELAY_MINUTES = 60
+// #59: новые пресеты в секундах: 10с/30с/1м/3м/5м/15м/30м/1ч.
+// Поддерживаем и старые «минутные» значения для backward-compat (5/15/30/60/240/1440 минут).
+const ALLOWED_DELAYS_SECONDS = new Set<number>([10, 30, 60, 180, 300, 900, 1800, 3600])
+const ALLOWED_DELAYS_LEGACY_MINUTES = new Set<number>([5, 15, 30, 60, 240, 1440])
+const DEFAULT_DELAY_SECONDS = 180
 const DEFAULT_TEXT =
   "{{name}}, рассмотрели вашу анкету. Ваша кандидатура нам интересна. Предлагаем тестовое задание."
 
@@ -91,9 +94,15 @@ export async function scheduleAnketaAutoReply(args: {
       return { scheduled: false, reason: "disabled" }
     }
 
-    const delayMinutes = typeof cfg.delayMinutes === "number" && ALLOWED_DELAYS.has(cfg.delayMinutes)
-      ? cfg.delayMinutes
-      : DEFAULT_DELAY_MINUTES
+    // #59: источник правды — delaySeconds. Если есть, читаем его. Иначе
+    // fallback на старое delayMinutes из legacy-данных. По дефолту — 180с.
+    const cfgAny = cfg as Record<string, unknown>
+    let delaySeconds = DEFAULT_DELAY_SECONDS
+    if (typeof cfgAny.delaySeconds === "number" && ALLOWED_DELAYS_SECONDS.has(cfgAny.delaySeconds)) {
+      delaySeconds = cfgAny.delaySeconds
+    } else if (typeof cfg.delayMinutes === "number" && ALLOWED_DELAYS_LEGACY_MINUTES.has(cfg.delayMinutes)) {
+      delaySeconds = cfg.delayMinutes * 60
+    }
 
     // 2. Дедупликация: не плодим если уже есть pending или sent для этого
     //    кандидата. Если HR пересохранил настройки — повторно слать не будем.
@@ -114,7 +123,7 @@ export async function scheduleAnketaAutoReply(args: {
 
     // 4. Считаем scheduled_at. База: now + delay. Если respectSchedule —
     //    сдвигаем вперёд до ближайшего рабочего слота в окне вакансии.
-    let scheduledAt = new Date(Date.now() + delayMinutes * 60_000)
+    let scheduledAt = new Date(Date.now() + delaySeconds * 1000)
     if (cfg.respectSchedule !== false) {
       const { adjusted } = adjustToWorkingWindow(scheduledAt, {
         scheduleEnabled:            row.scheduleEnabled,
@@ -146,7 +155,7 @@ export async function scheduleAnketaAutoReply(args: {
       candidateId:     args.candidateId,
       vacancyId:       args.vacancyId,
       scheduledAt:     scheduledAt.toISOString(),
-      delayMinutes,
+      delaySeconds,
       respectSchedule: cfg.respectSchedule !== false,
       hasTestTaskUrl:  !!cfg.testTaskUrl,
     }))

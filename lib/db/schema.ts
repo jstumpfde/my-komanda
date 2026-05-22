@@ -313,6 +313,9 @@ export const vacancies = pgTable("vacancies", {
   aiChatbotEnabled:  boolean("ai_chatbot_enabled").notNull().default(false),
   aiChatbotSettings: jsonb("ai_chatbot_settings").notNull().default({}),
   aiChatbotPrompt:   text("ai_chatbot_prompt").notNull().default(""),
+  // #61: per-vacancy стоп-факторы. См. drizzle/0125_vacancy_stop_factors.sql
+  // и компонент components/vacancies/vacancy-stop-factors-settings.tsx.
+  stopFactorsJson:   jsonb("stop_factors_json").$type<VacancyStopFactors>().notNull().default({}),
   // Авто-разбор hh-откликов: cron каждые 10 минут разбирает накопленные отклики
   // в рабочее время. Если выключено — клиент жмёт «Разобрать» вручную.
   autoProcessingEnabled:      boolean("auto_processing_enabled").notNull().default(false),
@@ -340,6 +343,55 @@ export interface VacancyPrequalificationQuestion {
   text:      string
   required:  boolean   // false = информативный
   criterion: string    // что считается «правильным ответом» для AI (опц.)
+}
+
+// #61: per-vacancy стоп-факторы. Все поля опциональны — отсутствие ключа
+// = выключен. enabled=false тоже = выключен. См. drizzle/0125.
+export interface VacancyStopFactorCity {
+  enabled:         boolean
+  allowedCities?:  string[]   // если кандидат НЕ из списка → стоп
+  allowRelocation?: boolean   // и НЕ отметил «готов к переезду»
+  rejectionText?:  string
+}
+export interface VacancyStopFactorFormat {
+  enabled:         boolean
+  allowedFormats?: Array<"office" | "hybrid" | "remote">
+  rejectionText?:  string
+}
+export interface VacancyStopFactorAge {
+  enabled:         boolean
+  minAge?:         number
+  maxAge?:         number
+  rejectionText?:  string
+}
+export interface VacancyStopFactorExperience {
+  enabled:         boolean
+  minYears?:       number
+  rejectionText?:  string
+}
+export interface VacancyStopFactorDocuments {
+  enabled:         boolean
+  required?:       string[]   // напр. ["med_book", "driver_license_b"]
+  rejectionText?:  string
+}
+export interface VacancyStopFactorCitizenship {
+  enabled:         boolean
+  allowed?:        string[]   // напр. ["RU", "BY"]
+  rejectionText?:  string
+}
+export interface VacancyStopFactorSalary {
+  enabled:         boolean
+  maxAmount?:      number     // в рублях
+  rejectionText?:  string
+}
+export interface VacancyStopFactors {
+  city?:               VacancyStopFactorCity
+  format?:             VacancyStopFactorFormat
+  age?:                VacancyStopFactorAge
+  experience?:         VacancyStopFactorExperience
+  documents?:          VacancyStopFactorDocuments
+  citizenship?:        VacancyStopFactorCitizenship
+  salaryExpectation?:  VacancyStopFactorSalary
 }
 
 export interface VacancyPrequalificationConfig {
@@ -437,12 +489,19 @@ export interface PostDemoSettings {
 
 export interface AnketaAutoReplySettings {
   enabled?:         boolean   // тумблер ВКЛ/ВЫКЛ, default false
-  delayMinutes?:    5 | 15 | 30 | 60 | 240 | 1440   // default 60
+  // #59: новые пресеты в секундах (10с/30с/1м/3м/5м/15м/30м/1ч).
+  delaySeconds?:    10 | 30 | 60 | 180 | 300 | 900 | 1800 | 3600
+  // Legacy в минутах — оставлен для backward-compat при чтении старых
+  // descriptionJson. Новые клиенты пишут delaySeconds; читатели сначала
+  // смотрят delaySeconds, потом делают fallback на delayMinutes * 60.
+  delayMinutes?:    5 | 15 | 30 | 60 | 240 | 1440
   respectSchedule?: boolean   // учитывать рабочее окно вакансии, default true
   text?:            string    // текст сообщения с плейсхолдерами
   testTaskUrl?:     string    // опциональная ссылка, дописывается в конец текста
 }
 
+export const ANKETA_AUTO_REPLY_DELAYS_SECONDS = [10, 30, 60, 180, 300, 900, 1800, 3600] as const
+// Legacy — больше не используется в UI, оставлен для совместимости.
 export const ANKETA_AUTO_REPLY_DELAYS = [5, 15, 30, 60, 240, 1440] as const
 export const DEFAULT_ANKETA_AUTO_REPLY_TEXT =
   "{{name}}, рассмотрели вашу анкету. Ваша кандидатура нам интересна. Предлагаем тестовое задание."

@@ -1039,6 +1039,16 @@ export default function HiringSettingsPage() {
                     </CardContent>
                   </Card>
 
+                  {/* #61: уведомление, что эти настройки — defaults для новых
+                      вакансий, а реальные правила настраиваются на самой
+                      вакансии (Воронка → Стоп-факторы). */}
+                  <div className="rounded-lg border border-blue-200 bg-blue-50/60 dark:bg-blue-950/20 p-3 text-xs text-blue-900 dark:text-blue-200">
+                    <strong>Это дефолты компании.</strong> Реальные стоп-факторы
+                    настраиваются на каждой вакансии — в табе «Воронка» → блок
+                    «Стоп-факторы по резюме». Эти значения берутся как стартовые
+                    при создании новой вакансии, если включена опция ниже.
+                  </div>
+
                   {/* Автоматический отказ */}
                   <Card>
                     <CardHeader>
@@ -1047,7 +1057,8 @@ export default function HiringSettingsPage() {
                     <CardContent className="space-y-4">
                       <div className="flex items-center justify-between py-2">
                         <div>
-                          <p className="text-sm font-medium">Отправлять автоматический отказ при срабатывании стоп-фактора</p>
+                          <p className="text-sm font-medium">Применять стоп-факторы автоматически при создании вакансии</p>
+                          <p className="text-[11px] text-muted-foreground mt-0.5">При создании новой вакансии — копировать эти дефолты в её настройки.</p>
                         </div>
                         <Switch checked={sfAutoReject} onCheckedChange={setSfAutoReject} />
                       </div>

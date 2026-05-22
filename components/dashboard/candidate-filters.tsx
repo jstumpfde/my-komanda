@@ -255,29 +255,6 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [], va
       </PopoverTrigger>
       <PopoverContent className="w-80 p-0" align="start">
         <div className="max-h-[75vh] overflow-y-auto p-4 space-y-4">
-          {/* P0-37 part 5: тумблер «Показать отказы». По дефолту ВЫКЛ — HR не
-              видит отказы пока сам не включит. Состояние тумблера выводим из
-              filters.funnelStatuses (включение «rejected» в массиве =
-              тумблер ВКЛ). Так при handleReset → DEFAULT_FILTERS без
-              "rejected" тумблер сам сбрасывается. */}
-          <div className="flex items-center justify-between gap-2">
-            <Label htmlFor="show-rejections" className="text-sm font-medium cursor-pointer">
-              Показать отказы
-            </Label>
-            <Switch
-              id="show-rejections"
-              checked={filters.funnelStatuses.includes("rejected")}
-              onCheckedChange={(v) => onFiltersChange({
-                ...filters,
-                funnelStatuses: v
-                  ? (filters.funnelStatuses.includes("rejected")
-                      ? filters.funnelStatuses
-                      : [...filters.funnelStatuses, "rejected"])
-                  : filters.funnelStatuses.filter(s => s !== "rejected"),
-              })}
-            />
-          </div>
-          <Separator />
           <div className="flex items-center justify-between mb-1">
             <h3 className="font-semibold text-sm">Поиск кандидатов</h3>
             {hasActiveFilters && (
@@ -462,7 +439,10 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [], va
 
           <Separator />
 
-          {/* 4. Funnel Status — ТЗ-3 Ч.4: всегда из PLATFORM_STAGES (slug'и). */}
+          {/* 4. Funnel Status — ТЗ-3 Ч.4: всегда из PLATFORM_STAGES (slug'и).
+              #53: тумблер «Скрыть отказы» переехал сюда из шапки попапа.
+              Логика инвертирована — лейбл «Скрыть отказы» означает действие
+              (нажми чтобы скрыть), отсюда тумблер ВКЛ когда rejected виден. */}
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-muted-foreground">Статус в воронке</label>
             <div className="space-y-1">
@@ -487,6 +467,27 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [], va
                   </div>
                 )
               })}
+            </div>
+            {/* #53: компактный тумблер «Скрыть/Показать отказы» прямо в
+                воронке, под статусом «Отказ». Лейбл меняется в зависимости
+                от текущего состояния — «Скрыть отказы» когда они видны
+                (тумблер ВКЛ), «Показать отказы» когда нет. */}
+            <div className="flex items-center justify-between gap-2 mt-2 pt-2 border-t border-border/40">
+              <Label htmlFor="show-rejections" className="text-sm cursor-pointer">
+                {filters.funnelStatuses.includes("rejected") ? "Скрыть отказы" : "Показать отказы"}
+              </Label>
+              <Switch
+                id="show-rejections"
+                checked={filters.funnelStatuses.includes("rejected")}
+                onCheckedChange={(v) => onFiltersChange({
+                  ...filters,
+                  funnelStatuses: v
+                    ? (filters.funnelStatuses.includes("rejected")
+                        ? filters.funnelStatuses
+                        : [...filters.funnelStatuses, "rejected"])
+                    : filters.funnelStatuses.filter(s => s !== "rejected"),
+                })}
+              />
             </div>
           </div>
 

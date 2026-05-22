@@ -41,6 +41,7 @@ import { Slider } from "@/components/ui/slider"
 import { Input } from "@/components/ui/input"
 import { Plus, Clock, Pause, Play, Archive, RotateCcw, Trash2, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, MessageSquareText, Zap, Globe, AlertTriangle, TrendingUp, Calendar, MapPin, DollarSign, Filter, X, Link2, Copy, Save, Sparkles, Eye, Check, Loader2, Download, ExternalLink, ClipboardList, ChevronLeft, ChevronRight, ChevronDown, CheckCircle2, XCircle, Users, Phone, Upload, RefreshCw, Activity, FileText, Bot } from "lucide-react"
 import { AiChatbotSettings } from "@/components/vacancies/ai-chatbot-settings"
+import { VacancyStopFactorsSettings } from "@/components/vacancies/vacancy-stop-factors-settings"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Label } from "@/components/ui/label"
@@ -1690,11 +1691,15 @@ export default function VacancyPage() {
       return m[c] || c
     })
     .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "company"
+  // #55: раньше для free-домена показывали `company24.pro/c/{slug}/{vacancy}`,
+  // но такого роута нет — кнопка «Предпросмотр»/«Открыть» дёргала 404.
+  // Реальный публичный роут — /vacancy/[slug]. На custom/subdomain пока
+  // используем тот же путь (subdomain-роутинг будет в отдельной задаче).
   const publicPageUrl = brandDomainLevel === "custom" && brandCustomDomain
-    ? `https://${brandCustomDomain}/v/${vacancySlugOrId}`
+    ? `https://${brandCustomDomain}/vacancy/${vacancySlugOrId}`
     : brandDomainLevel === "subdomain"
-    ? `https://${companySlugDisplay}.company24.pro/v/${vacancySlugOrId}`
-    : `https://company24.pro/c/${companySlugDisplay}/${vacancySlugOrId}`
+    ? `https://${companySlugDisplay}.company24.pro/vacancy/${vacancySlugOrId}`
+    : `https://company24.pro/vacancy/${vacancySlugOrId}`
 
   // ── Loading / 404 guard ────────────────────────────────────
   const isLoadingVacancy = vacancyLoading || (!apiVacancy && !vacancyError)
@@ -2464,20 +2469,50 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                         </CardHeader>
                         <CardContent className="space-y-1.5">
                           {transitions.map((t) => {
-                            // Подсветка «теряем больше всего» — только для самой низкой
-                            // конверсии среди eligibleForAlarm-этапов. Если данных мало
-                            // или процент в пределах нормы — не подсвечиваем.
-                            const isWorst = t.eligibleForAlarm && t.pct === minPct && eligibleAlarms.length > 1
+                            // #54: смягчённая шкала цвета. Раньше любая
+                            // конверсия <30% подсвечивалась как «бутылочное
+                            // горло» красным — для свежей вакансии 4% это
+                            // нормально, не надо пугать.
+                            //  < 1%   — оранжевый (есть проблема)
+                            //  1–5%   — нейтральный серый (норма для свежих)
+                            //  5–20%  — зелёный (хорошо)
+                            //  > 20%  — emerald (отлично)
+                            // Подсветка «теряем больше всего» теперь только
+                            // для самой низкой и только если она в зоне <1%.
+                            const tone =
+                              !t.hasData       ? "empty"   :
+                              t.pct < 1        ? "warn"    :
+                              t.pct <= 5       ? "neutral" :
+                              t.pct <= 20      ? "good"    :
+                                                 "great"
+                            const isWorst = tone === "warn" && t.eligibleForAlarm && t.pct === minPct && eligibleAlarms.length > 1
+                            const barClass = {
+                              empty:   "bg-muted",
+                              warn:    "bg-orange-500",
+                              neutral: "bg-slate-400",
+                              good:    "bg-emerald-500",
+                              great:   "bg-emerald-600",
+                            }[tone]
+                            const textClass = {
+                              empty:   "text-muted-foreground",
+                              warn:    "text-orange-700 dark:text-orange-400",
+                              neutral: "text-foreground",
+                              good:    "text-emerald-700 dark:text-emerald-400",
+                              great:   "text-emerald-700 dark:text-emerald-400",
+                            }[tone]
+                            const rowClass = isWorst
+                              ? "bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800"
+                              : "bg-muted/30"
                             return (
-                              <div key={t.from + t.to} className={cn("flex items-center gap-3 px-3 py-2 rounded-lg text-sm", isWorst ? "bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800" : "bg-muted/30")}>
+                              <div key={t.from + t.to} className={cn("flex items-center gap-3 px-3 py-2 rounded-lg text-sm", rowClass)}>
                                 <span className="text-muted-foreground w-[200px] shrink-0 text-xs">{t.from} → {t.to}</span>
                                 <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-                                  <div className={cn("h-full rounded-full", isWorst ? "bg-red-500" : "bg-primary")} style={{ width: `${t.hasData ? t.pct : 0}%` }} />
+                                  <div className={cn("h-full rounded-full", barClass)} style={{ width: `${t.hasData ? t.pct : 0}%` }} />
                                 </div>
-                                <span className={cn("text-xs font-semibold w-12 text-right", isWorst ? "text-red-600" : t.hasData ? "text-foreground" : "text-muted-foreground")}>
+                                <span className={cn("text-xs font-semibold w-12 text-right", textClass)}>
                                   {t.hasData ? `${t.pct}%` : "—"}
                                 </span>
-                                {isWorst && <div className="flex items-center gap-1 text-red-600 shrink-0"><AlertTriangle className="w-3.5 h-3.5" /><span className="text-xs font-medium">Здесь теряем больше всего</span></div>}
+                                {isWorst && <div className="flex items-center gap-1 text-orange-600 dark:text-orange-400 shrink-0"><AlertTriangle className="w-3.5 h-3.5" /><span className="text-xs font-medium">Здесь теряем больше всего</span></div>}
                               </div>
                             )
                           })}
@@ -2670,47 +2705,69 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                             </div>
                           </div>
                         </div>
+                        {/* #56: современный UX — клик прямо на картинку
+                            открывает file dialog, hover показывает overlay
+                            с кнопками «Заменить»/«Удалить». Если пусто —
+                            плейсхолдер тоже кликабельный (label.htmlFor). */}
                         <div className="space-y-1.5">
                           <Label className="text-xs">Логотип</Label>
                           <div className="flex items-center gap-3">
+                            <input
+                              id="brand-logo-input"
+                              type="file"
+                              accept="image/png,image/svg+xml,image/jpeg,image/webp"
+                              className="hidden"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0]
+                                if (!file) return
+                                if (file.size > 2 * 1024 * 1024) {
+                                  toast.error("Файл слишком большой (макс. 2 МБ)")
+                                  e.target.value = ""
+                                  return
+                                }
+                                const reader = new FileReader()
+                                reader.onload = () => {
+                                  const base64 = reader.result as string
+                                  setBrandLogo(base64)
+                                  saveBranding({ logo: base64 })
+                                }
+                                reader.readAsDataURL(file)
+                                e.target.value = ""
+                              }}
+                            />
                             {brandLogo ? (
-                              <div className="relative">
-                                <img src={brandLogo} alt="Логотип" className="max-h-[60px] object-contain rounded-md border" />
-                                <button
-                                  className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center hover:bg-red-600"
-                                  onClick={() => { setBrandLogo(""); saveBranding({ logo: "" }) }}
-                                >
-                                  <X className="w-3 h-3" />
-                                </button>
+                              <div className="relative group">
+                                <img
+                                  src={brandLogo}
+                                  alt="Логотип"
+                                  className="max-h-[60px] min-h-[60px] object-contain rounded-md border bg-background px-2"
+                                />
+                                <div className="absolute inset-0 rounded-md bg-black/55 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                                  <label
+                                    htmlFor="brand-logo-input"
+                                    className="px-2 py-1 rounded bg-white/90 text-foreground text-[11px] font-medium cursor-pointer hover:bg-white"
+                                  >
+                                    Заменить
+                                  </label>
+                                  <button
+                                    type="button"
+                                    className="px-2 py-1 rounded bg-red-500 text-white text-[11px] font-medium hover:bg-red-600"
+                                    onClick={() => { setBrandLogo(""); saveBranding({ logo: "" }) }}
+                                  >
+                                    Удалить
+                                  </button>
+                                </div>
                               </div>
                             ) : (
-                              <div className="h-14 w-24 rounded-lg border-2 border-dashed border-border flex items-center justify-center bg-muted/50">
-                                <span className="text-[10px] text-muted-foreground">Логотип</span>
-                              </div>
+                              <label
+                                htmlFor="brand-logo-input"
+                                className="h-14 w-24 rounded-lg border-2 border-dashed border-border flex flex-col items-center justify-center bg-muted/50 cursor-pointer hover:bg-muted hover:border-primary/40 transition-colors"
+                              >
+                                <Upload className="w-4 h-4 text-muted-foreground mb-0.5" />
+                                <span className="text-[10px] text-muted-foreground">Загрузить</span>
+                              </label>
                             )}
-                            <div className="flex flex-col gap-1">
-                              <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => {
-                                const input = document.createElement("input")
-                                input.type = "file"
-                                input.accept = "image/png,image/svg+xml,image/jpeg,image/webp"
-                                input.onchange = (e) => {
-                                  const file = (e.target as HTMLInputElement).files?.[0]
-                                  if (!file) return
-                                  if (file.size > 2 * 1024 * 1024) { toast.error("Файл слишком большой (макс. 2 МБ)"); return }
-                                  const reader = new FileReader()
-                                  reader.onload = () => {
-                                    const base64 = reader.result as string
-                                    setBrandLogo(base64)
-                                    saveBranding({ logo: base64 })
-                                  }
-                                  reader.readAsDataURL(file)
-                                }
-                                input.click()
-                              }}>
-                                Загрузить
-                              </Button>
-                              <span className="text-[10px] text-muted-foreground">PNG, SVG, JPG до 2 МБ</span>
-                            </div>
+                            <span className="text-[10px] text-muted-foreground">PNG, SVG, JPG до 2 МБ</span>
                           </div>
                         </div>
                         <div className="space-y-1.5">
@@ -2732,7 +2789,7 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                             <div className="flex-1 min-w-0">
                               <p className="text-sm font-medium">Бесплатный</p>
                               <p className="text-xs text-muted-foreground mt-0.5">
-                                Ваши ссылки: <span className="font-mono text-foreground">company24.pro/c/{companySlugDisplay}/...</span>
+                                Ваши ссылки: <span className="font-mono text-foreground">company24.pro/vacancy/...</span>
                               </p>
                               {brandDomainLevel === "free" && (
                                 <div className="flex items-center gap-2 mt-2">
@@ -2766,7 +2823,7 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                                 <span className="text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 rounded-full px-2 py-0.5">Тариф Бизнес</span>
                               </div>
                               <p className="text-xs text-muted-foreground mt-0.5">
-                                Ваши ссылки: <span className="font-mono text-foreground">{companySlugDisplay}.company24.pro/v/...</span>
+                                Ваши ссылки: <span className="font-mono text-foreground">{companySlugDisplay}.company24.pro/vacancy/...</span>
                               </p>
                               {brandDomainLevel === "subdomain" && (
                                 <div className="mt-2 space-y-1.5">
@@ -2980,6 +3037,21 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                 {/* ───────── ТАБ «Сообщения» ───────── */}
                 {settingsSection === "messages" && (
                 <div className="space-y-6 max-w-3xl">
+                  {/* #62: предупреждение для случая когда включён AI-агент.
+                      Обработка пока не подключена (см. ai-chatbot tab), но
+                      когда заработает — все блоки ниже будут заглушены
+                      AI-агентом. Сейчас они продолжают работать. */}
+                  {(apiVacancy as { aiChatbotEnabled?: boolean } | undefined)?.aiChatbotEnabled && (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50/60 dark:bg-amber-950/20 p-3 flex items-start gap-2">
+                      <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                      <div className="text-xs text-amber-900 dark:text-amber-200">
+                        <strong>AI чат-бот включён для этой вакансии.</strong> Когда
+                        обработка заработает (на следующей неделе), блоки ниже
+                        будут отключены — за общение с кандидатом отвечает агент.
+                        Сейчас они продолжают работать как обычно.
+                      </div>
+                    </div>
+                  )}
                   {/* #21: серия первых сообщений. Рендерится первой — это
                       замена старого блока «Первое сообщение» (он останется
                       в AutomationSettings как fallback для backward compat,
@@ -3007,6 +3079,9 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                     salaryFrom={apiVacancy?.salaryMin}
                     salaryTo={apiVacancy?.salaryMax}
                     aiProcessSettings={apiVacancy?.aiProcessSettings as { inviteMessage?: string; reInviteMessage?: string } | null | undefined}
+                    // #60: чтобы блок «Минимальная задержка» мог скрыться,
+                    // когда серия первых сообщений активна.
+                    firstMessagesChain={(apiVacancy as { firstMessagesChain?: Array<{ enabled: boolean; delaySeconds: number; text: string }> } | undefined)?.firstMessagesChain ?? []}
                     sections={["firstMessage", "callIntent", "templates"] satisfies AutomationSectionId[]}
                     tabKey="messages"
                   />
@@ -3038,6 +3113,14 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                     initial={apiVacancy?.aiProcessSettings ?? null}
                     onSaved={() => refetchVacancy()}
                   />
+                  {/* #61: per-vacancy стоп-факторы. Логика применения в
+                      process-queue пока не подключена — это отдельная
+                      задача. Сейчас компонент только хранит конфиг. */}
+                  <VacancyStopFactorsSettings
+                    vacancyId={id}
+                    initial={(apiVacancy as { stopFactorsJson?: import("@/lib/db/schema").VacancyStopFactors } | undefined)?.stopFactorsJson ?? null}
+                    onSaved={() => refetchVacancy()}
+                  />
                   {/* P0-22: editable стоп-слова, единый источник для дожима и hh-чата. */}
                   <VacancyStopWordsSettings
                     vacancyId={id}
@@ -3060,6 +3143,17 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                     <h3 className="text-lg font-semibold text-foreground mb-1">Настройки дожима</h3>
                     <p className="text-sm text-muted-foreground">AI-фильтр откликов и цепочка касаний кандидатов, которые не открыли или не дошли до конца демо.</p>
                   </div>
+                  {/* #62: предупреждение когда AI-агент включён. */}
+                  {(apiVacancy as { aiChatbotEnabled?: boolean } | undefined)?.aiChatbotEnabled && (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50/60 dark:bg-amber-950/20 p-3 flex items-start gap-2">
+                      <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                      <div className="text-xs text-amber-900 dark:text-amber-200">
+                        <strong>AI чат-бот включён.</strong> Когда обработка заработает,
+                        цепочка дожима будет отключена для этой вакансии — общение
+                        ведёт агент. Сейчас цепочка продолжает работать.
+                      </div>
+                    </div>
+                  )}
                   <VacancyAiProcessSettings
                     vacancyId={id}
                     initial={apiVacancy?.aiProcessSettings ?? null}
@@ -3070,9 +3164,9 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                 </div>
                 )}
 
-                {/* ───────── ТАБ «AI чат-бот» (#15 Фаза 1, всё disabled) ───────── */}
+                {/* ───────── ТАБ «AI чат-бот» (#62: открыто для админа) ───────── */}
                 {settingsSection === "aichatbot" && (
-                <AiChatbotSettings vacancyId={id} />
+                <AiChatbotSettings vacancyId={id} onSaved={() => refetchVacancy()} />
                 )}
 
                 {/* ───────── ТАБ «Расписание» (бывший «AI сценарии») ───────── */}

@@ -12,8 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth"
 import {
-  Briefcase, Users, UserCheck, Clock, TrendingUp, Plus, ChevronRight,
-  Sparkles, Activity, Calendar, BarChart3,
+  Briefcase, Users, UserCheck, TrendingUp, Plus, ChevronRight,
+  Sparkles, Activity, Calendar,
 } from "lucide-react"
 import { CandidatesProgressMiniTable } from "@/components/candidates/candidates-progress-mini-table"
 import { Greeting } from "./_components/greeting"
@@ -140,22 +140,6 @@ function ComingSoon({ children }: { children: ReactNode }) {
   )
 }
 
-// ─── KPI Pill ───────────────────────────────────────────────────────────────
-
-function KpiPill({ icon: Icon, label, value }: { icon: ElementType; label: string; value: number | null }) {
-  return (
-    <div className="border rounded-xl shadow-sm hover:shadow-md transition-shadow p-4 inline-flex items-center gap-3 w-fit">
-      <div className="w-10 h-10 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 flex items-center justify-center shrink-0">
-        <Icon className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-      </div>
-      <div className="flex flex-col">
-        <span className="text-xs text-muted-foreground leading-none">{label}</span>
-        <span className="text-2xl font-bold leading-tight mt-1">{value === null ? "…" : value}</span>
-      </div>
-    </div>
-  )
-}
-
 // ─── Color metric card ──────────────────────────────────────────────────────
 
 function Metric({
@@ -177,6 +161,28 @@ function Metric({
 
 // ─── Page ───────────────────────────────────────────────────────────────────
 
+// #47: ключ для localStorage. Сохраняем { name, savedAt } чтобы при первом
+// рендере страницы (до прихода session) сразу показать имя из прошлого захода.
+const HR_USER_CACHE_KEY = "hr_user_cache"
+
+interface HrUserCache {
+  name: string
+  savedAt: number
+}
+
+function readHrUserCache(): HrUserCache | null {
+  if (typeof window === "undefined") return null
+  try {
+    const raw = localStorage.getItem(HR_USER_CACHE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as Partial<HrUserCache>
+    if (typeof parsed.name === "string" && parsed.name.length > 0) {
+      return { name: parsed.name, savedAt: parsed.savedAt ?? 0 }
+    }
+  } catch {}
+  return null
+}
+
 function DashboardContent() {
   const router = useRouter()
   const { user } = useAuth()
@@ -184,10 +190,34 @@ function DashboardContent() {
   const [loaded, setLoaded] = useState(false)
   // #30: фильтр по вакансии. "all" = показывать всё (default).
   const [selectedVacancyId, setSelectedVacancyId] = useState<string>("all")
+  // #47: имя из localStorage для мгновенного первого рендера. Заменяется на
+  // user.name как только сессия подтянулась.
+  const [cachedName, setCachedName] = useState<string>("")
+
+  useEffect(() => {
+    const c = readHrUserCache()
+    if (c) setCachedName(c.name)
+  }, [])
+
+  // #47: когда сессия загрузилась — сохранить актуальное имя в localStorage,
+  // чтобы при следующем заходе оно было сразу.
+  useEffect(() => {
+    if (!user.name) return
+    if (typeof window === "undefined") return
+    try {
+      const current = readHrUserCache()
+      if (current?.name !== user.name) {
+        localStorage.setItem(HR_USER_CACHE_KEY, JSON.stringify({ name: user.name, savedAt: Date.now() }))
+      }
+    } catch {}
+  }, [user.name])
 
   useEffect(() => {
     let cancelled = false
-    fetch("/api/modules/hr/dashboard/stats")
+    // #49: при изменении фильтра — перезагружаем счётчики с ?vacancyId=
+    const qs = selectedVacancyId !== "all" ? `?vacancyId=${encodeURIComponent(selectedVacancyId)}` : ""
+    setLoaded(false)
+    fetch(`/api/modules/hr/dashboard/stats${qs}`)
       .then(r => (r.ok ? r.json() : null))
       .then((d: DashboardStats | null) => {
         if (cancelled) return
@@ -196,7 +226,10 @@ function DashboardContent() {
       .catch(() => {})
       .finally(() => { if (!cancelled) setLoaded(true) })
     return () => { cancelled = true }
-  }, [])
+  }, [selectedVacancyId])
+
+  // #47: эффективное имя — реальное user.name из сессии, иначе из кеша.
+  const effectiveName = user.name || cachedName
 
   const kpi = stats?.kpi
   const vacancies = stats?.vacancies ?? []
@@ -255,8 +288,8 @@ function DashboardContent() {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
                 <h1 className="text-xl font-semibold">
-                  {user.name
-                    ? `${getGreeting()}, ${user.name.split(" ")[0]}!`
+                  {effectiveName
+                    ? `${getGreeting()}, ${effectiveName.split(" ")[0]}!`
                     : `${getGreeting()}!`}
                 </h1>
                 <p className="text-sm text-muted-foreground" suppressHydrationWarning>{getDateString()}</p>
@@ -287,44 +320,33 @@ function DashboardContent() {
             {/* ═══ Очередь HR (P0-8) ═══ */}
             <AwaitingReviewBanner />
 
-            {/* ═══ KPI pills ═══ */}
-            <div className="flex flex-wrap gap-3">
-              <KpiPill icon={Briefcase} label="Активные вакансии" value={kpi?.activeVacancies ?? null} />
-              <KpiPill icon={Users} label="Кандидатов сегодня" value={kpi?.candidatesToday ?? null} />
-              <KpiPill icon={Users} label="Кандидатов в работе" value={kpi?.candidatesInWork ?? null} />
+            {/* ═══ KPI pills — #50/#51 ═══
+                Раньше было 2 ряда (KpiPill + Metric цветной), путано.
+                Юрий: один ряд понятных метрик, реагируют на фильтр вакансии.
+                «Кандидатов сегодня» → «Откликов сегодня» (это hh-отклики
+                за день). «Кандидатов в работе» → «Прошли демо» (count
+                stage IN demo_opened+, см. /api/.../stats #49). Убраны
+                «Ср. время закрытия» (Скоро-плейсхолдер) и «Всего
+                кандидатов» (бесполезно при наличии «Прошли демо»). */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+              <Metric icon={Briefcase} label="Активных вакансий" value={kpi?.activeVacancies ?? "—"} bg="bg-emerald-500" />
+              <Metric icon={Users} label="Откликов сегодня" value={kpi?.candidatesToday ?? "—"} bg="bg-blue-500" />
+              <Metric icon={UserCheck} label="Прошли демо" value={kpi?.candidatesInWork ?? "—"} bg="bg-violet-500" />
+              <Metric icon={Activity} label="Нанято за месяц" value={kpi?.hiredThisMonth ?? "—"} bg="bg-orange-500" />
+              <Metric icon={TrendingUp} label="Конверсия воронки" value={kpi ? `${kpi.conversionRate}%` : "—"} bg="bg-indigo-500" />
             </div>
 
             {/* ═══ AI-ассистент — #33: активирован SQL-инсайтами ═══ */}
             <AiInsights selectedVacancyId={selectedVacancyId} />
 
-            {/* ═══ 5 Metrics ═══ */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-              <Metric icon={Briefcase} label="Активных вакансий" value={kpi?.activeVacancies ?? "—"} bg="bg-emerald-400" />
-              <Metric icon={Users} label="Всего кандидатов" value={kpi?.totalCandidates ?? "—"} bg="bg-blue-400" />
-              <Metric icon={UserCheck} label="Нанято за месяц" value={kpi?.hiredThisMonth ?? "—"} bg="bg-violet-600" />
-              <Metric icon={Clock} label="Ср. время закрытия" value="—" trend="Скоро" bg="bg-orange-400" />
-              <Metric icon={TrendingUp} label="Конверсия воронки" value={kpi ? `${kpi.conversionRate}%` : "—"} bg="bg-indigo-400" />
-            </div>
+            {/* ═══ Live progress widget — #52: раскрывающийся ═══ */}
+            <ProgressWidget selectedVacancyId={selectedVacancyId} />
 
-            {/* ═══ Live progress widget ═══ */}
-            <div className="border rounded-xl shadow-sm hover:shadow-md transition-shadow p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold flex items-center gap-2">
-                  <Activity className="w-4 h-4" style={{ color: C.green }} />
-                  Прогресс кандидатов сейчас
-                </h3>
-                <Link
-                  href="/hr/candidates"
-                  className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
-                >
-                  Все <ChevronRight className="w-3 h-3" />
-                </Link>
-              </div>
-              <CandidatesProgressMiniTable limit={5} />
-            </div>
-
-            {/* ═══ Funnel + Active Vacancies ═══ */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            {/* ═══ Funnel + Active Vacancies ═══
+                #49: блок «Активные вакансии» справа не показываем, когда
+                выбрана конкретная — иначе там единственная карточка-дубль.
+                Воронка остаётся (она уже фильтруется). */}
+            <div className={cn("grid grid-cols-1 gap-5", selectedVacancyId === "all" && "lg:grid-cols-2")}>
               {/* Funnel */}
               <div className="border rounded-xl shadow-sm hover:shadow-md transition-shadow p-6">
                 <h3 className="text-lg font-semibold mb-4">Воронка найма</h3>
@@ -361,7 +383,8 @@ function DashboardContent() {
                 )}
               </div>
 
-              {/* Active Vacancies */}
+              {/* Active Vacancies — #49: скрываем когда выбрана одна вакансия */}
+              {selectedVacancyId === "all" && (
               <div className="border rounded-xl shadow-sm hover:shadow-md transition-shadow p-6">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-semibold">Активные вакансии</h3>
@@ -410,17 +433,22 @@ function DashboardContent() {
                   </div>
                 )}
               </div>
+              )}
             </div>
 
-            {/* ═══ Efficiency + Events ═══ */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            {/* ═══ Efficiency + Events ═══
+                #49: «Прогресс вакансий» скрываем при выборе одной — это
+                кросс-вакансионный обзор, теряет смысл с фильтром. */}
+            <div className={cn("grid grid-cols-1 gap-5", selectedVacancyId === "all" && "lg:grid-cols-2")}>
               {/* #35: блок «Эффективность по вакансиям» переименован в
                   «Прогресс вакансий». Раньше показывалось «done/total» с
                   %% (например 6/432 = 1.4% для свежей вакансии — выглядело
                   как провал, хотя в первые недели это норма). Теперь —
                   «inProgress / total» без процентов: «X в работе из Y
                   откликов». Бар показывает долю «в работе» от total —
-                  это нейтральная метрика, без оценки. */}
+                  это нейтральная метрика, без оценки.
+                  #49: скрываем при фильтре по конкретной вакансии. */}
+              {selectedVacancyId === "all" && (
               <div className="border rounded-xl shadow-sm hover:shadow-md transition-shadow p-6">
                 <div className="flex items-center justify-between mb-1">
                   <h3 className="text-lg font-semibold">Прогресс вакансий</h3>
@@ -467,6 +495,7 @@ function DashboardContent() {
                   </div>
                 )}
               </div>
+              )}
 
               {/* Events — Скоро */}
               <ComingSoon>
@@ -501,6 +530,44 @@ export default function HRDashboardPage() {
   return <DashboardContent />
 }
 
+// ─── Прогресс кандидатов сейчас — #52 ─────────────────────────────────────
+// По умолчанию 5 строк. Кнопка «Показать все» раскрывает до 20.
+// Фильтр vacancyId передаётся из шапки (#49).
+function ProgressWidget({ selectedVacancyId }: { selectedVacancyId: string }) {
+  const [expanded, setExpanded] = useState(false)
+  return (
+    <div className="border rounded-xl shadow-sm hover:shadow-md transition-shadow p-6">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg font-semibold flex items-center gap-2">
+          <Activity className="w-4 h-4" style={{ color: C.green }} />
+          Прогресс кандидатов сейчас
+        </h3>
+        <Link
+          href="/hr/candidates"
+          className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+        >
+          Все <ChevronRight className="w-3 h-3" />
+        </Link>
+      </div>
+      <CandidatesProgressMiniTable
+        limit={5}
+        vacancyId={selectedVacancyId}
+        expanded={expanded}
+        maxExpanded={20}
+      />
+      <div className="mt-3 flex justify-center">
+        <button
+          type="button"
+          onClick={() => setExpanded(v => !v)}
+          className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors px-3 py-1 rounded-md hover:bg-muted/40"
+        >
+          {expanded ? "Свернуть" : "Показать все"}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // #33: AI-ассистент — 4 карточки с SQL-инсайтами из БД (без LLM-вызовов).
 // Endpoint /api/modules/hr/dashboard/ai-insights. selectedVacancyId сейчас
 // игнорируется на сервере (для будущего расширения).
@@ -514,10 +581,12 @@ interface AiInsight {
 
 function AiInsights({ selectedVacancyId }: { selectedVacancyId: string }) {
   const [insights, setInsights] = useState<AiInsight[] | null>(null)
-  void selectedVacancyId // зарезервировано для будущего ?vacancyId=
   useEffect(() => {
     let cancelled = false
-    fetch("/api/modules/hr/dashboard/ai-insights")
+    // #49: фильтр инсайтов по выбранной вакансии
+    const qs = selectedVacancyId !== "all" ? `?vacancyId=${encodeURIComponent(selectedVacancyId)}` : ""
+    setInsights(null)
+    fetch(`/api/modules/hr/dashboard/ai-insights${qs}`)
       .then(r => r.ok ? r.json() : null)
       .then((d: { insights?: AiInsight[] } | null) => {
         if (cancelled) return
@@ -525,7 +594,7 @@ function AiInsights({ selectedVacancyId }: { selectedVacancyId: string }) {
       })
       .catch(() => {})
     return () => { cancelled = true }
-  }, [])
+  }, [selectedVacancyId])
 
   return (
     <div className="rounded-lg border bg-gradient-to-br from-[#EEEDFE] to-[#E6F1FB] dark:from-[#1a1830] dark:to-[#172030] p-5">

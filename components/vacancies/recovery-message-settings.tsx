@@ -4,12 +4,13 @@
 // По умолчанию выключено + текст пустой. Никакого hardcoded fallback.
 // HR редактирует и сохраняет вручную через свой endpoint.
 
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Switch } from "@/components/ui/switch"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
+import { PlaceholderBadges } from "@/components/ui/placeholder-badges"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { AlertTriangle, ChevronDown, Loader2, Save } from "lucide-react"
 import { toast } from "sonner"
@@ -27,6 +28,7 @@ export function RecoveryMessageSettings({ vacancyId, initialEnabled, initialText
   const [enabled, setEnabled] = useState(Boolean(initialEnabled))
   const [text, setText] = useState(typeof initialText === "string" ? initialText : "")
   const [saving, setSaving] = useState(false)
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   const [savedBaseline, setSavedBaseline] = useState({
     enabled: Boolean(initialEnabled),
     text:    typeof initialText === "string" ? initialText : "",
@@ -101,15 +103,23 @@ export function RecoveryMessageSettings({ vacancyId, initialEnabled, initialText
 
             <div className={cn("space-y-1.5", !enabled && "opacity-60 pointer-events-none")}>
               <label className="text-xs font-medium">Текст сообщения</label>
-              <Textarea
+              <textarea
+                ref={textareaRef}
                 value={text}
                 onChange={(e) => setText(e.target.value)}
                 placeholder="Текст сообщения. Например: «{{name}}, в прошлом сообщении была неактуальная ссылка. Вот рабочая: {{demo_link}}»"
                 rows={5}
-                className="text-sm resize-y"
+                className="border-input placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 flex w-full rounded-md border bg-[var(--input-bg)] px-3 py-2 text-sm shadow-xs outline-none focus-visible:ring-[3px] resize-y min-h-16"
+              />
+              {/* #57: кликабельные плейсхолдеры — клик вставляет токен на
+                  позицию курсора в textarea. */}
+              <PlaceholderBadges
+                textareaRef={textareaRef}
+                placeholders={["name", "vacancy", "company", "demo_link"]}
+                value={text}
+                onValueChange={setText}
               />
               <p className="text-[11px] text-muted-foreground">
-                Плейсхолдеры: {"{{name}}"}, {"{{vacancy}}"}, {"{{company}}"}, {"{{demo_link}}"}.
                 Если поле пустое — повторное сообщение не отправляется даже при ВКЛ.
               </p>
             </div>
