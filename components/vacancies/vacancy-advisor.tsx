@@ -285,7 +285,17 @@ export function VacancyAdvisor({ vacancyId, vacancyData, companyDescription, foc
       )
     }
 
-    if (!result) return null
+    if (!result) {
+      return (
+        <div className="flex flex-col items-center gap-3 py-8 text-center">
+          <Bot className="w-8 h-8 text-muted-foreground" />
+          <p className="text-xs text-muted-foreground px-4">Анализ ещё не запускался. Нажмите кнопку чтобы оценить вакансию.</p>
+          <Button size="sm" variant="outline" onClick={() => fetchAnalysis(undefined, { force: true })} disabled={loading}>
+            <Sparkles className="w-3.5 h-3.5 mr-1.5" />Запустить анализ
+          </Button>
+        </div>
+      )
+    }
 
     return (
       <div className="space-y-3">
