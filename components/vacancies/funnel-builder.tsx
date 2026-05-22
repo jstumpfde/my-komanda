@@ -46,6 +46,13 @@ import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
+import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -57,6 +64,7 @@ import {
   type FunnelBlockType,
   type FunnelConfig,
 } from "@/lib/funnel-builder/blocks"
+import { BLOCK_SETTINGS_REGISTRY } from "@/lib/funnel-builder/block-settings"
 
 export interface FunnelBuilderProps {
   vacancyId: string
@@ -77,6 +85,7 @@ export function FunnelBuilder({ vacancyId }: FunnelBuilderProps) {
   const [blocks, setBlocks] = useState<FunnelBlock[]>([])
   const [saving, setSaving] = useState(false)
   const [pendingConflict, setPendingConflict] = useState<PendingIncompatibility | null>(null)
+  const [openBlockType, setOpenBlockType] = useState<FunnelBlockType | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -234,6 +243,7 @@ export function FunnelBuilder({ vacancyId }: FunnelBuilderProps) {
                     block={block}
                     saving={saving}
                     onToggle={() => handleToggleBlock(block.type)}
+                    onOpenSettings={() => setOpenBlockType(block.type)}
                   />
                 ))}
               </div>
@@ -275,17 +285,48 @@ export function FunnelBuilder({ vacancyId }: FunnelBuilderProps) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Sheet
+        open={openBlockType !== null}
+        onOpenChange={(open) => { if (!open) setOpenBlockType(null) }}
+      >
+        <SheetContent side="right" className="w-full sm:max-w-2xl overflow-y-auto p-6">
+          {openBlockType && (() => {
+            const entry  = BLOCK_SETTINGS_REGISTRY[openBlockType]
+            const meta   = BLOCK_META[openBlockType]
+            const title  = entry?.title       ?? meta.label
+            const desc   = entry?.description ?? meta.description
+            const Comp   = entry?.component   ?? null
+            return (
+              <>
+                <SheetHeader className="px-0">
+                  <SheetTitle>{title}</SheetTitle>
+                  <SheetDescription>{desc}</SheetDescription>
+                </SheetHeader>
+                <div className="mt-6">
+                  {Comp ? (
+                    <Comp vacancyId={vacancyId} onSaved={() => setOpenBlockType(null)} />
+                  ) : (
+                    <p className="text-sm text-muted-foreground">В разработке — настроек для этого блока пока нет.</p>
+                  )}
+                </div>
+              </>
+            )
+          })()}
+        </SheetContent>
+      </Sheet>
     </Card>
   )
 }
 
 interface SortableBlockCardProps {
-  block:    FunnelBlock
-  saving:   boolean
-  onToggle: () => void
+  block:          FunnelBlock
+  saving:         boolean
+  onToggle:       () => void
+  onOpenSettings: () => void
 }
 
-function SortableBlockCard({ block, saving, onToggle }: SortableBlockCardProps) {
+function SortableBlockCard({ block, saving, onToggle, onOpenSettings }: SortableBlockCardProps) {
   const meta = BLOCK_META[block.type]
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: block.type })
@@ -348,7 +389,7 @@ function SortableBlockCard({ block, saving, onToggle }: SortableBlockCardProps) 
         size="icon"
         className="h-8 w-8"
         aria-label="Настройки блока"
-        disabled
+        onClick={onOpenSettings}
       >
         <Settings2 className="h-4 w-4" />
       </Button>
