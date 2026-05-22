@@ -4,6 +4,11 @@ import { db } from "@/lib/db"
 import { vacancies, companies } from "@/lib/db/schema"
 import { apiError, apiSuccess } from "@/lib/api-helpers"
 
+
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
+}
+
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ slug: string }> },
@@ -32,7 +37,7 @@ export async function GET(
       .innerJoin(companies, eq(vacancies.companyId, companies.id))
       .where(
         and(
-          or(eq(vacancies.slug, slug), eq(vacancies.id, slug)),
+          isUuid(slug) ? eq(vacancies.id, slug) : eq(vacancies.slug, slug),
           or(eq(vacancies.status, "active"), eq(vacancies.status, "published")),
           isNull(vacancies.deletedAt),
         ),
