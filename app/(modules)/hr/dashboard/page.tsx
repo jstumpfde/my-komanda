@@ -230,7 +230,10 @@ function DashboardContent() {
 
   useEffect(() => {
     let cancelled = false
-    fetch("/api/modules/hr/dashboard/stats")
+    // #49: при изменении фильтра — перезагружаем счётчики с ?vacancyId=
+    const qs = selectedVacancyId !== "all" ? `?vacancyId=${encodeURIComponent(selectedVacancyId)}` : ""
+    setLoaded(false)
+    fetch(`/api/modules/hr/dashboard/stats${qs}`)
       .then(r => (r.ok ? r.json() : null))
       .then((d: DashboardStats | null) => {
         if (cancelled) return
@@ -239,7 +242,7 @@ function DashboardContent() {
       .catch(() => {})
       .finally(() => { if (!cancelled) setLoaded(true) })
     return () => { cancelled = true }
-  }, [])
+  }, [selectedVacancyId])
 
   // #47: эффективное имя — реальное user.name из сессии, иначе из кеша.
   const effectiveName = user.name || cachedName
@@ -366,11 +369,14 @@ function DashboardContent() {
                   Все <ChevronRight className="w-3 h-3" />
                 </Link>
               </div>
-              <CandidatesProgressMiniTable limit={5} />
+              <CandidatesProgressMiniTable limit={5} vacancyId={selectedVacancyId} />
             </div>
 
-            {/* ═══ Funnel + Active Vacancies ═══ */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            {/* ═══ Funnel + Active Vacancies ═══
+                #49: блок «Активные вакансии» справа не показываем, когда
+                выбрана конкретная — иначе там единственная карточка-дубль.
+                Воронка остаётся (она уже фильтруется). */}
+            <div className={cn("grid grid-cols-1 gap-5", selectedVacancyId === "all" && "lg:grid-cols-2")}>
               {/* Funnel */}
               <div className="border rounded-xl shadow-sm hover:shadow-md transition-shadow p-6">
                 <h3 className="text-lg font-semibold mb-4">Воронка найма</h3>
@@ -407,7 +413,8 @@ function DashboardContent() {
                 )}
               </div>
 
-              {/* Active Vacancies */}
+              {/* Active Vacancies — #49: скрываем когда выбрана одна вакансия */}
+              {selectedVacancyId === "all" && (
               <div className="border rounded-xl shadow-sm hover:shadow-md transition-shadow p-6">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-semibold">Активные вакансии</h3>
@@ -456,17 +463,22 @@ function DashboardContent() {
                   </div>
                 )}
               </div>
+              )}
             </div>
 
-            {/* ═══ Efficiency + Events ═══ */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            {/* ═══ Efficiency + Events ═══
+                #49: «Прогресс вакансий» скрываем при выборе одной — это
+                кросс-вакансионный обзор, теряет смысл с фильтром. */}
+            <div className={cn("grid grid-cols-1 gap-5", selectedVacancyId === "all" && "lg:grid-cols-2")}>
               {/* #35: блок «Эффективность по вакансиям» переименован в
                   «Прогресс вакансий». Раньше показывалось «done/total» с
                   %% (например 6/432 = 1.4% для свежей вакансии — выглядело
                   как провал, хотя в первые недели это норма). Теперь —
                   «inProgress / total» без процентов: «X в работе из Y
                   откликов». Бар показывает долю «в работе» от total —
-                  это нейтральная метрика, без оценки. */}
+                  это нейтральная метрика, без оценки.
+                  #49: скрываем при фильтре по конкретной вакансии. */}
+              {selectedVacancyId === "all" && (
               <div className="border rounded-xl shadow-sm hover:shadow-md transition-shadow p-6">
                 <div className="flex items-center justify-between mb-1">
                   <h3 className="text-lg font-semibold">Прогресс вакансий</h3>
@@ -513,6 +525,7 @@ function DashboardContent() {
                   </div>
                 )}
               </div>
+              )}
 
               {/* Events — Скоро */}
               <ComingSoon>
@@ -560,10 +573,12 @@ interface AiInsight {
 
 function AiInsights({ selectedVacancyId }: { selectedVacancyId: string }) {
   const [insights, setInsights] = useState<AiInsight[] | null>(null)
-  void selectedVacancyId // зарезервировано для будущего ?vacancyId=
   useEffect(() => {
     let cancelled = false
-    fetch("/api/modules/hr/dashboard/ai-insights")
+    // #49: фильтр инсайтов по выбранной вакансии
+    const qs = selectedVacancyId !== "all" ? `?vacancyId=${encodeURIComponent(selectedVacancyId)}` : ""
+    setInsights(null)
+    fetch(`/api/modules/hr/dashboard/ai-insights${qs}`)
       .then(r => r.ok ? r.json() : null)
       .then((d: { insights?: AiInsight[] } | null) => {
         if (cancelled) return
@@ -571,7 +586,7 @@ function AiInsights({ selectedVacancyId }: { selectedVacancyId: string }) {
       })
       .catch(() => {})
     return () => { cancelled = true }
-  }, [])
+  }, [selectedVacancyId])
 
   return (
     <div className="rounded-lg border bg-gradient-to-br from-[#EEEDFE] to-[#E6F1FB] dark:from-[#1a1830] dark:to-[#172030] p-5">

@@ -7,15 +7,22 @@
 //   3) topScores — кандидаты с AI-score >= 80 в anketa_filled
 //   4) weekConv  — конверсия (% открывших демо из новых) за 7 дней
 
-import { and, eq, gte, inArray, isNull, sql } from "drizzle-orm"
+import { and, eq, gte, isNull, sql, type SQL } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { candidates, vacancies } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     const user = await requireCompany()
     const companyId = user.companyId
+
+    // #49: ?vacancyId= фильтрует все инсайты на одну вакансию
+    const url = new URL(req.url)
+    const vacancyIdParam = url.searchParams.get("vacancyId")
+    const vacancyFilter: SQL | undefined = vacancyIdParam && vacancyIdParam !== "all"
+      ? eq(candidates.vacancyId, vacancyIdParam)
+      : undefined
 
     const now = new Date()
     const sevenDaysAgo = new Date(now.getTime() - 7 * 86_400_000)
@@ -39,6 +46,7 @@ export async function GET() {
           eq(vacancies.companyId, companyId),
           isNull(vacancies.deletedAt),
           gte(candidates.createdAt, sevenDaysAgo),
+          vacancyFilter,
         ))
         .groupBy(candidates.vacancyId, vacancies.title)
         .orderBy(sql`count(*) DESC`)
@@ -53,6 +61,7 @@ export async function GET() {
           isNull(vacancies.deletedAt),
           eq(candidates.stage, "primary_contact"),
           sql`${candidates.updatedAt} < ${oneDayAgo.toISOString()}`,
+          vacancyFilter,
         )),
 
       // 3) High AI-score in anketa_filled
@@ -64,6 +73,7 @@ export async function GET() {
           isNull(vacancies.deletedAt),
           eq(candidates.stage, "anketa_filled"),
           sql`${candidates.aiScore} >= 80`,
+          vacancyFilter,
         )),
 
       // 4) Конверсия demo open / total за неделю
@@ -77,6 +87,7 @@ export async function GET() {
           eq(vacancies.companyId, companyId),
           isNull(vacancies.deletedAt),
           gte(candidates.createdAt, sevenDaysAgo),
+          vacancyFilter,
         )),
     ])
 

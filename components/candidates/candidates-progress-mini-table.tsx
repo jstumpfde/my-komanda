@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils"
 interface MiniCandidate {
   id: string
   name: string
+  vacancyId?: string | null
   vacancyTitle: string
   demoTotalBlocks: number
   demoCompletedBlocks: number
@@ -24,7 +25,19 @@ function progressTextClass(percent: number | null, isActive: boolean): string {
   return cn("text-red-500", isActive && "animate-pulse")
 }
 
-export function CandidatesProgressMiniTable({ limit = 5 }: { limit?: number }) {
+export function CandidatesProgressMiniTable({
+  limit = 5,
+  vacancyId,
+  expanded = false,
+  maxExpanded = 20,
+}: {
+  limit?: number
+  // #49: фильтр по вакансии — если передан, показываем только её кандидатов.
+  vacancyId?: string
+  // #52: режим раскрытия — показывать до maxExpanded строк вместо limit.
+  expanded?: boolean
+  maxExpanded?: number
+}) {
   const router = useRouter()
   const [items, setItems] = useState<MiniCandidate[]>([])
   const [loading, setLoading] = useState(true)
@@ -43,12 +56,16 @@ export function CandidatesProgressMiniTable({ limit = 5 }: { limit?: number }) {
   }, [])
 
   const top = useMemo(() => {
-    const filtered = items.filter(
+    let filtered = items.filter(
       (c) => c.progressPercent !== null && c.demoCompletedBlocks > 0,
     )
+    if (vacancyId && vacancyId !== "all") {
+      filtered = filtered.filter((c) => c.vacancyId === vacancyId)
+    }
     filtered.sort((a, b) => (b.progressPercent ?? 0) - (a.progressPercent ?? 0))
-    return filtered.slice(0, limit)
-  }, [items, limit])
+    const slice = expanded ? maxExpanded : limit
+    return filtered.slice(0, slice)
+  }, [items, limit, vacancyId, expanded, maxExpanded])
 
   async function toggleFavorite(id: string) {
     const target = items.find((c) => c.id === id)

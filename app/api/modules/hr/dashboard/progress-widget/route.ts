@@ -17,10 +17,15 @@ export interface ProgressWidgetItem {
   progressBuckets: DemoProgressGroupCounts
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     const user = await requireCompany()
     const companyId = user.companyId
+
+    // #49: ?vacancyId= — показывать прогресс одной вакансии
+    const url = new URL(req.url)
+    const vacancyIdParam = url.searchParams.get("vacancyId")
+    const singleVacancy = vacancyIdParam && vacancyIdParam !== "all" ? vacancyIdParam : null
 
     const topVacancies = await db
       .select({
@@ -32,9 +37,10 @@ export async function GET() {
         eq(vacancies.companyId, companyId),
         inArray(vacancies.status, ACTIVE_VACANCY_STATUSES),
         isNull(vacancies.deletedAt),
+        singleVacancy ? eq(vacancies.id, singleVacancy) : undefined,
       ))
       .orderBy(desc(vacancies.createdAt))
-      .limit(5)
+      .limit(singleVacancy ? 1 : 5)
 
     if (topVacancies.length === 0) {
       return apiSuccess<ProgressWidgetItem[]>([])
