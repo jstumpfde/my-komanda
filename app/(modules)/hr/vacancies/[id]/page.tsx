@@ -58,6 +58,7 @@ import { PostDemoSettings } from "@/components/vacancies/post-demo-settings"
 import { VacancyAiProcessSettings } from "@/components/vacancies/vacancy-ai-process-settings"
 import { VacancyFollowupSettings } from "@/components/vacancies/vacancy-followup-settings"
 import { VacancyPrequalificationSettings } from "@/components/vacancies/vacancy-prequalification-settings"
+import { VacancyStopWordsSettings } from "@/components/vacancies/vacancy-stop-words-settings"
 import { VacancySettingsProvider, VacancyTabPendingDot, VacancyStickySaveBar, useVacancySectionRegister, type VacancyTabKey } from "@/components/vacancies/vacancy-settings-context"
 import { BestPublicationTimeBlock } from "./components/BestPublicationTimeBlock"
 import {
@@ -2944,6 +2945,12 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                   <VacancyPrequalificationSettings
                     vacancyId={id}
                     initial={apiVacancy?.aiProcessSettings ?? null}
+                    onSaved={() => refetchVacancy()}
+                  />
+                  {/* P0-22: editable стоп-слова, единый источник для дожима и hh-чата. */}
+                  <VacancyStopWordsSettings
+                    vacancyId={id}
+                    initial={(apiVacancy as { stopWordsJson?: string[] } | undefined)?.stopWordsJson ?? null}
                     onSaved={() => refetchVacancy()}
                   />
                   <PostDemoSettings vacancyId={id} />
