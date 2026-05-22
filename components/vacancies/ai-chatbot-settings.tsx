@@ -43,6 +43,7 @@ interface Settings {
   dailyMessageLimit: number
   stopWordsOverride: boolean
   telegramChannel: string
+  autoRejectOnAbuse: boolean
 }
 const DEFAULT_SETTINGS: Settings = {
   triggers: DEFAULT_TRIGGERS,
@@ -50,6 +51,7 @@ const DEFAULT_SETTINGS: Settings = {
   dailyMessageLimit: 5,
   stopWordsOverride: true,
   telegramChannel: "",
+  autoRejectOnAbuse: false,
 }
 
 interface Metrics { total: number; sent: number; escalated: number; rejected: number }
@@ -270,6 +272,13 @@ export function AiChatbotSettings({ vacancyId }: { vacancyId: string }) {
               <p className="text-[11px] text-muted-foreground mt-0.5">Если в ответе кандидата встречается стоп-слово — AI не отвечает, эскалация HR'у.</p>
             </div>
             <Switch checked={settings.stopWordsOverride} onCheckedChange={v => setSettings(s => ({ ...s, stopWordsOverride: v }))} />
+          </div>
+          <div className="flex items-center justify-between gap-3 rounded-lg border bg-muted/30 p-3">
+            <div>
+              <Label className="text-sm">Автоотказ при оскорблениях</Label>
+              <p className="text-[11px] text-muted-foreground mt-0.5">При confidence ≥ 0.7 кандидат с матом будет автоматически отклонён.</p>
+            </div>
+            <Switch checked={settings.autoRejectOnAbuse} onCheckedChange={v => setSettings(s => ({ ...s, autoRejectOnAbuse: v }))} />
           </div>
           <div className="flex justify-end">
             <Button size="sm" variant="outline" onClick={() => save()} disabled={saving} className="gap-1.5 h-8 text-xs">

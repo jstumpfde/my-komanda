@@ -19,6 +19,7 @@ import { callClaudeHaiku, callClaudeSonnet } from "@/lib/ai/client"
 import { matchStopWord } from "@/lib/followup/stop-words"
 import { createNotification } from "@/lib/notifications"
 import { sendTelegramAlert } from "@/lib/notifications/telegram"
+import { classifyIncomingMessage, validateAiReply } from "@/lib/ai/security-filter"
 
 export type IntentCategory =
   | "salary" | "schedule" | "location" | "requirements"
@@ -31,6 +32,7 @@ export interface ChatbotSettings {
   dailyMessageLimit?: number
   stopWordsOverride?: boolean
   telegramChannel?: string
+  autoRejectOnAbuse?: boolean
 }
 
 export interface ProcessVacancy {
@@ -80,7 +82,14 @@ const ESCALATION_REASON_LABEL: Record<string, string> = {
   not_in_triggers:       "Категория не включена в триггеры",
   rejection_signal:      "Кандидат отказался",
   empty_reply:           "AI вернул пустой ответ",
+  security_injection:    "Попытка prompt-injection",
+  security_code:         "Вредоносный код во входящем сообщении",
+  security_abuse:        "Мат / оскорбления / угрозы",
+  security_unauthorized_reply: "AI-ответ нарушил правила (post-filter)",
 }
+
+const INCOMING_SECURITY_CONFIDENCE = 0.7
+const POST_FILTER_CONFIDENCE       = 0.6
 
 function getQuotaLimit(): number {
   const v = parseInt(process.env.AI_CHATBOT_DAILY_LIMIT ?? "1000", 10)
@@ -273,6 +282,50 @@ export async function processChatbotMessage(input: ProcessInput): Promise<Proces
   }
 
   const candidateInfo = await loadCandidate(candidateId)
+
+  // 0. Pre-filter безопасности (#64, #65, #66): Haiku-классификатор для
+  // injection / code / abuse. Срабатывает раньше всех остальных правил,
+  // чтобы вредоносное сообщение никогда не доходило до основного AI.
+  const incomingSec = await classifyIncomingMessage(incomingText)
+  if (incomingSec.category !== "normal" && incomingSec.confidence >= INCOMING_SECURITY_CONFIDENCE) {
+    const reasonKey =
+      incomingSec.category === "injection" ? "security_injection" :
+      incomingSec.category === "code"      ? "security_code"      :
+                                             "security_abuse"
+    const notifType =
+      incomingSec.category === "injection" ? "ai_security_injection_attempt" :
+      incomingSec.category === "code"      ? "ai_security_code_attempt"      :
+                                             "ai_security_abuse"
+    const severity =
+      incomingSec.category === "abuse" ? "warning" : "danger"
+
+    await logMessage({
+      candidateId, vacancyId, incoming: incomingText,
+      category: "other", confidence: incomingSec.confidence,
+      reply: null, sent: false, escalated: true, reason: reasonKey,
+    })
+    await escalate({
+      companyId, vacancyId, vacancyTitle, candidateId, candidateInfo,
+      incomingMessage: incomingText, reason: reasonKey,
+      confidence: incomingSec.confidence,
+      telegramChannel, severity,
+      notificationType: notifType,
+    })
+
+    if (incomingSec.category === "abuse" && settings.autoRejectOnAbuse === true) {
+      await db.update(candidates).set({
+        stage: "rejected",
+        autoProcessingStopped: true,
+        autoProcessingStoppedReason: "abuse_in_chat",
+        autoProcessingStoppedAt: new Date(),
+        automationPaused: true,
+        updatedAt: new Date(),
+      }).where(eq(candidates.id, candidateId))
+      return { handled: true, action: "rejected", confidence: incomingSec.confidence, escalationReason: reasonKey }
+    }
+
+    return { handled: true, action: "escalated", confidence: incomingSec.confidence, escalationReason: reasonKey }
+  }
 
   // 1. Стоп-слова перебивают AI: rejected без AI-вызова.
   if (stopwordsOn && matchStopWord(incomingText)) {
