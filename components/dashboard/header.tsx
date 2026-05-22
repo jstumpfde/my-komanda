@@ -1,7 +1,7 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
-import { Bell, Moon, Sun, Coffee, LogOut, PanelLeftClose, PanelLeft, ChevronDown, ArrowLeft, Building2, User as UserIcon, Loader2 } from "lucide-react"
+import { Bell, Moon, Sun, Coffee, LogOut, PanelLeftClose, PanelLeft, ChevronDown, ArrowLeft, Building2, User as UserIcon, Loader2, Shield } from "lucide-react"
 import { useTheme } from "next-themes"
 import { useEffect, useRef, useState } from "react"
 import { useRouter, usePathname } from "next/navigation"
@@ -37,7 +37,8 @@ export function DashboardHeader() {
   const [mounted, setMounted] = useState(false)
   const { state, toggleSidebar } = useSidebar()
   const { user, role, realRole, isViewingAs, setRole, returnToAdmin, logout } = useAuth()
-  const { update: updateSession } = useSession()
+  const { data: session, update: updateSession } = useSession()
+  const isPlatformAdmin = session?.user?.isPlatformAdmin === true
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
   const router = useRouter()
@@ -210,6 +211,20 @@ export function DashboardHeader() {
                 В хедере остался только колокольчик + аватар, чтобы освободить
                 место и не дублировать поверхностные действия. */}
 
+            {/* Platform admin shortcut — виден только тем, чей email есть в
+                PLATFORM_ADMIN_EMAILS. Сам /admin/platform защищён ещё и
+                layout-проверкой, так что это просто удобная точка входа. */}
+            {isPlatformAdmin && (
+              <Link
+                href="/admin/platform"
+                title="Настройки платформы"
+                className="relative inline-flex items-center justify-center h-9 w-9 rounded-md hover:bg-accent hover:text-accent-foreground transition-colors"
+              >
+                <Shield className="h-5 w-5" />
+                <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-orange-500 ring-2 ring-background" />
+              </Link>
+            )}
+
             {/* Notifications */}
             <Popover>
               <PopoverTrigger asChild>
@@ -313,6 +328,15 @@ export function DashboardHeader() {
                   <DropdownMenuItem className="text-sm cursor-pointer" asChild>
                     <Link href="/settings/profile"><UserIcon className="w-4 h-4 mr-2" />Профиль</Link>
                   </DropdownMenuItem>
+                  {isPlatformAdmin && (
+                    <DropdownMenuItem className="text-sm cursor-pointer" asChild>
+                      <Link href="/admin/platform">
+                        <Shield className="w-4 h-4 mr-2" />
+                        Настройки платформы
+                        <span className="ml-auto w-2 h-2 rounded-full bg-orange-500" />
+                      </Link>
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuSeparator />
                   {/* Inline-переключатель темы — 3 варианта. Используем 3 строки
                       вместо группы кнопок, чтобы помещалось в стандартный 224px
