@@ -132,6 +132,25 @@ export async function GET(
         }
       : null
 
+    // #16/#25: тексты двух финальных экранов из descriptionJson.finalScreens.
+    // Если поля не заданы — frontend применит дефолты.
+    const finalScreensRaw = (dj.finalScreens && typeof dj.finalScreens === "object")
+      ? dj.finalScreens as Record<string, unknown>
+      : null
+    const finalScreens = finalScreensRaw
+      ? {
+          afterVideo: {
+            title:    typeof (finalScreensRaw.afterVideo as { title?: string } | undefined)?.title    === "string" ? (finalScreensRaw.afterVideo as { title: string }).title    : "",
+            subtitle: typeof (finalScreensRaw.afterVideo as { subtitle?: string } | undefined)?.subtitle === "string" ? (finalScreensRaw.afterVideo as { subtitle: string }).subtitle : "",
+            button:   typeof (finalScreensRaw.afterVideo as { button?: string } | undefined)?.button   === "string" ? (finalScreensRaw.afterVideo as { button: string }).button   : "",
+          },
+          afterAnketa: {
+            title:    typeof (finalScreensRaw.afterAnketa as { title?: string } | undefined)?.title    === "string" ? (finalScreensRaw.afterAnketa as { title: string }).title    : "",
+            subtitle: typeof (finalScreensRaw.afterAnketa as { subtitle?: string } | undefined)?.subtitle === "string" ? (finalScreensRaw.afterAnketa as { subtitle: string }).subtitle : "",
+          },
+        }
+      : null
+
     return apiSuccess({
       candidateName: candidate.name,
       vacancyTitle: vacancy.title,
@@ -150,6 +169,7 @@ export async function GET(
       aiScore: candidate.aiScore,
       postDemoSettings: demo.postDemoSettings ?? {},
       anketaIntro,
+      finalScreens,
       prefill,
     })
   } catch (err) {

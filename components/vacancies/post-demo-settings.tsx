@@ -542,8 +542,75 @@ export function PostDemoSettings({ vacancyId, sections }: PostDemoSettingsProps)
       </Card>
       )}
 
+      {/* #17: блок «Автоответ после заполнения анкеты» переехал ВНИЗ —
+          после превью, как завершающее действие воронки. См. ниже за
+          showSection("preview"). */}
+
+      {showSection("preview") && (
+      /* Live preview */
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Превью финального экрана</CardTitle>
+          {/* #17: ползунок «Тестовый балл» удалён — это была отладка,
+              в проде не нужно. Превью отрисовывается под текущий
+              previewScore из state (default 80, см. useState выше). */}
+        </CardHeader>
+        <CardContent>
+          <div className="rounded-xl border overflow-hidden" style={{ backgroundColor: "#f8fafc" }}>
+            <div className="p-6 text-center space-y-4 max-w-sm mx-auto">
+              {mode === "auto" ? (
+                previewLevel === "green" ? (
+                  <>
+                    <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto" />
+                    <h3 className="text-lg font-bold text-gray-900">{greenTitle}</h3>
+                    <div className="space-y-2 text-left">
+                      <p className="text-xs text-gray-500">Выберите тип встречи:</p>
+                      <div className="space-y-1.5">
+                        {meetPhone && <div className="p-2 rounded-lg border text-sm flex items-center gap-2"><Phone className="w-4 h-4 text-gray-400" /> Звонок</div>}
+                        {meetOnline && <div className="p-2 rounded-lg border text-sm flex items-center gap-2"><Video className="w-4 h-4 text-gray-400" /> Онлайн</div>}
+                        {meetOffice && <div className="p-2 rounded-lg border text-sm flex items-center gap-2"><Building2 className="w-4 h-4 text-gray-400" /> Офис</div>}
+                      </div>
+                    </div>
+                    <div className="h-9 rounded-lg bg-primary flex items-center justify-center text-white text-sm font-medium">
+                      <Calendar className="w-4 h-4 mr-1.5" /> Выбрать время
+                    </div>
+                  </>
+                ) : previewLevel === "yellow" ? (
+                  <>
+                    <Clock className="w-12 h-12 text-amber-500 mx-auto" />
+                    <h3 className="text-lg font-bold text-gray-900">{yellowTitle}</h3>
+                    <p className="text-sm text-gray-500">{yellowText}</p>
+                  </>
+                ) : (
+                  <>
+                    <XCircle className="w-12 h-12 text-red-400 mx-auto" />
+                    <h3 className="text-lg font-bold text-gray-900">{redTitle}</h3>
+                    <p className="text-sm text-gray-500">{redText}</p>
+                  </>
+                )
+              ) : (
+                <>
+                  <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto" />
+                  <h3 className="text-lg font-bold text-gray-900">{renderTemplate(manualTitle, { name: "Иван" })}</h3>
+                  <p className="text-sm text-gray-500">{manualText}</p>
+                  {manualButtonEnabled && (
+                    <div className="h-9 rounded-lg bg-primary flex items-center justify-center text-white text-sm font-medium">
+                      {manualButton}
+                    </div>
+                  )}
+                </>
+              )}
+              <p className="text-[10px] text-gray-300">Powered by Company24</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+      )}
+
       {showSection("anketaAutoReply") && (
-      /* ТЗ-3 Ч.1: автоответ после заполнения финальной анкеты */
+      /* ТЗ-3 Ч.1: автоответ после заполнения финальной анкеты.
+         #17: блок перенесён вниз (раньше был выше preview) — теперь это
+         завершающее действие воронки, идущее после AI-скоринга и превью. */
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between gap-3">
@@ -626,71 +693,6 @@ export function PostDemoSettings({ vacancyId, sections }: PostDemoSettingsProps)
             <Button size="sm" className="gap-1.5 h-8 text-xs" onClick={handleSave} disabled={saving}>
               <Save className="w-4 h-4" /> {saving ? "Сохранение…" : "Сохранить настройки"}
             </Button>
-          </div>
-        </CardContent>
-      </Card>
-      )}
-
-      {showSection("preview") && (
-      /* Live preview */
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Превью финального экрана</CardTitle>
-          {mode === "auto" && (
-            <div className={cn("flex items-center gap-3 mt-2", !enabled && "opacity-50 pointer-events-none")}>
-              <Label className="text-xs text-muted-foreground">Тестовый балл:</Label>
-              <Slider value={[previewScore]} onValueChange={([v]) => setPreviewScore(v)} min={0} max={100} step={1} className="w-32" />
-              <span className={cn("text-sm font-bold", previewLevel === "green" ? "text-emerald-600" : previewLevel === "yellow" ? "text-amber-600" : "text-red-600")}>{previewScore}%</span>
-            </div>
-          )}
-        </CardHeader>
-        <CardContent>
-          <div className="rounded-xl border overflow-hidden" style={{ backgroundColor: "#f8fafc" }}>
-            <div className="p-6 text-center space-y-4 max-w-sm mx-auto">
-              {mode === "auto" ? (
-                previewLevel === "green" ? (
-                  <>
-                    <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto" />
-                    <h3 className="text-lg font-bold text-gray-900">{greenTitle}</h3>
-                    <div className="space-y-2 text-left">
-                      <p className="text-xs text-gray-500">Выберите тип встречи:</p>
-                      <div className="space-y-1.5">
-                        {meetPhone && <div className="p-2 rounded-lg border text-sm flex items-center gap-2"><Phone className="w-4 h-4 text-gray-400" /> Звонок</div>}
-                        {meetOnline && <div className="p-2 rounded-lg border text-sm flex items-center gap-2"><Video className="w-4 h-4 text-gray-400" /> Онлайн</div>}
-                        {meetOffice && <div className="p-2 rounded-lg border text-sm flex items-center gap-2"><Building2 className="w-4 h-4 text-gray-400" /> Офис</div>}
-                      </div>
-                    </div>
-                    <div className="h-9 rounded-lg bg-primary flex items-center justify-center text-white text-sm font-medium">
-                      <Calendar className="w-4 h-4 mr-1.5" /> Выбрать время
-                    </div>
-                  </>
-                ) : previewLevel === "yellow" ? (
-                  <>
-                    <Clock className="w-12 h-12 text-amber-500 mx-auto" />
-                    <h3 className="text-lg font-bold text-gray-900">{yellowTitle}</h3>
-                    <p className="text-sm text-gray-500">{yellowText}</p>
-                  </>
-                ) : (
-                  <>
-                    <XCircle className="w-12 h-12 text-red-400 mx-auto" />
-                    <h3 className="text-lg font-bold text-gray-900">{redTitle}</h3>
-                    <p className="text-sm text-gray-500">{redText}</p>
-                  </>
-                )
-              ) : (
-                <>
-                  <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto" />
-                  <h3 className="text-lg font-bold text-gray-900">{renderTemplate(manualTitle, { name: "Иван" })}</h3>
-                  <p className="text-sm text-gray-500">{manualText}</p>
-                  {manualButtonEnabled && (
-                    <div className="h-9 rounded-lg bg-primary flex items-center justify-center text-white text-sm font-medium">
-                      {manualButton}
-                    </div>
-                  )}
-                </>
-              )}
-              <p className="text-[10px] text-gray-300">Powered by Company24</p>
-            </div>
           </div>
         </CardContent>
       </Card>

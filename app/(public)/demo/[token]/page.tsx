@@ -32,7 +32,7 @@ export default async function DemoPageRoute({
 
   // 1. Owner ссылки — нужен, чтобы знать вакансию (на случай создания нового).
   const [owner] = await db
-    .select({ id: candidates.id, shortId: candidates.shortId })
+    .select({ id: candidates.id, shortId: candidates.shortId, vacancyId: candidates.vacancyId })
     .from(candidates)
     .where(eq(candidates.shortId, token))
     .limit(1)
@@ -43,6 +43,11 @@ export default async function DemoPageRoute({
 
   // 2. Кто пришёл — cookie или ?c=. Если совпадает с владельцем или с другим
   //    кандидатом этой ссылки — пропускаем без перенаправления.
+  //
+  // #9 fix: token из URL — авторитетный источник. Если cookie/queryUuid
+  // указывает на кандидата ДРУГОЙ вакансии — НЕ перенаправляем (раньше
+  // редиректило на старую вакансию, и Юрий видел демо первого отклика
+  // вместо нового). Cookie перепишется в /visit при следующем шаге.
   const cookieStore = await cookies()
   const cookieUuid = cookieStore.get(COOKIE_NAME)?.value
   const queryUuidRaw = typeof sp.c === "string" ? sp.c : undefined
@@ -52,16 +57,22 @@ export default async function DemoPageRoute({
   if (visitorUuid) {
     if (visitorUuid === owner.id) return <DemoClient />
     const [existing] = await db
-      .select({ id: candidates.id, shortId: candidates.shortId })
+      .select({ id: candidates.id, shortId: candidates.shortId, vacancyId: candidates.vacancyId })
       .from(candidates)
       .where(eq(candidates.id, visitorUuid))
       .limit(1)
     if (existing && existing.shortId) {
       if (existing.shortId === token) return <DemoClient />
-      // У посетителя свой short_id — перекидываем туда (без создания нового кандидата).
-      redirect(`/demo/${existing.shortId}?c=${existing.id}`)
+      // #9 fix: редиректить на чужой short_id можно только если кандидат
+      // относится к ТОЙ ЖЕ вакансии. Иначе token в URL = новая вакансия,
+      // надо создавать нового кандидата для неё (fallthrough к /visit).
+      if (existing.vacancyId === owner.vacancyId) {
+        redirect(`/demo/${existing.shortId}?c=${existing.id}`)
+      }
     }
-    // Cookie/c указывают на несуществующего кандидата — fallthrough к visit.
+    // Cookie/c указывают на несуществующего кандидата ИЛИ на кандидата
+    // другой вакансии — fallthrough к visit (создаст нового кандидата
+    // для текущей вакансии и перепишет cookie).
   }
 
   // 3. Новый посетитель — делегируем в route handler (он создаст candidate и

@@ -59,6 +59,8 @@ import { VacancyAiProcessSettings } from "@/components/vacancies/vacancy-ai-proc
 import { VacancyFollowupSettings } from "@/components/vacancies/vacancy-followup-settings"
 import { VacancyPrequalificationSettings } from "@/components/vacancies/vacancy-prequalification-settings"
 import { VacancyStopWordsSettings } from "@/components/vacancies/vacancy-stop-words-settings"
+import { FinalScreensSettings, type FinalScreensConfig } from "@/components/vacancies/final-screens-settings"
+import { RecoveryMessageSettings } from "@/components/vacancies/recovery-message-settings"
 import { VacancySettingsProvider, VacancyTabPendingDot, VacancyStickySaveBar, useVacancySectionRegister, useSafeSubTabSwitch, type VacancyTabKey } from "@/components/vacancies/vacancy-settings-context"
 import { BestPublicationTimeBlock } from "./components/BestPublicationTimeBlock"
 import {
@@ -2985,6 +2987,13 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                     sections={["firstMessage", "callIntent", "templates"] satisfies AutomationSectionId[]}
                     tabKey="messages"
                   />
+                  {/* #46: «Аварийное повторное сообщение» — opt-in под спойлером. */}
+                  <RecoveryMessageSettings
+                    vacancyId={id}
+                    initialEnabled={(apiVacancy as { recoveryMessageEnabled?: boolean } | undefined)?.recoveryMessageEnabled ?? false}
+                    initialText={(apiVacancy as { recoveryMessageText?: string } | undefined)?.recoveryMessageText ?? ""}
+                    onSaved={() => refetchVacancy()}
+                  />
                 </div>
                 )}
 
@@ -3011,6 +3020,11 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                     vacancyId={id}
                     initial={(apiVacancy as { stopWordsJson?: string[] } | undefined)?.stopWordsJson ?? null}
                     onSaved={() => refetchVacancy()}
+                  />
+                  {/* #16/#25: тексты двух финальных экранов демо. */}
+                  <FinalScreensSettings
+                    vacancyId={id}
+                    initial={((apiVacancy?.descriptionJson as { finalScreens?: FinalScreensConfig } | null | undefined)?.finalScreens) ?? null}
                   />
                   <PostDemoSettings vacancyId={id} />
                 </div>

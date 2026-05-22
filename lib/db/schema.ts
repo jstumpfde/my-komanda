@@ -305,6 +305,11 @@ export const vacancies = pgTable("vacancies", {
   aiQualityDetails:      jsonb("ai_quality_details"),
   aiQualityAnalyzedAt:   timestamp("ai_quality_analyzed_at", { withTimezone: true }),
   aiQualityInputHash:    text("ai_quality_input_hash"),
+  // #46: «Аварийное повторное сообщение». Default OFF, текст пустой.
+  // process-queue использует только если recoveryMessageEnabled=true И
+  // recoveryMessageText непустой. Никаких hardcoded fallback'ов.
+  recoveryMessageEnabled: boolean("recovery_message_enabled").notNull().default(false),
+  recoveryMessageText:    text("recovery_message_text").notNull().default(""),
   // Авто-разбор hh-откликов: cron каждые 10 минут разбирает накопленные отклики
   // в рабочее время. Если выключено — клиент жмёт «Разобрать» вручную.
   autoProcessingEnabled:      boolean("auto_processing_enabled").notNull().default(false),

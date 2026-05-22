@@ -598,37 +598,10 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
             </div>
           </div>
 
-          {/* Шаблон для повторной отправки */}
-          <div className="space-y-2">
-            <Label className="text-sm font-medium">Текст для повторной отправки (если ссылка была сломана)</Label>
-            <textarea
-              className="w-full border rounded-lg p-3 text-sm resize-none h-36 bg-background focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none leading-relaxed"
-              value={reInviteText}
-              onChange={(e) => setReInviteText(e.target.value)}
-              placeholder="Здравствуйте, {{name}}! Извините — в прошлом сообщении была неактуальная ссылка. Вот рабочая: {{demo_link}}"
-            />
-            <p className="text-[11px] text-muted-foreground">
-              Используется для кандидатов, которым уже отправлялось сообщение ранее (например, после исправления битых ссылок).
-            </p>
-            <div className="flex items-center justify-between gap-3 flex-wrap">
-              <div className="flex flex-wrap gap-1.5">
-                {["{{name}}", "{{vacancy}}", "{{company}}", "{{demo_link}}"].map(v => (
-                  <Badge key={v} variant="outline" className="text-xs cursor-default">{v}</Badge>
-                ))}
-              </div>
-              {!tabKey && (
-                <Button
-                  size="sm"
-                  className="h-8 text-xs gap-1.5"
-                  onClick={saveReInviteMessage}
-                  disabled={!reInviteDirty || savingReInvite}
-                >
-                  {savingReInvite ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                  Сохранить
-                </Button>
-              )}
-            </div>
-          </div>
+          {/* #46: блок «Текст для повторной отправки» удалён из этой
+              карточки. Переехал в отдельный компонент RecoveryMessageSettings
+              под спойлером в табе «Сообщения» — opt-in, по умолчанию ВЫКЛ,
+              чтобы автоматика не дёргала кандидатов дубликатами. */}
         </CardContent>
       </Card>
       )}
