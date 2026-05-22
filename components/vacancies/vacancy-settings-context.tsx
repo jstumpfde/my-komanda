@@ -182,6 +182,47 @@ export function useVacancySectionRegister(opts: {
 }
 
 /**
+ * #11: helper для безопасного переключения подтаба. Если в текущем
+ * подтабе есть несохранённые изменения — показывает confirm с тремя
+ * опциями (через стандартный window.confirm для простоты):
+ *   1) Сохранить (saveAll + переключить)
+ *   2) Не сохранять (потерять правки + переключить)
+ *   3) Отмена (остаться в текущем подтабе)
+ * window.confirm даёт только 2 кнопки, поэтому используем последовательно:
+ * сначала «Сохранить?» (OK = сохранить и продолжить, Cancel = открыть
+ * подвопрос «Отменить переход или потерять правки?»). Это упрощённая
+ * версия escape clause из ТЗ #11.
+ */
+export function useSafeSubTabSwitch(currentTab: VacancyTabKey | null): (next: VacancyTabKey, doSwitch: () => void) => void {
+  const ctx = useVacancySettings()
+  return (next: VacancyTabKey, doSwitch: () => void) => {
+    if (!ctx || !currentTab || next === currentTab) {
+      doSwitch()
+      return
+    }
+    if (!ctx.tabHasPending(currentTab)) {
+      doSwitch()
+      return
+    }
+    // 1) Save before switching?
+    const wantSave = window.confirm(
+      "У вас есть несохранённые изменения в текущем разделе. Сохранить перед переходом?\n\n" +
+      "OK — сохранить и перейти.\nОтмена — отказаться от сохранения (откроется второй вопрос).",
+    )
+    if (wantSave) {
+      void ctx.saveAll().then(() => doSwitch())
+      return
+    }
+    // 2) Discard or stay?
+    const discard = window.confirm(
+      "Перейти без сохранения? Несохранённые правки будут потеряны.\n\n" +
+      "OK — потерять правки и перейти.\nОтмена — остаться в текущем разделе.",
+    )
+    if (discard) doSwitch()
+  }
+}
+
+/**
  * Жёлтая точка-индикатор для таба, если в нём есть несохранённые изменения.
  * Используется внутри Provider'а.
  */

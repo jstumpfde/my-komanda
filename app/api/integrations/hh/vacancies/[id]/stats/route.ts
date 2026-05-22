@@ -34,10 +34,15 @@ export async function GET(
       })
     }
 
+    // #45: unprocessed = response + claimed. 'claimed' — промежуточный
+    // статус, выставляется process-queue в момент захвата отклика, но
+    // ДО реальной отправки сообщения. Считаем как «новый», чтобы UI
+    // показывал реалистичный счётчик: пока сообщение не ушло — отклик
+    // ещё в очереди.
     const [counts] = await db
       .select({
         total: sql<number>`count(*)::int`,
-        unprocessed: sql<number>`count(*) filter (where ${hhResponses.status} = 'response')::int`,
+        unprocessed: sql<number>`count(*) filter (where ${hhResponses.status} IN ('response', 'claimed'))::int`,
         lastCreatedAt: sql<Date | null>`max(${hhResponses.createdAt})`,
       })
       .from(hhResponses)

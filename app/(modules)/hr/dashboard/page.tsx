@@ -75,6 +75,7 @@ interface VacancyRow {
   createdAt: string
   candidateCount: number
   decisionCount: number
+  inProgressCount?: number
 }
 
 interface DashboardStats {
@@ -393,10 +394,14 @@ function DashboardContent() {
                           </p>
                         </div>
                         <div className="flex items-center gap-1.5 shrink-0">
-                          <Badge variant="secondary" className="text-[10px] h-5">{v.candidateCount} откл.</Badge>
-                          {v.decisionCount > 0 && (
-                            <Badge className="text-[10px] h-5 bg-emerald-100 text-emerald-700 border-0">
-                              {v.decisionCount} фин.
+                          {/* #34: «откл./фин.» переименовано в более понятное
+                              «откликов · в работе». В работе = stage IN
+                              (primary_contact..offer_sent) — кандидат активно
+                              в воронке. */}
+                          <Badge variant="secondary" className="text-[10px] h-5">{v.candidateCount} откликов</Badge>
+                          {(v.inProgressCount ?? 0) > 0 && (
+                            <Badge className="text-[10px] h-5 bg-blue-100 text-blue-700 border-0">
+                              {v.inProgressCount} в работе
                             </Badge>
                           )}
                         </div>
@@ -409,13 +414,19 @@ function DashboardContent() {
 
             {/* ═══ Efficiency + Events ═══ */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-              {/* Efficiency — реальное */}
+              {/* #35: блок «Эффективность по вакансиям» переименован в
+                  «Прогресс вакансий». Раньше показывалось «done/total» с
+                  %% (например 6/432 = 1.4% для свежей вакансии — выглядело
+                  как провал, хотя в первые недели это норма). Теперь —
+                  «inProgress / total» без процентов: «X в работе из Y
+                  откликов». Бар показывает долю «в работе» от total —
+                  это нейтральная метрика, без оценки. */}
               <div className="border rounded-xl shadow-sm hover:shadow-md transition-shadow p-6">
                 <div className="flex items-center justify-between mb-1">
-                  <h3 className="text-lg font-semibold">Эффективность по вакансиям</h3>
+                  <h3 className="text-lg font-semibold">Прогресс вакансий</h3>
                 </div>
                 <p className="text-xs text-muted-foreground mb-4">
-                  Сколько откликов дошло до этапа «Решение» / всего откликов
+                  Сколько кандидатов в работе по каждой вакансии
                 </p>
                 {!loaded ? (
                   <div className="h-40" />
@@ -427,10 +438,10 @@ function DashboardContent() {
                   <div className="space-y-4">
                     {vacancies.slice(0, 5).map(v => {
                       const total = v.candidateCount || 0
-                      const done = v.decisionCount || 0
-                      const pct = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0
-                      const barColor = pct >= 50 ? C.green : pct >= 20 ? C.blue : C.orange
-                      const tooltip = `Дошло до решения: ${done} из ${total} откликов${total > 0 ? ` (${pct}%)` : ""}`
+                      const inWork = v.inProgressCount ?? 0
+                      const barPct = total > 0 ? Math.min(100, Math.round((inWork / total) * 100)) : 0
+                      const barColor = inWork === 0 ? C.orange : inWork >= 5 ? C.green : C.blue
+                      const tooltip = `${inWork} в работе из ${total} откликов`
                       return (
                         <div key={v.id}>
                           <div className="flex items-center justify-between mb-1.5 gap-2">
@@ -439,13 +450,15 @@ function DashboardContent() {
                               className="text-[11px] text-muted-foreground tabular-nums whitespace-nowrap shrink-0"
                               title={tooltip}
                             >
-                              {done}/{total} <span className="text-muted-foreground/70">решений</span>
+                              <span className="font-medium text-foreground">{inWork}</span>
+                              <span className="text-muted-foreground/70"> в работе </span>
+                              / {total} <span className="text-muted-foreground/70">откликов</span>
                             </span>
                           </div>
                           <div className="h-2.5 bg-muted/30 rounded-full overflow-hidden" title={tooltip}>
                             <div
                               className="h-full rounded-full transition-all"
-                              style={{ width: `${pct}%`, backgroundColor: barColor }}
+                              style={{ width: `${barPct}%`, backgroundColor: barColor }}
                             />
                           </div>
                         </div>

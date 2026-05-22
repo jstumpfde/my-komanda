@@ -58,7 +58,7 @@ import { PostDemoSettings } from "@/components/vacancies/post-demo-settings"
 import { VacancyAiProcessSettings } from "@/components/vacancies/vacancy-ai-process-settings"
 import { VacancyFollowupSettings } from "@/components/vacancies/vacancy-followup-settings"
 import { VacancyPrequalificationSettings } from "@/components/vacancies/vacancy-prequalification-settings"
-import { VacancySettingsProvider, VacancyTabPendingDot, VacancyStickySaveBar, useVacancySectionRegister, type VacancyTabKey } from "@/components/vacancies/vacancy-settings-context"
+import { VacancySettingsProvider, VacancyTabPendingDot, VacancyStickySaveBar, useVacancySectionRegister, useSafeSubTabSwitch, type VacancyTabKey } from "@/components/vacancies/vacancy-settings-context"
 import { BestPublicationTimeBlock } from "./components/BestPublicationTimeBlock"
 import {
   ResponsiveContainer,
@@ -785,14 +785,46 @@ export default function VacancyPage() {
   // Сводные счётчики для шапки. Отдельный endpoint, не зависящий от фильтров,
   // чтобы «всего кандидатов» всегда показывало COUNT по vacancy_id, а не
   // длину apiCandidates (которая ужимается фильтрами / задержкой загрузки).
-  const [headerStats, setHeaderStats] = useState<{ total: number; pending: number; freshCount: number; demoOpened: number; rejected: number } | null>(null)
+  // #13/#14: единый endpoint /stats — те же цифры в шапке, аналитике
+  // и дашборде. Сохранили старые поля total/pending/freshCount/demoOpened/
+  // rejected плюс hhTotal/hhNew/inProgress/anketaFilled/hired. freshCount
+  // берётся из старого /candidate-stats — он использует user_vacancy_views
+  // (отдельная логика «свежести с прошлого захода»), которой нет в общей
+  // функции.
+  const [headerStats, setHeaderStats] = useState<{
+    total: number; pending: number; freshCount: number;
+    demoOpened: number; rejected: number;
+    hhTotal: number; hhNew: number; inProgress: number;
+    anketaFilled: number; hired: number;
+  } | null>(null)
   const loadHeaderStats = useCallback(async () => {
     if (!id) return
     try {
-      const res = await fetch(`/api/modules/hr/vacancies/${id}/candidate-stats`)
-      if (!res.ok) return
-      const data = await res.json() as { total: number; pending: number; freshCount: number; demoOpened: number; rejected: number }
-      setHeaderStats(data)
+      const [statsRes, candRes] = await Promise.all([
+        fetch(`/api/modules/hr/vacancies/${id}/stats`),
+        fetch(`/api/modules/hr/vacancies/${id}/candidate-stats`),
+      ])
+      if (!statsRes.ok) return
+      const stats = await statsRes.json() as {
+        total: number; hhTotal: number; hhNew: number;
+        inProgress: number; rejected: number; hired: number;
+        demoOpened: number; anketaFilled: number;
+      }
+      const cand = candRes.ok
+        ? await candRes.json() as { pending: number; freshCount: number }
+        : { pending: 0, freshCount: 0 }
+      setHeaderStats({
+        total:        stats.total,
+        pending:      cand.pending,
+        freshCount:   cand.freshCount,
+        demoOpened:   stats.demoOpened,
+        rejected:     stats.rejected,
+        hhTotal:      stats.hhTotal,
+        hhNew:        stats.hhNew,
+        inProgress:   stats.inProgress,
+        anketaFilled: stats.anketaFilled,
+        hired:        stats.hired,
+      })
     } catch { /* silent */ }
   }, [id])
   useEffect(() => {
@@ -1786,35 +1818,45 @@ export default function VacancyPage() {
                 </div>
                 <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-muted-foreground">
                   {activeTab === "candidates" && <>
-                    {/* Цифры берём из headerStats (отдельный COUNT по vacancy_id).
-                        Пока запрос /candidate-stats не вернулся — показываем «—». */}
-                    <UITooltip>
-                      <TooltipTrigger asChild>
-                        <span className="cursor-help"><span className="font-medium text-foreground">{headerStats?.total ?? "—"}</span> всего кандидатов</span>
-                      </TooltipTrigger>
-                      <TooltipContent>Все кандидаты на вакансии — все источники, все этапы</TooltipContent>
-                    </UITooltip>
-                    {/* P0-9: бейдж дельты «свежих» (anketa_filled с прошлого
-                        захода HR в карточку). Старая строка «N ждут разбора»
-                        (P0-8) убрана — она создавала ложную тревогу при
-                        дефолте direct_demo, см. P0-7. */}
-                    {(headerStats?.freshCount ?? 0) > 0 && <>
-                      <span>·</span>
-                      <UITooltip>
-                        <TooltipTrigger asChild>
-                          <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 cursor-help">
-                            +{headerStats?.freshCount} новых
-                          </span>
-                        </TooltipTrigger>
-                        <TooltipContent>Новые заполненные анкеты с прошлого захода в вакансию</TooltipContent>
-                      </UITooltip>
-                    </>}
-                    <span>·</span>
+                    {/* #13: две логические группы метрик. Слева — hh.ru
+                        (синхрон с hh-кабинетом), вертикальная черта,
+                        справа — наши данные после разбора. Если вакансия
+                        не привязана к hh — hh-блок скрыт. */}
+                    {headerStats?.hhTotal !== undefined && headerStats.hhTotal + headerStats.hhNew > 0 && (
+                      <>
+                        <UITooltip>
+                          <TooltipTrigger asChild>
+                            <span className="cursor-help">
+                              <span className="font-medium text-foreground">{headerStats.hhTotal}</span> откликов всего
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>Всего откликов с hh.ru, синхронизировано с hh-кабинетом</TooltipContent>
+                        </UITooltip>
+                        <span>·</span>
+                        <UITooltip>
+                          <TooltipTrigger asChild>
+                            <span className="cursor-help">
+                              <span className="font-medium text-foreground">{headerStats.hhNew}</span> новых
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>Новые отклики, ещё не разобраны (status = response)</TooltipContent>
+                        </UITooltip>
+                        <span className="mx-1 inline-block h-3 w-px bg-border" aria-hidden="true" />
+                      </>
+                    )}
+                    {/* Блок наших данных после разбора */}
                     <UITooltip>
                       <TooltipTrigger asChild>
                         <span className="cursor-help"><span className="font-medium text-foreground">{headerStats?.demoOpened ?? "—"}</span> открыли демо</span>
                       </TooltipTrigger>
-                      <TooltipContent>Сколько кандидатов хотя бы зашли на демо-анкету</TooltipContent>
+                      <TooltipContent>Кандидаты, добравшиеся до стадии «demo_opened» и далее</TooltipContent>
+                    </UITooltip>
+                    <span>·</span>
+                    <UITooltip>
+                      <TooltipTrigger asChild>
+                        <span className="cursor-help"><span className="font-medium text-foreground">{headerStats?.anketaFilled ?? "—"}</span> анкет заполнено</span>
+                      </TooltipTrigger>
+                      <TooltipContent>Кандидаты, сдавшие финальную анкету (anketa_filled и далее)</TooltipContent>
                     </UITooltip>
                     <span>·</span>
                     <UITooltip>
@@ -1823,6 +1865,20 @@ export default function VacancyPage() {
                       </TooltipTrigger>
                       <TooltipContent>Кандидаты со статусом «Отказ» в воронке</TooltipContent>
                     </UITooltip>
+                    {/* P0-9: бейдж дельты «свежих» — оставлен (отдельная семантика
+                        «с прошлого захода»), но переехал в конец, чтобы не мешать
+                        основным метрикам. */}
+                    {(headerStats?.freshCount ?? 0) > 0 && <>
+                      <span>·</span>
+                      <UITooltip>
+                        <TooltipTrigger asChild>
+                          <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 cursor-help">
+                            +{headerStats?.freshCount} новых анкет
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent>Новые заполненные анкеты с прошлого захода в вакансию</TooltipContent>
+                      </UITooltip>
+                    </>}
                     {useListPaginated && paginated.total > 0 && (
                       <>
                         <span>·</span>
@@ -2507,34 +2563,23 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                     { value: "followup"    as const, label: "Дожим",               icon: MessageSquareText },
                     { value: "ai"          as const, label: "Расписание",          icon: Zap },
                     { value: "integrations" as const, label: "Интеграции",          icon: Settings },
-                  ] satisfies { value: VacancyTabKey; label: string; icon: typeof Globe }[]).map((s) => {
-                    const Icon = s.icon
-                    const active = settingsSection === s.value
-                    return (
-                      <button
-                        key={s.value}
-                        type="button"
-                        title="У вас есть несохранённые изменения в этом разделе"
-                        onClick={() => {
-                          setSettingsSection(s.value)
-                          const sp = new URLSearchParams(window.location.search)
-                          sp.set("tab", "settings")
-                          sp.set("section", s.value)
-                          router.replace(`${window.location.pathname}?${sp.toString()}`, { scroll: false })
-                        }}
-                        className={cn(
-                          "inline-flex items-center gap-1.5 px-3 py-2 text-sm border-b-2 -mb-px transition-colors whitespace-nowrap shrink-0",
-                          active
-                            ? "border-primary text-foreground font-medium"
-                            : "border-transparent text-muted-foreground hover:text-foreground"
-                        )}
-                      >
-                        <Icon className="w-3.5 h-3.5" />
-                        {s.label}
-                        <VacancyTabPendingDot tab={s.value} />
-                      </button>
-                    )
-                  })}
+                  ] satisfies { value: VacancyTabKey; label: string; icon: typeof Globe }[]).map((s) => (
+                    <SettingsSubNavButton
+                      key={s.value}
+                      tab={s.value}
+                      label={s.label}
+                      Icon={s.icon}
+                      active={settingsSection === s.value}
+                      currentTab={settingsSection as VacancyTabKey}
+                      onSwitch={() => {
+                        setSettingsSection(s.value)
+                        const sp = new URLSearchParams(window.location.search)
+                        sp.set("tab", "settings")
+                        sp.set("section", s.value)
+                        router.replace(`${window.location.pathname}?${sp.toString()}`, { scroll: false })
+                      }}
+                    />
+                  ))}
                 </div>
 
                 {/* ───────── ТАБ «Страница и брендинг» ───────── */}
@@ -3543,4 +3588,38 @@ function BrandingStickyRegister({
     save,
   })
   return null
+}
+
+// #11: кнопка саб-таба настроек, перехватывающая клик через
+// useSafeSubTabSwitch. Если в текущем подтабе есть несохранённые
+// изменения — confirm-диалог даёт три исхода: сохранить и перейти,
+// перейти без сохранения, остаться. Компонент рендерится внутри
+// <VacancySettingsProvider>, поэтому hook сработает.
+function SettingsSubNavButton({
+  tab, label, Icon, active, currentTab, onSwitch,
+}: {
+  tab: VacancyTabKey
+  label: string
+  Icon: typeof Globe
+  active: boolean
+  currentTab: VacancyTabKey
+  onSwitch: () => void
+}) {
+  const safeSwitch = useSafeSubTabSwitch(currentTab)
+  return (
+    <button
+      type="button"
+      onClick={() => safeSwitch(tab, onSwitch)}
+      className={cn(
+        "inline-flex items-center gap-1.5 px-3 py-2 text-sm border-b-2 -mb-px transition-colors whitespace-nowrap shrink-0",
+        active
+          ? "border-primary text-foreground font-medium"
+          : "border-transparent text-muted-foreground hover:text-foreground"
+      )}
+    >
+      <Icon className="w-3.5 h-3.5" />
+      {label}
+      <VacancyTabPendingDot tab={tab} />
+    </button>
+  )
 }

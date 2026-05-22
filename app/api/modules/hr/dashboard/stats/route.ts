@@ -84,7 +84,9 @@ export async function GET() {
         ))
         .groupBy(candidates.stage, candidates.vacancyId),
 
-      // 5. Active vacancies with candidate counts
+      // 5. Active vacancies with candidate counts.
+      // #34: добавил inProgressCount — кандидаты «в работе» (НЕ new, НЕ
+      // rejected, НЕ hired). Это даёт честную метрику «кто сейчас в воронке».
       db.select({
         id: vacancies.id,
         title: vacancies.title,
@@ -96,6 +98,11 @@ export async function GET() {
         createdAt: vacancies.createdAt,
         candidateCount: sql<number>`count(${candidates.id})::int`,
         decisionCount: sql<number>`count(case when ${candidates.stage} in ('decision', 'final_decision') then 1 end)::int`,
+        inProgressCount: sql<number>`count(case when ${candidates.stage} in (
+          'primary_contact','demo_opened','anketa_filled','ai_screening',
+          'test_task_sent','test_task_done','scheduled','interview',
+          'reference_check','decision','offer_sent'
+        ) then 1 end)::int`,
       })
         .from(vacancies)
         .leftJoin(candidates, eq(candidates.vacancyId, vacancies.id))
