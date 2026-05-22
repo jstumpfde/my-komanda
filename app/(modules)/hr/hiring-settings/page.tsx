@@ -727,21 +727,30 @@ export default function HiringSettingsPage() {
               {/* ═══ TAB 3: Сообщения ═══ */}
               <TabsContent value="messages">
                 <div className="space-y-4 max-w-3xl">
-                  <Card>
+                  {/* #44: блок «Шаблоны сообщений» закрыт плашкой «Скоро».
+                      Шаблоны на уровне компании пока демо-заглушка — они
+                      не подключены к диалогу отправки в карточке кандидата.
+                      Будем доделывать вместе с этим диалогом отдельной
+                      задачей. UI оставляем виден, но кликать нельзя. */}
+                  <Card className="relative overflow-hidden">
                     <CardHeader>
                       <div className="flex items-center justify-between">
                         <div>
                           <CardTitle className="text-base flex items-center gap-2">
                             <MessageSquare className="size-4" />Шаблоны сообщений
+                            <Badge variant="outline" className="text-[10px] h-5 px-1.5 ml-1">Скоро</Badge>
                           </CardTitle>
-                          <CardDescription className="mt-1">Создайте шаблоны для быстрого использования в вакансиях</CardDescription>
+                          <CardDescription className="mt-1">
+                            Шаблоны сообщений компании — общая библиотека для использования
+                            во всех вакансиях. Скоро.
+                          </CardDescription>
                         </div>
-                        <Button size="sm" className="gap-1.5" onClick={openNewTemplate}>
+                        <Button size="sm" className="gap-1.5" disabled>
                           <Plus className="size-3.5" />Создать шаблон
                         </Button>
                       </div>
                     </CardHeader>
-                    <CardContent>
+                    <CardContent className="pointer-events-none opacity-40 select-none">
                       <div className="rounded-md border">
                         <table className="w-full text-sm">
                           <thead className="bg-muted/50 border-b">
@@ -762,10 +771,10 @@ export default function HiringSettingsPage() {
                                 <td className="py-2.5 px-4 text-muted-foreground">{CHANNEL_LABELS[t.channel]}</td>
                                 <td className="py-2.5 px-4 text-right">
                                   <div className="flex items-center justify-end gap-1">
-                                    <Button variant="ghost" size="icon" className="size-7" onClick={() => openEditTemplate(t)}>
+                                    <Button variant="ghost" size="icon" className="size-7" disabled>
                                       <Pencil className="size-3.5" />
                                     </Button>
-                                    <Button variant="ghost" size="icon" className="size-7" disabled={t.isSystem} onClick={() => deleteTemplate(t.id)}>
+                                    <Button variant="ghost" size="icon" className="size-7" disabled>
                                       <Trash2 className="size-3.5" />
                                     </Button>
                                   </div>
