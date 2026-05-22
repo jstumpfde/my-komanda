@@ -43,6 +43,13 @@ interface VacancySettingsCtx {
   saveAll: () => Promise<void>
   tabHasPending: (tab: VacancyTabKey) => boolean
   saving: boolean
+  /**
+   * Bug #82: ставится в true только после первого реального input/select/button
+   * взаимодействия HR внутри настроек (не на табах). До этого момента любые
+   * изменения watchedValues трактуются как программная нормализация (resync
+   * initial → state) и НЕ помечают секцию как dirty.
+   */
+  hasUserInteracted: boolean
 }
 
 const Ctx = createContext<VacancySettingsCtx | null>(null)
@@ -50,7 +57,35 @@ const Ctx = createContext<VacancySettingsCtx | null>(null)
 export function VacancySettingsProvider({ children }: { children: ReactNode }) {
   const [pendingChanges, setPendingChanges] = useState<Record<SectionKey, boolean>>({})
   const [saving, setSaving] = useState(false)
+  const [hasUserInteracted, setHasUserInteracted] = useState(false)
+  const interactedRef = useRef(false)
   const registrations = useRef<Map<SectionKey, Registration>>(new Map())
+
+  // Bug #82: глобальный слушатель «реальной» интеракции HR. Клики на табах,
+  // навигации и хедере игнорируются (они только переключают вид, ничего не
+  // редактируют). После первой настоящей интеракции флаг навсегда true.
+  useEffect(() => {
+    if (interactedRef.current) return
+    const isRealInteraction = (target: EventTarget | null): boolean => {
+      if (!(target instanceof Element)) return false
+      if (target.closest('[role="tab"], [role="tablist"], nav, header, [data-vacancy-tab]')) return false
+      return target.closest(
+        'input, textarea, select, button, [role="switch"], [role="combobox"], [role="checkbox"], [role="radio"], [role="menuitem"], [contenteditable="true"]'
+      ) != null
+    }
+    const handler = (e: Event) => {
+      if (interactedRef.current) return
+      if (!isRealInteraction(e.target)) return
+      interactedRef.current = true
+      setHasUserInteracted(true)
+    }
+    document.addEventListener('pointerdown', handler, true)
+    document.addEventListener('keydown', handler, true)
+    return () => {
+      document.removeEventListener('pointerdown', handler, true)
+      document.removeEventListener('keydown', handler, true)
+    }
+  }, [])
 
   const markChanged = useCallback((key: SectionKey) => {
     setPendingChanges(prev => (prev[key] ? prev : { ...prev, [key]: true }))
@@ -123,7 +158,8 @@ export function VacancySettingsProvider({ children }: { children: ReactNode }) {
     saveAll,
     tabHasPending,
     saving,
-  }), [pendingCount, hasPending, pendingChanges, markChanged, markSaved, registerSaver, unregisterSaver, saveAll, tabHasPending, saving])
+    hasUserInteracted,
+  }), [pendingCount, hasPending, pendingChanges, markChanged, markSaved, registerSaver, unregisterSaver, saveAll, tabHasPending, saving, hasUserInteracted])
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }
@@ -158,18 +194,36 @@ export function useVacancySectionRegister(opts: {
   const markSaved = ctx?.markSaved
   const registerSaver = ctx?.registerSaver
   const unregisterSaver = ctx?.unregisterSaver
+  const hasUserInteracted = ctx?.hasUserInteracted ?? false
 
-  // Установим baseline при первой загрузке + отслеживание изменений.
+  // Bug #82: baseline ставится на первом рендере с loaded=true. Но parent
+  // часто делает resync через useEffect(initial → setState), что меняет
+  // watchedValues уже ПОСЛЕ установки baseline — false positive dirty.
+  //
+  // Решение: пока HR не сделал ни одной реальной интеракции (см. Provider),
+  // любые расхождения baseline ≠ current трактуем как программную
+  // нормализацию и переносим baseline. Как только interacted=true,
+  // переключаемся в обычный режим — реальные правки сразу markChanged.
   useEffect(() => {
     if (!loaded) return
+    const cur = JSON.stringify(watchedValues)
     if (baselineRef.current === null) {
-      baselineRef.current = JSON.stringify(watchedValues)
+      baselineRef.current = cur
       return
     }
-    const cur = JSON.stringify(watchedValues)
-    if (cur !== baselineRef.current) markChanged?.(sectionKey)
-    else markSaved?.(sectionKey)
-  }, [loaded, watchedValues, sectionKey, markChanged, markSaved])
+    if (cur === baselineRef.current) {
+      markSaved?.(sectionKey)
+      return
+    }
+    if (!hasUserInteracted) {
+      // Нормализация: parent дотащил данные → state обновился. Перенастраиваем
+      // baseline без вызова markChanged.
+      baselineRef.current = cur
+      markSaved?.(sectionKey)
+      return
+    }
+    markChanged?.(sectionKey)
+  }, [loaded, watchedValues, sectionKey, markChanged, markSaved, hasUserInteracted])
 
   // Регистрация saver — вызывает save и сбрасывает baseline.
   useEffect(() => {
