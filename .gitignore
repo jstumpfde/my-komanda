@@ -30,3 +30,16 @@ public/uploads/
 # Backup files from hotfixes (e.g. *.bak, *.bak-postdemo-mode, *.bak-stopword)
 *.bak
 *.bak-*
+
+# Playwright runtime artifacts (local CLI/MCP browsers, screenshots from runs)
+.playwright-cli/
+.playwright-mcp/
+
+# Ad-hoc screenshots/markdown from debugging sessions in repo root
+/*.png
+/recon-followup-*.md
+
+# Logs and temp directories
+*.log
+tmp/
+temp/
