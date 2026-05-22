@@ -22,7 +22,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
-import { ChevronDown, GripVertical, Settings2 } from "lucide-react"
+import { ChevronDown, GripVertical, Plus, Settings, Settings2, Star } from "lucide-react"
 
 import {
   AlertDialog,
@@ -47,6 +47,8 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Label } from "@/components/ui/label"
@@ -68,11 +70,17 @@ import {
   applyFunnelTemplate,
   BLOCK_META,
   FUNNEL_TEMPLATES,
+  normalizeFunnelConfig,
   type FunnelBlock,
   type FunnelBlockType,
   type FunnelConfig,
 } from "@/lib/funnel-builder/blocks"
 import { BLOCK_SETTINGS_REGISTRY } from "@/lib/funnel-builder/block-settings"
+import {
+  ManageFunnelTemplatesDialog,
+  SaveFunnelTemplateDialog,
+  type CompanyFunnelTemplate,
+} from "./company-funnel-templates-dialogs"
 
 export interface FunnelBuilderProps {
   vacancyId: string
@@ -95,6 +103,26 @@ export function FunnelBuilder({ vacancyId }: FunnelBuilderProps) {
   const [pendingConflict, setPendingConflict] = useState<PendingIncompatibility | null>(null)
   const [openBlockType, setOpenBlockType] = useState<FunnelBlockType | null>(null)
   const [pendingTemplate, setPendingTemplate] = useState<string | null>(null)
+  // Group 15: пер-компанийная библиотека шаблонов воронки.
+  const [companyTemplates, setCompanyTemplates] = useState<CompanyFunnelTemplate[]>([])
+  const [pendingCompanyTplId, setPendingCompanyTplId] = useState<string | null>(null)
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false)
+  const [manageDialogOpen, setManageDialogOpen] = useState(false)
+
+  const reloadCompanyTemplates = async () => {
+    try {
+      const res = await fetch("/api/modules/hr/company-funnel-templates")
+      if (!res.ok) return
+      const data = await res.json() as { templates?: CompanyFunnelTemplate[] }
+      setCompanyTemplates(data.templates ?? [])
+    } catch {
+      // тихо — это не критично
+    }
+  }
+
+  useEffect(() => {
+    void reloadCompanyTemplates()
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -194,6 +222,18 @@ export function FunnelBuilder({ vacancyId }: FunnelBuilderProps) {
     toast.success(`Шаблон «${tpl.name}» применён`, { duration: 1500 })
   }
 
+  const confirmCompanyTemplate = async () => {
+    if (!pendingCompanyTplId) return
+    const tpl = companyTemplates.find((t) => t.id === pendingCompanyTplId)
+    setPendingCompanyTplId(null)
+    if (!tpl) return
+    // Шаблон компании хранит готовый набор блоков — нормализуем (на случай
+    // если список типов изменился с момента сохранения) и применяем целиком.
+    const normalized = normalizeFunnelConfig(tpl.configJson)
+    await applyBlocks(normalized.blocks)
+    toast.success(`Шаблон «${tpl.name}» применён`, { duration: 1500 })
+  }
+
   const confirmConflict = async () => {
     if (!pendingConflict) return
     const { type, conflictTypes } = pendingConflict
@@ -250,7 +290,35 @@ export function FunnelBuilder({ vacancyId }: FunnelBuilderProps) {
                     <ChevronDown className="ml-1 h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-72">
+                <DropdownMenuContent align="end" className="w-80">
+                  {companyTemplates.length > 0 && (
+                    <>
+                      <DropdownMenuLabel className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                        Шаблоны компании
+                      </DropdownMenuLabel>
+                      {companyTemplates.map((tpl) => (
+                        <DropdownMenuItem
+                          key={tpl.id}
+                          onSelect={() => setPendingCompanyTplId(tpl.id)}
+                          className="flex flex-col items-start gap-0.5 py-2"
+                        >
+                          <span className="text-sm font-medium flex items-center gap-1.5 w-full">
+                            <span className="truncate">{tpl.name}</span>
+                            {tpl.isDefault && (
+                              <Star className="h-3 w-3 fill-amber-400 text-amber-500 shrink-0 ml-auto" />
+                            )}
+                          </span>
+                          {tpl.description && (
+                            <span className="text-xs text-muted-foreground line-clamp-2">{tpl.description}</span>
+                          )}
+                        </DropdownMenuItem>
+                      ))}
+                      <DropdownMenuSeparator />
+                    </>
+                  )}
+                  <DropdownMenuLabel className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                    Встроенные
+                  </DropdownMenuLabel>
                   {Object.entries(FUNNEL_TEMPLATES).map(([key, template]) => (
                     <DropdownMenuItem
                       key={key}
@@ -261,6 +329,21 @@ export function FunnelBuilder({ vacancyId }: FunnelBuilderProps) {
                       <span className="text-xs text-muted-foreground">{template.description}</span>
                     </DropdownMenuItem>
                   ))}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onSelect={() => setSaveDialogOpen(true)}
+                    className="flex items-center gap-2 py-2"
+                  >
+                    <Plus className="h-4 w-4" />
+                    <span className="text-sm">Сохранить текущую как шаблон…</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onSelect={() => setManageDialogOpen(true)}
+                    className="flex items-center gap-2 py-2"
+                  >
+                    <Settings className="h-4 w-4" />
+                    <span className="text-sm">Управление шаблонами…</span>
+                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             )}
@@ -350,6 +433,42 @@ export function FunnelBuilder({ vacancyId }: FunnelBuilderProps) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <AlertDialog
+        open={pendingCompanyTplId !== null}
+        onOpenChange={(open) => { if (!open) setPendingCompanyTplId(null) }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {pendingCompanyTplId && `Применить шаблон «${companyTemplates.find((t) => t.id === pendingCompanyTplId)?.name ?? ""}»?`}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Текущий набор включённых блоков и их порядок будут заменены
+              сохранённым шаблоном. Настройки внутри блоков (тексты, пороги,
+              сценарии AI и т. п.) сохранятся — изменится только список
+              включённых блоков и порядок.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Отмена</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmCompanyTemplate}>Применить</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <SaveFunnelTemplateDialog
+        open={saveDialogOpen}
+        onOpenChange={setSaveDialogOpen}
+        currentBlocks={blocks}
+        onSaved={() => { void reloadCompanyTemplates() }}
+      />
+
+      <ManageFunnelTemplatesDialog
+        open={manageDialogOpen}
+        onOpenChange={setManageDialogOpen}
+        onChanged={() => { void reloadCompanyTemplates() }}
+      />
 
       <Sheet
         open={openBlockType !== null}

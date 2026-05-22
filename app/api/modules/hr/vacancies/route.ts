@@ -2,11 +2,12 @@ import { NextRequest } from "next/server"
 import { eq, and, count, isNull, isNotNull } from "drizzle-orm"
 import { nanoid } from "nanoid"
 import { db } from "@/lib/db"
-import { vacancies } from "@/lib/db/schema"
+import { companyFunnelTemplates, vacancies } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { logActivity } from "@/lib/activity-log"
 import { generateVacancyShortCode } from "@/lib/short-id"
 import { seedDefaultFunnelStages } from "@/lib/funnel/seed-default-stages"
+import { normalizeFunnelConfig } from "@/lib/funnel-builder/blocks"
 
 // Transliterate Russian text to Latin for slug generation
 function transliterate(text: string): string {
@@ -104,6 +105,27 @@ export async function POST(req: NextRequest) {
         enabled: false,
         midRangeAction: "direct_demo",
       },
+    }
+
+    // Group 15: если у компании есть default-шаблон воронки — копируем его
+    // config_json в новую вакансию и включаем конструктор. Не падаем если
+    // что-то не так с шаблоном — просто оставляем дефолтный пустой конфиг.
+    try {
+      const [defaultTpl] = await db.select({
+        configJson: companyFunnelTemplates.configJson,
+      })
+        .from(companyFunnelTemplates)
+        .where(and(
+          eq(companyFunnelTemplates.companyId, user.companyId),
+          eq(companyFunnelTemplates.isDefault, true),
+        ))
+        .limit(1)
+      if (defaultTpl) {
+        insertValues.funnelConfigJson = normalizeFunnelConfig(defaultTpl.configJson)
+        insertValues.funnelBuilderEnabled = true
+      }
+    } catch (err) {
+      console.warn("[POST /api/modules/hr/vacancies] default funnel template lookup failed:", err)
     }
 
     // createdBy might be null for some auth flows — make it optional

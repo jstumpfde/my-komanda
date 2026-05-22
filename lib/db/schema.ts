@@ -2059,3 +2059,23 @@ export const cronRuns = pgTable("cron_runs", {
 }, (t) => [
   index("cron_runs_name_started_idx").on(t.cronName, t.startedAt),
 ])
+
+// Group 15: библиотека пер-компанийных шаблонов воронки.
+// config_json хранит массив { type, order, enabled } — тот же формат, что в
+// vacancies.funnel_config_json. При применении копируется в вакансию.
+// is_default = true — стартовый шаблон для новых вакансий компании. Только
+// один шаблон на компанию может быть default (см. uniq_cft_default_per_company
+// в drizzle/0130_company_funnel_templates.sql).
+export const companyFunnelTemplates = pgTable("company_funnel_templates", {
+  id:          uuid("id").primaryKey().defaultRandom(),
+  companyId:   uuid("company_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  name:        text("name").notNull(),
+  description: text("description"),
+  configJson:  jsonb("config_json").notNull(),
+  isDefault:   boolean("is_default").notNull().default(false),
+  createdBy:   uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt:   timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt:   timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("idx_cft_company").on(t.companyId),
+])
