@@ -39,7 +39,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Checkbox } from "@/components/ui/checkbox"
 import { Slider } from "@/components/ui/slider"
 import { Input } from "@/components/ui/input"
-import { Plus, Clock, Pause, Play, Archive, RotateCcw, Trash2, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, MessageSquareText, Zap, Globe, AlertTriangle, TrendingUp, Calendar, MapPin, DollarSign, Filter, X, Link2, Copy, Save, Sparkles, Eye, Check, Loader2, Download, ExternalLink, ClipboardList, ChevronLeft, ChevronRight, ChevronDown, CheckCircle2, XCircle, Users, Phone, Upload, RefreshCw, Activity, FileText } from "lucide-react"
+import { Plus, Clock, Pause, Play, Archive, RotateCcw, Trash2, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, MessageSquareText, Zap, Globe, AlertTriangle, TrendingUp, Calendar, MapPin, DollarSign, Filter, X, Link2, Copy, Save, Sparkles, Eye, Check, Loader2, Download, ExternalLink, ClipboardList, ChevronLeft, ChevronRight, ChevronDown, CheckCircle2, XCircle, Users, Phone, Upload, RefreshCw, Activity, FileText, Bot } from "lucide-react"
+import { AiChatbotSettings } from "@/components/vacancies/ai-chatbot-settings"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Label } from "@/components/ui/label"
@@ -2493,6 +2494,7 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                     { value: "messages"    as const, label: "Сообщения",           icon: MessageCircle },
                     { value: "funnel"      as const, label: "Воронка",             icon: Kanban },
                     { value: "followup"    as const, label: "Дожим",               icon: MessageSquareText },
+                    { value: "aichatbot"   as const, label: "AI чат-бот",          icon: Bot },
                     { value: "ai"          as const, label: "Расписание",          icon: Zap },
                     { value: "integrations" as const, label: "Интеграции",          icon: Settings },
                   ] satisfies { value: VacancyTabKey; label: string; icon: typeof Globe }[]).map((s) => {
@@ -2949,6 +2951,11 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                   />
                   <VacancyFollowupSettings vacancyId={id} />
                 </div>
+                )}
+
+                {/* ───────── ТАБ «AI чат-бот» (#15 Фаза 1, всё disabled) ───────── */}
+                {settingsSection === "aichatbot" && (
+                <AiChatbotSettings vacancyId={id} />
                 )}
 
                 {/* ───────── ТАБ «Расписание» (бывший «AI сценарии») ───────── */}
