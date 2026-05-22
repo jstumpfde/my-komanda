@@ -657,9 +657,22 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
         const tokenForUrl = shortIdForUrl ?? candidateId
         const demoUrl = `https://company24.pro/demo/${tokenForUrl}`
 
-        const messageText = previouslyInvited
-          ? (aiSettings.reInviteMessage?.trim() || aiSettings.inviteMessage?.trim() || DEMO_INVITE_MESSAGE)
-          : (aiSettings.inviteMessage?.trim() || DEMO_INVITE_MESSAGE)
+        // #46: «Аварийное повторное сообщение» теперь opt-in.
+        // Применяется ТОЛЬКО когда:
+        //   - в hh-чате уже было сообщение от работодателя (previouslyInvited)
+        //   - HR явно включил recoveryMessageEnabled в табе «Сообщения»
+        //   - текст recoveryMessageText непустой
+        // Иначе шлём обычный inviteMessage (или DEMO_INVITE_MESSAGE как
+        // последний fallback). aiSettings.reInviteMessage (legacy) больше
+        // НЕ используется как автоматический fallback.
+        const recoveryEnabled = localVac?.recoveryMessageEnabled === true
+        const recoveryText = typeof localVac?.recoveryMessageText === "string"
+          ? localVac.recoveryMessageText.trim()
+          : ""
+        const messageText =
+          (previouslyInvited && recoveryEnabled && recoveryText.length > 0)
+            ? recoveryText
+            : (aiSettings.inviteMessage?.trim() || DEMO_INVITE_MESSAGE)
 
         const replaced = renderTemplate(messageText, {
           name:      candidateName,

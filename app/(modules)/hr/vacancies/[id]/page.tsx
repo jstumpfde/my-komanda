@@ -59,6 +59,7 @@ import { VacancyAiProcessSettings } from "@/components/vacancies/vacancy-ai-proc
 import { VacancyFollowupSettings } from "@/components/vacancies/vacancy-followup-settings"
 import { VacancyPrequalificationSettings } from "@/components/vacancies/vacancy-prequalification-settings"
 import { FinalScreensSettings, type FinalScreensConfig } from "@/components/vacancies/final-screens-settings"
+import { RecoveryMessageSettings } from "@/components/vacancies/recovery-message-settings"
 import { VacancySettingsProvider, VacancyTabPendingDot, VacancyStickySaveBar, useVacancySectionRegister, type VacancyTabKey } from "@/components/vacancies/vacancy-settings-context"
 import { BestPublicationTimeBlock } from "./components/BestPublicationTimeBlock"
 import {
@@ -2909,6 +2910,13 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                     aiProcessSettings={apiVacancy?.aiProcessSettings as { inviteMessage?: string; reInviteMessage?: string } | null | undefined}
                     sections={["firstMessage", "callIntent", "templates"] satisfies AutomationSectionId[]}
                     tabKey="messages"
+                  />
+                  {/* #46: «Аварийное повторное сообщение» — opt-in под спойлером. */}
+                  <RecoveryMessageSettings
+                    vacancyId={id}
+                    initialEnabled={(apiVacancy as { recoveryMessageEnabled?: boolean } | undefined)?.recoveryMessageEnabled ?? false}
+                    initialText={(apiVacancy as { recoveryMessageText?: string } | undefined)?.recoveryMessageText ?? ""}
+                    onSaved={() => refetchVacancy()}
                   />
                 </div>
                 )}
