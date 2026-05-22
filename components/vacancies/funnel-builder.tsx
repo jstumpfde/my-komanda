@@ -22,7 +22,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
-import { ChevronDown, Clock3, GripVertical, Plus, RotateCcw, Settings, Settings2, Star } from "lucide-react"
+import { ChevronDown, Clock3, GripVertical, Loader2, Plus, RotateCcw, Save, Settings, Settings2, Star } from "lucide-react"
 
 import {
   AlertDialog,
@@ -57,6 +57,7 @@ import {
   Sheet,
   SheetContent,
   SheetDescription,
+  SheetFooter,
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet"
@@ -76,6 +77,7 @@ import {
   type FunnelConfig,
 } from "@/lib/funnel-builder/blocks"
 import { BLOCK_SETTINGS_REGISTRY } from "@/lib/funnel-builder/block-settings"
+import { useVacancySettings } from "@/components/vacancies/vacancy-settings-context"
 import {
   ManageFunnelTemplatesDialog,
   SaveFunnelTemplateDialog,
@@ -614,7 +616,7 @@ export function FunnelBuilder({ vacancyId }: FunnelBuilderProps) {
         open={openBlockType !== null}
         onOpenChange={(open) => { if (!open) setOpenBlockType(null) }}
       >
-        <SheetContent side="right" className="w-full sm:max-w-2xl overflow-y-auto p-6">
+        <SheetContent side="right" className="w-full sm:max-w-2xl overflow-y-auto p-6 flex flex-col">
           {openBlockType && (() => {
             const entry  = BLOCK_SETTINGS_REGISTRY[openBlockType]
             const meta   = BLOCK_META[openBlockType]
@@ -623,17 +625,18 @@ export function FunnelBuilder({ vacancyId }: FunnelBuilderProps) {
             const Comp   = entry?.component   ?? null
             return (
               <>
-                <SheetHeader className="px-0">
+                <SheetHeader className="px-0 shrink-0">
                   <SheetTitle>{title}</SheetTitle>
                   <SheetDescription>{desc}</SheetDescription>
                 </SheetHeader>
-                <div className="mt-6">
+                <div className="mt-6 flex-1 pb-20">
                   {Comp ? (
                     <Comp vacancyId={vacancyId} onSaved={() => setOpenBlockType(null)} />
                   ) : (
                     <p className="text-sm text-muted-foreground">В разработке — настроек для этого блока пока нет.</p>
                   )}
                 </div>
+                <FunnelBlockSheetSaveFooter />
               </>
             )
           })()}
@@ -732,5 +735,29 @@ function SortableBlockCard({ block, saving, onToggle, onOpenSettings }: Sortable
         <Settings2 className="h-4 w-4" />
       </Button>
     </div>
+  )
+}
+
+// #88: VacancyStickySaveBar (z-40 sticky) перекрывается Sheet overlay (z-50),
+// поэтому когда HR открывает настройки блока в Sheet — кнопка «Сохранить»
+// у нижнего края страницы недоступна. Дублируем её в подвале Sheet и зовём
+// тот же saveAll() из контекста, что и общая sticky-кнопка.
+function FunnelBlockSheetSaveFooter() {
+  const ctx = useVacancySettings()
+  if (!ctx) return null
+  const label = ctx.pendingCount > 1
+    ? `Сохранить (${ctx.pendingCount} изменения)`
+    : "Сохранить"
+  return (
+    <SheetFooter className="sticky bottom-0 -mx-6 -mb-6 px-6 py-3 mt-4 bg-background border-t shrink-0">
+      <Button
+        onClick={() => { void ctx.saveAll() }}
+        disabled={ctx.saving || !ctx.hasPending}
+        className="gap-2 h-10 px-5"
+      >
+        {ctx.saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+        {label}
+      </Button>
+    </SheetFooter>
   )
 }
