@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -10,6 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Slider } from "@/components/ui/slider"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Button } from "@/components/ui/button"
+import { PlaceholderBadges } from "@/components/ui/placeholder-badges"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { renderTemplate } from "@/lib/template-renderer"
@@ -115,6 +116,7 @@ export function PostDemoSettings({ vacancyId, sections }: PostDemoSettingsProps)
   const [autoReplyRespectSchedule, setAutoReplyRespectSchedule] = useState(true)
   const [autoReplyText, setAutoReplyText] = useState(DEFAULT_ANKETA_AUTO_REPLY_TEXT)
   const [autoReplyTestTaskUrl, setAutoReplyTestTaskUrl] = useState("")
+  const autoReplyTextareaRef = useRef<HTMLTextAreaElement | null>(null)
 
   // Preview
   const [previewScore, setPreviewScore] = useState(80)
@@ -662,17 +664,18 @@ export function PostDemoSettings({ vacancyId, sections }: PostDemoSettingsProps)
           <div className="space-y-1.5">
             <Label className="text-xs">Текст сообщения</Label>
             <textarea
+              ref={autoReplyTextareaRef}
               className="w-full border rounded-lg p-2 text-sm resize-none h-20 bg-background focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
               value={autoReplyText}
               onChange={e => setAutoReplyText(e.target.value.slice(0, 2000))}
             />
-            <p className="text-[10px] text-muted-foreground">
-              Доступные плейсхолдеры:{" "}
-              <code className="text-[10px] bg-muted px-1 py-0.5 rounded">{"{{name}}"}</code>,{" "}
-              <code className="text-[10px] bg-muted px-1 py-0.5 rounded">{"{{vacancy}}"}</code>,{" "}
-              <code className="text-[10px] bg-muted px-1 py-0.5 rounded">{"{{company}}"}</code>,{" "}
-              <code className="text-[10px] bg-muted px-1 py-0.5 rounded">{"{{demo_link}}"}</code>
-            </p>
+            {/* #57: кликабельные плейсхолдеры — вставка на позицию курсора. */}
+            <PlaceholderBadges
+              textareaRef={autoReplyTextareaRef}
+              placeholders={["name", "vacancy", "company", "demo_link"]}
+              value={autoReplyText}
+              onValueChange={(v) => setAutoReplyText(v.slice(0, 2000))}
+            />
           </div>
 
           <div className="space-y-1.5">

@@ -9,6 +9,7 @@ import { Switch } from "@/components/ui/switch"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Separator } from "@/components/ui/separator"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { PlaceholderBadges } from "@/components/ui/placeholder-badges"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { Input } from "@/components/ui/input"
@@ -264,6 +265,8 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
     next[idx] = text
     setInsistMessages(next)
   }
+  // #57: refs на 3 текстарии insistMessages для PlaceholderBadges.
+  const insistRefs = useRef<Array<HTMLTextAreaElement | null>>([null, null, null])
 
   // 3. Цепочка дожима — переехала в отдельный компонент VacancyFollowupSettings
   // (API: /api/modules/hr/vacancies/[id]/followup-settings, таблица
@@ -684,21 +687,23 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
                   <Label className="text-xs font-medium">
                     Шаблон №{idx + 1}{idx === 2 && " — финальный"}
                   </Label>
-                  <Textarea
+                  <textarea
+                    ref={(el) => { insistRefs.current[idx] = el }}
                     value={text}
                     onChange={e => updateInsistMessage(idx as 0 | 1 | 2, e.target.value)}
                     rows={3}
                     disabled={!callIntentEnabled}
-                    className="text-sm resize-y"
+                    className="border-input flex w-full rounded-md border bg-[var(--input-bg)] px-3 py-2 text-sm shadow-xs outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:border-ring resize-y"
+                  />
+                  {/* #57: кликабельные плейсхолдеры */}
+                  <PlaceholderBadges
+                    getTextarea={() => insistRefs.current[idx]}
+                    placeholders={["name", "vacancy", "demo_link"]}
+                    value={text}
+                    onValueChange={(v) => updateInsistMessage(idx as 0 | 1 | 2, v)}
                   />
                 </div>
               ))}
-              <p className="text-[11px] text-muted-foreground">
-                Плейсхолдеры:{" "}
-                <code className="text-[10px] bg-muted px-1 py-0.5 rounded">{"{{name}}"}</code>,{" "}
-                <code className="text-[10px] bg-muted px-1 py-0.5 rounded">{"{{vacancy}}"}</code>,{" "}
-                <code className="text-[10px] bg-muted px-1 py-0.5 rounded">{"{{demo_link}}"}</code>.
-              </p>
             </div>
           )}
         </CardContent>

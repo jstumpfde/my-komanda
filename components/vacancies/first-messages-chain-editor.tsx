@@ -11,13 +11,13 @@
 // При сохранении chain[0].text дублируется в ai_process_settings.inviteMessage
 // (backward compat) — это делает endpoint на сервере.
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { PlaceholderBadges } from "@/components/ui/placeholder-badges"
 import { Loader2, Save, Send } from "lucide-react"
 import { toast } from "sonner"
 
@@ -47,7 +47,7 @@ const DELAY_OPTIONS: Array<{ value: number; label: string }> = [
   { value: 3600, label: "1 час" },
 ]
 
-const PLACEHOLDER_BADGES = ["{{name}}", "{{vacancy}}", "{{company}}", "{{demo_link}}"]
+const PLACEHOLDER_TOKENS = ["name", "vacancy", "company", "demo_link"]
 
 function emptyChain(fallbackText: string, fallbackDelay: number): ChainStep[] {
   return [
@@ -78,6 +78,9 @@ export function FirstMessagesChainEditor({
   const [chain, setChain] = useState<ChainStep[]>(initialChain)
   const [savedChain, setSavedChain] = useState<ChainStep[]>(initialChain)
   const [saving, setSaving] = useState(false)
+  // #57: refs на 3 textarea — нужны для PlaceholderBadges, чтобы вставлять
+  // токен в позицию курсора.
+  const textareaRefs = useRef<Array<HTMLTextAreaElement | null>>([null, null, null])
 
   // Если внешние initial поменялись (refetch вакансии и т.п.) — догоняемся
   // только если у пользователя нет локальных правок.
@@ -172,6 +175,7 @@ export function FirstMessagesChainEditor({
                   </Select>
                 </div>
                 <textarea
+                  ref={(el) => { textareaRefs.current[idx] = el }}
                   className="w-full border rounded-lg p-3 text-sm resize-none h-28 bg-background focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none leading-relaxed"
                   value={step.text}
                   onChange={(e) => updateStep(idx, { text: e.target.value })}
@@ -179,11 +183,12 @@ export function FirstMessagesChainEditor({
                     ? "{{name}}, привет! Видели ваш отклик на {{vacancy}}... {{demo_link}}"
                     : `Текст Сообщения ${idx + 1} (плейсхолдер ссылки опционален)`}
                 />
-                <div className="flex flex-wrap gap-1.5">
-                  {PLACEHOLDER_BADGES.map(v => (
-                    <Badge key={v} variant="outline" className="text-[10px] cursor-default">{v}</Badge>
-                  ))}
-                </div>
+                <PlaceholderBadges
+                  getTextarea={() => textareaRefs.current[idx]}
+                  placeholders={PLACEHOLDER_TOKENS}
+                  value={step.text}
+                  onValueChange={(next) => updateStep(idx, { text: next })}
+                />
                 {isFirst && (
                   <p className="text-[11px] text-muted-foreground">
                     Сообщение 1 ОБЯЗАНО содержать{" "}
