@@ -110,8 +110,17 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
     return {}
   })()
 
-  // 1. Первое сообщение
-  const [firstMessageDelay, setFirstMessageDelay] = useState(String(initialAutomation.delayMinutes ?? "3"))
+  // 1. Первое сообщение.
+  // #20: delaySeconds — новое поле в секундах. Раньше было delayMinutes
+  // (целое число минут, минимум 2 мин), теперь поддерживаем 15/30 сек
+  // для "живого" общения. Читаем сначала delaySeconds, если нет —
+  // fallback на delayMinutes * 60.
+  const initialDelaySeconds = (() => {
+    if (typeof initialAutomation.delaySeconds === "number") return initialAutomation.delaySeconds
+    if (typeof initialAutomation.delayMinutes === "number") return initialAutomation.delayMinutes * 60
+    return 180
+  })()
+  const [firstMessageDelay, setFirstMessageDelay] = useState(String(initialDelaySeconds))
   // Шаблон сообщения хранится в vacancies.ai_process_settings.inviteMessage —
   // его читает hh process-queue при отправке приглашения на демо.
   const initialInviteMessage = aiProcessSettings?.inviteMessage || DEFAULT_FIRST_MESSAGE
@@ -361,8 +370,14 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
       // workingHours переехали в schedule_* колонки и редактируются через
       // /api/modules/hr/vacancies/[id]/schedule-settings; здесь не сохраняем.
       const previousWorkingHours = (currentJson.automation as Record<string, unknown> | undefined)?.workingHours
+      // #20: пишем оба поля для backward compatibility.
+      //   delaySeconds — новое (15..3600);
+      //   delayMinutes — старое (в минутах, дробное при <60s). cron/process-queue
+      //   при чтении будет предпочитать delaySeconds, если оба заполнены.
+      const delaySecondsNum = Number(firstMessageDelay)
       const automationData = {
-        delayMinutes: Number(firstMessageDelay),
+        delaySeconds: Number.isFinite(delaySecondsNum) ? delaySecondsNum : 180,
+        delayMinutes: Number.isFinite(delaySecondsNum) ? Math.max(1, Math.round(delaySecondsNum / 60)) : 3,
         ...(previousWorkingHours ? { workingHours: previousWorkingHours } : {}),
         responseReaction,
         autoInvite,
@@ -493,16 +508,20 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
                 Чтобы первое сообщение не выглядело как автоматика. Реальная задержка может быть больше из-за обработки очереди.
               </p>
             </div>
+            {/* #20: значения в секундах. 15с/30с/1м — для "живого" общения,
+                3м-1ч — для более естественной задержки. */}
             <Select value={firstMessageDelay} onValueChange={setFirstMessageDelay}>
               <SelectTrigger className="w-[140px] h-9 shrink-0">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="2">2 минуты</SelectItem>
-                <SelectItem value="3">3 минуты</SelectItem>
-                <SelectItem value="5">5 минут</SelectItem>
-                <SelectItem value="10">10 минут</SelectItem>
-                <SelectItem value="15">15 минут</SelectItem>
+                <SelectItem value="15">15 секунд</SelectItem>
+                <SelectItem value="30">30 секунд</SelectItem>
+                <SelectItem value="60">1 минута</SelectItem>
+                <SelectItem value="180">3 минуты</SelectItem>
+                <SelectItem value="900">15 минут</SelectItem>
+                <SelectItem value="1800">30 минут</SelectItem>
+                <SelectItem value="3600">1 час</SelectItem>
               </SelectContent>
             </Select>
           </div>
