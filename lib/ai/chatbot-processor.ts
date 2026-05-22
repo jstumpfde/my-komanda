@@ -1,23 +1,24 @@
 // #15 Фазы 4-6: ядро AI-чат-бота. Обрабатывает одно входящее сообщение.
 //
 // Поток:
-//   1. Проверка стоп-слов → если найдено и stopWordsOverride=true,
-//      сразу перевод в rejected без AI-вызова.
-//   2. Проверка глобальной quota (ai_chatbot_quota) → если превышена,
-//      эскалация в Telegram, без AI.
-//   3. Проверка лимита сообщений на кандидата за день → если превышен,
-//      эскалация.
-//   4. Защита от петель: если последний ответ AI этому кандидату был
-//      < 60 секунд назад, ставим паузу 3 минуты (возвращаем skip).
-//   5. Intent classifier (Haiku) → category + confidence.
-//   6. Решение: low confidence | out_of_scope | rejection_signal → эскалация.
-//   7. Generator (Sonnet) — генерирует ответ.
-//   8. Запись в ai_chatbot_messages.
+//   1. Проверка стоп-слов — если найдено, перевод в rejected без AI-вызова.
+//   2. Глобальная quota (ai_chatbot_quota): INSERT ... ON CONFLICT increment.
+//      Превышение → эскалация HR + notification, без AI.
+//   3. Защита от петель: если последний ответ < 60 секунд → skipped (handled).
+//   4. Защита от спама кандидата: > 10 сообщений за час → эскалация.
+//   5. Лимит сообщений на кандидата за день → эскалация.
+//   6. Intent classifier (Haiku) → category + confidence.
+//   7. Решения: low confidence | out_of_scope | rejection_signal → эскалация.
+//   8. Generator (Sonnet) — отвечает.
+//   9. Запись в ai_chatbot_messages + notification HR при эскалации.
 
-import { sql } from "drizzle-orm"
+import { and, eq, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
+import { candidates } from "@/lib/db/schema"
 import { callClaudeHaiku, callClaudeSonnet } from "@/lib/ai/client"
 import { matchStopWord } from "@/lib/followup/stop-words"
+import { createNotification } from "@/lib/notifications"
+import { sendTelegramAlert } from "@/lib/notifications/telegram"
 
 export type IntentCategory =
   | "salary" | "schedule" | "location" | "requirements"
@@ -32,24 +33,33 @@ export interface ChatbotSettings {
   telegramChannel?: string
 }
 
+export interface ProcessVacancy {
+  id:                string
+  title:             string | null
+  companyId:         string
+  aiChatbotEnabled?: boolean | null
+  aiChatbotSettings: unknown
+  aiChatbotPrompt:   string | null
+}
+
 export interface ProcessInput {
-  companyId:   string
-  vacancyId:   string
   candidateId: string
-  message:     string
-  settings:    ChatbotSettings
-  prompt:      string
+  vacancyId:   string
+  incomingText: string
+  vacancy:     ProcessVacancy
 }
 
 export interface ProcessResult {
-  action:    "sent" | "escalated" | "rejected" | "skipped"
-  reply?:    string
-  category?: IntentCategory
-  confidence?: number
+  /** true = AI-агент взял на себя обработку этого сообщения. Сторона-вызывающая
+   *  не должна запускать legacy-классификацию (rejection / wants_contact). */
+  handled:          boolean
+  action:           "sent" | "escalated" | "rejected" | "skipped"
+  reply?:           string
+  category?:        IntentCategory
+  confidence?:      number
   escalationReason?: string
 }
 
-// Triggers map: settings.triggers ключи → categories
 const TRIGGER_TO_CATEGORY: Record<string, IntentCategory> = {
   salary:              "salary",
   schedule:            "schedule",
@@ -60,46 +70,74 @@ const TRIGGER_TO_CATEGORY: Record<string, IntentCategory> = {
   interviewScheduling: "interview_scheduling",
 }
 
-async function checkQuota(companyId: string): Promise<boolean> {
-  // Глобальный лимит 1000/день/компания. INSERT ... ON CONFLICT increment.
+const ESCALATION_REASON_LABEL: Record<string, string> = {
+  stop_word:             "Стоп-слово в сообщении",
+  global_quota_exceeded: "Дневной лимит компании исчерпан",
+  ping_pong_pause:       "Пауза антипетли",
+  spam_flood:            "Кандидат шлёт слишком часто (>10 за час)",
+  daily_limit:           "Дневной лимит сообщений кандидату",
+  low_confidence:        "AI не уверен в ответе",
+  not_in_triggers:       "Категория не включена в триггеры",
+  rejection_signal:      "Кандидат отказался",
+  empty_reply:           "AI вернул пустой ответ",
+}
+
+function getQuotaLimit(): number {
+  const v = parseInt(process.env.AI_CHATBOT_DAILY_LIMIT ?? "1000", 10)
+  return Number.isFinite(v) && v > 0 ? v : 1000
+}
+
+async function checkAndIncrementQuota(
+  companyId: string,
+): Promise<{ ok: boolean; current: number; limit: number }> {
+  const limit = getQuotaLimit()
   const today = new Date().toISOString().slice(0, 10)
   await db.execute(sql`
     INSERT INTO ai_chatbot_quota (company_id, date, count)
     VALUES (${companyId}::uuid, ${today}::date, 1)
     ON CONFLICT (company_id, date) DO UPDATE SET count = ai_chatbot_quota.count + 1
   `)
-  const rows = await db.execute(sql`
-    SELECT count FROM ai_chatbot_quota WHERE company_id = ${companyId}::uuid AND date = ${today}::date
-  `) as unknown as Array<{ count: number }>
-  const count = rows?.[0]?.count ?? 0
-  return count <= 1000
+  const rows = (await db.execute(sql`
+    SELECT count FROM ai_chatbot_quota
+    WHERE company_id = ${companyId}::uuid AND date = ${today}::date
+  `)) as unknown as Array<{ count: number }>
+  const current = Number(rows?.[0]?.count ?? 0)
+  return { ok: current <= limit, current, limit }
 }
 
 async function dailyMessagesForCandidate(candidateId: string): Promise<number> {
   const today = new Date().toISOString().slice(0, 10)
-  const rows = await db.execute(sql`
+  const rows = (await db.execute(sql`
     SELECT count(*)::int AS c FROM ai_chatbot_messages
     WHERE candidate_id = ${candidateId}::uuid
       AND DATE(created_at) = ${today}::date
       AND sent_at IS NOT NULL
-  `) as unknown as Array<{ c: number }>
-  return rows?.[0]?.c ?? 0
+  `)) as unknown as Array<{ c: number }>
+  return Number(rows?.[0]?.c ?? 0)
+}
+
+async function hourlyIncomingForCandidate(candidateId: string): Promise<number> {
+  const rows = (await db.execute(sql`
+    SELECT count(*)::int AS c FROM ai_chatbot_messages
+    WHERE candidate_id = ${candidateId}::uuid
+      AND created_at >= NOW() - INTERVAL '1 hour'
+  `)) as unknown as Array<{ c: number }>
+  return Number(rows?.[0]?.c ?? 0)
 }
 
 async function lastReplyAt(candidateId: string): Promise<Date | null> {
-  const rows = await db.execute(sql`
+  const rows = (await db.execute(sql`
     SELECT sent_at FROM ai_chatbot_messages
     WHERE candidate_id = ${candidateId}::uuid AND sent_at IS NOT NULL
     ORDER BY sent_at DESC LIMIT 1
-  `) as unknown as Array<{ sent_at: string }>
+  `)) as unknown as Array<{ sent_at: string }>
   return rows?.[0]?.sent_at ? new Date(rows[0].sent_at) : null
 }
 
 async function logMessage(args: {
-  candidateId: string; vacancyId: string; incoming: string;
-  category: IntentCategory; confidence: number;
-  reply: string | null; sent: boolean; escalated: boolean;
-  reason: string | null;
+  candidateId: string; vacancyId: string; incoming: string
+  category: IntentCategory; confidence: number
+  reply: string | null; sent: boolean; escalated: boolean; reason: string | null
 }) {
   await db.execute(sql`
     INSERT INTO ai_chatbot_messages
@@ -143,92 +181,292 @@ async function classifyIntent(message: string): Promise<{ category: IntentCatego
   }
 }
 
+interface CandidateInfo { name: string; shortId: string | null; token: string }
+async function loadCandidate(candidateId: string): Promise<CandidateInfo | null> {
+  const [c] = await db
+    .select({ name: candidates.name, shortId: candidates.shortId, token: candidates.token })
+    .from(candidates)
+    .where(eq(candidates.id, candidateId))
+    .limit(1)
+  if (!c) return null
+  return { name: c.name, shortId: c.shortId, token: c.token }
+}
+
+async function escalate(args: {
+  companyId:        string
+  vacancyId:        string
+  vacancyTitle:     string
+  candidateId:      string
+  candidateInfo:    CandidateInfo | null
+  incomingMessage:  string
+  reason:           keyof typeof ESCALATION_REASON_LABEL | string
+  category?:        IntentCategory
+  confidence?:      number
+  threshold?:       number
+  telegramChannel?: string
+  severity?:        "info" | "warning" | "danger" | "success"
+  notificationType?: string
+}) {
+  const candName = args.candidateInfo?.name ?? "Кандидат"
+  const tokenForUrl = args.candidateInfo?.shortId ?? args.candidateInfo?.token ?? args.candidateId
+  const href = `/hr/vacancies/${args.vacancyId}?candidate=${tokenForUrl}`
+  const label = ESCALATION_REASON_LABEL[args.reason] ?? args.reason
+  const preview = args.incomingMessage.length > 200
+    ? args.incomingMessage.slice(0, 200) + "…"
+    : args.incomingMessage
+
+  const title = `🤖 AI-агент эскалирует: ${candName} (${args.vacancyTitle})`
+  const confLine = typeof args.confidence === "number"
+    ? `\nУверенность: ${args.confidence.toFixed(2)}${args.threshold != null ? ` (порог ${args.threshold.toFixed(2)})` : ""}`
+    : ""
+  const catLine = args.category ? `\nКатегория: ${args.category}` : ""
+  const body = `Причина: ${label}${catLine}${confLine}\nСообщение кандидата: «${preview}»`
+
+  await createNotification({
+    tenantId:   args.companyId,
+    type:       args.notificationType ?? "ai_chatbot_escalation",
+    title,
+    body,
+    severity:   args.severity ?? "warning",
+    href,
+    sourceType: "ai_chatbot",
+    sourceId:   args.candidateId,
+  })
+
+  if (args.telegramChannel) {
+    const link = `https://company24.pro${href}`
+    const tgText =
+      `🤖 <b>AI-агент эскалирует кандидата</b>\n\n` +
+      `<b>Вакансия:</b> ${args.vacancyTitle}\n` +
+      `<b>Кандидат:</b> ${candName}\n` +
+      `<b>Причина:</b> ${label}${args.category ? ` (${args.category})` : ""}${confLine}\n` +
+      `<b>Сообщение:</b> «${preview}»\n\n` +
+      `<a href="${link}">Открыть карточку</a>`
+    await sendTelegramAlert(args.telegramChannel, tgText).catch(() => {})
+  }
+}
+
 export async function processChatbotMessage(input: ProcessInput): Promise<ProcessResult> {
-  const { companyId, vacancyId, candidateId, message, settings, prompt } = input
+  const { candidateId, vacancyId, incomingText, vacancy } = input
+  const settings = (vacancy.aiChatbotSettings ?? {}) as ChatbotSettings
+  const prompt = vacancy.aiChatbotPrompt ?? ""
+  const companyId = vacancy.companyId
+  const vacancyTitle = vacancy.title ?? "—"
+  const telegramChannel = settings.telegramChannel?.trim() || undefined
+
   const threshold = typeof settings.confidenceThreshold === "number" ? settings.confidenceThreshold : 0.7
   const dailyLimit = typeof settings.dailyMessageLimit === "number" ? settings.dailyMessageLimit : 5
-  const stopwords = settings.stopWordsOverride !== false
+  const stopwordsOn = settings.stopWordsOverride !== false
 
-  // 1. Стоп-слова
-  if (stopwords && matchStopWord(message)) {
+  // Защита: бот не должен трогать остановленных / финальных кандидатов.
+  const [c] = await db
+    .select({
+      stage: candidates.stage,
+      stopped: candidates.autoProcessingStopped,
+    })
+    .from(candidates)
+    .where(eq(candidates.id, candidateId))
+    .limit(1)
+  if (!c) return { handled: false, action: "skipped", escalationReason: "candidate_missing" }
+  if (c.stopped || c.stage === "rejected" || c.stage === "hired") {
+    return { handled: false, action: "skipped", escalationReason: "candidate_inactive" }
+  }
+
+  const candidateInfo = await loadCandidate(candidateId)
+
+  // 1. Стоп-слова перебивают AI: rejected без AI-вызова.
+  if (stopwordsOn && matchStopWord(incomingText)) {
+    await db.update(candidates).set({
+      stage: "rejected",
+      autoProcessingStopped: true,
+      autoProcessingStoppedReason: "stop_word_in_chat",
+      autoProcessingStoppedAt: new Date(),
+      automationPaused: true,
+      updatedAt: new Date(),
+    }).where(eq(candidates.id, candidateId))
     await logMessage({
-      candidateId, vacancyId, incoming: message,
+      candidateId, vacancyId, incoming: incomingText,
       category: "rejection_signal", confidence: 1,
       reply: null, sent: false, escalated: false, reason: "stop_word",
     })
-    return { action: "rejected", escalationReason: "stop_word", category: "rejection_signal", confidence: 1 }
+    return { handled: true, action: "rejected", category: "rejection_signal", confidence: 1, escalationReason: "stop_word" }
   }
 
   // 2. Глобальная quota
-  const quotaOk = await checkQuota(companyId)
-  if (!quotaOk) {
+  const quota = await checkAndIncrementQuota(companyId)
+  if (!quota.ok) {
     await logMessage({
-      candidateId, vacancyId, incoming: message,
+      candidateId, vacancyId, incoming: incomingText,
       category: "other", confidence: 0,
       reply: null, sent: false, escalated: true, reason: "global_quota_exceeded",
     })
-    return { action: "escalated", escalationReason: "global_quota_exceeded" }
+    await escalate({
+      companyId, vacancyId, vacancyTitle, candidateId, candidateInfo,
+      incomingMessage: incomingText, reason: "global_quota_exceeded",
+      telegramChannel, severity: "danger",
+      notificationType: "ai_chatbot_escalation_limit",
+    })
+    return { handled: true, action: "escalated", escalationReason: "global_quota_exceeded" }
   }
 
-  // 3. Защита от петель: 3-минутная пауза если AI только что отвечал
+  // 3. Защита от петель: 60-секундный cooldown между ответами AI.
   const last = await lastReplyAt(candidateId)
-  if (last && (Date.now() - last.getTime()) < 60_000) {
-    return { action: "skipped", escalationReason: "ping_pong_pause" }
+  if (last && Date.now() - last.getTime() < 60_000) {
+    return { handled: true, action: "skipped", escalationReason: "ping_pong_pause" }
   }
 
-  // 4. Лимит на кандидата
+  // 4. Защита от спама/бота: > 10 сообщений за последний час → эскалация.
+  const hourly = await hourlyIncomingForCandidate(candidateId)
+  if (hourly >= 10) {
+    await logMessage({
+      candidateId, vacancyId, incoming: incomingText,
+      category: "other", confidence: 0,
+      reply: null, sent: false, escalated: true, reason: "spam_flood",
+    })
+    await escalate({
+      companyId, vacancyId, vacancyTitle, candidateId, candidateInfo,
+      incomingMessage: incomingText, reason: "spam_flood",
+      telegramChannel, severity: "warning",
+    })
+    return { handled: true, action: "escalated", escalationReason: "spam_flood" }
+  }
+
+  // 5. Лимит сообщений на кандидата в день.
   const todayCnt = await dailyMessagesForCandidate(candidateId)
   if (todayCnt >= dailyLimit) {
     await logMessage({
-      candidateId, vacancyId, incoming: message,
+      candidateId, vacancyId, incoming: incomingText,
       category: "other", confidence: 0,
       reply: null, sent: false, escalated: true, reason: "daily_limit",
     })
-    return { action: "escalated", escalationReason: "daily_limit" }
+    await escalate({
+      companyId, vacancyId, vacancyTitle, candidateId, candidateInfo,
+      incomingMessage: incomingText, reason: "daily_limit",
+      telegramChannel, severity: "info",
+    })
+    return { handled: true, action: "escalated", escalationReason: "daily_limit" }
   }
 
-  // 5. Intent classifier
-  const { category, confidence } = await classifyIntent(message)
+  // 6. Intent classifier
+  let category: IntentCategory = "other"
+  let confidence = 0
+  try {
+    const cls = await classifyIntent(incomingText)
+    category = cls.category
+    confidence = cls.confidence
+  } catch (err) {
+    console.warn("[chatbot] intent classifier failed:", err)
+    await logMessage({
+      candidateId, vacancyId, incoming: incomingText,
+      category: "other", confidence: 0,
+      reply: null, sent: false, escalated: true, reason: "classifier_error",
+    })
+    await escalate({
+      companyId, vacancyId, vacancyTitle, candidateId, candidateInfo,
+      incomingMessage: incomingText, reason: "classifier_error",
+      telegramChannel, severity: "warning",
+      notificationType: "ai_chatbot_escalation_error",
+    })
+    return { handled: true, action: "escalated", escalationReason: "classifier_error" }
+  }
 
-  // 6. Решение
+  // 7. Решение
   if (category === "rejection_signal") {
     await logMessage({
-      candidateId, vacancyId, incoming: message,
-      category, confidence, reply: null, sent: false, escalated: false, reason: "rejection_signal",
+      candidateId, vacancyId, incoming: incomingText,
+      category, confidence,
+      reply: null, sent: false, escalated: false, reason: "rejection_signal",
     })
-    return { action: "rejected", category, confidence }
+    return { handled: true, action: "rejected", category, confidence, escalationReason: "rejection_signal" }
   }
   if (confidence < threshold) {
     await logMessage({
-      candidateId, vacancyId, incoming: message,
-      category, confidence, reply: null, sent: false, escalated: true, reason: "low_confidence",
+      candidateId, vacancyId, incoming: incomingText,
+      category, confidence,
+      reply: null, sent: false, escalated: true, reason: "low_confidence",
     })
-    return { action: "escalated", category, confidence, escalationReason: "low_confidence" }
+    await escalate({
+      companyId, vacancyId, vacancyTitle, candidateId, candidateInfo,
+      incomingMessage: incomingText, reason: "low_confidence",
+      category, confidence, threshold,
+      telegramChannel, severity: "warning",
+      notificationType: "ai_chatbot_escalation_low_confidence",
+    })
+    return { handled: true, action: "escalated", category, confidence, escalationReason: "low_confidence" }
   }
-  // Маппим category → trigger key и проверяем что включено
   const triggerKey = (Object.keys(TRIGGER_TO_CATEGORY) as Array<keyof typeof TRIGGER_TO_CATEGORY>)
     .find(k => TRIGGER_TO_CATEGORY[k] === category)
   if (!triggerKey || !settings.triggers?.[triggerKey]) {
     await logMessage({
-      candidateId, vacancyId, incoming: message,
-      category, confidence, reply: null, sent: false, escalated: true, reason: "not_in_triggers",
+      candidateId, vacancyId, incoming: incomingText,
+      category, confidence,
+      reply: null, sent: false, escalated: true, reason: "not_in_triggers",
     })
-    return { action: "escalated", category, confidence, escalationReason: "not_in_triggers" }
+    await escalate({
+      companyId, vacancyId, vacancyTitle, candidateId, candidateInfo,
+      incomingMessage: incomingText, reason: "not_in_triggers",
+      category, confidence, threshold,
+      telegramChannel, severity: "info",
+      notificationType: "ai_chatbot_escalation_out_of_scope",
+    })
+    return { handled: true, action: "escalated", category, confidence, escalationReason: "not_in_triggers" }
   }
 
-  // 7. Generator
-  const reply = (await callClaudeSonnet(message, prompt, 800)).trim()
+  // 8. Generator
+  if (!prompt?.trim()) {
+    return { handled: false, action: "skipped", escalationReason: "no_prompt" }
+  }
+  let reply = ""
+  try {
+    reply = (await callClaudeSonnet(incomingText, prompt, 800)).trim()
+  } catch (err) {
+    console.warn("[chatbot] generator failed:", err)
+  }
   if (!reply) {
     await logMessage({
-      candidateId, vacancyId, incoming: message,
-      category, confidence, reply: null, sent: false, escalated: true, reason: "empty_reply",
+      candidateId, vacancyId, incoming: incomingText,
+      category, confidence,
+      reply: null, sent: false, escalated: true, reason: "empty_reply",
     })
-    return { action: "escalated", category, confidence, escalationReason: "empty_reply" }
+    await escalate({
+      companyId, vacancyId, vacancyTitle, candidateId, candidateInfo,
+      incomingMessage: incomingText, reason: "empty_reply",
+      category, confidence, threshold,
+      telegramChannel, severity: "warning",
+      notificationType: "ai_chatbot_escalation_error",
+    })
+    return { handled: true, action: "escalated", category, confidence, escalationReason: "empty_reply" }
   }
 
   await logMessage({
-    candidateId, vacancyId, incoming: message,
-    category, confidence, reply, sent: true, escalated: false, reason: null,
+    candidateId, vacancyId, incoming: incomingText,
+    category, confidence,
+    reply, sent: true, escalated: false, reason: null,
   })
-  return { action: "sent", reply, category, confidence }
+  return { handled: true, action: "sent", reply, category, confidence }
 }
+
+// Удержание прежнего экспорта для обратной совместимости с уже написанными
+// вызовами (если где-то ещё передают плоские поля).
+export type LegacyProcessInput = {
+  companyId: string; vacancyId: string; candidateId: string
+  message: string; settings: ChatbotSettings; prompt: string
+}
+export async function processChatbotMessageLegacy(input: LegacyProcessInput): Promise<ProcessResult> {
+  return processChatbotMessage({
+    candidateId: input.candidateId,
+    vacancyId:   input.vacancyId,
+    incomingText: input.message,
+    vacancy: {
+      id:                input.vacancyId,
+      title:             null,
+      companyId:         input.companyId,
+      aiChatbotEnabled:  true,
+      aiChatbotSettings: input.settings,
+      aiChatbotPrompt:   input.prompt,
+    },
+  })
+}
+
+// Suppress unused-import warning if `and` is not needed.
+void and
