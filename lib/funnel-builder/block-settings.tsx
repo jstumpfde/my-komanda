@@ -16,6 +16,7 @@ import { OfferSettings } from "@/components/vacancies/offer-settings"
 import { PostDemoSettings } from "@/components/vacancies/post-demo-settings"
 import { ReferenceCheckSettings } from "@/components/vacancies/reference-check-settings"
 import { TestTaskSettings } from "@/components/vacancies/test-task-settings"
+import { VideoIntroSettings } from "@/components/vacancies/video-intro-settings"
 import { useVacancySectionRegister } from "@/components/vacancies/vacancy-settings-context"
 import { VacancyAiProcessSettings } from "@/components/vacancies/vacancy-ai-process-settings"
 import { VacancyFollowupSettings } from "@/components/vacancies/vacancy-followup-settings"
@@ -304,7 +305,11 @@ export const BLOCK_SETTINGS_REGISTRY: Partial<Record<FunnelBlockType, BlockSetti
     title:       "Финальный экран",
     description: "Тексты экранов после видео и после анкеты",
   },
-  // video_intro: компонента видео-визитки со сжатием пока нет — TODO Группы 19+.
+  video_intro: {
+    component:   VideoIntroSettings,
+    title:       "Видео-визитка",
+    description: "Инструкция, длительность и обязательность шага",
+  },
   test_task: {
     component:   TestTaskSettings,
     title:       "Тестовое задание",
