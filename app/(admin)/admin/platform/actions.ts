@@ -10,7 +10,8 @@ import { revalidatePath } from "next/cache"
 import { eq } from "drizzle-orm"
 import { auth } from "@/auth"
 import { db } from "@/lib/db"
-import { platformFunnelTemplates, vacancies } from "@/lib/db/schema"
+import { asc } from "drizzle-orm"
+import { platformFunnelTemplates, vacancies, yuliaMessages } from "@/lib/db/schema"
 import { isPlatformAdminEmail } from "@/lib/platform/auth"
 import { runPendingMigrations } from "@/lib/platform/settings-migrations"
 import {
@@ -159,4 +160,33 @@ export async function actionDeletePlatformTemplate(id: string) {
   if (!deleted) throw new Error("Шаблон не найден")
   revalidatePath("/admin/platform")
   return { ok: true }
+}
+
+// Группа 28: чтение полной истории сообщений конкретного диалога Юлии для
+// просмотра в platform admin. Возвращает только то, что нужно для UI —
+// без полей вроде pending_action.params (могут быть громоздкими).
+export async function actionGetYuliaConversation(conversationId: string) {
+  await requireAdminEmail()
+  const messages = await db
+    .select({
+      id:            yuliaMessages.id,
+      role:          yuliaMessages.role,
+      content:       yuliaMessages.content,
+      pendingAction: yuliaMessages.pendingAction,
+      actionStatus:  yuliaMessages.actionStatus,
+      createdAt:     yuliaMessages.createdAt,
+    })
+    .from(yuliaMessages)
+    .where(eq(yuliaMessages.conversationId, conversationId))
+    .orderBy(asc(yuliaMessages.createdAt))
+  return {
+    messages: messages.map(m => ({
+      id:             m.id,
+      role:           m.role,
+      content:        m.content,
+      pending_action: m.pendingAction,
+      action_status:  m.actionStatus,
+      created_at:     m.createdAt ? m.createdAt.toISOString() : null,
+    })),
+  }
 }

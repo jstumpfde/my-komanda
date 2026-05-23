@@ -19,9 +19,10 @@ import {
   actionMineTemplateFromVacancy,
   actionUpdatePlatformTemplate,
   actionDeletePlatformTemplate,
+  actionGetYuliaConversation,
 } from "./actions"
 import {
-  AlertTriangle, Loader2, ShieldAlert, LibraryBig, Plus, Pencil, Trash2,
+  AlertTriangle, Bot, Loader2, ShieldAlert, LibraryBig, Plus, Pencil, Trash2,
 } from "lucide-react"
 import {
   Select as SelectPrimitive,
@@ -87,6 +88,31 @@ interface MinableVacancy {
   companyName: string
 }
 
+interface YuliaConvItem {
+  id: string
+  contextType: string
+  status: string
+  resultingEntityId: string | null
+  createdAt: string | null
+  updatedAt: string | null
+  userEmail: string | null
+  userName: string | null
+  companyName: string | null
+  messageCount: number
+}
+
+interface YuliaProps {
+  metrics: {
+    total:       number
+    active:      number
+    completed:   number
+    abandoned:   number
+    avgMessages: number
+  }
+  systemPrompt: string
+  conversations: YuliaConvItem[]
+}
+
 interface Props {
   migrations: MigrationItem[]
   companies: CompanyItem[]
@@ -95,6 +121,7 @@ interface Props {
   recentActions: ActionItem[]
   templates: TemplateItem[]
   minableVacancies: MinableVacancy[]
+  yulia: YuliaProps
 }
 
 const INDUSTRY_OPTIONS = [
@@ -127,6 +154,7 @@ export function PlatformAdminClient({
   recentActions,
   templates,
   minableVacancies,
+  yulia,
 }: Props) {
   return (
     <div className="container mx-auto p-6 max-w-7xl">
@@ -146,6 +174,7 @@ export function PlatformAdminClient({
           <TabsTrigger value="companies">Companies ({companiesTotal})</TabsTrigger>
           <TabsTrigger value="vacancies">AI vacancies ({vacancies.length})</TabsTrigger>
           <TabsTrigger value="templates">Templates ({templates.length})</TabsTrigger>
+          <TabsTrigger value="yulia">Yulia ({yulia.metrics.total})</TabsTrigger>
           <TabsTrigger value="emergency" className="text-red-600">Emergency</TabsTrigger>
           <TabsTrigger value="logs">Logs</TabsTrigger>
         </TabsList>
@@ -161,6 +190,9 @@ export function PlatformAdminClient({
         </TabsContent>
         <TabsContent value="templates" className="mt-4">
           <TemplatesTab items={templates} minableVacancies={minableVacancies} />
+        </TabsContent>
+        <TabsContent value="yulia" className="mt-4">
+          <YuliaTab data={yulia} />
         </TabsContent>
         <TabsContent value="emergency" className="mt-4">
           <EmergencyTab />
@@ -853,5 +885,186 @@ function LogsTab({ items }: { items: ActionItem[] }) {
         </Table>
       </CardContent>
     </Card>
+  )
+}
+
+// ─── Группа 28: Yulia ─────────────────────────────────────────────────────────
+
+interface YuliaMessageView {
+  id:             string
+  role:           string
+  content:        string
+  pending_action: unknown
+  action_status:  string | null
+  created_at:     string | null
+}
+
+function statusBadge(status: string) {
+  const cls =
+    status === "completed" ? "bg-green-100 text-green-800"
+    : status === "active"    ? "bg-blue-100 text-blue-800"
+    : "bg-gray-100 text-gray-700"
+  return <Badge className={cls}>{status}</Badge>
+}
+
+function YuliaTab({ data }: { data: YuliaProps }) {
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [messages, setMessages] = useState<YuliaMessageView[]>([])
+  const [loadingMsgs, setLoadingMsgs] = useState(false)
+  const [showPrompt, setShowPrompt] = useState(false)
+
+  useEffect(() => {
+    if (!selectedId) return
+    let cancelled = false
+    setLoadingMsgs(true)
+    setMessages([])
+    actionGetYuliaConversation(selectedId)
+      .then(res => { if (!cancelled) setMessages(res.messages as YuliaMessageView[]) })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setLoadingMsgs(false) })
+    return () => { cancelled = true }
+  }, [selectedId])
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <MetricCard label="Всего диалогов"  value={data.metrics.total} />
+        <MetricCard label="Активных"        value={data.metrics.active} />
+        <MetricCard label="Завершено"       value={data.metrics.completed} accent="green" />
+        <MetricCard label="Брошено"         value={data.metrics.abandoned} accent="gray" />
+        <MetricCard label="Ср. сообщений"   value={data.metrics.avgMessages} />
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Bot className="w-4 h-4" />
+            Последние 30 диалогов
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Дата</TableHead>
+                <TableHead>Юзер</TableHead>
+                <TableHead>Компания</TableHead>
+                <TableHead>Контекст</TableHead>
+                <TableHead>Статус</TableHead>
+                <TableHead className="text-right">Сообщений</TableHead>
+                <TableHead></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {data.conversations.map(c => (
+                <TableRow key={c.id}>
+                  <TableCell className="text-xs">{fmtDate(c.updatedAt)}</TableCell>
+                  <TableCell className="text-xs">{c.userName ?? c.userEmail ?? "—"}</TableCell>
+                  <TableCell className="text-xs">{c.companyName ?? "—"}</TableCell>
+                  <TableCell className="text-xs">{c.contextType}</TableCell>
+                  <TableCell>{statusBadge(c.status)}</TableCell>
+                  <TableCell className="text-right text-xs">{c.messageCount}</TableCell>
+                  <TableCell className="text-right">
+                    <Button size="sm" variant="ghost" onClick={() => setSelectedId(c.id)}>
+                      Открыть
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+              {data.conversations.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center text-muted-foreground">
+                    Диалогов пока нет
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between text-base">
+            <span>Системный промпт</span>
+            <Button size="sm" variant="ghost" onClick={() => setShowPrompt(p => !p)}>
+              {showPrompt ? "Скрыть" : "Показать"}
+            </Button>
+          </CardTitle>
+        </CardHeader>
+        {showPrompt && (
+          <CardContent>
+            <pre className="text-xs whitespace-pre-wrap bg-muted/40 p-3 rounded-md max-h-96 overflow-auto">
+              {data.systemPrompt}
+            </pre>
+          </CardContent>
+        )}
+      </Card>
+
+      <Dialog open={!!selectedId} onOpenChange={(v) => !v && setSelectedId(null)}>
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-auto">
+          <DialogHeader>
+            <DialogTitle>Диалог Юлии</DialogTitle>
+            <DialogDescription className="text-xs">
+              ID: {selectedId}
+            </DialogDescription>
+          </DialogHeader>
+          {loadingMsgs ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {messages.map(m => (
+                <div
+                  key={m.id}
+                  className={
+                    m.role === "user"
+                      ? "ml-12 bg-primary/10 rounded-lg p-3 text-sm"
+                      : "mr-12 bg-muted rounded-lg p-3 text-sm"
+                  }
+                >
+                  <div className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">
+                    {m.role}{m.action_status ? ` · action ${m.action_status}` : ""}
+                  </div>
+                  <div className="whitespace-pre-wrap">{m.content}</div>
+                  {m.pending_action ? (
+                    <pre className="mt-2 text-[10px] bg-background/60 rounded p-2 overflow-auto">
+                      {JSON.stringify(m.pending_action, null, 2)}
+                    </pre>
+                  ) : null}
+                </div>
+              ))}
+              {messages.length === 0 && (
+                <div className="text-center text-muted-foreground text-sm py-6">
+                  Сообщений нет
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}
+
+function MetricCard({
+  label,
+  value,
+  accent,
+}: {
+  label:   string
+  value:   number
+  accent?: "green" | "gray"
+}) {
+  const valueCls =
+    accent === "green" ? "text-green-600"
+    : accent === "gray"  ? "text-muted-foreground"
+    : "text-foreground"
+  return (
+    <div className="rounded-lg border p-3">
+      <div className="text-xs text-muted-foreground">{label}</div>
+      <div className={`text-2xl font-bold ${valueCls}`}>{value}</div>
+    </div>
   )
 }
