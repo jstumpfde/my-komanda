@@ -22,6 +22,7 @@ import {
 import type { MiniFormField } from "@/components/vacancies/mini-form-builder"
 import { FORMAT_LABELS, EMPLOYMENT_LABELS } from "@/lib/vacancy-types"
 import { resolveBrand } from "@/lib/brand-colors"
+import { getEffectiveBranding } from "@/lib/branding/get-effective-branding"
 import { formatDescription } from "@/lib/public-vacancy/format-description"
 
 interface VacancyData {
@@ -39,6 +40,9 @@ interface VacancyData {
   brandBgColor: string | null
   brandTextColor: string | null
   descriptionJson: Record<string, unknown> | null
+  // Группа 38: расширенный брендинг + флаг override.
+  brandingJson?: { accentColor?: string; fontFamily?: string } | null
+  brandingOverrideEnabled?: boolean | null
 }
 
 type ScreenState = "loading" | "landing" | "form" | "done" | "error"
@@ -96,7 +100,25 @@ function VacancyPageInner({ params }: { params: Promise<{ slug: string }> }) {
     }
   }, [slug, utmSource, utmMedium, screen])
 
-  const brand = vacancy ? resolveBrand(vacancy) : resolveBrand({})
+  // Группа 38: эффективный брендинг = company-уровень + опциональный override.
+  // Источник истины — companies-поля; vacancy.brandingOverrideEnabled
+  // (default false) и description_json.branding используются только если HR
+  // явно включил override.
+  const effective = vacancy
+    ? getEffectiveBranding(
+        { brandingOverrideEnabled: vacancy.brandingOverrideEnabled ?? false, descriptionJson: vacancy.descriptionJson },
+        {
+          logoUrl:           vacancy.companyLogo ?? null,
+          brandPrimaryColor: vacancy.brandPrimaryColor ?? null,
+          brandBgColor:      vacancy.brandBgColor ?? null,
+          brandTextColor:    vacancy.brandTextColor ?? null,
+          brandingJson:      vacancy.brandingJson ?? null,
+        },
+      )
+    : null
+  const brand = effective
+    ? { primary: effective.primaryColor, bg: effective.backgroundColor, text: effective.textColor }
+    : resolveBrand({})
   const accentColor = brand.primary
   const bgColor = brand.bg
   const textColor = brand.text
