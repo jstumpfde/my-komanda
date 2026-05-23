@@ -163,6 +163,10 @@ export interface ProcessInput {
    *  уведомления, НЕ инкрементируем счётчики. Используется тестовой
    *  песочницей в UI настроек чат-бота. */
   dryRun?:      boolean
+  /** Группа 33: явная история диалога для sandbox-режима. Если не
+   *  задана и dryRun=true — context пустой. Если dryRun=false —
+   *  игнорируется, контекст подгружается из ai_chatbot_messages. */
+  sandboxHistory?: Array<{ role: "user" | "assistant"; text: string }>
 }
 
 export interface ProcessResult {
@@ -597,24 +601,39 @@ export async function processChatbotMessage(input: ProcessInput): Promise<Proces
   }
 
   // Защита: бот не должен трогать остановленных / финальных кандидатов.
-  const [c] = await db
-    .select({
-      stage:   candidates.stage,
-      stopped: candidates.autoProcessingStopped,
-    })
-    .from(candidates)
-    .where(eq(candidates.id, candidateId))
-    .limit(1)
-  if (!c) return { handled: false, action: "skipped", escalationReason: "candidate_missing" }
-  if (c.stopped || c.stage === "rejected" || c.stage === "hired") {
-    return { handled: false, action: "skipped", escalationReason: "candidate_inactive" }
+  // В sandbox-режиме (Группа 33) проверка кандидата не нужна — мы тестируем
+  // пайплайн на синтетических данных, кандидата с таким id может не быть.
+  let candidateInfo: CandidateLoad | null = null
+  let abuseWarningsCount = 0
+  if (!dryRun) {
+    const [c] = await db
+      .select({
+        stage:   candidates.stage,
+        stopped: candidates.autoProcessingStopped,
+      })
+      .from(candidates)
+      .where(eq(candidates.id, candidateId))
+      .limit(1)
+    if (!c) return { handled: false, action: "skipped", escalationReason: "candidate_missing" }
+    if (c.stopped || c.stage === "rejected" || c.stage === "hired") {
+      return { handled: false, action: "skipped", escalationReason: "candidate_inactive" }
+    }
+    candidateInfo = await loadCandidate(candidateId)
+    abuseWarningsCount = candidateInfo?.abuseWarningsCount ?? 0
+  } else {
+    // dryRun: фиктивный candidateInfo для логирования внутри escalate-helper'ов
+    // (которые в dryRun всё равно no-op).
+    candidateInfo = {
+      name: "sandbox", shortId: null, token: candidateId,
+      abuseWarningsCount: 0, shortMessagesSentCount: 0,
+    }
   }
 
-  const candidateInfo = await loadCandidate(candidateId)
-  const abuseWarningsCount = candidateInfo?.abuseWarningsCount ?? 0
-
   // 0. Pre-filter с контекстом последних 3 ходов (Группа 30).
-  const context = await recentContext(candidateId)
+  //    В sandbox используем переданную UI историю, иначе тянем из БД.
+  const context = dryRun
+    ? (input.sandboxHistory ?? [])
+    : await recentContext(candidateId)
   const incomingSec = await classifyIncomingMessage(incomingText, { context })
 
   // 0a. INJECTION → СРАЗУ автоотказ + сообщение кандидату.
@@ -801,13 +820,17 @@ export async function processChatbotMessage(input: ProcessInput): Promise<Proces
   }
 
   // 3. Защита от петель: 60-секундный cooldown между ответами AI.
-  const last = await lastReplyAt(candidateId)
-  if (last && Date.now() - last.getTime() < 60_000) {
-    return { handled: true, action: "skipped", escalationReason: "ping_pong_pause" }
+  //    В sandbox пропускаем — иначе быстрые тесты HR блокируются.
+  if (!dryRun) {
+    const last = await lastReplyAt(candidateId)
+    if (last && Date.now() - last.getTime() < 60_000) {
+      return { handled: true, action: "skipped", escalationReason: "ping_pong_pause" }
+    }
   }
 
   // 4. Защита от спама/бота: > 10 сообщений за последний час → эскалация.
-  const hourly = await hourlyIncomingForCandidate(candidateId)
+  //    В sandbox пропускаем (нет реальных сообщений в БД у тест-кандидата).
+  const hourly = dryRun ? 0 : await hourlyIncomingForCandidate(candidateId)
   if (hourly >= 10) {
     await log({
       candidateId, vacancyId, incoming: incomingText,
@@ -823,7 +846,7 @@ export async function processChatbotMessage(input: ProcessInput): Promise<Proces
   }
 
   // 5. Лимит сообщений на кандидата в день.
-  const todayCnt = await dailyMessagesForCandidate(candidateId)
+  const todayCnt = dryRun ? 0 : await dailyMessagesForCandidate(candidateId)
   if (todayCnt >= dailyLimit) {
     await log({
       candidateId, vacancyId, incoming: incomingText,

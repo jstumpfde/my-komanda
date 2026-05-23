@@ -18,7 +18,8 @@ import { Separator } from "@/components/ui/separator"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Bot, Wand2, Eye, Shield, Send, Loader2, Save, Pencil, Info, Undo2 } from "lucide-react"
+import { Bot, Wand2, Eye, Shield, Send, Loader2, Save, Pencil, Info, Undo2, FlaskConical } from "lucide-react"
+import { AiChatbotSandbox } from "./ai-chatbot-sandbox"
 import { toast } from "sonner"
 
 interface Triggers {
@@ -152,6 +153,7 @@ export function AiChatbotSettings({ vacancyId }: { vacancyId: string }) {
   const [quota, setQuota] = useState<QuotaUsage | null>(null)
   const [auditing, setAuditing] = useState(false)
   const [auditResult, setAuditResult] = useState<{ ranAt: string; issuesCount: number; summary: string } | null>(null)
+  const [sandboxOpen, setSandboxOpen] = useState(false)
   const [abuseHistory, setAbuseHistory] = useState<AbuseHistoryItem[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
   const [undoingId, setUndoingId] = useState<string | null>(null)
@@ -339,14 +341,37 @@ export function AiChatbotSettings({ vacancyId }: { vacancyId: string }) {
                 <p className="text-[11px] text-amber-700 mt-1">Сначала сгенерируйте промпт ниже.</p>
               )}
             </div>
-            <Switch
-              checked={enabled}
-              disabled={!canEnable}
-              onCheckedChange={v => { setEnabled(v); void save({ enabled: v }) }}
-            />
+            <div className="flex flex-col items-end gap-2">
+              <Switch
+                checked={enabled}
+                disabled={!canEnable}
+                onCheckedChange={v => { setEnabled(v); void save({ enabled: v }) }}
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setSandboxOpen(true)}
+                disabled={!canEnable}
+                className="gap-1.5 h-8 text-xs"
+              >
+                <FlaskConical className="w-3.5 h-3.5" />
+                Тестировать
+              </Button>
+            </div>
           </div>
         </CardHeader>
       </Card>
+
+      {/* Группа 33: Sandbox диалог */}
+      <Dialog open={sandboxOpen} onOpenChange={setSandboxOpen}>
+        <DialogContent className="max-w-2xl p-0 gap-0">
+          <DialogTitle className="sr-only">Песочница AI чат-бота</DialogTitle>
+          <AiChatbotSandbox
+            vacancyId={vacancyId}
+            onClose={() => setSandboxOpen(false)}
+          />
+        </DialogContent>
+      </Dialog>
 
       {/* Триггеры */}
       <Card>
