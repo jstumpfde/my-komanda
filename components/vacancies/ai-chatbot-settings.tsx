@@ -17,16 +17,8 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Bot, Wand2, Eye, Shield, Send, Loader2, Save, Pencil, AlertCircle, Undo2 } from "lucide-react"
+import { Bot, Wand2, Eye, Shield, Send, Loader2, Save, Pencil, Info, Undo2 } from "lucide-react"
 import { toast } from "sonner"
 
 interface Triggers {
@@ -47,13 +39,35 @@ const TRIGGER_LIST: { key: keyof Triggers; label: string }[] = [
   { key: "interviewScheduling", label: "Согласование времени интервью (осторожно)" },
 ]
 
+// Группа 30: старые типы оставлены для backward-compat с уже сохранёнными
+// settings.abuseFilter. Логика 3-уровневой грубости теперь зашита в
+// chatbot-processor.ts и не настраивается через UI (sensitivity/action
+// больше не показываются).
+/** @deprecated Группа 30 — заменено фиксированной 3-уровневой логикой. */
 type AbuseSensitivity = "soft" | "moderate" | "strict"
+/** @deprecated Группа 30. */
 type AbuseAction = "escalate" | "needs_review" | "auto_reject" | "warn_and_continue"
-
+/** @deprecated Группа 30 — сохраняем поле в state чтобы не затирать сохранённый JSON. */
 interface AbuseFilter {
-  enabled: boolean
-  sensitivity: AbuseSensitivity
-  action: AbuseAction
+  enabled?:     boolean
+  sensitivity?: AbuseSensitivity
+  action?:      AbuseAction
+}
+
+// Группа 30: шаблоны автоматических отказов. Дефолты — синхронизированы с
+// DEFAULT_REJECTION_MESSAGES в lib/ai/chatbot-processor.ts.
+interface RejectionMessages {
+  injection?:     string
+  severeAbuse?:   string
+  repeatedAbuse?: string
+  unstable?:      string
+}
+
+const DEFAULT_REJECTION_MESSAGES: Required<RejectionMessages> = {
+  injection:     "В связи с нарушением правил общения мы вынуждены прекратить рассмотрение вашей кандидатуры.",
+  severeAbuse:   "Мы вынуждены прекратить общение в связи с нарушением норм общения.",
+  repeatedAbuse: "К сожалению, мы решили прекратить общение.",
+  unstable:      "По итогам нашего общения мы решили пока не двигаться дальше. Спасибо за интерес к нашей компании.",
 }
 
 interface Settings {
@@ -62,23 +76,20 @@ interface Settings {
   dailyMessageLimit: number
   stopWordsOverride: boolean
   telegramChannel: string
-  /** @deprecated — заменено abuseFilter, оставлено для backward-compat. */
-  autoRejectOnAbuse: boolean
-  abuseFilter: AbuseFilter
+  /** @deprecated Группа 30 — больше не читается на сервере. */
+  autoRejectOnAbuse?: boolean
+  /** @deprecated Группа 30 — сохраняем для backward-compat. */
+  abuseFilter?: AbuseFilter
+  rejectionMessages: Required<RejectionMessages>
 }
-const DEFAULT_ABUSE_FILTER: AbuseFilter = {
-  enabled: false,
-  sensitivity: "moderate",
-  action: "escalate",
-}
+
 const DEFAULT_SETTINGS: Settings = {
   triggers: DEFAULT_TRIGGERS,
   confidenceThreshold: 0.7,
   dailyMessageLimit: 5,
   stopWordsOverride: true,
   telegramChannel: "",
-  autoRejectOnAbuse: false,
-  abuseFilter: DEFAULT_ABUSE_FILTER,
+  rejectionMessages: DEFAULT_REJECTION_MESSAGES,
 }
 
 interface AbuseHistoryItem {
@@ -130,7 +141,11 @@ export function AiChatbotSettings({ vacancyId }: { vacancyId: string }) {
           setSettings(s => ({
             ...s,
             ...d.settings,
-            abuseFilter: { ...DEFAULT_ABUSE_FILTER, ...(d.settings.abuseFilter ?? {}) },
+            // Группа 30: гарантируем заполненные rejection-сообщения.
+            rejectionMessages: {
+              ...DEFAULT_REJECTION_MESSAGES,
+              ...(d.settings.rejectionMessages ?? {}),
+            },
           }))
         }
         if (typeof d.prompt === "string") setPrompt(d.prompt)
@@ -380,93 +395,23 @@ export function AiChatbotSettings({ vacancyId }: { vacancyId: string }) {
             </div>
             <Switch checked={settings.stopWordsOverride} onCheckedChange={v => setSettings(s => ({ ...s, stopWordsOverride: v }))} />
           </div>
-          {/* #79 Расширенный фильтр оскорблений */}
-          <div className="space-y-4 rounded-lg border bg-muted/30 p-4">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <Label className="text-sm">Фильтр оскорблений</Label>
-                <p className="text-[11px] text-muted-foreground mt-0.5">
-                  Чувствительность и действие при срабатывании. Заменяет старый автоотказ.
-                </p>
-              </div>
-              <Switch
-                checked={settings.abuseFilter.enabled}
-                onCheckedChange={v => setSettings(s => ({
-                  ...s,
-                  abuseFilter: { ...s.abuseFilter, enabled: v },
-                  // Backward-compat: гасим устаревший флаг.
-                  autoRejectOnAbuse: v && s.abuseFilter.action === "auto_reject",
-                }))}
-              />
-            </div>
-
-            {settings.abuseFilter.enabled && (
-              <>
-                <div className="space-y-2">
-                  <Label className="text-xs">Чувствительность</Label>
-                  <RadioGroup
-                    value={settings.abuseFilter.sensitivity}
-                    onValueChange={v => setSettings(s => ({
-                      ...s,
-                      abuseFilter: { ...s.abuseFilter, sensitivity: v as AbuseSensitivity },
-                    }))}
-                    className="space-y-1.5"
-                  >
-                    <div className="flex items-start gap-2">
-                      <RadioGroupItem value="soft" id="abuse-soft" className="mt-0.5" />
-                      <Label htmlFor="abuse-soft" className="text-xs font-normal cursor-pointer">
-                        <span className="font-medium">Мягко</span> — только явный мат и угрозы (порог 0.9)
-                      </Label>
-                    </div>
-                    <div className="flex items-start gap-2">
-                      <RadioGroupItem value="moderate" id="abuse-moderate" className="mt-0.5" />
-                      <Label htmlFor="abuse-moderate" className="text-xs font-normal cursor-pointer">
-                        <span className="font-medium">Умеренно</span> — мат и оскорбления (порог 0.7) — по умолчанию
-                      </Label>
-                    </div>
-                    <div className="flex items-start gap-2">
-                      <RadioGroupItem value="strict" id="abuse-strict" className="mt-0.5" />
-                      <Label htmlFor="abuse-strict" className="text-xs font-normal cursor-pointer">
-                        <span className="font-medium">Строго</span> — грубость, пассивная агрессия (порог 0.5)
-                      </Label>
-                    </div>
-                  </RadioGroup>
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Действие при срабатывании</Label>
-                  <Select
-                    value={settings.abuseFilter.action}
-                    onValueChange={v => setSettings(s => ({
-                      ...s,
-                      abuseFilter: { ...s.abuseFilter, action: v as AbuseAction },
-                      autoRejectOnAbuse: s.abuseFilter.enabled && v === "auto_reject",
-                    }))}
-                  >
-                    <SelectTrigger className="h-8 text-sm bg-[var(--input-bg)]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="escalate">Только эскалировать HR (без действий)</SelectItem>
-                      <SelectItem value="needs_review">Перевести в «Требует решения»</SelectItem>
-                      <SelectItem value="auto_reject">Автоматический отказ</SelectItem>
-                      <SelectItem value="warn_and_continue">Предупредить кандидата и продолжить</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <Alert className="bg-background">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription className="text-[11px] leading-relaxed">
-                    <span className="font-medium">Считается оскорблением:</span> мат, прямые угрозы,
-                    расистские и сексистские высказывания.{" "}
-                    <span className="font-medium">Не считается:</span> эмоциональные ответы без мата,
-                    несогласие, требования объяснений.
-                  </AlertDescription>
-                </Alert>
-              </>
-            )}
-          </div>
+          {/* Группа 30: автоматическая защита всегда включена. Уровни и
+              пороги — фиксированы в lib/ai/chatbot-processor.ts. UI
+              показывает только информационный блок + редактируемые шаблоны
+              сообщений кандидату. */}
+          <Alert className="bg-background">
+            <Shield className="h-4 w-4" />
+            <AlertDescription className="text-[11px] leading-relaxed">
+              <span className="font-medium">Автоматическая защита (всегда включена):</span>
+              <ul className="list-disc pl-4 mt-1 space-y-0.5">
+                <li>Попытка перепрограммировать AI → автоотказ.</li>
+                <li>Мат или прямые оскорбления → автоотказ.</li>
+                <li>Раздражённый тон без мата → счётчик; на 2-м срабатывании отказ.</li>
+                <li>Признаки эмоциональной нестабильности → мягкий отказ.</li>
+                <li>Вопросы вне темы → мягко возвращаем в разговор (без отказа).</li>
+              </ul>
+            </AlertDescription>
+          </Alert>
           <div className="flex justify-end">
             <Button size="sm" variant="outline" onClick={() => save()} disabled={saving} className="gap-1.5 h-8 text-xs">
               {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
@@ -533,6 +478,93 @@ export function AiChatbotSettings({ vacancyId }: { vacancyId: string }) {
               ))}
             </ul>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Группа 30: Шаблоны автоматических отказов */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+            <Shield className="w-4 h-4" /> Шаблоны автоматических отказов
+          </CardTitle>
+          <CardDescription>
+            AI отправит эти сообщения кандидату при срабатывании защиты, после чего кандидат
+            автоматически переводится в стадию «Отказано».
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-1.5">
+            <Label className="text-xs">При попытке перепрограммировать AI (injection)</Label>
+            <Textarea
+              value={settings.rejectionMessages.injection}
+              onChange={e => setSettings(s => ({
+                ...s,
+                rejectionMessages: { ...s.rejectionMessages, injection: e.target.value },
+              }))}
+              rows={2}
+              maxLength={500}
+              className="text-sm"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">При мате или серьёзных оскорблениях</Label>
+            <Textarea
+              value={settings.rejectionMessages.severeAbuse}
+              onChange={e => setSettings(s => ({
+                ...s,
+                rejectionMessages: { ...s.rejectionMessages, severeAbuse: e.target.value },
+              }))}
+              rows={2}
+              maxLength={500}
+              className="text-sm"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">При повторных неуважительных сообщениях (2-е срабатывание)</Label>
+            <Textarea
+              value={settings.rejectionMessages.repeatedAbuse}
+              onChange={e => setSettings(s => ({
+                ...s,
+                rejectionMessages: { ...s.rejectionMessages, repeatedAbuse: e.target.value },
+              }))}
+              rows={2}
+              maxLength={500}
+              className="text-sm"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">При признаках эмоциональной нестабильности</Label>
+            <Textarea
+              value={settings.rejectionMessages.unstable}
+              onChange={e => setSettings(s => ({
+                ...s,
+                rejectionMessages: { ...s.rejectionMessages, unstable: e.target.value },
+              }))}
+              rows={2}
+              maxLength={500}
+              className="text-sm"
+            />
+          </div>
+          <Alert className="bg-background">
+            <Info className="h-4 w-4" />
+            <AlertDescription className="text-[11px] leading-relaxed">
+              После отправки этих сообщений кандидат переводится в стадию «Отказано»
+              автоматически. Историю срабатываний можно посмотреть выше и при необходимости
+              отменить решение.
+            </AlertDescription>
+          </Alert>
+          <div className="flex justify-end">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => save()}
+              disabled={saving}
+              className="gap-1.5 h-8 text-xs"
+            >
+              {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+              Сохранить
+            </Button>
+          </div>
         </CardContent>
       </Card>
 
