@@ -174,6 +174,38 @@ Abuse history с undo:
 - GET /api/modules/hr/vacancies/[id]/ai-chatbot/abuse-history
 - POST /api/modules/hr/vacancies/[id]/ai-chatbot/undo-action
 
+## AI Chatbot Sandbox (Group 33)
+
+Внутренний тестовый режим без cron и hh.ru. HR-настройки → AI чат-бот →
+кнопка «Тестировать» в шапке открывает песочницу:
+
+- POST /api/modules/hr/vacancies/[id]/ai-chatbot/sandbox-message
+  Body: { message, history: [{role, content}] }
+- Прогоняет processChatbotMessage с dryRun=true:
+  - НЕ пишет в БД (candidates, ai_chatbot_messages)
+  - НЕ уведомляет HR и Telegram
+  - НЕ инкрементирует quota, не блокирует ping-pong/daily-limit
+  - Контекст pre-filter берётся из переданной UI истории
+- Возвращает action/reply/category/confidence/escalationReason/тайминги +
+  диагностику (триггеры, responseTiming, rejectionMessages).
+
+UI имитирует тайминги (cap 8 сек, реальные до 5 мин). Под каждым
+ответом AI — бэдж action + категория + confidence + reason.
+
+## Response Timing (Group 33)
+
+В aiChatbotSettings.responseTiming:
+- delaySeconds (1-300) — задержка перед основным reply
+- enableShortMessages — двойные сообщения
+- shortMessages[] — пул шаблонов («Минутку, посмотрю...»)
+- maxShortMessagesPerDialog (1-10)
+- shortToMainDelaySeconds (3-60)
+
+processor возвращает preMessage + preMessageDelayMs + replyDelayMs в
+ProcessResult; scan-incoming выполняет sleep'ы (cap 60 сек, чтобы один
+кандидат не блокировал cron). Счётчик коротких — candidates.short_
+messages_sent_count (миграция 0135).
+
 ## Funnel Builder (Group 22)
 
 Визуальный drag-and-drop конструктор воронки на 17 блоков (feature flag: vacancy.funnelBuilderEnabled).
