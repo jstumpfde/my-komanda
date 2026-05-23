@@ -20,11 +20,16 @@ import { useVacancySectionRegister } from "@/components/vacancies/vacancy-settin
 import { VacancyAiProcessSettings } from "@/components/vacancies/vacancy-ai-process-settings"
 import { VacancyFollowupSettings } from "@/components/vacancies/vacancy-followup-settings"
 import { VacancyPrequalificationSettings } from "@/components/vacancies/vacancy-prequalification-settings"
+import { VacancyRequirementsSettings } from "@/components/vacancies/vacancy-requirements-settings"
 import { VacancyScheduleSettings } from "@/components/vacancies/vacancy-schedule-settings"
 import { VacancyStopFactorsSettings } from "@/components/vacancies/vacancy-stop-factors-settings"
 import { VacancyStopWordsSettings } from "@/components/vacancies/vacancy-stop-words-settings"
 import type { Question } from "@/lib/course-types"
-import type { VacancyAiProcessSettings as VacancyAiProcessSettingsData, VacancyStopFactors } from "@/lib/db/schema"
+import type {
+  VacancyAiProcessSettings as VacancyAiProcessSettingsData,
+  VacancyRequirements,
+  VacancyStopFactors,
+} from "@/lib/db/schema"
 
 import type { FunnelBlockType } from "./blocks"
 
@@ -55,6 +60,7 @@ interface VacancyShape {
   aiScoringEnabled:     boolean
   stopFactorsJson:      VacancyStopFactors | null
   stopWordsJson:        string[] | null
+  requirementsJson:     VacancyRequirements | null
   descriptionJson:      { finalScreens?: FinalScreensConfig; anketa?: AnketaShape } | null
 }
 
@@ -93,12 +99,21 @@ function AiResumeScoreSettingsWrapped({ vacancyId, onSaved }: BlockSettingsProps
   const { data, loaded } = useVacancyData(vacancyId)
   if (!loaded) return <LoadingSpinner />
   return (
-    <VacancyAiProcessSettings
-      vacancyId={vacancyId}
-      initial={data?.aiProcessSettings ?? null}
-      initialAiScoringEnabled={data?.aiScoringEnabled ?? true}
-      onSaved={onSaved}
-    />
+    <div className="space-y-6">
+      {/* Группа 25: новые структурированные требования для v2-скоринга. */}
+      <VacancyRequirementsSettings
+        vacancyId={vacancyId}
+        initial={data?.requirementsJson ?? null}
+        onSaved={onSaved}
+      />
+      {/* Legacy v1 thresholds (minScoreLower/Upper, midRangeAction). */}
+      <VacancyAiProcessSettings
+        vacancyId={vacancyId}
+        initial={data?.aiProcessSettings ?? null}
+        initialAiScoringEnabled={data?.aiScoringEnabled ?? true}
+        onSaved={onSaved}
+      />
+    </div>
   )
 }
 
@@ -227,7 +242,7 @@ export const BLOCK_SETTINGS_REGISTRY: Partial<Record<FunnelBlockType, BlockSetti
   ai_resume_score: {
     component:   AiResumeScoreSettingsWrapped,
     title:       "AI-скоринг резюме",
-    description: "AI оценивает резюме при импорте 0–100",
+    description: "Структурированные требования (v2) + пороги score",
   },
   stop_factors_resume: {
     component:   StopFactorsSettingsWrapped,

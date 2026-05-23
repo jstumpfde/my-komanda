@@ -318,6 +318,11 @@ export const vacancies = pgTable("vacancies", {
   aiChatbotPrompt:   text("ai_chatbot_prompt").notNull().default(""),
   // #61: per-vacancy стоп-факторы.
   stopFactorsJson:   jsonb("stop_factors_json").$type<VacancyStopFactors>().notNull().default({}),
+  // Группа 25: структурированные требования (must_have / nice_to_have /
+  // deal_breakers / ideal_profile / scoring_weights). Используются
+  // двухпроходным AI-скорингом v2 (lib/ai-score-candidate-v2.ts).
+  // Если must_have пустой — работает только v1.
+  requirementsJson:  jsonb("requirements_json").$type<VacancyRequirements>().default({}),
   // Funnel Builder MVP: экспериментальный конструктор воронки (см. drizzle/0127).
   // funnelBuilderEnabled выключен по умолчанию; cron'ы и старые компоненты
   // продолжают читать существующие поля (aiChatbotEnabled и т.д.).
@@ -402,6 +407,86 @@ export interface VacancyStopFactors {
   documents?:          VacancyStopFactorDocuments
   citizenship?:        VacancyStopFactorCitizenship
   salaryExpectation?:  VacancyStopFactorSalary
+}
+
+// ─── Группа 25: структурированные требования вакансии ──────────────────────
+// Используются двухпроходным AI-скорингом v2 (lib/ai-score-candidate-v2.ts).
+// must_have ≥ 1 — активирует v2 (запуск параллельно с v1, A/B сравнение).
+
+export interface ScoringWeights {
+  relevant_experience: number   // default 30
+  hard_skills:         number   // default 25
+  tenure_stability:    number   // default 10
+  results_in_numbers:  number   // default 10
+  soft_skills_fit:     number   // default 10
+  company_size_match:  number   // default 5
+  managerial_match:    number   // default 5
+  education:           number   // default 3
+  location_readiness:  number   // default 2
+}
+
+export const DEFAULT_SCORING_WEIGHTS: ScoringWeights = {
+  relevant_experience: 30,
+  hard_skills:         25,
+  tenure_stability:    10,
+  results_in_numbers:  10,
+  soft_skills_fit:     10,
+  company_size_match:  5,
+  managerial_match:    5,
+  education:           3,
+  location_readiness:  2,
+}
+
+export interface VacancyRequirements {
+  must_have?:                    string[]   // 3-5 жёстких
+  nice_to_have?:                 string[]   // до 5 желательных
+  deal_breakers?:                string[]   // до 3
+  ideal_profile?:                string     // 1-2 предложения
+  scoring_weights?:              ScoringWeights
+  ai_suggested_at?:              string
+  hr_edited_after_suggestion?:   boolean
+}
+
+// Результат двухпроходного скоринга v2 — сохраняется в candidates.aiScoreV2Details.
+// Полный JSON см. lib/ai-score-candidate-v2.ts.
+export interface CandidateScoreV2 {
+  score:    number                                          // 0-100, взвешенная сумма
+  decision: "strong_match" | "match" | "maybe" | "weak" | "reject"
+  extracted_facts: {
+    total_years_experience:  number | null
+    relevant_experience:     Array<{ role: string; years: number; industry: string | null }>
+    industry_match:          "exact" | "adjacent" | "different" | "unknown"
+    hard_skills_mentioned:   string[]
+    soft_skills_evidence:    string[]
+    managerial_experience:   { has: boolean; team_size: number | null }
+    avg_tenure_years:        number | null
+    company_sizes_worked:    string[]
+    results_with_numbers:    string[]
+    red_flags:               string[]
+    green_flags:             string[]
+    education_summary:       string | null
+  }
+  criteria_scores: {
+    relevant_experience: number
+    hard_skills:         number
+    tenure_stability:    number
+    results_in_numbers:  number
+    soft_skills_fit:     number
+    company_size_match:  number
+    managerial_match:    number
+    education:           number
+    location_readiness:  number
+  }
+  reasoning: {
+    pros:                    string[]
+    cons:                    string[]
+    questions_for_interview: string[]
+  }
+  matched_must_have:        string[]
+  missed_must_have:         string[]
+  matched_nice_to_have:     string[]
+  triggered_deal_breakers:  string[]
+  scored_at?:               string
 }
 
 export interface VacancyPrequalificationConfig {
@@ -576,6 +661,12 @@ export const candidates = pgTable("candidates", {
   aiSummary: text("ai_summary"),
   aiDetails: jsonb("ai_details"), // [{question, score, comment}]
   aiScoredAt: timestamp("ai_scored_at"),
+  // Группа 25: A/B сравнение скоринга v1 (scoreCandidateById) vs v2
+  // (scoreCandidateV2, двухпроходный со структурированными требованиями).
+  // aiScore = v2 если доступен, иначе v1 — основной для UI/фильтров.
+  aiScoreV1:        real("ai_score_v1"),
+  aiScoreV2:        real("ai_score_v2"),
+  aiScoreV2Details: jsonb("ai_score_v2_details").$type<CandidateScoreV2>(),
   // AI-скор по данным резюме (hh.ru / анкета) — выставляется в момент приёма
   // отклика, до демо. Шкала 0..100, NULL = не оценивали. Отдельно от aiScore
   // (он считается после прохождения демо и включает ответы на вопросы).

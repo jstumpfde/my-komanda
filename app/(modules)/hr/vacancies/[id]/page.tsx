@@ -56,6 +56,7 @@ import { MiniFormBuilder } from "@/components/vacancies/mini-form-builder"
 import { UtmLinksSection } from "@/components/vacancies/utm-links-section"
 import { PostDemoSettings } from "@/components/vacancies/post-demo-settings"
 import { VacancyAiProcessSettings } from "@/components/vacancies/vacancy-ai-process-settings"
+import { VacancyRequirementsSettings } from "@/components/vacancies/vacancy-requirements-settings"
 import { VacancyFollowupSettings } from "@/components/vacancies/vacancy-followup-settings"
 import { VacancyPrequalificationSettings } from "@/components/vacancies/vacancy-prequalification-settings"
 import { VacancyStopWordsSettings } from "@/components/vacancies/vacancy-stop-words-settings"
@@ -3184,6 +3185,13 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                       </div>
                     </div>
                   )}
+                  {/* Группа 25: структурированные требования + двухпроходный
+                      AI-скоринг v2. При must_have ≥ 1 — параллельно с v1 для A/B. */}
+                  <VacancyRequirementsSettings
+                    vacancyId={id}
+                    initial={(apiVacancy as { requirementsJson?: import("@/lib/db/schema").VacancyRequirements } | undefined)?.requirementsJson ?? null}
+                    onSaved={() => refetchVacancy()}
+                  />
                   <VacancyAiProcessSettings
                     vacancyId={id}
                     initial={apiVacancy?.aiProcessSettings ?? null}
