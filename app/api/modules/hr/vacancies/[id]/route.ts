@@ -66,6 +66,7 @@ export async function PUT(
       employment_type?: string[]
       hiring_plan?: number
       employee_type?: string
+      branding_override_enabled?: boolean
     }
 
     const updates: Record<string, unknown> = {
@@ -93,6 +94,10 @@ export async function PUT(
     if (body.employment_type !== undefined) updates.employmentType = body.employment_type
     if (body.hiring_plan !== undefined) updates.hiringPlan = body.hiring_plan
     if (body.employee_type !== undefined) updates.employeeType = body.employee_type
+    // Группа 38: переключатель override брендинга.
+    if (body.branding_override_enabled !== undefined) {
+      updates.brandingOverrideEnabled = body.branding_override_enabled === true
+    }
 
     const [updated] = await db
       .update(vacancies)

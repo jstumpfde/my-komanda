@@ -76,6 +76,13 @@ export const paymentRequisites = pgTable("payment_requisites", {
   updatedAt: timestamp("updated_at").defaultNow(),
 })
 
+// Группа 38: расширенный per-company брендинг. Базовые поля
+// (logo/primary/bg/text) — отдельные колонки на companies; здесь дополнительные.
+export interface CompanyBrandingExtra {
+  accentColor?: string
+  fontFamily?:  string  // "inter" | "manrope" | "ibm-plex" | "roboto"
+}
+
 export const companies = pgTable("companies", {
   id:                 uuid("id").primaryKey().defaultRandom(),
   name:               text("name").notNull(),
@@ -111,6 +118,8 @@ export const companies = pgTable("companies", {
   brandPrimaryColor:  text("brand_primary_color").default("#3b82f6"),
   brandBgColor:       text("brand_bg_color").default("#f0f4ff"),
   brandTextColor:     text("brand_text_color").default("#1e293b"),
+  // Группа 38: расширенные поля брендинга поверх базовых колонок.
+  brandingJson:       jsonb("branding_json").$type<CompanyBrandingExtra>().notNull().default({}),
   customTheme:        jsonb("custom_theme"),       // { primary, background, foreground, sidebar, accent }
   demoProfile:        jsonb("demo_profile").default({}),  // Профиль для демонстраций должности
   brandName:          text("brand_name"),
@@ -336,6 +345,9 @@ export const vacancies = pgTable("vacancies", {
   // funnelBuilderEnabled выключен по умолчанию; cron'ы и старые компоненты
   // продолжают читать существующие поля (aiChatbotEnabled и т.д.).
   funnelBuilderEnabled: boolean("funnel_builder_enabled").notNull().default(false),
+  // Группа 38: false — вакансия наследует брендинг компании (default).
+  // true — используется собственный описанный в description_json.branding.
+  brandingOverrideEnabled: boolean("branding_override_enabled").notNull().default(false),
   funnelConfigJson:     jsonb("funnel_config_json")
     .$type<{ blocks: Array<{ type: string; order: number; enabled: boolean }> }>()
     .notNull()
