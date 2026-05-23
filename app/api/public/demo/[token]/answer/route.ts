@@ -1,10 +1,58 @@
 import { NextRequest } from "next/server"
 import { eq } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { candidates } from "@/lib/db/schema"
+import { candidates, vacancies, type VacancyRequirements } from "@/lib/db/schema"
 import { apiError, apiSuccess } from "@/lib/api-helpers"
 import { isShortId } from "@/lib/short-id"
 import { scoreCandidateById } from "@/lib/ai-score-candidate"
+import { scoreCandidateV2 } from "@/lib/ai-score-candidate-v2"
+
+// Группа 25: fire-and-forget A/B скоринг при завершении демо.
+// Если у вакансии есть must_have — запускаем v1+v2 параллельно. Иначе —
+// только v1 (legacy). Не переоцениваем кандидатов с aiScoredAt != null.
+async function runAbScoring(candidateId: string, vacancyId: string): Promise<void> {
+  try {
+    const [vac] = await db
+      .select({ requirementsJson: vacancies.requirementsJson })
+      .from(vacancies)
+      .where(eq(vacancies.id, vacancyId))
+      .limit(1)
+
+    const reqJson = (vac?.requirementsJson ?? {}) as VacancyRequirements
+    const hasRequirements = (reqJson.must_have?.length ?? 0) > 0
+
+    if (!hasRequirements) {
+      const v1 = await scoreCandidateById({ candidateId, vacancyId, skipIfScored: true })
+      if (v1) {
+        await db.update(candidates).set({
+          aiScoreV1:  v1.score,
+          aiScoredAt: new Date(),
+        }).where(eq(candidates.id, candidateId))
+      }
+      return
+    }
+
+    const [v1Result, v2Result] = await Promise.all([
+      scoreCandidateById({ candidateId, vacancyId, skipIfScored: true })
+        .catch((err: unknown) => { console.error("[demo answer] v1 failed:", err); return null }),
+      scoreCandidateV2({ candidateId, vacancyId, skipIfScored: true })
+        .catch((err: unknown) => { console.error("[demo answer] v2 failed:", err); return null }),
+    ])
+
+    if (!v1Result && !v2Result) return
+
+    const mainScore = v2Result?.score ?? v1Result?.score ?? null
+    await db.update(candidates).set({
+      aiScore:          mainScore,
+      aiScoreV1:        v1Result?.score ?? null,
+      aiScoreV2:        v2Result?.score ?? null,
+      aiScoreV2Details: v2Result ?? null,
+      aiScoredAt:       new Date(),
+    }).where(eq(candidates.id, candidateId))
+  } catch (err) {
+    console.error("[demo answer] A/B scoring failed:", err instanceof Error ? err.message : err)
+  }
+}
 
 interface DemoBlock {
   blockId: string
@@ -226,14 +274,9 @@ export async function POST(
     })
 
     // Авто AI-скоринг при завершении демо (вне транзакции, fire-and-forget).
+    // Группа 25: запускает v1+v2 параллельно, если у вакансии есть структурированные требования.
     if (txResult.isComplete && txResult.aiScoreNull) {
-      void scoreCandidateById({
-        candidateId: txResult.candidateId,
-        vacancyId: txResult.vacancyId,
-        skipIfScored: true,
-      }).catch((err) => {
-        console.error("[demo answer] auto AI scoring failed:", err instanceof Error ? err.message : err)
-      })
+      void runAbScoring(txResult.candidateId, txResult.vacancyId)
     }
 
     return apiSuccess({ ok: true, stage: txResult.stage })
