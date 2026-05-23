@@ -163,7 +163,16 @@ Tables: platform_settings_migrations, platform_emergency_actions, platform_funne
    - Блокирует: unauthorized_promise / system_leak / role_break / offtopic
 4. **AI Watcher** — периодический аудит последних 20 сообщений на вакансию
    - Ручной триггер: POST /api/modules/hr/vacancies/[id]/ai-chatbot/watcher-audit
-   - Cron-эндпоинт: /api/cron/ai-chatbot-watcher (расписание пока не настроено)
+   - Cron-эндпоинт: GET/POST /api/cron/ai-chatbot-watcher (Группа 34):
+     - Cooldown 30 мин между запусками (проверяется по cron_runs)
+     - Activity guard: пропускает если за час было <50 сообщений
+     - Логируется в cron_runs (startCronRun/finishCronRun)
+   - Расписание на сервере (crontab — раз в час):
+     ```
+     0 * * * * curl -s -X POST -H "X-Cron-Secret: $CRON_SECRET" \
+       https://company24.pro/api/cron/ai-chatbot-watcher \
+       >> /var/log/ai-watcher.log 2>&1
+     ```
 
 Kill switch:
 - Per-vacancy: vacancy.aiChatbotEnabled

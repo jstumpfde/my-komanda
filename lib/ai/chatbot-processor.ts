@@ -130,6 +130,10 @@ function clampInt(v: unknown, min: number, max: number, fallback: number): numbe
 
 export interface ChatbotSettings {
   triggers?:            Record<string, boolean>
+  /** Группа 34: триггеры по умолчанию ВЫКЛЮЧЕНЫ. AI отвечает на всё, что
+   *  не заблокировал pre-filter. Если HR явно включит — пайплайн
+   *  возвращается к ограничению по категориям intent. */
+  triggersEnabled?:     boolean
   confidenceThreshold?: number
   dailyMessageLimit?:   number
   stopWordsOverride?:   boolean
@@ -912,7 +916,11 @@ export async function processChatbotMessage(input: ProcessInput): Promise<Proces
   // Группа 30: offtopic-хинт обходит фильтр триггеров — мы хотим, чтобы
   // на offtopic кандидата мы всегда ответили мягким редиректом, даже если
   // его текущий intent не входит в triggers.
-  if (!offtopicHint) {
+  //
+  // Группа 34: триггеры теперь ОПЦИОНАЛЬНЫ. По умолчанию AI отвечает на
+  // всё, что не заблокировал pre-filter. Проверка intent-категории
+  // выполняется только если HR явно включил triggersEnabled.
+  if (!offtopicHint && settings.triggersEnabled === true) {
     const triggerKey = (Object.keys(TRIGGER_TO_CATEGORY) as Array<keyof typeof TRIGGER_TO_CATEGORY>)
       .find(k => TRIGGER_TO_CATEGORY[k] === category)
     if (!triggerKey || !settings.triggers?.[triggerKey]) {
