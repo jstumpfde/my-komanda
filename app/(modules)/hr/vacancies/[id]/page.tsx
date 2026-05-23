@@ -64,6 +64,7 @@ import { FinalScreensSettings, type FinalScreensConfig } from "@/components/vaca
 import { RecoveryMessageSettings } from "@/components/vacancies/recovery-message-settings"
 import { FirstMessagesChainEditor } from "@/components/vacancies/first-messages-chain-editor"
 import { FunnelBuilder } from "@/components/vacancies/funnel-builder"
+import { BrandingOverrideSwitch } from "@/components/vacancies/branding-override-switch"
 import { VacancySettingsProvider, VacancyTabPendingDot, VacancyStickySaveBar, useVacancySectionRegister, useSafeSubTabSwitch, type VacancyTabKey } from "@/components/vacancies/vacancy-settings-context"
 import {
   ResponsiveContainer,
@@ -2666,6 +2667,16 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                       }}
                       save={() => saveBranding()}
                     />
+
+                    {/* Группа 38: переключатель «использовать брендинг компании». */}
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-base">Источник брендинга</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <BrandingOverrideSwitch vacancyId={id} />
+                      </CardContent>
+                    </Card>
 
                     {/* Брендинг страницы */}
                     <Card>
