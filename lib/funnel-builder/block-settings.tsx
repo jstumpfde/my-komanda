@@ -231,6 +231,13 @@ function AnketaFullSettingsWrapped({ vacancyId, onSaved }: BlockSettingsProps) {
 function AiAnketaScoreSettingsWrapped({ vacancyId }: BlockSettingsProps) {
   return <PostDemoSettings vacancyId={vacancyId} sections={["thresholds"]} />
 }
+// Группа 35: Sheet-обёртка для VacancyFollowupSettings. Передаёт
+// tabKey="funnel-builder", чтобы pending-индикатор попадал на этот таб
+// (а не на standalone followup-таб, где компонента нет в Sheet).
+function DozhimSettingsWrapped({ vacancyId, onSaved }: BlockSettingsProps) {
+  return <VacancyFollowupSettings vacancyId={vacancyId} tabKey="funnel-builder" onSaved={onSaved} />
+}
+
 function AutoReplyTestTaskSettingsWrapped({ vacancyId }: BlockSettingsProps) {
   return <PostDemoSettings vacancyId={vacancyId} sections={["anketaAutoReply"]} />
 }
@@ -286,7 +293,7 @@ export const BLOCK_SETTINGS_REGISTRY: Partial<Record<FunnelBlockType, BlockSetti
     description: "Триггер автоотказа по словам кандидата",
   },
   dozhim: {
-    component:   VacancyFollowupSettings,
+    component:   DozhimSettingsWrapped,
     title:       "Дожим",
     description: "Цепочка касаний для не-открывших и не-завершивших",
   },

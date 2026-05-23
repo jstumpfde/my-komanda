@@ -1,14 +1,15 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
+import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion"
-import { MessageSquareText, RotateCcw } from "lucide-react"
+import { Loader2, MessageSquareText, Plus, RotateCcw, Save, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { FOLLOWUP_PRESETS, FOLLOWUP_MESSAGE_SLOTS, type FollowUpPreset } from "@/lib/followup/presets"
@@ -16,7 +17,7 @@ import {
   DEFAULT_FOLLOWUP_NOT_OPENED,
   DEFAULT_FOLLOWUP_OPENED_NOT_FINISHED,
 } from "@/lib/followup/default-messages"
-import { useVacancySectionRegister } from "./vacancy-settings-context"
+import { useVacancySectionRegister, type VacancyTabKey } from "./vacancy-settings-context"
 
 interface Campaign {
   id: string
@@ -31,6 +32,12 @@ interface Campaign {
 
 interface Props {
   vacancyId: string
+  /** Группа 35: для funnel-builder Sheet передаём "funnel-builder", чтобы
+   *  pending-индикатор появлялся на правильном табе. Дефолт — "followup"
+   *  (когда компонент рендерится на standalone-табе вакансии). */
+  tabKey?:   VacancyTabKey
+  /** Колбэк после успешного сохранения (например — закрыть Sheet). */
+  onSaved?:  () => void
 }
 
 const PRESET_ORDER: FollowUpPreset[] = ["off", "soft", "standard", "aggressive"]
@@ -63,7 +70,7 @@ function slotsUsage(preset: FollowUpPreset): Map<number, number[]> {
   return map
 }
 
-export function VacancyFollowupSettings({ vacancyId }: Props) {
+export function VacancyFollowupSettings({ vacancyId, tabKey = "followup", onSaved }: Props) {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [enabled, setEnabled] = useState(false)
@@ -82,12 +89,23 @@ export function VacancyFollowupSettings({ vacancyId }: Props) {
   const [touchedA, setTouchedA] = useState(false)
   const [touchedB, setTouchedB] = useState(false)
 
+  // Группа 35: кастомные дни касаний. null = «используем preset.days».
+  // Хранится в vacancy.descriptionJson.followupCustomDays (отдельный PATCH).
+  const [customDays, setCustomDays] = useState<number[] | null>(null)
+  const [touchedDays, setTouchedDays] = useState(false)
+
   useEffect(() => {
     let cancelled = false
     const load = async () => {
       try {
-        const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}/followup-settings`)
-        const data = await res.json() as { campaign?: Campaign | null }
+        const [campaignRes, vacancyRes] = await Promise.all([
+          fetch(`/api/modules/hr/vacancies/${vacancyId}/followup-settings`),
+          fetch(`/api/modules/hr/vacancies/${vacancyId}`),
+        ])
+        const data = await campaignRes.json() as { campaign?: Campaign | null }
+        const vacancyData = vacancyRes.ok
+          ? (await vacancyRes.json().catch(() => null) as { descriptionJson?: Record<string, unknown> | null } | null)
+          : null
         if (cancelled) return
         if (data.campaign) {
           setEnabled(data.campaign.enabled)
@@ -97,6 +115,15 @@ export function VacancyFollowupSettings({ vacancyId }: Props) {
           setStopOnVacancyClosed(data.campaign.stopOnVacancyClosed)
           setCustomA(data.campaign.customMessages ?? null)
           setCustomB(data.campaign.customMessagesOpened ?? null)
+        }
+        // Группа 35: кастомные дни из descriptionJson.
+        const dj = vacancyData?.descriptionJson
+        if (dj && typeof dj === "object" && Array.isArray((dj as Record<string, unknown>).followupCustomDays)) {
+          const raw = (dj as Record<string, unknown>).followupCustomDays as unknown[]
+          const days = raw
+            .map(d => Number(d))
+            .filter(d => Number.isFinite(d) && d >= 1 && d <= 365)
+          setCustomDays(days.length > 0 ? days.sort((a, b) => a - b) : null)
         }
       } catch (err) {
         console.error("[followup-settings] load failed:", err)
@@ -121,13 +148,31 @@ export function VacancyFollowupSettings({ vacancyId }: Props) {
       })
       const data = await res.json() as { campaign?: Campaign; error?: string }
       if (!res.ok) throw new Error(data.error || "Не удалось сохранить")
+
+      // Группа 35: customDays живут в vacancy.descriptionJson — отдельный
+      // PATCH на основную ручку вакансии. Сохраняем ТОЛЬКО если HR-у трогал
+      // редактор (touchedDays) — чтобы не затирать чужие поля descriptionJson.
+      if (touchedDays) {
+        const dj = customDays && customDays.length > 0
+          ? { followupCustomDays: [...customDays].sort((a, b) => a - b) }
+          : { followupCustomDays: null }
+        const r2 = await fetch(`/api/modules/hr/vacancies/${vacancyId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ description_json: dj }),
+        })
+        if (!r2.ok) throw new Error("Не удалось сохранить расписание")
+      }
+
       toast.success("Настройки воронки дожима сохранены")
       setTouchedA(false)
       setTouchedB(false)
+      setTouchedDays(false)
       if (data.campaign) {
         setCustomA(data.campaign.customMessages ?? null)
         setCustomB(data.campaign.customMessagesOpened ?? null)
       }
+      onSaved?.()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Ошибка сохранения")
     } finally {
@@ -137,12 +182,44 @@ export function VacancyFollowupSettings({ vacancyId }: Props) {
 
   useVacancySectionRegister({
     sectionKey: `followup:${vacancyId}`,
-    tabKey: "followup",
+    tabKey,
     loaded: !loading,
-    watchedValues: { enabled, preset, stopOnReply, stopOnVacancyClosed, customA, customB, touchedA, touchedB },
+    watchedValues: {
+      enabled, preset, stopOnReply, stopOnVacancyClosed,
+      customA, customB, customDays,
+      touchedA, touchedB, touchedDays,
+    },
     save: handleSave,
   })
-  void saving
+
+  // Группа 35: локальный isDirty для inline-кнопки «Сохранить».
+  // Параллельно с useVacancySectionRegister — даёт HR явный визуальный
+  // сигнал «есть несохранённые изменения» и работает даже если глобальный
+  // sticky-saver скрыт overlay'ем Sheet.
+  const initialRef = useRef<string | null>(null)
+  const currentSnapshot = useMemo(
+    () => JSON.stringify({
+      enabled, preset, stopOnReply, stopOnVacancyClosed,
+      customA, customB, customDays,
+    }),
+    [enabled, preset, stopOnReply, stopOnVacancyClosed, customA, customB, customDays],
+  )
+  useEffect(() => {
+    if (loading) return
+    if (initialRef.current === null) initialRef.current = currentSnapshot
+  }, [loading, currentSnapshot])
+  useEffect(() => {
+    if (!saving && initialRef.current !== null) {
+      // После успешного save handleSave() уже обнуляет touchedA/B/Days;
+      // подтягиваем baseline на актуальное состояние.
+      initialRef.current = JSON.stringify({
+        enabled, preset, stopOnReply, stopOnVacancyClosed,
+        customA, customB, customDays,
+      })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [saving])
+  const isDirty = !loading && initialRef.current !== null && initialRef.current !== currentSnapshot
 
   const presetCfg = FOLLOWUP_PRESETS[preset]
   const usage = slotsUsage(preset)
@@ -378,6 +455,31 @@ export function VacancyFollowupSettings({ vacancyId }: Props) {
             </div>
             <Switch checked={stopOnVacancyClosed} onCheckedChange={setStopOnVacancyClosed} disabled={loading} />
           </label>
+        </div>
+
+        {/* Группа 35: явная inline-кнопка «Сохранить» с индикатором dirty.
+            Дублирует sticky-кнопку из VacancySettingsProvider — нужна
+            потому что в funnel-builder Sheet sticky-bar может быть закрыт
+            overlay'ем, а HR должен видеть, что изменения зафиксировались. */}
+        <div className="flex items-center justify-between gap-2 border-t pt-4">
+          <div className="text-xs">
+            {isDirty ? (
+              <Badge variant="outline" className="text-amber-700 border-amber-300 bg-amber-50">
+                Есть несохранённые изменения
+              </Badge>
+            ) : (
+              <span className="text-muted-foreground">Изменений нет</span>
+            )}
+          </div>
+          <Button
+            size="sm"
+            onClick={() => { void handleSave() }}
+            disabled={loading || saving || !isDirty}
+            className="gap-1.5"
+          >
+            {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+            Сохранить
+          </Button>
         </div>
       </CardContent>
     </Card>
