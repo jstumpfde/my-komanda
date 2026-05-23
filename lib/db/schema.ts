@@ -2187,3 +2187,47 @@ export const platformFunnelTemplates = pgTable("platform_funnel_templates", {
   createdAt:        timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt:        timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 })
+
+// ─── Группа 28: AI-помощник «Юлия» ─────────────────────────────────────────
+// Внутренний HR-ассистент для создания вакансии через короткий диалог.
+// НЕ путать с Аней — sales-ассистентом на лендинге Company24.
+// Миграция drizzle/0133_yulia_conversations.sql.
+
+export interface YuliaConversationState {
+  // Накапливаемые данные в процессе диалога. Произвольный bag — Юлия пишет
+  // сюда то, что нужно текущему context_type, без жёсткой схемы.
+  [k: string]: unknown
+}
+
+export interface YuliaPendingAction {
+  type:                   string                  // "create_vacancy_draft" | (future)
+  params:                 Record<string, unknown>
+  requires_confirmation?: boolean
+}
+
+export const yuliaConversations = pgTable("yulia_conversations", {
+  id:                 uuid("id").primaryKey().defaultRandom(),
+  userId:             uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  companyId:          uuid("company_id").references(() => companies.id, { onDelete: "cascade" }),
+  contextType:        text("context_type").notNull(),                  // "vacancy_creation"
+  state:              jsonb("state").$type<YuliaConversationState>().notNull().default({}),
+  status:             text("status").notNull().default("active"),      // active | completed | abandoned
+  resultingEntityId:  uuid("resulting_entity_id"),
+  createdAt:          timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt:          timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("idx_yulia_conv_user").on(t.userId, t.status),
+  index("idx_yulia_conv_company").on(t.companyId, t.createdAt),
+])
+
+export const yuliaMessages = pgTable("yulia_messages", {
+  id:             uuid("id").primaryKey().defaultRandom(),
+  conversationId: uuid("conversation_id").references(() => yuliaConversations.id, { onDelete: "cascade" }).notNull(),
+  role:           text("role").notNull(),                              // user | assistant
+  content:        text("content").notNull(),
+  pendingAction:  jsonb("pending_action").$type<YuliaPendingAction>(),
+  actionStatus:   text("action_status"),                               // null | pending | confirmed | rejected | executed
+  createdAt:      timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("idx_yulia_msg_conv").on(t.conversationId, t.createdAt),
+])
