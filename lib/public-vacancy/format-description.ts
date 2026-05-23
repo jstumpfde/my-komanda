@@ -1,6 +1,19 @@
-// Эвристический парсер описания вакансии из анкеты Company24.
-// На вход — plain text (description_json.companyDescription), на выходе —
-// массив секций с подзаголовками и параграфами для рендеринга.
+// Парсер описания вакансии из анкеты Company24 (v3, Группа 31).
+// Вход — plain text (description_json.companyDescription), выход — массив
+// секций с заголовками и параграфами для рендеринга.
+//
+// История: v1 (Группа 16) и v2 (Группа 18) использовали агрессивную
+// эвристику «короткая строка без точки в конце = заголовок». Это ломало
+// списки вида «готов работать,/понимает X,/чувствует Y,» — каждый пункт
+// превращался в отдельный «заголовок» с 0 параграфами, и текст выглядел
+// как набор оборванных строк.
+//
+// v3 идея: единственный надёжный сигнал — пустая строка между параграфами
+// (\n\n). Доверяем ей. Заголовком считаем только то, в чём мы УВЕРЕНЫ:
+//   1. Явные имена секций из SECTION_HEADERS (стандартные блоки анкеты)
+//   2. Полностью КАПСОВЫЕ короткие строки («ВАЖНО», «ПРО ДОХОД»)
+//   3. Короткие строки, заканчивающиеся двоеточием
+// Всё остальное — параграф, даже если короткий или без точки в конце.
 
 const SECTION_HEADERS = [
   "Честный разговор",
@@ -25,84 +38,100 @@ const SECTION_HEADERS = [
   "Локация",
   "Контакты",
   "Дополнительная информация",
-  "По итогам 2025 года",
-  "По итогам 2024 года",
-  "Цель на 2026 год",
-  "Цель на 2025 год",
   "Реальный продукт",
+  "Продукт",
+  "ВАЖНО",
+  "ПРО ДОХОД",
 ]
 
 export interface Section {
-  title?: string
+  title?:      string
   paragraphs: string[]
 }
 
-// Эвристика заголовка. Учитывает что в плотных описаниях из hh.ru заголовки
-// чаще всего идут с двоеточием/тире в конце или просто как короткие фразы
-// без терминальной пунктуации.
-function isLikelyHeader(line: string): boolean {
-  const trimmed = line.trim()
-  if (!trimmed) return false
-  if (trimmed.length > 80) return false
-  // Заголовок с двоеточием в конце (классический паттерн).
-  if (/[:—-]$/.test(trimmed)) {
-    const body = trimmed.replace(/[:—-]$/, "").trim()
-    return body.length > 0 && body.length <= 70 && body.split(/\s+/).length <= 8
+const SECTION_HEADERS_NORM = new Set(
+  SECTION_HEADERS.map(h => h.toLowerCase().replace(/[()?]/g, "").replace(/\s+/g, " ").trim()),
+)
+
+// Только то, в чём УВЕРЕНЫ: явные имена секций, капсовые маркеры или строка
+// с двоеточием в конце. Все остальные «короткие фразы без точки» — это
+// нормальные параграфы или элементы списка, НЕ заголовки.
+function isHeaderBlock(block: string): boolean {
+  // Заголовок — это один логический «кусок» без переносов внутри.
+  if (block.includes("\n")) return false
+  const t = block.trim()
+  if (!t) return false
+  if (t.length > 80) return false
+
+  // 1. Явный заголовок из словаря (case-insensitive, без знаков препинания).
+  const stripped = t.replace(/[:—–\-.,]+$/, "").toLowerCase().replace(/\s+/g, " ").trim()
+  if (SECTION_HEADERS_NORM.has(stripped)) return true
+
+  // 2. Полностью капсовая короткая строка (кириллица или латиница) длиной до
+  //    30 символов: «ВАЖНО», «ПРО ДОХОД», «О КОМПАНИИ».
+  //    Требуем минимум 5 БУКВ или наличие пробела — иначе короткие
+  //    аббревиатуры в перечислениях («США», «ОАЭ») ложно попадают в
+  //    заголовки.
+  if (t.length <= 30 && /^[A-ZА-ЯЁ\s\d.,!?«»"'()–—-]+$/.test(t) && /[A-ZА-ЯЁ]/.test(t)) {
+    const letterCount = (t.match(/[A-ZА-ЯЁ]/g) ?? []).length
+    if (letterCount >= 5 || /\s/.test(t)) return true
   }
-  // Без терминальной пунктуации — короткая фраза.
-  if (/[.?!;]$/.test(trimmed)) return false
-  const wordCount = trimmed.split(/\s+/).length
-  if (wordCount > 8) return false
-  if (wordCount === 1 && trimmed.length < 4) return false
-  // Если строка целиком в верхнем регистре длиной 2+ слов — это, скорее
-  // всего, имя бренда («ГК ОРЛИНК», «ООО РОМАШКА»), не заголовок.
-  const upperOnly = /^[A-ZА-ЯЁ\s\d.,«»"'()-]+$/.test(trimmed)
-  if (upperOnly && wordCount >= 2 && trimmed.length < 30) return false
-  return true
+
+  // 3. Двоеточие в конце короткой строки — типичный паттерн «Условия:» /
+  //    «Обязанности:». Но только если внутри нет точек и не несколько слов
+  //    типа предложения.
+  if (/[:]$/.test(t) && t.length <= 60 && !/[.!?]/.test(t.slice(0, -1))) {
+    return true
+  }
+
+  return false
 }
 
-// Разбивка длинного параграфа на более короткие куски по последней точке.
-// Используется для текстов из hh.ru без явной разметки на абзацы.
-function splitLongParagraph(text: string, targetLen = 300, hardLimit = 500): string[] {
-  if (text.length <= hardLimit) return [text]
-  const sentences = text.split(/(?<=[.!?])\s+(?=[А-ЯA-Z«"])/g)
-  const chunks: string[] = []
-  let chunk = ""
-  for (const sentence of sentences) {
-    chunk += (chunk ? " " : "") + sentence
-    if (chunk.length >= targetLen) {
-      chunks.push(chunk)
-      chunk = ""
-    }
-  }
-  if (chunk) chunks.push(chunk)
-  return chunks.length > 0 ? chunks : [text]
+function stripHeaderTail(s: string): string {
+  return s.replace(/[\s:—–-]+$/, "").trim()
+}
+
+// Группировка очень коротких подряд идущих «строк-фрагментов» в один
+// параграф. Это lifeline для списков, где каждый item был отдельным
+// блоком через \n\n: «готов работать,\n\nпонимает X,\n\nчувствует Y,». В
+// итоге склеиваем их через \n чтобы рендер с whitespace-pre-line показал
+// их как маркированный (визуально) список.
+function looksLikeListItem(s: string): boolean {
+  const t = s.trim()
+  if (t.length === 0 || t.length > 160) return false
+  // Должна не быть полным предложением (без точки в конце или с запятой).
+  return /[,;]$/.test(t) || (!/[.!?]$/.test(t) && t.length < 120)
 }
 
 export function formatDescription(text: string): Section[] {
   if (!text) return []
 
-  // 1. Нормализация переводов строк и пробелов.
-  let normalized = text.replace(/\r\n/g, "\n").replace(/[ \t]+/g, " ").trim()
+  // 1. Нормализация переводов строк. Внутри блока сохраняем \n — это
+  //    может быть «мягкий» перенос внутри логического абзаца.
+  const normalized = text
+    .replace(/\r\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/[ \t]+/g, " ")
+    .trim()
 
-  // 2. Явные заголовки из списка — отмечаем их маркерами.
-  // На входе из hh.ru текст часто без переводов строк, поэтому заголовок
-  // может стоять не только после \n, но и после конца предложения (`.`,
-  // `!`, `?`) с пробелом. Заголовок может оканчиваться двоеточием, тире
-  // или просто пробелом.
-  const headerPattern = new RegExp(
-    `(?:^|\\n|(?<=[.!?]\\s))(${SECTION_HEADERS.join("|")})(?=\\s*[:—-]|\\s|,|\\.|$)`,
-    "gi",
-  )
-  normalized = normalized.replace(headerPattern, "\n\n###$1###\n\n")
+  if (!normalized) return []
 
-  // 3. Разбиение на блоки по двойным переводам строк.
-  const blocks = normalized
+  // 2. Главное разбиение — по пустой строке (\n\n).
+  const rawBlocks = normalized
     .split(/\n{2,}/)
-    .map((b) => b.trim())
+    .map(b => b.trim())
     .filter(Boolean)
 
-  // 4. Группировка в секции.
+  // 2a. Fallback: текст без \n\n совсем. Разбиваем по \n или по
+  //     предложениям (по 2-3) — лишь бы не показать одним абзацем.
+  let blocks: string[]
+  if (rawBlocks.length <= 1) {
+    blocks = splitFallback(rawBlocks[0] ?? normalized)
+  } else {
+    blocks = rawBlocks
+  }
+
+  // 3. Группировка в секции.
   const sections: Section[] = []
   let current: Section = { paragraphs: [] }
 
@@ -112,38 +141,77 @@ export function formatDescription(text: string): Section[] {
     }
   }
 
-  // Срезает соединительные знаки в начале параграфа, оставшиеся от
-  // заголовка («: текст», «— текст»), и схлопывает двойные пробелы.
-  const cleanParagraph = (s: string): string =>
-    s.replace(/^[\s:—–-]+/, "").replace(/\s{2,}/g, " ").trim()
+  // 3a. Склеивание серии коротких «список-фрагментов» в один параграф.
+  const merged: string[] = []
+  let listBuf: string[] = []
 
-  for (const block of blocks) {
-    const explicitHeader = block.match(/^###(.+)###$/)
-
-    if (explicitHeader) {
-      pushCurrent()
-      current = { title: explicitHeader[1].trim(), paragraphs: [] }
-      continue
-    }
-
-    // Эвристика: короткая строка без пунктуации в конце — это inline-заголовок.
-    if (isLikelyHeader(block)) {
-      pushCurrent()
-      current = { title: block.replace(/[:—-]\s*$/, ""), paragraphs: [] }
-      continue
-    }
-
-    // Длинные блоки — разбиваем на параграфы по последним точкам.
-    const cleaned = cleanParagraph(block)
-    if (!cleaned) continue
-    if (cleaned.length > 500) {
-      current.paragraphs.push(...splitLongParagraph(cleaned))
+  const flushList = () => {
+    if (listBuf.length === 0) return
+    if (listBuf.length === 1) {
+      merged.push(listBuf[0])
     } else {
-      current.paragraphs.push(cleaned)
+      merged.push(listBuf.join("\n"))
     }
+    listBuf = []
   }
 
+  for (const block of blocks) {
+    if (block.includes("\n")) {
+      // Многострочный блок — не трогаем, флешим предыдущий список.
+      flushList()
+      merged.push(block)
+      continue
+    }
+    if (isHeaderBlock(block)) {
+      flushList()
+      merged.push(block)
+      continue
+    }
+    if (looksLikeListItem(block)) {
+      listBuf.push(block)
+    } else {
+      flushList()
+      merged.push(block)
+    }
+  }
+  flushList()
+
+  // 4. Превращаем merged в секции.
+  for (const block of merged) {
+    if (isHeaderBlock(block)) {
+      pushCurrent()
+      current = { title: stripHeaderTail(block), paragraphs: [] }
+      continue
+    }
+    current.paragraphs.push(block)
+  }
   pushCurrent()
 
   return sections
+}
+
+// Fallback для текстов без явных \n\n: разбиваем по \n, иначе по
+// предложениям (по 2-3), чтобы блок не остался одним мегапараграфом.
+function splitFallback(text: string): string[] {
+  const byNewline = text.split(/\n+/).map(s => s.trim()).filter(Boolean)
+  if (byNewline.length >= 3) return byNewline
+
+  const sentences = text
+    .replace(/\s+/g, " ")
+    .split(/(?<=[.!?])\s+(?=[A-ZА-ЯЁ«"])/g)
+    .map(s => s.trim())
+    .filter(Boolean)
+  if (sentences.length <= 1) return [text.trim()]
+
+  const chunks: string[] = []
+  let buf: string[] = []
+  for (const s of sentences) {
+    buf.push(s)
+    if (buf.length >= 3 || buf.join(" ").length > 280) {
+      chunks.push(buf.join(" "))
+      buf = []
+    }
+  }
+  if (buf.length) chunks.push(buf.join(" "))
+  return chunks
 }
