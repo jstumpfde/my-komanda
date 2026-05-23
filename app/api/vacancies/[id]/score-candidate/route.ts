@@ -81,10 +81,14 @@ export async function POST(
         candidateId: body.candidateId,
         v1:          v1Result?.score ?? null,
         v2:          v2Result?.score ?? null,
-        details:     v2Result ?? null,
+        // v2Details — полный CandidateScoreV2 (extracted_facts, criteria_scores,
+        // reasoning, must_have stats). Передаём отдельным полем чтобы не
+        // конфликтовать с legacy details (массив v1).
+        v2Details:   v2Result ?? null,
         // Legacy-поля для совместимости с UI, не использующим v2 ещё.
         score:       mainScore,
         summary:     v1Result?.summary ?? null,
+        details:     v1Result?.details ?? null,
       })
     }
 

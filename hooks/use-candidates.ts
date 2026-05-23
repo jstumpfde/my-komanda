@@ -48,6 +48,11 @@ export interface ApiCandidate {
   // AI-скор резюме (выставляется в lib/hh/process-queue.ts при приёме отклика).
   // Отдельно от aiScore — тот считается после демо и учитывает ответы.
   resumeScore?: number | null
+  // Группа 25: A/B сравнение v1 vs v2 (см. CandidateScoreV2 в schema.ts).
+  aiScoreV1?: number | null
+  aiScoreV2?: number | null
+  aiScoreV2Details?: import("@/lib/db/schema").CandidateScoreV2 | null
+  aiScoredAt?: string | null
   isFavorite: boolean | null
   createdAt: string | null
   updatedAt: string | null

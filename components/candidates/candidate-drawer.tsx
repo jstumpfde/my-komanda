@@ -57,6 +57,7 @@ import type { ApiCandidate } from "@/hooks/use-candidates"
 import type { Lesson, Block } from "@/lib/course-types"
 import { AnswersTab } from "./answers-tab"
 import { HhResumeInfo } from "./hh-resume-info"
+import { AiMatchCardV2 } from "./ai-match-card-v2"
 
 // ─── Note type ────────────────────────────────────────────────────────────────
 
@@ -805,9 +806,25 @@ export function CandidateDrawer({
         const data = await res.json() as { error?: string }
         throw new Error(data.error || "Ошибка")
       }
-      const data = await res.json() as { score: number; summary: string; details: { question: string; score: number; comment: string }[] }
-      setCandidate(prev => prev ? { ...prev, aiScore: data.score, aiSummary: data.summary, aiDetails: data.details } : prev)
-      toast.success(`AI-скоринг: ${data.score}/100`)
+      const data = await res.json() as {
+        score:     number | null
+        summary?:  string | null
+        details?:  { question: string; score: number; comment: string }[] | null
+        v1?:       number | null
+        v2?:       number | null
+        v2Details?: import("@/lib/db/schema").CandidateScoreV2 | null
+      }
+      setCandidate(prev => prev ? {
+        ...prev,
+        aiScore:          data.score ?? prev.aiScore,
+        aiSummary:        typeof data.summary === "string" ? data.summary : prev.aiSummary,
+        aiDetails:        Array.isArray(data.details) ? data.details : prev.aiDetails,
+        aiScoreV1:        data.v1 ?? prev.aiScoreV1 ?? null,
+        aiScoreV2:        data.v2 ?? prev.aiScoreV2 ?? null,
+        aiScoreV2Details: data.v2Details ?? prev.aiScoreV2Details ?? null,
+      } : prev)
+      const shown = data.v2 ?? data.score ?? "?"
+      toast.success(`AI-скоринг: ${shown}/100`)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Ошибка AI-скоринга")
     } finally {
@@ -1242,6 +1259,13 @@ export function CandidateDrawer({
 
               {/* ── AI-оценка ────────────────────────────────────── */}
               <TabsContent value="ai" className="px-6 py-4 pb-28 mt-0 space-y-4">
+                {candidate.aiScoreV2Details && (
+                  <AiMatchCardV2
+                    details={candidate.aiScoreV2Details}
+                    scoreV1={candidate.aiScoreV1 ?? null}
+                    scoreV2={candidate.aiScoreV2 ?? null}
+                  />
+                )}
                 {candidate.aiScore != null ? (
                   <>
                     <div className="flex flex-col items-center gap-2 py-4">
