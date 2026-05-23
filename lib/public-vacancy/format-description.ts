@@ -103,18 +103,57 @@ function looksLikeListItem(s: string): boolean {
   return /[,;]$/.test(t) || (!/[.!?]$/.test(t) && t.length < 120)
 }
 
+// Группа 32: знаковые маркеры-заголовки, которые в hh-описаниях часто
+// идут сплошняком в середине параграфа без переводов строк. Вставляем
+// `\n\n` перед ними, чтобы основной splitter сработал.
+const INLINE_HEADER_MARKERS = [
+  "Что мы предлагаем",
+  "Мы предлагаем",
+  "Что мы ждём",
+  "Условия",
+  "Обязанности",
+  "Требования",
+  "О компании",
+  "О нас",
+  "Команда",
+  "Бонусы",
+  "Преимущества",
+  "Этапы отбора",
+  "График работы",
+  "Локация",
+  "Контакты",
+  "Дополнительная информация",
+  "Зарплата",
+  "Реальный продукт",
+]
+
+function injectHeaderBreaks(text: string): string {
+  // Маркер должен идти после конца предложения (.!?) + пробел/перенос, и
+  // дальше обязательно `:` или `—` чтобы не ловить случайные упоминания
+  // («о компании говорить рано» НЕ заголовок, а «О компании:» — да).
+  // Вставляем \n\n ДО и ПОСЛЕ заголовка с двоеточием — чтобы он стал
+  // отдельным блоком (isHeaderBlock его подхватит).
+  const escaped = INLINE_HEADER_MARKERS.map(m => m.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")
+  const re = new RegExp(`(?<=[.!?]\\s|\\n)(${escaped})\\s*([:—])\\s*`, "g")
+  return text.replace(re, "\n\n$1$2\n\n")
+}
+
 export function formatDescription(text: string): Section[] {
   if (!text) return []
 
   // 1. Нормализация переводов строк. Внутри блока сохраняем \n — это
   //    может быть «мягкий» перенос внутри логического абзаца.
-  const normalized = text
+  let normalized = text
     .replace(/\r\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .replace(/[ \t]+/g, " ")
     .trim()
 
   if (!normalized) return []
+
+  // 1a. Группа 32: hh-описания приходят сплошной строкой. Вставляем `\n\n`
+  //     перед знаковыми маркерами секций, чтобы splitter их разделил.
+  normalized = injectHeaderBreaks(normalized)
 
   // 2. Главное разбиение — по пустой строке (\n\n).
   const rawBlocks = normalized
@@ -130,6 +169,15 @@ export function formatDescription(text: string): Section[] {
   } else {
     blocks = rawBlocks
   }
+
+  // 2b. Группа 32: если блок длинный (>400 символов) без внутренних \n —
+  //     это сплошная стена, дробим её на чанки по 2-3 предложения. Иначе
+  //     UI покажет неразрывный мегапараграф. Заголовочные блоки трогать
+  //     не нужно — они короткие и пройдут через isHeaderBlock как есть.
+  blocks = blocks.flatMap(b => {
+    if (b.length > 400 && !b.includes("\n")) return splitFallback(b)
+    return [b]
+  })
 
   // 3. Группировка в секции.
   const sections: Section[] = []
