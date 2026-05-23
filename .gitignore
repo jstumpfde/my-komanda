@@ -43,3 +43,8 @@ public/uploads/
 *.log
 tmp/
 temp/
+
+# Playwright (Группа 29)
+playwright-report/
+test-results/
+.playwright/
