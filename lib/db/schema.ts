@@ -703,6 +703,11 @@ export const candidates = pgTable("candidates", {
   // пересоздании кандидата). См. drizzle/0134_ai_chatbot_v2_tracking.sql.
   abuseWarningsCount:   integer("abuse_warnings_count").notNull().default(0),
   lastAbuseWarningAt:   timestamp("last_abuse_warning_at", { withTimezone: true }),
+  // Группа 33: счётчик «коротких» сообщений ("Минутку, посмотрю...") за
+  // диалог. Лимит регулируется в aiChatbotSettings.responseTiming.
+  // См. drizzle/0135_chatbot_delays.sql.
+  shortMessagesSentCount: integer("short_messages_sent_count").notNull().default(0),
+  lastShortMessageAt:     timestamp("last_short_message_at", { withTimezone: true }),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 })
