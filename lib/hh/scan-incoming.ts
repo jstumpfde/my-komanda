@@ -455,11 +455,23 @@ export async function scanIncomingMessages(opts: {
             } else if (cb.action === "escalated") {
               console.info(`[scan-incoming] ${candidateId} ai_chatbot_escalated reason=${cb.escalationReason} cat=${cb.category ?? "-"} text="${preview}"`)
             } else if (cb.action === "rejected") {
+              // Группа 30: processor может вернуть reply при отказе
+              // (injection / severe_abuse / repeated_abuse / unstable) —
+              // отправляем кандидату это сообщение перед закрытием цепочки.
+              if (cb.reply) {
+                const ok = await sendFarewell(accessToken, resp.hhResponseId, cb.reply)
+                console.info(`[scan-incoming] ${candidateId} ai_chatbot_rejected_with_reply ok=${ok} reason=${cb.escalationReason} text="${preview}"`)
+              } else {
+                console.info(`[scan-incoming] ${candidateId} ai_chatbot_rejected reason=${cb.escalationReason} text="${preview}"`)
+              }
               if (cb.escalationReason === "stop_word") {
                 rejected = true
                 result.rejectedRegex++
+              } else if (cb.escalationReason?.startsWith("security_")) {
+                // Помечаем что цепочку дальше не продолжаем для этого
+                // кандидата в текущей итерации scan-incoming.
+                rejected = true
               }
-              console.info(`[scan-incoming] ${candidateId} ai_chatbot_rejected reason=${cb.escalationReason} text="${preview}"`)
             } else {
               console.info(`[scan-incoming] ${candidateId} ai_chatbot_skipped reason=${cb.escalationReason} text="${preview}"`)
             }
