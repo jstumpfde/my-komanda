@@ -450,6 +450,16 @@ export async function scanIncomingMessages(opts: {
           })
           if (cb.handled) {
             if (cb.action === "sent" && cb.reply) {
+              // Группа 33: уважаем тайминги из processor — преCмесс +
+              // задержки. Cap-им суммарную задержку 5 минут, чтобы один
+              // кандидат не блокировал scan-incoming.
+              if (cb.preMessage && cb.preMessageDelayMs) {
+                await sendFarewell(accessToken, resp.hhResponseId, cb.preMessage)
+                await new Promise(r => setTimeout(r, Math.min(cb.preMessageDelayMs!, 60_000)))
+              }
+              if (cb.replyDelayMs && cb.replyDelayMs > 0) {
+                await new Promise(r => setTimeout(r, Math.min(cb.replyDelayMs, 60_000)))
+              }
               const ok = await sendFarewell(accessToken, resp.hhResponseId, cb.reply)
               console.info(`[scan-incoming] ${candidateId} ai_chatbot_sent ok=${ok} cat=${cb.category} conf=${cb.confidence?.toFixed(2)} text="${preview}"`)
             } else if (cb.action === "escalated") {
@@ -459,6 +469,9 @@ export async function scanIncomingMessages(opts: {
               // (injection / severe_abuse / repeated_abuse / unstable) —
               // отправляем кандидату это сообщение перед закрытием цепочки.
               if (cb.reply) {
+                if (cb.replyDelayMs && cb.replyDelayMs > 0) {
+                  await new Promise(r => setTimeout(r, Math.min(cb.replyDelayMs, 60_000)))
+                }
                 const ok = await sendFarewell(accessToken, resp.hhResponseId, cb.reply)
                 console.info(`[scan-incoming] ${candidateId} ai_chatbot_rejected_with_reply ok=${ok} reason=${cb.escalationReason} text="${preview}"`)
               } else {

@@ -18,7 +18,8 @@ import { Separator } from "@/components/ui/separator"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Bot, Wand2, Eye, Shield, Send, Loader2, Save, Pencil, Info, Undo2 } from "lucide-react"
+import { Bot, Wand2, Eye, Shield, Send, Loader2, Save, Pencil, Info, Undo2, FlaskConical } from "lucide-react"
+import { AiChatbotSandbox } from "./ai-chatbot-sandbox"
 import { toast } from "sonner"
 
 interface Triggers {
@@ -70,6 +71,34 @@ const DEFAULT_REJECTION_MESSAGES: Required<RejectionMessages> = {
   unstable:      "По итогам нашего общения мы решили пока не двигаться дальше. Спасибо за интерес к нашей компании.",
 }
 
+// Группа 33: тайминги ответа. Должны совпадать с DEFAULT_RESPONSE_TIMING
+// в lib/ai/chatbot-processor.ts.
+interface ResponseTiming {
+  delaySeconds:               number
+  enableShortMessages:        boolean
+  shortMessages:              string[]
+  maxShortMessagesPerDialog:  number
+  shortToMainDelaySeconds:    number
+}
+
+const DEFAULT_SHORT_MESSAGES: string[] = [
+  "Минутку, сейчас посмотрю...",
+  "Секунду, проверю информацию",
+  "Сейчас уточню, минутку...",
+  "Один момент...",
+  "Подождите немного, отвечу подробно",
+  "Сейчас отвечу",
+  "Минутку",
+]
+
+const DEFAULT_RESPONSE_TIMING: ResponseTiming = {
+  delaySeconds:               10,
+  enableShortMessages:        false,
+  shortMessages:              DEFAULT_SHORT_MESSAGES,
+  maxShortMessagesPerDialog:  2,
+  shortToMainDelaySeconds:    8,
+}
+
 interface Settings {
   triggers: Triggers
   confidenceThreshold: number  // 0..1
@@ -81,6 +110,7 @@ interface Settings {
   /** @deprecated Группа 30 — сохраняем для backward-compat. */
   abuseFilter?: AbuseFilter
   rejectionMessages: Required<RejectionMessages>
+  responseTiming: ResponseTiming
 }
 
 const DEFAULT_SETTINGS: Settings = {
@@ -90,6 +120,7 @@ const DEFAULT_SETTINGS: Settings = {
   stopWordsOverride: true,
   telegramChannel: "",
   rejectionMessages: DEFAULT_REJECTION_MESSAGES,
+  responseTiming: DEFAULT_RESPONSE_TIMING,
 }
 
 interface AbuseHistoryItem {
@@ -122,6 +153,7 @@ export function AiChatbotSettings({ vacancyId }: { vacancyId: string }) {
   const [quota, setQuota] = useState<QuotaUsage | null>(null)
   const [auditing, setAuditing] = useState(false)
   const [auditResult, setAuditResult] = useState<{ ranAt: string; issuesCount: number; summary: string } | null>(null)
+  const [sandboxOpen, setSandboxOpen] = useState(false)
   const [abuseHistory, setAbuseHistory] = useState<AbuseHistoryItem[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
   const [undoingId, setUndoingId] = useState<string | null>(null)
@@ -145,6 +177,14 @@ export function AiChatbotSettings({ vacancyId }: { vacancyId: string }) {
             rejectionMessages: {
               ...DEFAULT_REJECTION_MESSAGES,
               ...(d.settings.rejectionMessages ?? {}),
+            },
+            // Группа 33: гарантируем заполненные тайминги.
+            responseTiming: {
+              ...DEFAULT_RESPONSE_TIMING,
+              ...(d.settings.responseTiming ?? {}),
+              shortMessages: Array.isArray(d.settings.responseTiming?.shortMessages) && d.settings.responseTiming.shortMessages.length > 0
+                ? d.settings.responseTiming.shortMessages
+                : DEFAULT_SHORT_MESSAGES,
             },
           }))
         }
@@ -301,14 +341,37 @@ export function AiChatbotSettings({ vacancyId }: { vacancyId: string }) {
                 <p className="text-[11px] text-amber-700 mt-1">Сначала сгенерируйте промпт ниже.</p>
               )}
             </div>
-            <Switch
-              checked={enabled}
-              disabled={!canEnable}
-              onCheckedChange={v => { setEnabled(v); void save({ enabled: v }) }}
-            />
+            <div className="flex flex-col items-end gap-2">
+              <Switch
+                checked={enabled}
+                disabled={!canEnable}
+                onCheckedChange={v => { setEnabled(v); void save({ enabled: v }) }}
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setSandboxOpen(true)}
+                disabled={!canEnable}
+                className="gap-1.5 h-8 text-xs"
+              >
+                <FlaskConical className="w-3.5 h-3.5" />
+                Тестировать
+              </Button>
+            </div>
           </div>
         </CardHeader>
       </Card>
+
+      {/* Группа 33: Sandbox диалог */}
+      <Dialog open={sandboxOpen} onOpenChange={setSandboxOpen}>
+        <DialogContent className="max-w-2xl p-0 gap-0">
+          <DialogTitle className="sr-only">Песочница AI чат-бота</DialogTitle>
+          <AiChatbotSandbox
+            vacancyId={vacancyId}
+            onClose={() => setSandboxOpen(false)}
+          />
+        </DialogContent>
+      </Dialog>
 
       {/* Триггеры */}
       <Card>
@@ -553,6 +616,166 @@ export function AiChatbotSettings({ vacancyId }: { vacancyId: string }) {
               отменить решение.
             </AlertDescription>
           </Alert>
+          <div className="flex justify-end">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => save()}
+              disabled={saving}
+              className="gap-1.5 h-8 text-xs"
+            >
+              {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+              Сохранить
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Группа 33: Поведение и тайминги */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+            <Loader2 className="w-4 h-4" /> Поведение и тайминги
+          </CardTitle>
+          <CardDescription>
+            Настройка скорости и реалистичности ответов AI
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-1.5">
+            <Label className="text-xs">Задержка перед ответом (секунды)</Label>
+            <Input
+              type="number"
+              min={1}
+              max={300}
+              value={settings.responseTiming.delaySeconds}
+              onChange={(e) => setSettings(s => ({
+                ...s,
+                responseTiming: {
+                  ...s.responseTiming,
+                  delaySeconds: Math.max(1, Math.min(300, Number(e.target.value) || 10)),
+                },
+              }))}
+              className="h-8 text-sm w-32"
+            />
+            <p className="text-[11px] text-muted-foreground">
+              Через сколько секунд AI ответит после получения сообщения. 10–30 сек создают
+              ощущение живого общения.
+            </p>
+          </div>
+
+          <div className="rounded-lg border bg-muted/30 p-3 space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <Label className="text-sm">Короткое сообщение перед ответом</Label>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  «Минутку, посмотрю...» создаёт ощущение живого общения.
+                </p>
+              </div>
+              <Switch
+                checked={settings.responseTiming.enableShortMessages}
+                onCheckedChange={(v) => setSettings(s => ({
+                  ...s,
+                  responseTiming: { ...s.responseTiming, enableShortMessages: v },
+                }))}
+              />
+            </div>
+
+            {settings.responseTiming.enableShortMessages && (
+              <>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Шаблоны коротких сообщений</Label>
+                  <p className="text-[11px] text-muted-foreground">
+                    AI выбирает случайно из этого списка.
+                  </p>
+                  {settings.responseTiming.shortMessages.map((msg, idx) => (
+                    <div key={idx} className="flex gap-2">
+                      <Input
+                        value={msg}
+                        onChange={(e) => setSettings(s => ({
+                          ...s,
+                          responseTiming: {
+                            ...s.responseTiming,
+                            shortMessages: s.responseTiming.shortMessages.map((m, i) =>
+                              i === idx ? e.target.value : m,
+                            ),
+                          },
+                        }))}
+                        className="h-8 text-sm flex-1"
+                      />
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8"
+                        disabled={settings.responseTiming.shortMessages.length <= 1}
+                        onClick={() => setSettings(s => ({
+                          ...s,
+                          responseTiming: {
+                            ...s.responseTiming,
+                            shortMessages: s.responseTiming.shortMessages.filter((_, i) => i !== idx),
+                          },
+                        }))}
+                      >
+                        Удалить
+                      </Button>
+                    </div>
+                  ))}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={() => setSettings(s => ({
+                      ...s,
+                      responseTiming: {
+                        ...s.responseTiming,
+                        shortMessages: [...s.responseTiming.shortMessages, "Новое короткое сообщение"],
+                      },
+                    }))}
+                  >
+                    + Добавить шаблон
+                  </Button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Макс. коротких за диалог</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={10}
+                      value={settings.responseTiming.maxShortMessagesPerDialog}
+                      onChange={(e) => setSettings(s => ({
+                        ...s,
+                        responseTiming: {
+                          ...s.responseTiming,
+                          maxShortMessagesPerDialog: Math.max(1, Math.min(10, Number(e.target.value) || 2)),
+                        },
+                      }))}
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Задержка после короткого (сек)</Label>
+                    <Input
+                      type="number"
+                      min={3}
+                      max={60}
+                      value={settings.responseTiming.shortToMainDelaySeconds}
+                      onChange={(e) => setSettings(s => ({
+                        ...s,
+                        responseTiming: {
+                          ...s.responseTiming,
+                          shortToMainDelaySeconds: Math.max(3, Math.min(60, Number(e.target.value) || 8)),
+                        },
+                      }))}
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+
           <div className="flex justify-end">
             <Button
               size="sm"

@@ -70,6 +70,64 @@ export const DEFAULT_REJECTION_MESSAGES: Required<RejectionMessages> = {
 export const FIRST_WARNING_MESSAGE =
   "Прошу общаться корректно. Готов продолжить обсуждение вакансии."
 
+// Группа 33: настройки реалистичности ответа. Хранятся в
+// aiChatbotSettings.responseTiming. Все задержки — на стороне scan-incoming
+// (caller), processor только считает и возвращает их в ProcessResult.
+export interface ResponseTimingSettings {
+  /** Сколько секунд ждать перед отправкой основного ответа (1-300). */
+  delaySeconds?:               number
+  /** Если включено — перед основным ответом отправляется случайное
+   *  «короткое» сообщение из shortMessages. */
+  enableShortMessages?:        boolean
+  shortMessages?:              string[]
+  /** Лимит «коротких» сообщений за один диалог с кандидатом. */
+  maxShortMessagesPerDialog?:  number
+  /** Задержка между «коротким» и основным ответом (3-60 сек). */
+  shortToMainDelaySeconds?:    number
+}
+
+export const DEFAULT_SHORT_MESSAGES: string[] = [
+  "Минутку, сейчас посмотрю...",
+  "Секунду, проверю информацию",
+  "Сейчас уточню, минутку...",
+  "Один момент...",
+  "Подождите немного, отвечу подробно",
+  "Сейчас отвечу",
+  "Минутку",
+]
+
+export const DEFAULT_RESPONSE_TIMING: Required<ResponseTimingSettings> = {
+  delaySeconds:               10,
+  enableShortMessages:        false,
+  shortMessages:              DEFAULT_SHORT_MESSAGES,
+  maxShortMessagesPerDialog:  2,
+  shortToMainDelaySeconds:    8,
+}
+
+function getResponseTiming(s: ChatbotSettings | undefined): Required<ResponseTimingSettings> {
+  const raw = s?.responseTiming ?? {}
+  const delaySeconds = clampInt(raw.delaySeconds, 1, 300, DEFAULT_RESPONSE_TIMING.delaySeconds)
+  const enableShortMessages = typeof raw.enableShortMessages === "boolean"
+    ? raw.enableShortMessages
+    : DEFAULT_RESPONSE_TIMING.enableShortMessages
+  const shortMessages = Array.isArray(raw.shortMessages) && raw.shortMessages.length > 0
+    ? raw.shortMessages.filter(s => typeof s === "string" && s.trim().length > 0)
+    : DEFAULT_SHORT_MESSAGES
+  const maxShortMessagesPerDialog = clampInt(
+    raw.maxShortMessagesPerDialog, 1, 10, DEFAULT_RESPONSE_TIMING.maxShortMessagesPerDialog,
+  )
+  const shortToMainDelaySeconds = clampInt(
+    raw.shortToMainDelaySeconds, 3, 60, DEFAULT_RESPONSE_TIMING.shortToMainDelaySeconds,
+  )
+  return { delaySeconds, enableShortMessages, shortMessages, maxShortMessagesPerDialog, shortToMainDelaySeconds }
+}
+
+function clampInt(v: unknown, min: number, max: number, fallback: number): number {
+  const n = typeof v === "number" ? v : Number(v)
+  if (!Number.isFinite(n)) return fallback
+  return Math.max(min, Math.min(max, Math.round(n)))
+}
+
 export interface ChatbotSettings {
   triggers?:            Record<string, boolean>
   confidenceThreshold?: number
@@ -81,6 +139,8 @@ export interface ChatbotSettings {
   /** @deprecated Группа 30 — заменено фиксированной 3-уровневой логикой. */
   abuseFilter?:         AbuseFilterSettings
   rejectionMessages?:   RejectionMessages
+  /** Группа 33. */
+  responseTiming?:      ResponseTimingSettings
 }
 
 export interface ProcessVacancy {
@@ -99,6 +159,14 @@ export interface ProcessInput {
   vacancyId:    string
   incomingText: string
   vacancy:      ProcessVacancy
+  /** Группа 33: sandbox-режим. true = НЕ пишем в БД, НЕ создаём
+   *  уведомления, НЕ инкрементируем счётчики. Используется тестовой
+   *  песочницей в UI настроек чат-бота. */
+  dryRun?:      boolean
+  /** Группа 33: явная история диалога для sandbox-режима. Если не
+   *  задана и dryRun=true — context пустой. Если dryRun=false —
+   *  игнорируется, контекст подгружается из ai_chatbot_messages. */
+  sandboxHistory?: Array<{ role: "user" | "assistant"; text: string }>
 }
 
 export interface ProcessResult {
@@ -115,6 +183,14 @@ export interface ProcessResult {
   category?:        IntentCategory
   confidence?:      number
   escalationReason?: string
+  /** Группа 33: «короткое» сообщение для отправки ПЕРЕД основным reply.
+   *  null/undefined — пропускаем. Caller (scan-incoming) сначала шлёт
+   *  preMessage, потом ждёт preMessageDelayMs, потом шлёт reply. */
+  preMessage?:      string
+  /** Задержка между preMessage и reply, в миллисекундах. */
+  preMessageDelayMs?: number
+  /** Задержка перед основным reply (если preMessage нет — общая задержка). */
+  replyDelayMs?:    number
 }
 
 const TRIGGER_TO_CATEGORY: Record<string, IntentCategory> = {
@@ -328,19 +404,30 @@ async function classifyIntent(message: string): Promise<{ category: IntentCatego
 }
 
 interface CandidateInfo { name: string; shortId: string | null; token: string }
-async function loadCandidate(candidateId: string): Promise<(CandidateInfo & { abuseWarningsCount: number }) | null> {
+interface CandidateLoad extends CandidateInfo {
+  abuseWarningsCount:     number
+  shortMessagesSentCount: number
+}
+async function loadCandidate(candidateId: string): Promise<CandidateLoad | null> {
   const [c] = await db
     .select({
-      name:                candidates.name,
-      shortId:             candidates.shortId,
-      token:               candidates.token,
-      abuseWarningsCount:  candidates.abuseWarningsCount,
+      name:                    candidates.name,
+      shortId:                 candidates.shortId,
+      token:                   candidates.token,
+      abuseWarningsCount:      candidates.abuseWarningsCount,
+      shortMessagesSentCount:  candidates.shortMessagesSentCount,
     })
     .from(candidates)
     .where(eq(candidates.id, candidateId))
     .limit(1)
   if (!c) return null
-  return { name: c.name, shortId: c.shortId, token: c.token, abuseWarningsCount: c.abuseWarningsCount ?? 0 }
+  return {
+    name:                    c.name,
+    shortId:                 c.shortId,
+    token:                   c.token,
+    abuseWarningsCount:      c.abuseWarningsCount ?? 0,
+    shortMessagesSentCount:  c.shortMessagesSentCount ?? 0,
+  }
 }
 
 async function escalate(args: {
@@ -458,6 +545,14 @@ function getRejectionMessage(
   return DEFAULT_REJECTION_MESSAGES[key]
 }
 
+// Группа 33: случайный выбор «короткого» сообщения, исключая последний
+// использованный (если known) — чтобы не повторяться подряд.
+function pickShortMessage(pool: string[], avoidLastIndex: number): string {
+  const available = pool.filter((_, i) => i !== avoidLastIndex)
+  const list = available.length > 0 ? available : pool
+  return list[Math.floor(Math.random() * list.length)]
+}
+
 // Hint для Executor когда pre-filter увидел offtopic. Дописывается к
 // SAFETY_RULES перед HR-промптом, чтобы модель не игнорировала offtopic и
 // не уходила в его обсуждение.
@@ -480,6 +575,20 @@ export async function processChatbotMessage(input: ProcessInput): Promise<Proces
   const dailyLimit = typeof settings.dailyMessageLimit === "number" ? settings.dailyMessageLimit : 5
   const stopwordsOn = settings.stopWordsOverride !== false
 
+  // Группа 33: dryRun (песочница) — пропускаем все side effects: запись в БД,
+  // уведомления, инкремент quota. Возвращаем тот же ProcessResult, чтобы UI
+  // тестера видел реальное решение пайплайна.
+  const dryRun = input.dryRun === true
+  const log = async (a: Parameters<typeof logMessage>[0]) => {
+    if (!dryRun) await logMessage(a)
+  }
+  const esc = async (a: Parameters<typeof escalate>[0]) => {
+    if (!dryRun) await escalate(a)
+  }
+  const rej = async (a: Parameters<typeof autoRejectAndNotify>[0]) => {
+    if (!dryRun) await autoRejectAndNotify(a)
+  }
+
   // Kill switch: аварийное отключение AI-чат-бота на уровне всей компании.
   const [companyRow] = await db
     .select({ killed: companies.aiChatbotKilled })
@@ -492,29 +601,44 @@ export async function processChatbotMessage(input: ProcessInput): Promise<Proces
   }
 
   // Защита: бот не должен трогать остановленных / финальных кандидатов.
-  const [c] = await db
-    .select({
-      stage:   candidates.stage,
-      stopped: candidates.autoProcessingStopped,
-    })
-    .from(candidates)
-    .where(eq(candidates.id, candidateId))
-    .limit(1)
-  if (!c) return { handled: false, action: "skipped", escalationReason: "candidate_missing" }
-  if (c.stopped || c.stage === "rejected" || c.stage === "hired") {
-    return { handled: false, action: "skipped", escalationReason: "candidate_inactive" }
+  // В sandbox-режиме (Группа 33) проверка кандидата не нужна — мы тестируем
+  // пайплайн на синтетических данных, кандидата с таким id может не быть.
+  let candidateInfo: CandidateLoad | null = null
+  let abuseWarningsCount = 0
+  if (!dryRun) {
+    const [c] = await db
+      .select({
+        stage:   candidates.stage,
+        stopped: candidates.autoProcessingStopped,
+      })
+      .from(candidates)
+      .where(eq(candidates.id, candidateId))
+      .limit(1)
+    if (!c) return { handled: false, action: "skipped", escalationReason: "candidate_missing" }
+    if (c.stopped || c.stage === "rejected" || c.stage === "hired") {
+      return { handled: false, action: "skipped", escalationReason: "candidate_inactive" }
+    }
+    candidateInfo = await loadCandidate(candidateId)
+    abuseWarningsCount = candidateInfo?.abuseWarningsCount ?? 0
+  } else {
+    // dryRun: фиктивный candidateInfo для логирования внутри escalate-helper'ов
+    // (которые в dryRun всё равно no-op).
+    candidateInfo = {
+      name: "sandbox", shortId: null, token: candidateId,
+      abuseWarningsCount: 0, shortMessagesSentCount: 0,
+    }
   }
 
-  const candidateInfo = await loadCandidate(candidateId)
-  const abuseWarningsCount = candidateInfo?.abuseWarningsCount ?? 0
-
   // 0. Pre-filter с контекстом последних 3 ходов (Группа 30).
-  const context = await recentContext(candidateId)
+  //    В sandbox используем переданную UI историю, иначе тянем из БД.
+  const context = dryRun
+    ? (input.sandboxHistory ?? [])
+    : await recentContext(candidateId)
   const incomingSec = await classifyIncomingMessage(incomingText, { context })
 
   // 0a. INJECTION → СРАЗУ автоотказ + сообщение кандидату.
   if (incomingSec.category === "injection" && incomingSec.confidence >= INCOMING_INJECTION_CONFIDENCE) {
-    await autoRejectAndNotify({
+    await rej({
       candidateId, vacancyId, vacancyTitle, companyId, candidateInfo,
       incomingText, reason: "security_injection",
       confidence: incomingSec.confidence,
@@ -528,12 +652,13 @@ export async function processChatbotMessage(input: ProcessInput): Promise<Proces
       reply:   getRejectionMessage(settings, "injection"),
       confidence: incomingSec.confidence,
       escalationReason: "security_injection",
+      replyDelayMs: getResponseTiming(settings).delaySeconds * 1000,
     }
   }
 
   // 0b. SEVERE_ABUSE → СРАЗУ автоотказ + сообщение.
   if (incomingSec.category === "severe_abuse" && incomingSec.confidence >= INCOMING_SEVERE_ABUSE_CONFIDENCE) {
-    await autoRejectAndNotify({
+    await rej({
       candidateId, vacancyId, vacancyTitle, companyId, candidateInfo,
       incomingText, reason: "security_severe_abuse",
       confidence: incomingSec.confidence,
@@ -547,20 +672,23 @@ export async function processChatbotMessage(input: ProcessInput): Promise<Proces
       reply:   getRejectionMessage(settings, "severeAbuse"),
       confidence: incomingSec.confidence,
       escalationReason: "security_severe_abuse",
+      replyDelayMs: getResponseTiming(settings).delaySeconds * 1000,
     }
   }
 
   // 0c. MEDIUM_ABUSE → счётчик +1, на 2-м срабатывании → отказ.
   if (incomingSec.category === "medium_abuse" && incomingSec.confidence >= INCOMING_MEDIUM_ABUSE_CONFIDENCE) {
     const newCount = abuseWarningsCount + 1
-    await db.update(candidates).set({
-      abuseWarningsCount:  newCount,
-      lastAbuseWarningAt:  new Date(),
-      updatedAt:           new Date(),
-    }).where(eq(candidates.id, candidateId))
+    if (!dryRun) {
+      await db.update(candidates).set({
+        abuseWarningsCount:  newCount,
+        lastAbuseWarningAt:  new Date(),
+        updatedAt:           new Date(),
+      }).where(eq(candidates.id, candidateId))
+    }
 
     if (newCount >= 2) {
-      await autoRejectAndNotify({
+      await rej({
         candidateId, vacancyId, vacancyTitle, companyId, candidateInfo,
         incomingText, reason: "security_repeated_abuse",
         confidence: incomingSec.confidence,
@@ -574,18 +702,19 @@ export async function processChatbotMessage(input: ProcessInput): Promise<Proces
         reply:   getRejectionMessage(settings, "repeatedAbuse"),
         confidence: incomingSec.confidence,
         escalationReason: "security_repeated_abuse",
+        replyDelayMs: getResponseTiming(settings).delaySeconds * 1000,
       }
     }
 
     // 1-е срабатывание: спокойное предупреждение, пайплайн не продолжаем —
     // кандидат должен увидеть warning перед тем как мы ответим по теме.
-    await logMessage({
+    await log({
       candidateId, vacancyId, incoming: incomingText,
       category: "other", confidence: incomingSec.confidence,
       reply: FIRST_WARNING_MESSAGE, sent: true, escalated: true,
       reason: "security_first_warning",
     })
-    await escalate({
+    await esc({
       companyId, vacancyId, vacancyTitle, candidateId, candidateInfo,
       incomingMessage: incomingText, reason: "security_first_warning",
       confidence: incomingSec.confidence,
@@ -598,12 +727,13 @@ export async function processChatbotMessage(input: ProcessInput): Promise<Proces
       reply:   FIRST_WARNING_MESSAGE,
       confidence: incomingSec.confidence,
       escalationReason: "security_first_warning",
+      replyDelayMs: getResponseTiming(settings).delaySeconds * 1000,
     }
   }
 
   // 0d. UNSTABLE_PATTERN → мягкий отказ + сообщение.
   if (incomingSec.category === "unstable_pattern" && incomingSec.confidence >= INCOMING_UNSTABLE_CONFIDENCE) {
-    await autoRejectAndNotify({
+    await rej({
       candidateId, vacancyId, vacancyTitle, companyId, candidateInfo,
       incomingText, reason: "security_unstable_pattern",
       confidence: incomingSec.confidence,
@@ -617,18 +747,19 @@ export async function processChatbotMessage(input: ProcessInput): Promise<Proces
       reply:   getRejectionMessage(settings, "unstable"),
       confidence: incomingSec.confidence,
       escalationReason: "security_unstable_pattern",
+      replyDelayMs: getResponseTiming(settings).delaySeconds * 1000,
     }
   }
 
   // 0e. CODE_REQUEST → эскалация HR (без автоответа кандидату).
   if ((incomingSec.category === "code_request" || incomingSec.category === "code") &&
       incomingSec.confidence >= INCOMING_CODE_CONFIDENCE) {
-    await logMessage({
+    await log({
       candidateId, vacancyId, incoming: incomingText,
       category: "other", confidence: incomingSec.confidence,
       reply: null, sent: false, escalated: true, reason: "security_code",
     })
-    await escalate({
+    await esc({
       companyId, vacancyId, vacancyTitle, candidateId, candidateInfo,
       incomingMessage: incomingText, reason: "security_code",
       confidence: incomingSec.confidence,
@@ -650,15 +781,17 @@ export async function processChatbotMessage(input: ProcessInput): Promise<Proces
 
   // 1. Стоп-слова перебивают AI: rejected без AI-вызова и без отправки сообщения.
   if (stopwordsOn && matchStopWord(incomingText)) {
-    await db.update(candidates).set({
-      stage:                       "rejected",
-      autoProcessingStopped:       true,
-      autoProcessingStoppedReason: "stop_word_in_chat",
-      autoProcessingStoppedAt:     new Date(),
-      automationPaused:            true,
-      updatedAt:                   new Date(),
-    }).where(eq(candidates.id, candidateId))
-    await logMessage({
+    if (!dryRun) {
+      await db.update(candidates).set({
+        stage:                       "rejected",
+        autoProcessingStopped:       true,
+        autoProcessingStoppedReason: "stop_word_in_chat",
+        autoProcessingStoppedAt:     new Date(),
+        automationPaused:            true,
+        updatedAt:                   new Date(),
+      }).where(eq(candidates.id, candidateId))
+    }
+    await log({
       candidateId, vacancyId, incoming: incomingText,
       category: "rejection_signal", confidence: 1,
       reply: null, sent: false, escalated: false, reason: "stop_word",
@@ -666,15 +799,18 @@ export async function processChatbotMessage(input: ProcessInput): Promise<Proces
     return { handled: true, action: "rejected", category: "rejection_signal", confidence: 1, escalationReason: "stop_word" }
   }
 
-  // 2. Глобальная quota
-  const quota = await checkAndIncrementQuota(companyId)
+  // 2. Глобальная quota — в sandbox-режиме не дёргаем, чтобы тесты HR не
+  //    сжигали дневной лимит компании.
+  const quota = dryRun
+    ? { ok: true, current: 0, limit: getQuotaLimit() }
+    : await checkAndIncrementQuota(companyId)
   if (!quota.ok) {
-    await logMessage({
+    await log({
       candidateId, vacancyId, incoming: incomingText,
       category: "other", confidence: 0,
       reply: null, sent: false, escalated: true, reason: "global_quota_exceeded",
     })
-    await escalate({
+    await esc({
       companyId, vacancyId, vacancyTitle, candidateId, candidateInfo,
       incomingMessage: incomingText, reason: "global_quota_exceeded",
       telegramChannel, severity: "danger",
@@ -684,20 +820,24 @@ export async function processChatbotMessage(input: ProcessInput): Promise<Proces
   }
 
   // 3. Защита от петель: 60-секундный cooldown между ответами AI.
-  const last = await lastReplyAt(candidateId)
-  if (last && Date.now() - last.getTime() < 60_000) {
-    return { handled: true, action: "skipped", escalationReason: "ping_pong_pause" }
+  //    В sandbox пропускаем — иначе быстрые тесты HR блокируются.
+  if (!dryRun) {
+    const last = await lastReplyAt(candidateId)
+    if (last && Date.now() - last.getTime() < 60_000) {
+      return { handled: true, action: "skipped", escalationReason: "ping_pong_pause" }
+    }
   }
 
   // 4. Защита от спама/бота: > 10 сообщений за последний час → эскалация.
-  const hourly = await hourlyIncomingForCandidate(candidateId)
+  //    В sandbox пропускаем (нет реальных сообщений в БД у тест-кандидата).
+  const hourly = dryRun ? 0 : await hourlyIncomingForCandidate(candidateId)
   if (hourly >= 10) {
-    await logMessage({
+    await log({
       candidateId, vacancyId, incoming: incomingText,
       category: "other", confidence: 0,
       reply: null, sent: false, escalated: true, reason: "spam_flood",
     })
-    await escalate({
+    await esc({
       companyId, vacancyId, vacancyTitle, candidateId, candidateInfo,
       incomingMessage: incomingText, reason: "spam_flood",
       telegramChannel, severity: "warning",
@@ -706,14 +846,14 @@ export async function processChatbotMessage(input: ProcessInput): Promise<Proces
   }
 
   // 5. Лимит сообщений на кандидата в день.
-  const todayCnt = await dailyMessagesForCandidate(candidateId)
+  const todayCnt = dryRun ? 0 : await dailyMessagesForCandidate(candidateId)
   if (todayCnt >= dailyLimit) {
-    await logMessage({
+    await log({
       candidateId, vacancyId, incoming: incomingText,
       category: "other", confidence: 0,
       reply: null, sent: false, escalated: true, reason: "daily_limit",
     })
-    await escalate({
+    await esc({
       companyId, vacancyId, vacancyTitle, candidateId, candidateInfo,
       incomingMessage: incomingText, reason: "daily_limit",
       telegramChannel, severity: "info",
@@ -730,12 +870,12 @@ export async function processChatbotMessage(input: ProcessInput): Promise<Proces
     confidence = cls.confidence
   } catch (err) {
     console.warn("[chatbot] intent classifier failed:", err)
-    await logMessage({
+    await log({
       candidateId, vacancyId, incoming: incomingText,
       category: "other", confidence: 0,
       reply: null, sent: false, escalated: true, reason: "classifier_error",
     })
-    await escalate({
+    await esc({
       companyId, vacancyId, vacancyTitle, candidateId, candidateInfo,
       incomingMessage: incomingText, reason: "classifier_error",
       telegramChannel, severity: "warning",
@@ -746,7 +886,7 @@ export async function processChatbotMessage(input: ProcessInput): Promise<Proces
 
   // 7. Решение
   if (category === "rejection_signal") {
-    await logMessage({
+    await log({
       candidateId, vacancyId, incoming: incomingText,
       category, confidence,
       reply: null, sent: false, escalated: false, reason: "rejection_signal",
@@ -754,12 +894,12 @@ export async function processChatbotMessage(input: ProcessInput): Promise<Proces
     return { handled: true, action: "rejected", category, confidence, escalationReason: "rejection_signal" }
   }
   if (confidence < threshold) {
-    await logMessage({
+    await log({
       candidateId, vacancyId, incoming: incomingText,
       category, confidence,
       reply: null, sent: false, escalated: true, reason: "low_confidence",
     })
-    await escalate({
+    await esc({
       companyId, vacancyId, vacancyTitle, candidateId, candidateInfo,
       incomingMessage: incomingText, reason: "low_confidence",
       category, confidence, threshold,
@@ -776,12 +916,12 @@ export async function processChatbotMessage(input: ProcessInput): Promise<Proces
     const triggerKey = (Object.keys(TRIGGER_TO_CATEGORY) as Array<keyof typeof TRIGGER_TO_CATEGORY>)
       .find(k => TRIGGER_TO_CATEGORY[k] === category)
     if (!triggerKey || !settings.triggers?.[triggerKey]) {
-      await logMessage({
+      await log({
         candidateId, vacancyId, incoming: incomingText,
         category, confidence,
         reply: null, sent: false, escalated: true, reason: "not_in_triggers",
       })
-      await escalate({
+      await esc({
         companyId, vacancyId, vacancyTitle, candidateId, candidateInfo,
         incomingMessage: incomingText, reason: "not_in_triggers",
         category, confidence, threshold,
@@ -810,12 +950,12 @@ export async function processChatbotMessage(input: ProcessInput): Promise<Proces
     console.warn("[chatbot] generator failed:", err)
   }
   if (!reply) {
-    await logMessage({
+    await log({
       candidateId, vacancyId, incoming: incomingText,
       category, confidence,
       reply: null, sent: false, escalated: true, reason: "empty_reply",
     })
-    await escalate({
+    await esc({
       companyId, vacancyId, vacancyTitle, candidateId, candidateInfo,
       incomingMessage: incomingText, reason: "empty_reply",
       category, confidence, threshold,
@@ -832,12 +972,12 @@ export async function processChatbotMessage(input: ProcessInput): Promise<Proces
     : null
   const postCheck = await validateAiReply(reply, { vacancyName: vacancy.title, salaryRange })
   if (postCheck.category !== "clean" && postCheck.confidence >= POST_FILTER_CONFIDENCE) {
-    await logMessage({
+    await log({
       candidateId, vacancyId, incoming: incomingText,
       category, confidence,
       reply, sent: false, escalated: true, reason: "security_unauthorized_reply",
     })
-    await escalate({
+    await esc({
       companyId, vacancyId, vacancyTitle, candidateId, candidateInfo,
       incomingMessage: incomingText, reason: "security_unauthorized_reply",
       category, confidence: postCheck.confidence,
@@ -847,12 +987,45 @@ export async function processChatbotMessage(input: ProcessInput): Promise<Proces
     return { handled: true, action: "escalated", category, confidence: postCheck.confidence, escalationReason: "security_unauthorized_reply" }
   }
 
-  await logMessage({
+  await log({
     candidateId, vacancyId, incoming: incomingText,
     category, confidence,
     reply, sent: true, escalated: false, reason: null,
   })
-  return { handled: true, action: "sent", reply, category, confidence }
+
+  // Группа 33: добавляем тайминги. Если включены «короткие» сообщения и
+  // лимит за диалог не исчерпан — кладём preMessage. Иначе только
+  // delaySeconds перед основным ответом.
+  const timing = getResponseTiming(settings)
+  const shortAlreadySent = candidateInfo?.shortMessagesSentCount ?? 0
+  let preMessage: string | undefined
+  let preMessageDelayMs: number | undefined
+  if (
+    timing.enableShortMessages &&
+    timing.shortMessages.length > 0 &&
+    shortAlreadySent < timing.maxShortMessagesPerDialog
+  ) {
+    preMessage = pickShortMessage(timing.shortMessages, -1)
+    preMessageDelayMs = timing.shortToMainDelaySeconds * 1000
+    if (!dryRun) {
+      await db.update(candidates).set({
+        shortMessagesSentCount: shortAlreadySent + 1,
+        lastShortMessageAt:     new Date(),
+        updatedAt:              new Date(),
+      }).where(eq(candidates.id, candidateId))
+    }
+  }
+
+  return {
+    handled:           true,
+    action:            "sent",
+    reply,
+    category,
+    confidence,
+    preMessage,
+    preMessageDelayMs,
+    replyDelayMs:      timing.delaySeconds * 1000,
+  }
 }
 
 // Удержание прежнего экспорта для обратной совместимости с уже написанными
