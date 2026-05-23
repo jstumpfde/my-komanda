@@ -125,10 +125,15 @@ export const companies = pgTable("companies", {
   trialEndsAt:        timestamp("trial_ends_at"),
   subscriptionStatus: text("subscription_status").default("trial"), // 'trial'|'active'|'paused'|'cancelled'|'expired'
   currentPlanId:      uuid("current_plan_id").references(() => plans.id),
-  // Telegram bot (multitenant knowledge base assistant)
+  // Telegram bot (multitenant knowledge base assistant) +
+  // Группа 34: тот же токен переиспользуется как HR-уведомления, если
+  // указан telegramChatId компании. См. lib/telegram/send-to-company.ts.
   telegramBotToken:    text("telegram_bot_token"),
   telegramBotUsername: text("telegram_bot_username"),
   telegramWebhookSet:  boolean("telegram_webhook_set").default(false),
+  // Группа 34: per-company чат для HR-уведомлений (новые отклики,
+  // AI-эскалации). Главный канал Юрия — отдельный, не здесь.
+  telegramChatId:      text("telegram_chat_id"),
   // Privacy policy (per-company, ФЗ-152) — null = используется дефолтный шаблон
   privacyPolicyHtml:        text("privacy_policy_html"),
   privacyPolicyUpdatedAt:   timestamp("privacy_policy_updated_at"),
