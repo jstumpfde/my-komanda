@@ -220,21 +220,22 @@ export interface FunnelConfig {
   blocks: FunnelBlock[]
 }
 
-// Конфигурация по умолчанию: все обязательные блоки включены,
-// типичные опциональные — выключены. Используется когда vacancy.funnel_config_json
-// ещё пустой ({ "blocks": [] }), чтобы UI не показывал пустоту.
-//
-// Также используется при normalizeFunnelConfig() для дополнения недостающих
-// блоков — что важно после расширения списка типов: старые вакансии с 5
-// блоками в БД будут автоматически дополнены новыми типами при чтении.
+// Конфигурация по умолчанию для новых вакансий — короткая воронка с 8
+// включёнными блоками. Длинная воронка отсеивает сильных кандидатов, поэтому
+// дефолт — минимум обязательных шагов + базовый AI-скоринг и дожим.
+// Используется когда vacancy.funnel_config_json ещё пустой ({ "blocks": [] }),
+// чтобы UI не показывал пустоту, а также при normalizeFunnelConfig() для
+// дополнения недостающих блоков.
 export function getDefaultFunnelConfig(): FunnelConfig {
   const defaultsByType: Partial<Record<FunnelBlockType, boolean>> = {
+    ai_resume_score:  true,
     first_message:    true,
     demo:             true,
     anketa:           true,
+    ai_anketa_score:  true,
+    dozhim:           true,
     interview:        true,
     thank_you_screen: true,
-    dozhim:           true,
     // Прочее — false (опционально, HR включит через UI).
   }
   return {
@@ -287,14 +288,22 @@ export interface FunnelTemplate {
   enabledBlocks:  FunnelBlockType[]
 }
 
+// Шаблон по умолчанию: применяется к новой вакансии, если у компании нет
+// своего default-шаблона. Должен совпадать с getDefaultFunnelConfig() —
+// та же короткая воронка с 8 включёнными блоками.
+export const DEFAULT_TEMPLATE_KEY = "simple"
+
 export const FUNNEL_TEMPLATES: Record<string, FunnelTemplate> = {
   simple: {
-    name:        "Простой найм",
-    description: "Базовый сценарий: сообщение → демо → анкета → интервью",
+    name:        "Минимальная воронка",
+    description: "Короткая воронка с фокусом на конверсию — рекомендуется",
     enabledBlocks: [
+      "ai_resume_score",
       "first_message",
       "demo",
       "anketa",
+      "ai_anketa_score",
+      "dozhim",
       "interview",
       "thank_you_screen",
     ],
