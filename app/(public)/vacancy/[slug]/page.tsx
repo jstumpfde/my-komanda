@@ -275,23 +275,42 @@ function VacancyPageInner({ params }: { params: Promise<{ slug: string }> }) {
                     )
                   }
                   return (
-                    <article className="space-y-7">
+                    <article className="space-y-6">
                       {sections.map((section, i) => (
                         <section key={i} className="space-y-3">
                           {section.title && (
-                            <h3 className="text-xl sm:text-2xl font-bold tracking-tight mt-6 mb-2">
+                            <h3 className="text-xl sm:text-2xl font-bold tracking-tight mt-6 mb-3">
                               {section.title}
                             </h3>
                           )}
-                          {section.paragraphs.map((para, j) => (
-                            <p
-                              key={j}
-                              className="text-[15px] sm:text-base leading-7 whitespace-pre-line"
-                              style={{ color: `${textColor}d9` }}
-                            >
-                              {para}
-                            </p>
-                          ))}
+                          {section.paragraphs.map((para, j) => {
+                            // Группа 31: внутренние \n в параграфе — это
+                            // склеенный список-фрагмент (см. parser). Рендерим
+                            // как маркированный список для читаемости.
+                            const lines = para.split("\n").map(l => l.trim()).filter(Boolean)
+                            if (lines.length >= 2) {
+                              return (
+                                <ul
+                                  key={j}
+                                  className="list-disc pl-5 space-y-1.5 text-[15px] sm:text-base leading-7"
+                                  style={{ color: `${textColor}d9` }}
+                                >
+                                  {lines.map((line, k) => (
+                                    <li key={k}>{line.replace(/[,;]$/, "")}</li>
+                                  ))}
+                                </ul>
+                              )
+                            }
+                            return (
+                              <p
+                                key={j}
+                                className="text-[15px] sm:text-base leading-7"
+                                style={{ color: `${textColor}d9` }}
+                              >
+                                {para}
+                              </p>
+                            )
+                          })}
                         </section>
                       ))}
                     </article>
