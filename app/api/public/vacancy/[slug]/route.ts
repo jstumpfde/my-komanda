@@ -32,6 +32,9 @@ export async function GET(
         brandBgColor: companies.brandBgColor,
         brandTextColor: companies.brandTextColor,
         descriptionJson: vacancies.descriptionJson,
+        // Группа 38: расширенный брендинг + флаг override.
+        brandingJson:             companies.brandingJson,
+        brandingOverrideEnabled:  vacancies.brandingOverrideEnabled,
       })
       .from(vacancies)
       .innerJoin(companies, eq(vacancies.companyId, companies.id))
