@@ -139,6 +139,10 @@ export const companies = pgTable("companies", {
   privacyPolicyUpdatedAt:   timestamp("privacy_policy_updated_at"),
   // Безопасность AI-чат-бота: глобальный kill switch на всю компанию.
   aiChatbotKilled:          boolean("ai_chatbot_killed").notNull().default(false),
+  // Группа 36: режим строгости pre-filter к severe_abuse.
+  //   'strict'  — автоотказ + сообщение (текущее поведение)
+  //   'lenient' — предупреждение, диалог продолжается
+  aiAbuseMode:              text("ai_abuse_mode").notNull().default("strict"),
   createdAt:          timestamp("created_at").defaultNow(),
   updatedAt:          timestamp("updated_at").defaultNow(),
 })

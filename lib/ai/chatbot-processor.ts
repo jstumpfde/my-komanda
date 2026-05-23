@@ -594,8 +594,12 @@ export async function processChatbotMessage(input: ProcessInput): Promise<Proces
   }
 
   // Kill switch: аварийное отключение AI-чат-бота на уровне всей компании.
+  // Группа 36: подтягиваем aiAbuseMode (strict|lenient) для ветки severe_abuse.
   const [companyRow] = await db
-    .select({ killed: companies.aiChatbotKilled })
+    .select({
+      killed:    companies.aiChatbotKilled,
+      abuseMode: companies.aiAbuseMode,
+    })
     .from(companies)
     .where(eq(companies.id, companyId))
     .limit(1)
@@ -603,6 +607,7 @@ export async function processChatbotMessage(input: ProcessInput): Promise<Proces
     console.log(`[chatbot] kill switch active for company=${companyId}, skipping`)
     return { handled: false, action: "skipped", escalationReason: "company_kill_switch" }
   }
+  const abuseMode: "strict" | "lenient" = companyRow?.abuseMode === "lenient" ? "lenient" : "strict"
 
   // Защита: бот не должен трогать остановленных / финальных кандидатов.
   // В sandbox-режиме (Группа 33) проверка кандидата не нужна — мы тестируем
@@ -660,8 +665,64 @@ export async function processChatbotMessage(input: ProcessInput): Promise<Proces
     }
   }
 
-  // 0b. SEVERE_ABUSE → СРАЗУ автоотказ + сообщение.
+  // 0b. SEVERE_ABUSE — поведение зависит от company.aiAbuseMode (Группа 36).
+  //   strict (default) — СРАЗУ автоотказ + сообщение.
+  //   lenient          — предупреждение "Прошу общаться корректно",
+  //                      диалог продолжается. Счётчик medium_abuse при этом
+  //                      также увеличиваем — на 2-м повторе всё-таки автоотказ.
   if (incomingSec.category === "severe_abuse" && incomingSec.confidence >= INCOMING_SEVERE_ABUSE_CONFIDENCE) {
+    if (abuseMode === "lenient") {
+      // Lenient: предупреждаем + поднимаем счётчик. На 2-м срабатывании
+      // (любого abuse-уровня) — отказ.
+      const newCount = abuseWarningsCount + 1
+      if (!dryRun) {
+        await db.update(candidates).set({
+          abuseWarningsCount:  newCount,
+          lastAbuseWarningAt:  new Date(),
+          updatedAt:           new Date(),
+        }).where(eq(candidates.id, candidateId))
+      }
+      if (newCount >= 2) {
+        await rej({
+          candidateId, vacancyId, vacancyTitle, companyId, candidateInfo,
+          incomingText, reason: "security_repeated_abuse",
+          confidence: incomingSec.confidence,
+          telegramChannel, severity: "warning",
+          notificationType: "ai_security_repeated_abuse",
+          stoppedReason: "repeated_abuse_in_chat_lenient",
+        })
+        return {
+          handled: true,
+          action:  "rejected",
+          reply:   getRejectionMessage(settings, "repeatedAbuse"),
+          confidence: incomingSec.confidence,
+          escalationReason: "security_repeated_abuse",
+          replyDelayMs: getResponseTiming(settings).delaySeconds * 1000,
+        }
+      }
+      await log({
+        candidateId, vacancyId, incoming: incomingText,
+        category: "other", confidence: incomingSec.confidence,
+        reply: FIRST_WARNING_MESSAGE, sent: true, escalated: true,
+        reason: "security_severe_abuse_lenient_warning",
+      })
+      await esc({
+        companyId, vacancyId, vacancyTitle, candidateId, candidateInfo,
+        incomingMessage: incomingText, reason: "security_severe_abuse",
+        confidence: incomingSec.confidence,
+        telegramChannel, severity: "info",
+        notificationType: "ai_security_severe_abuse_lenient",
+      })
+      return {
+        handled: true,
+        action:  "sent",
+        reply:   FIRST_WARNING_MESSAGE,
+        confidence: incomingSec.confidence,
+        escalationReason: "security_severe_abuse_lenient_warning",
+        replyDelayMs: getResponseTiming(settings).delaySeconds * 1000,
+      }
+    }
+    // strict (default)
     await rej({
       candidateId, vacancyId, vacancyTitle, companyId, candidateInfo,
       incomingText, reason: "security_severe_abuse",

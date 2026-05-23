@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils"
 import {Settings, Clock, Save, Bell, GitBranch, MessageSquare, ShieldAlert, Plus, Pencil, Trash2, Palette, Plug} from "lucide-react"
 import { toast } from "sonner"
 import { IntegrationsContent } from "@/components/hr/integrations-content"
+import { AiAbuseModeSettings } from "@/components/company/ai-abuse-mode-settings"
 
 // ─── Constants ─────────────────────────────────────────────────────────────
 
@@ -977,6 +978,11 @@ export default function HiringSettingsPage() {
                     </div>
                   </DialogContent>
                 </Dialog>
+
+                {/* Группа 36: per-company режим строгости AI чат-бота. */}
+                <div className="max-w-3xl mt-6">
+                  <AiAbuseModeSettings />
+                </div>
               </TabsContent>
 
               {/* ═══ TAB 4: Стоп-факторы ═══ */}
