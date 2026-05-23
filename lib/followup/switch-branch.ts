@@ -75,10 +75,20 @@ export async function switchToBranchOpened(candidateId: string): Promise<{
       scheduleWorkingDays:        vacancies.scheduleWorkingDays,
       scheduleExcludedHolidayIds: vacancies.scheduleExcludedHolidayIds,
       scheduleCustomHolidays:     vacancies.scheduleCustomHolidays,
+      descriptionJson:            vacancies.descriptionJson,
     })
     .from(vacancies)
     .where(eq(vacancies.id, cand.vacancyId))
     .limit(1)
+
+  // Группа 35: кастомные дни касаний из descriptionJson.followupCustomDays.
+  const djForDays = vac?.descriptionJson as Record<string, unknown> | null
+  const rawDays = Array.isArray(djForDays?.followupCustomDays)
+    ? (djForDays!.followupCustomDays as unknown[])
+    : null
+  const customDays = rawDays
+    ? rawDays.map(d => Number(d)).filter(d => Number.isFinite(d) && d >= 1 && d <= 365)
+    : null
 
   const touchesB = generateTouchSchedule({
     campaignId:  campaign.id,
@@ -90,6 +100,7 @@ export async function switchToBranchOpened(candidateId: string): Promise<{
     messages:    messagesB,
     branch:      "opened_not_finished",
     vacancy:     vac ?? {},
+    customDays:  customDays && customDays.length > 0 ? customDays : null,
   })
   let scheduled = 0
   if (touchesB.length > 0) {

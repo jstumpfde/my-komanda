@@ -283,21 +283,89 @@ export function VacancyFollowupSettings({ vacancyId, tabKey = "followup", onSave
           </p>
         </div>
 
-        {presetCfg.days.length > 0 && (
-          <div className="rounded-md border bg-muted/30 p-3">
-            <div className="text-xs font-medium text-muted-foreground mb-2">
-              Расписание касаний (отсчёт у каждого кандидата идёт от его даты приглашения):
+        {/* Группа 35: редактируемое расписание касаний.
+            customDays перекрывает preset.days. Любой день 1-365, автосортировка. */}
+        {(presetCfg.days.length > 0 || customDays !== null) && (
+          <div className="rounded-md border bg-muted/30 p-3 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-xs font-medium text-muted-foreground">
+                Расписание касаний (Д = день приглашения кандидата)
+              </div>
+              {customDays !== null && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 gap-1 text-[11px]"
+                  onClick={() => { setTouchedDays(true); setCustomDays(null) }}
+                  disabled={loading || !enabled}
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  Вернуть к пресету
+                </Button>
+              )}
             </div>
+
             <div className="flex flex-wrap gap-1.5">
-              {presetCfg.days.map((dayOffset, idx) => (
+              {(customDays ?? presetCfg.days).map((dayOffset, idx) => (
                 <div
                   key={idx}
-                  className="rounded-md border bg-background px-2 py-1 text-xs font-medium tabular-nums"
+                  className="inline-flex items-center gap-1 rounded-md border bg-background pl-2 pr-1 py-0.5"
                 >
-                  Д+{dayOffset}
+                  <span className="text-[11px] text-muted-foreground">Д+</span>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={365}
+                    value={dayOffset}
+                    onChange={(e) => {
+                      const v = Math.max(1, Math.min(365, Number(e.target.value) || 1))
+                      setTouchedDays(true)
+                      const current = customDays ?? [...presetCfg.days]
+                      const next = [...current]
+                      next[idx] = v
+                      // Автосортировка по возрастанию + дедупликация.
+                      setCustomDays(Array.from(new Set(next)).sort((a, b) => a - b))
+                    }}
+                    disabled={loading || !enabled}
+                    className="h-6 w-14 text-xs px-1 tabular-nums"
+                  />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-5 w-5 text-muted-foreground hover:text-destructive"
+                    disabled={loading || !enabled || (customDays ?? presetCfg.days).length <= 1}
+                    onClick={() => {
+                      setTouchedDays(true)
+                      const current = customDays ?? [...presetCfg.days]
+                      setCustomDays(current.filter((_, i) => i !== idx))
+                    }}
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </Button>
                 </div>
               ))}
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 gap-1 text-[11px]"
+                disabled={loading || !enabled || (customDays ?? presetCfg.days).length >= FOLLOWUP_MESSAGE_SLOTS}
+                onClick={() => {
+                  setTouchedDays(true)
+                  const current = customDays ?? [...presetCfg.days]
+                  const maxDay = current.length > 0 ? Math.max(...current) : 0
+                  setCustomDays([...current, maxDay + 1].sort((a, b) => a - b))
+                }}
+              >
+                <Plus className="w-3 h-3" />
+                Добавить день
+              </Button>
             </div>
+
+            <p className="text-[11px] text-muted-foreground">
+              {customDays !== null
+                ? "Кастомное расписание. Текст касания берётся из шаблонов 1…N по порядку дней."
+                : `Пресет «${FOLLOWUP_PRESETS[preset].label}». Измените любой день — расписание станет кастомным.`}
+            </p>
           </div>
         )}
 

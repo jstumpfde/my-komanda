@@ -53,6 +53,9 @@ export interface GenerateTouchScheduleParams {
   branch?:       FollowUpBranch
   /** Расписание вакансии — нужно для adjustToWorkingWindow. */
   vacancy:       VacancySchedule
+  /** Группа 35: кастомные дни касаний, перекрывают preset.days. Если
+   *  заданы — messageIndexes берутся по порядку (i-й день → i-й слот). */
+  customDays?:   number[] | null
 }
 
 // Генерация ±15 минут jitter в миллисекундах. Используем простой
@@ -70,16 +73,25 @@ function addDaysKeepingTime(date: Date, days: number): Date {
 }
 
 export function generateTouchSchedule(params: GenerateTouchScheduleParams): ScheduledTouch[] {
-  const { campaignId, candidateId, preset, d0Date, d0Source, messages, vacancy } = params
+  const { campaignId, candidateId, preset, d0Date, d0Source, messages, vacancy, customDays } = params
   const branch = params.branch ?? "not_opened"
 
   if (preset === "off") return []
   const schedule = FOLLOWUP_PRESETS[preset]
-  if (!schedule || schedule.days.length === 0) return []
+  if (!schedule) return []
   if (messages.length === 0) return []
 
-  return schedule.days.map((dayOffset, idx) => {
-    const slot = schedule.messageIndexes[idx] ?? idx
+  // Группа 35: кастомное расписание перекрывает preset.days. messageIndexes
+  // берём по порядку 0..N-1 (i-й день — i-й слот). Дедупликация и сортировка
+  // выполнены на стороне UI/load.
+  const useCustom = Array.isArray(customDays) && customDays.length > 0
+  const days = useCustom
+    ? [...customDays].filter(d => Number.isFinite(d) && d >= 1 && d <= 365).sort((a, b) => a - b)
+    : schedule.days
+  if (days.length === 0) return []
+
+  return days.map((dayOffset, idx) => {
+    const slot = useCustom ? idx : (schedule.messageIndexes[idx] ?? idx)
     const text = messages[slot] ?? messages[messages.length - 1] ?? ""
 
     // 1. От Д0 прибавляем dayOffset, сохраняя час/минуту Д0.
