@@ -65,6 +65,13 @@ export function AiChatbotSandbox({
   const [sending, setSending] = useState(false)
   const scrollerRef = useRef<HTMLDivElement | null>(null)
 
+  // Группа 36: если последнее assistant-сообщение завершилось action=rejected,
+  // ввод блокируется — в реале кандидата перевели в "Отказ" и его сообщения
+  // больше не обрабатываются. Sandbox должен это имитировать.
+  const conversationClosed = messages.some(
+    m => m.role === "assistant" && m.diagnostics?.action === "rejected",
+  )
+
   useEffect(() => {
     const el = scrollerRef.current
     if (el) el.scrollTop = el.scrollHeight
@@ -72,7 +79,7 @@ export function AiChatbotSandbox({
 
   const send = async () => {
     const text = input.trim()
-    if (!text || sending) return
+    if (!text || sending || conversationClosed) return
 
     const userMsg: ChatMessage = {
       id:      `u_${Date.now()}`,
@@ -229,6 +236,12 @@ export function AiChatbotSandbox({
       </div>
 
       <div className="border-t p-3 space-y-2">
+        {conversationClosed && (
+          <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-800">
+            Диалог завершён — кандидат переведён в стадию «Отказ». В реале его сообщения
+            больше не обрабатываются. Нажмите «Очистить», чтобы начать новый тест.
+          </div>
+        )}
         <Textarea
           value={input}
           onChange={(e) => setInput(e.target.value)}
@@ -238,9 +251,9 @@ export function AiChatbotSandbox({
               send()
             }
           }}
-          placeholder="Сообщение от лица кандидата..."
+          placeholder={conversationClosed ? "Диалог закрыт" : "Сообщение от лица кандидата..."}
           rows={2}
-          disabled={sending}
+          disabled={sending || conversationClosed}
           className="resize-none text-sm"
         />
         <div className="flex justify-between gap-2">
@@ -257,7 +270,7 @@ export function AiChatbotSandbox({
           <Button
             size="sm"
             onClick={send}
-            disabled={!input.trim() || sending}
+            disabled={!input.trim() || sending || conversationClosed}
             className="gap-1.5 h-8 text-xs"
           >
             <Send className="w-3.5 h-3.5" />
