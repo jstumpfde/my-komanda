@@ -698,6 +698,11 @@ export const candidates = pgTable("candidates", {
   // разным реф-ссылкам, мы оставляем одну карточку и копим сюда исходные
   // токены (см. lib/candidates/normalize-contacts.ts + apply route).
   referralUuids: jsonb("referral_uuids").$type<string[]>().notNull().default([]),
+  // Группа 30: счётчик медиум-уровней грубости в AI-чате. На 2-м срабатывании
+  // — автоотказ. Сбрасывается только новой ручной активацией HR-ом (или при
+  // пересоздании кандидата). См. drizzle/0134_ai_chatbot_v2_tracking.sql.
+  abuseWarningsCount:   integer("abuse_warnings_count").notNull().default(0),
+  lastAbuseWarningAt:   timestamp("last_abuse_warning_at", { withTimezone: true }),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 })
