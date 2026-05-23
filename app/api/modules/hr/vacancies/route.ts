@@ -8,6 +8,7 @@ import { logActivity } from "@/lib/activity-log"
 import { generateVacancyShortCode } from "@/lib/short-id"
 import { seedDefaultFunnelStages } from "@/lib/funnel/seed-default-stages"
 import { normalizeFunnelConfig } from "@/lib/funnel-builder/blocks"
+import { buildDefaultAnketaQuestions } from "@/lib/funnel-builder/anketa-defaults"
 
 // Transliterate Russian text to Latin for slug generation
 function transliterate(text: string): string {
@@ -137,7 +138,21 @@ export async function POST(req: NextRequest) {
     if (body.category) insertValues.category = body.category
     if (body.salary_min) insertValues.salaryMin = body.salary_min
     if (body.salary_max) insertValues.salaryMax = body.salary_max
-    if (body.description_json) insertValues.descriptionJson = body.description_json
+    // Группа 26: дефолтные 5 вопросов короткой анкеты. Юрий — длинная анкета
+    // отсеивает сильных кандидатов. Сидим только если клиент сам не передал
+    // anketaQuestions в description_json (т.е. не работает с собственным набором).
+    const incomingDescriptionJson = body.description_json
+    const hasIncomingAnketa = !!(
+      incomingDescriptionJson &&
+      Array.isArray((incomingDescriptionJson as Record<string, unknown>).anketaQuestions)
+    )
+    const seededDescriptionJson: Record<string, unknown> = {
+      ...(incomingDescriptionJson ?? {}),
+    }
+    if (!hasIncomingAnketa) {
+      seededDescriptionJson.anketaQuestions = buildDefaultAnketaQuestions()
+    }
+    insertValues.descriptionJson = seededDescriptionJson
 
     const vacancy = await db.transaction(async (tx) => {
       const shortCode = await generateVacancyShortCode(tx, new Date())
