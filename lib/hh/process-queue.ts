@@ -918,6 +918,15 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
             const d0Source: "hh_response" | "manual_review" =
               parsedD0 && !Number.isNaN(parsedD0.getTime()) ? "hh_response" : "manual_review"
             // Свежий отклик — кандидат ещё не открыл демо, ставим ветку А.
+            // Группа 35: подтягиваем customDays из vacancy.descriptionJson
+            // (если HR задал кастомное расписание в UI дожима).
+            const djForDays = localVac.descriptionJson as Record<string, unknown> | null
+            const rawDays = Array.isArray(djForDays?.followupCustomDays)
+              ? (djForDays!.followupCustomDays as unknown[])
+              : null
+            const customDays = rawDays
+              ? rawDays.map(d => Number(d)).filter(d => Number.isFinite(d) && d >= 1 && d <= 365)
+              : null
             const touches = generateTouchSchedule({
               campaignId:  campaign.id,
               candidateId,
@@ -927,6 +936,7 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
               messages,
               branch:      "not_opened",
               vacancy:     localVac,
+              customDays:  customDays && customDays.length > 0 ? customDays : null,
             })
             if (touches.length > 0) {
               await db.insert(followUpMessages).values(touches)
