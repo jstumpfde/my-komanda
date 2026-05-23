@@ -64,6 +64,11 @@ function VacancyPageInner({ params }: { params: Promise<{ slug: string }> }) {
     ? (descriptionJson!.miniFormFields as MiniFormField[])
     : []
 
+  // Группа 32: источник описания. На проде у части вакансий
+  // descriptionJson.companyDescription пустой, а основной текст лежит в
+  // vacancies.description (text). Берём первый непустой источник.
+  // Считаем текст HTML только если в нём ЕСТЬ структурные теги
+  // (<p>, <br>, <ul>, <li>, <h2>, …). Иначе — plain text для formatDescription.
   const companyDescriptionText = typeof descriptionJson?.companyDescription === "string"
     ? (descriptionJson!.companyDescription as string)
     : ""
@@ -181,10 +186,13 @@ function VacancyPageInner({ params }: { params: Promise<{ slug: string }> }) {
   const salary = formatSalary(v.salaryMin, v.salaryMax)
   const hasMeta = v.city || v.format || v.employment || salary
 
-  // Описание: предпочитаем companyDescription (plain text из анкеты),
-  // иначе fallback на description (HTML).
-  const hasPlainDescription = companyDescriptionText.trim().length > 0
-  const hasHtmlDescription = !hasPlainDescription && !!v.description?.trim()
+  // Группа 32: выбираем источник описания и решаем, plain text или HTML.
+  // Priority: descriptionJson.companyDescription → vacancies.description.
+  // HTML только если в выбранном источнике есть структурные теги.
+  const rawDescription = companyDescriptionText.trim() || (v.description ?? "").trim()
+  const looksLikeHtml = /<(p|br|ul|ol|li|h\d|strong|em|div|span)\b[^>]*>/i.test(rawDescription)
+  const hasPlainDescription = rawDescription.length > 0 && !looksLikeHtml
+  const hasHtmlDescription  = rawDescription.length > 0 && looksLikeHtml
 
   return (
     <div className="min-h-screen flex flex-col" style={{ backgroundColor: bgColor, color: textColor }}>
@@ -261,16 +269,19 @@ function VacancyPageInner({ params }: { params: Promise<{ slug: string }> }) {
           </section>
 
           {/* Описание */}
-          {(hasPlainDescription || hasHtmlDescription) && (
-            <section>
-              <h2 className="text-xl font-semibold mb-4">О вакансии</h2>
-              {hasPlainDescription ? (
-                (() => {
-                  const sections = formatDescription(companyDescriptionText)
+          <section>
+            <h2 className="text-xl font-semibold mb-4">О вакансии</h2>
+            {!hasPlainDescription && !hasHtmlDescription && (
+              <p className="text-sm opacity-60 italic">
+                Описание вакансии скоро появится.
+              </p>
+            )}
+            {hasPlainDescription && (() => {
+                  const sections = formatDescription(rawDescription)
                   if (sections.length === 0) {
                     return (
                       <p className="text-base leading-relaxed whitespace-pre-line">
-                        {companyDescriptionText}
+                        {rawDescription}
                       </p>
                     )
                   }
@@ -315,15 +326,14 @@ function VacancyPageInner({ params }: { params: Promise<{ slug: string }> }) {
                       ))}
                     </article>
                   )
-                })()
-              ) : (
-                <article
-                  className="prose prose-base max-w-none prose-headings:font-semibold prose-headings:mt-6 prose-headings:mb-3 prose-p:leading-relaxed prose-li:my-1"
-                  dangerouslySetInnerHTML={{ __html: v.description! }}
-                />
-              )}
-            </section>
-          )}
+                })()}
+            {hasHtmlDescription && (
+              <article
+                className="prose prose-base max-w-none prose-headings:font-semibold prose-headings:mt-6 prose-headings:mb-3 prose-p:leading-relaxed prose-li:my-1"
+                dangerouslySetInnerHTML={{ __html: rawDescription }}
+              />
+            )}
+          </section>
 
           {/* ── CTA или форма ──────────────────────────────────── */}
           {screen === "landing" && (
