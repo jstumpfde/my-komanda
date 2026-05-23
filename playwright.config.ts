@@ -17,6 +17,15 @@ export default defineConfig({
     trace:      "retain-on-failure",
     screenshot: "only-on-failure",
     video:      "retain-on-failure",
+    // Staging бывает за basic-auth (HTTP 401). Если задан
+    // PLAYWRIGHT_HTTP_USER/PASSWORD — Playwright автоматически добавит
+    // Authorization header ко всем запросам.
+    httpCredentials: process.env.PLAYWRIGHT_HTTP_USER
+      ? {
+          username: process.env.PLAYWRIGHT_HTTP_USER,
+          password: process.env.PLAYWRIGHT_HTTP_PASSWORD ?? "",
+        }
+      : undefined,
   },
   projects: [
     {
