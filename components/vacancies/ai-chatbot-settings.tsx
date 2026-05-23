@@ -101,6 +101,8 @@ const DEFAULT_RESPONSE_TIMING: ResponseTiming = {
 
 interface Settings {
   triggers: Triggers
+  /** Группа 34: триггеры по умолчанию OFF — AI отвечает на всё. */
+  triggersEnabled: boolean
   confidenceThreshold: number  // 0..1
   dailyMessageLimit: number
   stopWordsOverride: boolean
@@ -115,6 +117,7 @@ interface Settings {
 
 const DEFAULT_SETTINGS: Settings = {
   triggers: DEFAULT_TRIGGERS,
+  triggersEnabled: false,
   confidenceThreshold: 0.7,
   dailyMessageLimit: 5,
   stopWordsOverride: true,
@@ -377,10 +380,27 @@ export function AiChatbotSettings({ vacancyId }: { vacancyId: string }) {
       <Card>
         <CardHeader>
           <CardTitle className="text-sm font-semibold">Когда AI отвечает кандидату</CardTitle>
-          <CardDescription>Триггеры, на которые бот реагирует автоматически.</CardDescription>
+          <CardDescription>
+            По умолчанию AI отвечает на все сообщения по теме вакансии. Включите триггеры
+            если хотите ограничить ответы определёнными темами.
+          </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-2">
-          {TRIGGER_LIST.map(t => (
+        <CardContent className="space-y-3">
+          <div className="flex items-start justify-between gap-3 rounded-lg border bg-muted/30 p-3">
+            <div className="min-w-0">
+              <Label className="text-sm">Ограничить AI определёнными темами</Label>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                Если включено — AI отвечает только когда сообщение попадает в одну из
+                выбранных категорий ниже. Иначе эскалация HR.
+              </p>
+            </div>
+            <Switch
+              checked={settings.triggersEnabled}
+              onCheckedChange={v => setSettings(s => ({ ...s, triggersEnabled: v }))}
+            />
+          </div>
+
+          {settings.triggersEnabled && TRIGGER_LIST.map(t => (
             <label key={t.key} className="flex items-center gap-2 text-sm cursor-pointer">
               <input
                 type="checkbox"
