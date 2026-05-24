@@ -468,6 +468,16 @@ export function usePaginatedCandidates({
     })
   }, [writeUrl, sortBy, order])
 
+  // Сброс сортировки в дефолт (createdAt desc) + чистка URL (?sortBy/?order).
+  // Используется 3-м кликом по заголовку колонки в ListView для индикации
+  // «нет активной сортировки» (стрелка скрыта, данные грузятся в дефолте).
+  const clearSort = useCallback(() => {
+    setSortByState("createdAt")
+    setOrderState("desc")
+    setPageState(1)
+    writeUrl({ sortBy: null, order: null, page: null })
+  }, [writeUrl])
+
   // ── Mutations (повторяют useCandidates — но обновляют локальный state) ────
   const updateStage = useCallback(async (candidateId: string, stage: string): Promise<boolean> => {
     try {
@@ -514,6 +524,7 @@ export function usePaginatedCandidates({
     setPage,
     setPageSize,
     setSort,
+    clearSort,
     refetch,
     updateStage,
     toggleFavorite,

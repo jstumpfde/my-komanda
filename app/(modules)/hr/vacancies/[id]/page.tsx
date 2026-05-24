@@ -1362,7 +1362,16 @@ export default function VacancyPage() {
     // Persist выбора в user-prefs — на следующем визите без ?sort/?sortBy
     // в URL значение поднимется обратно (см. инжект-эффект ниже).
     persistListSort(next ? { key: next.key, dir: next.dir } : null)
-    if (useListPaginated && next) {
+    if (useListPaginated) {
+      if (next === null) {
+        // 3-й клик — сброс сортировки. Чистим URL (?sortBy/?order) и
+        // legacy (?sort/?order), сервер вернёт данные в дефолтном порядке
+        // (createdAt desc). ListView не подсветит ни одного заголовка
+        // (effectiveListSort вернёт null, т.к. URL пустой).
+        paginated.clearSort()
+        setListSort(null)
+        return
+      }
       const serverKey = SERVER_SORT_MAP[next.key]
       if (serverKey) {
         // Серверная сортировка — пишет в ?sortBy=&order= (usePaginatedCandidates),
@@ -1384,17 +1393,18 @@ export default function VacancyPage() {
   // (юзер кликал ещё раз — отсюда «залипание»).
   const effectiveListSort = useMemo<ListSortState | null>(() => {
     if (!useListPaginated) return listSort
-    // Источник правды — локальный state usePaginatedCandidates, а не URL.
-    // URL — просто зеркало; при дефолте (?sortBy не задан) state всё равно
-    // содержит реально применённую сортировку (progress desc после инжекта
-    // user-prefs). Если читать из URL — ListView получает sort=null, не
-    // подсвечивает активный заголовок и инициирует "set default" вместо
-    // "toggle dir" при клике, что превращает клик в no-op.
+    // 3-state цикл (ASC → DESC → null) требует уметь показывать состояние
+    // «нет активной сортировки» — без подсветки заголовка. Источник правды —
+    // URL: если ?sortBy не задан, юзер явно сбросил сортировку. paginated
+    // продолжит фетчить с дефолтом (createdAt desc), но визуально стрелка
+    // не появится.
+    const urlSortBy = searchParams?.get("sortBy")
+    if (!urlSortBy) return null
     const entry = (Object.entries(SERVER_SORT_MAP) as [ListSortKey, PaginatedSortKey][])
       .find(([, v]) => v === paginated.sortBy)
     const listKey: ListSortKey = entry?.[0] ?? (paginated.sortBy as ListSortKey)
     return { key: listKey, dir: paginated.order }
-  }, [useListPaginated, listSort, paginated.sortBy, paginated.order]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [useListPaginated, listSort, paginated.sortBy, paginated.order, searchParams]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Инжект сохранённой сортировки из user-prefs (per-user persistence) ───
   // Однократный guard: при первом успешном входе в режим list-paginated с
