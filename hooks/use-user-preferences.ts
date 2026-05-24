@@ -27,7 +27,7 @@ const ALLOWED_MODES: CandidatesViewMode[] = ["funnel", "list", "kanban", "tiles"
 // Whitelist должен совпадать с ListSortKey (components/dashboard/list-view.tsx)
 // и серверным ALLOWED_LIST_SORT_KEYS (app/api/user/preferences/route.ts).
 const ALLOWED_LIST_SORT_KEYS = new Set([
-  "favorite", "name", "aiScore", "progress", "salary",
+  "favorite", "name", "aiScore", "resumeScore", "progress", "salary",
   "responseDate", "status", "city", "source",
 ])
 
