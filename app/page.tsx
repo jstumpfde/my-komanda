@@ -83,6 +83,8 @@ function AuthenticatedDashboard() {
     salaryMin: 0,
     salaryMax: 250000,
     scoreMin: 0,
+    scoreMinResume: 0,
+    scoreMinAnketa: 0,
     sources: [],
     workFormats: [],
     relocation: "any",

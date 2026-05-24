@@ -124,6 +124,17 @@ export function applyCandidateFilters<C extends FilterableColumn>(
       if (filters.searchText && !c.name.toLowerCase().includes(filters.searchText.toLowerCase())) return false
       if (filters.cities.length > 0 && !filters.cities.includes(c.city)) return false
       if (((c as any).aiScore ?? c.score ?? 0) < filters.scoreMin) return false
+      // Раздельные слайдеры AI-скор: по резюме (resumeScore) и по анкете
+      // (aiScore). 0 = «не задан», фильтр пропускается. Кандидатов без
+      // скора (null) при активном фильтре — исключаем.
+      if ((filters.scoreMinResume ?? 0) > 0) {
+        const rs = (c as any).resumeScore
+        if (rs == null || rs < filters.scoreMinResume) return false
+      }
+      if ((filters.scoreMinAnketa ?? 0) > 0) {
+        const ai = (c as any).aiScore
+        if (ai == null || ai < filters.scoreMinAnketa) return false
+      }
       if (filters.sources.length > 0 && !filters.sources.includes(c.source)) return false
 
       // Work format

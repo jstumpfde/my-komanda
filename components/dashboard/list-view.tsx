@@ -46,18 +46,10 @@ interface ListViewProps {
   startIndex?: number
 }
 
-const DEFAULT_DIR: Record<ListSortKey, ListSortDir> = {
-  favorite:     "desc",
-  name:         "asc",
-  aiScore:      "desc",
-  resumeScore:  "desc",
-  progress:     "desc",
-  salary:       "desc",
-  responseDate: "desc",
-  status:       "asc",
-  city:         "asc",
-  source:       "asc",
-}
+// Стандартный 3-state цикл сортировки начинается с ASC.
+// 1-й клик → ASC, 2-й → DESC, 3-й → null (сброс).
+const FIRST_DIR: ListSortDir = "asc"
+const SECOND_DIR: ListSortDir = "desc"
 
 /** Возвращает 0..100 либо null (не приступал).
  *  Приоритет: API-поле progressPercent (page-based, корректно для всех данных).
@@ -213,16 +205,13 @@ export function ListView({
 
   const handleSort = (key: ListSortKey) => {
     if (!onSortChange) return
+    // 3-state цикл: ASC → DESC → null (сброс).
     if (!sort || sort.key !== key) {
-      onSortChange({ key, dir: DEFAULT_DIR[key] })
-    } else if (sort.dir === DEFAULT_DIR[key]) {
-      onSortChange({ key, dir: sort.dir === "asc" ? "desc" : "asc" })
+      onSortChange({ key, dir: FIRST_DIR })
+    } else if (sort.dir === FIRST_DIR) {
+      onSortChange({ key, dir: SECOND_DIR })
     } else {
-      // 3-й клик — сброс на глобальный дефолт (progress desc), а не null.
-      // Раньше возвращали null, но в pagination-режиме это приводило к
-      // визуальному "залипанию" последней сортировки (paginated state не
-      // сбрасывался). Явный reset к дефолту делает цикл предсказуемым.
-      onSortChange({ key: "progress", dir: "desc" })
+      onSortChange(null)
     }
   }
 
