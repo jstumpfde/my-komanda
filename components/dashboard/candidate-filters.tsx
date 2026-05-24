@@ -30,7 +30,15 @@ export interface FilterState {
   cities: string[]
   salaryMin: number
   salaryMax: number
+  /** @deprecated — оставлено для обратной совместимости с местами, где
+   *  используется один общий слайдер. На странице вакансии — scoreMinAnketa. */
   scoreMin: number
+  /** Минимальный AI-скор по резюме (поле candidates.resumeScore).
+   *  0 = «не задан», фильтр не применяется. */
+  scoreMinResume: number
+  /** Минимальный AI-скор по анкете (поле candidates.aiScore).
+   *  0 = «не задан», фильтр не применяется. */
+  scoreMinAnketa: number
   sources: string[]
   workFormats: string[]
   relocation: "any" | "yes" | "no"
@@ -77,7 +85,9 @@ const WORK_FORMATS = [
 export const DEFAULT_FUNNEL_STATUSES: StageSlug[] = []
 
 const DEFAULT_FILTERS: FilterState = {
-  searchText: "", cities: [], salaryMin: 0, salaryMax: 250000, scoreMin: 0, sources: [], workFormats: [],
+  searchText: "", cities: [], salaryMin: 0, salaryMax: 250000,
+  scoreMin: 0, scoreMinResume: 0, scoreMinAnketa: 0,
+  sources: [], workFormats: [],
   relocation: "any", businessTrips: "any", experienceMin: 0, experienceMax: 20,
   funnelStatuses: DEFAULT_FUNNEL_STATUSES.slice(),
   demoProgress: [],
@@ -213,7 +223,8 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [], va
     (filters.cities?.length ?? 0) > 0 ? 1 : 0,
     (filters.sources?.length ?? 0) > 0 ? 1 : 0,
     (filters.workFormats?.length ?? 0) > 0 ? 1 : 0,
-    (filters.scoreMin ?? 0) > 0 ? 1 : 0,
+    (filters.scoreMinResume ?? 0) > 0 ? 1 : 0,
+    (filters.scoreMinAnketa ?? 0) > 0 ? 1 : 0,
     (filters.salaryMin ?? 0) > 0 || (filters.salaryMax ?? 250000) < 250000 ? 1 : 0,
     (filters.relocation ?? "any") !== "any" ? 1 : 0,
     (filters.businessTrips ?? "any") !== "any" ? 1 : 0,
@@ -343,14 +354,33 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [], va
           </div>
           )}
 
-          {/* Score. На дефолте (0) — пишем «не задано», чтобы пользователь не
-              думал, что у него стоит фильтр «AI ≥ 0» (он ничего не отсекает,
-              но визуально выглядит как активный). */}
+          {/* Score — два независимых слайдера. resumeScore — оценка резюме
+              (выставляется в process-queue.ts при приёме отклика); aiScore —
+              оценка после прохождения демо/анкеты. На дефолте (0) показываем
+              «не задан», чтобы было видно — фильтр не активен. */}
           <div className="space-y-2">
             <label className="text-xs font-medium text-muted-foreground">
-              Минимальный AI-скор: {filters.scoreMin > 0 ? filters.scoreMin : <span className="italic">не задан</span>}
+              Минимальный AI-скор по резюме: {filters.scoreMinResume > 0
+                ? filters.scoreMinResume
+                : <span className="italic">не задан</span>}
             </label>
-            <Slider value={[filters.scoreMin]} onValueChange={([v]) => onFiltersChange({ ...filters, scoreMin: v })} min={0} max={100} step={5} />
+            <Slider
+              value={[filters.scoreMinResume]}
+              onValueChange={([v]) => onFiltersChange({ ...filters, scoreMinResume: v })}
+              min={0} max={100} step={5}
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-xs font-medium text-muted-foreground">
+              Минимальный AI-скор по анкете: {filters.scoreMinAnketa > 0
+                ? filters.scoreMinAnketa
+                : <span className="italic">не задан</span>}
+            </label>
+            <Slider
+              value={[filters.scoreMinAnketa]}
+              onValueChange={([v]) => onFiltersChange({ ...filters, scoreMinAnketa: v })}
+              min={0} max={100} step={5}
+            />
           </div>
 
           <Separator />

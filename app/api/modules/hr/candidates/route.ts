@@ -548,11 +548,29 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // AI-скор от X.
+    // AI-скор от X (legacy единый слайдер — фильтрует по aiScore).
     const scoreMinParam = url.searchParams.get("scoreMin")
     if (scoreMinParam && Number.isFinite(Number(scoreMinParam))) {
       const v = Math.max(0, Math.floor(Number(scoreMinParam)))
       // Включаем кандидатов без скора (NULL) если v=0; иначе исключаем.
+      if (v > 0) {
+        filterConds.push(sql`(${candidates.aiScore} IS NOT NULL AND ${candidates.aiScore} >= ${v})`)
+      }
+    }
+
+    // Минимальный AI-скор по резюме (отдельный слайдер на странице вакансии).
+    const scoreMinResumeParam = url.searchParams.get("scoreMinResume")
+    if (scoreMinResumeParam && Number.isFinite(Number(scoreMinResumeParam))) {
+      const v = Math.max(0, Math.floor(Number(scoreMinResumeParam)))
+      if (v > 0) {
+        filterConds.push(sql`(${candidates.resumeScore} IS NOT NULL AND ${candidates.resumeScore} >= ${v})`)
+      }
+    }
+
+    // Минимальный AI-скор по анкете (после прохождения демо).
+    const scoreMinAnketaParam = url.searchParams.get("scoreMinAnketa")
+    if (scoreMinAnketaParam && Number.isFinite(Number(scoreMinAnketaParam))) {
+      const v = Math.max(0, Math.floor(Number(scoreMinAnketaParam)))
       if (v > 0) {
         filterConds.push(sql`(${candidates.aiScore} IS NOT NULL AND ${candidates.aiScore} >= ${v})`)
       }
