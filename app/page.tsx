@@ -92,6 +92,7 @@ function AuthenticatedDashboard() {
     experienceMin: 0,
     experienceMax: 20,
     funnelStatuses: DEFAULT_FUNNEL_STATUSES.slice(),
+    hideRejected: false,
     demoProgress: [],
     dateRange: "",
     dateFrom: "",

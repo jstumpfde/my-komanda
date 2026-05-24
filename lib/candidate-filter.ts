@@ -156,6 +156,10 @@ export function applyCandidateFilters<C extends FilterableColumn>(
         if (!filters.funnelStatuses.includes(col.id)) return false
       }
 
+      // Скрыть отказы (отдельный тумблер). Колонка/стадия rejected отсекается
+      // независимо от whitelist — зеркалит серверный excludeRejected.
+      if (filters.hideRejected && (col.id === "rejected" || c.stage === "rejected")) return false
+
       // Demo progress
       if (!passesDemoProgress(c, filters.demoProgress)) return false
 

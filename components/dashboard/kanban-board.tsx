@@ -53,6 +53,8 @@ interface KanbanBoardProps {
   onSelectionChange?: (next: Set<string>) => void
   /** Стартовый индекс для нумерации строк в list view (для пагинации). */
   listStartIndex?: number
+  /** Прокидывается в ListView: сервер уже отсортировал, не сортируем повторно. */
+  listServerSorted?: boolean
 }
 
 const VIEW_BUTTONS: { mode: ViewMode; icon: React.ElementType; label: string }[] = [
@@ -64,7 +66,7 @@ const VIEW_BUTTONS: { mode: ViewMode; icon: React.ElementType; label: string }[]
 
 const PRESET_COLORS = ["#94a3b8", "#3b82f6", "#ef4444", "#8b5cf6", "#f97316", "#22c55e", "#ec4899", "#06b6d4", "#f59e0b", "#10b981"]
 
-export function KanbanBoard({ settings, viewMode, onViewModeChange, columns = [], onColumnsChange, onOpenProfile, onAction, onToggleFavorite, hideViewSwitcher, onAddCustomColumn, onRemoveColumn, sortMode = "date_desc", listSort, onListSortChange, selectedIds, onSelectionChange, listStartIndex }: KanbanBoardProps) {
+export function KanbanBoard({ settings, viewMode, onViewModeChange, columns = [], onColumnsChange, onOpenProfile, onAction, onToggleFavorite, hideViewSwitcher, onAddCustomColumn, onRemoveColumn, sortMode = "date_desc", listSort, onListSortChange, selectedIds, onSelectionChange, listStartIndex, listServerSorted = false }: KanbanBoardProps) {
   const [addColOpen, setAddColOpen] = useState(false)
   const [newColName, setNewColName] = useState("")
   const [newColColor, setNewColColor] = useState("#3b82f6")
@@ -311,6 +313,7 @@ export function KanbanBoard({ settings, viewMode, onViewModeChange, columns = []
           selectedIds={selectedIds}
           onSelectionChange={onSelectionChange}
           startIndex={listStartIndex}
+          serverSorted={listServerSorted}
         />
       )}
 

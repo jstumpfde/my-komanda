@@ -96,6 +96,7 @@ export interface CandidatesFilters {
   scoreMin?: number
   scoreMinResume?: number             // фильтр по candidates.resumeScore
   scoreMinAnketa?: number             // фильтр по candidates.aiScore (после анкеты)
+  hideRejected?: boolean              // сервер: stage != 'rejected'
 }
 
 export interface CandidatesSortParams {
@@ -189,6 +190,7 @@ export function useCandidates(
         if (typeof filters.scoreMinAnketa === "number" && filters.scoreMinAnketa > 0) {
           params.set("scoreMinAnketa", String(filters.scoreMinAnketa))
         }
+        if (filters.hideRejected) params.set("excludeRejected", "true")
         if (filters.search && filters.search.trim()) {
           params.set("search", filters.search.trim())
         }
@@ -409,6 +411,7 @@ export function usePaginatedCandidates({
         if (typeof filters.scoreMin === "number" && filters.scoreMin > 0) params.set("scoreMin", String(filters.scoreMin))
         if (typeof filters.scoreMinResume === "number" && filters.scoreMinResume > 0) params.set("scoreMinResume", String(filters.scoreMinResume))
         if (typeof filters.scoreMinAnketa === "number" && filters.scoreMinAnketa > 0) params.set("scoreMinAnketa", String(filters.scoreMinAnketa))
+        if (filters.hideRejected) params.set("excludeRejected", "true")
         if (filters.search && filters.search.trim()) params.set("search", filters.search.trim())
         // demoProgress в paginated режиме теперь применяется на сервере через
         // SQL (см. route.ts: pre-fetch demoTotalBlocks → SQL WHERE с COUNT
@@ -472,10 +475,17 @@ export function usePaginatedCandidates({
     setSortByState(key)
     setOrderState(nextDir)
     setPageState(1)
+    // Всегда пишем sortBy в URL, даже если key="createdAt" (мапится на
+    // колонку «Дата отклика»). Раньше тут был спец-кейс sortBy:null для
+    // createdAt → effectiveListSort читал URL и при отсутствии sortBy
+    // возвращал null → стрелка не появлялась на «Дате».
+    // sort:null — чистим legacy-параметр ?sort в том же router.replace,
+    // чтобы не было второго конкурирующего writeUrl, затирающего sortBy.
     writeUrl({
-      sortBy: key === "createdAt" ? null : key,
+      sortBy: key,
       order:  nextDir === "desc" ? null : nextDir,
       page:   null,
+      sort:   null,
     })
   }, [writeUrl, sortBy, order])
 
@@ -486,7 +496,7 @@ export function usePaginatedCandidates({
     setSortByState("createdAt")
     setOrderState("desc")
     setPageState(1)
-    writeUrl({ sortBy: null, order: null, page: null })
+    writeUrl({ sortBy: null, order: null, page: null, sort: null })
   }, [writeUrl])
 
   // ── Mutations (повторяют useCandidates — но обновляют локальный state) ────

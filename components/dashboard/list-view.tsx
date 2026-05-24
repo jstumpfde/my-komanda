@@ -44,12 +44,28 @@ interface ListViewProps {
   onSelectionChange?: (next: Set<string>) => void
   /** @deprecated Колонка № удалена. Поле сохранено для совместимости интерфейса с callers. */
   startIndex?: number
+  /** В paginated-режиме сервер уже отсортировал — повторно сортировать не нужно.
+   *  Иначе локальный сорт по `sort.key=favorite` перетасовывает строки сразу
+   *  после optimistic-апдейта isFavorite, и кандидат «пропадает» из текущей
+   *  позиции (на самом деле — едет в favorites-группу). */
+  serverSorted?: boolean
 }
 
-// Стандартный 3-state цикл сортировки начинается с ASC.
-// 1-й клик → ASC, 2-й → DESC, 3-й → null (сброс).
-const FIRST_DIR: ListSortDir = "asc"
-const SECOND_DIR: ListSortDir = "desc"
+// 3-state цикл сортировки: DEFAULT_DIR → reverse → null.
+// Для числовых/дат-колонок DEFAULT_DIR=desc (юзер ждёт «большое сверху»),
+// для текстовых — asc (алфавитный порядок естественен сверху→вниз).
+const DEFAULT_DIR: Record<ListSortKey, ListSortDir> = {
+  favorite:     "desc",
+  name:         "asc",
+  aiScore:      "desc",
+  resumeScore:  "desc",
+  progress:     "desc",
+  salary:       "desc",
+  responseDate: "desc",
+  status:       "asc",
+  city:         "asc",
+  source:       "asc",
+}
 
 /** Возвращает 0..100 либо null (не приступал).
  *  Приоритет: API-поле progressPercent (page-based, корректно для всех данных).
@@ -125,6 +141,7 @@ export function ListView({
   columns, settings, onOpenProfile, onAction, onToggleFavorite,
   sortMode = "date_desc", sort = null, onSortChange,
   selectedIds, onSelectionChange,
+  serverSorted = false,
 }: ListViewProps) {
   const lastSelectedIdRef = useRef<string | null>(null)
   const selectionEnabled = !!selectedIds && !!onSelectionChange
@@ -141,6 +158,10 @@ export function ListView({
   ), [columns])
 
   const allCandidates = useMemo(() => {
+    // В paginated-режиме сервер уже отсортировал → не пересортировываем.
+    // Иначе локальная сортировка по favorite перетасует список сразу после
+    // optimistic-апдейта isFavorite, и кандидат «уезжает» из своей позиции.
+    if (serverSorted) return rawCandidates
     if (!sort) return applySortMode(rawCandidates, sortMode) as typeof rawCandidates
     const arr = [...rawCandidates]
     const mul = sort.dir === "asc" ? 1 : -1
@@ -201,15 +222,20 @@ export function ListView({
       return 0
     })
     return arr
-  }, [rawCandidates, sort, sortMode])
+  }, [rawCandidates, sort, sortMode, serverSorted])
 
   const handleSort = (key: ListSortKey) => {
     if (!onSortChange) return
-    // 3-state цикл: ASC → DESC → null (сброс).
+    // 3-state цикл: DEFAULT_DIR → reverse → null (сброс).
+    // Раньше первый клик всегда давал ASC — для AI-score/salary/date это
+    // выглядело как «сортировка не работает» (юзер кликнул по «AI-оцен.»
+    // и ждал лучших сверху, а получил худших).
+    const def = DEFAULT_DIR[key]
+    const rev: ListSortDir = def === "asc" ? "desc" : "asc"
     if (!sort || sort.key !== key) {
-      onSortChange({ key, dir: FIRST_DIR })
-    } else if (sort.dir === FIRST_DIR) {
-      onSortChange({ key, dir: SECOND_DIR })
+      onSortChange({ key, dir: def })
+    } else if (sort.dir === def) {
+      onSortChange({ key, dir: rev })
     } else {
       onSortChange(null)
     }

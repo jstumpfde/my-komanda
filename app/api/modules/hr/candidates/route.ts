@@ -576,6 +576,14 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // Скрыть отказы (тумблер «Скрыть/Показать отказы»). Отдельно от
+    // stage-whitelist: исключает ровно rejected, не трогая legacy-стадии
+    // (demo/interviewed/offer/...), которых нет в наборе slug'ов фильтра.
+    const excludeRejectedParam = url.searchParams.get("excludeRejected")
+    if (excludeRejectedParam === "true") {
+      filterConds.push(sql`(${candidates.stage} IS DISTINCT FROM 'rejected')`)
+    }
+
     // Поиск по имени/email/телефону (ILIKE). %/_/\ экранируем, чтобы юзер
     // не получил расширенный паттерн при вводе этих символов.
     const searchParam = url.searchParams.get("search")?.trim()

@@ -403,7 +403,7 @@ export default function VacancyPage() {
     router.replace(`${window.location.pathname}${qs ? "?" + qs : ""}`, { scroll: false })
   }, [router])
 
-  const [filters, setFilters] = useState<FilterState>({ searchText: "", cities: [], salaryMin: 0, salaryMax: 250000, scoreMin: 0, scoreMinResume: 0, scoreMinAnketa: 0, sources: [], workFormats: [], relocation: "any", businessTrips: "any", experienceMin: 0, experienceMax: 20, funnelStatuses: DEFAULT_FUNNEL_STATUSES.slice(), demoProgress: [], dateRange: "", dateFrom: "", dateTo: "", ageMin: 18, ageMax: 65, education: [], languages: [], otherLanguages: [], skills: [], industries: [] })
+  const [filters, setFilters] = useState<FilterState>({ searchText: "", cities: [], salaryMin: 0, salaryMax: 250000, scoreMin: 0, scoreMinResume: 0, scoreMinAnketa: 0, sources: [], workFormats: [], relocation: "any", businessTrips: "any", experienceMin: 0, experienceMax: 20, funnelStatuses: DEFAULT_FUNNEL_STATUSES.slice(), hideRejected: false, demoProgress: [], dateRange: "", dateFrom: "", dateTo: "", ageMin: 18, ageMax: 65, education: [], languages: [], otherLanguages: [], skills: [], industries: [] })
 
   // Маппинг русских лейблов фильтра прогресса демо → API-идентификаторы.
   // UI: candidate-filters.tsx:70 ["Не начал", "В процессе", "Завершил (≥85%)",
@@ -442,6 +442,7 @@ export default function VacancyPage() {
     scoreMin: filters.scoreMin,
     scoreMinResume: filters.scoreMinResume,
     scoreMinAnketa: filters.scoreMinAnketa,
+    hideRejected: filters.hideRejected,
   }), [filters]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // viewMode поднят сюда (выше хуков), чтобы useCandidates умел пропускать
@@ -455,28 +456,16 @@ export default function VacancyPage() {
   // (kanban/funnel/tiles) useCandidates снова работает и наполняет columns.
   const useListPaginated = tabFromUrl === "candidates" && viewMode === "list"
 
-  // Маппинг русских лейблов фильтра воронки → реальные значения
-  // candidates.stage в БД. Без этого маппинга stage=Демо%20пройдено,Оффер,...
-  // ехал в API и никогда не матчил inArray(candidates.stage, ...).
-  // Лейблы из FUNNEL_STATUSES в candidate-filters.tsx (7 шт), enum в БД из
-  // STAGE_ORDER_SQL (route.ts:50). 1:1 маппинг; некоторые DB-значения
-  // (interviewed/offer) могут не встречаться в текущих данных — фильтр всё
-  // равно валиден и просто вернёт 0 строк.
-  const FUNNEL_LABEL_TO_DB_STAGES: Record<string, string[]> = {
-    "Всего откликов":     ["new"],
-    "Демо пройдено":      ["decision"],
-    "Интервью назначено": ["interview"],
-    "Интервью пройдено":  ["interviewed"],
-    "Оффер":              ["offer"],
-    "Нанят":              ["hired"],
-    "Отказ":              ["rejected"],
-  }
+  // filters.funnelStatuses содержит slug'и стадий из PLATFORM_STAGES
+  // (candidate-filters.tsx рендерит ALL_STAGE_SLUGS). Это уже совпадает с
+  // candidates.stage в БД → передаём напрямую как stage-фильтр.
+  // Раньше тут была мапа Russian-label → slug'и, но ключи (рус. метки) НЕ
+  // пересекались с реальным содержимым funnelStatuses (slug'и), поэтому
+  // flatMap всегда возвращал [] — фильтр статусов молча не применялся.
   const stageFilterFromFunnel: string[] | undefined = useMemo(() => {
-    const labels = filters.funnelStatuses ?? []
-    if (labels.length === 0) return undefined
-    const stages = labels.flatMap(l => FUNNEL_LABEL_TO_DB_STAGES[l] ?? [])
-    return stages.length > 0 ? stages : undefined
-  }, [filters.funnelStatuses]) // eslint-disable-line react-hooks/exhaustive-deps
+    const slugs = filters.funnelStatuses ?? []
+    return slugs.length > 0 ? slugs : undefined
+  }, [filters.funnelStatuses])
 
   const { candidates: apiCandidates, updateStage, refetch: refetchCandidates, toggleFavorite } = useCandidates(
     useListPaginated ? null : id,
@@ -1365,22 +1354,20 @@ export default function VacancyPage() {
     // в URL значение поднимется обратно (см. инжект-эффект ниже).
     persistListSort(next ? { key: next.key, dir: next.dir } : null)
     if (useListPaginated) {
+      // ВАЖНО: НЕ вызываем setListSort здесь. paginated.clearSort/setSort
+      // сами пишут URL (?sortBy/?order) и заодно чистят legacy ?sort. Вызов
+      // setListSort делал второй router.replace, который читал ещё не
+      // обновлённый window.location.search и затирал только что записанный
+      // ?sortBy → стрелка не появлялась, хотя данные сортировались.
       if (next === null) {
-        // 3-й клик — сброс сортировки. Чистим URL (?sortBy/?order) и
-        // legacy (?sort/?order), сервер вернёт данные в дефолтном порядке
-        // (createdAt desc). ListView не подсветит ни одного заголовка
-        // (effectiveListSort вернёт null, т.к. URL пустой).
+        // 3-й клик — сброс сортировки. Сервер вернёт дефолт (createdAt desc),
+        // ListView не подсветит заголовок (effectiveListSort вернёт null).
         paginated.clearSort()
-        setListSort(null)
         return
       }
       const serverKey = SERVER_SORT_MAP[next.key]
       if (serverKey) {
-        // Серверная сортировка — пишет в ?sortBy=&order= (usePaginatedCandidates),
-        // ИЛИ сбрасывается в дефолт (?sortBy не задан) при desc по createdAt.
         paginated.setSort(serverKey, next.dir)
-        // Legacy ?sort/?order больше не нужны в этом режиме — чистим.
-        setListSort(null)
         return
       }
     }
@@ -2330,6 +2317,7 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                   selectedIds={selectedCandidateIds}
                   onSelectionChange={setSelectedCandidateIds}
                   listStartIndex={useListPaginated ? (paginated.page - 1) * paginated.pageSize : undefined}
+                  listServerSorted={useListPaginated}
                 />
                 {useListPaginated && (
                   <div className="mt-3">
