@@ -236,12 +236,6 @@ export function AiChatbotSandbox({
       </div>
 
       <div className="border-t p-3 space-y-2">
-        {conversationClosed && (
-          <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-800">
-            Диалог завершён — кандидат переведён в стадию «Отказ». В реале его сообщения
-            больше не обрабатываются. Нажмите «Очистить», чтобы начать новый тест.
-          </div>
-        )}
         <Textarea
           value={input}
           onChange={(e) => setInput(e.target.value)}
