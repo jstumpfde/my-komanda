@@ -491,9 +491,14 @@ export default function VacancyPage() {
   })
 
   const handleToggleFavorite = useCallback(async (candidateId: string, isFavorite: boolean) => {
-    const ok = await toggleFavorite(candidateId, isFavorite)
+    // В режиме list-paginated видимые кандидаты приходят из paginated.candidates
+    // (useCandidates отключён, vacancyId=null). Оптимистичный апдейт должен
+    // менять локальный state именно того хука, который рендерится; иначе UI
+    // не обновляется до полного refetch.
+    const fn = useListPaginated ? paginated.toggleFavorite : toggleFavorite
+    const ok = await fn(candidateId, isFavorite)
     if (!ok) toast.error("Не удалось обновить избранное")
-  }, [toggleFavorite])
+  }, [useListPaginated, paginated.toggleFavorite, toggleFavorite])
 
   const [status, setStatus] = useState<VacancyStatus>("draft")
   const [columns, setColumns] = useState<ColumnData[]>(emptyColumns())
