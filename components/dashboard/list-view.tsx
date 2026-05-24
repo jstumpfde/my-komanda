@@ -51,10 +51,21 @@ interface ListViewProps {
   serverSorted?: boolean
 }
 
-// Стандартный 3-state цикл сортировки начинается с ASC.
-// 1-й клик → ASC, 2-й → DESC, 3-й → null (сброс).
-const FIRST_DIR: ListSortDir = "asc"
-const SECOND_DIR: ListSortDir = "desc"
+// 3-state цикл сортировки: DEFAULT_DIR → reverse → null.
+// Для числовых/дат-колонок DEFAULT_DIR=desc (юзер ждёт «большое сверху»),
+// для текстовых — asc (алфавитный порядок естественен сверху→вниз).
+const DEFAULT_DIR: Record<ListSortKey, ListSortDir> = {
+  favorite:     "desc",
+  name:         "asc",
+  aiScore:      "desc",
+  resumeScore:  "desc",
+  progress:     "desc",
+  salary:       "desc",
+  responseDate: "desc",
+  status:       "asc",
+  city:         "asc",
+  source:       "asc",
+}
 
 /** Возвращает 0..100 либо null (не приступал).
  *  Приоритет: API-поле progressPercent (page-based, корректно для всех данных).
@@ -215,11 +226,16 @@ export function ListView({
 
   const handleSort = (key: ListSortKey) => {
     if (!onSortChange) return
-    // 3-state цикл: ASC → DESC → null (сброс).
+    // 3-state цикл: DEFAULT_DIR → reverse → null (сброс).
+    // Раньше первый клик всегда давал ASC — для AI-score/salary/date это
+    // выглядело как «сортировка не работает» (юзер кликнул по «AI-оцен.»
+    // и ждал лучших сверху, а получил худших).
+    const def = DEFAULT_DIR[key]
+    const rev: ListSortDir = def === "asc" ? "desc" : "asc"
     if (!sort || sort.key !== key) {
-      onSortChange({ key, dir: FIRST_DIR })
-    } else if (sort.dir === FIRST_DIR) {
-      onSortChange({ key, dir: SECOND_DIR })
+      onSortChange({ key, dir: def })
+    } else if (sort.dir === def) {
+      onSortChange({ key, dir: rev })
     } else {
       onSortChange(null)
     }

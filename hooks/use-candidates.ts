@@ -472,8 +472,12 @@ export function usePaginatedCandidates({
     setSortByState(key)
     setOrderState(nextDir)
     setPageState(1)
+    // Всегда пишем sortBy в URL, даже если key="createdAt" (мапится на
+    // колонку «Дата отклика»). Раньше тут был спец-кейс sortBy:null для
+    // createdAt → effectiveListSort читал URL и при отсутствии sortBy
+    // возвращал null → стрелка не появлялась на «Дате».
     writeUrl({
-      sortBy: key === "createdAt" ? null : key,
+      sortBy: key,
       order:  nextDir === "desc" ? null : nextDir,
       page:   null,
     })
