@@ -382,8 +382,12 @@ export default function VacancyPage() {
   }
   const searchParams = useSearchParams()
 
-  // Сортировка списка кандидатов — состояние в URL, чтобы переживало refresh
-  const VALID_SORT_KEYS: ListSortKey[] = ["favorite", "name", "aiScore", "progress", "salary", "responseDate", "status", "city", "source"]
+  // Сортировка списка кандидатов — состояние в URL, чтобы переживало refresh.
+  // resumeScore был пропущен — единственный ListSortKey, отсутствовавший в
+  // списке. Из-за этого legacy-парсер listSort отбраковывал сортировку по
+  // «AI-резм» как невалидную, и стрелка на этой колонке не появлялась (тогда
+  // как на остальных — появлялась). Добавлен для паритета со всеми колонками.
+  const VALID_SORT_KEYS: ListSortKey[] = ["favorite", "name", "aiScore", "resumeScore", "progress", "salary", "responseDate", "status", "city", "source"]
   const sortParam = searchParams?.get("sort") ?? null
   const orderParam = searchParams?.get("order") ?? null
   const listSort: ListSortState | null = sortParam && (VALID_SORT_KEYS as string[]).includes(sortParam)

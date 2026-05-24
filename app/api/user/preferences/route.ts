@@ -21,7 +21,7 @@ const ALLOWED_VIEW_MODES = new Set(["funnel", "list", "kanban", "tiles"])
 // Whitelist должен совпадать с ListSortKey из components/dashboard/list-view.tsx.
 // Дублирую константой, чтобы не тянуть UI-импорт в API-роут.
 const ALLOWED_LIST_SORT_KEYS = new Set([
-  "favorite", "name", "aiScore", "progress", "salary",
+  "favorite", "name", "aiScore", "resumeScore", "progress", "salary",
   "responseDate", "status", "city", "source",
 ])
 
