@@ -70,17 +70,12 @@ const WORK_FORMATS = [
   { id: "remote", label: "Удалёнка" },
 ]
 
-// ТЗ-3 Ч.4: дефолтные «активные» стадии при первом открытии фильтра.
-// Терминальные (rejected) выключены — HR не видит отказы, пока сам не отметит.
-export const DEFAULT_FUNNEL_STATUSES: StageSlug[] = [
-  "new", "primary_contact", "demo_opened", "anketa_filled",
-  "ai_screening", "test_task_sent", "test_task_done",
-  "scheduled", "interview", "reference_check", "decision",
-  "offer_sent", "hired",
-]
+// Семантика: пустой массив = «нет фильтра по статусу, показываем всех».
+// 13 заранее проставленных чекбоксов сбивали с толку — выглядело как
+// активный фильтр, хотя видимо ничего не отсекалось. Теперь по первому
+// открытию HR видит чистый список без галочек и сам выбирает статусы.
+export const DEFAULT_FUNNEL_STATUSES: StageSlug[] = []
 
-// ТЗ-3 Ч.4: дефолт включает все «активные» стадии, кроме rejected/терминальных,
-// чтобы HR не видел отказы в списке пока сам не отметит чекбокс.
 const DEFAULT_FILTERS: FilterState = {
   searchText: "", cities: [], salaryMin: 0, salaryMax: 250000, scoreMin: 0, sources: [], workFormats: [],
   relocation: "any", businessTrips: "any", experienceMin: 0, experienceMax: 20,
