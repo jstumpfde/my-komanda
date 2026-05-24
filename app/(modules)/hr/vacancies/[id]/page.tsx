@@ -1354,22 +1354,20 @@ export default function VacancyPage() {
     // в URL значение поднимется обратно (см. инжект-эффект ниже).
     persistListSort(next ? { key: next.key, dir: next.dir } : null)
     if (useListPaginated) {
+      // ВАЖНО: НЕ вызываем setListSort здесь. paginated.clearSort/setSort
+      // сами пишут URL (?sortBy/?order) и заодно чистят legacy ?sort. Вызов
+      // setListSort делал второй router.replace, который читал ещё не
+      // обновлённый window.location.search и затирал только что записанный
+      // ?sortBy → стрелка не появлялась, хотя данные сортировались.
       if (next === null) {
-        // 3-й клик — сброс сортировки. Чистим URL (?sortBy/?order) и
-        // legacy (?sort/?order), сервер вернёт данные в дефолтном порядке
-        // (createdAt desc). ListView не подсветит ни одного заголовка
-        // (effectiveListSort вернёт null, т.к. URL пустой).
+        // 3-й клик — сброс сортировки. Сервер вернёт дефолт (createdAt desc),
+        // ListView не подсветит заголовок (effectiveListSort вернёт null).
         paginated.clearSort()
-        setListSort(null)
         return
       }
       const serverKey = SERVER_SORT_MAP[next.key]
       if (serverKey) {
-        // Серверная сортировка — пишет в ?sortBy=&order= (usePaginatedCandidates),
-        // ИЛИ сбрасывается в дефолт (?sortBy не задан) при desc по createdAt.
         paginated.setSort(serverKey, next.dir)
-        // Legacy ?sort/?order больше не нужны в этом режиме — чистим.
-        setListSort(null)
         return
       }
     }

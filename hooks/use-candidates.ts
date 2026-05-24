@@ -479,10 +479,13 @@ export function usePaginatedCandidates({
     // колонку «Дата отклика»). Раньше тут был спец-кейс sortBy:null для
     // createdAt → effectiveListSort читал URL и при отсутствии sortBy
     // возвращал null → стрелка не появлялась на «Дате».
+    // sort:null — чистим legacy-параметр ?sort в том же router.replace,
+    // чтобы не было второго конкурирующего writeUrl, затирающего sortBy.
     writeUrl({
       sortBy: key,
       order:  nextDir === "desc" ? null : nextDir,
       page:   null,
+      sort:   null,
     })
   }, [writeUrl, sortBy, order])
 
@@ -493,7 +496,7 @@ export function usePaginatedCandidates({
     setSortByState("createdAt")
     setOrderState("desc")
     setPageState(1)
-    writeUrl({ sortBy: null, order: null, page: null })
+    writeUrl({ sortBy: null, order: null, page: null, sort: null })
   }, [writeUrl])
 
   // ── Mutations (повторяют useCandidates — но обновляют локальный state) ────
