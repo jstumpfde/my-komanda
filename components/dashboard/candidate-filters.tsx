@@ -46,6 +46,9 @@ export interface FilterState {
   experienceMin: number
   experienceMax: number
   funnelStatuses: string[]
+  /** Скрыть кандидатов в стадии rejected. Отдельно от funnelStatuses —
+   *  применяется сервером как stage != 'rejected', не ломая legacy-стадии. */
+  hideRejected: boolean
   demoProgress: string[]
   dateRange: string
   dateFrom: string
@@ -90,6 +93,7 @@ const DEFAULT_FILTERS: FilterState = {
   sources: [], workFormats: [],
   relocation: "any", businessTrips: "any", experienceMin: 0, experienceMax: 20,
   funnelStatuses: DEFAULT_FUNNEL_STATUSES.slice(),
+  hideRejected: false,
   demoProgress: [],
   dateRange: "", dateFrom: "", dateTo: "", ageMin: 18, ageMax: 65, education: [], languages: [], otherLanguages: [],
   skills: [], industries: [],
@@ -230,6 +234,7 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [], va
     (filters.businessTrips ?? "any") !== "any" ? 1 : 0,
     (filters.experienceMin ?? 0) > 0 || (filters.experienceMax ?? 20) < 20 ? 1 : 0,
     (filters.funnelStatuses?.length ?? 0) > 0 ? 1 : 0,
+    filters.hideRejected ? 1 : 0,
     (filters.demoProgress?.length ?? 0) > 0 ? 1 : 0,
     filters.dateRange || filters.dateFrom || filters.dateTo ? 1 : 0,
     (filters.ageMin ?? 18) > 18 || (filters.ageMax ?? 65) < 65 ? 1 : 0,
@@ -471,7 +476,9 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [], va
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-muted-foreground">Статус в воронке</label>
             <div className="space-y-1">
-              {ALL_STAGE_SLUGS.map((slug) => {
+              {/* rejected исключён из чекбоксов — им управляет тумблер
+                  «Скрыть/Показать отказы» ниже (отдельный hideRejected). */}
+              {ALL_STAGE_SLUGS.filter((slug) => slug !== "rejected").map((slug) => {
                 const stage = PLATFORM_STAGES[slug]
                 return (
                   <div key={slug} className="flex items-center gap-2">
@@ -493,25 +500,20 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [], va
                 )
               })}
             </div>
-            {/* #53: компактный тумблер «Скрыть/Показать отказы» прямо в
-                воронке, под статусом «Отказ». Лейбл меняется в зависимости
-                от текущего состояния — «Скрыть отказы» когда они видны
-                (тумблер ВКЛ), «Показать отказы» когда нет. */}
+            {/* #53: компактный тумблер «Скрыть/Показать отказы».
+                Отдельный boolean hideRejected (НЕ через funnelStatuses):
+                в данных есть legacy-стадии (demo/interviewed/offer/...),
+                которых нет в ALL_STAGE_SLUGS, поэтому материализовать
+                whitelist «все кроме rejected» нельзя — он выкинул бы и их.
+                Сервер применяет stage != 'rejected' независимо от whitelist. */}
             <div className="flex items-center justify-between gap-2 mt-2 pt-2 border-t border-border/40">
               <Label htmlFor="show-rejections" className="text-sm cursor-pointer">
-                {filters.funnelStatuses.includes("rejected") ? "Скрыть отказы" : "Показать отказы"}
+                {filters.hideRejected ? "Показать отказы" : "Скрыть отказы"}
               </Label>
               <Switch
                 id="show-rejections"
-                checked={filters.funnelStatuses.includes("rejected")}
-                onCheckedChange={(v) => onFiltersChange({
-                  ...filters,
-                  funnelStatuses: v
-                    ? (filters.funnelStatuses.includes("rejected")
-                        ? filters.funnelStatuses
-                        : [...filters.funnelStatuses, "rejected"])
-                    : filters.funnelStatuses.filter(s => s !== "rejected"),
-                })}
+                checked={!filters.hideRejected}
+                onCheckedChange={(show) => onFiltersChange({ ...filters, hideRejected: !show })}
               />
             </div>
           </div>
