@@ -2330,6 +2330,7 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                   selectedIds={selectedCandidateIds}
                   onSelectionChange={setSelectedCandidateIds}
                   listStartIndex={useListPaginated ? (paginated.page - 1) * paginated.pageSize : undefined}
+                  listServerSorted={useListPaginated}
                 />
                 {useListPaginated && (
                   <div className="mt-3">
