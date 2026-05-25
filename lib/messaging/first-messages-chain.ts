@@ -29,6 +29,11 @@ const CHAIN_BRANCH_BY_INDEX: Record<number, string> = {
   2: "first_msg_3",
 }
 
+// Branch для мягкого Сообщения 1 в нерабочее время. Cron /api/cron/follow-up
+// отправляет это сообщение даже вне рабочего окна (canSendNow=false) — в этом
+// весь смысл off-hours-ветки. См. scheduleOffHoursFirstMessage ниже.
+export const OFF_HOURS_FIRST_BRANCH = "first_msg_offhours"
+
 // Кампания нужна, потому что follow_up_messages.campaign_id NOT NULL.
 // Если кампании ещё нет — создаём отключённую "off".
 async function ensureCampaign(vacancyId: string): Promise<string | null> {
@@ -122,5 +127,60 @@ export async function scheduleFirstMessagesChain(args: {
   } catch (err) {
     console.error("[first-messages-chain] schedule failed:", err instanceof Error ? err.message : err)
     return { scheduled: 0, reason: "exception" }
+  }
+}
+
+// Off-hours: планирует одно «мягкое» Сообщение 1 для кандидата, откликнувшегося
+// вне рабочих часов вакансии (вместо демо-приглашения и Сообщений 2/3).
+// Текст сохраняется «как есть» (с плейсхолдерами {{name}}/{{vacancy}}/...) —
+// cron /api/cron/follow-up рендерит их при отправке и шлёт даже вне окна.
+export async function scheduleOffHoursFirstMessage(args: {
+  candidateId:  string
+  vacancyId:    string
+  text:         string
+  delaySeconds: number
+}): Promise<{ scheduled: boolean; reason?: string }> {
+  try {
+    const text = (args.text ?? "").trim()
+    if (!text) return { scheduled: false, reason: "empty_text" }
+
+    const campaignId = await ensureCampaign(args.vacancyId)
+    if (!campaignId) return { scheduled: false, reason: "campaign_upsert_failed" }
+
+    // Дедуп: одно off-hours-сообщение на кандидата (pending или уже sent).
+    const [existing] = await db
+      .select({ id: followUpMessages.id })
+      .from(followUpMessages)
+      .where(and(
+        eq(followUpMessages.candidateId, args.candidateId),
+        eq(followUpMessages.branch, OFF_HOURS_FIRST_BRANCH),
+      ))
+      .limit(1)
+    if (existing) return { scheduled: false, reason: "already_scheduled" }
+
+    const delay = Math.max(0, Number(args.delaySeconds) || 0)
+    const scheduledAt = new Date(Date.now() + delay * 1000)
+    await db.insert(followUpMessages).values({
+      campaignId,
+      candidateId: args.candidateId,
+      scheduledAt,
+      touchNumber: 0,
+      channel:     "hh",
+      messageText: text,
+      status:      "pending",
+      branch:      OFF_HOURS_FIRST_BRANCH,
+    })
+
+    console.log("[first-messages-chain] off-hours", JSON.stringify({
+      tag:          "first-messages-chain/off-hours",
+      candidateId:  args.candidateId,
+      vacancyId:    args.vacancyId,
+      scheduledAt:  scheduledAt.toISOString(),
+      delaySeconds: delay,
+    }))
+    return { scheduled: true }
+  } catch (err) {
+    console.error("[first-messages-chain] off-hours schedule failed:", err instanceof Error ? err.message : err)
+    return { scheduled: false, reason: "exception" }
   }
 }

@@ -335,6 +335,12 @@ export const vacancies = pgTable("vacancies", {
     .$type<Array<{ enabled: boolean; delaySeconds: number; text: string }>>()
     .notNull()
     .default([]),
+  // Альтернативный текст Сообщения 1 для нерабочего времени (drizzle/0140).
+  // Если кандидат откликнулся вне рабочих часов вакансии (canSendNow=false)
+  // и off-hours включён — шлётся этот текст вместо основного, без Сообщений 2/3.
+  firstMessageOffHoursEnabled:      boolean("first_message_off_hours_enabled").notNull().default(false),
+  firstMessageOffHoursDelaySeconds: integer("first_message_off_hours_delay_seconds").notNull().default(15),
+  firstMessageOffHoursText:         text("first_message_off_hours_text"),
   // #15: AI чат-бот кандидатов.
   aiChatbotEnabled:  boolean("ai_chatbot_enabled").notNull().default(false),
   aiChatbotSettings: jsonb("ai_chatbot_settings").notNull().default({}),
