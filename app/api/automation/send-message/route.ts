@@ -5,6 +5,7 @@ import { vacancies, candidates, companies } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { sendMail } from "@/lib/mail"
 import { renderTemplate } from "@/lib/template-renderer"
+import { getCandidateFirstName } from "@/lib/messaging/candidate-name"
 
 interface AutomationSettings {
   tone?: "official" | "casual" | "custom"
@@ -88,8 +89,9 @@ export async function POST(req: NextRequest) {
     // Формируем текст
     const template = automation.firstMessageText || getDefaultTemplate(automation.tone || "casual")
     const candidateToken = candidate.token || candidate.id
+    const { firstName } = await getCandidateFirstName(candidate.id)
     const text = replaceVariables(template, {
-      name: candidate.name.split(" ")[0],
+      name: firstName,
       position: vacancy.title,
       company: company?.name || "",
       link: `${process.env.NEXTAUTH_URL || "https://mycomanda24.ru"}/candidate/${candidateToken}`,
