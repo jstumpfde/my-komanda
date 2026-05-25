@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { eq, and, lte } from "drizzle-orm"
+import { eq, and, lte, gte, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { vacancies, candidates, followUpMessages, followUpCampaigns, hhResponses, companies } from "@/lib/db/schema"
 import { getValidToken } from "@/lib/hh-helpers"
@@ -54,6 +54,17 @@ const RUN_BUDGET_MS  = 90_000    // мягкий бюджет одного cron-
 // если в БД null или меньше минимума — берём дефолт 31 сек.
 const DEFAULT_SEND_DELAY_SECONDS = 31
 const MIN_SEND_DELAY_SECONDS     = 21
+
+// 00:00 сегодняшнего дня по Москве (UTC+3, фиксированный — РФ без DST с 2014)
+// как UTC-инстант. Используется для rate-limit «1 дожим в день кандидату».
+function startOfTodayMsk(): Date {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Moscow",
+    year: "numeric", month: "2-digit", day: "2-digit",
+  }).formatToParts(new Date())
+  const get = (t: string) => parts.find(p => p.type === t)?.value ?? "00"
+  return new Date(`${get("year")}-${get("month")}-${get("day")}T00:00:00+03:00`)
+}
 
 type TouchOutcome = "sent" | "cancelled" | "failed" | "skipped"
 
@@ -193,6 +204,26 @@ async function processOneTouch(
         errorMessage: reason,
       }).where(eq(followUpMessages.id, msg.id))
       return { outcome: "cancelled", reason }
+    }
+
+    // Rate-limit: не более 1 ОТПРАВЛЕННОГО сообщения в день одному кандидату
+    // (TZ Europe/Moscow). Применяется только к обычному дожиму (мы внутри
+    // !isOneOffPostAnketa) — серия первых сообщений / off-hours / anketa-
+    // автоответы НЕ ограничиваются (намеренные одиночные/быстрые серии).
+    // Считаем ВСЕ sent-касания за сегодня (включая серию) — чтобы дожим не
+    // ложился вторым/третьим сообщением поверх уже отправленного сегодня.
+    // Если сегодня уже что-то ушло — оставляем pending (status/scheduled_at
+    // НЕ трогаем), следующий день подберёт.
+    const [sentToday] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(followUpMessages)
+      .where(and(
+        eq(followUpMessages.candidateId, msg.candidateId),
+        eq(followUpMessages.status, "sent"),
+        gte(followUpMessages.sentAt, startOfTodayMsk()),
+      ))
+    if ((sentToday?.count ?? 0) > 0) {
+      return { outcome: "skipped", reason: "rate_limit_one_per_day" }
     }
   }
 
