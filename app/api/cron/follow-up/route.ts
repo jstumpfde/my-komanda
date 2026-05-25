@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { eq, and, lte } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { vacancies, candidates, followUpMessages, followUpCampaigns, hhResponses } from "@/lib/db/schema"
+import { vacancies, candidates, followUpMessages, followUpCampaigns, hhResponses, companies } from "@/lib/db/schema"
 import { getValidToken } from "@/lib/hh-helpers"
 import { shouldStopFollowUp } from "@/lib/followup/should-stop"
 import { canSendNow } from "@/lib/schedule/can-send-now"
@@ -46,15 +46,44 @@ export async function POST(req: NextRequest) {
 // cron в рабочее время подберёт.
 
 const LIMIT          = 200
-const MIN_DELAY_MS   = 2_000     // минимальная пауза между отправками
-const MAX_DELAY_MS   = 30_000    // больше нет смысла — следующий cron-тик подберёт
 const RUN_BUDGET_MS  = 90_000    // мягкий бюджет одного cron-call
+
+// Задержка между отправками — per-company (companies.follow_up_send_delay_seconds).
+// Дефолт и нижняя граница дублируют API (app/api/modules/hr/company/send-delay):
+// если в БД null или меньше минимума — берём дефолт 31 сек.
+const DEFAULT_SEND_DELAY_SECONDS = 31
+const MIN_SEND_DELAY_SECONDS     = 21
 
 type TouchOutcome = "sent" | "cancelled" | "failed" | "skipped"
 
 interface TouchResult {
   outcome: TouchOutcome
   reason?: string
+  // Задержка компании-отправителя (мс), которую нужно выждать перед следующей
+  // отправкой. Задаётся только когда реально дошли до отправки в hh
+  // (sent / hh-ошибка / исключение) — иначе спать незачем.
+  delayMs?: number
+}
+
+// Резолвер per-company задержки с кэшем на один cron-run (одна и та же
+// компания встречается в очереди многократно — не дёргаем БД каждый раз).
+async function resolveCompanyDelayMs(
+  companyId: string,
+  cache: Map<string, number>,
+): Promise<number> {
+  const cached = cache.get(companyId)
+  if (cached !== undefined) return cached
+  const [row] = await db
+    .select({ seconds: companies.followUpSendDelaySeconds })
+    .from(companies)
+    .where(eq(companies.id, companyId))
+    .limit(1)
+  const secs = row?.seconds
+  const safeSeconds =
+    typeof secs === "number" && secs >= MIN_SEND_DELAY_SECONDS ? secs : DEFAULT_SEND_DELAY_SECONDS
+  const ms = safeSeconds * 1000
+  cache.set(companyId, ms)
+  return ms
 }
 
 async function processCampaignTouches(now: Date) {
@@ -71,12 +100,12 @@ async function processCampaignTouches(now: Date) {
   let touchSkipped = 0
   const reasonBreakdown: Record<string, number> = {}
 
-  // Расчёт интервала: 3600/N сек, но с cap'ами.
-  const targetDelayMs = pending.length > 0 ? Math.floor(3_600_000 / pending.length) : MIN_DELAY_MS
-  const sendDelayMs   = Math.max(MIN_DELAY_MS, Math.min(MAX_DELAY_MS, targetDelayMs))
+  // Кэш per-company задержек на этот run.
+  const delayCache = new Map<string, number>()
 
   const runStartedAt = Date.now()
   let bailedEarly = false
+  let lastDelayMs = 0   // для логов: последняя применённая задержка
 
   for (let i = 0; i < pending.length; i++) {
     if (Date.now() - runStartedAt > RUN_BUDGET_MS) {
@@ -86,7 +115,7 @@ async function processCampaignTouches(now: Date) {
     }
 
     const msg = pending[i]
-    const result = await processOneTouch(msg, now)
+    const result = await processOneTouch(msg, now, delayCache)
     if (result.outcome === "sent")      touchSent++
     else if (result.outcome === "cancelled") touchCancelled++
     else if (result.outcome === "failed")    touchFailed++
@@ -96,8 +125,20 @@ async function processCampaignTouches(now: Date) {
       reasonBreakdown[result.reason] = (reasonBreakdown[result.reason] ?? 0) + 1
     }
 
-    if (i < pending.length - 1) {
-      await new Promise(r => setTimeout(r, sendDelayMs))
+    // Спим ТОЛЬКО после реальной отправки в hh (result.delayMs задан). Отмены,
+    // skip'ы и pre-send ошибки не трогают hh-аккаунт — задержка им не нужна.
+    if (result.delayMs && i < pending.length - 1) {
+      lastDelayMs = result.delayMs
+      const remaining = RUN_BUDGET_MS - (Date.now() - runStartedAt)
+      // Если полная задержка не влезает в остаток бюджета — НЕ отправляем
+      // следующее сообщение раньше времени, а выходим: остаток подберёт
+      // следующий cron-тик. Так задержка между отправками всегда >= настройки
+      // компании и cron-call не зависает на минуты при больших значениях.
+      if (result.delayMs >= remaining) {
+        bailedEarly = true
+        break
+      }
+      await new Promise(r => setTimeout(r, result.delayMs))
     }
   }
 
@@ -107,7 +148,7 @@ async function processCampaignTouches(now: Date) {
     cancelled:  touchCancelled,
     failed:     touchFailed,
     skipped:    touchSkipped,
-    sendDelayMs,
+    lastDelayMs,
     bailedEarly,
     reasons:    reasonBreakdown,
   }
@@ -116,6 +157,7 @@ async function processCampaignTouches(now: Date) {
 async function processOneTouch(
   msg: typeof followUpMessages.$inferSelect,
   now: Date,
+  delayCache: Map<string, number>,
 ): Promise<TouchResult> {
   // Сессия 7: для branch='anketa_confirmation' пропускаем стоп-триггеры.
   // shouldStopFollowUp среагировал бы на stage='anketa_filled' (демо
@@ -251,6 +293,11 @@ async function processOneTouch(
     demo_link: demoUrl,
   })
 
+  // Реально отправляем в hh → выдержать per-company задержку перед следующей
+  // отправкой. Возвращаем delayMs во всех исходах ниже (sent / hh-ошибка /
+  // исключение), чтобы вызывающий цикл выждал нужную паузу.
+  const delayMs = await resolveCompanyDelayMs(vacancy.companyId, delayCache)
+
   try {
     const form = new URLSearchParams()
     form.set("message", finalText)
@@ -270,19 +317,19 @@ async function processOneTouch(
         status: "failed",
         errorMessage: `${reason}: ${errText.slice(0, 200)}`,
       }).where(eq(followUpMessages.id, msg.id))
-      return { outcome: "failed", reason }
+      return { outcome: "failed", reason, delayMs }
     }
     await db.update(followUpMessages).set({
       status: "sent",
       sentAt: new Date(),
     }).where(eq(followUpMessages.id, msg.id))
-    return { outcome: "sent" }
+    return { outcome: "sent", delayMs }
   } catch (err) {
     const reason = err instanceof Error ? err.message.slice(0, 200) : "unknown"
     await db.update(followUpMessages).set({
       status: "failed",
       errorMessage: reason,
     }).where(eq(followUpMessages.id, msg.id))
-    return { outcome: "failed", reason: "exception" }
+    return { outcome: "failed", reason: "exception", delayMs }
   }
 }
