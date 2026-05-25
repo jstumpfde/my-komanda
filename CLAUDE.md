@@ -251,6 +251,28 @@ Per-vacancy стоп-факторы в vacancy.stopFactorsJson:
 - CRON_SECRET — для авторизации cron-эндпоинтов
 - HH_CLIENT_ID / HH_CLIENT_SECRET — hh.ru OAuth
 
+## Корзина вакансий (Trash)
+
+Три уровня состояний вакансии (lib/vacancies/lifecycle.ts):
+- Активные (active/paused) — таб «Активные»
+- Архив (archived/closed*) — таб «Архив», бессрочно
+- Корзина (deleted_at IS NOT NULL) — таб «Корзина», авто-удаление через
+  companies.trash_retention_days (по умолчанию 30; настройка — HR → Настройки
+  найма → Сообщения → «Корзина — срок хранения»). Признак корзины — deleted_at
+  (отдельной status='trashed' НЕ вводим).
+
+«Удалить навсегда» и cron удаляют зависимые строки (кандидаты/демо/hh) ДО
+вакансии (lib/vacancies/hard-delete.ts) — FK NO ACTION иначе блокируют delete.
+Кандидаты привязаны к вакансии один-к-одному, поэтому не затрагивают другие.
+
+Cron авто-удаления — /api/cron/trash-cleanup (раз в сутки, 03:00 МСК):
+```
+0 0 * * * curl -s -X POST -H "X-Cron-Secret: $CRON_SECRET" \
+  https://company24.pro/api/cron/trash-cleanup \
+  >> /var/log/trash-cleanup.log 2>&1
+```
+(00:00 UTC = 03:00 МСК; логируется в cron_runs.)
+
 ## Deployment Commands
 
 Стандартный деплой (после мерджа feature-ветки в develop):
