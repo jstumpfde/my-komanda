@@ -152,6 +152,11 @@ export const companies = pgTable("companies", {
   //   'strict'  — автоотказ + сообщение (текущее поведение)
   //   'lenient' — предупреждение, диалог продолжается
   aiAbuseMode:              text("ai_abuse_mode").notNull().default("strict"),
+  // Безопасность отправки: минимальная задержка между отправками follow-up
+  // сообщений в hh-чат (в секундах, per-company). Меньшие значения повышают
+  // риск бана аккаунта hh.ru за подозрительную активность. Дефолт 31 сек,
+  // допустимый диапазон в UI/API 21..600. Cron умножает на 1000 → ms.
+  followUpSendDelaySeconds: integer("follow_up_send_delay_seconds").notNull().default(31),
   createdAt:          timestamp("created_at").defaultNow(),
   updatedAt:          timestamp("updated_at").defaultNow(),
 })

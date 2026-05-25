@@ -20,6 +20,7 @@ import {Settings, Clock, Save, Bell, GitBranch, MessageSquare, ShieldAlert, Plus
 import { toast } from "sonner"
 import { IntegrationsContent } from "@/components/hr/integrations-content"
 import { AiAbuseModeSettings } from "@/components/company/ai-abuse-mode-settings"
+import { SendDelaySettings } from "@/components/company/send-delay-settings"
 
 // ─── Constants ─────────────────────────────────────────────────────────────
 
@@ -982,6 +983,11 @@ export default function HiringSettingsPage() {
                 {/* Группа 36: per-company режим строгости AI чат-бота. */}
                 <div className="max-w-3xl mt-6">
                   <AiAbuseModeSettings />
+                </div>
+
+                {/* Per-company темп отправки follow-up (безопасность hh-аккаунта). */}
+                <div className="max-w-3xl mt-6">
+                  <SendDelaySettings />
                 </div>
               </TabsContent>
 
