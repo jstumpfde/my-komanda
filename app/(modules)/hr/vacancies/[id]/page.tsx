@@ -3122,6 +3122,9 @@ export default function VacancyPage() {
                       if (typeof a?.delayMinutes === "number") return a.delayMinutes * 60
                       return 180
                     })()}
+                    initialOffHoursEnabled={(apiVacancy as { firstMessageOffHoursEnabled?: boolean } | undefined)?.firstMessageOffHoursEnabled ?? false}
+                    initialOffHoursDelaySeconds={(apiVacancy as { firstMessageOffHoursDelaySeconds?: number } | undefined)?.firstMessageOffHoursDelaySeconds ?? 15}
+                    initialOffHoursText={(apiVacancy as { firstMessageOffHoursText?: string | null } | undefined)?.firstMessageOffHoursText ?? ""}
                     onSaved={() => refetchVacancy()}
                   />
                   <AutomationSettings
