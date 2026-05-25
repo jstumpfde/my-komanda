@@ -1,8 +1,8 @@
 import { NextRequest } from "next/server"
-import { eq, and, count, isNull, isNotNull, inArray, notInArray, or, type SQL } from "drizzle-orm"
+import { eq, and, count, isNull, isNotNull, inArray, notInArray, or, desc, type SQL } from "drizzle-orm"
 import { nanoid } from "nanoid"
 import { db } from "@/lib/db"
-import { companyFunnelTemplates, vacancies } from "@/lib/db/schema"
+import { companies, companyFunnelTemplates, vacancies } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { CLOSED_VACANCY_STATUSES } from "@/lib/vacancies/lifecycle"
 import { logActivity } from "@/lib/activity-log"
@@ -42,11 +42,11 @@ export async function GET(req: NextRequest) {
     const limit = Math.min(100, Math.max(1, parseInt(req.nextUrl.searchParams.get("limit") ?? "20")))
     const offset = (page - 1) * limit
 
-    const showDeleted = req.nextUrl.searchParams.get("deleted") === "true"
-
-    // scope (табы списка): active = всё кроме архива; archive = только архив.
+    // scope (табы списка): active = всё кроме архива; archive = только архив;
+    // trash = корзина (deleted_at IS NOT NULL). Legacy ?deleted=true == trash.
     // null/all/любое другое — без фильтра по статусу (обратная совместимость).
     const scope = req.nextUrl.searchParams.get("scope")
+    const showDeleted = req.nextUrl.searchParams.get("deleted") === "true" || scope === "trash"
     const closed = CLOSED_VACANCY_STATUSES as readonly string[] as string[]
     // status может быть NULL (= draft) → для active-скоупа NULL включаем.
     const scopeWhere: SQL | undefined =
@@ -67,12 +67,13 @@ export async function GET(req: NextRequest) {
       .select()
       .from(vacancies)
       .where(baseWhere)
-      .orderBy(vacancies.createdAt)
+      // Корзина — свежеудалённые сверху; остальные табы — по дате создания.
+      .orderBy(showDeleted ? desc(vacancies.deletedAt) : vacancies.createdAt)
       .limit(limit)
       .offset(offset)
 
-    // Счётчики табов «по БД» (исключая удалённые). Активные = всё кроме
-    // архива (включая NULL/draft); архив = closed-статусы.
+    // Счётчики табов «по БД». Активные/архив — среди НЕ удалённых;
+    // корзина — удалённые.
     const notDeleted = and(eq(vacancies.companyId, user.companyId), isNull(vacancies.deletedAt))
     const [activeCnt] = await db
       .select({ value: count() })
@@ -82,15 +83,28 @@ export async function GET(req: NextRequest) {
       .select({ value: count() })
       .from(vacancies)
       .where(and(notDeleted, inArray(vacancies.status, closed)))
+    const [trashedCnt] = await db
+      .select({ value: count() })
+      .from(vacancies)
+      .where(and(eq(vacancies.companyId, user.companyId), isNotNull(vacancies.deletedAt)))
+
+    // Срок хранения корзины компании — чтобы список посчитал обратный отсчёт.
+    const [companyRow] = await db
+      .select({ retention: companies.trashRetentionDays })
+      .from(companies)
+      .where(eq(companies.id, user.companyId))
+      .limit(1)
 
     return apiSuccess({
       vacancies: rows,
       total: totalResult?.value ?? 0,
       page,
       limit,
+      trashRetentionDays: companyRow?.retention ?? 30,
       counts: {
         active:   activeCnt?.value ?? 0,
         archived: archivedCnt?.value ?? 0,
+        trashed:  trashedCnt?.value ?? 0,
       },
     })
   } catch (err) {
