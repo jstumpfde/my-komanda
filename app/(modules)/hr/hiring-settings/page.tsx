@@ -21,6 +21,7 @@ import { toast } from "sonner"
 import { IntegrationsContent } from "@/components/hr/integrations-content"
 import { AiAbuseModeSettings } from "@/components/company/ai-abuse-mode-settings"
 import { SendDelaySettings } from "@/components/company/send-delay-settings"
+import { TrashRetentionSettings } from "@/components/company/trash-retention-settings"
 
 // ─── Constants ─────────────────────────────────────────────────────────────
 
@@ -988,6 +989,11 @@ export default function HiringSettingsPage() {
                 {/* Per-company темп отправки follow-up (безопасность hh-аккаунта). */}
                 <div className="max-w-3xl mt-6">
                   <SendDelaySettings />
+                </div>
+
+                {/* Корзина вакансий — срок хранения до авто-удаления. */}
+                <div className="max-w-3xl mt-6">
+                  <TrashRetentionSettings />
                 </div>
               </TabsContent>
 
