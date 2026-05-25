@@ -38,11 +38,11 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Checkbox } from "@/components/ui/checkbox"
 import { Slider } from "@/components/ui/slider"
 import { Input } from "@/components/ui/input"
-import {Clock, Pause, Play, RotateCcw, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, MessageSquareText, Zap, Globe, AlertTriangle, TrendingUp, Filter, X, Link2, Copy, Save, Sparkles, Eye, Check, Loader2, Download, ExternalLink, ClipboardList, ChevronLeft, ChevronRight, ChevronDown, Users, Upload, RefreshCw, Bot, Workflow} from "lucide-react"
+import {Clock, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, MessageSquareText, Zap, Globe, AlertTriangle, TrendingUp, Filter, X, Link2, Copy, Save, Sparkles, Eye, Check, Loader2, Download, ExternalLink, ClipboardList, ChevronLeft, ChevronRight, ChevronDown, Users, Upload, RefreshCw, Bot, Workflow} from "lucide-react"
 import { AiChatbotSettings } from "@/components/vacancies/ai-chatbot-settings"
 import { VacancyStopFactorsSettings } from "@/components/vacancies/vacancy-stop-factors-settings"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
 import { defaultColumnColors, COLUMN_ORDER, type CandidateAction, getNextColumnId, PROGRESS_BY_COLUMN } from "@/lib/column-config"
@@ -52,8 +52,10 @@ import { HhAutoProcess } from "@/components/hh/hh-auto-process"
 import { AutomationSettings, type AutomationSectionId } from "@/components/vacancies/automation-settings"
 import { VacancyScheduleSettings } from "@/components/vacancies/vacancy-schedule-settings"
 import { PublishTab } from "@/components/vacancies/publish-tab"
+import { VacancyActionsMenuItems } from "@/components/vacancies/vacancy-actions-menu"
+import { PermanentDeleteDialog } from "@/components/vacancies/permanent-delete-dialog"
 import {
-  getVacancyLifecycle,
+  getVacancyState,
   VACANCY_STATUS_ON_PAUSE, VACANCY_STATUS_ON_RESUME,
   VACANCY_STATUS_ON_CLOSE, VACANCY_STATUS_ON_RESTORE,
 } from "@/lib/vacancies/lifecycle"
@@ -201,39 +203,9 @@ function apiCandidateToCard(c: ApiCandidate, columnId: string): Candidate {
 // Пункт меню «Действия». Включённый — обычный DropdownMenuItem. Выключенный —
 // серый div с тултипом (у Radix disabled-item отключены pointer-events, и
 // hover-тултип на нём не срабатывает, поэтому рендерим div-обёртку).
-function ActionMenuItem({
-  icon: Icon, label, enabled, onClick, disabledReason, busy,
-}: {
-  icon: React.ElementType
-  label: string
-  enabled: boolean
-  onClick: () => void
-  disabledReason: string
-  busy?: boolean
-}) {
-  if (enabled) {
-    return (
-      <DropdownMenuItem className="gap-2 cursor-pointer" disabled={busy} onClick={onClick}>
-        {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Icon className="size-3.5" />}
-        {label}
-      </DropdownMenuItem>
-    )
-  }
-  return (
-    <UITooltip>
-      <TooltipTrigger asChild>
-        <div
-          aria-disabled="true"
-          className="relative flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-muted-foreground/40 cursor-not-allowed select-none"
-          onClick={(e) => { e.preventDefault(); e.stopPropagation() }}
-        >
-          <Icon className="size-3.5" />{label}
-        </div>
-      </TooltipTrigger>
-      <TooltipContent>{disabledReason}</TooltipContent>
-    </UITooltip>
-  )
-}
+// Пункты меню действий вынесены в общий компонент
+// components/vacancies/vacancy-actions-menu.tsx (ActionMenuItem /
+// VacancyActionsMenuItems) — переиспользуется и в строке списка вакансий.
 
 export default function VacancyPage() {
   const params = useParams()
@@ -1128,6 +1100,7 @@ export default function VacancyPage() {
   const { role } = useAuth()
   const canAdd = isPlatformRole(role)
   const [duplicating, setDuplicating] = useState(false)
+  const [permDeleteOpen, setPermDeleteOpen] = useState(false)
 
   const handleDuplicate = async () => {
     setDuplicating(true)
@@ -1148,7 +1121,33 @@ export default function VacancyPage() {
   const handlePauseVacancy   = () => { updateVacancyStatus(VACANCY_STATUS_ON_PAUSE);   toast.warning("Вакансия приостановлена") }
   const handleResumeVacancy  = () => { updateVacancyStatus(VACANCY_STATUS_ON_RESUME);  toast.success("Вакансия возобновлена") }
   const handleCloseVacancy   = () => { updateVacancyStatus(VACANCY_STATUS_ON_CLOSE);   toast("Вакансия закрыта и отправлена в архив") }
-  const handleRestoreVacancy = () => { updateVacancyStatus(VACANCY_STATUS_ON_RESTORE); toast.success("Вакансия восстановлена из архива") }
+
+  // Восстановить: из архива → status active; из корзины → очистка deleted_at (PATCH).
+  const handleRestoreVacancy = async () => {
+    if (apiVacancy?.deletedAt) {
+      try {
+        const res = await fetch(`/api/modules/hr/vacancies/${id}`, {
+          method: "PATCH", headers: { "Content-Type": "application/json" }, body: "{}",
+        })
+        if (!res.ok) throw new Error()
+        toast.success("Вакансия восстановлена из корзины")
+        refetchVacancy()
+      } catch { toast.error("Не удалось восстановить вакансию") }
+    } else {
+      updateVacancyStatus(VACANCY_STATUS_ON_RESTORE)
+      toast.success("Вакансия восстановлена из архива")
+    }
+  }
+
+  // В корзину: soft-delete (deleted_at = now). Вакансия уходит из активных/архива.
+  const handleMoveToTrash = async () => {
+    try {
+      const res = await fetch(`/api/modules/hr/vacancies/${id}`, { method: "DELETE" })
+      if (!res.ok) throw new Error()
+      toast.success("Вакансия перемещена в корзину")
+      router.push("/hr/vacancies")
+    } catch { toast.error("Не удалось переместить в корзину") }
+  }
 
   // Экспорт кандидатов в Excel — серверный endpoint отдаёт .xlsx с
   // Content-Disposition; якорь скачивает файл с именем от сервера.
@@ -2023,40 +2022,31 @@ export default function VacancyPage() {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-56">
-                    {/* Унифицированное меню: ВСЕГДА 6 пунктов в одном порядке.
-                        Активность зависит от lifecycle (active/paused/closed),
-                        недоступные показываем серыми с тултипом. */}
-                    {(() => {
-                      const lifecycle = getVacancyLifecycle(status)
-                      const lifecycleLabel =
-                        lifecycle === "paused" ? "приостановленной"
-                        : lifecycle === "closed" ? "закрытой"
-                        : "активной"
-                      const reason = `Недоступно для ${lifecycleLabel} вакансии`
-                      return (
-                        <>
-                          <ActionMenuItem icon={Copy} label="Дублировать" enabled busy={duplicating}
-                            onClick={handleDuplicate} disabledReason={reason} />
-                          <ActionMenuItem icon={Download} label="Экспорт в Excel" enabled
-                            onClick={handleExportExcel} disabledReason={reason} />
-                          <DropdownMenuSeparator />
-                          <ActionMenuItem icon={Pause} label="Остановить"
-                            enabled={lifecycle === "active"}
-                            onClick={handlePauseVacancy} disabledReason={reason} />
-                          <ActionMenuItem icon={Play} label="Возобновить"
-                            enabled={lifecycle === "paused"}
-                            onClick={handleResumeVacancy} disabledReason={reason} />
-                          <ActionMenuItem icon={X} label="Закрыть вакансию"
-                            enabled={lifecycle !== "closed"}
-                            onClick={handleCloseVacancy} disabledReason={reason} />
-                          <ActionMenuItem icon={RotateCcw} label="Восстановить"
-                            enabled={lifecycle === "closed"}
-                            onClick={handleRestoreVacancy} disabledReason={reason} />
-                        </>
-                      )
-                    })()}
+                    {/* Унифицированное меню действий — общий компонент
+                        VacancyActionsMenuItems (тот же в строке списка). */}
+                    <VacancyActionsMenuItems
+                      lifecycle={getVacancyState({ status, deletedAt: apiVacancy?.deletedAt })}
+                      duplicating={duplicating}
+                      handlers={{
+                        onDuplicate:       handleDuplicate,
+                        onExport:          handleExportExcel,
+                        onPause:           handlePauseVacancy,
+                        onResume:          handleResumeVacancy,
+                        onArchive:         handleCloseVacancy,
+                        onRestore:         handleRestoreVacancy,
+                        onTrash:           handleMoveToTrash,
+                        onPermanentDelete: () => setPermDeleteOpen(true),
+                      }}
+                    />
                   </DropdownMenuContent>
                 </DropdownMenu>
+                <PermanentDeleteDialog
+                  open={permDeleteOpen}
+                  onOpenChange={setPermDeleteOpen}
+                  vacancyId={id}
+                  vacancyTitle={apiVacancy?.title ?? ""}
+                  onDeleted={() => router.push("/hr/vacancies")}
+                />
               </div>
             </div>
 
