@@ -38,7 +38,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Checkbox } from "@/components/ui/checkbox"
 import { Slider } from "@/components/ui/slider"
 import { Input } from "@/components/ui/input"
-import {Clock, Pause, Play, Archive, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, MessageSquareText, Zap, Globe, AlertTriangle, TrendingUp, Filter, X, Link2, Copy, Save, Sparkles, Eye, Check, Loader2, Download, ExternalLink, ClipboardList, ChevronLeft, ChevronRight, ChevronDown, Users, Upload, RefreshCw, Bot, Workflow} from "lucide-react"
+import {Clock, Pause, Play, RotateCcw, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, MessageSquareText, Zap, Globe, AlertTriangle, TrendingUp, Filter, X, Link2, Copy, Save, Sparkles, Eye, Check, Loader2, Download, ExternalLink, ClipboardList, ChevronLeft, ChevronRight, ChevronDown, Users, Upload, RefreshCw, Bot, Workflow} from "lucide-react"
 import { AiChatbotSettings } from "@/components/vacancies/ai-chatbot-settings"
 import { VacancyStopFactorsSettings } from "@/components/vacancies/vacancy-stop-factors-settings"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -52,6 +52,11 @@ import { HhAutoProcess } from "@/components/hh/hh-auto-process"
 import { AutomationSettings, type AutomationSectionId } from "@/components/vacancies/automation-settings"
 import { VacancyScheduleSettings } from "@/components/vacancies/vacancy-schedule-settings"
 import { PublishTab } from "@/components/vacancies/publish-tab"
+import {
+  getVacancyLifecycle,
+  VACANCY_STATUS_ON_PAUSE, VACANCY_STATUS_ON_RESUME,
+  VACANCY_STATUS_ON_CLOSE, VACANCY_STATUS_ON_RESTORE,
+} from "@/lib/vacancies/lifecycle"
 import { MiniFormBuilder } from "@/components/vacancies/mini-form-builder"
 import { UtmLinksSection } from "@/components/vacancies/utm-links-section"
 import { PostDemoSettings } from "@/components/vacancies/post-demo-settings"
@@ -89,7 +94,7 @@ interface ColumnData {
   candidates: Candidate[]
 }
 
-type VacancyStatus = "draft" | "active" | "published" | "paused" | "closed_success" | "closed_cancelled"
+type VacancyStatus = "draft" | "active" | "published" | "paused" | "closed_success" | "closed_cancelled" | "archived"
 
 // Источник правды — COLUMN_ORDER из lib/column-config.ts. Object.entries
 // над defaultColumnColors не гарантирует порядок и включает rejected
@@ -191,6 +196,43 @@ function apiCandidateToCard(c: ApiCandidate, columnId: string): Candidate {
     businessTripsReady: c.businessTripsReady ?? null,
     photoUrl: c.photoUrl ?? null,
   }
+}
+
+// Пункт меню «Действия». Включённый — обычный DropdownMenuItem. Выключенный —
+// серый div с тултипом (у Radix disabled-item отключены pointer-events, и
+// hover-тултип на нём не срабатывает, поэтому рендерим div-обёртку).
+function ActionMenuItem({
+  icon: Icon, label, enabled, onClick, disabledReason, busy,
+}: {
+  icon: React.ElementType
+  label: string
+  enabled: boolean
+  onClick: () => void
+  disabledReason: string
+  busy?: boolean
+}) {
+  if (enabled) {
+    return (
+      <DropdownMenuItem className="gap-2 cursor-pointer" disabled={busy} onClick={onClick}>
+        {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Icon className="size-3.5" />}
+        {label}
+      </DropdownMenuItem>
+    )
+  }
+  return (
+    <UITooltip>
+      <TooltipTrigger asChild>
+        <div
+          aria-disabled="true"
+          className="relative flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-muted-foreground/40 cursor-not-allowed select-none"
+          onClick={(e) => { e.preventDefault(); e.stopPropagation() }}
+        >
+          <Icon className="size-3.5" />{label}
+        </div>
+      </TooltipTrigger>
+      <TooltipContent>{disabledReason}</TooltipContent>
+    </UITooltip>
+  )
 }
 
 export default function VacancyPage() {
@@ -1102,6 +1144,23 @@ export default function VacancyPage() {
     }
   }
 
+  // ── Действия жизненного цикла (см. lib/vacancies/lifecycle.ts) ──
+  const handlePauseVacancy   = () => { updateVacancyStatus(VACANCY_STATUS_ON_PAUSE);   toast.warning("Вакансия приостановлена") }
+  const handleResumeVacancy  = () => { updateVacancyStatus(VACANCY_STATUS_ON_RESUME);  toast.success("Вакансия возобновлена") }
+  const handleCloseVacancy   = () => { updateVacancyStatus(VACANCY_STATUS_ON_CLOSE);   toast("Вакансия закрыта и отправлена в архив") }
+  const handleRestoreVacancy = () => { updateVacancyStatus(VACANCY_STATUS_ON_RESTORE); toast.success("Вакансия восстановлена из архива") }
+
+  // Экспорт кандидатов в Excel — серверный endpoint отдаёт .xlsx с
+  // Content-Disposition; якорь скачивает файл с именем от сервера.
+  const handleExportExcel = () => {
+    const a = document.createElement("a")
+    a.href = `/api/modules/hr/vacancies/${id}/export-candidates`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    toast.success("Экспорт начался")
+  }
+
   const totalCandidates = columns.reduce((acc, col) => acc + col.candidates.length, 0)
 
   const saveBranding = async (updates?: { companyName?: string; color?: string; slogan?: string; logo?: string }) => {
@@ -1963,74 +2022,39 @@ export default function VacancyPage() {
                       Действия<ChevronDown className="size-3 ml-0.5 opacity-50" />
                     </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    {(status === "draft" || status === "paused") && (
-                      <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => { updateVacancyStatus("active"); toast.success("Вакансия запущена") }}>
-                        <Play className="size-3.5" />Запустить
-                      </DropdownMenuItem>
-                    )}
-                    {(status === "draft" || status === "paused") && <DropdownMenuSeparator />}
-                    {apiCandidates.length > 0 && (
-                      <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => {
-                        const stageLabels: Record<string, string> = { new: "Новые", primary_contact: "Первичный контакт", demo: "Демо", demo_opened: "Демо открыто", decision: "Демо пройдено", anketa_filled: "Анкета", ai_screening: "AI-скрининг", interview: "Интервью", final_decision: "Финал", hired: "Наняты", rejected: "Отказ" }
-                        const stageCounts: Record<string, number> = {}
-                        for (const c of apiCandidates) { const s = c.stage || "new"; stageCounts[s] = (stageCounts[s] || 0) + 1 }
-                        const topCandidates = apiCandidates.filter(c => c.aiScore != null).sort((a, b) => (b.aiScore ?? 0) - (a.aiScore ?? 0)).slice(0, 10)
-                        const html = `<html><head><title>Отчёт: ${vacancyTitle}</title><style>body{font-family:system-ui;max-width:800px;margin:40px auto;padding:0 20px;color:#1a1a1a}h1{font-size:22px}h2{font-size:16px;margin-top:24px}table{width:100%;border-collapse:collapse;margin:12px 0}td,th{border:1px solid #ddd;padding:8px;text-size:13px;text-align:left}th{background:#f5f5f5}.bar{height:16px;background:#6366f1;border-radius:4px}@media print{body{margin:20px}}</style></head><body>
-<h1>${vacancyTitle}</h1><p>Статус: ${status} | Город: ${apiVacancy?.city || "—"} | ЗП: ${apiVacancy?.salaryMin ? apiVacancy.salaryMin.toLocaleString("ru") : "—"} — ${apiVacancy?.salaryMax ? apiVacancy.salaryMax.toLocaleString("ru") : "—"} ₽</p>
-<h2>Воронка (${apiCandidates.length} кандидатов)</h2><table><tr><th>Этап</th><th>Кол-во</th></tr>${Object.entries(stageCounts).map(([s, n]) => `<tr><td>${stageLabels[s] || s}</td><td>${n}</td></tr>`).join("")}</table>
-${topCandidates.length > 0 ? `<h2>Топ кандидаты</h2><table><tr><th>Имя</th><th>AI-скор</th><th>Этап</th><th>Источник</th></tr>${topCandidates.map(c => `<tr><td>${c.name}</td><td>${c.aiScore}</td><td>${stageLabels[c.stage || "new"] || c.stage}</td><td>${c.source || "—"}</td></tr>`).join("")}</table>` : ""}
-${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
-<p style="color:#999;font-size:11px;margin-top:40px">Сгенерировано Company24.pro</p></body></html>`
-                        const w = window.open("", "_blank")
-                        if (w) { w.document.write(html); w.document.close(); w.print() }
-                      }}>
-                        <Download className="size-3.5" />Отчёт PDF
-                      </DropdownMenuItem>
-                    )}
-                    {apiCandidates.length > 0 && (
-                      <DropdownMenuItem className="gap-2 cursor-pointer" onClick={async () => {
-                        const XLSX = (await import("xlsx")).default
-                        const data = apiCandidates.map(c => ({
-                          "Имя": c.name,
-                          "Email": c.email || "",
-                          "Телефон": c.phone || "",
-                          "Город": c.city || "",
-                          "Источник": c.source || "",
-                          "Этап": c.stage || "",
-                          "AI-скор": c.aiScore ?? "",
-                          "Вердикт": c.aiScore != null ? (c.aiScore >= 70 ? "подходит" : c.aiScore >= 40 ? "возможно" : "не подходит") : "",
-                          "Дата": c.createdAt ? new Date(c.createdAt).toLocaleDateString("ru-RU") : "",
-                        }))
-                        const ws = XLSX.utils.json_to_sheet(data)
-                        const wb = XLSX.utils.book_new()
-                        XLSX.utils.book_append_sheet(wb, ws, "Кандидаты")
-                        XLSX.writeFile(wb, `кандидаты-${vacancyTitle}.xlsx`)
-                        toast.success("Экспорт готов")
-                      }}>
-                        <Download className="size-3.5" />Экспорт Excel
-                      </DropdownMenuItem>
-                    )}
-                    {apiCandidates.length > 0 && <DropdownMenuSeparator />}
-                    <DropdownMenuItem className="gap-2 cursor-pointer" disabled={duplicating} onClick={handleDuplicate}>
-                      {duplicating ? <Loader2 className="size-3.5 animate-spin" /> : <Copy className="size-3.5" />}Дублировать
-                    </DropdownMenuItem>
-                    {(status === "draft" || status === "paused") && (
-                      <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => { updateVacancyStatus("closed_cancelled"); toast("В архив") }}>
-                        <Archive className="size-3.5" />В архив
-                      </DropdownMenuItem>
-                    )}
-                    {(status === "active" || status === "paused") && <DropdownMenuSeparator />}
-                    {status === "active" && (
-                      <DropdownMenuItem className="gap-2 cursor-pointer text-destructive focus:text-destructive" onClick={() => { updateVacancyStatus("paused"); toast.warning("Вакансия приостановлена") }}>
-                        <Pause className="size-3.5" />Остановить
-                      </DropdownMenuItem>
-                    )}
-                    {(status === "active" || status === "paused") && (
-                      <DropdownMenuItem className="gap-2 cursor-pointer text-destructive focus:text-destructive" onClick={() => { updateVacancyStatus("closed_cancelled"); toast.warning("Вакансия отменена") }}>
-                        <X className="size-3.5" />Закрыть вакансию
-                      </DropdownMenuItem>
-                    )}
+                  <DropdownMenuContent align="end" className="w-56">
+                    {/* Унифицированное меню: ВСЕГДА 6 пунктов в одном порядке.
+                        Активность зависит от lifecycle (active/paused/closed),
+                        недоступные показываем серыми с тултипом. */}
+                    {(() => {
+                      const lifecycle = getVacancyLifecycle(status)
+                      const lifecycleLabel =
+                        lifecycle === "paused" ? "приостановленной"
+                        : lifecycle === "closed" ? "закрытой"
+                        : "активной"
+                      const reason = `Недоступно для ${lifecycleLabel} вакансии`
+                      return (
+                        <>
+                          <ActionMenuItem icon={Copy} label="Дублировать" enabled busy={duplicating}
+                            onClick={handleDuplicate} disabledReason={reason} />
+                          <ActionMenuItem icon={Download} label="Экспорт в Excel" enabled
+                            onClick={handleExportExcel} disabledReason={reason} />
+                          <DropdownMenuSeparator />
+                          <ActionMenuItem icon={Pause} label="Остановить"
+                            enabled={lifecycle === "active"}
+                            onClick={handlePauseVacancy} disabledReason={reason} />
+                          <ActionMenuItem icon={Play} label="Возобновить"
+                            enabled={lifecycle === "paused"}
+                            onClick={handleResumeVacancy} disabledReason={reason} />
+                          <ActionMenuItem icon={X} label="Закрыть вакансию"
+                            enabled={lifecycle !== "closed"}
+                            onClick={handleCloseVacancy} disabledReason={reason} />
+                          <ActionMenuItem icon={RotateCcw} label="Восстановить"
+                            enabled={lifecycle === "closed"}
+                            onClick={handleRestoreVacancy} disabledReason={reason} />
+                        </>
+                      )
+                    })()}
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
