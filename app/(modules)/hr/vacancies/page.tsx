@@ -312,7 +312,10 @@ function VacancyTile({ v, selected, onToggle, team, actions }: {
 export default function VacanciesPage() {
   const router = useRouter()
   const { role } = useAuth()
-  const { vacancies, total, loading, refetch } = useVacancies(1, 50)
+  // Таб «Активные» (active+paused) / «Архив» (закрытые). Скоуп уходит на
+  // сервер — список и счётчики считаются по БД, не по загруженной странице.
+  const [scope, setScope] = useState<"active" | "archive">("active")
+  const { vacancies, total, counts, loading, refetch } = useVacancies(1, 100, scope)
   const [view, setView] = useState<ViewMode>(() => {
     if (typeof window === "undefined") return "table"
     const stored = window.localStorage.getItem("vacancies-view")
@@ -604,6 +607,28 @@ export default function VacanciesPage() {
               </div>
             </div>
 
+            {/* Табы: Активные (active+paused) / Архив (закрытые). Счётчики — по БД. */}
+            <div className="flex items-center gap-1 mb-4 border-b border-border">
+              {([
+                { key: "active",  label: "Активные", n: counts.active },
+                { key: "archive", label: "Архив",    n: counts.archived },
+              ] as const).map((t) => (
+                <button
+                  key={t.key}
+                  type="button"
+                  onClick={() => { setScope(t.key); setSelected(new Set()) }}
+                  className={cn(
+                    "px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors",
+                    scope === t.key
+                      ? "border-primary text-foreground"
+                      : "border-transparent text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {t.label} <span className="text-muted-foreground">({t.n})</span>
+                </button>
+              ))}
+            </div>
+
             {/* Toolbar */}
             {!loading && vacancies.length > 0 && (<>
               <div className="flex items-center gap-3 mb-4">
@@ -636,8 +661,8 @@ export default function VacanciesPage() {
               </div>
             )}
 
-            {/* Empty */}
-            {!loading && vacancies.length === 0 && (
+            {/* Empty — нет вакансий вообще (ни активных, ни в архиве) */}
+            {!loading && vacancies.length === 0 && counts.active + counts.archived === 0 && (
               <div className="flex flex-col items-center justify-center py-20 text-center">
                 <Briefcase className="size-12 text-muted-foreground/30 mb-4" />
                 <p className="text-muted-foreground font-medium">Вакансий пока нет</p>
@@ -646,6 +671,21 @@ export default function VacanciesPage() {
                   {creating ? <Loader2 className="size-4 mr-1.5 animate-spin" /> : <Plus className="size-4 mr-1.5" />}
                   Создать вакансию
                 </Button>
+              </div>
+            )}
+
+            {/* Empty — текущий таб пуст, но вакансии есть в другом */}
+            {!loading && vacancies.length === 0 && counts.active + counts.archived > 0 && (
+              <div className="flex flex-col items-center justify-center py-16 text-center">
+                <Briefcase className="size-10 text-muted-foreground/30 mb-3" />
+                <p className="text-muted-foreground font-medium">
+                  {scope === "archive" ? "В архиве пусто" : "Нет активных вакансий"}
+                </p>
+                <p className="text-sm text-muted-foreground/60 mt-1">
+                  {scope === "archive"
+                    ? "Закрытые вакансии попадают сюда автоматически"
+                    : "Загляните в архив или создайте новую вакансию"}
+                </p>
               </div>
             )}
 

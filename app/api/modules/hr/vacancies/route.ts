@@ -1,9 +1,10 @@
 import { NextRequest } from "next/server"
-import { eq, and, count, isNull, isNotNull } from "drizzle-orm"
+import { eq, and, count, isNull, isNotNull, inArray, notInArray, or, type SQL } from "drizzle-orm"
 import { nanoid } from "nanoid"
 import { db } from "@/lib/db"
 import { companyFunnelTemplates, vacancies } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
+import { CLOSED_VACANCY_STATUSES } from "@/lib/vacancies/lifecycle"
 import { logActivity } from "@/lib/activity-log"
 import { generateVacancyShortCode } from "@/lib/short-id"
 import { seedDefaultFunnelStages } from "@/lib/funnel/seed-default-stages"
@@ -42,9 +43,20 @@ export async function GET(req: NextRequest) {
     const offset = (page - 1) * limit
 
     const showDeleted = req.nextUrl.searchParams.get("deleted") === "true"
+
+    // scope (табы списка): active = всё кроме архива; archive = только архив.
+    // null/all/любое другое — без фильтра по статусу (обратная совместимость).
+    const scope = req.nextUrl.searchParams.get("scope")
+    const closed = CLOSED_VACANCY_STATUSES as readonly string[] as string[]
+    // status может быть NULL (= draft) → для active-скоупа NULL включаем.
+    const scopeWhere: SQL | undefined =
+      scope === "archive" ? inArray(vacancies.status, closed)
+      : scope === "active" ? (or(isNull(vacancies.status), notInArray(vacancies.status, closed)) as SQL)
+      : undefined
+
     const baseWhere = showDeleted
       ? and(eq(vacancies.companyId, user.companyId), isNotNull(vacancies.deletedAt))
-      : and(eq(vacancies.companyId, user.companyId), isNull(vacancies.deletedAt))
+      : and(eq(vacancies.companyId, user.companyId), isNull(vacancies.deletedAt), scopeWhere)
 
     const [totalResult] = await db
       .select({ value: count() })
@@ -59,11 +71,27 @@ export async function GET(req: NextRequest) {
       .limit(limit)
       .offset(offset)
 
+    // Счётчики табов «по БД» (исключая удалённые). Активные = всё кроме
+    // архива (включая NULL/draft); архив = closed-статусы.
+    const notDeleted = and(eq(vacancies.companyId, user.companyId), isNull(vacancies.deletedAt))
+    const [activeCnt] = await db
+      .select({ value: count() })
+      .from(vacancies)
+      .where(and(notDeleted, or(isNull(vacancies.status), notInArray(vacancies.status, closed))))
+    const [archivedCnt] = await db
+      .select({ value: count() })
+      .from(vacancies)
+      .where(and(notDeleted, inArray(vacancies.status, closed)))
+
     return apiSuccess({
       vacancies: rows,
       total: totalResult?.value ?? 0,
       page,
       limit,
+      counts: {
+        active:   activeCnt?.value ?? 0,
+        archived: archivedCnt?.value ?? 0,
+      },
     })
   } catch (err) {
     if (err instanceof Response) return err
