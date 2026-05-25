@@ -104,7 +104,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Параллельная обработка компаний — каждая компания идёт своим потоком.
-    // Внутри компании (importApplications + processHhQueue) сохраняется
+    // Внутри компании (импорт в hh_responses + processHhQueue) сохраняется
     // последовательность, чтобы не словить 429 от hh.ru на одном employer.
     await Promise.all(Array.from(byCompany.entries()).map(async ([companyId, rows]) => {
       // Без валидного токена hh — пропускаем компанию. getValidToken — тот же
