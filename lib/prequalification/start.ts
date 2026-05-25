@@ -15,6 +15,7 @@ import {
 } from "@/lib/db/schema"
 import type { VacancyAiProcessSettings, VacancyPrequalificationQuestion } from "@/lib/db/schema"
 import { getValidToken } from "@/lib/hh-helpers"
+import { getCandidateFirstName } from "@/lib/messaging/candidate-name"
 
 interface StartResult {
   started:  boolean
@@ -22,11 +23,11 @@ interface StartResult {
 }
 
 function renderQuestionsMessage(args: {
-  candidateName: string
-  vacancyTitle:  string
-  questions:     VacancyPrequalificationQuestion[]
+  firstName:    string
+  vacancyTitle: string
+  questions:    VacancyPrequalificationQuestion[]
 }): string {
-  const firstName = (args.candidateName || "").trim().split(/\s+/)[0] || "Здравствуйте"
+  const { firstName } = args
   const numbered = args.questions
     .map((q, i) => `${i + 1}. ${q.text.trim()}`)
     .join("\n")
@@ -90,10 +91,11 @@ export async function startPrequalification(candidateId: string): Promise<StartR
     const tokenResult = await getValidToken(row.vacCompanyId)
     if (!tokenResult) return { started: false, reason: "no_hh_token" }
 
-    // 3. Рендерим и отправляем.
+    // 3. Рендерим и отправляем. Имя — централизованным хелпером (hh first_name → fallback).
+    const { firstName } = await getCandidateFirstName(candidateId)
     const message = renderQuestionsMessage({
-      candidateName: row.candName,
-      vacancyTitle:  row.vacTitle ?? "",
+      firstName,
+      vacancyTitle: row.vacTitle ?? "",
       questions,
     })
     const sentOk = await sendHhMessage(tokenResult.accessToken, row.hhResponseId, message)

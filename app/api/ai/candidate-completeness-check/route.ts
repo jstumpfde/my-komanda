@@ -3,6 +3,7 @@ import { eq, and } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { candidates, vacancies } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
+import { getCandidateFirstName } from "@/lib/messaging/candidate-name"
 
 export async function POST(req: NextRequest) {
   try {
@@ -46,7 +47,11 @@ export async function POST(req: NextRequest) {
     // Generate message
     let message = ""
     if (shouldContact) {
-      const name = candidate.name?.split(" ")[0] || "кандидат"
+      // Имя — централизованным хелпером (hh first_name → fallback). Если имени
+      // нет вовсе (helper вернёт «Здравствуйте») — оставляем нейтральное «кандидат»,
+      // чтобы не получить «Здравствуйте, Здравствуйте!».
+      const { firstName } = await getCandidateFirstName(candidate.id)
+      const name = firstName === "Здравствуйте" ? "кандидат" : firstName
       const position = vacancy?.title || "вакансию"
       const missingList = missingFields.map(f => `— Укажите ${f.toLowerCase()}`).join("\n")
       message = `Здравствуйте, ${name}! Спасибо за интерес к позиции "${position}". Для продолжения рассмотрения хотели бы уточнить:\n\n${missingList}\n\nВы можете дополнить данные по ссылке или отправить ответом на это сообщение.`

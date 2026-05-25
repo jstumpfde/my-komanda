@@ -30,6 +30,7 @@ import { processChatbotMessage } from "@/lib/ai/chatbot-processor"
 import { saveCandidatePhoto } from "@/lib/hh/save-candidate-photo"
 import { extractHhResumeFields } from "@/lib/hh/extract-resume-fields"
 import { matchCallIntentKeyword, renderInsistTemplate } from "@/lib/messaging/call-intent"
+import { getCandidateFirstName } from "@/lib/messaging/candidate-name"
 import { processPrequalificationAnswer } from "@/lib/prequalification/process-answer"
 
 // Дефолтные эскалационные шаблоны для callIntent (insist-demo).
@@ -539,7 +540,7 @@ export async function scanIncomingMessages(opts: {
             // Подставляем плейсхолдеры и шлём шаблон №(count+1).
             const customs = Array.isArray(callIntent.insistDemoMessages) ? callIntent.insistDemoMessages : []
             const tpl     = customs[count] ?? DEFAULT_INSIST_DEMO_MESSAGES[count]
-            const firstName = (candVac?.candName ?? "").trim().split(/\s+/)[0] || "Здравствуйте"
+            const { firstName } = await getCandidateFirstName(candidateId)
             const tokenForUrl = candVac?.candShortId ?? candVac?.candToken ?? candidateId
             const demoLink = `https://company24.pro/demo/${tokenForUrl}`
             const message = renderInsistTemplate(tpl, {

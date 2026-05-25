@@ -7,6 +7,7 @@ import { shouldStopFollowUp } from "@/lib/followup/should-stop"
 import { canSendNow } from "@/lib/schedule/can-send-now"
 import { checkCronAuth } from "@/lib/cron/auth"
 import { renderTemplate } from "@/lib/template-renderer"
+import { getCandidateFirstName } from "@/lib/messaging/candidate-name"
 
 // POST /api/cron/follow-up
 // Отправляет очередную порцию касаний из follow_up_messages кандидатам
@@ -285,13 +286,15 @@ async function processOneTouch(
     return { outcome: "failed", reason: "no_hh_token" }
   }
 
-  // Подставляем переменные в текст касания (имя из кандидата, должность, ссылка)
+  // Подставляем переменные в текст касания (имя из кандидата, должность, ссылка).
+  // Имя берём централизованным хелпером (hh first_name → fallback), shortId/token
+  // нужны для demo-ссылки.
   const [cand] = await db
-    .select({ name: candidates.name, shortId: candidates.shortId, token: candidates.token })
+    .select({ shortId: candidates.shortId, token: candidates.token })
     .from(candidates)
     .where(eq(candidates.id, msg.candidateId))
     .limit(1)
-  const firstName = (cand?.name ?? "").trim().split(/\s+/)[0] || "Здравствуйте"
+  const { firstName } = await getCandidateFirstName(msg.candidateId)
   const tokenForUrl = cand?.shortId ?? cand?.token ?? msg.candidateId
   const demoUrl = `https://company24.pro/demo/${tokenForUrl}`
   const finalText = renderTemplate(msg.messageText, {

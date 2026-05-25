@@ -6,6 +6,7 @@ import { checkCronAuth } from "@/lib/cron/auth"
 import { getPrequalConfig, daysSinceSent, finalizePrequalification } from "@/lib/prequalification/finalize"
 import { sendCandidateMessage } from "@/lib/prequalification/start"
 import { renderTemplate } from "@/lib/template-renderer"
+import { getCandidateFirstName } from "@/lib/messaging/candidate-name"
 
 // POST /api/cron/prequalification
 //
@@ -30,10 +31,10 @@ interface StageHistoryEntry {
 const DEFAULT_REMINDER_D1 = "{{name}}, напомню — вы откликнулись на «{{vacancy}}». Ответьте, пожалуйста, на пару коротких вопросов, чтобы я мог двигаться дальше с вашей кандидатурой."
 const DEFAULT_REMINDER_D3 = "{{name}}, ещё раз напоминаю про вопросы по «{{vacancy}}». Если не получу ответ — отправлю вам общую демонстрацию должности без уточнений."
 
-function renderReminder(template: string, args: { name: string; vacancyTitle: string }): string {
-  const firstName = (args.name || "").trim().split(/\s+/)[0] || "Здравствуйте"
+// firstName уже разрешён хелпером getCandidateFirstName — здесь не сплитим.
+function renderReminder(template: string, args: { firstName: string; vacancyTitle: string }): string {
   return renderTemplate(template, {
-    name:    firstName,
+    name:    args.firstName,
     vacancy: args.vacancyTitle,
   })
 }
@@ -86,8 +87,9 @@ export async function POST(req: NextRequest) {
 
         // 2. Д+3 reminder.
         if (days >= 3 && !sentReminders.has("prequalification_reminder_3")) {
+          const { firstName } = await getCandidateFirstName(cand.id)
           const text = renderReminder(cfg.reminderD3 || DEFAULT_REMINDER_D3, {
-            name: cand.name, vacancyTitle: cfg.vacancyTitle,
+            firstName, vacancyTitle: cfg.vacancyTitle,
           })
           const ok = await sendCandidateMessage(cand.id, text)
           if (ok) {
@@ -107,8 +109,9 @@ export async function POST(req: NextRequest) {
 
         // 3. Д+1 reminder.
         if (days >= 1 && !sentReminders.has("prequalification_reminder_1")) {
+          const { firstName } = await getCandidateFirstName(cand.id)
           const text = renderReminder(cfg.reminderD1 || DEFAULT_REMINDER_D1, {
-            name: cand.name, vacancyTitle: cfg.vacancyTitle,
+            firstName, vacancyTitle: cfg.vacancyTitle,
           })
           const ok = await sendCandidateMessage(cand.id, text)
           if (ok) {
