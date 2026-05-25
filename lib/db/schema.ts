@@ -157,6 +157,11 @@ export const companies = pgTable("companies", {
   // риск бана аккаунта hh.ru за подозрительную активность. Дефолт 31 сек,
   // допустимый диапазон в UI/API 21..600. Cron умножает на 1000 → ms.
   followUpSendDelaySeconds: integer("follow_up_send_delay_seconds").notNull().default(31),
+  // Корзина вакансий: срок хранения в днях до авто-удаления (drizzle/0141).
+  // «В корзине» = vacancies.deleted_at IS NOT NULL. Cron /api/cron/trash-cleanup
+  // удаляет вакансии навсегда, когда deleted_at старше trash_retention_days.
+  // Допустимые значения 1/3/7/14/30/60/90, дефолт 30.
+  trashRetentionDays:       integer("trash_retention_days").notNull().default(30),
   createdAt:          timestamp("created_at").defaultNow(),
   updatedAt:          timestamp("updated_at").defaultNow(),
 })
