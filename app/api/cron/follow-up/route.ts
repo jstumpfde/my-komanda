@@ -173,8 +173,14 @@ async function processOneTouch(
   // дополнительно проверяем что демо ещё не открыто — иначе
   // дальнейшие приветственные сообщения теряют смысл.
   const isChainStep = msg.branch === "first_msg_2" || msg.branch === "first_msg_3"
+  // Off-hours: мягкое Сообщение 1, запланированное при отклике вне рабочих
+  // часов (producer — lib/messaging/first-messages-chain.ts,
+  // OFF_HOURS_FIRST_BRANCH). Одиночное, не дожим: стоп-триггеры пропускаем,
+  // но проверяем demo_opened/терминальную стадию, и (главное) шлём даже вне
+  // рабочего окна — в этом весь смысл off-hours-сообщения.
+  const isOffHoursFirst = msg.branch === "first_msg_offhours"
   const isOneOffPostAnketa =
-    msg.branch === "anketa_confirmation" || msg.branch === "anketa_auto_reply" || isChainStep
+    msg.branch === "anketa_confirmation" || msg.branch === "anketa_auto_reply" || isChainStep || isOffHoursFirst
   if (!isOneOffPostAnketa) {
     // Стоп-триггеры (вакансия закрыта / демо пройдено / отказ /
     // автоматизация остановлена) — только для обычной цепочки дожима.
@@ -189,10 +195,10 @@ async function processOneTouch(
     }
   }
 
-  // #21: для chain-сообщений (first_msg_2/first_msg_3) если кандидат уже
-  // открыл демо — дальнейшие приветственные теряют смысл, отменяем.
+  // #21: для chain-сообщений (first_msg_2/first_msg_3) и off-hours-сообщения:
+  // если кандидат уже открыл демо — приветственное теряет смысл, отменяем.
   // Также проверяем rejected/hired стадии — туда тоже не шлём.
-  if (isChainStep) {
+  if (isChainStep || isOffHoursFirst) {
     const [cand] = await db
       .select({ stage: candidates.stage, demoOpenedAt: candidates.demoOpenedAt, autoStopped: candidates.autoProcessingStopped })
       .from(candidates)
@@ -256,8 +262,10 @@ async function processOneTouch(
 
   // Проверка расписания: если сейчас вне окна — оставляем pending,
   // следующий cron в рабочее время подберёт. НЕ помечаем как failed.
+  // Исключение: off-hours-сообщение (isOffHoursFirst) специально шлётся вне
+  // рабочего окна — для него проверку расписания пропускаем.
   const check = canSendNow(vacancy, now)
-  if (!check.allowed) {
+  if (!check.allowed && !isOffHoursFirst) {
     return { outcome: "skipped", reason: check.reason ?? "off_hours" }
   }
 

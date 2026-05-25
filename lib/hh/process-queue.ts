@@ -180,17 +180,36 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
     const localVac = localVacancies.find(v => v.hhVacancyId === resp.hhVacancyId) || null
 
     // Проверка расписания — для cron'а: если нерабочее время / выходной /
-    // праздник — оставляем status='response', следующий cron подберёт.
+    // праздник — обычно оставляем status='response', следующий cron подберёт.
+    //
+    // Исключение (off-hours soft mode): если у вакансии включён альтернативный
+    // текст Сообщения 1 для нерабочего времени (firstMessageOffHoursEnabled) и
+    // он непустой — НЕ откладываем. Создаём кандидата и шлём ОДНО мягкое
+    // подтверждение вместо демо-приглашения и Сообщений 2/3, без авто-отказов.
+    // HR работает с кандидатом утром. Для вакансий с AI чат-ботом оставляем
+    // прежнее поведение (defer) — чат-бот сам ведёт диалог.
+    let offHoursSoftMode = false
     if (respectWorkingHours && localVac) {
       const check = canSendNow(localVac)
       if (!check.allowed) {
-        deferredOffHours++
-        results.push({
-          id:     resp.hhResponseId,
-          name:   resp.candidateName,
-          action: `deferred_${check.reason ?? "off_hours"}`,
-        })
-        continue
+        const offText = typeof localVac.firstMessageOffHoursText === "string"
+          ? localVac.firstMessageOffHoursText.trim()
+          : ""
+        if (
+          localVac.firstMessageOffHoursEnabled === true &&
+          offText.length > 0 &&
+          localVac.aiChatbotEnabled !== true
+        ) {
+          offHoursSoftMode = true
+        } else {
+          deferredOffHours++
+          results.push({
+            id:     resp.hhResponseId,
+            name:   resp.candidateName,
+            action: `deferred_${check.reason ?? "off_hours"}`,
+          })
+          continue
+        }
       }
     }
 
@@ -454,7 +473,8 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
       // явное HR-правило «не из Москвы / не моложе 18». Если фактор сработал —
       // далее обработка кандидата идёт по ветке rejected (см. блок ниже).
       let stopFactorMatch: StopFactorMatch | null = null
-      if (candidateId && localVac) {
+      // Off-hours soft mode: не применяем стоп-факторы ночью (никаких авто-отказов).
+      if (candidateId && localVac && !offHoursSoftMode) {
         const factors = (localVac as { stopFactorsJson?: VacancyStopFactors | null }).stopFactorsJson
         if (factors && Object.keys(factors).length > 0) {
           // hh-резюме отдаёт age напрямую или только birth_date. Берём оба
@@ -483,7 +503,7 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
       // приёме отклика. Если кандидат уже оценён ранее (resume_score IS NOT
       // NULL) — пропускаем, чтобы не тратить токены повторно. Полный AI-скор
       // (aiScore) считается отдельно после завершения демо.
-      if (candidateId && localVac && !stopFactorMatch) {
+      if (candidateId && localVac && !stopFactorMatch && !offHoursSoftMode) {
         try {
           const [scoreRow] = await db
             .select({ resumeScore: candidates.resumeScore })
@@ -758,6 +778,30 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
       // в "rejected" с отправленным отказом, либо помечен ручным разбором.
       if (!belowThreshold && !stopFactorMatch) {
 
+      if (offHoursSoftMode && candidateId && localVac) {
+        // Off-hours: вместо демо-приглашения и серии Сообщений 2/3 планируем
+        // одно мягкое подтверждение через follow_up_messages
+        // (branch=first_msg_offhours) с задержкой. Cron /api/cron/follow-up
+        // отправит его даже вне рабочего окна. Демо/дожим/скоринг — НЕ запускаем,
+        // hh_response помечаем 'invited' (из очереди уходит), HR работает утром.
+        try {
+          const { scheduleOffHoursFirstMessage } = await import("@/lib/messaging/first-messages-chain")
+          await scheduleOffHoursFirstMessage({
+            candidateId,
+            vacancyId:    localVac.id,
+            text:         typeof localVac.firstMessageOffHoursText === "string" ? localVac.firstMessageOffHoursText : "",
+            delaySeconds: typeof localVac.firstMessageOffHoursDelaySeconds === "number" ? localVac.firstMessageOffHoursDelaySeconds : 15,
+          })
+        } catch (offErr) {
+          console.error("[PQ] off-hours soft message schedule failed:",
+            offErr instanceof Error ? offErr.message : offErr)
+        }
+        await db.update(hhResponses)
+          .set({ status: "invited", localCandidateId: candidateId })
+          .where(eq(hhResponses.id, resp.id))
+        results.push({ id: resp.hhResponseId, name: resp.candidateName, action: "off_hours_soft_message" })
+      } else {
+
       // Проверяем — отправляли ли работодателю уже что-то по этому отклику.
       let previouslyInvited = false
       try {
@@ -951,6 +995,7 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
 
       invitedCount++
       results.push({ id: resp.hhResponseId, name: resp.candidateName, action: "invited" })
+      } // конец else (обычный invite-путь; off-hours soft mode обработан выше)
       } // конец if (!belowThreshold && !stopFactorMatch) — отказ/keep_new/стоп-фактор обработан выше отдельной веткой
     } catch (err: unknown) {
       console.error("[PQ] FAIL", resp.candidateName, err instanceof Error ? err.message : err)
