@@ -474,7 +474,9 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
       // далее обработка кандидата идёт по ветке rejected (см. блок ниже).
       let stopFactorMatch: StopFactorMatch | null = null
       // Off-hours soft mode: не применяем стоп-факторы ночью (никаких авто-отказов).
-      if (candidateId && localVac && !offHoursSoftMode) {
+      // Funnel-флаг stopFactorsEnabled: только явный false выключает блок
+      // (undefined/отсутствует = включено — обратная совместимость).
+      if (candidateId && localVac && !offHoursSoftMode && aiSettings.stopFactorsEnabled !== false) {
         const factors = (localVac as { stopFactorsJson?: VacancyStopFactors | null }).stopFactorsJson
         if (factors && Object.keys(factors).length > 0) {
           // hh-резюме отдаёт age напрямую или только birth_date. Берём оба

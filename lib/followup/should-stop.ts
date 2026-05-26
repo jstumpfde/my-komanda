@@ -93,11 +93,16 @@ export async function shouldStopFollowUp(
     let vacancyStopWords: string[] | null = null
     try {
       const [vac] = await db
-        .select({ stopWordsJson: vacancies.stopWordsJson })
+        .select({ stopWordsJson: vacancies.stopWordsJson, aiProcessSettings: vacancies.aiProcessSettings })
         .from(vacancies)
         .where(eq(vacancies.id, candidate.vacancyId))
         .limit(1)
-      if (Array.isArray(vac?.stopWordsJson) && vac.stopWordsJson.length > 0) {
+      // Funnel-флаг stop_words_chat: только явный false отключает КАСТОМНЫЙ
+      // список стоп-слов вакансии (undefined/отсутствует = включено).
+      // Жёстко закодированный baseline matchStopWord НЕ отключаем — это
+      // защита от нежелательного дожима (инцидент 04.05.2026).
+      const funnelFlag = (vac?.aiProcessSettings as { stopWordsChatEnabled?: boolean } | null)?.stopWordsChatEnabled
+      if (funnelFlag !== false && Array.isArray(vac?.stopWordsJson) && vac.stopWordsJson.length > 0) {
         vacancyStopWords = vac.stopWordsJson.filter((s): s is string => typeof s === "string")
       }
     } catch { /* silent — fallback ниже */ }
