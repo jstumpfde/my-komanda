@@ -1,9 +1,9 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Plus, Eye, Pencil, Trash2, Loader2, Copy, BookOpen, FileText, Search } from "lucide-react"
+import { Plus, Eye, Pencil, Trash2, Loader2, Copy, BookOpen, FileText, Search, Puzzle, ListChecks } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
@@ -43,12 +43,34 @@ interface QuestionnaireTemplate {
   usageCount: number
 }
 
+/** Типы материалов, которые реально хранятся в demo_templates (length-based).
+ *  Анкеты — отдельная (мок) сущность, в этот тип не входят. */
+type CreatableType = "demo" | "block" | "test"
+
 // ─── Constants ──────────────────────────────────────────────────────────────
 
 const TYPE_BADGE: Record<string, { label: string; cls: string }> = {
   candidate: { label: "Кандидат", cls: "bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-400" },
   client: { label: "Заказчик", cls: "bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400" },
   post_demo: { label: "После демо", cls: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400" },
+}
+
+// Копирайт пустого состояния + диалога создания по типу материала.
+const TYPE_COPY: Record<CreatableType, {
+  emoji: string
+  plural: string          // «Нет {plural}»
+  createBtn: string       // кнопка в empty-state / option в диалоге
+  dialogDesc: string      // подпись опции в диалоге «Что создать?»
+}> = {
+  demo:  { emoji: "📖", plural: "демонстраций", createBtn: "Создать первую демонстрацию", dialogDesc: "Полное демо вакансии" },
+  block: { emoji: "🧩", plural: "блоков",       createBtn: "Создать первый блок",          dialogDesc: "Переиспользуемый блок («О компании» и т.п.)" },
+  test:  { emoji: "✅", plural: "тестов",        createBtn: "Создать первый тест",           dialogDesc: "Тестовое задание для кандидата" },
+}
+
+const DIALOG_TITLE: Record<CreatableType, string> = {
+  demo: "Демонстрация",
+  block: "Блок",
+  test: "Тест",
 }
 
 // ─── Mock questionnaire data ────────────────────────────────────────────────
@@ -60,6 +82,101 @@ const MOCK_QUESTIONNAIRES: QuestionnaireTemplate[] = [
   { id: "q4", name: "Опрос после демонстрации", type: "post_demo", questionsCount: 8, requiredCount: 5, createdAt: "2026-04-09T10:00:00Z", usageCount: 4 },
 ]
 
+// ─── Helpers ──────────────────────────────────────────────────────────────
+
+function formatDate(d: string) {
+  if (!d) return "—"
+  return new Date(d).toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric" })
+}
+
+// ─── Empty state (переиспользуемый) ─────────────────────────────────────────
+
+function EmptyMaterialsState({ type, onCreate }: { type: CreatableType; onCreate: () => void }) {
+  const Icon = type === "block" ? Puzzle : type === "test" ? ListChecks : BookOpen
+  const copy = TYPE_COPY[type]
+  return (
+    <div className="flex flex-col items-center justify-center py-12 text-center px-4">
+      <Icon className="h-10 w-10 text-muted-foreground/30 mb-3" />
+      <p className="text-sm text-muted-foreground mb-1">Нет {copy.plural}</p>
+      <p className="text-xs text-muted-foreground/70 mb-3 max-w-xs">
+        Создайте {copy.createBtn.replace(/^Создать /, "").toLowerCase()} для использования в вакансиях
+      </p>
+      <Button size="sm" variant="outline" onClick={onCreate}>
+        <Plus className="h-3.5 w-3.5 mr-1" />{copy.createBtn}
+      </Button>
+    </div>
+  )
+}
+
+// ─── Materials table (демо / блоки / тесты — одинаковая структура) ──────────
+
+function MaterialsTable({ rows, onDelete }: { rows: TemplateData[]; onDelete: (id: string) => void }) {
+  return (
+    <div className="overflow-auto" style={{ maxHeight: "60vh" }}>
+      <table className="w-full">
+        <thead className="bg-muted/50 border-b border-t border-border sticky top-0">
+          <tr>
+            <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-2.5">Название</th>
+            <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-2.5 w-[100px]">Тип</th>
+            <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-2.5 w-[160px]">Должность</th>
+            <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-2.5 w-[70px]">Блоков</th>
+            <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-2.5 w-[110px]">Создан</th>
+            <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-2.5 w-[110px]">Действия</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((t) => {
+            const lengthInfo = LENGTH_LABELS[t.length as keyof typeof LENGTH_LABELS]
+            const nicheInfo = NICHE_LABELS[t.niche as keyof typeof NICHE_LABELS]
+            const mt = MATERIAL_TYPE_LABELS[getMaterialType(t.length)]
+            const sectionsCount = Array.isArray(t.sections) ? t.sections.length : 0
+            const firstEmoji = Array.isArray(t.sections) && t.sections.length > 0
+              ? (t.sections[0] as { emoji?: string })?.emoji || "📄" : "📄"
+            return (
+              <tr key={t.id} className="border-b border-border/50 hover:bg-muted/50 transition-colors group">
+                <td className="px-4 py-2.5">
+                  <Link href={`/hr/library/create/editor?id=${t.id}`} className="flex items-center gap-2 min-w-0">
+                    <span className="text-base shrink-0">{firstEmoji}</span>
+                    <span className="text-sm font-medium text-foreground group-hover:text-primary transition-colors truncate">{t.name}</span>
+                    {t.isSystem && <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 shrink-0">Системный</Badge>}
+                  </Link>
+                </td>
+                <td className="px-4 py-2.5">
+                  <div className="flex flex-col items-start gap-1">
+                    <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium", mt.cls)}>{mt.label}</span>
+                    {lengthInfo?.label && <span className="text-[10px] text-muted-foreground">{lengthInfo.label}</span>}
+                  </div>
+                </td>
+                <td className="px-4 py-2.5 text-sm text-muted-foreground truncate max-w-[160px]">{nicheInfo?.label || "—"}</td>
+                <td className="px-4 py-2.5 text-center text-sm text-muted-foreground">{sectionsCount}</td>
+                <td className="px-4 py-2.5 text-sm text-muted-foreground whitespace-nowrap">{formatDate(t.createdAt)}</td>
+                <td className="px-4 py-2.5">
+                  <div className="flex items-center gap-0.5 justify-end">
+                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0" asChild>
+                      <Link href={`/hr/library/preview/${t.id}`} target="_blank"><Eye className="h-3.5 w-3.5" /></Link>
+                    </Button>
+                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0" asChild>
+                      <Link href={`/hr/library/create/editor?id=${t.id}`}><Pencil className="h-3.5 w-3.5" /></Link>
+                    </Button>
+                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => toast.success("Шаблон скопирован")}>
+                      <Copy className="h-3.5 w-3.5" />
+                    </Button>
+                    {!t.isSystem && (
+                      <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive" onClick={() => onDelete(t.id)}>
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 // ─── Page ───────────────────────────────────────────────────────────────────
 
 export default function LibraryPage() {
@@ -69,25 +186,22 @@ export default function LibraryPage() {
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [questionnaires] = useState<QuestionnaireTemplate[]>(MOCK_QUESTIONNAIRES)
-  const [activeTab, setActiveTab] = useState<"demos" | "questionnaires">("demos")
+  const [activeTab, setActiveTab] = useState<"demos" | "blocks" | "questionnaires" | "tests">("demos")
   const [search, setSearch] = useState("")
   const [typeFilter, setTypeFilter] = useState<"all" | "candidate" | "client" | "post_demo">("all")
+  const [createOpen, setCreateOpen] = useState(false)
 
-  // Вкладка «Демонстрации» показывает только обычные демо. «Блок компании»
-  // (length='block', getMaterialType → 'block') — переиспользуемые кубики для
-  // генерации демо, в этой вкладке им не место (Этап 1). Свою вкладку «Блоки»
-  // получат на Этапе 2. Серверная генерация демо берёт блоки по niche
-  // напрямую (demo/generate), от этого UI-фильтра не зависит.
-  const visibleDemos = useMemo(
-    () => templates.filter(t => getMaterialType(t.length) !== "block"),
-    [templates],
-  )
+  // Тип материала выводится из length (см. getMaterialType). Анкеты — мок,
+  // отдельной вкладкой. Счётчики во вкладках считают весь список типа,
+  // поиск — только отображаемые строки.
+  const demoRows  = useMemo(() => templates.filter(t => getMaterialType(t.length) === "demo"),  [templates])
+  const blockRows = useMemo(() => templates.filter(t => getMaterialType(t.length) === "block"), [templates])
+  const testRows  = useMemo(() => templates.filter(t => getMaterialType(t.length) === "test"),  [templates])
 
-  const filteredTemplates = useMemo(() => {
+  const bySearch = useCallback((list: TemplateData[]) => {
     const q = search.trim().toLowerCase()
-    if (!q) return visibleDemos
-    return visibleDemos.filter(t => t.name.toLowerCase().includes(q))
-  }, [visibleDemos, search])
+    return q ? list.filter(t => t.name.toLowerCase().includes(q)) : list
+  }, [search])
 
   const filteredQuestionnaires = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -97,9 +211,12 @@ export default function LibraryPage() {
     )
   }, [questionnaires, search, typeFilter])
 
-  const handleCreate = () => {
-    if (activeTab === "demos") router.push("/hr/library/create")
-    else toast("Создание шаблонов анкет — в разработке")
+  // Демо ведём через богатый мастер (AI / документ / вручную). Блок и тест —
+  // структурно простые, открываем редактор напрямую с ?type=.
+  const startCreate = (kind: CreatableType) => {
+    setCreateOpen(false)
+    if (kind === "demo") router.push("/hr/library/create")
+    else router.push(`/hr/library/create/editor?type=${kind}`)
   }
 
   const fetchTemplates = () => {
@@ -134,9 +251,31 @@ export default function LibraryPage() {
     setDeleteId(null)
   }
 
-  const formatDate = (d: string) => {
-    if (!d) return "—"
-    return new Date(d).toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric" })
+  // Один и тот же рендер для вкладок демо/блоки/тесты.
+  const renderMaterialsTab = (kind: CreatableType, rows: TemplateData[]) => {
+    const shown = bySearch(rows)
+    return (
+      <Card>
+        <CardContent className="p-0">
+          {loading ? (
+            <div className="flex items-center justify-center py-12 gap-2 text-muted-foreground">
+              <Loader2 className="w-4 h-4 animate-spin" />Загрузка...
+            </div>
+          ) : shown.length === 0 ? (
+            search.trim() ? (
+              <div className="flex flex-col items-center justify-center py-12 text-center px-4">
+                <Search className="h-10 w-10 text-muted-foreground/30 mb-3" />
+                <p className="text-sm text-muted-foreground">Ничего не найдено</p>
+              </div>
+            ) : (
+              <EmptyMaterialsState type={kind} onCreate={() => startCreate(kind)} />
+            )
+          ) : (
+            <MaterialsTable rows={shown} onDelete={(id) => setDeleteId(id)} />
+          )}
+        </CardContent>
+      </Card>
+    )
   }
 
   return (
@@ -149,19 +288,27 @@ export default function LibraryPage() {
             {/* Header */}
             <div className="mb-6">
               <h1 className="text-2xl font-bold tracking-tight">Библиотека</h1>
-              <p className="text-sm text-muted-foreground mt-1">Шаблоны демонстраций и анкет</p>
+              <p className="text-sm text-muted-foreground mt-1">Шаблоны демонстраций, блоков, анкет и тестов</p>
             </div>
 
-            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "demos" | "questionnaires")}>
+            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)}>
               <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
                 <TabsList className="shrink-0">
                   <TabsTrigger value="demos" className="gap-1.5">
                     <BookOpen className="w-3.5 h-3.5" />Демонстрации
-                    <span className="ml-1 text-muted-foreground">({visibleDemos.length})</span>
+                    <span className="ml-1 text-muted-foreground">({demoRows.length})</span>
+                  </TabsTrigger>
+                  <TabsTrigger value="blocks" className="gap-1.5">
+                    <Puzzle className="w-3.5 h-3.5" />Блоки
+                    <span className="ml-1 text-muted-foreground">({blockRows.length})</span>
                   </TabsTrigger>
                   <TabsTrigger value="questionnaires" className="gap-1.5">
                     <FileText className="w-3.5 h-3.5" />Анкеты
                     <span className="ml-1 text-muted-foreground">({questionnaires.length})</span>
+                  </TabsTrigger>
+                  <TabsTrigger value="tests" className="gap-1.5">
+                    <ListChecks className="w-3.5 h-3.5" />Тесты
+                    <span className="ml-1 text-muted-foreground">({testRows.length})</span>
                   </TabsTrigger>
                 </TabsList>
                 <div className="flex items-center gap-2 ml-auto flex-1 justify-end min-w-0">
@@ -187,98 +334,15 @@ export default function LibraryPage() {
                       </SelectContent>
                     </Select>
                   )}
-                  <Button size="sm" className="gap-1.5 h-8 text-xs shrink-0" onClick={handleCreate}>
+                  <Button size="sm" className="gap-1.5 h-8 text-xs shrink-0" onClick={() => setCreateOpen(true)}>
                     <Plus className="h-3.5 w-3.5" />Создать шаблон
                   </Button>
                 </div>
               </div>
 
-              <TabsContent value="demos" className="mt-0">
-                <Card>
-                  <CardContent className="p-0">
-                    {loading ? (
-                      <div className="flex items-center justify-center py-12 gap-2 text-muted-foreground">
-                        <Loader2 className="w-4 h-4 animate-spin" />Загрузка...
-                      </div>
-                    ) : filteredTemplates.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center py-12 text-center px-4">
-                        <BookOpen className="h-10 w-10 text-muted-foreground/30 mb-3" />
-                        <p className="text-sm text-muted-foreground mb-2">
-                          {visibleDemos.length === 0 ? "Нет шаблонов демонстраций" : "Ничего не найдено"}
-                        </p>
-                        {visibleDemos.length === 0 && (
-                          <Button size="sm" variant="outline" asChild>
-                            <Link href="/hr/library/create"><Plus className="h-3.5 w-3.5 mr-1" />Создать первый</Link>
-                          </Button>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="overflow-auto" style={{ maxHeight: "60vh" }}>
-                        <table className="w-full">
-                          <thead className="bg-muted/50 border-b border-t border-border sticky top-0">
-                            <tr>
-                              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-2.5">Название</th>
-                              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-2.5 w-[100px]">Тип</th>
-                              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-2.5 w-[160px]">Должность</th>
-                              <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-2.5 w-[70px]">Блоков</th>
-                              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-2.5 w-[110px]">Создан</th>
-                              <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-2.5 w-[110px]">Действия</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {filteredTemplates.map((t) => {
-                              const lengthInfo = LENGTH_LABELS[t.length as keyof typeof LENGTH_LABELS]
-                              const nicheInfo = NICHE_LABELS[t.niche as keyof typeof NICHE_LABELS]
-                              const mt = MATERIAL_TYPE_LABELS[getMaterialType(t.length)]
-                              const sectionsCount = Array.isArray(t.sections) ? t.sections.length : 0
-                              const firstEmoji = Array.isArray(t.sections) && t.sections.length > 0
-                                ? (t.sections[0] as { emoji?: string })?.emoji || "📄" : "📄"
-                              return (
-                                <tr key={t.id} className="border-b border-border/50 hover:bg-muted/50 transition-colors group">
-                                  <td className="px-4 py-2.5">
-                                    <Link href={`/hr/library/create/editor?id=${t.id}`} className="flex items-center gap-2 min-w-0">
-                                      <span className="text-base shrink-0">{firstEmoji}</span>
-                                      <span className="text-sm font-medium text-foreground group-hover:text-primary transition-colors truncate">{t.name}</span>
-                                      {t.isSystem && <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 shrink-0">Системный</Badge>}
-                                    </Link>
-                                  </td>
-                                  <td className="px-4 py-2.5">
-                                    <div className="flex flex-col items-start gap-1">
-                                      <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium", mt.cls)}>{mt.label}</span>
-                                      {lengthInfo?.label && <span className="text-[10px] text-muted-foreground">{lengthInfo.label}</span>}
-                                    </div>
-                                  </td>
-                                  <td className="px-4 py-2.5 text-sm text-muted-foreground truncate max-w-[160px]">{nicheInfo?.label || "—"}</td>
-                                  <td className="px-4 py-2.5 text-center text-sm text-muted-foreground">{sectionsCount}</td>
-                                  <td className="px-4 py-2.5 text-sm text-muted-foreground whitespace-nowrap">{formatDate(t.createdAt)}</td>
-                                  <td className="px-4 py-2.5">
-                                    <div className="flex items-center gap-0.5 justify-end">
-                                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0" asChild>
-                                        <Link href={`/hr/library/preview/${t.id}`} target="_blank"><Eye className="h-3.5 w-3.5" /></Link>
-                                      </Button>
-                                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0" asChild>
-                                        <Link href={`/hr/library/create/editor?id=${t.id}`}><Pencil className="h-3.5 w-3.5" /></Link>
-                                      </Button>
-                                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => toast.success("Шаблон скопирован")}>
-                                        <Copy className="h-3.5 w-3.5" />
-                                      </Button>
-                                      {!t.isSystem && (
-                                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive" onClick={() => setDeleteId(t.id)}>
-                                          <Trash2 className="h-3.5 w-3.5" />
-                                        </Button>
-                                      )}
-                                    </div>
-                                  </td>
-                                </tr>
-                              )
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              </TabsContent>
+              <TabsContent value="demos" className="mt-0">{renderMaterialsTab("demo", demoRows)}</TabsContent>
+              <TabsContent value="blocks" className="mt-0">{renderMaterialsTab("block", blockRows)}</TabsContent>
+              <TabsContent value="tests" className="mt-0">{renderMaterialsTab("test", testRows)}</TabsContent>
 
               <TabsContent value="questionnaires" className="mt-0">
                 <Card>
@@ -350,6 +414,32 @@ export default function LibraryPage() {
           </div>
         </div>
       </SidebarInset>
+
+      {/* Create-type chooser */}
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Что создать?</DialogTitle>
+            <DialogDescription>Выберите тип материала для библиотеки</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            {(["demo", "block", "test"] as CreatableType[]).map((kind) => (
+              <button
+                key={kind}
+                type="button"
+                onClick={() => startCreate(kind)}
+                className="w-full flex items-start gap-3 rounded-lg border border-border p-3 text-left transition-colors hover:border-primary/50 hover:bg-muted/50"
+              >
+                <span className="text-2xl leading-none shrink-0">{TYPE_COPY[kind].emoji}</span>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold">{DIALOG_TITLE[kind]}</p>
+                  <p className="text-xs text-muted-foreground">{TYPE_COPY[kind].dialogDesc}</p>
+                </div>
+              </button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Delete confirmation */}
       <Dialog open={!!deleteId} onOpenChange={(open) => { if (!open) setDeleteId(null) }}>

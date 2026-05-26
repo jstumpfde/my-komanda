@@ -76,7 +76,9 @@ export const LENGTH_LABELS: Record<DemoLength, { label: string; emoji: string; t
 export type MaterialType = "demo" | "block" | "anketa" | "test"
 
 export function getMaterialType(length: string): MaterialType {
-  return length === "block" ? "block" : "demo"
+  if (length === "block") return "block"
+  if (length === "test") return "test"
+  return "demo"
 }
 
 export const MATERIAL_TYPE_LABELS: Record<MaterialType, { label: string; cls: string }> = {
