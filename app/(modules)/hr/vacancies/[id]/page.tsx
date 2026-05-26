@@ -38,7 +38,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Checkbox } from "@/components/ui/checkbox"
 import { Slider } from "@/components/ui/slider"
 import { Input } from "@/components/ui/input"
-import {Clock, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, MessageSquareText, Zap, Globe, AlertTriangle, TrendingUp, Filter, X, Link2, Copy, Save, Sparkles, Eye, Check, Loader2, Download, ExternalLink, ClipboardList, ChevronLeft, ChevronRight, ChevronDown, Users, Upload, RefreshCw, Bot, Workflow} from "lucide-react"
+import {Clock, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, MessageSquareText, Zap, Globe, AlertTriangle, TrendingUp, Filter, X, Link2, Copy, Save, Sparkles, Eye, Check, Loader2, Download, ExternalLink, ClipboardList, ChevronLeft, ChevronRight, ChevronDown, Users, Upload, RefreshCw, Bot, Workflow, ListChecks, FilePlus} from "lucide-react"
 import { AiChatbotSettings } from "@/components/vacancies/ai-chatbot-settings"
 import { VacancyStopFactorsSettings } from "@/components/vacancies/vacancy-stop-factors-settings"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -782,6 +782,10 @@ export default function VacancyPage() {
   const courseEditorRef = useRef<NotionEditorHandle>(null)
   const courseTabRef = useRef<CourseTabHandle>(null)
   const [courseEditorSaveStatus, setCourseEditorSaveStatus] = useState<"saved" | "saving">("saved")
+  // Этап 2.5: таб «Тест» — клон таба «Демонстрация» (CourseTab kind="test").
+  const testEditorRef = useRef<NotionEditorHandle>(null)
+  const testTabRef = useRef<CourseTabHandle>(null)
+  const [testEditorSaveStatus, setTestEditorSaveStatus] = useState<"saved" | "saving">("saved")
 
   // Anketa external save handle: AnketaTab вызывает registerHandle({save})
   // при mount, мы держим ссылку и зелёная кнопка «Сохранить» в шапке таба
@@ -2115,9 +2119,11 @@ export default function VacancyPage() {
                     { value: "analytics", icon: BarChart3, label: "Аналитика" },
                     { value: "anketa", icon: ClipboardList, label: "Анкета" },
                     { value: "course", icon: BookOpen, label: "Демонстрация" },
+                    { value: "test", icon: ListChecks, label: "Тест" },
                   ] : [
                     { value: "anketa", icon: ClipboardList, label: "Анкета" },
                     { value: "course", icon: BookOpen, label: "Демонстрация" },
+                    { value: "test", icon: ListChecks, label: "Тест" },
                     { value: "candidates", icon: Kanban, label: "Кандидаты" },
                     { value: "analytics", icon: BarChart3, label: "Аналитика" },
                   ]).map(tab => (
@@ -2247,14 +2253,61 @@ export default function VacancyPage() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="start">
-                        <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => courseTabRef.current?.openAiGenerate()}>
-                          <Sparkles className="w-3.5 h-3.5" />Сгенерировать с AI
+                        <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => courseTabRef.current?.resetBlank()}>
+                          <FilePlus className="w-3.5 h-3.5" />Создать с нуля
                         </DropdownMenuItem>
                         <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => courseEditorRef.current?.openLibrary()}>
                           <BookOpen className="w-3.5 h-3.5" />Из библиотеки
                         </DropdownMenuItem>
-                        <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => courseTabRef.current?.openFileUpload()}>
-                          <Upload className="w-3.5 h-3.5" />Загрузить файл
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                )}
+                {activeTab === "test" && (
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <div className="relative">
+                      <div className="flex items-center">
+                        <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8 rounded-r-none border-r-0" onClick={() => testEditorRef.current?.save()}>
+                          {testEditorSaveStatus === "saving" ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Check className="w-3.5 h-3.5" />
+                          )}
+                          Сохранить
+                        </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="outline" size="sm" className="h-8 px-2 rounded-l-none">
+                              <ChevronDown className="w-3 h-3 opacity-50" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="start">
+                            <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => testEditorRef.current?.openSaveTemplate()}>
+                              <Save className="w-3.5 h-3.5" />В библиотеку
+                            </DropdownMenuItem>
+                            <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => testEditorRef.current?.downloadTxt()}>
+                              <Download className="w-3.5 h-3.5" />Скачать
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                      <span className={cn("absolute left-1/2 -translate-x-1/2 top-full mt-0.5 text-[10px] leading-none whitespace-nowrap transition-colors", testEditorSaveStatus === "saving" ? "text-amber-500" : "text-muted-foreground/40")}>
+                        {testEditorSaveStatus === "saving" ? "Сохранение..." : "✓ Сохранено"}
+                      </span>
+                    </div>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8">
+                          <Sparkles className="w-3.5 h-3.5" />Создать из...
+                          <ChevronDown className="w-3 h-3 ml-0.5 opacity-50" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start">
+                        <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => testTabRef.current?.resetBlank()}>
+                          <FilePlus className="w-3.5 h-3.5" />Создать с нуля
+                        </DropdownMenuItem>
+                        <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => testEditorRef.current?.openLibrary()}>
+                          <BookOpen className="w-3.5 h-3.5" />Из библиотеки
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
@@ -2358,6 +2411,17 @@ export default function VacancyPage() {
                   editorRef={courseEditorRef}
                   tabRef={courseTabRef}
                   onSaveStatusChange={setCourseEditorSaveStatus}
+                />
+              </TabsContent>
+
+              <TabsContent value="test">
+                <CourseTab
+                  vacancyId={id}
+                  vacancyTitle={vacancyTitle}
+                  kind="test"
+                  editorRef={testEditorRef}
+                  tabRef={testTabRef}
+                  onSaveStatusChange={setTestEditorSaveStatus}
                 />
               </TabsContent>
 
@@ -3313,9 +3377,9 @@ export default function VacancyPage() {
             {/* ═══ Bottom tab navigation ══════════════════ */}
             {(() => {
               const tabOrder = status === "active"
-                ? ["candidates", "analytics", "course", "anketa", "settings"]
-                : ["anketa", "analytics", "candidates", "course", "settings"]
-              const tabLabels: Record<string, string> = { anketa: "Анкета", course: "Демонстрация", candidates: "Кандидаты", analytics: "Аналитика", settings: "Настройки" }
+                ? ["candidates", "analytics", "course", "test", "anketa", "settings"]
+                : ["anketa", "analytics", "candidates", "course", "test", "settings"]
+              const tabLabels: Record<string, string> = { anketa: "Анкета", course: "Демонстрация", test: "Тест", candidates: "Кандидаты", analytics: "Аналитика", settings: "Настройки" }
               const idx = tabOrder.indexOf(activeTab)
               const prevTab = idx > 0 ? tabOrder[idx - 1] : null
               const nextTab = idx < tabOrder.length - 1 ? tabOrder[idx + 1] : null

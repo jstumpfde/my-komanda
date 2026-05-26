@@ -571,6 +571,10 @@ export interface VacancyAiProcessSettings {
 export const demos = pgTable("demos", {
   id: uuid("id").primaryKey().defaultRandom(),
   vacancyId: uuid("vacancy_id").references(() => vacancies.id).notNull(),
+  // Этап 2.5: дискриминатор материала вакансии. 'demo' — демонстрация
+  // должности (таб «Демонстрация»), 'test' — тестовое задание (таб «Тест»).
+  // Одна запись на (vacancy_id, kind). Миграция 0142.
+  kind: text("kind").notNull().default("demo"), // 'demo' | 'test'
   title: text("title").notNull(),
   status: text("status").default("draft"), // 'draft' | 'published'
   lessonsJson: jsonb("lessons_json").notNull().default("[]"),

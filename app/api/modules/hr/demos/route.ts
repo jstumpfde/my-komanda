@@ -11,6 +11,9 @@ export async function GET(req: NextRequest) {
     const vacancyId = req.nextUrl.searchParams.get("vacancy_id")
     if (!vacancyId) return apiError("'vacancy_id' обязателен", 400)
 
+    // Этап 2.5: ?kind=demo|test (default 'demo' — обратная совместимость).
+    const kind = req.nextUrl.searchParams.get("kind") === "test" ? "test" : "demo"
+
     // Verify vacancy belongs to this company
     const [vacancy] = await db
       .select({ id: vacancies.id })
@@ -23,7 +26,7 @@ export async function GET(req: NextRequest) {
     const rows = await db
       .select()
       .from(demos)
-      .where(eq(demos.vacancyId, vacancyId))
+      .where(and(eq(demos.vacancyId, vacancyId), eq(demos.kind, kind)))
 
     return apiSuccess(rows)
   } catch (err) {
@@ -41,10 +44,14 @@ export async function POST(req: NextRequest) {
       vacancy_id?: unknown
       title?: unknown
       lessons_json?: unknown
+      kind?: unknown
     }
 
     const vacancyId = typeof body.vacancy_id === "string" ? body.vacancy_id : null
     if (!vacancyId) return apiError("'vacancy_id' обязателен", 400)
+
+    // Этап 2.5: 'test' разрешён, всё прочее → 'demo' (обратная совместимость).
+    const kind = body.kind === "test" ? "test" : "demo"
 
     const title = typeof body.title === "string" ? body.title.trim() : ""
     if (!title) return apiError("'title' обязателен", 400)
@@ -62,7 +69,7 @@ export async function POST(req: NextRequest) {
 
     const [demo] = await db
       .insert(demos)
-      .values({ vacancyId, title, lessonsJson })
+      .values({ vacancyId, title, lessonsJson, kind })
       .returning()
 
     return apiSuccess(demo, 201)
