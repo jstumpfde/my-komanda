@@ -592,6 +592,19 @@ export const demos = pgTable("demos", {
   updatedAt: timestamp("updated_at").defaultNow(),
 })
 
+// Ответы кандидатов на тестовое задание (публичная /test/[token]). Миграция 0144.
+// ai_score/ai_reasoning заполняются на Этапе 2 (AI-скоринг).
+export const testSubmissions = pgTable("test_submissions", {
+  id:          uuid("id").primaryKey().defaultRandom(),
+  candidateId: uuid("candidate_id").references(() => candidates.id, { onDelete: "cascade" }).notNull(),
+  demoId:      uuid("demo_id").references(() => demos.id, { onDelete: "set null" }),
+  answerText:  text("answer_text"),
+  fileUrl:     text("file_url"),
+  aiScore:     integer("ai_score"),
+  aiReasoning: text("ai_reasoning"),
+  submittedAt: timestamp("submitted_at").defaultNow(),
+})
+
 export interface PostDemoSettings {
   enabled?: boolean
   mode?: "auto" | "manual"
