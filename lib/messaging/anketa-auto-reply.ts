@@ -72,6 +72,7 @@ export async function scheduleAnketaAutoReply(args: {
     const [row] = await db
       .select({
         postDemoSettings:           demos.postDemoSettings,
+        aiProcessSettings:          vacancies.aiProcessSettings,
         scheduleEnabled:            vacancies.scheduleEnabled,
         scheduleStart:              vacancies.scheduleStart,
         scheduleEnd:                vacancies.scheduleEnd,
@@ -87,6 +88,13 @@ export async function scheduleAnketaAutoReply(args: {
       .limit(1)
 
     if (!row) return { scheduled: false, reason: "demo_not_found" }
+
+    // Funnel-флаг auto_reply_test_task: только явный false выключает блок
+    // (undefined/отсутствует = включено — обратная совместимость).
+    const funnelFlag = (row.aiProcessSettings as { testTaskAutoReplyEnabled?: boolean } | null)?.testTaskAutoReplyEnabled
+    if (funnelFlag === false) {
+      return { scheduled: false, reason: "funnel_disabled" }
+    }
 
     const settings = (row.postDemoSettings as PostDemoSettings | null) ?? {}
     const cfg = settings.anketaAutoReply

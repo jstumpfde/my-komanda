@@ -13,10 +13,20 @@ import { scoreCandidateV2 } from "@/lib/ai-score-candidate-v2"
 async function runAbScoring(candidateId: string, vacancyId: string): Promise<void> {
   try {
     const [vac] = await db
-      .select({ requirementsJson: vacancies.requirementsJson })
+      .select({
+        requirementsJson:  vacancies.requirementsJson,
+        aiProcessSettings: vacancies.aiProcessSettings,
+      })
       .from(vacancies)
       .where(eq(vacancies.id, vacancyId))
       .limit(1)
+
+    // Funnel-флаг ai_anketa_score: только явный false выключает авто-скрининг
+    // анкеты (undefined/отсутствует = включено — обратная совместимость).
+    // Ручная кнопка скоринга у HR (/api/vacancies/[id]/score-candidate) НЕ
+    // затрагивается — она работает всегда.
+    const funnelFlag = (vac?.aiProcessSettings as { aiAnketaScoreEnabled?: boolean } | null)?.aiAnketaScoreEnabled
+    if (funnelFlag === false) return
 
     const reqJson = (vac?.requirementsJson ?? {}) as VacancyRequirements
     const hasRequirements = (reqJson.must_have?.length ?? 0) > 0

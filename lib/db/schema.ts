@@ -566,6 +566,15 @@ export interface VacancyAiProcessSettings {
   inviteMessage?:    string
   reInviteMessage?:  string
   rejectMessage?:    string
+
+  // ── Funnel Builder soft-флаги (зеркалятся из funnel_config_json,
+  //    см. funnel-config/route.ts). undefined/отсутствует = включено
+  //    (обратная совместимость со старыми вакансиями). Только явный false
+  //    выключает соответствующий блок воронки на бэкенде. ──
+  stopFactorsEnabled?:       boolean
+  aiAnketaScoreEnabled?:     boolean
+  stopWordsChatEnabled?:     boolean
+  testTaskAutoReplyEnabled?: boolean
 }
 
 export const demos = pgTable("demos", {
