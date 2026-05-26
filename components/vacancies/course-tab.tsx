@@ -96,19 +96,27 @@ function splitTextIntoLessons(text: string, fileName: string): Lesson[] {
 export interface CourseTabHandle {
   openAiGenerate: () => void
   openFileUpload: () => void
+  /** Этап 2.5: сбросить содержимое к одному пустому уроку («Создать с нуля»). */
+  resetBlank: () => void
 }
 
 interface CourseTabProps {
   vacancyId: string
   vacancyTitle?: string
+  /** Этап 2.5: 'demo' (таб «Демонстрация», дефолт) | 'test' (таб «Тест»). */
+  kind?: "demo" | "test"
   editorRef?: React.Ref<NotionEditorHandle>
   tabRef?: React.Ref<CourseTabHandle>
   onSaveStatusChange?: (status: "saved" | "saving") => void
 }
 
 export const CourseTab = forwardRef<NotionEditorHandle, CourseTabProps>(
-  function CourseTab({ vacancyId, vacancyTitle, editorRef, tabRef, onSaveStatusChange }, _ref) {
-    const { demo, loading, error, saveStatus, createDemo, updateDemo } = useDemo(vacancyId)
+  function CourseTab({ vacancyId, vacancyTitle, kind = "demo", editorRef, tabRef, onSaveStatusChange }, _ref) {
+    const { demo, loading, error, saveStatus, createDemo, updateDemo } = useDemo(vacancyId, kind)
+    // Заголовок по умолчанию для новой записи отражает тип материала.
+    const defaultTitle = kind === "test"
+      ? (vacancyTitle ? `${vacancyTitle} — тест` : "Тестовое задание")
+      : (vacancyTitle || "Демонстрация должности")
     const [generating, setGenerating] = useState(false)
     const [genProgress, setGenProgress] = useState<{ current: number; total: number } | null>(null)
     const [aiDialogOpen, setAiDialogOpen] = useState(false)
@@ -137,9 +145,9 @@ export const CourseTab = forwardRef<NotionEditorHandle, CourseTabProps>(
         title: "Новый урок",
         blocks: [createBlock("text")],
       }
-      createDemo(vacancyTitle || "Демонстрация должности", [lesson])
+      createDemo(defaultTitle, [lesson])
         .catch(() => toast.error("Не удалось создать демонстрацию"))
-    }, [loading, demo, error, vacancyTitle, createDemo])
+    }, [loading, demo, error, defaultTitle, createDemo])
 
     // ═══ ГЕНЕРАЦИЯ БЛОК-ЗА-БЛОКОМ ═══
     const handleGenerateDemo = useCallback(async () => {
@@ -288,7 +296,18 @@ export const CourseTab = forwardRef<NotionEditorHandle, CourseTabProps>(
     useImperativeHandle(tabRef, () => ({
       openAiGenerate: () => setAiDialogOpen(true),
       openFileUpload: () => fileInputRef.current?.click(),
-    }), [])
+      // «Создать с нуля» — заменить содержимое одним пустым уроком.
+      resetBlank: () => {
+        const blank: Lesson = {
+          id: `les-${Date.now()}`,
+          emoji: "📄",
+          title: "Новый урок",
+          blocks: [createBlock("text")],
+        }
+        if (demo) updateDemo({ ...demo, lessons: [blank] })
+        else createDemo(defaultTitle, [blank]).catch(() => toast.error("Не удалось создать"))
+      },
+    }), [demo, updateDemo, createDemo, defaultTitle])
 
     // Loading state
     if (loading || (!demo && !error)) {

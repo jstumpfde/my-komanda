@@ -37,7 +37,7 @@ interface UseDemoResult {
   updateDemo: (updated: Demo) => void
 }
 
-export function useDemo(vacancyId: string | null): UseDemoResult {
+export function useDemo(vacancyId: string | null, kind: "demo" | "test" = "demo"): UseDemoResult {
   const [demo, setDemo] = useState<Demo | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -46,13 +46,13 @@ export function useDemo(vacancyId: string | null): UseDemoResult {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const latestDemoRef = useRef<Demo | null>(null)
 
-  // Load demo on mount
+  // Load demo on mount (kind разделяет демо/тест — Этап 2.5)
   useEffect(() => {
     if (!vacancyId) return
     setLoading(true)
     setError(null)
 
-    fetch(`/api/modules/hr/demos?vacancy_id=${encodeURIComponent(vacancyId)}`)
+    fetch(`/api/modules/hr/demos?vacancy_id=${encodeURIComponent(vacancyId)}&kind=${kind}`)
       .then(res => res.ok ? res.json() : Promise.reject(res))
       .then((json: { data?: ApiDemo[] }) => {
         const rows = json.data ?? (json as unknown as ApiDemo[])
@@ -65,7 +65,7 @@ export function useDemo(vacancyId: string | null): UseDemoResult {
       })
       .catch(() => setError("Не удалось загрузить демо"))
       .finally(() => setLoading(false))
-  }, [vacancyId])
+  }, [vacancyId, kind])
 
   const persistUpdate = useCallback(async (updated: Demo) => {
     setSaveStatus("saving")
@@ -106,7 +106,7 @@ export function useDemo(vacancyId: string | null): UseDemoResult {
       const res = await fetch("/api/modules/hr/demos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ vacancy_id: vacancyId, title, lessons_json: lessons }),
+        body: JSON.stringify({ vacancy_id: vacancyId, title, lessons_json: lessons, kind }),
       })
       if (!res.ok) throw new Error("create failed")
       const json = await res.json()
@@ -120,7 +120,7 @@ export function useDemo(vacancyId: string | null): UseDemoResult {
       setSaveStatus("error")
       return null
     }
-  }, [vacancyId])
+  }, [vacancyId, kind])
 
   // Flush pending changes: save immediately
   const flush = useCallback(() => {
@@ -163,4 +163,9 @@ export function useDemo(vacancyId: string | null): UseDemoResult {
   }, [persistUpdate])
 
   return { demo, loading, error, saveStatus, createDemo, updateDemo }
+}
+
+/** Этап 2.5: таб «Тест» — те же демо-записи в таблице demos, но kind='test'. */
+export function useTest(vacancyId: string | null): UseDemoResult {
+  return useDemo(vacancyId, "test")
 }
