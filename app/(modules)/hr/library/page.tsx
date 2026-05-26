@@ -17,7 +17,7 @@ import {
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
-import { LENGTH_LABELS, NICHE_LABELS } from "@/lib/demo-types"
+import { LENGTH_LABELS, NICHE_LABELS, MATERIAL_TYPE_LABELS, getMaterialType } from "@/lib/demo-types"
 import { toast } from "sonner"
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -51,12 +51,6 @@ const TYPE_BADGE: Record<string, { label: string; cls: string }> = {
   post_demo: { label: "После демо", cls: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400" },
 }
 
-const LENGTH_BADGE: Record<string, { label: string; cls: string }> = {
-  short: { label: "Короткая", cls: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400" },
-  medium: { label: "Средняя", cls: "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400" },
-  long: { label: "Длинная", cls: "bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400" },
-}
-
 // ─── Mock questionnaire data ────────────────────────────────────────────────
 
 const MOCK_QUESTIONNAIRES: QuestionnaireTemplate[] = [
@@ -79,11 +73,21 @@ export default function LibraryPage() {
   const [search, setSearch] = useState("")
   const [typeFilter, setTypeFilter] = useState<"all" | "candidate" | "client" | "post_demo">("all")
 
+  // Вкладка «Демонстрации» показывает только обычные демо. «Блок компании»
+  // (length='block', getMaterialType → 'block') — переиспользуемые кубики для
+  // генерации демо, в этой вкладке им не место (Этап 1). Свою вкладку «Блоки»
+  // получат на Этапе 2. Серверная генерация демо берёт блоки по niche
+  // напрямую (demo/generate), от этого UI-фильтра не зависит.
+  const visibleDemos = useMemo(
+    () => templates.filter(t => getMaterialType(t.length) !== "block"),
+    [templates],
+  )
+
   const filteredTemplates = useMemo(() => {
     const q = search.trim().toLowerCase()
-    if (!q) return templates
-    return templates.filter(t => t.name.toLowerCase().includes(q))
-  }, [templates, search])
+    if (!q) return visibleDemos
+    return visibleDemos.filter(t => t.name.toLowerCase().includes(q))
+  }, [visibleDemos, search])
 
   const filteredQuestionnaires = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -153,7 +157,7 @@ export default function LibraryPage() {
                 <TabsList className="shrink-0">
                   <TabsTrigger value="demos" className="gap-1.5">
                     <BookOpen className="w-3.5 h-3.5" />Демонстрации
-                    <span className="ml-1 text-muted-foreground">({templates.length})</span>
+                    <span className="ml-1 text-muted-foreground">({visibleDemos.length})</span>
                   </TabsTrigger>
                   <TabsTrigger value="questionnaires" className="gap-1.5">
                     <FileText className="w-3.5 h-3.5" />Анкеты
@@ -200,9 +204,9 @@ export default function LibraryPage() {
                       <div className="flex flex-col items-center justify-center py-12 text-center px-4">
                         <BookOpen className="h-10 w-10 text-muted-foreground/30 mb-3" />
                         <p className="text-sm text-muted-foreground mb-2">
-                          {templates.length === 0 ? "Нет шаблонов демонстраций" : "Ничего не найдено"}
+                          {visibleDemos.length === 0 ? "Нет шаблонов демонстраций" : "Ничего не найдено"}
                         </p>
-                        {templates.length === 0 && (
+                        {visibleDemos.length === 0 && (
                           <Button size="sm" variant="outline" asChild>
                             <Link href="/hr/library/create"><Plus className="h-3.5 w-3.5 mr-1" />Создать первый</Link>
                           </Button>
@@ -216,7 +220,6 @@ export default function LibraryPage() {
                               <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-2.5">Название</th>
                               <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-2.5 w-[100px]">Тип</th>
                               <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-2.5 w-[160px]">Должность</th>
-                              <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-2.5 w-[100px]">Длительность</th>
                               <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-2.5 w-[70px]">Блоков</th>
                               <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-2.5 w-[110px]">Создан</th>
                               <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-2.5 w-[110px]">Действия</th>
@@ -226,7 +229,7 @@ export default function LibraryPage() {
                             {filteredTemplates.map((t) => {
                               const lengthInfo = LENGTH_LABELS[t.length as keyof typeof LENGTH_LABELS]
                               const nicheInfo = NICHE_LABELS[t.niche as keyof typeof NICHE_LABELS]
-                              const lb = LENGTH_BADGE[t.length]
+                              const mt = MATERIAL_TYPE_LABELS[getMaterialType(t.length)]
                               const sectionsCount = Array.isArray(t.sections) ? t.sections.length : 0
                               const firstEmoji = Array.isArray(t.sections) && t.sections.length > 0
                                 ? (t.sections[0] as { emoji?: string })?.emoji || "📄" : "📄"
@@ -240,10 +243,12 @@ export default function LibraryPage() {
                                     </Link>
                                   </td>
                                   <td className="px-4 py-2.5">
-                                    {lb && <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium", lb.cls)}>{lb.label}</span>}
+                                    <div className="flex flex-col items-start gap-1">
+                                      <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium", mt.cls)}>{mt.label}</span>
+                                      {lengthInfo?.label && <span className="text-[10px] text-muted-foreground">{lengthInfo.label}</span>}
+                                    </div>
                                   </td>
                                   <td className="px-4 py-2.5 text-sm text-muted-foreground truncate max-w-[160px]">{nicheInfo?.label || "—"}</td>
-                                  <td className="px-4 py-2.5 text-center text-sm text-muted-foreground">{lengthInfo?.label || "—"}</td>
                                   <td className="px-4 py-2.5 text-center text-sm text-muted-foreground">{sectionsCount}</td>
                                   <td className="px-4 py-2.5 text-sm text-muted-foreground whitespace-nowrap">{formatDate(t.createdAt)}</td>
                                   <td className="px-4 py-2.5">
