@@ -1685,6 +1685,9 @@ export const demoTemplates = pgTable("demo_templates", {
   validUntil:    timestamp("valid_until"),
   // RAG: см. knowledgeArticles.embedding
   embedding:     jsonb("embedding"),
+  // Этап 3: корзина. NULL — активный; не-NULL — в корзине, cron trash-cleanup
+  // удалит навсегда через companies.trash_retention_days. Миграция 0143.
+  deletedAt:     timestamp("deleted_at"),
   createdAt:     timestamp("created_at").defaultNow(),
   updatedAt:     timestamp("updated_at").defaultNow(),
 })

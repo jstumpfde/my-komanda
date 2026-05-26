@@ -3,12 +3,13 @@
 import { useState, useEffect, useMemo, useCallback } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Plus, Eye, Pencil, Trash2, Loader2, Copy, BookOpen, FileText, Search, Puzzle, ListChecks } from "lucide-react"
+import { Plus, Eye, Pencil, Trash2, Loader2, Copy, BookOpen, FileText, Search, Puzzle, ListChecks, RotateCcw, Trash, AlertTriangle } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
@@ -29,6 +30,7 @@ interface TemplateData {
   length: string
   isSystem: boolean
   sections: unknown[]
+  deletedAt: string | null
   createdAt: string
   updatedAt: string
 }
@@ -184,6 +186,126 @@ function MaterialsTable({ rows, onDelete, onDuplicate }: {
   )
 }
 
+// ─── Trash (корзина) ─────────────────────────────────────────────────────
+
+// Дней до автоудаления = retention − прошедшие дни с deleted_at (Этап 3).
+function trashDaysLeft(deletedAt: string | null, retentionDays: number): number {
+  if (!deletedAt) return retentionDays
+  const elapsedDays = Math.floor((Date.now() - new Date(deletedAt).getTime()) / 86_400_000)
+  return Math.max(0, retentionDays - elapsedDays)
+}
+
+function TrashTable({ rows, retentionDays, onRestore, onPermanent }: {
+  rows: TemplateData[]
+  retentionDays: number
+  onRestore: (t: TemplateData) => void
+  onPermanent: (t: TemplateData) => void
+}) {
+  return (
+    <div className="overflow-auto" style={{ maxHeight: "60vh" }}>
+      <table className="w-full">
+        <thead className="bg-muted/50 border-b border-t border-border sticky top-0">
+          <tr>
+            <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-2.5">Название</th>
+            <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-2.5 w-[100px]">Тип</th>
+            <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-2.5 w-[120px]">Удалён</th>
+            <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-2.5 w-[140px]">До удаления</th>
+            <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-2.5 w-[150px]">Действия</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((t) => {
+            const mt = MATERIAL_TYPE_LABELS[getMaterialType(t.length)]
+            const daysLeft = trashDaysLeft(t.deletedAt, retentionDays)
+            return (
+              <tr key={t.id} className="border-b border-border/50 hover:bg-muted/50 transition-colors">
+                <td className="px-4 py-2.5 text-sm font-medium text-foreground truncate max-w-[280px]">{t.name}</td>
+                <td className="px-4 py-2.5">
+                  <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium", mt.cls)}>{mt.label}</span>
+                </td>
+                <td className="px-4 py-2.5 text-sm text-muted-foreground whitespace-nowrap">{formatDate(t.deletedAt ?? "")}</td>
+                <td className="px-4 py-2.5">
+                  <span className={cn(
+                    "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium",
+                    daysLeft <= 1 ? "bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400" : "bg-muted text-muted-foreground",
+                  )}>
+                    {daysLeft === 0 ? "сегодня" : `${daysLeft} дн.`}
+                  </span>
+                </td>
+                <td className="px-4 py-2.5">
+                  <div className="flex items-center gap-1 justify-end">
+                    <Button size="sm" variant="ghost" className="h-7 gap-1 px-2 text-xs" title="Восстановить" onClick={() => onRestore(t)}>
+                      <RotateCcw className="h-3.5 w-3.5" />Восстановить
+                    </Button>
+                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive" title="Удалить навсегда" onClick={() => onPermanent(t)}>
+                      <Trash className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+// Лёгкий аналог vacancy PermanentDeleteDialog — для шаблонов (Этап 3).
+// Не трогаем vacancy-флоу; подтверждение через ввод точного названия.
+function PermanentDeleteTemplateDialog({ template, open, onOpenChange, onDeleted }: {
+  template: TemplateData | null
+  open: boolean
+  onOpenChange: (v: boolean) => void
+  onDeleted: () => void
+}) {
+  const [typed, setTyped] = useState("")
+  const [deleting, setDeleting] = useState(false)
+  useEffect(() => { if (!open) { setTyped(""); setDeleting(false) } }, [open])
+
+  const name = template?.name ?? ""
+  const confirmed = typed.trim() === name.trim() && name.trim().length > 0
+
+  const handleDelete = async () => {
+    if (!template || !confirmed) return
+    setDeleting(true)
+    try {
+      const res = await fetch(`/api/demo-templates/${template.id}/permanent`, { method: "DELETE" })
+      if (!res.ok) throw new Error()
+      toast.success("Шаблон удалён навсегда")
+      onOpenChange(false)
+      onDeleted()
+    } catch {
+      toast.error("Не удалось удалить")
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-destructive">
+            <AlertTriangle className="size-4" />Удалить навсегда?
+          </DialogTitle>
+          <DialogDescription>Шаблон «{name}» будет удалён без возможности восстановления.</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-1.5">
+          <Label htmlFor="confirm-tmpl" className="text-xs">Введите название шаблона для подтверждения:</Label>
+          <Input id="confirm-tmpl" value={typed} onChange={(e) => setTyped(e.target.value)} placeholder={name} autoComplete="off" />
+        </div>
+        <div className="flex justify-end gap-2 mt-2">
+          <Button variant="outline" size="sm" onClick={() => onOpenChange(false)} disabled={deleting}>Отмена</Button>
+          <Button variant="destructive" size="sm" onClick={handleDelete} disabled={!confirmed || deleting} className="gap-1.5">
+            {deleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash className="w-3.5 h-3.5" />}Удалить навсегда
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 // ─── Page ───────────────────────────────────────────────────────────────────
 
 export default function LibraryPage() {
@@ -193,10 +315,15 @@ export default function LibraryPage() {
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [questionnaires] = useState<QuestionnaireTemplate[]>(MOCK_QUESTIONNAIRES)
-  const [activeTab, setActiveTab] = useState<"demos" | "blocks" | "questionnaires" | "tests">("demos")
+  const [activeTab, setActiveTab] = useState<"demos" | "blocks" | "questionnaires" | "tests" | "trash">("demos")
   const [search, setSearch] = useState("")
   const [typeFilter, setTypeFilter] = useState<"all" | "candidate" | "client" | "post_demo">("all")
   const [createOpen, setCreateOpen] = useState(false)
+  // Этап 3: корзина. Удалённые шаблоны грузятся отдельным запросом (?trashed=true),
+  // retentionDays — для бейджа «дней до удаления» и текста confirm.
+  const [trashedRows, setTrashedRows] = useState<TemplateData[]>([])
+  const [retentionDays, setRetentionDays] = useState(30)
+  const [permanentTarget, setPermanentTarget] = useState<TemplateData | null>(null)
 
   // Тип материала выводится из length (см. getMaterialType). Анкеты — мок,
   // отдельной вкладкой. Счётчики во вкладках считают весь список типа,
@@ -238,7 +365,24 @@ export default function LibraryPage() {
       .catch(() => setLoading(false))
   }
 
-  useEffect(() => { fetchTemplates() }, [])
+  const fetchTrashed = () => {
+    fetch("/api/demo-templates?trashed=true")
+      .then((r) => r.json())
+      .then((data) => {
+        const rows = data.data ?? data
+        setTrashedRows(Array.isArray(rows) ? rows : [])
+      })
+      .catch(() => { /* корзина просто будет пустой */ })
+  }
+
+  useEffect(() => {
+    fetchTemplates()
+    fetchTrashed()
+    fetch("/api/modules/hr/company/trash-retention")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { const days = (d?.data ?? d)?.retentionDays; if (typeof days === "number") setRetentionDays(days) })
+      .catch(() => { /* дефолт 30 */ })
+  }, [])
 
   const handleDelete = async () => {
     if (!deleteId) return
@@ -246,16 +390,31 @@ export default function LibraryPage() {
     try {
       const res = await fetch(`/api/demo-templates/${deleteId}`, { method: "DELETE" })
       if (res.ok) {
-        toast.success("Шаблон удалён")
+        toast.success("Шаблон перемещён в корзину")
         setTemplates((prev) => prev.filter((t) => t.id !== deleteId))
+        fetchTrashed()
       } else {
-        toast.error("Ошибка удаления")
+        const body = await res.json().catch(() => ({}))
+        toast.error(body.error || "Ошибка удаления")
       }
     } catch {
       toast.error("Ошибка сети")
     }
     setDeleting(false)
     setDeleteId(null)
+  }
+
+  // Этап 3: восстановить из корзины.
+  const handleRestore = async (t: TemplateData) => {
+    try {
+      const res = await fetch(`/api/demo-templates/${t.id}/restore`, { method: "POST" })
+      if (!res.ok) { toast.error("Не удалось восстановить"); return }
+      toast.success("Шаблон восстановлен")
+      setTrashedRows((prev) => prev.filter((x) => x.id !== t.id))
+      fetchTemplates()
+    } catch {
+      toast.error("Ошибка сети")
+    }
   }
 
   // Дублирование: POST /api/demo-templates всегда создаёт пользовательский
@@ -340,6 +499,10 @@ export default function LibraryPage() {
                     <Puzzle className="w-3.5 h-3.5" />Блоки
                     <span className="ml-1 text-muted-foreground">({blockRows.length})</span>
                   </TabsTrigger>
+                  <TabsTrigger value="trash" className="gap-1.5">
+                    <Trash2 className="w-3.5 h-3.5" />Корзина
+                    <span className="ml-1 text-muted-foreground">({trashedRows.length})</span>
+                  </TabsTrigger>
                 </TabsList>
                 <div className="flex items-center gap-2 ml-auto flex-1 justify-end min-w-0">
                   <div className="relative flex-1 max-w-xs min-w-[160px]">
@@ -373,6 +536,29 @@ export default function LibraryPage() {
               <TabsContent value="demos" className="mt-0">{renderMaterialsTab("demo", demoRows)}</TabsContent>
               <TabsContent value="blocks" className="mt-0">{renderMaterialsTab("block", blockRows)}</TabsContent>
               <TabsContent value="tests" className="mt-0">{renderMaterialsTab("test", testRows)}</TabsContent>
+
+              <TabsContent value="trash" className="mt-0">
+                <Card>
+                  <CardContent className="p-0">
+                    {trashedRows.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-12 text-center px-4">
+                        <Trash2 className="h-10 w-10 text-muted-foreground/30 mb-3" />
+                        <p className="text-sm text-muted-foreground">Корзина пуста</p>
+                        <p className="text-xs text-muted-foreground/70 mt-1">
+                          Удалённые шаблоны хранятся здесь и удаляются навсегда через {retentionDays} дн.
+                        </p>
+                      </div>
+                    ) : (
+                      <TrashTable
+                        rows={trashedRows}
+                        retentionDays={retentionDays}
+                        onRestore={handleRestore}
+                        onPermanent={(t) => setPermanentTarget(t)}
+                      />
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
 
               <TabsContent value="questionnaires" className="mt-0">
                 <Card>
@@ -476,7 +662,8 @@ export default function LibraryPage() {
         <DialogContent className="sm:max-w-sm">
           <DialogHeader><DialogTitle>Удалить шаблон?</DialogTitle></DialogHeader>
           <p className="text-sm text-muted-foreground">
-            Удалить шаблон «{templates.find(t => t.id === deleteId)?.name ?? ""}»? Это действие нельзя отменить.
+            Удалить шаблон «{templates.find(t => t.id === deleteId)?.name ?? ""}»? Он будет перемещён в корзину
+            и автоматически удалён через {retentionDays} дн.
           </p>
           <div className="flex justify-end gap-2 mt-2">
             <Button variant="outline" size="sm" onClick={() => setDeleteId(null)}>Отмена</Button>
@@ -487,6 +674,14 @@ export default function LibraryPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Permanent delete (из корзины) */}
+      <PermanentDeleteTemplateDialog
+        template={permanentTarget}
+        open={!!permanentTarget}
+        onOpenChange={(o) => { if (!o) setPermanentTarget(null) }}
+        onDeleted={() => { setPermanentTarget(null); fetchTrashed() }}
+      />
     </SidebarProvider>
   )
 }

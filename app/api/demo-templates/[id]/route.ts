@@ -83,14 +83,21 @@ export async function DELETE(
     const user = await requireCompany()
     const { id } = await params
 
+    // Этап 3: soft-delete (перенос в корзину). Системные шаблоны удалять нельзя.
+    const [existing] = await db
+      .select({ id: demoTemplates.id, isSystem: demoTemplates.isSystem, tenantId: demoTemplates.tenantId })
+      .from(demoTemplates)
+      .where(eq(demoTemplates.id, id))
+      .limit(1)
+
+    if (!existing) return apiError("Шаблон не найден", 404)
+    if (existing.isSystem) return apiError("Нельзя удалить системный шаблон", 400)
+    if (existing.tenantId !== user.companyId) return apiError("Нет доступа", 403)
+
     const [deleted] = await db
-      .delete(demoTemplates)
-      .where(
-        and(
-          eq(demoTemplates.id, id),
-          eq(demoTemplates.tenantId, user.companyId),
-        ),
-      )
+      .update(demoTemplates)
+      .set({ deletedAt: new Date(), updatedAt: new Date() })
+      .where(and(eq(demoTemplates.id, id), eq(demoTemplates.tenantId, user.companyId)))
       .returning()
 
     if (!deleted) return apiError("Шаблон не найден или нет доступа", 404)

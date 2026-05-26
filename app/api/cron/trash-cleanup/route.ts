@@ -11,9 +11,9 @@
 //   (00:00 UTC = 03:00 МСК)
 
 import { NextRequest, NextResponse } from "next/server"
-import { and, isNotNull, sql } from "drizzle-orm"
+import { and, isNotNull, inArray, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { vacancies, companies } from "@/lib/db/schema"
+import { vacancies, companies, demoTemplates } from "@/lib/db/schema"
 import { checkCronAuth } from "@/lib/cron/auth"
 import { startCronRun, finishCronRun } from "@/lib/cron/record-run"
 import { hardDeleteVacancy } from "@/lib/vacancies/hard-delete"
@@ -61,14 +61,53 @@ async function handle(req: NextRequest) {
       }
     }
 
+    // ── Корзина материалов библиотеки (Этап 3) ──────────────────────────────
+    // demo_templates самодостаточны (нет зависимых строк) → bulk delete по id.
+    // retention per-company, поэтому условие через join с companies.
+    const dueTemplates = await db
+      .select({ id: demoTemplates.id, companyId: demoTemplates.tenantId })
+      .from(demoTemplates)
+      .innerJoin(companies, sql`${companies.id} = ${demoTemplates.tenantId}`)
+      .where(and(
+        isNotNull(demoTemplates.deletedAt),
+        sql`${demoTemplates.deletedAt} < now() - make_interval(days => ${companies.trashRetentionDays})`,
+      ))
+      .orderBy(demoTemplates.deletedAt)
+      .limit(MAX_PER_RUN)
+
+    let deletedTemplates = 0
+    const templatesByCompany: Record<string, number> = {}
+    if (dueTemplates.length > 0) {
+      try {
+        await db.delete(demoTemplates).where(inArray(demoTemplates.id, dueTemplates.map(t => t.id)))
+        deletedTemplates = dueTemplates.length
+        for (const t of dueTemplates) {
+          if (t.companyId) templatesByCompany[t.companyId] = (templatesByCompany[t.companyId] ?? 0) + 1
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        errors.push(`templates: ${msg}`)
+        console.error("[trash-cleanup] failed to delete templates", msg)
+      }
+    }
+
     const metadata = {
       due:               due.length,
       deletedVacancies,
       deletedCandidates,
+      deletedTemplates,
+      templatesByCompany,
       errors:            errors.length,
     }
     if (run) await finishCronRun(run.id, errors.length > 0 ? "error" : "ok", metadata, errors[0])
-    return NextResponse.json({ ok: true, ...metadata })
+    return NextResponse.json({
+      ok: true,
+      vacancies_deleted: deletedVacancies,
+      templates_deleted: deletedTemplates,
+      by_company:        templatesByCompany,
+      deletedCandidates,
+      errors:            errors.length,
+    })
   } catch (err) {
     if (run) await finishCronRun(run.id, "error", null, err instanceof Error ? err.message : String(err))
     console.error("[trash-cleanup] fatal:", err)
