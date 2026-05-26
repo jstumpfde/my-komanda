@@ -191,8 +191,13 @@ async function processOneTouch(
   // но проверяем demo_opened/терминальную стадию, и (главное) шлём даже вне
   // рабочего окна — в этом весь смысл off-hours-сообщения.
   const isOffHoursFirst = msg.branch === "first_msg_offhours"
+  // Этап 2: branch='test_after_message' — одиночное сообщение после теста
+  // (auto: при проверке; assisted: по кнопке «Принять»). Как и anketa_auto_reply,
+  // это не дожим: пропускаем стоп-триггеры и дневной rate-limit.
+  const isTestAfterMessage = msg.branch === "test_after_message"
   const isOneOffPostAnketa =
-    msg.branch === "anketa_confirmation" || msg.branch === "anketa_auto_reply" || isChainStep || isOffHoursFirst
+    msg.branch === "anketa_confirmation" || msg.branch === "anketa_auto_reply"
+    || isChainStep || isOffHoursFirst || isTestAfterMessage
   if (!isOneOffPostAnketa) {
     // Стоп-триггеры (вакансия закрыта / демо пройдено / отказ /
     // автоматизация остановлена) — только для обычной цепочки дожима.

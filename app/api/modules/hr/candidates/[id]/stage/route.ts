@@ -9,6 +9,8 @@ const VALID_STAGES = [
   "new", "primary_contact", "demo", "demo_opened", "decision",
   "anketa_filled", "ai_screening", "interview", "final_decision",
   "hired", "rejected", "talent_pool", "pending", "preboarding",
+  // Этап 2: исходы тестового задания (lib/stages.ts test_passed/test_failed).
+  "test_task_done", "test_passed", "test_failed",
 ] as const
 type Stage = (typeof VALID_STAGES)[number]
 
