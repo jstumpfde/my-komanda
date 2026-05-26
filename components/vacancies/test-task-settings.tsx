@@ -1,8 +1,13 @@
 "use client"
 
-// Группа 19: минимальная UI-заглушка для блока «Тестовое задание».
-// API: GET/PUT /api/modules/hr/vacancies/[id]/test-task.
-// Хранение в vacancy.descriptionJson.testTask.
+// Блок воронки «Тестовое задание» (Этап 2.6 — связан с табом «Тест»).
+// Источник правды — запись demos с kind='test' (та же, что и таб «Тест»):
+//   контент теста → lessonsJson, настройки блока → postDemoSettings
+//   (testTaskInstructions / testDeadlineDays / testAiCheck / testResponseFormat).
+// Загрузка: GET /api/modules/hr/demos?vacancy_id=X&kind=test
+// Сохранение: POST (если записи нет) + PUT /api/modules/hr/demos/[id].
+// DEPRECATED: vacancy.descriptionJson.testTask (/test-task route) — читается
+// как fallback для старых вакансий, пока их не пересохранили в новом UI.
 
 import { useEffect, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -27,38 +32,78 @@ export function TestTaskSettings({ vacancyId, onSaved }: Props) {
   const [deadlineDays, setDeadlineDays] = useState(3)
   const [aiCheck, setAiCheck] = useState(false)
   const [responseFormat, setResponseFormat] = useState<ResponseFormat>("text")
+  const [demoId, setDemoId] = useState<string | null>(null)
   const [loaded, setLoaded] = useState(false)
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     if (!vacancyId) return
     let cancelled = false
-    fetch(`/api/modules/hr/vacancies/${vacancyId}/test-task`)
-      .then(r => r.ok ? r.json() : null)
-      .then(json => {
-        if (cancelled) return
-        const cfg = json?.config
-        if (cfg && typeof cfg === "object") {
-          if (typeof cfg.taskText === "string") setTaskText(cfg.taskText)
-          if (typeof cfg.deadlineDays === "number") setDeadlineDays(cfg.deadlineDays)
-          if (typeof cfg.aiCheck === "boolean") setAiCheck(cfg.aiCheck)
-          if (cfg.responseFormat === "file" || cfg.responseFormat === "both" || cfg.responseFormat === "text") {
-            setResponseFormat(cfg.responseFormat)
+    ;(async () => {
+      try {
+        // 1. Источник правды — запись demos kind='test' (та же, что таб «Тест»).
+        const demoRes = await fetch(`/api/modules/hr/demos?vacancy_id=${encodeURIComponent(vacancyId)}&kind=test`)
+        const demoJson = demoRes.ok ? await demoRes.json() : null
+        const rows = demoJson?.data ?? demoJson
+        const demo = Array.isArray(rows) ? rows[0] : null
+        let applied = false
+        if (demo?.id && !cancelled) {
+          setDemoId(demo.id)
+          const pds = (demo.postDemoSettings && typeof demo.postDemoSettings === "object") ? demo.postDemoSettings : null
+          if (pds) {
+            if (typeof pds.testTaskInstructions === "string") { setTaskText(pds.testTaskInstructions); applied = true }
+            if (typeof pds.testDeadlineDays === "number") { setDeadlineDays(pds.testDeadlineDays); applied = true }
+            if (typeof pds.testAiCheck === "boolean") { setAiCheck(pds.testAiCheck); applied = true }
+            if (pds.testResponseFormat === "file" || pds.testResponseFormat === "both" || pds.testResponseFormat === "text") {
+              setResponseFormat(pds.testResponseFormat); applied = true
+            }
           }
         }
-        setLoaded(true)
-      })
-      .catch(() => { setLoaded(true) })
+        // 2. Fallback на legacy descriptionJson.testTask (старые вакансии).
+        if (!applied && !cancelled) {
+          const legacyRes = await fetch(`/api/modules/hr/vacancies/${vacancyId}/test-task`)
+          const legacyJson = legacyRes.ok ? await legacyRes.json() : null
+          const cfg = legacyJson?.config
+          if (cfg && typeof cfg === "object" && !cancelled) {
+            if (typeof cfg.taskText === "string") setTaskText(cfg.taskText)
+            if (typeof cfg.deadlineDays === "number") setDeadlineDays(cfg.deadlineDays)
+            if (typeof cfg.aiCheck === "boolean") setAiCheck(cfg.aiCheck)
+            if (cfg.responseFormat === "file" || cfg.responseFormat === "both" || cfg.responseFormat === "text") {
+              setResponseFormat(cfg.responseFormat)
+            }
+          }
+        }
+      } catch { /* оставляем дефолты */ }
+      finally { if (!cancelled) setLoaded(true) }
+    })()
     return () => { cancelled = true }
   }, [vacancyId])
 
   const save = async () => {
     setSaving(true)
     try {
-      const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}/test-task`, {
+      // Создаём запись demos kind='test', если её ещё нет (общая с табом «Тест»).
+      let id = demoId
+      if (!id) {
+        const createRes = await fetch("/api/modules/hr/demos", {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({ vacancy_id: vacancyId, kind: "test", title: "Тестовое задание", lessons_json: [] }),
+        })
+        if (!createRes.ok) throw new Error("Не удалось создать запись теста")
+        const created = await createRes.json()
+        id = (created.data ?? created).id
+        setDemoId(id)
+      }
+      const res = await fetch(`/api/modules/hr/demos/${id}`, {
         method:  "PUT",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ taskText, deadlineDays, aiCheck, responseFormat }),
+        body:    JSON.stringify({ post_demo_settings: {
+          testTaskInstructions: taskText,
+          testDeadlineDays:     deadlineDays,
+          testAiCheck:          aiCheck,
+          testResponseFormat:   responseFormat,
+        } }),
       })
       if (!res.ok) throw new Error("Не удалось сохранить")
       toast.success("Тестовое задание сохранено")

@@ -13,6 +13,7 @@ async function getOwnedDemo(demoId: string, companyId: string) {
       title: demos.title,
       status: demos.status,
       lessonsJson: demos.lessonsJson,
+      postDemoSettings: demos.postDemoSettings,
       createdAt: demos.createdAt,
       updatedAt: demos.updatedAt,
     })
@@ -60,6 +61,7 @@ export async function PUT(
       title?: unknown
       status?: unknown
       lessons_json?: unknown
+      post_demo_settings?: unknown
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -73,6 +75,14 @@ export async function PUT(
     }
     if (Array.isArray(body.lessons_json)) {
       updates.lessonsJson = body.lessons_json
+    }
+    // Этап 2.6: настройки блока «Тестовое задание» (и пр.) — мерджим с
+    // существующими, чтобы частичный PUT не затирал чужие ключи postDemoSettings.
+    if (body.post_demo_settings && typeof body.post_demo_settings === "object" && !Array.isArray(body.post_demo_settings)) {
+      const prev = (existing.postDemoSettings && typeof existing.postDemoSettings === "object")
+        ? existing.postDemoSettings as Record<string, unknown>
+        : {}
+      updates.postDemoSettings = { ...prev, ...(body.post_demo_settings as Record<string, unknown>) }
     }
 
     const [updated] = await db

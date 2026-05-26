@@ -621,6 +621,15 @@ export interface PostDemoSettings {
   // тестового задания. Отдельный одиночный touch (branch=anketa_auto_reply),
   // не цепочка дожима. Не путать с anketaConfirmation (короткое «спасибо»).
   anketaAutoReply?: AnketaAutoReplySettings
+
+  // Этап 2.6: настройки блока воронки «Тестовое задание». Хранятся в
+  // postDemoSettings записи demos с kind='test' (контент теста — в её
+  // lessonsJson). Так блок воронки и таб «Тест» используют одну запись.
+  // (DEPRECATED источник — descriptionJson.testTask; читается как fallback.)
+  testTaskInstructions?: string
+  testDeadlineDays?:     number
+  testAiCheck?:          boolean
+  testResponseFormat?:   "text" | "file" | "both"
 }
 
 export interface AnketaAutoReplySettings {
