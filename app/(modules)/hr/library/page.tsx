@@ -294,21 +294,21 @@ export default function LibraryPage() {
             <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)}>
               <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
                 <TabsList className="shrink-0">
-                  <TabsTrigger value="demos" className="gap-1.5">
-                    <BookOpen className="w-3.5 h-3.5" />Демонстрации
-                    <span className="ml-1 text-muted-foreground">({demoRows.length})</span>
-                  </TabsTrigger>
-                  <TabsTrigger value="blocks" className="gap-1.5">
-                    <Puzzle className="w-3.5 h-3.5" />Блоки
-                    <span className="ml-1 text-muted-foreground">({blockRows.length})</span>
-                  </TabsTrigger>
                   <TabsTrigger value="questionnaires" className="gap-1.5">
                     <FileText className="w-3.5 h-3.5" />Анкеты
                     <span className="ml-1 text-muted-foreground">({questionnaires.length})</span>
                   </TabsTrigger>
+                  <TabsTrigger value="demos" className="gap-1.5">
+                    <BookOpen className="w-3.5 h-3.5" />Демонстрации
+                    <span className="ml-1 text-muted-foreground">({demoRows.length})</span>
+                  </TabsTrigger>
                   <TabsTrigger value="tests" className="gap-1.5">
                     <ListChecks className="w-3.5 h-3.5" />Тесты
                     <span className="ml-1 text-muted-foreground">({testRows.length})</span>
+                  </TabsTrigger>
+                  <TabsTrigger value="blocks" className="gap-1.5">
+                    <Puzzle className="w-3.5 h-3.5" />Блоки
+                    <span className="ml-1 text-muted-foreground">({blockRows.length})</span>
                   </TabsTrigger>
                 </TabsList>
                 <div className="flex items-center gap-2 ml-auto flex-1 justify-end min-w-0">
@@ -423,7 +423,7 @@ export default function LibraryPage() {
             <DialogDescription>Выберите тип материала для библиотеки</DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
-            {(["demo", "block", "test"] as CreatableType[]).map((kind) => (
+            {(["demo", "test", "block"] as CreatableType[]).map((kind) => (
               <button
                 key={kind}
                 type="button"
