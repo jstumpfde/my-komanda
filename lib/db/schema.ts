@@ -652,6 +652,16 @@ export interface PostDemoSettings {
   testDeadlineDays?:     number
   testAiCheck?:          boolean
   testResponseFormat?:   "text" | "file" | "both"
+
+  // Этап 2 (AI-скоринг теста). Все поля опциональны — обратная совместимость:
+  //   testCheckMode  undefined → 'assisted' (AI оценивает, стадию решает HR)
+  //   testAiPrompt   undefined → дефолтный промпт оценки (lib/ai-score-test.ts)
+  //   testPassingScore undefined → 70
+  //   testAfterMessage undefined/'' → сообщение после теста не отправляется
+  testCheckMode?:   "auto" | "assisted" | "manual"
+  testAiPrompt?:    string
+  testPassingScore?: number
+  testAfterMessage?: string   // плейсхолдеры {{name}}, {{vacancy}}
 }
 
 export interface AnketaAutoReplySettings {

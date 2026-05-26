@@ -20,6 +20,8 @@ export type StageSlug =
   | "ai_screening"
   | "test_task_sent"
   | "test_task_done"
+  | "test_passed"
+  | "test_failed"
   | "scheduled"
   | "interview"
   | "reference_check"
@@ -77,7 +79,7 @@ export const STAGE_COLOR_CLASSES: Record<StageColor, string> = {
 }
 
 // ───────────────────────────────────────────────────────────────────
-// 14 системных стадий воронки
+// 16 стадий воронки (14 базовых + 2 исхода теста: test_passed/test_failed)
 // ───────────────────────────────────────────────────────────────────
 
 export const PLATFORM_STAGES: Record<StageSlug, StageDefinition> = {
@@ -150,6 +152,26 @@ export const PLATFORM_STAGES: Record<StageSlug, StageDefinition> = {
     isTerminal: false,
     sortOrder: 7,
     description: "Кандидат прислал результат тестового",
+  },
+  test_passed: {
+    slug: "test_passed",
+    defaultLabel: "Тест пройден",
+    defaultColor: "green",
+    defaultHhAction: null,
+    isSystem: false,
+    isTerminal: false,
+    sortOrder: 7.5,           // между «Задание выполн.» и «Интервью наз.»
+    description: "Тестовое задание принято (AI/HR), кандидат двигается дальше",
+  },
+  test_failed: {
+    slug: "test_failed",
+    defaultLabel: "Тест не пройден",
+    defaultColor: "rose",     // отличаем от жёсткого «Отказ» (red)
+    defaultHhAction: null,    // без авто-discard — HR сам решает по hh
+    isSystem: false,
+    isTerminal: true,
+    sortOrder: 7.6,
+    description: "Тестовое задание отклонено по результатам проверки",
   },
   scheduled: {
     slug: "scheduled",
@@ -246,18 +268,18 @@ export const TERMINAL_STAGE_SLUGS: StageSlug[] = ALL_STAGE_SLUGS.filter(
 //                Эта группа шире чем reзonate demo_progress_json IS NOT NULL.
 export const IN_PROGRESS_STAGE_SLUGS: StageSlug[] = [
   "primary_contact", "demo_opened", "anketa_filled",
-  "ai_screening", "test_task_sent", "test_task_done",
+  "ai_screening", "test_task_sent", "test_task_done", "test_passed",
   "scheduled", "interview", "reference_check", "decision",
   "offer_sent",
 ]
 export const ANKETA_FILLED_STAGE_SLUGS: StageSlug[] = [
-  "anketa_filled", "ai_screening", "test_task_sent", "test_task_done",
+  "anketa_filled", "ai_screening", "test_task_sent", "test_task_done", "test_passed",
   "scheduled", "interview", "reference_check", "decision",
   "offer_sent", "hired",
 ]
 export const DEMO_OPENED_STAGE_SLUGS: StageSlug[] = [
   "demo_opened", "anketa_filled", "ai_screening", "test_task_sent",
-  "test_task_done", "scheduled", "interview", "reference_check",
+  "test_task_done", "test_passed", "scheduled", "interview", "reference_check",
   "decision", "offer_sent", "hired",
 ]
 
@@ -361,7 +383,7 @@ const FUNNEL_PRESET_SET: Set<FunnelPreset> = new Set(["fast", "standard", "deep"
 /**
  * Парсит сохранённый pipeline из vacancies.description_json.pipeline.
  * Невалидные/устаревшие/null значения → дефолт на пресете "standard".
- * Гарантирует, что в результате присутствуют ВСЕ 14 системных слугов,
+ * Гарантирует, что в результате присутствуют ВСЕ 16 слугов воронки,
  * даже если в сохранёнке кого-то не было.
  */
 export function parsePipeline(raw: unknown): VacancyPipelineV2 {

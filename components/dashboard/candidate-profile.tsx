@@ -20,7 +20,7 @@ import {
   MapPin, Briefcase, Circle, Calendar, Star, ExternalLink, Archive,
   CheckCircle2, XCircle, Clock, MessageSquare, Send, User,
   Play, FileText, History, Bot, Phone, Video, Building2,
-  ChevronRight, Sparkles,
+  ChevronRight, Sparkles, ClipboardList, Loader2, Paperclip,
 } from "lucide-react"
 
 // ─── Мок-данные ─────────────────────────────────────────────
@@ -165,6 +165,36 @@ const channelIcons: Record<string, { icon: typeof MessageSquare; color: string }
   bot: { icon: Bot, color: "text-cyan-500" },
 }
 
+// ─── Тест (Этап 2) ──────────────────────────────────────────
+
+interface TestSubmissionRow {
+  id:          string
+  answerText:  string | null
+  fileUrl:     string | null
+  aiScore:     number | null
+  aiReasoning: string | null
+  submittedAt: string | null
+}
+interface TestSubmissionData {
+  submission: TestSubmissionRow | null
+  checkMode:  "auto" | "assisted" | "manual"
+  stage:      string | null
+}
+
+// 70+ зелёный, 40–70 жёлтый, <40 красный (по ТЗ Этапа 2).
+function testScoreClasses(score: number): string {
+  if (score >= 70) return "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400"
+  if (score >= 40) return "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400"
+  return "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400"
+}
+
+function formatSubmittedAt(iso: string | null): string {
+  if (!iso) return ""
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ""
+  return d.toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })
+}
+
 // ─── Компонент ──────────────────────────────────────────────
 
 export function CandidateProfile({ candidate, columnId, columnTitle, columnColorFrom, columnColorTo, open, onOpenChange, onAction }: CandidateProfileProps) {
@@ -180,6 +210,51 @@ export function CandidateProfile({ candidate, columnId, columnTitle, columnColor
   const scorePopRef = useRef<HTMLDivElement>(null)
   const { role } = useAuth()
   const canEditThresholds = isPlatformRole(role)
+
+  // ─── Тест (Этап 2): ответ на тестовое задание + AI score ───────────
+  const [testData, setTestData] = useState<TestSubmissionData | null>(null)
+  const [answerExpanded, setAnswerExpanded] = useState(false)
+  const [reasoningExpanded, setReasoningExpanded] = useState(false)
+  const [verdictBusy, setVerdictBusy] = useState(false)
+
+  useEffect(() => {
+    if (!open || !candidate?.id) { setTestData(null); return }
+    let cancelled = false
+    setAnswerExpanded(false)
+    setReasoningExpanded(false)
+    ;(async () => {
+      try {
+        const res = await fetch(`/api/modules/hr/candidates/${candidate.id}/test-submission`)
+        const json = res.ok ? await res.json() : null
+        const data = (json?.data ?? json) as TestSubmissionData | null
+        if (!cancelled) setTestData(data ?? null)
+      } catch {
+        if (!cancelled) setTestData(null)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [open, candidate?.id])
+
+  const submitVerdict = async (verdict: "pass" | "fail") => {
+    if (!candidate?.id) return
+    setVerdictBusy(true)
+    try {
+      const res = await fetch(`/api/modules/hr/candidates/${candidate.id}/test-submission`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ verdict }),
+      })
+      if (!res.ok) throw new Error()
+      const json = await res.json()
+      const d = (json?.data ?? json) as { stage?: string }
+      setTestData(prev => prev ? { ...prev, stage: d.stage ?? prev.stage } : prev)
+      toast.success(verdict === "pass" ? "Тест принят — кандидат двигается дальше" : "Тест отклонён")
+    } catch {
+      toast.error("Не удалось сохранить решение")
+    } finally {
+      setVerdictBusy(false)
+    }
+  }
 
   useEffect(() => {
     if (!scorePopup) return
@@ -428,6 +503,99 @@ export function CandidateProfile({ candidate, columnId, columnTitle, columnColor
 
             {/* ─── Ответы ──────────────────────────────────── */}
             <TabsContent value="answers" className="space-y-5 mt-0">
+              {/* ─── Тест (Этап 2): показываем только если есть submission ─── */}
+              {testData?.submission && (() => {
+                const sub = testData.submission!
+                const answer = sub.answerText ?? ""
+                const longAnswer = answer.length > 280
+                const shownAnswer = answerExpanded || !longAnswer ? answer : answer.slice(0, 280) + "…"
+                const showVerdict = testData.checkMode === "assisted" && testData.stage === "test_task_done"
+                return (
+                  <>
+                    <div>
+                      <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+                        <ClipboardList className="w-4 h-4 text-muted-foreground" />
+                        Тест
+                        {testData.stage === "test_passed" && (
+                          <Badge variant="outline" className="text-[11px] border-emerald-300 text-emerald-700">Принят</Badge>
+                        )}
+                        {testData.stage === "test_failed" && (
+                          <Badge variant="outline" className="text-[11px] border-red-300 text-red-600">Отклонён</Badge>
+                        )}
+                      </h3>
+
+                      <div className="p-3 rounded-lg border border-border space-y-3">
+                        {/* Ответ кандидата */}
+                        {answer ? (
+                          <div>
+                            <p className="text-xs font-medium text-muted-foreground mb-1">Ответ кандидата</p>
+                            <p className="text-sm text-foreground whitespace-pre-wrap break-words">{shownAnswer}</p>
+                            {longAnswer && (
+                              <button onClick={() => setAnswerExpanded(v => !v)} className="mt-1 text-xs text-primary hover:underline">
+                                {answerExpanded ? "Свернуть" : "Развернуть"}
+                              </button>
+                            )}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-muted-foreground">Текстовый ответ не приложен</p>
+                        )}
+
+                        {/* Файл (заглушка — ссылка появится позже) */}
+                        {sub.fileUrl && (
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <Paperclip className="w-3.5 h-3.5" /> Файл прикреплён
+                          </div>
+                        )}
+
+                        {/* AI score + обоснование */}
+                        {sub.aiScore != null ? (
+                          <div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <div className={cn("flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold", testScoreClasses(sub.aiScore))}>
+                                <Sparkles className="w-3 h-3" /> AI: {sub.aiScore}/100
+                              </div>
+                              {sub.aiReasoning && (
+                                <button onClick={() => setReasoningExpanded(v => !v)} className="text-xs text-primary hover:underline inline-flex items-center gap-0.5">
+                                  <ChevronRight className={cn("w-3 h-3 transition-transform", reasoningExpanded && "rotate-90")} />
+                                  {reasoningExpanded ? "Скрыть обоснование" : "Развернуть обоснование"}
+                                </button>
+                              )}
+                            </div>
+                            {reasoningExpanded && sub.aiReasoning && (
+                              <p className="mt-2 text-sm text-foreground bg-muted/50 border rounded-lg p-2.5 leading-relaxed whitespace-pre-wrap">{sub.aiReasoning}</p>
+                            )}
+                          </div>
+                        ) : testData.checkMode === "manual" ? (
+                          <p className="text-xs text-muted-foreground">Проверка вручную (AI отключён)</p>
+                        ) : (
+                          <p className="text-xs text-muted-foreground">AI ещё не оценил ответ</p>
+                        )}
+
+                        {/* Дата отправки */}
+                        {sub.submittedAt && (
+                          <p className="text-[11px] text-muted-foreground">Отправлено: {formatSubmittedAt(sub.submittedAt)}</p>
+                        )}
+
+                        {/* Принять / Отклонить — только assisted + стадия test_task_done */}
+                        {showVerdict && (
+                          <div className="flex items-center gap-2 pt-2 border-t">
+                            <Button size="sm" disabled={verdictBusy} onClick={() => submitVerdict("pass")}
+                              className="h-8 gap-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white">
+                              {verdictBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />} Принять
+                            </Button>
+                            <Button size="sm" variant="outline" disabled={verdictBusy} onClick={() => submitVerdict("fail")}
+                              className="h-8 gap-1.5 text-xs text-destructive border-destructive/40 hover:bg-destructive/10">
+                              <XCircle className="w-3.5 h-3.5" /> Отклонить
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <Separator />
+                  </>
+                )
+              })()}
+
               {/* Ответы на вопросы */}
               <div>
                 <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
