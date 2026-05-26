@@ -1,6 +1,6 @@
 import { db } from "@/lib/db"
 import { hhResponses } from "@/lib/db/schema"
-import { and, eq } from "drizzle-orm"
+import { and, eq, sql } from "drizzle-orm"
 import { getNegotiations, fetchHhResume, type HHNegotiationItem } from "@/lib/hh-api"
 
 // Единый импорт hh-откликов в таблицу hh_responses. ОДИН источник правды для
@@ -144,7 +144,17 @@ export async function importHhResponsesForVacancy(opts: {
         target: [hhResponses.companyId, hhResponses.hhResponseId],
         // localCandidateId НЕ в values → при апдейте сохраняется привязка
         // кандидата (guard от повторного разбора в processHhQueue).
-        set: values,
+        set: {
+          ...values,
+          // Защита локального 'invited' от сброса синком. Off-hours / keep_new /
+          // prequalification / invite-с-упавшим-PUT остаются на hh в коллекции
+          // `response` (state.id='response'), хотя мы уже перевели отклик в
+          // 'invited' локально. Без этого CASE upsert сбросил бы статус обратно
+          // в 'response' → кандидат вернулся бы в очередь разбора и получил дубль
+          // приглашения (Артём Красножон, 26.05: 03:45 off-hours + 13:14 повтор).
+          // Остальные статусы (response/orphaned/claimed/…) синкаются как раньше.
+          status: sql`CASE WHEN ${hhResponses.status} = 'invited' THEN ${hhResponses.status} ELSE ${item.state.id} END`,
+        },
       })
     imported++
   }
