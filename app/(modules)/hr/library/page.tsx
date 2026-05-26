@@ -110,7 +110,11 @@ function EmptyMaterialsState({ type, onCreate }: { type: CreatableType; onCreate
 
 // ─── Materials table (демо / блоки / тесты — одинаковая структура) ──────────
 
-function MaterialsTable({ rows, onDelete }: { rows: TemplateData[]; onDelete: (id: string) => void }) {
+function MaterialsTable({ rows, onDelete, onDuplicate }: {
+  rows: TemplateData[]
+  onDelete: (id: string) => void
+  onDuplicate: (t: TemplateData) => void
+}) {
   return (
     <div className="overflow-auto" style={{ maxHeight: "60vh" }}>
       <table className="w-full">
@@ -152,17 +156,20 @@ function MaterialsTable({ rows, onDelete }: { rows: TemplateData[]; onDelete: (i
                 <td className="px-4 py-2.5 text-sm text-muted-foreground whitespace-nowrap">{formatDate(t.createdAt)}</td>
                 <td className="px-4 py-2.5">
                   <div className="flex items-center gap-0.5 justify-end">
-                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0" asChild>
+                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0" asChild title="Просмотр">
                       <Link href={`/hr/library/preview/${t.id}`} target="_blank"><Eye className="h-3.5 w-3.5" /></Link>
                     </Button>
-                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0" asChild>
-                      <Link href={`/hr/library/create/editor?id=${t.id}`}><Pencil className="h-3.5 w-3.5" /></Link>
-                    </Button>
-                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => toast.success("Шаблон скопирован")}>
+                    {/* Редактирование недоступно для системных (PATCH tenant-scoped → 404) */}
+                    {!t.isSystem && (
+                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0" asChild title="Редактировать">
+                        <Link href={`/hr/library/create/editor?id=${t.id}`}><Pencil className="h-3.5 w-3.5" /></Link>
+                      </Button>
+                    )}
+                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0" title="Дублировать" onClick={() => onDuplicate(t)}>
                       <Copy className="h-3.5 w-3.5" />
                     </Button>
                     {!t.isSystem && (
-                      <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive" onClick={() => onDelete(t.id)}>
+                      <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive" title="Удалить" onClick={() => onDelete(t.id)}>
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
                     )}
@@ -251,6 +258,29 @@ export default function LibraryPage() {
     setDeleteId(null)
   }
 
+  // Дублирование: POST /api/demo-templates всегда создаёт пользовательский
+  // (is_system=false) шаблон. length сохраняется → копия блока остаётся блоком,
+  // копия теста — тестом. После успеха обновляем список (копия видна сразу).
+  const handleDuplicate = async (t: TemplateData) => {
+    try {
+      const res = await fetch("/api/demo-templates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: `${t.name} (копия)`.slice(0, 76),
+          niche: t.niche,
+          length: t.length,
+          sections: t.sections,
+        }),
+      })
+      if (!res.ok) { toast.error("Не удалось дублировать"); return }
+      toast.success("Создана копия шаблона")
+      fetchTemplates()
+    } catch {
+      toast.error("Ошибка сети")
+    }
+  }
+
   // Один и тот же рендер для вкладок демо/блоки/тесты.
   const renderMaterialsTab = (kind: CreatableType, rows: TemplateData[]) => {
     const shown = bySearch(rows)
@@ -271,7 +301,7 @@ export default function LibraryPage() {
               <EmptyMaterialsState type={kind} onCreate={() => startCreate(kind)} />
             )
           ) : (
-            <MaterialsTable rows={shown} onDelete={(id) => setDeleteId(id)} />
+            <MaterialsTable rows={shown} onDelete={(id) => setDeleteId(id)} onDuplicate={handleDuplicate} />
           )}
         </CardContent>
       </Card>
@@ -445,7 +475,9 @@ export default function LibraryPage() {
       <Dialog open={!!deleteId} onOpenChange={(open) => { if (!open) setDeleteId(null) }}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader><DialogTitle>Удалить шаблон?</DialogTitle></DialogHeader>
-          <p className="text-sm text-muted-foreground">Шаблон будет удалён без возможности восстановления.</p>
+          <p className="text-sm text-muted-foreground">
+            Удалить шаблон «{templates.find(t => t.id === deleteId)?.name ?? ""}»? Это действие нельзя отменить.
+          </p>
           <div className="flex justify-end gap-2 mt-2">
             <Button variant="outline" size="sm" onClick={() => setDeleteId(null)}>Отмена</Button>
             <Button variant="destructive" size="sm" onClick={handleDelete} disabled={deleting}>
