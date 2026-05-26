@@ -2024,7 +2024,7 @@ function TaskEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: 
                 </div>
                 <span className="text-xs font-bold text-muted-foreground w-5 shrink-0">{qi + 1}.</span>
                 <span className={cn("flex-1 text-sm truncate", q.text ? "text-foreground" : "text-muted-foreground/50 italic")}>
-                  {q.text || "Вопрос"}
+                  {isExpanded ? "" : (q.text || "Вопрос")}
                 </span>
                 {typeInfo && (
                   <span className="text-[11px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground shrink-0 font-mono">
