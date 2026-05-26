@@ -156,6 +156,7 @@ export async function POST(
     const [demo] = await db
       .select({ vacancyId: demos.vacancyId })
       .from(demos)
+      .where(eq(demos.kind, "demo"))
       .limit(1)
 
     if (!demo?.vacancyId) {

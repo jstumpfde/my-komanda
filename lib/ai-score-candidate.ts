@@ -142,7 +142,7 @@ export async function scoreCandidateById(args: {
   const [demoRow] = await db
     .select({ lessonsJson: demos.lessonsJson })
     .from(demos)
-    .where(eq(demos.vacancyId, vacancyId))
+    .where(and(eq(demos.vacancyId, vacancyId), eq(demos.kind, "demo")))
     .orderBy(desc(demos.updatedAt))
     .limit(1)
   const blockMap = buildBlockMap(demoRow?.lessonsJson)

@@ -63,7 +63,7 @@ async function getOwnedDemo(vacancyId: string, companyId: string) {
     })
     .from(demos)
     .innerJoin(vacancies, eq(demos.vacancyId, vacancies.id))
-    .where(and(eq(demos.vacancyId, vacancyId), eq(vacancies.companyId, companyId)))
+    .where(and(eq(demos.vacancyId, vacancyId), eq(demos.kind, "demo"), eq(vacancies.companyId, companyId)))
     .orderBy(sql`${demos.updatedAt} DESC`)
     .limit(1)
 

@@ -97,7 +97,7 @@ export async function GET(
     const [demoRow] = await db
       .select({ lessonsJson: demos.lessonsJson })
       .from(demos)
-      .where(eq(demos.vacancyId, id))
+      .where(and(eq(demos.vacancyId, id), eq(demos.kind, "demo")))
       .orderBy(desc(demos.updatedAt))
       .limit(1)
     if (demoRow) {

@@ -82,7 +82,7 @@ export async function scheduleAnketaAutoReply(args: {
       })
       .from(demos)
       .innerJoin(vacancies, eq(demos.vacancyId, vacancies.id))
-      .where(eq(demos.vacancyId, args.vacancyId))
+      .where(and(eq(demos.vacancyId, args.vacancyId), eq(demos.kind, "demo")))
       .orderBy(sql`${demos.updatedAt} DESC`)
       .limit(1)
 

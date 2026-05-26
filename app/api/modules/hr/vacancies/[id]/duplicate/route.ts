@@ -98,6 +98,7 @@ export async function POST(
     for (const d of originalDemos) {
       await db.insert(demos).values({
         vacancyId: duplicate.id,
+        kind: d.kind, // сохраняем тип (demo/test), иначе test-запись стала бы demo
         title: `${d.title} (копия)`,
         status: d.status,
         lessonsJson: d.lessonsJson,

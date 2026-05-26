@@ -101,7 +101,10 @@ export async function GET(
         postDemoSettings: demos.postDemoSettings,
       })
       .from(demos)
-      .where(eq(demos.vacancyId, vacancy.id))
+      // kind='demo': кандидату отдаём только демонстрацию. Без фильтра запись
+      // с kind='test' (таб «Тест», Этап 2.5) могла оказаться новее и подменить
+      // демо → кандидат видел пустой тест (критический баг).
+      .where(and(eq(demos.vacancyId, vacancy.id), eq(demos.kind, "demo")))
       .orderBy(sql`${demos.updatedAt} DESC`)
       .limit(1)
 

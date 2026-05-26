@@ -269,7 +269,7 @@ export async function GET(req: NextRequest) {
             updatedAt: demos.updatedAt,
           })
           .from(demos)
-          .where(inArray(demos.vacancyId, vacancyIds))
+          .where(and(inArray(demos.vacancyId, vacancyIds), eq(demos.kind, "demo")))
           .orderBy(desc(demos.updatedAt))
 
         const latestByVacancy = new Map<string, unknown>()
@@ -614,7 +614,7 @@ export async function GET(req: NextRequest) {
       const earlyDemoRows = await db
         .select({ lessonsJson: demos.lessonsJson })
         .from(demos)
-        .where(eq(demos.vacancyId, vacancyId))
+        .where(and(eq(demos.vacancyId, vacancyId), eq(demos.kind, "demo")))
         .orderBy(desc(demos.updatedAt))
         .limit(1)
       if (earlyDemoRows.length > 0) {
@@ -692,7 +692,7 @@ export async function GET(req: NextRequest) {
     const demoRowsV2 = await db
       .select({ lessonsJson: demos.lessonsJson, updatedAt: demos.updatedAt })
       .from(demos)
-      .where(eq(demos.vacancyId, vacancyId))
+      .where(and(eq(demos.vacancyId, vacancyId), eq(demos.kind, "demo")))
       .orderBy(desc(demos.updatedAt))
       .limit(1)
     if (demoRowsV2.length > 0) {
