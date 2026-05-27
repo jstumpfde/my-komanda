@@ -13,9 +13,10 @@
 // если основной cron уже идёт, итерация увидит 409 и пропустится.
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
-import { hhVacancies, vacancies, hhTokens, hhResponses } from "@/lib/db/schema"
+import { hhVacancies, vacancies, hhResponses } from "@/lib/db/schema"
 import { and, eq, inArray, count, sql } from "drizzle-orm"
-import { HHClient } from "@/lib/hh/client"
+import { getValidToken } from "@/lib/hh-helpers"
+import { importHhResponsesForVacancy } from "@/lib/hh/import-responses"
 import { checkCronAuth } from "@/lib/cron/auth"
 import { processHhQueue } from "@/lib/hh/process-queue"
 
@@ -55,6 +56,10 @@ async function runOneIteration(): Promise<IterationResult> {
     const activeRows = await db
       .select({
         hhVacancyId:           hhVacancies.hhVacancyId,
+        // vacancies.hh_vacancy_id — тот же hh-идентификатор, что использует
+        // кнопка «Синхронизировать» и основной cron. Приоритетный источник,
+        // hhVacancies.hhVacancyId — fallback.
+        vacancyHhId:           vacancies.hhVacancyId,
         vacancyId:             hhVacancies.localVacancyId,
         companyId:             vacancies.companyId,
         autoProcessingEnabled: vacancies.autoProcessingEnabled,
@@ -76,18 +81,36 @@ async function runOneIteration(): Promise<IterationResult> {
     }
 
     await Promise.all(Array.from(byCompany.entries()).map(async ([companyId, rows]) => {
-      const tokenRows = await db
-        .select()
-        .from(hhTokens)
-        .where(eq(hhTokens.companyId, companyId))
-        .limit(1)
-      if (!tokenRows[0]) { skipped++; return }
+      // getValidToken — тот же путь, что у кнопки «Синхронизировать» и основного
+      // cron'а: читает hh_integrations и сам рефрешит протухший access_token.
+      const tokenResult = await getValidToken(companyId)
+      if (!tokenResult) { skipped++; return }
+      const accessToken = tokenResult.accessToken
 
-      const client = new HHClient(companyId)
+      // Шаг 1 — импорт новых откликов в hh_responses (status='response').
+      // ПЕРЕВЕДЕНО на importHhResponsesForVacancy (negotiations → upsert
+      // hh_responses), как в /api/cron/hh-import. Раньше тут был
+      // HHClient.importApplications, который писал НАПРЯМУЮ в candidates
+      // (минуя hh_responses) → processHhQueue ниже их не видел, и кандидаты
+      // застревали в stage='new'. mode "new" — полное резюме тянем только для
+      // новых откликов: burst крутит до 50 итераций, иначе выжжем hh /resumes
+      // rate-limit. На 2-й+ итерации уже импортированные отклики пропускаются
+      // (imported=0), и цикл корректно завершается по early-break.
       for (const row of rows) {
         if (!row.vacancyId) continue
+        const hhVacancyId = row.vacancyHhId ?? row.hhVacancyId
+        // hh API ждёт числовой vacancy_id; некорректный — пропускаем (как cron/кнопка).
+        if (!hhVacancyId || !/^\d+$/.test(hhVacancyId)) {
+          console.warn(`[hh-import-burst] vacancy ${row.vacancyId} — пропуск, hh_vacancy_id не числовой: "${hhVacancyId}"`)
+          continue
+        }
         try {
-          const r = await client.importApplications(row.vacancyId)
+          const r = await importHhResponsesForVacancy({
+            companyId,
+            accessToken,
+            hhVacancyId,
+            mode: "new",
+          })
           imported += r.imported
         } catch (err) {
           errors.push(`vacancy ${row.vacancyId}: ${err instanceof Error ? err.message : String(err)}`)
