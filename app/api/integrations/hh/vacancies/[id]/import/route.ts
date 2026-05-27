@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
 import { requireCompany } from "@/lib/api-helpers"
 import { db } from "@/lib/db"
-import { vacancies, hhTokens } from "@/lib/db/schema"
+import { vacancies } from "@/lib/db/schema"
 import { eq } from "drizzle-orm"
-import { HHClient, HHMockClient } from "@/lib/hh/client"
+import { HHMockClient } from "@/lib/hh/client"
+import { getValidToken } from "@/lib/hh-helpers"
+import { importHhResponsesForVacancy } from "@/lib/hh/import-responses"
 
 export async function POST(
   _req: NextRequest,
@@ -25,21 +27,37 @@ export async function POST(
       return NextResponse.json({ error: "Вакансия не найдена" }, { status: 404 })
     }
 
-    // Check if token exists
-    const tokenRows = await db
-      .select()
-      .from(hhTokens)
-      .where(eq(hhTokens.companyId, user.companyId))
-      .limit(1)
+    // Токен hh через getValidToken (читает hh_integrations + авто-рефреш) —
+    // тот же путь, что у кнопки «Синхронизировать» и основного cron'а.
+    // В dev или без активной интеграции — mock (как было раньше).
+    const tokenResult =
+      process.env.NODE_ENV === "development" ? null : await getValidToken(user.companyId)
 
     let result: { imported: number }
 
-    if (!tokenRows[0] || process.env.NODE_ENV === "development") {
+    if (!tokenResult) {
       const mock = new HHMockClient(user.companyId)
       result = await mock.importApplications(vacancyId)
     } else {
-      const client = new HHClient(user.companyId)
-      result = await client.importApplications(vacancyId)
+      // hh API ждёт числовой vacancy_id; UUID нашей vacancies.id не годится.
+      const hhVacancyId = vacancy.hhVacancyId
+      if (!hhVacancyId || !/^\d+$/.test(hhVacancyId)) {
+        return NextResponse.json(
+          { error: "У вакансии нет корректного hh_vacancy_id" },
+          { status: 400 },
+        )
+      }
+      // ПЕРЕВЕДЕНО с HHClient.importApplications (писал НАПРЯМУЮ в candidates,
+      // минуя hh_responses → застревание в stage='new') на общий
+      // importHhResponsesForVacancy. mode "sync" — ручной импорт затягивает ВСЕ
+      // отклики (HR хочет всё, что есть на hh), как кнопка «Синхронизировать».
+      const r = await importHhResponsesForVacancy({
+        companyId: user.companyId,
+        accessToken: tokenResult.accessToken,
+        hhVacancyId,
+        mode: "sync",
+      })
+      result = { imported: r.imported }
     }
 
     return NextResponse.json(result)
