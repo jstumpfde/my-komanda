@@ -1468,6 +1468,10 @@ export const vacancyUtmLinks = pgTable("vacancy_utm_links", {
   name:            text("name").notNull(),
   slug:            text("slug").unique().notNull(),
   destinationUrl:  text("destination_url"),
+  // Куда ведёт /v/{slug}: 'vacancy' → /vacancy/{slug} (default), 'demo' →
+  // /api/public/source/{linkId}/visit (создаёт кандидата и шлёт на /demo).
+  // Миграция 0145. Существующие строки → 'vacancy' через default.
+  destinationType: text("destination_type").notNull().default("vacancy"),
   clicks:          integer("clicks").default(0),
   candidatesCount: integer("candidates_count").default(0),
   createdAt:       timestamp("created_at").defaultNow(),

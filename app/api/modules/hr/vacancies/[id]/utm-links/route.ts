@@ -61,13 +61,26 @@ export async function POST(
 
     if (!vacancy) return apiError("Vacancy not found", 404)
 
-    const body = await req.json() as { source: string; name: string; destinationUrl?: string }
+    const body = await req.json() as {
+      source: string
+      name: string
+      destinationUrl?: string
+      destinationType?: string
+    }
 
     if (!body.source || !body.name?.trim()) {
       return apiError("source and name are required", 400)
     }
 
     const destinationUrl = body.destinationUrl?.trim() || null
+
+    // Enum 'vacancy' | 'demo'. Дефолт 'vacancy' — поведение до этой фичи
+    // (см. миграцию 0145 и /v/[code]). Невалидное значение → 400.
+    const rawDest = body.destinationType?.trim() || "vacancy"
+    if (rawDest !== "vacancy" && rawDest !== "demo") {
+      return apiError("destinationType must be 'vacancy' or 'demo'", 400)
+    }
+    const destinationType = rawDest as "vacancy" | "demo"
 
     // Get company name for short code prefix
     const [company] = await db
@@ -96,6 +109,7 @@ export async function POST(
         name: body.name.trim(),
         slug,
         destinationUrl,
+        destinationType,
       })
       .returning()
 
