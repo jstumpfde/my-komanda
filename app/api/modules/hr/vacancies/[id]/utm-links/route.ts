@@ -3,6 +3,7 @@ import { eq, and } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { vacancies, vacancyUtmLinks, companies } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
+import { logActivity } from "@/lib/activity-log"
 
 function generateShortCode(companyName: string): string {
   const prefix = (companyName || "k")[0].toLowerCase()
@@ -110,8 +111,35 @@ export async function POST(
         slug,
         destinationUrl,
         destinationType,
+        createdByUserId: user.id,
       })
       .returning()
+
+    // Audit: дублируем в activity_log для общего трейла (фильтры по
+    // user/entity). logActivity сам ловит ошибки внутри (lib/activity-log.ts
+    // 20+38), но оборачиваем ещё раз — best-effort, никакая просадка
+    // лога не должна влиять на ответ клиенту (Yuri's spec).
+    try {
+      await logActivity({
+        companyId:   user.companyId,
+        userId:      user.id,
+        action:      "create",
+        entityType:  "utm_link",
+        entityId:    link.id,
+        entityTitle: link.name,
+        module:      "hr",
+        details: {
+          vacancyId:       id,
+          source:          link.source,
+          destinationType: link.destinationType,
+          slug:            link.slug,
+        },
+        request: req,
+      })
+    } catch (logErr) {
+      console.error("[utm-links POST] activity log failed:",
+        logErr instanceof Error ? logErr.message : logErr)
+    }
 
     return apiSuccess(link, 201)
   } catch (err) {

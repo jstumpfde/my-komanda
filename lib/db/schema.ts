@@ -1474,6 +1474,11 @@ export const vacancyUtmLinks = pgTable("vacancy_utm_links", {
   destinationType: text("destination_type").notNull().default("vacancy"),
   clicks:          integer("clicks").default(0),
   candidatesCount: integer("candidates_count").default(0),
+  // Audit: кто создал ссылку (миграция 0146). Nullable — старые
+  // (доaudit) строки остаются NULL. FK не ставим намеренно: при удалении
+  // юзера ссылку сохраняем. Параллельная запись идёт в activity_log
+  // (entity_type='utm_link') для полноценного трейла.
+  createdByUserId: uuid("created_by_user_id"),
   createdAt:       timestamp("created_at").defaultNow(),
 })
 
