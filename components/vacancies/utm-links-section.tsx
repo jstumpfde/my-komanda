@@ -19,9 +19,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import { Badge } from "@/components/ui/badge"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { Link2, Plus, Copy, Loader2, MousePointerClick, Users, Trash2 } from "lucide-react"
 import { toast } from "sonner"
+
+type DestinationType = "vacancy" | "demo"
 
 interface UtmLink {
   id: string
@@ -30,6 +34,7 @@ interface UtmLink {
   name: string
   slug: string
   destinationUrl: string | null
+  destinationType: DestinationType
   clicks: number
   candidatesCount: number
   createdAt: string
@@ -64,6 +69,7 @@ export function UtmLinksSection({ vacancyId }: UtmLinksSectionProps) {
   const [creating, setCreating] = useState(false)
   const [newSource, setNewSource] = useState("")
   const [newName, setNewName] = useState("")
+  const [newDestinationType, setNewDestinationType] = useState<DestinationType>("vacancy")
   const [deleteLinkId, setDeleteLinkId] = useState<string | null>(null)
 
   const fetchLinks = useCallback(async () => {
@@ -95,7 +101,11 @@ export function UtmLinksSection({ vacancyId }: UtmLinksSectionProps) {
       const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}/utm-links`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ source: newSource, name: newName.trim() }),
+        body: JSON.stringify({
+          source: newSource,
+          name: newName.trim(),
+          destinationType: newDestinationType,
+        }),
       })
       if (!res.ok) throw new Error()
       const link = await res.json()
@@ -103,6 +113,7 @@ export function UtmLinksSection({ vacancyId }: UtmLinksSectionProps) {
       setShowDialog(false)
       setNewSource("")
       setNewName("")
+      setNewDestinationType("vacancy")
       toast.success("Ссылка создана")
     } catch {
       toast.error("Не удалось создать ссылку")
@@ -184,7 +195,20 @@ export function UtmLinksSection({ vacancyId }: UtmLinksSectionProps) {
                             <span className="text-xs font-medium">{meta.label}</span>
                           </div>
                         </td>
-                        <td className="px-4 py-3 text-xs">{link.name}</td>
+                        <td className="px-4 py-3 text-xs">
+                          <div className="flex items-center gap-2">
+                            <span>{link.name}</span>
+                            <Badge
+                              variant={link.destinationType === "demo" ? "default" : "secondary"}
+                              className="h-4 px-1.5 text-[10px] font-medium leading-none"
+                              title={link.destinationType === "demo"
+                                ? "Ссылка ведёт сразу на демо"
+                                : "Ссылка ведёт на описание вакансии"}
+                            >
+                              {link.destinationType === "demo" ? "Демо" : "Вакансия"}
+                            </Badge>
+                          </div>
+                        </td>
                         <td className="px-4 py-3">
                           <span className="text-xs text-primary font-mono">/v/{link.slug}</span>
                         </td>
@@ -252,9 +276,39 @@ export function UtmLinksSection({ vacancyId }: UtmLinksSectionProps) {
                 autoFocus
               />
             </div>
+            <div className="space-y-1.5">
+              <Label className="text-sm">Куда ведёт ссылка</Label>
+              <RadioGroup
+                value={newDestinationType}
+                onValueChange={(v) => setNewDestinationType(v as DestinationType)}
+                className="space-y-1"
+              >
+                <div className="flex items-start gap-2">
+                  <RadioGroupItem value="vacancy" id="dest-vacancy" className="mt-0.5" />
+                  <Label htmlFor="dest-vacancy" className="text-sm font-normal cursor-pointer">
+                    Описание вакансии
+                    <span className="block text-xs text-muted-foreground">
+                      Кандидат сначала видит описание, затем откликается.
+                    </span>
+                  </Label>
+                </div>
+                <div className="flex items-start gap-2">
+                  <RadioGroupItem value="demo" id="dest-demo" className="mt-0.5" />
+                  <Label htmlFor="dest-demo" className="text-sm font-normal cursor-pointer">
+                    Сразу на демо
+                    <span className="block text-xs text-muted-foreground">
+                      Кандидат сразу попадает на демо вакансии, минуя описание.
+                    </span>
+                  </Label>
+                </div>
+              </RadioGroup>
+            </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowDialog(false)}>Отмена</Button>
+            <Button variant="outline" onClick={() => {
+              setShowDialog(false)
+              setNewDestinationType("vacancy")
+            }}>Отмена</Button>
             <Button onClick={handleCreate} disabled={creating}>
               {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : "Создать"}
             </Button>
