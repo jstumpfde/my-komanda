@@ -43,21 +43,32 @@ export async function GET(
   }
 
   // Существующий посетитель — отправляем на его собственный демо-shortId,
-  // дубль не плодим. Зеркало /demo/.../visit:50-68.
+  // дубль не плодим. Tenant guard: дедуп срабатывает ТОЛЬКО если cookie
+  // указывает на кандидата ТОЙ ЖЕ вакансии что у ссылки. Иначе — клик
+  // по ссылке компании B при наличии cookie кандидата компании A раньше
+  // отправлял на демо A (UX-баг кросс-тенант, инцидент #16, slug о265ea
+  // 28.05). Cookie от другой вакансии теперь игнорируется → fallthrough
+  // к созданию нового кандидата под link.vacancyId, новый cookie заместит
+  // старый. Аналогичная защита в /api/public/demo/[token]/visit.
   const cookieUuid = req.cookies.get(COOKIE_NAME)?.value
   if (cookieUuid && UUID_RE.test(cookieUuid)) {
     const [existing] = await db
-      .select({ id: candidates.id, shortId: candidates.shortId })
+      .select({
+        id:        candidates.id,
+        shortId:   candidates.shortId,
+        vacancyId: candidates.vacancyId,
+      })
       .from(candidates)
       .where(eq(candidates.id, cookieUuid))
       .limit(1)
-    if (existing && existing.shortId) {
+    if (existing && existing.shortId && existing.vacancyId === link.vacancyId) {
       await markDemoOpened(existing.id)
       return NextResponse.redirect(
         new URL(`/demo/${existing.shortId}?c=${existing.id}`, req.url),
       )
     }
-    // Cookie указывает на несуществующего кандидата — fallthrough, создаём.
+    // Cookie указывает на (а) несуществующего кандидата, (б) кандидата
+    // другой вакансии — fallthrough, создаём нового под link.vacancyId.
   }
 
   // Новый посетитель — создаём кандидата под вакансию ссылки.
