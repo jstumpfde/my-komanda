@@ -7,7 +7,8 @@ import { Plus, Eye, Pencil, Trash2, Loader2, Copy, BookOpen, FileText, Search, P
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Card, CardContent } from "@/components/ui/card"
+import { CardContent } from "@/components/ui/card"
+import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -137,72 +138,68 @@ function MaterialsTable({ rows, onDelete, onDuplicate }: {
   onDuplicate: (t: TemplateData) => void
 }) {
   return (
-    <div className="max-h-[60vh] overflow-auto">
-      <table className="w-full">
-        <thead className="bg-muted/50 border-b border-t border-border sticky top-0">
-          <tr>
-            <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Название</th>
-            <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3 w-[120px]">Тип</th>
-            <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3 w-[180px]">Должность</th>
-            <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3 w-[80px]">Блоков</th>
-            <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3 w-[120px]">Создан</th>
-            <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3 w-[80px]">Действия</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((t) => {
-            const lengthInfo = LENGTH_LABELS[t.length as keyof typeof LENGTH_LABELS]
-            const nicheInfo = NICHE_LABELS[t.niche as keyof typeof NICHE_LABELS]
-            const mt = MATERIAL_TYPE_LABELS[getMaterialType(t.length)]
-            const sectionsCount = Array.isArray(t.sections) ? t.sections.length : 0
-            return (
-              <tr key={t.id} className="border-b border-border/50 hover:bg-muted/50 transition-colors group">
-                <td className="px-4 py-3">
-                  <Link href={`/hr/library/create/editor?id=${t.id}`} className="flex items-center gap-2 min-w-0">
-                    <span className="text-sm font-medium text-foreground group-hover:text-primary transition-colors truncate">{t.name}</span>
-                    {t.isSystem && <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 shrink-0 font-normal">Системный</Badge>}
-                  </Link>
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex flex-col items-start gap-1">
-                    <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium", mt.cls)}>{mt.label}</span>
-                    {lengthInfo?.label && <span className="text-xs text-muted-foreground">{lengthInfo.label}</span>}
-                  </div>
-                </td>
-                <td className="px-4 py-3 text-sm text-muted-foreground truncate max-w-[180px]">{nicheInfo?.label || "—"}</td>
-                <td className="px-4 py-3 text-center text-sm text-muted-foreground">{sectionsCount}</td>
-                <td className="px-4 py-3 text-sm text-muted-foreground whitespace-nowrap">{formatDate(t.createdAt)}</td>
-                <td className="px-4 py-3">
-                  <div className="flex justify-end">
-                    <RowMenu>
+    <DataTable>
+      <DataHead>
+        <DataHeadCell>Название</DataHeadCell>
+        <DataHeadCell width="120px">Тип</DataHeadCell>
+        <DataHeadCell width="180px">Должность</DataHeadCell>
+        <DataHeadCell align="center" width="80px">Блоков</DataHeadCell>
+        <DataHeadCell width="120px">Создан</DataHeadCell>
+        <DataHeadCell align="right" width="80px">Действия</DataHeadCell>
+      </DataHead>
+      <tbody>
+        {rows.map((t) => {
+          const lengthInfo = LENGTH_LABELS[t.length as keyof typeof LENGTH_LABELS]
+          const nicheInfo = NICHE_LABELS[t.niche as keyof typeof NICHE_LABELS]
+          const mt = MATERIAL_TYPE_LABELS[getMaterialType(t.length)]
+          const sectionsCount = Array.isArray(t.sections) ? t.sections.length : 0
+          return (
+            <DataRow key={t.id} className="group">
+              <DataCell>
+                <Link href={`/hr/library/create/editor?id=${t.id}`} className="flex items-center gap-2 min-w-0">
+                  <span className="font-medium text-foreground group-hover:text-primary transition-colors truncate">{t.name}</span>
+                  {t.isSystem && <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 shrink-0 font-normal">Системный</Badge>}
+                </Link>
+              </DataCell>
+              <DataCell>
+                <div className="flex flex-col items-start gap-1">
+                  <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium", mt.cls)}>{mt.label}</span>
+                  {lengthInfo?.label && <span className="text-xs text-muted-foreground">{lengthInfo.label}</span>}
+                </div>
+              </DataCell>
+              <DataCell className="text-muted-foreground truncate max-w-[180px]">{nicheInfo?.label || "—"}</DataCell>
+              <DataCell align="center" className="text-muted-foreground">{sectionsCount}</DataCell>
+              <DataCell className="text-muted-foreground whitespace-nowrap">{formatDate(t.createdAt)}</DataCell>
+              <DataCell>
+                <div className="flex justify-end">
+                  <RowMenu>
+                    <DropdownMenuItem asChild className="gap-2 cursor-pointer">
+                      <Link href={`/hr/library/preview/${t.id}`} target="_blank"><Eye className="h-3.5 w-3.5" />Просмотр</Link>
+                    </DropdownMenuItem>
+                    {!t.isSystem && (
                       <DropdownMenuItem asChild className="gap-2 cursor-pointer">
-                        <Link href={`/hr/library/preview/${t.id}`} target="_blank"><Eye className="h-3.5 w-3.5" />Просмотр</Link>
+                        <Link href={`/hr/library/create/editor?id=${t.id}`}><Pencil className="h-3.5 w-3.5" />Редактировать</Link>
                       </DropdownMenuItem>
-                      {!t.isSystem && (
-                        <DropdownMenuItem asChild className="gap-2 cursor-pointer">
-                          <Link href={`/hr/library/create/editor?id=${t.id}`}><Pencil className="h-3.5 w-3.5" />Редактировать</Link>
+                    )}
+                    <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => onDuplicate(t)}>
+                      <Copy className="h-3.5 w-3.5" />Дублировать
+                    </DropdownMenuItem>
+                    {!t.isSystem && (
+                      <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem className="gap-2 cursor-pointer text-destructive focus:text-destructive" onClick={() => onDelete(t.id)}>
+                          <Trash2 className="h-3.5 w-3.5" />Удалить
                         </DropdownMenuItem>
-                      )}
-                      <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => onDuplicate(t)}>
-                        <Copy className="h-3.5 w-3.5" />Дублировать
-                      </DropdownMenuItem>
-                      {!t.isSystem && (
-                        <>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem className="gap-2 cursor-pointer text-destructive focus:text-destructive" onClick={() => onDelete(t.id)}>
-                            <Trash2 className="h-3.5 w-3.5" />Удалить
-                          </DropdownMenuItem>
-                        </>
-                      )}
-                    </RowMenu>
-                  </div>
-                </td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
-    </div>
+                      </>
+                    )}
+                  </RowMenu>
+                </div>
+              </DataCell>
+            </DataRow>
+          )
+        })}
+      </tbody>
+    </DataTable>
   )
 }
 
@@ -218,76 +215,72 @@ function QuestionnairesTable({ rows, isPlatformAdmin, onEdit, onDuplicate, onDel
   onUnassignAll: (q: QuestionnaireTemplate) => void
 }) {
   return (
-    <div className="max-h-[60vh] overflow-auto">
-      <table className="w-full">
-        <thead className="bg-muted/50 border-b border-t border-border sticky top-0">
-          <tr>
-            <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Название</th>
-            <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3 w-[110px]">Вопросов</th>
-            <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3 w-[110px]">Обязат.</th>
-            <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3 w-[120px]">Создан</th>
-            <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3 w-[80px]">Действия</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((q) => {
-            const total = Array.isArray(q.questions) ? q.questions.length : 0
-            const required = Array.isArray(q.questions) ? q.questions.filter((x) => x?.required).length : 0
-            return (
-              <tr key={q.id} className="border-b border-border/50 hover:bg-muted/50 transition-colors group">
-                <td className="px-4 py-3">
-                  <button type="button" onClick={() => onEdit(q)} className="flex items-center gap-2 min-w-0 text-left">
-                    <span className="text-sm font-medium text-foreground group-hover:text-primary transition-colors truncate">{q.name}</span>
-                    {q.isSystem && (
-                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 shrink-0 font-normal gap-0.5">
-                        <Globe className="h-2.5 w-2.5" />Всем
-                      </Badge>
-                    )}
-                  </button>
-                </td>
-                <td className="px-4 py-3 text-center text-sm text-muted-foreground">{total}</td>
-                <td className="px-4 py-3 text-center text-sm text-muted-foreground">{required}</td>
-                <td className="px-4 py-3 text-sm text-muted-foreground whitespace-nowrap">{formatDate(q.createdAt)}</td>
-                <td className="px-4 py-3">
-                  <div className="flex justify-end">
-                    <RowMenu>
-                      <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => onEdit(q)}>
-                        {q.isSystem ? <><Eye className="h-3.5 w-3.5" />Просмотр</> : <><Pencil className="h-3.5 w-3.5" />Редактировать</>}
-                      </DropdownMenuItem>
-                      <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => onDuplicate(q)}>
-                        <Copy className="h-3.5 w-3.5" />Дублировать
-                      </DropdownMenuItem>
-                      {isPlatformAdmin && (
-                        <>
-                          <DropdownMenuSeparator />
-                          {q.isSystem ? (
-                            <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => onUnassignAll(q)}>
-                              <Lock className="h-3.5 w-3.5" />Снять у всех
-                            </DropdownMenuItem>
-                          ) : (
-                            <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => onAssignAll(q)}>
-                              <Globe className="h-3.5 w-3.5" />Назначить всем компаниям
-                            </DropdownMenuItem>
-                          )}
-                        </>
-                      )}
-                      {!q.isSystem && (
-                        <>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem className="gap-2 cursor-pointer text-destructive focus:text-destructive" onClick={() => onDelete(q.id)}>
-                            <Trash2 className="h-3.5 w-3.5" />Удалить
+    <DataTable>
+      <DataHead>
+        <DataHeadCell>Название</DataHeadCell>
+        <DataHeadCell align="center" width="110px">Вопросов</DataHeadCell>
+        <DataHeadCell align="center" width="110px">Обязат.</DataHeadCell>
+        <DataHeadCell width="120px">Создан</DataHeadCell>
+        <DataHeadCell align="right" width="80px">Действия</DataHeadCell>
+      </DataHead>
+      <tbody>
+        {rows.map((q) => {
+          const total = Array.isArray(q.questions) ? q.questions.length : 0
+          const required = Array.isArray(q.questions) ? q.questions.filter((x) => x?.required).length : 0
+          return (
+            <DataRow key={q.id} className="group">
+              <DataCell>
+                <button type="button" onClick={() => onEdit(q)} className="flex items-center gap-2 min-w-0 text-left">
+                  <span className="font-medium text-foreground group-hover:text-primary transition-colors truncate">{q.name}</span>
+                  {q.isSystem && (
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 shrink-0 font-normal gap-0.5">
+                      <Globe className="h-2.5 w-2.5" />Всем
+                    </Badge>
+                  )}
+                </button>
+              </DataCell>
+              <DataCell align="center" className="text-muted-foreground">{total}</DataCell>
+              <DataCell align="center" className="text-muted-foreground">{required}</DataCell>
+              <DataCell className="text-muted-foreground whitespace-nowrap">{formatDate(q.createdAt)}</DataCell>
+              <DataCell>
+                <div className="flex justify-end">
+                  <RowMenu>
+                    <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => onEdit(q)}>
+                      {q.isSystem ? <><Eye className="h-3.5 w-3.5" />Просмотр</> : <><Pencil className="h-3.5 w-3.5" />Редактировать</>}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => onDuplicate(q)}>
+                      <Copy className="h-3.5 w-3.5" />Дублировать
+                    </DropdownMenuItem>
+                    {isPlatformAdmin && (
+                      <>
+                        <DropdownMenuSeparator />
+                        {q.isSystem ? (
+                          <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => onUnassignAll(q)}>
+                            <Lock className="h-3.5 w-3.5" />Снять у всех
                           </DropdownMenuItem>
-                        </>
-                      )}
-                    </RowMenu>
-                  </div>
-                </td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
-    </div>
+                        ) : (
+                          <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => onAssignAll(q)}>
+                            <Globe className="h-3.5 w-3.5" />Назначить всем компаниям
+                          </DropdownMenuItem>
+                        )}
+                      </>
+                    )}
+                    {!q.isSystem && (
+                      <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem className="gap-2 cursor-pointer text-destructive focus:text-destructive" onClick={() => onDelete(q.id)}>
+                          <Trash2 className="h-3.5 w-3.5" />Удалить
+                        </DropdownMenuItem>
+                      </>
+                    )}
+                  </RowMenu>
+                </div>
+              </DataCell>
+            </DataRow>
+          )
+        })}
+      </tbody>
+    </DataTable>
   )
 }
 
@@ -306,54 +299,50 @@ function TrashTable({ rows, retentionDays, onRestore, onPermanent }: {
   onPermanent: (t: TrashRow) => void
 }) {
   return (
-    <div className="max-h-[60vh] overflow-auto">
-      <table className="w-full">
-        <thead className="bg-muted/50 border-b border-t border-border sticky top-0">
-          <tr>
-            <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Название</th>
-            <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3 w-[140px]">Тип</th>
-            <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3 w-[120px]">Удалён</th>
-            <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3 w-[140px]">До удаления</th>
-            <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3 w-[80px]">Действия</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((t) => {
-            const daysLeft = trashDaysLeft(t.deletedAt, retentionDays)
-            return (
-              <tr key={`${t.kind}-${t.id}`} className="border-b border-border/50 hover:bg-muted/50 transition-colors">
-                <td className="px-4 py-3 text-sm font-medium text-foreground truncate max-w-[280px]">{t.name}</td>
-                <td className="px-4 py-3">
-                  <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium", t.typeCls)}>{t.typeLabel}</span>
-                </td>
-                <td className="px-4 py-3 text-sm text-muted-foreground whitespace-nowrap">{formatDate(t.deletedAt ?? "")}</td>
-                <td className="px-4 py-3">
-                  <span className={cn(
-                    "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
-                    daysLeft <= 1 ? "bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400" : "bg-muted text-muted-foreground",
-                  )}>
-                    {daysLeft === 0 ? "сегодня" : `${daysLeft} дн.`}
-                  </span>
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex justify-end">
-                    <RowMenu>
-                      <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => onRestore(t)}>
-                        <RotateCcw className="h-3.5 w-3.5" />Восстановить
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem className="gap-2 cursor-pointer text-destructive focus:text-destructive" onClick={() => onPermanent(t)}>
-                        <Trash className="h-3.5 w-3.5" />Удалить навсегда
-                      </DropdownMenuItem>
-                    </RowMenu>
-                  </div>
-                </td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
-    </div>
+    <DataTable>
+      <DataHead>
+        <DataHeadCell>Название</DataHeadCell>
+        <DataHeadCell width="140px">Тип</DataHeadCell>
+        <DataHeadCell width="120px">Удалён</DataHeadCell>
+        <DataHeadCell width="140px">До удаления</DataHeadCell>
+        <DataHeadCell align="right" width="80px">Действия</DataHeadCell>
+      </DataHead>
+      <tbody>
+        {rows.map((t) => {
+          const daysLeft = trashDaysLeft(t.deletedAt, retentionDays)
+          return (
+            <DataRow key={`${t.kind}-${t.id}`}>
+              <DataCell className="font-medium text-foreground truncate max-w-[280px]">{t.name}</DataCell>
+              <DataCell>
+                <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium", t.typeCls)}>{t.typeLabel}</span>
+              </DataCell>
+              <DataCell className="text-muted-foreground whitespace-nowrap">{formatDate(t.deletedAt ?? "")}</DataCell>
+              <DataCell>
+                <span className={cn(
+                  "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
+                  daysLeft <= 1 ? "bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400" : "bg-muted text-muted-foreground",
+                )}>
+                  {daysLeft === 0 ? "сегодня" : `${daysLeft} дн.`}
+                </span>
+              </DataCell>
+              <DataCell>
+                <div className="flex justify-end">
+                  <RowMenu>
+                    <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => onRestore(t)}>
+                      <RotateCcw className="h-3.5 w-3.5" />Восстановить
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem className="gap-2 cursor-pointer text-destructive focus:text-destructive" onClick={() => onPermanent(t)}>
+                      <Trash className="h-3.5 w-3.5" />Удалить навсегда
+                    </DropdownMenuItem>
+                  </RowMenu>
+                </div>
+              </DataCell>
+            </DataRow>
+          )
+        })}
+      </tbody>
+    </DataTable>
   )
 }
 
@@ -637,7 +626,7 @@ export default function LibraryPage() {
   const renderMaterialsTab = (kind: CreatableType, rows: TemplateData[]) => {
     const shown = bySearch(rows)
     return (
-      <Card>
+      <TableCard>
         <CardContent className="p-0">
           {loading ? (
             <div className="flex items-center justify-center py-12 gap-2 text-muted-foreground">
@@ -656,7 +645,7 @@ export default function LibraryPage() {
             <MaterialsTable rows={shown} onDelete={(id) => setDeleteId(id)} onDuplicate={handleDuplicate} />
           )}
         </CardContent>
-      </Card>
+      </TableCard>
     )
   }
 
@@ -717,7 +706,7 @@ export default function LibraryPage() {
               <TabsContent value="tests" className="mt-0">{renderMaterialsTab("test", testRows)}</TabsContent>
 
               <TabsContent value="questionnaires" className="mt-0">
-                <Card>
+                <TableCard>
                   <CardContent className="p-0">
                     {loadingQ ? (
                       <div className="flex items-center justify-center py-12 gap-2 text-muted-foreground">
@@ -753,11 +742,11 @@ export default function LibraryPage() {
                       />
                     )}
                   </CardContent>
-                </Card>
+                </TableCard>
               </TabsContent>
 
               <TabsContent value="trash" className="mt-0">
-                <Card>
+                <TableCard>
                   <CardContent className="p-0">
                     {trashRows.length === 0 ? (
                       <div className="flex flex-col items-center justify-center py-12 text-center px-4">
@@ -776,7 +765,7 @@ export default function LibraryPage() {
                       />
                     )}
                   </CardContent>
-                </Card>
+                </TableCard>
               </TabsContent>
             </Tabs>
 
