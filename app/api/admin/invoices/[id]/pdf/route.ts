@@ -1,29 +1,24 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextRequest } from "next/server"
 import { db } from "@/lib/db"
 import { invoices, plans, companies } from "@/lib/db/schema"
-import { eq, and } from "drizzle-orm"
-import { apiError, requireCompany } from "@/lib/api-helpers"
+import { eq } from "drizzle-orm"
+import { apiError, requirePlatformAdmin } from "@/lib/api-helpers"
 import { renderInvoiceHtml } from "@/lib/billing/invoice-pdf-html"
 
+// GET /api/admin/invoices/[id]/pdf — cross-tenant PDF счёта для админа платформы.
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  let user: Awaited<ReturnType<typeof requireCompany>>
   try {
-    user = await requireCompany()
+    await requirePlatformAdmin()
   } catch (e) {
-    return e as NextResponse
+    return e as Response
   }
 
   const { id } = await params
 
-  const rows = await db
-    .select()
-    .from(invoices)
-    .where(and(eq(invoices.id, id), eq(invoices.companyId, user.companyId)))
-    .limit(1)
-
+  const rows = await db.select().from(invoices).where(eq(invoices.id, id)).limit(1)
   const invoice = rows[0]
   if (!invoice) return apiError("Счёт не найден", 404)
 
@@ -33,14 +28,12 @@ export async function GET(
     if (planRows[0]) planName = planRows[0].name
   }
 
-  const companyRows = await db.select().from(companies).where(eq(companies.id, user.companyId)).limit(1)
+  const companyRows = await db.select().from(companies).where(eq(companies.id, invoice.companyId)).limit(1)
   const company = companyRows[0]
 
   const html = renderInvoiceHtml(invoice, { name: company?.name, inn: company?.inn, kpp: company?.kpp }, planName)
 
   return new Response(html, {
-    headers: {
-      "Content-Type": "text/html; charset=utf-8",
-    },
+    headers: { "Content-Type": "text/html; charset=utf-8" },
   })
 }
