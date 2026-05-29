@@ -9,7 +9,6 @@ import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
 import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
@@ -55,12 +54,6 @@ const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
   cancelled: { label: "Отменён",  color: "bg-muted text-muted-foreground border-border" },
   paused:    { label: "Пауза",    color: "bg-muted text-muted-foreground border-border" },
 }
-
-const SORT_OPTIONS = [
-  { value: "created_at", label: "Дата регистрации" },
-  { value: "name",       label: "Название" },
-  { value: "mrr",        label: "MRR" },
-]
 
 // ─── Вспомогательные функции ──────────────────────────────────────────────────
 
@@ -179,9 +172,12 @@ function AdminClientsInner() {
   }
 
   const statusLabels: Record<string, string> = {
-    trial:   "Пробный",
-    active:  "Активен",
-    expired: "Истёк",
+    trial:     "Пробный",
+    active:    "Активен",
+    paused:    "Пауза",
+    expired:   "Истёк",
+    overdue:   "Просрочен",
+    cancelled: "Отменён",
   }
 
   return (
@@ -217,17 +213,7 @@ function AdminClientsInner() {
                   />
                 </div>
 
-                {/* Сортировка */}
-                <Select value={sort} onValueChange={setSort}>
-                  <SelectTrigger className="w-[190px] h-9">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {SORT_OPTIONS.map(o => (
-                      <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {/* Сортировка — по клику на заголовки колонок (Компания/Дата/MRR) */}
               </div>
 
               {/* Фильтр по статусу */}
@@ -258,7 +244,7 @@ function AdminClientsInner() {
                   <DataHeadCell align="center">Статус</DataHeadCell>
                   <DataHeadCell align="right">Польз.</DataHeadCell>
                   <DataHeadCell sortable sortDir={sort === "created_at" ? "desc" : null} onSort={() => setSort("created_at")}>Дата</DataHeadCell>
-                  <DataHeadCell align="right" sortable sortDir={sort === "mrr" ? "desc" : null} onSort={() => setSort("mrr")}>MRR ₽</DataHeadCell>
+                  <DataHeadCell align="right" sortable sortDir={sort === "mrr" ? "desc" : null} onSort={() => setSort("mrr")} className="whitespace-nowrap">MRR ₽</DataHeadCell>
                   <DataHeadCell align="right" width="80px">Действия</DataHeadCell>
                 </DataHead>
                 <tbody>
@@ -300,7 +286,7 @@ function AdminClientsInner() {
                           </Link>
                         </DataCell>
                         <DataCell className="text-muted-foreground">{client.inn ?? "—"}</DataCell>
-                        <DataCell>
+                        <DataCell className="whitespace-nowrap">
                           {client.planName
                             ? <div>
                                 <p className="font-medium text-foreground">{client.planName}</p>
@@ -314,7 +300,7 @@ function AdminClientsInner() {
                         </DataCell>
                         <DataCell align="right" className="text-foreground">{client.userCount}</DataCell>
                         <DataCell className="text-foreground">{formatDate(client.createdAt)}</DataCell>
-                        <DataCell align="right" className="font-medium text-foreground">{client.mrr > 0 ? formatPrice(client.mrr) : "—"}</DataCell>
+                        <DataCell align="right" className="font-medium text-foreground whitespace-nowrap">{client.mrr > 0 ? formatPrice(client.mrr) : "—"}</DataCell>
                         <DataCell align="right">
                           <div className="flex justify-end">
                             <DropdownMenu>
