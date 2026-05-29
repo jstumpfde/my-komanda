@@ -2042,10 +2042,11 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
 
       {/* ── 9. AI-генерация ── */}
       <Section title="AI-генерация" number={9} filled={data.screeningQuestions.length > 0 || !!data.hhDescription}>
-        {/* Screening questions */}
-        {data.screeningQuestions.length > 0 && (
-          <div className="space-y-2">
-            <Label className="text-xs font-medium">Вопросы для скрининга</Label>
+        {/* Screening questions — блок виден всегда, чтобы можно было добавить
+            первый вопрос вручную (а не только после AI-парса). БАГ-6. */}
+        <div className="space-y-2">
+          <Label className="text-xs font-medium">Вопросы для скрининга</Label>
+          {data.screeningQuestions.length > 0 ? (
             <div className="space-y-1.5">
               {data.screeningQuestions.map((q, i) => (
                 <div key={i} className="flex items-start gap-2">
@@ -2070,16 +2071,18 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
                 </div>
               ))}
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-7 text-xs gap-1"
-              onClick={() => set("screeningQuestions", [...data.screeningQuestions, ""])}
-            >
-              <Plus className="w-3 h-3" /> Добавить вопрос
-            </Button>
-          </div>
-        )}
+          ) : (
+            <p className="text-xs text-muted-foreground">Пока нет вопросов — добавьте вручную или сгенерируйте через AI ниже.</p>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs gap-1"
+            onClick={() => set("screeningQuestions", [...data.screeningQuestions, ""])}
+          >
+            <Plus className="w-3 h-3" /> Добавить вопрос
+          </Button>
+        </div>
 
         {/* hh.ru description — generate / preview / edit */}
         <div className="space-y-3 mt-4">
