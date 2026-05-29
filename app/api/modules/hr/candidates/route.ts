@@ -529,6 +529,10 @@ export async function GET(req: NextRequest) {
         OR COALESCE(${candidates.salaryMin}, ${candidates.salaryMax}, 999999999) <= ${v}
       )`)
     }
+    // «Скрыть без зарплаты» — исключаем кандидатов, у которых ЗП не указана.
+    if (url.searchParams.get("hideNoSalary") === "true") {
+      filterConds.push(sql`NOT (${candidates.salaryMin} IS NULL AND ${candidates.salaryMax} IS NULL)`)
+    }
 
     // Источник кандидата (multi-select).
     const sourcesParam = url.searchParams.get("sources")

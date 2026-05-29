@@ -15,7 +15,8 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
-import { Search, Settings, X, ChevronsUpDown, Check } from "lucide-react"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { Search, Settings, X, ChevronsUpDown, Check, ChevronDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Candidate } from "./candidate-card"
 import {
@@ -49,6 +50,8 @@ export interface FilterState {
   /** Скрыть кандидатов в стадии rejected. Отдельно от funnelStatuses —
    *  применяется сервером как stage != 'rejected', не ломая legacy-стадии. */
   hideRejected: boolean
+  /** Скрыть кандидатов без указанной зарплаты (server: salary NOT NULL). */
+  hideNoSalary: boolean
   demoProgress: string[]
   dateRange: string
   dateFrom: string
@@ -94,6 +97,7 @@ const DEFAULT_FILTERS: FilterState = {
   relocation: "any", businessTrips: "any", experienceMin: 0, experienceMax: 20,
   funnelStatuses: DEFAULT_FUNNEL_STATUSES.slice(),
   hideRejected: false,
+  hideNoSalary: false,
   demoProgress: [],
   dateRange: "", dateFrom: "", dateTo: "", ageMin: 18, ageMax: 65, education: [], languages: [], otherLanguages: [],
   skills: [], industries: [],
@@ -230,6 +234,7 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [], va
     (filters.scoreMinResume ?? 0) > 0 ? 1 : 0,
     (filters.scoreMinAnketa ?? 0) > 0 ? 1 : 0,
     (filters.salaryMin ?? 0) > 0 || (filters.salaryMax ?? 250000) < 250000 ? 1 : 0,
+    filters.hideNoSalary ? 1 : 0,
     (filters.relocation ?? "any") !== "any" ? 1 : 0,
     (filters.businessTrips ?? "any") !== "any" ? 1 : 0,
     (filters.experienceMin ?? 0) > 0 || (filters.experienceMax ?? 20) < 20 ? 1 : 0,
@@ -363,6 +368,15 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [], va
               onValueChange={([min, max]) => onFiltersChange({ ...filters, salaryMin: min, salaryMax: max })}
               min={0} max={250000} step={10000}
             />
+            {/* По умолчанию кандидаты без указанной ЗП проходят любой фильтр по
+                зарплате (их оффер неизвестен). Этот чекбокс их прячет. */}
+            <label className="flex items-center gap-2 cursor-pointer text-sm pt-0.5">
+              <Checkbox
+                checked={filters.hideNoSalary}
+                onCheckedChange={(v) => onFiltersChange({ ...filters, hideNoSalary: v === true })}
+              />
+              <span>Скрыть без указанной зарплаты</span>
+            </label>
           </div>
 
           <Separator className="my-1" />
@@ -396,150 +410,154 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [], va
             />
           </div>
 
-          <Separator />
+          <Separator className="my-1" />
 
-          {/* 1. Work Format — 3 checkboxes */}
-          {false && (
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-muted-foreground">Формат работы</label>
-            <div className="space-y-1">
-              {WORK_FORMATS.map((f) => (
-                <div key={f.id} className="flex items-center gap-2">
-                  <Checkbox
-                    id={`fmt-${f.id}`}
-                    checked={filters.workFormats.includes(f.id)}
-                    onCheckedChange={() => onFiltersChange({ ...filters, workFormats: toggleArray(filters.workFormats, f.id) })}
-                  />
-                  <label htmlFor={`fmt-${f.id}`} className="text-sm cursor-pointer">{f.label}</label>
+          {/* Доп. фильтры — свёрнуты по умолчанию, чтобы панель не растягивалась */}
+          <Collapsible>
+            <CollapsibleTrigger className="flex w-full items-center justify-between text-sm font-medium [&[data-state=open]>svg]:rotate-180">
+              <span className="flex items-center gap-2">
+                Дополнительно
+                {((filters.workFormats?.length ?? 0) > 0 || (filters.relocation ?? "any") !== "any" || (filters.businessTrips ?? "any") !== "any" || (filters.experienceMin ?? 0) > 0 || (filters.experienceMax ?? 20) < 20) && (
+                  <span className="text-[10px] rounded-full bg-primary/15 text-primary px-1.5 py-0.5">активны</span>
+                )}
+              </span>
+              <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform" />
+            </CollapsibleTrigger>
+            <CollapsibleContent className="space-y-3 pt-3">
+              {/* Формат работы */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Формат работы</label>
+                <div className="space-y-1">
+                  {WORK_FORMATS.map((f) => (
+                    <div key={f.id} className="flex items-center gap-2">
+                      <Checkbox
+                        id={`fmt-${f.id}`}
+                        checked={filters.workFormats.includes(f.id)}
+                        onCheckedChange={() => onFiltersChange({ ...filters, workFormats: toggleArray(filters.workFormats, f.id) })}
+                      />
+                      <label htmlFor={`fmt-${f.id}`} className="text-sm cursor-pointer">{f.label}</label>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </div>
-          )}
-
-          {/* 2. Relocation */}
-          {false && (
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-muted-foreground">Готовность к переезду</label>
-            <div className="space-y-1">
-              {([["any", "Не важно"], ["yes", "Да"], ["no", "Нет"]] as const).map(([val, label]) => (
-                <div key={val} className="flex items-center gap-2">
-                  <input
-                    type="radio"
-                    id={`reloc-${val}`}
-                    name="relocation"
-                    checked={filters.relocation === val}
-                    onChange={() => onFiltersChange({ ...filters, relocation: val })}
-                    className="accent-primary w-3.5 h-3.5"
-                  />
-                  <label htmlFor={`reloc-${val}`} className="text-sm cursor-pointer">{label}</label>
+              </div>
+              {/* Готовность к переезду */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Готовность к переезду</label>
+                <div className="space-y-1">
+                  {([["any", "Не важно"], ["yes", "Да"], ["no", "Нет"]] as const).map(([val, label]) => (
+                    <div key={val} className="flex items-center gap-2">
+                      <input
+                        type="radio"
+                        id={`reloc-${val}`}
+                        name="relocation"
+                        checked={filters.relocation === val}
+                        onChange={() => onFiltersChange({ ...filters, relocation: val })}
+                        className="accent-primary w-3.5 h-3.5"
+                      />
+                      <label htmlFor={`reloc-${val}`} className="text-sm cursor-pointer">{label}</label>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </div>
-          )}
-
-          {/* 2b. Business Trips */}
-          {false && (
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-muted-foreground">Готовность к командировкам</label>
-            <div className="space-y-1">
-              {([["any", "Не важно"], ["yes", "Готов"], ["no", "Не готов"]] as const).map(([val, label]) => (
-                <div key={val} className="flex items-center gap-2">
-                  <input
-                    type="radio"
-                    id={`trips-${val}`}
-                    name="businessTrips"
-                    checked={filters.businessTrips === val}
-                    onChange={() => onFiltersChange({ ...filters, businessTrips: val })}
-                    className="accent-primary w-3.5 h-3.5"
-                  />
-                  <label htmlFor={`trips-${val}`} className="text-sm cursor-pointer">{label}</label>
+              </div>
+              {/* Готовность к командировкам */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Готовность к командировкам</label>
+                <div className="space-y-1">
+                  {([["any", "Не важно"], ["yes", "Готов"], ["no", "Не готов"]] as const).map(([val, label]) => (
+                    <div key={val} className="flex items-center gap-2">
+                      <input
+                        type="radio"
+                        id={`trips-${val}`}
+                        name="businessTrips"
+                        checked={filters.businessTrips === val}
+                        onChange={() => onFiltersChange({ ...filters, businessTrips: val })}
+                        className="accent-primary w-3.5 h-3.5"
+                      />
+                      <label htmlFor={`trips-${val}`} className="text-sm cursor-pointer">{label}</label>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </div>
-          )}
+              </div>
+              {/* Опыт работы */}
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-muted-foreground">
+                  {filters.experienceMin === 0 && filters.experienceMax >= 20
+                    ? <>Опыт работы: <span className="italic">не задан</span></>
+                    : <>Опыт работы: {filters.experienceMin} – {filters.experienceMax}{filters.experienceMax >= 20 ? "+" : ""} лет</>}
+                </label>
+                <Slider
+                  value={[filters.experienceMin, filters.experienceMax]}
+                  onValueChange={([min, max]) => onFiltersChange({ ...filters, experienceMin: min, experienceMax: max })}
+                  min={0} max={20} step={1}
+                />
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
 
-          {/* 3. Experience */}
-          {false && (
-          <div className="space-y-2">
-            <label className="text-xs font-medium text-muted-foreground">
-              Опыт работы: {filters.experienceMin} – {filters.experienceMax} лет
-            </label>
-            <Slider
-              value={[filters.experienceMin, filters.experienceMax]}
-              onValueChange={([min, max]) => onFiltersChange({ ...filters, experienceMin: min, experienceMax: max })}
-              min={0} max={20} step={1}
-            />
-          </div>
-          )}
-
-          {/* 4. Funnel Status — ТЗ-3 Ч.4: всегда из PLATFORM_STAGES (slug'и).
-              #53: тумблер «Скрыть отказы» переехал сюда из шапки попапа.
-              Логика инвертирована — лейбл «Скрыть отказы» означает действие
-              (нажми чтобы скрыть), отсюда тумблер ВКЛ когда rejected виден. */}
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-muted-foreground">Статус в воронке</label>
-            <div className="space-y-1">
-              {/* rejected исключён из чекбоксов — им управляет тумблер
-                  «Скрыть/Показать отказы» ниже (отдельный hideRejected). */}
-              {ALL_STAGE_SLUGS.filter((slug) => slug !== "rejected").map((slug) => {
-                const stage = PLATFORM_STAGES[slug]
-                return (
-                  <div key={slug} className="flex items-center gap-2">
-                    <Checkbox
-                      id={`funnel-${slug}`}
-                      checked={filters.funnelStatuses.includes(slug)}
-                      onCheckedChange={() => onFiltersChange({
-                        ...filters,
-                        funnelStatuses: toggleArray(filters.funnelStatuses, slug),
-                      })}
-                    />
-                    <label htmlFor={`funnel-${slug}`} className="text-sm cursor-pointer flex items-center gap-2">
-                      <span>{stage.defaultLabel}</span>
-                      {stage.isTerminal && (
-                        <span className="text-[10px] text-muted-foreground">терминальная</span>
-                      )}
-                    </label>
-                  </div>
-                )
-              })}
-            </div>
-            {/* #53: компактный тумблер «Скрыть/Показать отказы».
-                Отдельный boolean hideRejected (НЕ через funnelStatuses):
-                в данных есть legacy-стадии (demo/interviewed/offer/...),
-                которых нет в ALL_STAGE_SLUGS, поэтому материализовать
-                whitelist «все кроме rejected» нельзя — он выкинул бы и их.
-                Сервер применяет stage != 'rejected' независимо от whitelist. */}
-            <div className="flex items-center justify-between gap-2 mt-2 pt-2 border-t border-border/40">
-              <Label htmlFor="show-rejections" className="text-sm cursor-pointer">
-                {filters.hideRejected ? "Показать отказы" : "Скрыть отказы"}
-              </Label>
-              <Switch
-                id="show-rejections"
-                checked={!filters.hideRejected}
-                onCheckedChange={(show) => onFiltersChange({ ...filters, hideRejected: !show })}
-              />
-            </div>
-          </div>
-
-          {/* 5. Demo Progress */}
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-muted-foreground">Прогресс демо</label>
-            <div className="space-y-1">
-              {DEMO_PROGRESS.map((s) => (
-                <div key={s} className="flex items-center gap-2">
-                  <Checkbox
-                    id={`demo-${s}`}
-                    checked={filters.demoProgress.includes(s)}
-                    onCheckedChange={() => onFiltersChange({ ...filters, demoProgress: toggleArray(filters.demoProgress, s) })}
-                  />
-                  <label htmlFor={`demo-${s}`} className="text-sm cursor-pointer">{s}</label>
+          {/* Статус, отказы и прогресс демо — свёрнуты (список статусов длинный) */}
+          <Collapsible>
+            <CollapsibleTrigger className="flex w-full items-center justify-between text-sm font-medium [&[data-state=open]>svg]:rotate-180">
+              <span className="flex items-center gap-2">
+                Статус и этап
+                {((filters.funnelStatuses?.length ?? 0) > 0 || filters.hideRejected || (filters.demoProgress?.length ?? 0) > 0) && (
+                  <span className="text-[10px] rounded-full bg-primary/15 text-primary px-1.5 py-0.5">активны</span>
+                )}
+              </span>
+              <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform" />
+            </CollapsibleTrigger>
+            <CollapsibleContent className="space-y-3 pt-3">
+              {/* Статус в воронке. rejected исключён — им управляет тумблер ниже. */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Статус в воронке</label>
+                <div className="space-y-1">
+                  {ALL_STAGE_SLUGS.filter((slug) => slug !== "rejected").map((slug) => {
+                    const stage = PLATFORM_STAGES[slug]
+                    return (
+                      <div key={slug} className="flex items-center gap-2">
+                        <Checkbox
+                          id={`funnel-${slug}`}
+                          checked={filters.funnelStatuses.includes(slug)}
+                          onCheckedChange={() => onFiltersChange({ ...filters, funnelStatuses: toggleArray(filters.funnelStatuses, slug) })}
+                        />
+                        <label htmlFor={`funnel-${slug}`} className="text-sm cursor-pointer flex items-center gap-2">
+                          <span>{stage.defaultLabel}</span>
+                          {stage.isTerminal && <span className="text-[10px] text-muted-foreground">терминальная</span>}
+                        </label>
+                      </div>
+                    )
+                  })}
                 </div>
-              ))}
-            </div>
-          </div>
+                {/* Скрыть/Показать отказы — отдельный hideRejected (сервер: stage != 'rejected'),
+                    т.к. в данных есть legacy-стадии вне ALL_STAGE_SLUGS. */}
+                <div className="flex items-center justify-between gap-2 mt-2 pt-2 border-t border-border/40">
+                  <Label htmlFor="show-rejections" className="text-sm cursor-pointer">
+                    {filters.hideRejected ? "Показать отказы" : "Скрыть отказы"}
+                  </Label>
+                  <Switch
+                    id="show-rejections"
+                    checked={!filters.hideRejected}
+                    onCheckedChange={(show) => onFiltersChange({ ...filters, hideRejected: !show })}
+                  />
+                </div>
+              </div>
+              {/* Прогресс демо */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Прогресс демо</label>
+                <div className="space-y-1">
+                  {DEMO_PROGRESS.map((s) => (
+                    <div key={s} className="flex items-center gap-2">
+                      <Checkbox
+                        id={`demo-${s}`}
+                        checked={filters.demoProgress.includes(s)}
+                        onCheckedChange={() => onFiltersChange({ ...filters, demoProgress: toggleArray(filters.demoProgress, s) })}
+                      />
+                      <label htmlFor={`demo-${s}`} className="text-sm cursor-pointer">{s}</label>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
 
           <Separator />
 

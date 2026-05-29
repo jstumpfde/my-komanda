@@ -97,6 +97,7 @@ export interface CandidatesFilters {
   scoreMinResume?: number             // фильтр по candidates.resumeScore
   scoreMinAnketa?: number             // фильтр по candidates.aiScore (после анкеты)
   hideRejected?: boolean              // сервер: stage != 'rejected'
+  hideNoSalary?: boolean              // сервер: исключить кандидатов без указанной ЗП
 }
 
 export interface CandidatesSortParams {
@@ -191,6 +192,7 @@ export function useCandidates(
           params.set("scoreMinAnketa", String(filters.scoreMinAnketa))
         }
         if (filters.hideRejected) params.set("excludeRejected", "true")
+        if (filters.hideNoSalary) params.set("hideNoSalary", "true")
         if (filters.search && filters.search.trim()) {
           params.set("search", filters.search.trim())
         }
@@ -412,6 +414,7 @@ export function usePaginatedCandidates({
         if (typeof filters.scoreMinResume === "number" && filters.scoreMinResume > 0) params.set("scoreMinResume", String(filters.scoreMinResume))
         if (typeof filters.scoreMinAnketa === "number" && filters.scoreMinAnketa > 0) params.set("scoreMinAnketa", String(filters.scoreMinAnketa))
         if (filters.hideRejected) params.set("excludeRejected", "true")
+        if (filters.hideNoSalary) params.set("hideNoSalary", "true")
         if (filters.search && filters.search.trim()) params.set("search", filters.search.trim())
         // demoProgress в paginated режиме теперь применяется на сервере через
         // SQL (см. route.ts: pre-fetch demoTotalBlocks → SQL WHERE с COUNT

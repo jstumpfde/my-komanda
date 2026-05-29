@@ -422,7 +422,7 @@ export default function VacancyPage() {
     router.replace(`${window.location.pathname}${qs ? "?" + qs : ""}`, { scroll: false })
   }, [router])
 
-  const [filters, setFilters] = useState<FilterState>({ searchText: "", cities: [], salaryMin: 0, salaryMax: 250000, scoreMin: 0, scoreMinResume: 0, scoreMinAnketa: 0, sources: [], workFormats: [], relocation: "any", businessTrips: "any", experienceMin: 0, experienceMax: 20, funnelStatuses: DEFAULT_FUNNEL_STATUSES.slice(), hideRejected: false, demoProgress: [], dateRange: "", dateFrom: "", dateTo: "", ageMin: 18, ageMax: 65, education: [], languages: [], otherLanguages: [], skills: [], industries: [] })
+  const [filters, setFilters] = useState<FilterState>({ searchText: "", cities: [], salaryMin: 0, salaryMax: 250000, scoreMin: 0, scoreMinResume: 0, scoreMinAnketa: 0, sources: [], workFormats: [], relocation: "any", businessTrips: "any", experienceMin: 0, experienceMax: 20, funnelStatuses: DEFAULT_FUNNEL_STATUSES.slice(), hideRejected: false, hideNoSalary: false, demoProgress: [], dateRange: "", dateFrom: "", dateTo: "", ageMin: 18, ageMax: 65, education: [], languages: [], otherLanguages: [], skills: [], industries: [] })
 
   // Маппинг русских лейблов фильтра прогресса демо → API-идентификаторы.
   // UI: candidate-filters.tsx:70 ["Не начал", "В процессе", "Завершил (≥85%)",
@@ -462,6 +462,7 @@ export default function VacancyPage() {
     scoreMinResume: filters.scoreMinResume,
     scoreMinAnketa: filters.scoreMinAnketa,
     hideRejected: filters.hideRejected,
+    hideNoSalary: filters.hideNoSalary,
   }), [filters]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // viewMode поднят сюда (выше хуков), чтобы useCandidates умел пропускать
@@ -2177,7 +2178,14 @@ export default function VacancyPage() {
                         onProcessed={() => { refetchCandidates(); handleHhSync() }}
                       />
                     )}
-                    <CandidateFilters filters={filters} onFiltersChange={setFilters} candidates={columns.flatMap((c) => c.candidates)} />
+                    <CandidateFilters
+                      filters={filters}
+                      onFiltersChange={setFilters}
+                      // Источник фасетов (города/источники в фильтре). В режиме
+                      // списка kanban-`columns` пуст — берём видимые из paginated,
+                      // иначе секция «Города» не показывается.
+                      candidates={useListPaginated ? (paginatedColumns?.[0]?.candidates ?? []) : columns.flatMap((c) => c.candidates)}
+                    />
                     {false && <SortMenu sortMode={sortMode} onSortChange={setSortMode} />}
                     {false && (
                     <DropdownMenu>
