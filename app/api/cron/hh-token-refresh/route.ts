@@ -1,16 +1,22 @@
-// POST /api/cron/hh-token-refresh — проактивное продление hh-токенов.
+// POST /api/cron/hh-token-refresh — обновление hh-токенов у дормантных компаний.
 //
-// Зачем: getValidToken продлевает токен только когда что-то его дёргает (лениво,
-// за 5 мин до истечения). Если компания неактивна (нет вакансий/крон не ходит) —
-// токен никто не обновляет и он умирает (так отвалились COMPANY24.PRO/ЮГОРИЯ).
-// Этот крон заранее (за 3 дня) обновляет токены ВСЕХ активных интеграций, чтобы
-// живые компании не теряли связь с hh внезапно. Оживить уже мёртвый токен нельзя
-// (нужен ручной OAuth) — но не дать живому умереть можно.
+// ВАЖНО про hh.ru: их OAuth НЕ разрешает обновлять токен заранее — на refresh
+// не-истёкшего токена hh отвечает 400 invalid_grant "token not expired". Поэтому
+// «продлевать за N дней вперёд» невозможно в принципе. Обновлять можно только
+// токен, который УЖЕ истёк.
 //
-// При неудаче refresh — помечаем интеграцию неактивной и пишем WARN в лог
-// (для мониторинга/алерта).
+// Что делает этот крон: у активных, но дормантных компаний (их крон-обращения
+// ничего не дёргают → ленивый getValidToken не срабатывает) обновляет уже
+// истёкшие токены, чтобы поддержать refresh-цепочку. Для компаний, которые
+// реально работают, токен и так лениво обновляется в getValidToken.
 //
-// Расписание на сервере (раз в сутки достаточно — буфер 3 дня):
+// БЕЗОПАСНОСТЬ: крон НИКОГДА не деактивирует интеграцию сам. Раньше любая
+// неудача refresh выключала интеграцию — и это вырубило живой Орлинк (hh вернул
+// "token not expired" на здоровом токене). Теперь при неудаче — только WARN в
+// лог; решение о деактивации остаётся за ленивым getValidToken во время реального
+// использования (battle-tested) и за человеком.
+//
+// Расписание (опционально, раз в сутки достаточно):
 //   0 5 * * * curl -s -X POST -H "X-Cron-Secret: $CRON_SECRET" \
 //     https://company24.pro/api/cron/hh-token-refresh >> /var/log/hh-token-refresh.log 2>&1
 
@@ -21,20 +27,18 @@ import { hhIntegrations } from "@/lib/db/schema"
 import { refreshAccessToken } from "@/lib/hh-api"
 import { checkCronAuth } from "@/lib/cron/auth"
 
-const REFRESH_AHEAD_MS = 3 * 24 * 60 * 60 * 1000 // обновляем за 3 дня до истечения
-
 export async function POST(req: NextRequest) {
   const auth = checkCronAuth(req)
   if (!auth.ok) return auth.response
 
   const now = Date.now()
-  const threshold = new Date(now + REFRESH_AHEAD_MS)
 
-  // Активные интеграции, токен которых истекает в ближайшие 3 дня.
+  // Только активные интеграции с УЖЕ истёкшим токеном — hh не даёт обновить
+  // не-истёкший (400 "token not expired").
   const rows = await db
     .select()
     .from(hhIntegrations)
-    .where(and(eq(hhIntegrations.isActive, true), lt(hhIntegrations.tokenExpiresAt, threshold)))
+    .where(and(eq(hhIntegrations.isActive, true), lt(hhIntegrations.tokenExpiresAt, new Date(now))))
 
   let refreshed = 0
   let failed = 0
@@ -53,20 +57,17 @@ export async function POST(req: NextRequest) {
         .where(eq(hhIntegrations.id, integ.id))
       refreshed++
     } catch (err) {
-      // Refresh не удался — токен фактически потерян. Помечаем неактивной и
-      // громко логируем (WARN), чтобы можно было заметить/заалертить и вовремя
-      // переподключить hh, пока компания активна.
-      await db
-        .update(hhIntegrations)
-        .set({ isActive: false, updatedAt: new Date() })
-        .where(eq(hhIntegrations.id, integ.id))
+      // НЕ деактивируем — только логируем. Деактивация по факту реального
+      // использования делается в getValidToken; здесь же мы могли наткнуться на
+      // временный сбой hh, и выключать живую интеграцию недопустимо.
+      const message = err instanceof Error ? err.message : String(err)
       console.error(JSON.stringify({
         tag: "cron/hh-token-refresh",
         level: "WARN",
-        msg: "hh refresh failed — integration deactivated, needs manual reconnect",
+        msg: "hh refresh failed (integration left active — no auto-deactivate)",
         companyId: integ.companyId,
         employer: integ.employerName,
-        error: err instanceof Error ? err.message : String(err),
+        error: message,
       }))
       failed++
     }
