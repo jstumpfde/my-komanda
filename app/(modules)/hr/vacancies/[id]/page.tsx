@@ -53,6 +53,7 @@ import { AutomationSettings, type AutomationSectionId } from "@/components/vacan
 import { VacancyScheduleSettings } from "@/components/vacancies/vacancy-schedule-settings"
 import { PublishTab } from "@/components/vacancies/publish-tab"
 import { VacancyActionsMenuItems } from "@/components/vacancies/vacancy-actions-menu"
+import { ExportCandidatesDialog } from "@/components/vacancies/export-candidates-dialog"
 import { PermanentDeleteDialog } from "@/components/vacancies/permanent-delete-dialog"
 import {
   getVacancyState,
@@ -628,7 +629,9 @@ export default function VacancyPage() {
   // ─── При первой загрузке user-prefs — гидратируем UI ─────────────────────
   useEffect(() => {
     if (!userPrefsLoaded) return
-    setViewModeLocal(userPrefs.viewMode as ViewMode)
+    // Не-админам доступен только «Список» (см. ViewSettings). Сохранённый
+    // kanban/funnel не гидратируем, иначе застрянут без переключателя режимов.
+    setViewModeLocal((role === "platform_admin" ? userPrefs.viewMode : "list") as ViewMode)
     if (userPrefs.columns && Object.keys(userPrefs.columns).length > 0) {
       setCardSettingsLocal((prev) => ({ ...prev, ...userPrefs.columns } as typeof prev))
     }
@@ -753,6 +756,8 @@ export default function VacancyPage() {
   const [anSalaryMax, setAnSalaryMax] = useState(300000)
   const [anScoreMin, setAnScoreMin] = useState(0)
   const [anStages, setAnStages] = useState<string[]>([])
+  // Export dialog state (выбор охвата + полей)
+  const [exportDialogOpen, setExportDialogOpen] = useState(false)
   // Reject dialog state
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false)
   const [rejectCandidateId, setRejectCandidateId] = useState<string | null>(null)
@@ -1155,14 +1160,8 @@ export default function VacancyPage() {
 
   // Экспорт кандидатов в Excel — серверный endpoint отдаёт .xlsx с
   // Content-Disposition; якорь скачивает файл с именем от сервера.
-  const handleExportExcel = () => {
-    const a = document.createElement("a")
-    a.href = `/api/modules/hr/vacancies/${id}/export-candidates`
-    document.body.appendChild(a)
-    a.click()
-    a.remove()
-    toast.success("Экспорт начался")
-  }
+  // Открываем диалог выбора охвата (все/выделенные/по статусам) и полей.
+  const handleExportExcel = () => setExportDialogOpen(true)
 
   const totalCandidates = columns.reduce((acc, col) => acc + col.candidates.length, 0)
 
@@ -1261,6 +1260,40 @@ export default function VacancyPage() {
   }
 
   const handleAction = async (candidateId: string, columnId: string, action: CandidateAction) => {
+    // В режиме пагинированного списка (Вид: Список) видимые строки приходят из
+    // `paginated.*`, а НЕ из kanban-state `columns` (там колонки по стадиям, без
+    // синтетической "all"). Старый код искал кандидата в `columns` по columnId
+    // "all", не находил и молча выходил — кнопки ✓/✗/→ в строке не работали.
+    // Здесь отдельная ветка: меняем стадию через paginated.updateStage (она же
+    // оптимистично обновляет видимый список) и рефетчим, чтобы переехали фильтры.
+    if (useListPaginated) {
+      const cand = paginatedColumns?.[0]?.candidates.find((c) => c.id === candidateId)
+      if (!cand) return
+      if (action === "reject") {
+        setRejectCandidateId(candidateId)
+        setRejectColumnId("all")
+        setRejectReason("")
+        setRejectDialogOpen(true)
+        return
+      }
+      const apply = async (target: string, msg: string) => {
+        const ok = await paginated.updateStage(candidateId, target)
+        if (ok) { toast.success(msg); paginated.refetch() }
+        else toast.error("Не удалось обновить статус")
+      }
+      switch (action) {
+        case "reserve":     return apply("talent_pool", `${cand.name} — в резерв`)
+        case "think":       return apply("pending", "🤔 Подумаем над кандидатом")
+        case "preboarding": return apply("preboarding", `${cand.name} — пребординг`)
+        case "hire":        return apply("hired", `🎉 ${cand.name} — нанят!`)
+        case "advance": {
+          const nextId = getNextColumnId(cand.stage ?? "new")
+          return apply(nextId ?? "hired", nextId ? `${cand.name} → следующий этап` : `🎉 ${cand.name} — нанят!`)
+        }
+        default: return
+      }
+    }
+
     const sourceCol = columns.find((c) => c.id === columnId)
     const candidate = sourceCol?.candidates.find((c) => c.id === candidateId)
     if (!candidate || !sourceCol) return
@@ -1364,14 +1397,16 @@ export default function VacancyPage() {
             break
         }
         setSelectedCandidateIds(new Set())
-        await refetchCandidates()
+        // В режиме списка видимые строки из paginated.* — рефетчим его,
+        // иначе таблица не обновится после массового действия.
+        await (useListPaginated ? paginated.refetch() : refetchCandidates())
       } catch {
         toast.error("Ошибка сети")
       } finally {
         setBulkBusy(false)
       }
     },
-    [selectedCandidateIds, bulkBusy, refetchCandidates],
+    [selectedCandidateIds, bulkBusy, refetchCandidates, useListPaginated, paginated],
   )
 
   const filteredColumns = applyCandidateFilters(columns, filters)
@@ -3519,6 +3554,13 @@ export default function VacancyPage() {
       </Dialog>
 
       {/* Reject confirmation dialog */}
+      <ExportCandidatesDialog
+        open={exportDialogOpen}
+        onOpenChange={setExportDialogOpen}
+        vacancyId={id}
+        selectedIds={Array.from(selectedCandidateIds)}
+      />
+
       <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -3539,14 +3581,26 @@ export default function VacancyPage() {
               variant="destructive"
               onClick={async () => {
                 if (rejectCandidateId && rejectColumnId) {
-                  const candidate = columns.find(c => c.id === rejectColumnId)?.candidates.find(c => c.id === rejectCandidateId)
-                  setColumns(p => p.map(c => c.id !== rejectColumnId ? c : { ...c, candidates: c.candidates.filter(x => x.id !== rejectCandidateId), count: c.candidates.filter(x => x.id !== rejectCandidateId).length }))
-                  toast.error(`${candidate?.name ?? "Кандидат"} — отказ`)
-                  await updateStage(rejectCandidateId, "rejected")
-                  // Suggest talent pool for candidates with decent AI score
-                  if (candidate?.aiScore != null && candidate.aiScore >= 50) {
-                    setTalentPoolCandidate(candidate)
-                    setTalentPoolDialogOpen(true)
+                  if (useListPaginated) {
+                    // Пагинированный список: кандидат в paginated.*, не в columns.
+                    const candidate = paginatedColumns?.[0]?.candidates.find(c => c.id === rejectCandidateId)
+                    toast.error(`${candidate?.name ?? "Кандидат"} — отказ`)
+                    const ok = await paginated.updateStage(rejectCandidateId, "rejected")
+                    if (ok) paginated.refetch(); else toast.error("Не удалось отказать")
+                    if (candidate?.aiScore != null && candidate.aiScore >= 50) {
+                      setTalentPoolCandidate(candidate)
+                      setTalentPoolDialogOpen(true)
+                    }
+                  } else {
+                    const candidate = columns.find(c => c.id === rejectColumnId)?.candidates.find(c => c.id === rejectCandidateId)
+                    setColumns(p => p.map(c => c.id !== rejectColumnId ? c : { ...c, candidates: c.candidates.filter(x => x.id !== rejectCandidateId), count: c.candidates.filter(x => x.id !== rejectCandidateId).length }))
+                    toast.error(`${candidate?.name ?? "Кандидат"} — отказ`)
+                    await updateStage(rejectCandidateId, "rejected")
+                    // Suggest talent pool for candidates with decent AI score
+                    if (candidate?.aiScore != null && candidate.aiScore >= 50) {
+                      setTalentPoolCandidate(candidate)
+                      setTalentPoolDialogOpen(true)
+                    }
                   }
                 }
                 setRejectDialogOpen(false)

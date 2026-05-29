@@ -13,7 +13,8 @@ import { SlidersHorizontal } from "lucide-react"
 export interface CardDisplaySettings {
   showSalary: boolean
   showSalaryFull: boolean
-  showScore: boolean
+  showScore: boolean          // колонка «AI-оцен.» (оценка анкеты)
+  showResumeScore?: boolean   // колонка «AI-резм.» (скоринг резюме); undefined = показывать
   showAge: boolean
   showSource: boolean
   showCity: boolean

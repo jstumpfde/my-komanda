@@ -148,7 +148,8 @@ export function ListView({
   const showProgress     = settings.showProgress !== false
   const showResponseDate = settings.showResponseDate !== false
   const showCity         = settings.showCity
-  const showScore        = settings.showScore
+  const showScore        = settings.showScore          // AI-оцен. (оценка анкеты)
+  const showResumeScore  = settings.showResumeScore !== false  // AI-резм. (undefined = вкл)
   const showSalary       = settings.showSalary || settings.showSalaryFull
   const showSource       = settings.showSource
   const showActions      = settings.showActions
@@ -271,8 +272,8 @@ export function ListView({
   cols.push("28px")                                     // ★ — фикс (w-7, ужато)
   cols.push("minmax(207px, 3.45fr)")                    // Кандидат — расширен ~15% за счёт Демо/AI
   if (showProgress) cols.push("minmax(95px, 1.2fr)")    // Демо
-  cols.push("60px")                                     // AI-резм. — AI-скор резюме (фикс, w-8 badge + место под header)
-  if (showScore) cols.push("minmax(60px, 0.85fr)")      // AI
+  if (showResumeScore) cols.push("60px")                // AI-резм. — AI-скор резюме (фикс, w-8 badge + место под header)
+  if (showScore) cols.push("minmax(60px, 0.85fr)")      // AI-оцен.
   if (showSalary) cols.push("minmax(95px, 1.1fr)")      // Зарплата — ужата (длинных чисел редко > 7 симв)
   if (showCity) cols.push("minmax(120px, 2fr)")         // Город
   if (showResponseDate) cols.push("minmax(70px, 0.7fr)") // Дата — "DD.MM.YY" укладывается в 70px
@@ -372,7 +373,7 @@ export function ListView({
           )}
         </div>
         {showProgress && <SortHeader label="Демо" sortKey="progress" sort={sort} onToggle={handleSort} align="center" />}
-        <SortHeader label="AI-резм." sortKey="resumeScore" sort={sort} onToggle={handleSort} align="center" />
+        {showResumeScore && <SortHeader label="AI-резм." sortKey="resumeScore" sort={sort} onToggle={handleSort} align="center" />}
         {showScore && <SortHeader label="AI-оцен." sortKey="aiScore" sort={sort} onToggle={handleSort} align="center" />}
         {showSalary && <SortHeader label="Зарплата" sortKey="salary" sort={sort} onToggle={handleSort} align="center" />}
         {showCity && <SortHeader label="Город" sortKey="city" sort={sort} onToggle={handleSort} align="left" />}
@@ -480,21 +481,23 @@ export function ListView({
               )}
 
               {/* AI score резюме — выставлен в process-queue.ts при приёме отклика. */}
-              <div className="flex items-center justify-center" title="AI-скор резюме (до демо)">
-                {candidate.resumeScore != null ? (
-                  <Badge
-                    variant="outline"
-                    className={cn(
-                      "text-[11px] font-semibold border px-1.5 py-0 h-5 w-8 justify-center",
-                      getScoreColor(candidate.resumeScore),
-                    )}
-                  >
-                    {candidate.resumeScore}
-                  </Badge>
-                ) : (
-                  <span className="text-muted-foreground/40 text-xs">—</span>
-                )}
-              </div>
+              {showResumeScore && (
+                <div className="flex items-center justify-center" title="AI-скор резюме (до демо)">
+                  {candidate.resumeScore != null ? (
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "text-[11px] font-semibold border px-1.5 py-0 h-5 w-8 justify-center",
+                        getScoreColor(candidate.resumeScore),
+                      )}
+                    >
+                      {candidate.resumeScore}
+                    </Badge>
+                  ) : (
+                    <span className="text-muted-foreground/40 text-xs">—</span>
+                  )}
+                </div>
+              )}
 
               {/* AI score */}
               {showScore && (

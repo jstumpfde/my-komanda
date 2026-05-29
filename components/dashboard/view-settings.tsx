@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/popover"
 import { Eye, ChevronDown } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { useAuth, isPlatformRole } from "@/lib/auth"
+import { useAuth } from "@/lib/auth"
 import type { CardDisplaySettings } from "./card-settings"
 import type { ViewMode } from "./kanban-board"
 
@@ -28,23 +28,30 @@ const VIEW_MODES: Array<{ value: ViewMode; label: string }> = [
   { value: "tiles",  label: "Плитки"  },
 ]
 
+// Порядок повторяет колонки списка (list-view.tsx): после «Кандидат» идут
+// Демо(прогресс) → AI-резм. → AI-оцен. → Зарплата → Город → Дата → Источник →
+// Действия. Тумблеры выстроены в том же порядке.
 const DISPLAY_TOGGLES: Array<{ key: keyof CardDisplaySettings; label: string }> = [
-  { key: "showScore",         label: "AI скоринг" },
   { key: "showProgress",      label: "Прогресс демо" },
-  { key: "showResponseDate",  label: "Дата отклика" },
+  { key: "showResumeScore",   label: "AI резюме" },
+  { key: "showScore",         label: "AI оценка" },
   { key: "showSalaryFull",    label: "Зарплата" },
   { key: "showCity",          label: "Город" },
-
+  { key: "showResponseDate",  label: "Дата отклика" },
   { key: "showSource",        label: "Источник" },
   { key: "showActions",       label: "Кнопки действий" },
 ]
 
 export function ViewSettings({ settings, onSettingsChange, viewMode, onViewModeChange }: ViewSettingsProps) {
   const { role } = useAuth()
-  const showAllViews = isPlatformRole(role)
+  // Все режимы (Воронка/Канбан/Плитки) — только у администратора платформы.
+  // Все остальные (менеджер платформы + клиентские роли) видят только «Список».
+  const showAllViews = role === "platform_admin"
 
   const handleToggle = (key: keyof CardDisplaySettings) => {
-    const next = { ...settings, [key]: !settings[key] }
+    // undefined трактуем как «включено» (см. checked выше), поэтому переключаем
+    // от отображаемого состояния: false → true, иначе → false.
+    const next = { ...settings, [key]: settings[key] === false }
     if (key === "showSalaryFull" && next.showSalaryFull) next.showSalary = false
     if (key === "showSalary" && next.showSalary) next.showSalaryFull = false
     onSettingsChange(next)
@@ -61,7 +68,10 @@ export function ViewSettings({ settings, onSettingsChange, viewMode, onViewModeC
           <ChevronDown className="w-3 h-3 ml-0.5 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-72" align="end">
+      <PopoverContent
+        className="w-72 max-h-[min(85vh,var(--radix-popover-content-available-height))] overflow-y-auto"
+        align="end"
+      >
         <div className="space-y-4">
           <div className="space-y-2">
             <h4 className="font-medium text-sm">Режим отображения</h4>
@@ -94,7 +104,7 @@ export function ViewSettings({ settings, onSettingsChange, viewMode, onViewModeC
                   <Label htmlFor={`vs-${key}`} className="text-sm font-normal cursor-pointer">{label}</Label>
                   <Switch
                     id={`vs-${key}`}
-                    checked={!!settings[key]}
+                    checked={settings[key] !== false}
                     onCheckedChange={() => handleToggle(key)}
                   />
                 </div>

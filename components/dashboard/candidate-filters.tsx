@@ -264,8 +264,11 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [], va
           <Settings className="size-3.5 ml-0.5 text-current opacity-60" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-80 p-0" align="start">
-        <div className="max-h-[75vh] overflow-y-auto p-4 space-y-4">
+      <PopoverContent
+        className="w-80 p-0 flex flex-col max-h-[min(85vh,var(--radix-popover-content-available-height))]"
+        align="start"
+      >
+        <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4">
           <div className="flex items-center justify-between mb-1">
             <h3 className="font-semibold text-sm">Поиск кандидатов</h3>
             {hasActiveFilters && (
@@ -346,18 +349,23 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [], va
             </div>
           )}
 
-          {/* Salary Range */}
-          {false && (
+          {/* Salary Range — единый ползунок с двумя бегунками (как «Возраст»).
+              На полном диапазоне (0–250k) показываем «не задана» — фильтр не
+              активен. Верхний бегунок на максимуме означает «и выше» (250k+). */}
           <div className="space-y-2">
             <label className="text-xs font-medium text-muted-foreground">
-              Зарплата: {filters.salaryMin.toLocaleString("ru-RU")} – {filters.salaryMax.toLocaleString("ru-RU")} ₽
+              {filters.salaryMin === 0 && filters.salaryMax >= 250000
+                ? <>Зарплата: <span className="italic">не задана</span></>
+                : <>Зарплата: {filters.salaryMin.toLocaleString("ru-RU")} – {filters.salaryMax.toLocaleString("ru-RU")}{filters.salaryMax >= 250000 ? "+" : ""} ₽</>}
             </label>
-            <div className="space-y-2">
-              <Slider value={[filters.salaryMin]} onValueChange={([v]) => onFiltersChange({ ...filters, salaryMin: v })} min={0} max={250000} step={10000} />
-              <Slider value={[filters.salaryMax]} onValueChange={([v]) => onFiltersChange({ ...filters, salaryMax: v })} min={0} max={250000} step={10000} />
-            </div>
+            <Slider
+              value={[filters.salaryMin, filters.salaryMax]}
+              onValueChange={([min, max]) => onFiltersChange({ ...filters, salaryMin: min, salaryMax: max })}
+              min={0} max={250000} step={10000}
+            />
           </div>
-          )}
+
+          <Separator className="my-1" />
 
           {/* Score — два независимых слайдера. resumeScore — оценка резюме
               (выставляется в process-queue.ts при приёме отклика); aiScore —
@@ -466,8 +474,6 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [], va
             />
           </div>
           )}
-
-          <Separator />
 
           {/* 4. Funnel Status — ТЗ-3 Ч.4: всегда из PLATFORM_STAGES (slug'и).
               #53: тумблер «Скрыть отказы» переехал сюда из шапки попапа.
@@ -595,8 +601,6 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [], va
             />
           </div>
 
-          <Separator />
-
           {/* 8. Education */}
           {false && (
           <div className="space-y-1.5">
@@ -699,8 +703,6 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [], va
           </div>
           )}
 
-          <Separator />
-
           {/* 10. Skills — combobox */}
           {false && (
           <div className="space-y-1.5">
@@ -801,12 +803,12 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [], va
           </div>
           )}
 
-          {/* Кнопка раньше называлась «Применить», но фильтры применяются
-              немедленно при каждом изменении (onFiltersChange → useCandidates
-              → refetch). Никакого batch-apply здесь нет, поэтому клик просто
-              закрывал поповер — и пользователь думал, что кнопка не работает.
-              Переименовали в «Готово», и подсказка для ясности. */}
-          <p className="text-[11px] text-muted-foreground text-center -mb-1">
+        </div>
+        {/* Футер закреплён вне скролла — «Готово» всегда доступно, даже когда
+            список фильтров длиннее экрана. Кнопка просто закрывает поповер:
+            фильтры применяются мгновенно при каждом изменении. */}
+        <div className="border-t bg-popover px-4 py-3 shrink-0">
+          <p className="text-[11px] text-muted-foreground text-center mb-2">
             Фильтры применяются мгновенно
           </p>
           <Button variant="default" className="w-full h-8 text-sm" onClick={() => setIsOpen(false)}>
