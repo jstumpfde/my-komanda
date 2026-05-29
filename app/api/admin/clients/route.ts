@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server"
 import { db } from "@/lib/db"
 import { companies, users, plans } from "@/lib/db/schema"
-import {ilike, or, inArray, count, asc, desc, and} from "drizzle-orm"
+import {ilike, or, inArray, count, asc, desc, and, isNull, isNotNull} from "drizzle-orm"
 import {requirePlatformAdmin, apiSuccess} from "@/lib/api-helpers"
 
 // GET /api/admin/clients
@@ -23,6 +23,7 @@ export async function GET(req: NextRequest) {
   const page = Math.max(1, parseInt(searchParams.get("page") ?? "1"))
   const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") ?? "20")))
   const sort = searchParams.get("sort") ?? "created_at"
+  const trashed = searchParams.get("trashed") === "true"
   const offset = (page - 1) * limit
 
   const statuses = statusParam ? statusParam.split(",").filter(Boolean) : []
@@ -54,6 +55,9 @@ export async function GET(req: NextRequest) {
   if (statuses.length > 0) {
     conditions.push(inArray(companies.subscriptionStatus, statuses))
   }
+
+  // Корзина: по умолчанию активные (deleted_at IS NULL); ?trashed=true — корзина.
+  conditions.push(trashed ? isNotNull(companies.deletedAt) : isNull(companies.deletedAt))
 
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined
 

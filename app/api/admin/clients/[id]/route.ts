@@ -88,35 +88,25 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   return apiSuccess({ id: updated.id, subscriptionStatus: updated.subscriptionStatus, name: updated.name })
 }
 
-// DELETE /api/admin/clients/[id] — удалить компанию (только platform_admin, не active)
+// DELETE /api/admin/clients/[id] — в корзину (soft-delete). Обратимо, поэтому
+// без ограничения по активной подписке. Необратимое удаление — отдельный
+// эндпоинт /permanent (с гардами).
 export async function DELETE(_req: NextRequest, { params }: Params) {
-  let user
   try {
-    user = await requirePlatformAdmin()
+    await requirePlatformAdmin()
   } catch (e) {
     return e as Response
   }
 
   const { id } = await params
 
-  const [company] = await db
-    .select({ id: companies.id, subscriptionStatus: companies.subscriptionStatus })
-    .from(companies)
+  const [updated] = await db
+    .update(companies)
+    .set({ deletedAt: new Date(), updatedAt: new Date() })
     .where(eq(companies.id, id))
-    .limit(1)
+    .returning({ id: companies.id })
 
-  if (!company) return apiError("Компания не найдена", 404)
+  if (!updated) return apiError("Компания не найдена", 404)
 
-  if (company.subscriptionStatus === "active") {
-    return apiError("Нельзя удалить компанию с активной подпиской", 400)
-  }
-
-  // Только platform_admin может удалять
-  if (user.role !== "platform_admin" && user.role !== "admin") {
-    return apiError("Только администратор платформы может удалять компании", 403)
-  }
-
-  await db.delete(companies).where(eq(companies.id, id))
-
-  return apiSuccess({ deleted: true })
+  return apiSuccess({ trashed: true })
 }
