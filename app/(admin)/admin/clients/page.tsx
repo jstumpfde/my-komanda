@@ -337,7 +337,7 @@ function AdminClientsInner() {
               <DataTable containerClassName="overflow-x-auto">
                 <DataHead>
                   {!isTrash && <DataSelectHeadCell checked={allSelected} onCheckedChange={toggleAll} />}
-                  <DataHeadCell sortable sortDir={sort === "name" ? "desc" : null} onSort={() => setSort("name")} width="360px">Компания</DataHeadCell>
+                  <DataHeadCell sortable sortDir={sort === "name" ? "desc" : null} onSort={() => setSort("name")} width="44ch">Компания</DataHeadCell>
                   <DataHeadCell>ИНН</DataHeadCell>
                   <DataHeadCell>Тариф</DataHeadCell>
                   <DataHeadCell align="center">Статус</DataHeadCell>
@@ -365,7 +365,7 @@ function AdminClientsInner() {
                       <DataRow key={client.id} className={cn("group", selected.has(client.id) && "bg-primary/[0.04]")}>
                         {!isTrash && <DataSelectCell checked={selected.has(client.id)} onCheckedChange={() => toggleOne(client.id)} />}
                         <DataCell>
-                          <Link href={`/admin/clients/${client.id}`} className="block max-w-[340px]">
+                          <Link href={`/admin/clients/${client.id}`} className="block max-w-[44ch]">
                             <p className="font-medium text-foreground group-hover:text-primary transition-colors truncate" title={client.name}>{client.name}</p>
                             {client.directorEmail && <p className="text-xs text-muted-foreground truncate">{client.directorEmail}</p>}
                           </Link>
