@@ -1742,6 +1742,22 @@ export const demoTemplates = pgTable("demo_templates", {
   updatedAt:     timestamp("updated_at").defaultNow(),
 })
 
+// Шаблоны анкет (библиотека). По образцу demoTemplates: per-tenant, soft-delete,
+// системные не удаляются. questions — Question[] (lib/course-types.ts), тот же
+// формат, что vacancy.descriptionJson.anketa.questions → применимо к вакансии.
+// Миграция 0147.
+export const questionnaireTemplates = pgTable("questionnaire_templates", {
+  id:         uuid("id").primaryKey().defaultRandom(),
+  tenantId:   uuid("tenant_id").references(() => companies.id, { onDelete: "cascade" }),
+  name:       text("name").notNull(),
+  type:       text("type").notNull().default("candidate"), // candidate | client | post_demo
+  questions:  jsonb("questions").notNull().default("[]"),
+  isSystem:   boolean("is_system").default(false),
+  deletedAt:  timestamp("deleted_at"),
+  createdAt:  timestamp("created_at").defaultNow(),
+  updatedAt:  timestamp("updated_at").defaultNow(),
+})
+
 // ─── Training: AI ролевые сценарии ───────────────────────────────────────────
 
 export const trainingScenarios = pgTable("training_scenarios", {

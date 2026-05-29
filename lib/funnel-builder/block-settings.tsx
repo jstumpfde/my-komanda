@@ -10,6 +10,7 @@ import { toast } from "sonner"
 
 import { AiChatbotSettings } from "@/components/vacancies/ai-chatbot-settings"
 import { QuestionEditor } from "@/components/vacancies/anketa-tab"
+import { AnketaTemplateControls } from "@/components/vacancies/anketa-template-controls"
 import { FinalScreensSettings, type FinalScreensConfig } from "@/components/vacancies/final-screens-settings"
 import { FirstMessagesChainEditor } from "@/components/vacancies/first-messages-chain-editor"
 import { OfferSettings } from "@/components/vacancies/offer-settings"
@@ -219,10 +220,15 @@ function AnketaFullSettingsWrapped({ vacancyId, onSaved }: BlockSettingsProps) {
         <PostDemoSettings vacancyId={vacancyId} sections={["formFields"]} />
       </section>
       <section className="space-y-3">
-        <h3 className="text-sm font-semibold">Вопросы анкеты</h3>
-        <p className="text-xs text-muted-foreground">
-          Эти вопросы кандидат увидит после загрузки видео-визитки.
-        </p>
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <h3 className="text-sm font-semibold">Вопросы анкеты</h3>
+            <p className="text-xs text-muted-foreground">
+              Эти вопросы кандидат увидит после загрузки видео-визитки.
+            </p>
+          </div>
+          <AnketaTemplateControls questions={questions} onChange={setQuestions} />
+        </div>
         <QuestionEditor questions={questions} onChange={setQuestions} />
       </section>
     </div>

@@ -13,7 +13,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { and, isNotNull, inArray, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { vacancies, companies, demoTemplates } from "@/lib/db/schema"
+import { vacancies, companies, demoTemplates, questionnaireTemplates } from "@/lib/db/schema"
 import { checkCronAuth } from "@/lib/cron/auth"
 import { startCronRun, finishCronRun } from "@/lib/cron/record-run"
 import { hardDeleteVacancy } from "@/lib/vacancies/hard-delete"
@@ -91,11 +91,38 @@ async function handle(req: NextRequest) {
       }
     }
 
+    // ── Корзина шаблонов анкет (миграция 0147) ──────────────────────────────
+    // Самодостаточны (нет зависимых строк) → bulk delete по id. retention
+    // per-company через join с companies, как у demo_templates.
+    const dueQuestionnaires = await db
+      .select({ id: questionnaireTemplates.id, companyId: questionnaireTemplates.tenantId })
+      .from(questionnaireTemplates)
+      .innerJoin(companies, sql`${companies.id} = ${questionnaireTemplates.tenantId}`)
+      .where(and(
+        isNotNull(questionnaireTemplates.deletedAt),
+        sql`${questionnaireTemplates.deletedAt} < now() - make_interval(days => ${companies.trashRetentionDays})`,
+      ))
+      .orderBy(questionnaireTemplates.deletedAt)
+      .limit(MAX_PER_RUN)
+
+    let deletedQuestionnaires = 0
+    if (dueQuestionnaires.length > 0) {
+      try {
+        await db.delete(questionnaireTemplates).where(inArray(questionnaireTemplates.id, dueQuestionnaires.map(t => t.id)))
+        deletedQuestionnaires = dueQuestionnaires.length
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        errors.push(`questionnaires: ${msg}`)
+        console.error("[trash-cleanup] failed to delete questionnaire templates", msg)
+      }
+    }
+
     const metadata = {
       due:               due.length,
       deletedVacancies,
       deletedCandidates,
       deletedTemplates,
+      deletedQuestionnaires,
       templatesByCompany,
       errors:            errors.length,
     }
@@ -104,6 +131,7 @@ async function handle(req: NextRequest) {
       ok: true,
       vacancies_deleted: deletedVacancies,
       templates_deleted: deletedTemplates,
+      questionnaires_deleted: deletedQuestionnaires,
       by_company:        templatesByCompany,
       deletedCandidates,
       errors:            errors.length,
