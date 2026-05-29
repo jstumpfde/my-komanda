@@ -637,7 +637,7 @@ export default function LibraryPage() {
   const renderMaterialsTab = (kind: CreatableType, rows: TemplateData[]) => {
     const shown = bySearch(rows)
     return (
-      <Card>
+      <Card className="py-0 overflow-hidden">
         <CardContent className="p-0">
           {loading ? (
             <div className="flex items-center justify-center py-12 gap-2 text-muted-foreground">
@@ -717,7 +717,7 @@ export default function LibraryPage() {
               <TabsContent value="tests" className="mt-0">{renderMaterialsTab("test", testRows)}</TabsContent>
 
               <TabsContent value="questionnaires" className="mt-0">
-                <Card>
+                <Card className="py-0 overflow-hidden">
                   <CardContent className="p-0">
                     {loadingQ ? (
                       <div className="flex items-center justify-center py-12 gap-2 text-muted-foreground">
@@ -757,7 +757,7 @@ export default function LibraryPage() {
               </TabsContent>
 
               <TabsContent value="trash" className="mt-0">
-                <Card>
+                <Card className="py-0 overflow-hidden">
                   <CardContent className="p-0">
                     {trashRows.length === 0 ? (
                       <div className="flex flex-col items-center justify-center py-12 text-center px-4">
