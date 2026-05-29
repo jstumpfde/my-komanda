@@ -3,8 +3,8 @@
   "configurations": [
     {
       "name": "Next.js dev",
-      "runtimeExecutable": "/opt/homebrew/bin/node",
-      "runtimeArgs": ["/Users/juri/my-komanda/node_modules/next/dist/bin/next", "dev"],
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["dev"],
       "port": 3000,
       "autoPort": true
     }

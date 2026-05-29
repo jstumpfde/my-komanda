@@ -35,23 +35,36 @@ interface TemplateData {
   updatedAt: string
 }
 
+// Шаблон анкеты — реальная сущность (questionnaire_templates, миграция 0147).
+// questions хранится как Question[] (course-types); счётчики считаем из массива.
 interface QuestionnaireTemplate {
   id: string
   name: string
   type: "candidate" | "client" | "post_demo"
-  questionsCount: number
-  requiredCount: number
+  questions: { required?: boolean }[]
+  isSystem: boolean
+  deletedAt: string | null
   createdAt: string
-  usageCount: number
 }
 
 /** Типы материалов, которые реально хранятся в demo_templates (length-based).
- *  Анкеты — отдельная (мок) сущность, в этот тип не входят. */
+ *  Анкеты — отдельная сущность (questionnaire_templates), не входит в этот тип. */
 type CreatableType = "demo" | "block" | "test"
+
+// Унифицированная строка корзины: материалы (demo_templates) и анкеты
+// (questionnaire_templates) лежат в разных таблицах, но показываются вместе.
+interface TrashRow {
+  id: string
+  name: string
+  typeLabel: string
+  typeCls: string
+  deletedAt: string | null
+  kind: "material" | "questionnaire"
+}
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
-const TYPE_BADGE: Record<string, { label: string; cls: string }> = {
+const QUESTIONNAIRE_TYPE: Record<string, { label: string; cls: string }> = {
   candidate: { label: "Кандидат", cls: "bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-400" },
   client: { label: "Заказчик", cls: "bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400" },
   post_demo: { label: "После демо", cls: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400" },
@@ -59,14 +72,13 @@ const TYPE_BADGE: Record<string, { label: string; cls: string }> = {
 
 // Копирайт пустого состояния + диалога создания по типу материала.
 const TYPE_COPY: Record<CreatableType, {
-  emoji: string
   plural: string          // «Нет {plural}»
   createBtn: string       // кнопка в empty-state / option в диалоге
   dialogDesc: string      // подпись опции в диалоге «Что создать?»
 }> = {
-  demo:  { emoji: "📖", plural: "демонстраций", createBtn: "Создать первую демонстрацию", dialogDesc: "Полное демо вакансии" },
-  block: { emoji: "🧩", plural: "блоков",       createBtn: "Создать первый блок",          dialogDesc: "Переиспользуемый блок («О компании» и т.п.)" },
-  test:  { emoji: "✅", plural: "тестов",        createBtn: "Создать первый тест",           dialogDesc: "Тестовое задание для кандидата" },
+  demo:  { plural: "демонстраций", createBtn: "Создать первую демонстрацию", dialogDesc: "Полное демо вакансии" },
+  block: { plural: "блоков",       createBtn: "Создать первый блок",          dialogDesc: "Переиспользуемый блок («О компании» и т.п.)" },
+  test:  { plural: "тестов",        createBtn: "Создать первый тест",           dialogDesc: "Тестовое задание для кандидата" },
 }
 
 const DIALOG_TITLE: Record<CreatableType, string> = {
@@ -75,14 +87,11 @@ const DIALOG_TITLE: Record<CreatableType, string> = {
   test: "Тест",
 }
 
-// ─── Mock questionnaire data ────────────────────────────────────────────────
-
-const MOCK_QUESTIONNAIRES: QuestionnaireTemplate[] = [
-  { id: "q1", name: "Анкета кандидата — базовая", type: "candidate", questionsCount: 12, requiredCount: 8, createdAt: "2026-04-12T10:00:00Z", usageCount: 7 },
-  { id: "q2", name: "Анкета кандидата — расширенная", type: "candidate", questionsCount: 25, requiredCount: 15, createdAt: "2026-04-11T10:00:00Z", usageCount: 3 },
-  { id: "q3", name: "Анкета заказчика (intake)", type: "client", questionsCount: 10, requiredCount: 10, createdAt: "2026-04-10T10:00:00Z", usageCount: 2 },
-  { id: "q4", name: "Опрос после демонстрации", type: "post_demo", questionsCount: 8, requiredCount: 5, createdAt: "2026-04-09T10:00:00Z", usageCount: 4 },
-]
+const CREATE_ICON: Record<CreatableType, typeof BookOpen> = {
+  demo: BookOpen,
+  block: Puzzle,
+  test: ListChecks,
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
@@ -94,7 +103,7 @@ function formatDate(d: string) {
 // ─── Empty state (переиспользуемый) ─────────────────────────────────────────
 
 function EmptyMaterialsState({ type, onCreate }: { type: CreatableType; onCreate: () => void }) {
-  const Icon = type === "block" ? Puzzle : type === "test" ? ListChecks : BookOpen
+  const Icon = CREATE_ICON[type]
   const copy = TYPE_COPY[type]
   return (
     <div className="flex flex-col items-center justify-center py-12 text-center px-4">
@@ -118,16 +127,16 @@ function MaterialsTable({ rows, onDelete, onDuplicate }: {
   onDuplicate: (t: TemplateData) => void
 }) {
   return (
-    <div className="overflow-auto" style={{ maxHeight: "60vh" }}>
+    <div className="max-h-[60vh] overflow-auto">
       <table className="w-full">
         <thead className="bg-muted/50 border-b border-t border-border sticky top-0">
           <tr>
-            <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-2.5">Название</th>
-            <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-2.5 w-[100px]">Тип</th>
-            <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-2.5 w-[160px]">Должность</th>
-            <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-2.5 w-[70px]">Блоков</th>
-            <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-2.5 w-[110px]">Создан</th>
-            <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-2.5 w-[110px]">Действия</th>
+            <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Название</th>
+            <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3 w-[120px]">Тип</th>
+            <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3 w-[180px]">Должность</th>
+            <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3 w-[80px]">Блоков</th>
+            <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3 w-[120px]">Создан</th>
+            <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3 w-[120px]">Действия</th>
           </tr>
         </thead>
         <tbody>
@@ -136,43 +145,40 @@ function MaterialsTable({ rows, onDelete, onDuplicate }: {
             const nicheInfo = NICHE_LABELS[t.niche as keyof typeof NICHE_LABELS]
             const mt = MATERIAL_TYPE_LABELS[getMaterialType(t.length)]
             const sectionsCount = Array.isArray(t.sections) ? t.sections.length : 0
-            const firstEmoji = Array.isArray(t.sections) && t.sections.length > 0
-              ? (t.sections[0] as { emoji?: string })?.emoji || "📄" : "📄"
             return (
               <tr key={t.id} className="border-b border-border/50 hover:bg-muted/50 transition-colors group">
-                <td className="px-4 py-2.5">
+                <td className="px-4 py-3">
                   <Link href={`/hr/library/create/editor?id=${t.id}`} className="flex items-center gap-2 min-w-0">
-                    <span className="text-base shrink-0">{firstEmoji}</span>
                     <span className="text-sm font-medium text-foreground group-hover:text-primary transition-colors truncate">{t.name}</span>
-                    {t.isSystem && <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 shrink-0">Системный</Badge>}
+                    {t.isSystem && <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 shrink-0 font-normal">Системный</Badge>}
                   </Link>
                 </td>
-                <td className="px-4 py-2.5">
+                <td className="px-4 py-3">
                   <div className="flex flex-col items-start gap-1">
-                    <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium", mt.cls)}>{mt.label}</span>
-                    {lengthInfo?.label && <span className="text-[10px] text-muted-foreground">{lengthInfo.label}</span>}
+                    <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium", mt.cls)}>{mt.label}</span>
+                    {lengthInfo?.label && <span className="text-xs text-muted-foreground">{lengthInfo.label}</span>}
                   </div>
                 </td>
-                <td className="px-4 py-2.5 text-sm text-muted-foreground truncate max-w-[160px]">{nicheInfo?.label || "—"}</td>
-                <td className="px-4 py-2.5 text-center text-sm text-muted-foreground">{sectionsCount}</td>
-                <td className="px-4 py-2.5 text-sm text-muted-foreground whitespace-nowrap">{formatDate(t.createdAt)}</td>
-                <td className="px-4 py-2.5">
+                <td className="px-4 py-3 text-sm text-muted-foreground truncate max-w-[180px]">{nicheInfo?.label || "—"}</td>
+                <td className="px-4 py-3 text-center text-sm text-muted-foreground">{sectionsCount}</td>
+                <td className="px-4 py-3 text-sm text-muted-foreground whitespace-nowrap">{formatDate(t.createdAt)}</td>
+                <td className="px-4 py-3">
                   <div className="flex items-center gap-0.5 justify-end">
-                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0" asChild title="Просмотр">
-                      <Link href={`/hr/library/preview/${t.id}`} target="_blank"><Eye className="h-3.5 w-3.5" /></Link>
+                    <Button size="sm" variant="ghost" className="h-8 w-8 p-0" asChild title="Просмотр">
+                      <Link href={`/hr/library/preview/${t.id}`} target="_blank"><Eye className="h-4 w-4" /></Link>
                     </Button>
                     {/* Редактирование недоступно для системных (PATCH tenant-scoped → 404) */}
                     {!t.isSystem && (
-                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0" asChild title="Редактировать">
-                        <Link href={`/hr/library/create/editor?id=${t.id}`}><Pencil className="h-3.5 w-3.5" /></Link>
+                      <Button size="sm" variant="ghost" className="h-8 w-8 p-0" asChild title="Редактировать">
+                        <Link href={`/hr/library/create/editor?id=${t.id}`}><Pencil className="h-4 w-4" /></Link>
                       </Button>
                     )}
-                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0" title="Дублировать" onClick={() => onDuplicate(t)}>
-                      <Copy className="h-3.5 w-3.5" />
+                    <Button size="sm" variant="ghost" className="h-8 w-8 p-0" title="Дублировать" onClick={() => onDuplicate(t)}>
+                      <Copy className="h-4 w-4" />
                     </Button>
                     {!t.isSystem && (
-                      <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive" title="Удалить" onClick={() => onDelete(t.id)}>
-                        <Trash2 className="h-3.5 w-3.5" />
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive" title="Удалить" onClick={() => onDelete(t.id)}>
+                        <Trash2 className="h-4 w-4" />
                       </Button>
                     )}
                   </div>
@@ -186,9 +192,73 @@ function MaterialsTable({ rows, onDelete, onDuplicate }: {
   )
 }
 
-// ─── Trash (корзина) ─────────────────────────────────────────────────────
+// ─── Questionnaires table (анкеты) ──────────────────────────────────────────
 
-// Дней до автоудаления = retention − прошедшие дни с deleted_at (Этап 3).
+function QuestionnairesTable({ rows, onEdit, onDuplicate, onDelete }: {
+  rows: QuestionnaireTemplate[]
+  onEdit: (q: QuestionnaireTemplate) => void
+  onDuplicate: (q: QuestionnaireTemplate) => void
+  onDelete: (id: string) => void
+}) {
+  return (
+    <div className="max-h-[60vh] overflow-auto">
+      <table className="w-full">
+        <thead className="bg-muted/50 border-b border-t border-border sticky top-0">
+          <tr>
+            <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Название</th>
+            <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3 w-[120px]">Тип</th>
+            <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3 w-[100px]">Вопросов</th>
+            <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3 w-[110px]">Обязат.</th>
+            <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3 w-[120px]">Создан</th>
+            <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3 w-[120px]">Действия</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((q) => {
+            const tb = QUESTIONNAIRE_TYPE[q.type]
+            const total = Array.isArray(q.questions) ? q.questions.length : 0
+            const required = Array.isArray(q.questions) ? q.questions.filter((x) => x?.required).length : 0
+            return (
+              <tr key={q.id} className="border-b border-border/50 hover:bg-muted/50 transition-colors group">
+                <td className="px-4 py-3">
+                  <button type="button" onClick={() => onEdit(q)} className="flex items-center gap-2 min-w-0 text-left">
+                    <span className="text-sm font-medium text-foreground group-hover:text-primary transition-colors truncate">{q.name}</span>
+                    {q.isSystem && <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 shrink-0 font-normal">Системный</Badge>}
+                  </button>
+                </td>
+                <td className="px-4 py-3">
+                  {tb && <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium", tb.cls)}>{tb.label}</span>}
+                </td>
+                <td className="px-4 py-3 text-center text-sm text-muted-foreground">{total}</td>
+                <td className="px-4 py-3 text-center text-sm text-muted-foreground">{required}</td>
+                <td className="px-4 py-3 text-sm text-muted-foreground whitespace-nowrap">{formatDate(q.createdAt)}</td>
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-0.5 justify-end">
+                    <Button size="sm" variant="ghost" className="h-8 w-8 p-0" title={q.isSystem ? "Просмотр" : "Редактировать"} onClick={() => onEdit(q)}>
+                      {q.isSystem ? <Eye className="h-4 w-4" /> : <Pencil className="h-4 w-4" />}
+                    </Button>
+                    <Button size="sm" variant="ghost" className="h-8 w-8 p-0" title="Дублировать" onClick={() => onDuplicate(q)}>
+                      <Copy className="h-4 w-4" />
+                    </Button>
+                    {!q.isSystem && (
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive" title="Удалить" onClick={() => onDelete(q.id)}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+// ─── Trash (корзина) — материалы + анкеты вместе ────────────────────────────
+
+// Дней до автоудаления = retention − прошедшие дни с deleted_at.
 function trashDaysLeft(deletedAt: string | null, retentionDays: number): number {
   if (!deletedAt) return retentionDays
   const elapsedDays = Math.floor((Date.now() - new Date(deletedAt).getTime()) / 86_400_000)
@@ -196,49 +266,48 @@ function trashDaysLeft(deletedAt: string | null, retentionDays: number): number 
 }
 
 function TrashTable({ rows, retentionDays, onRestore, onPermanent }: {
-  rows: TemplateData[]
+  rows: TrashRow[]
   retentionDays: number
-  onRestore: (t: TemplateData) => void
-  onPermanent: (t: TemplateData) => void
+  onRestore: (t: TrashRow) => void
+  onPermanent: (t: TrashRow) => void
 }) {
   return (
-    <div className="overflow-auto" style={{ maxHeight: "60vh" }}>
+    <div className="max-h-[60vh] overflow-auto">
       <table className="w-full">
         <thead className="bg-muted/50 border-b border-t border-border sticky top-0">
           <tr>
-            <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-2.5">Название</th>
-            <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-2.5 w-[100px]">Тип</th>
-            <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-2.5 w-[120px]">Удалён</th>
-            <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-2.5 w-[140px]">До удаления</th>
-            <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-2.5 w-[150px]">Действия</th>
+            <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Название</th>
+            <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3 w-[120px]">Тип</th>
+            <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3 w-[120px]">Удалён</th>
+            <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3 w-[140px]">До удаления</th>
+            <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3 w-[150px]">Действия</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((t) => {
-            const mt = MATERIAL_TYPE_LABELS[getMaterialType(t.length)]
             const daysLeft = trashDaysLeft(t.deletedAt, retentionDays)
             return (
-              <tr key={t.id} className="border-b border-border/50 hover:bg-muted/50 transition-colors">
-                <td className="px-4 py-2.5 text-sm font-medium text-foreground truncate max-w-[280px]">{t.name}</td>
-                <td className="px-4 py-2.5">
-                  <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium", mt.cls)}>{mt.label}</span>
+              <tr key={`${t.kind}-${t.id}`} className="border-b border-border/50 hover:bg-muted/50 transition-colors">
+                <td className="px-4 py-3 text-sm font-medium text-foreground truncate max-w-[280px]">{t.name}</td>
+                <td className="px-4 py-3">
+                  <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium", t.typeCls)}>{t.typeLabel}</span>
                 </td>
-                <td className="px-4 py-2.5 text-sm text-muted-foreground whitespace-nowrap">{formatDate(t.deletedAt ?? "")}</td>
-                <td className="px-4 py-2.5">
+                <td className="px-4 py-3 text-sm text-muted-foreground whitespace-nowrap">{formatDate(t.deletedAt ?? "")}</td>
+                <td className="px-4 py-3">
                   <span className={cn(
-                    "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium",
+                    "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
                     daysLeft <= 1 ? "bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400" : "bg-muted text-muted-foreground",
                   )}>
                     {daysLeft === 0 ? "сегодня" : `${daysLeft} дн.`}
                   </span>
                 </td>
-                <td className="px-4 py-2.5">
+                <td className="px-4 py-3">
                   <div className="flex items-center gap-1 justify-end">
-                    <Button size="sm" variant="ghost" className="h-7 gap-1 px-2 text-xs" title="Восстановить" onClick={() => onRestore(t)}>
-                      <RotateCcw className="h-3.5 w-3.5" />Восстановить
+                    <Button size="sm" variant="ghost" className="h-8 gap-1 px-2 text-xs" title="Восстановить" onClick={() => onRestore(t)}>
+                      <RotateCcw className="h-4 w-4" />Восстановить
                     </Button>
-                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive" title="Удалить навсегда" onClick={() => onPermanent(t)}>
-                      <Trash className="h-3.5 w-3.5" />
+                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive" title="Удалить навсегда" onClick={() => onPermanent(t)}>
+                      <Trash className="h-4 w-4" />
                     </Button>
                   </div>
                 </td>
@@ -251,10 +320,10 @@ function TrashTable({ rows, retentionDays, onRestore, onPermanent }: {
   )
 }
 
-// Лёгкий аналог vacancy PermanentDeleteDialog — для шаблонов (Этап 3).
-// Не трогаем vacancy-флоу; подтверждение через ввод точного названия.
-function PermanentDeleteTemplateDialog({ template, open, onOpenChange, onDeleted }: {
-  template: TemplateData | null
+// Подтверждение необратимого удаления вводом точного названия. apiBase зависит
+// от вида (материал / анкета), чтобы дёргать правильный permanent-эндпоинт.
+function PermanentDeleteDialog({ target, open, onOpenChange, onDeleted }: {
+  target: TrashRow | null
   open: boolean
   onOpenChange: (v: boolean) => void
   onDeleted: () => void
@@ -263,16 +332,17 @@ function PermanentDeleteTemplateDialog({ template, open, onOpenChange, onDeleted
   const [deleting, setDeleting] = useState(false)
   useEffect(() => { if (!open) { setTyped(""); setDeleting(false) } }, [open])
 
-  const name = template?.name ?? ""
+  const name = target?.name ?? ""
   const confirmed = typed.trim() === name.trim() && name.trim().length > 0
 
   const handleDelete = async () => {
-    if (!template || !confirmed) return
+    if (!target || !confirmed) return
+    const base = target.kind === "questionnaire" ? "/api/questionnaire-templates" : "/api/demo-templates"
     setDeleting(true)
     try {
-      const res = await fetch(`/api/demo-templates/${template.id}/permanent`, { method: "DELETE" })
+      const res = await fetch(`${base}/${target.id}/permanent`, { method: "DELETE" })
       if (!res.ok) throw new Error()
-      toast.success("Шаблон удалён навсегда")
+      toast.success("Удалено навсегда")
       onOpenChange(false)
       onDeleted()
     } catch {
@@ -289,10 +359,10 @@ function PermanentDeleteTemplateDialog({ template, open, onOpenChange, onDeleted
           <DialogTitle className="flex items-center gap-2 text-destructive">
             <AlertTriangle className="size-4" />Удалить навсегда?
           </DialogTitle>
-          <DialogDescription>Шаблон «{name}» будет удалён без возможности восстановления.</DialogDescription>
+          <DialogDescription>«{name}» будет удалён без возможности восстановления.</DialogDescription>
         </DialogHeader>
         <div className="space-y-1.5">
-          <Label htmlFor="confirm-tmpl" className="text-xs">Введите название шаблона для подтверждения:</Label>
+          <Label htmlFor="confirm-tmpl" className="text-xs">Введите название для подтверждения:</Label>
           <Input id="confirm-tmpl" value={typed} onChange={(e) => setTyped(e.target.value)} placeholder={name} autoComplete="off" />
         </div>
         <div className="flex justify-end gap-2 mt-2">
@@ -308,26 +378,29 @@ function PermanentDeleteTemplateDialog({ template, open, onOpenChange, onDeleted
 
 // ─── Page ───────────────────────────────────────────────────────────────────
 
+type TabKey = "questionnaires" | "demos" | "blocks" | "tests" | "trash"
+
 export default function LibraryPage() {
   const router = useRouter()
   const [templates, setTemplates] = useState<TemplateData[]>([])
+  const [questionnaires, setQuestionnaires] = useState<QuestionnaireTemplate[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadingQ, setLoadingQ] = useState(true)
   const [deleteId, setDeleteId] = useState<string | null>(null)
+  const [deleteQId, setDeleteQId] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
-  const [questionnaires] = useState<QuestionnaireTemplate[]>(MOCK_QUESTIONNAIRES)
-  const [activeTab, setActiveTab] = useState<"demos" | "blocks" | "questionnaires" | "tests" | "trash">("demos")
+  // Анкеты — главное, с них начинают → вкладка по умолчанию.
+  const [activeTab, setActiveTab] = useState<TabKey>("questionnaires")
   const [search, setSearch] = useState("")
   const [typeFilter, setTypeFilter] = useState<"all" | "candidate" | "client" | "post_demo">("all")
   const [createOpen, setCreateOpen] = useState(false)
-  // Этап 3: корзина. Удалённые шаблоны грузятся отдельным запросом (?trashed=true),
-  // retentionDays — для бейджа «дней до удаления» и текста confirm.
+  // Корзина: удалённые материалы и анкеты грузятся отдельными запросами.
   const [trashedRows, setTrashedRows] = useState<TemplateData[]>([])
+  const [trashedQ, setTrashedQ] = useState<QuestionnaireTemplate[]>([])
   const [retentionDays, setRetentionDays] = useState(30)
-  const [permanentTarget, setPermanentTarget] = useState<TemplateData | null>(null)
+  const [permanentTarget, setPermanentTarget] = useState<TrashRow | null>(null)
 
-  // Тип материала выводится из length (см. getMaterialType). Анкеты — мок,
-  // отдельной вкладкой. Счётчики во вкладках считают весь список типа,
-  // поиск — только отображаемые строки.
+  // Тип материала выводится из length (см. getMaterialType).
   const demoRows  = useMemo(() => templates.filter(t => getMaterialType(t.length) === "demo"),  [templates])
   const blockRows = useMemo(() => templates.filter(t => getMaterialType(t.length) === "block"), [templates])
   const testRows  = useMemo(() => templates.filter(t => getMaterialType(t.length) === "test"),  [templates])
@@ -345,12 +418,28 @@ export default function LibraryPage() {
     )
   }, [questionnaires, search, typeFilter])
 
-  // Демо ведём через богатый мастер (AI / документ / вручную). Блок и тест —
-  // структурно простые, открываем редактор напрямую с ?type=.
+  // Единый список корзины: материалы + анкеты.
+  const trashRows = useMemo<TrashRow[]>(() => {
+    const mats: TrashRow[] = trashedRows.map((t) => {
+      const mt = MATERIAL_TYPE_LABELS[getMaterialType(t.length)]
+      return { id: t.id, name: t.name, typeLabel: mt.label, typeCls: mt.cls, deletedAt: t.deletedAt, kind: "material" }
+    })
+    const qs: TrashRow[] = trashedQ.map((q) => {
+      const tb = QUESTIONNAIRE_TYPE[q.type] ?? { label: "Анкета", cls: "bg-muted text-muted-foreground" }
+      return { id: q.id, name: q.name, typeLabel: `Анкета · ${tb.label}`, typeCls: tb.cls, deletedAt: q.deletedAt, kind: "questionnaire" }
+    })
+    return [...mats, ...qs].sort((a, b) => (b.deletedAt ?? "").localeCompare(a.deletedAt ?? ""))
+  }, [trashedRows, trashedQ])
+
+  // Демо ведём через богатый мастер; блок/тест — напрямую редактор; анкета — свой редактор.
   const startCreate = (kind: CreatableType) => {
     setCreateOpen(false)
     if (kind === "demo") router.push("/hr/library/create")
     else router.push(`/hr/library/create/editor?type=${kind}`)
+  }
+  const startCreateAnketa = () => {
+    setCreateOpen(false)
+    router.push("/hr/library/anketa-editor")
   }
 
   const fetchTemplates = () => {
@@ -365,18 +454,37 @@ export default function LibraryPage() {
       .catch(() => setLoading(false))
   }
 
-  const fetchTrashed = () => {
-    fetch("/api/demo-templates?trashed=true")
+  const fetchQuestionnaires = () => {
+    setLoadingQ(true)
+    fetch("/api/questionnaire-templates")
       .then((r) => r.json())
       .then((data) => {
         const rows = data.data ?? data
-        setTrashedRows(Array.isArray(rows) ? rows : [])
+        setQuestionnaires(Array.isArray(rows) ? rows : [])
+        setLoadingQ(false)
       })
+      .catch(() => setLoadingQ(false))
+  }
+
+  const fetchTrashed = () => {
+    fetch("/api/demo-templates?trashed=true")
+      .then((r) => r.json())
+      .then((data) => { const rows = data.data ?? data; setTrashedRows(Array.isArray(rows) ? rows : []) })
       .catch(() => { /* корзина просто будет пустой */ })
+    fetch("/api/questionnaire-templates?trashed=true")
+      .then((r) => r.json())
+      .then((data) => { const rows = data.data ?? data; setTrashedQ(Array.isArray(rows) ? rows : []) })
+      .catch(() => { /* пусто */ })
   }
 
   useEffect(() => {
+    // Открыть нужную вкладку, если пришли с ?tab=... (например из редактора анкеты).
+    if (typeof window !== "undefined") {
+      const tab = new URLSearchParams(window.location.search).get("tab") as TabKey | null
+      if (tab && ["questionnaires", "demos", "blocks", "tests", "trash"].includes(tab)) setActiveTab(tab)
+    }
     fetchTemplates()
+    fetchQuestionnaires()
     fetchTrashed()
     fetch("/api/modules/hr/company/trash-retention")
       .then((r) => (r.ok ? r.json() : null))
@@ -384,6 +492,7 @@ export default function LibraryPage() {
       .catch(() => { /* дефолт 30 */ })
   }, [])
 
+  // ── Материалы: удаление / восстановление / дублирование ──────────────────
   const handleDelete = async () => {
     if (!deleteId) return
     setDeleting(true)
@@ -404,22 +513,6 @@ export default function LibraryPage() {
     setDeleteId(null)
   }
 
-  // Этап 3: восстановить из корзины.
-  const handleRestore = async (t: TemplateData) => {
-    try {
-      const res = await fetch(`/api/demo-templates/${t.id}/restore`, { method: "POST" })
-      if (!res.ok) { toast.error("Не удалось восстановить"); return }
-      toast.success("Шаблон восстановлен")
-      setTrashedRows((prev) => prev.filter((x) => x.id !== t.id))
-      fetchTemplates()
-    } catch {
-      toast.error("Ошибка сети")
-    }
-  }
-
-  // Дублирование: POST /api/demo-templates всегда создаёт пользовательский
-  // (is_system=false) шаблон. length сохраняется → копия блока остаётся блоком,
-  // копия теста — тестом. После успеха обновляем список (копия видна сразу).
   const handleDuplicate = async (t: TemplateData) => {
     try {
       const res = await fetch("/api/demo-templates", {
@@ -435,6 +528,65 @@ export default function LibraryPage() {
       if (!res.ok) { toast.error("Не удалось дублировать"); return }
       toast.success("Создана копия шаблона")
       fetchTemplates()
+    } catch {
+      toast.error("Ошибка сети")
+    }
+  }
+
+  // ── Анкеты: редактирование / дублирование / удаление ─────────────────────
+  const editQuestionnaire = (q: QuestionnaireTemplate) => {
+    router.push(`/hr/library/anketa-editor?id=${q.id}`)
+  }
+
+  const duplicateQuestionnaire = async (q: QuestionnaireTemplate) => {
+    try {
+      const res = await fetch("/api/questionnaire-templates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: `${q.name} (копия)`.slice(0, 120),
+          type: q.type,
+          questions: q.questions,
+        }),
+      })
+      if (!res.ok) { toast.error("Не удалось дублировать"); return }
+      toast.success("Создана копия анкеты")
+      fetchQuestionnaires()
+    } catch {
+      toast.error("Ошибка сети")
+    }
+  }
+
+  const handleDeleteQuestionnaire = async () => {
+    if (!deleteQId) return
+    setDeleting(true)
+    try {
+      const res = await fetch(`/api/questionnaire-templates/${deleteQId}`, { method: "DELETE" })
+      if (res.ok) {
+        toast.success("Анкета перемещена в корзину")
+        setQuestionnaires((prev) => prev.filter((q) => q.id !== deleteQId))
+        fetchTrashed()
+      } else {
+        const body = await res.json().catch(() => ({}))
+        toast.error(body.error || "Ошибка удаления")
+      }
+    } catch {
+      toast.error("Ошибка сети")
+    }
+    setDeleting(false)
+    setDeleteQId(null)
+  }
+
+  // ── Корзина: восстановление (диспетчеризация по виду) ─────────────────────
+  const handleRestore = async (t: TrashRow) => {
+    const base = t.kind === "questionnaire" ? "/api/questionnaire-templates" : "/api/demo-templates"
+    try {
+      const res = await fetch(`${base}/${t.id}/restore`, { method: "POST" })
+      if (!res.ok) { toast.error("Не удалось восстановить"); return }
+      toast.success("Восстановлено")
+      fetchTrashed()
+      if (t.kind === "questionnaire") fetchQuestionnaires()
+      else fetchTemplates()
     } catch {
       toast.error("Ошибка сети")
     }
@@ -473,14 +625,14 @@ export default function LibraryPage() {
       <SidebarInset>
         <DashboardHeader />
         <div className="flex-1 overflow-auto bg-background min-w-0">
-          <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
+          <div className="px-6 py-6 lg:px-10">
             {/* Header */}
             <div className="mb-6">
               <h1 className="text-2xl font-bold tracking-tight">Библиотека</h1>
-              <p className="text-sm text-muted-foreground mt-1">Шаблоны демонстраций, блоков, анкет и тестов</p>
+              <p className="text-sm text-muted-foreground mt-1">Шаблоны анкет, демонстраций, блоков и тестов</p>
             </div>
 
-            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)}>
+            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabKey)}>
               <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
                 <TabsList className="shrink-0">
                   <TabsTrigger value="questionnaires" className="gap-1.5">
@@ -501,7 +653,7 @@ export default function LibraryPage() {
                   </TabsTrigger>
                   <TabsTrigger value="trash" className="gap-1.5">
                     <Trash2 className="w-3.5 h-3.5" />Корзина
-                    <span className="ml-1 text-muted-foreground">({trashedRows.length})</span>
+                    <span className="ml-1 text-muted-foreground">({trashRows.length})</span>
                   </TabsTrigger>
                 </TabsList>
                 <div className="flex items-center gap-2 ml-auto flex-1 justify-end min-w-0">
@@ -511,12 +663,12 @@ export default function LibraryPage() {
                       value={search}
                       onChange={(e) => setSearch(e.target.value)}
                       placeholder="Поиск по названию..."
-                      className="pl-8 h-8 text-sm"
+                      className="pl-8 h-9 text-sm"
                     />
                   </div>
                   {activeTab === "questionnaires" && (
                     <Select value={typeFilter} onValueChange={(v) => setTypeFilter(v as typeof typeFilter)}>
-                      <SelectTrigger className="h-8 w-[150px] text-sm">
+                      <SelectTrigger className="h-9 w-[150px] text-sm">
                         <SelectValue placeholder="Тип" />
                       </SelectTrigger>
                       <SelectContent>
@@ -527,8 +679,8 @@ export default function LibraryPage() {
                       </SelectContent>
                     </Select>
                   )}
-                  <Button size="sm" className="gap-1.5 h-8 text-xs shrink-0" onClick={() => setCreateOpen(true)}>
-                    <Plus className="h-3.5 w-3.5" />Создать шаблон
+                  <Button size="sm" className="gap-1.5 h-9 shrink-0" onClick={() => setCreateOpen(true)}>
+                    <Plus className="h-4 w-4" />Создать шаблон
                   </Button>
                 </div>
               </div>
@@ -537,10 +689,47 @@ export default function LibraryPage() {
               <TabsContent value="blocks" className="mt-0">{renderMaterialsTab("block", blockRows)}</TabsContent>
               <TabsContent value="tests" className="mt-0">{renderMaterialsTab("test", testRows)}</TabsContent>
 
+              <TabsContent value="questionnaires" className="mt-0">
+                <Card>
+                  <CardContent className="p-0">
+                    {loadingQ ? (
+                      <div className="flex items-center justify-center py-12 gap-2 text-muted-foreground">
+                        <Loader2 className="w-4 h-4 animate-spin" />Загрузка...
+                      </div>
+                    ) : filteredQuestionnaires.length === 0 ? (
+                      search.trim() || typeFilter !== "all" ? (
+                        <div className="flex flex-col items-center justify-center py-12 text-center px-4">
+                          <Search className="h-10 w-10 text-muted-foreground/30 mb-3" />
+                          <p className="text-sm text-muted-foreground">Ничего не найдено</p>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-center justify-center py-12 text-center px-4">
+                          <FileText className="h-10 w-10 text-muted-foreground/30 mb-3" />
+                          <p className="text-sm text-muted-foreground mb-1">Нет анкет</p>
+                          <p className="text-xs text-muted-foreground/70 mb-3 max-w-xs">
+                            Создайте анкету — её можно будет загрузить в любую вакансию
+                          </p>
+                          <Button size="sm" variant="outline" onClick={startCreateAnketa}>
+                            <Plus className="h-3.5 w-3.5 mr-1" />Создать первую анкету
+                          </Button>
+                        </div>
+                      )
+                    ) : (
+                      <QuestionnairesTable
+                        rows={filteredQuestionnaires}
+                        onEdit={editQuestionnaire}
+                        onDuplicate={duplicateQuestionnaire}
+                        onDelete={(id) => setDeleteQId(id)}
+                      />
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
               <TabsContent value="trash" className="mt-0">
                 <Card>
                   <CardContent className="p-0">
-                    {trashedRows.length === 0 ? (
+                    {trashRows.length === 0 ? (
                       <div className="flex flex-col items-center justify-center py-12 text-center px-4">
                         <Trash2 className="h-10 w-10 text-muted-foreground/30 mb-3" />
                         <p className="text-sm text-muted-foreground">Корзина пуста</p>
@@ -550,77 +739,11 @@ export default function LibraryPage() {
                       </div>
                     ) : (
                       <TrashTable
-                        rows={trashedRows}
+                        rows={trashRows}
                         retentionDays={retentionDays}
                         onRestore={handleRestore}
                         onPermanent={(t) => setPermanentTarget(t)}
                       />
-                    )}
-                  </CardContent>
-                </Card>
-              </TabsContent>
-
-              <TabsContent value="questionnaires" className="mt-0">
-                <Card>
-                  <CardContent className="p-0">
-                    {filteredQuestionnaires.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center py-12 text-center px-4">
-                        <FileText className="h-10 w-10 text-muted-foreground/30 mb-3" />
-                        <p className="text-sm text-muted-foreground">
-                          {questionnaires.length === 0 ? "Нет шаблонов анкет" : "Ничего не найдено"}
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="overflow-auto" style={{ maxHeight: "60vh" }}>
-                        <table className="w-full">
-                          <thead className="bg-muted/50 border-b border-t border-border sticky top-0">
-                            <tr>
-                              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-2.5">Название</th>
-                              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-2.5 w-[110px]">Тип</th>
-                              <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-2.5 w-[90px]">Вопросов</th>
-                              <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-2.5 w-[110px]">Обязат.</th>
-                              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-2.5 w-[110px]">Создан</th>
-                              <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-2.5 w-[110px]">Использ.</th>
-                              <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-2.5 w-[110px]">Действия</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {filteredQuestionnaires.map((q) => {
-                              const tb = TYPE_BADGE[q.type]
-                              return (
-                                <tr key={q.id} className="border-b border-border/50 hover:bg-muted/50 transition-colors group">
-                                  <td className="px-4 py-2.5">
-                                    <span className="text-sm font-medium text-foreground">{q.name}</span>
-                                  </td>
-                                  <td className="px-4 py-2.5">
-                                    {tb && <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium", tb.cls)}>{tb.label}</span>}
-                                  </td>
-                                  <td className="px-4 py-2.5 text-center text-sm text-muted-foreground">{q.questionsCount}</td>
-                                  <td className="px-4 py-2.5 text-center text-sm text-muted-foreground">{q.requiredCount}</td>
-                                  <td className="px-4 py-2.5 text-sm text-muted-foreground whitespace-nowrap">{formatDate(q.createdAt)}</td>
-                                  <td className="px-4 py-2.5 text-center text-sm text-muted-foreground">{q.usageCount}</td>
-                                  <td className="px-4 py-2.5">
-                                    <div className="flex items-center gap-0.5 justify-end">
-                                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => toast("Просмотр анкеты — в разработке")}>
-                                        <Eye className="h-3.5 w-3.5" />
-                                      </Button>
-                                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => toast("Редактирование анкеты — в разработке")}>
-                                        <Pencil className="h-3.5 w-3.5" />
-                                      </Button>
-                                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => toast("Шаблон скопирован")}>
-                                        <Copy className="h-3.5 w-3.5" />
-                                      </Button>
-                                      <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive" onClick={() => toast("Удаление анкеты — в разработке")}>
-                                        <Trash2 className="h-3.5 w-3.5" />
-                                      </Button>
-                                    </div>
-                                  </td>
-                                </tr>
-                              )
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
                     )}
                   </CardContent>
                 </Card>
@@ -639,25 +762,40 @@ export default function LibraryPage() {
             <DialogDescription>Выберите тип материала для библиотеки</DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
-            {(["demo", "test", "block"] as CreatableType[]).map((kind) => (
-              <button
-                key={kind}
-                type="button"
-                onClick={() => startCreate(kind)}
-                className="w-full flex items-start gap-3 rounded-lg border border-border p-3 text-left transition-colors hover:border-primary/50 hover:bg-muted/50"
-              >
-                <span className="text-2xl leading-none shrink-0">{TYPE_COPY[kind].emoji}</span>
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold">{DIALOG_TITLE[kind]}</p>
-                  <p className="text-xs text-muted-foreground">{TYPE_COPY[kind].dialogDesc}</p>
-                </div>
-              </button>
-            ))}
+            {/* Анкета — первой, это основной материал */}
+            <button
+              type="button"
+              onClick={startCreateAnketa}
+              className="w-full flex items-start gap-3 rounded-lg border border-border p-3 text-left transition-colors hover:border-primary/50 hover:bg-muted/50"
+            >
+              <FileText className="h-5 w-5 mt-0.5 shrink-0 text-muted-foreground" />
+              <div className="min-w-0">
+                <p className="text-sm font-semibold">Анкета</p>
+                <p className="text-xs text-muted-foreground">Набор вопросов для вакансии (кандидат / заказчик / после демо)</p>
+              </div>
+            </button>
+            {(["demo", "test", "block"] as CreatableType[]).map((kind) => {
+              const Icon = CREATE_ICON[kind]
+              return (
+                <button
+                  key={kind}
+                  type="button"
+                  onClick={() => startCreate(kind)}
+                  className="w-full flex items-start gap-3 rounded-lg border border-border p-3 text-left transition-colors hover:border-primary/50 hover:bg-muted/50"
+                >
+                  <Icon className="h-5 w-5 mt-0.5 shrink-0 text-muted-foreground" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold">{DIALOG_TITLE[kind]}</p>
+                    <p className="text-xs text-muted-foreground">{TYPE_COPY[kind].dialogDesc}</p>
+                  </div>
+                </button>
+              )
+            })}
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* Delete confirmation */}
+      {/* Delete material confirmation */}
       <Dialog open={!!deleteId} onOpenChange={(open) => { if (!open) setDeleteId(null) }}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader><DialogTitle>Удалить шаблон?</DialogTitle></DialogHeader>
@@ -675,9 +813,27 @@ export default function LibraryPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Delete questionnaire confirmation */}
+      <Dialog open={!!deleteQId} onOpenChange={(open) => { if (!open) setDeleteQId(null) }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader><DialogTitle>Удалить анкету?</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Удалить анкету «{questionnaires.find(q => q.id === deleteQId)?.name ?? ""}»? Она будет перемещена в корзину
+            и автоматически удалена через {retentionDays} дн.
+          </p>
+          <div className="flex justify-end gap-2 mt-2">
+            <Button variant="outline" size="sm" onClick={() => setDeleteQId(null)}>Отмена</Button>
+            <Button variant="destructive" size="sm" onClick={handleDeleteQuestionnaire} disabled={deleting}>
+              {deleting ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : null}
+              Удалить
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Permanent delete (из корзины) */}
-      <PermanentDeleteTemplateDialog
-        template={permanentTarget}
+      <PermanentDeleteDialog
+        target={permanentTarget}
         open={!!permanentTarget}
         onOpenChange={(o) => { if (!o) setPermanentTarget(null) }}
         onDeleted={() => { setPermanentTarget(null); fetchTrashed() }}
