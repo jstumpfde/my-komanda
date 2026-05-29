@@ -6,17 +6,20 @@ import Link from "next/link"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
-import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
+import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 import {
-  Shield, Search, Building2, Eye, Lock, CalendarPlus,
-  ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Loader2,
+  Shield, Search, Building2, Eye, Lock, CalendarPlus, MoreHorizontal,
+  ChevronLeft, ChevronRight, Loader2,
 } from "lucide-react"
 
 // ─── Типы ─────────────────────────────────────────────────────────────────────
@@ -80,29 +83,6 @@ function useDebounce<T>(value: T, delay: number): T {
     return () => clearTimeout(handler)
   }, [value, delay])
   return debouncedValue
-}
-
-// ─── Компонент SortableHeader ─────────────────────────────────────────────────
-
-function SortableHeader({
-  label, field, currentSort, onSort,
-}: {
-  label: string
-  field: string
-  currentSort: string
-  onSort: (f: string) => void
-}) {
-  return (
-    <button
-      className="flex items-center gap-1 text-xs font-medium text-muted-foreground uppercase tracking-wider hover:text-foreground transition-colors"
-      onClick={() => onSort(field)}
-    >
-      {label}
-      {currentSort === field
-        ? <ChevronDown className="w-3 h-3" />
-        : <ChevronUp className="w-3 h-3 opacity-30" />}
-    </button>
-  )
 }
 
 // ─── Основная страница ────────────────────────────────────────────────────────
@@ -269,153 +249,108 @@ function AdminClientsInner() {
             </div>
 
             {/* Таблица */}
-            <Card>
-              <CardContent className="p-0">
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b bg-muted/50">
-                        <th className="text-left px-4 py-3">
-                          <SortableHeader label="Компания" field="name" currentSort={sort} onSort={setSort} />
-                        </th>
-                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">ИНН</th>
-                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Тариф</th>
-                        <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Статус</th>
-                        <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Польз.</th>
-                        <th className="text-left px-4 py-3">
-                          <SortableHeader label="Дата" field="created_at" currentSort={sort} onSort={setSort} />
-                        </th>
-                        <th className="text-right px-4 py-3">
-                          <SortableHeader label="MRR ₽" field="mrr" currentSort={sort} onSort={setSort} />
-                        </th>
-                        <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Действия</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {loading && (
-                        <tr>
-                          <td colSpan={8} className="text-center py-8">
-                            <Loader2 className="w-5 h-5 animate-spin mx-auto text-muted-foreground" />
-                          </td>
-                        </tr>
-                      )}
-                      {!loading && data.data.length === 0 && (
-                        <tr>
-                          <td colSpan={8} className="text-center py-8 text-sm text-muted-foreground">
-                            Нет клиентов по выбранным фильтрам
-                          </td>
-                        </tr>
-                      )}
-                      {!loading && data.data.map(client => {
-                        const statusCfg = STATUS_CONFIG[client.subscriptionStatus ?? ""] ?? {
-                          label: client.subscriptionStatus ?? "—", color: ""
-                        }
-                        const isBlocking = blockingId === client.id
-                        const isExtending = extendingId === client.id
-                        const isBlocked = client.subscriptionStatus === "paused"
+            <TableCard>
+              <DataTable containerClassName="overflow-x-auto">
+                <DataHead>
+                  <DataHeadCell sortable sortDir={sort === "name" ? "desc" : null} onSort={() => setSort("name")}>Компания</DataHeadCell>
+                  <DataHeadCell>ИНН</DataHeadCell>
+                  <DataHeadCell>Тариф</DataHeadCell>
+                  <DataHeadCell align="center">Статус</DataHeadCell>
+                  <DataHeadCell align="right">Польз.</DataHeadCell>
+                  <DataHeadCell sortable sortDir={sort === "created_at" ? "desc" : null} onSort={() => setSort("created_at")}>Дата</DataHeadCell>
+                  <DataHeadCell align="right" sortable sortDir={sort === "mrr" ? "desc" : null} onSort={() => setSort("mrr")}>MRR ₽</DataHeadCell>
+                  <DataHeadCell align="right" width="80px">Действия</DataHeadCell>
+                </DataHead>
+                <tbody>
+                  {loading && (
+                    <tr>
+                      <td colSpan={8} className="text-center py-8">
+                        <Loader2 className="w-5 h-5 animate-spin mx-auto text-muted-foreground" />
+                      </td>
+                    </tr>
+                  )}
+                  {!loading && data.data.length === 0 && (
+                    <tr>
+                      <td colSpan={8} className="text-center py-8 text-sm text-muted-foreground">
+                        Нет клиентов по выбранным фильтрам
+                      </td>
+                    </tr>
+                  )}
+                  {!loading && data.data.map(client => {
+                    const statusCfg = STATUS_CONFIG[client.subscriptionStatus ?? ""] ?? {
+                      label: client.subscriptionStatus ?? "—", color: ""
+                    }
+                    const isBlocking = blockingId === client.id
+                    const isExtending = extendingId === client.id
+                    const isBlocked = client.subscriptionStatus === "paused"
 
-                        return (
-                          <tr key={client.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
-                            <td className="px-4 py-3">
-                              <Link href={`/admin/clients/${client.id}`} className="flex items-center gap-2.5 group">
-                                <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                                  <Building2 className="w-4 h-4 text-primary" />
-                                </div>
-                                <div>
-                                  <p className="text-sm font-medium text-foreground group-hover:text-primary transition-colors">
-                                    {client.name}
-                                  </p>
-                                  {client.directorEmail && (
-                                    <p className="text-xs text-muted-foreground">{client.directorEmail}</p>
-                                  )}
-                                </div>
-                              </Link>
-                            </td>
-                            <td className="px-4 py-3 text-sm text-muted-foreground">
-                              {client.inn ?? "—"}
-                            </td>
-                            <td className="px-4 py-3">
-                              {client.planName
-                                ? <div>
-                                    <p className="text-sm font-medium text-foreground">{client.planName}</p>
-                                    <p className="text-xs text-muted-foreground">{formatPrice(client.planPrice)}</p>
-                                  </div>
-                                : <span className="text-sm text-muted-foreground">—</span>
-                              }
-                            </td>
-                            <td className="text-center px-4 py-3">
-                              <Badge variant="outline" className={cn("text-xs", statusCfg.color)}>
-                                {statusCfg.label}
-                              </Badge>
-                            </td>
-                            <td className="text-right px-4 py-3 text-sm text-foreground">
-                              {client.userCount}
-                            </td>
-                            <td className="px-4 py-3 text-sm text-foreground">
-                              {formatDate(client.createdAt)}
-                            </td>
-                            <td className="text-right px-4 py-3 text-sm font-medium text-foreground">
-                              {client.mrr > 0 ? formatPrice(client.mrr) : "—"}
-                            </td>
-                            <td className="text-center px-4 py-3">
-                              <div className="flex items-center justify-center gap-1">
-                                {/* Просмотр */}
-                                <Button
-                                  asChild
-                                  size="icon"
-                                  variant="ghost"
-                                  className="h-7 w-7"
-                                  title="Просмотр"
-                                >
-                                  <Link href={`/admin/clients/${client.id}`}>
-                                    <Eye className="w-3.5 h-3.5" />
-                                  </Link>
+                    return (
+                      <DataRow key={client.id} className="group">
+                        <DataCell>
+                          <Link href={`/admin/clients/${client.id}`} className="flex items-center gap-2.5 group/name">
+                            <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                              <Building2 className="w-4 h-4 text-primary" />
+                            </div>
+                            <div>
+                              <p className="font-medium text-foreground group-hover/name:text-primary transition-colors">{client.name}</p>
+                              {client.directorEmail && (
+                                <p className="text-xs text-muted-foreground">{client.directorEmail}</p>
+                              )}
+                            </div>
+                          </Link>
+                        </DataCell>
+                        <DataCell className="text-muted-foreground">{client.inn ?? "—"}</DataCell>
+                        <DataCell>
+                          {client.planName
+                            ? <div>
+                                <p className="font-medium text-foreground">{client.planName}</p>
+                                <p className="text-xs text-muted-foreground">{formatPrice(client.planPrice)}</p>
+                              </div>
+                            : <span className="text-muted-foreground">—</span>
+                          }
+                        </DataCell>
+                        <DataCell align="center">
+                          <Badge variant="outline" className={cn("text-xs", statusCfg.color)}>{statusCfg.label}</Badge>
+                        </DataCell>
+                        <DataCell align="right" className="text-foreground">{client.userCount}</DataCell>
+                        <DataCell className="text-foreground">{formatDate(client.createdAt)}</DataCell>
+                        <DataCell align="right" className="font-medium text-foreground">{client.mrr > 0 ? formatPrice(client.mrr) : "—"}</DataCell>
+                        <DataCell align="right">
+                          <div className="flex justify-end">
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0" title="Действия">
+                                  <MoreHorizontal className="h-4 w-4" />
                                 </Button>
-
-                                {/* Блокировка */}
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  className={cn(
-                                    "h-7 w-7",
-                                    isBlocked
-                                      ? "text-emerald-600 hover:text-emerald-700"
-                                      : "text-muted-foreground hover:text-destructive"
-                                  )}
-                                  title={isBlocked ? "Разблокировать" : "Заблокировать"}
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="w-52">
+                                <DropdownMenuItem asChild className="gap-2 cursor-pointer">
+                                  <Link href={`/admin/clients/${client.id}`}><Eye className="h-3.5 w-3.5" />Просмотр</Link>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  className={cn("gap-2 cursor-pointer", !isBlocked && "text-destructive focus:text-destructive")}
                                   disabled={isBlocking}
                                   onClick={() => handleBlock(client)}
                                 >
-                                  {isBlocking
-                                    ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                    : <Lock className="w-3.5 h-3.5" />}
-                                </Button>
-
-                                {/* Продление trial */}
+                                  {isBlocking ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Lock className="h-3.5 w-3.5" />}
+                                  {isBlocked ? "Разблокировать" : "Заблокировать"}
+                                </DropdownMenuItem>
                                 {client.subscriptionStatus === "trial" && (
-                                  <Button
-                                    size="icon"
-                                    variant="ghost"
-                                    className="h-7 w-7 text-muted-foreground hover:text-primary"
-                                    title="Продлить trial на 14 дней"
-                                    disabled={isExtending}
-                                    onClick={() => handleExtend(client)}
-                                  >
-                                    {isExtending
-                                      ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                      : <CalendarPlus className="w-3.5 h-3.5" />}
-                                  </Button>
+                                  <DropdownMenuItem className="gap-2 cursor-pointer" disabled={isExtending} onClick={() => handleExtend(client)}>
+                                    {isExtending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CalendarPlus className="h-3.5 w-3.5" />}
+                                    Продлить trial на 14 дней
+                                  </DropdownMenuItem>
                                 )}
-                              </div>
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </CardContent>
-            </Card>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
+                        </DataCell>
+                      </DataRow>
+                    )
+                  })}
+                </tbody>
+              </DataTable>
+            </TableCard>
 
             {/* Пагинация */}
             {data.totalPages > 1 && (

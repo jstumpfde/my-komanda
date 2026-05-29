@@ -26,11 +26,12 @@ import {
 import { useVacancies, type ApiVacancy } from "@/hooks/use-vacancies"
 import { VacancyStatusBadge, getVacancyStatusLabel } from "@/components/vacancies/vacancy-status-badge"
 import { VacancyActionsMenuItems } from "@/components/vacancies/vacancy-actions-menu"
+import { TableCard, DataTable, DataHead, DataHeadCell, DataSelectHeadCell } from "@/components/ui/data-table"
 import { PermanentDeleteDialog } from "@/components/vacancies/permanent-delete-dialog"
 import { getVacancyState, getTrashDaysRemaining, formatTrashCountdown } from "@/lib/vacancies/lifecycle"
 import {
   Plus, Briefcase, MapPin, List, LayoutGrid, Table2, Calendar, Banknote,
-  Search, MoreHorizontal, Pencil, Copy, Archive, Trash2, ListFilter,
+  Search, MoreHorizontal, Pencil, Copy, Archive, Trash2,
   Loader2, ExternalLink,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -117,38 +118,6 @@ function getHrName(createdBy: string, team: TeamMember[]): string {
   return member?.name ?? "Не назначен"
 }
 
-/** Sortable column header with funnel icon */
-function SortableHeader({
-  label, column, current, onToggle,
-}: {
-  label: string
-  column: string
-  current: ColumnSort
-  onToggle: (col: string) => void
-}) {
-  const isActive = current?.column === column
-  const dir = isActive ? current.dir : null
-
-  return (
-    <button
-      type="button"
-      onClick={() => onToggle(column)}
-      className={cn(
-        "inline-flex items-center gap-1.5 text-sm font-semibold select-none transition-colors",
-        isActive ? "text-foreground" : "text-muted-foreground hover:text-foreground",
-      )}
-    >
-      <ListFilter
-        className={cn(
-          "size-4 transition-transform",
-          dir === "desc" && "scale-y-[-1]",
-          !isActive && "opacity-40",
-        )}
-      />
-      {label}
-    </button>
-  )
-}
 
 // ─── Row actions ─────────────────────────────────────────────────────────────
 
@@ -673,19 +642,17 @@ export default function VacanciesPage() {
 
             {/* Table */}
             {!loading && filtered.length > 0 && view === "table" && (
-              <div className="rounded-xl border border-border bg-card overflow-hidden">
-                <table className="w-full text-left">
-                  <thead>
-                    <tr className="border-b border-border bg-muted/40">
-                      <th className="pl-5 pr-2 py-3 w-10"><Checkbox checked={allSelected} onCheckedChange={toggleAll} /></th>
-                      <th className="px-4 py-3 text-sm font-semibold text-muted-foreground" style={{ minWidth: 450 }}>Вакансия</th>
-                      <th className="px-4 py-3 text-sm font-semibold text-muted-foreground">Город</th>
-                      <th className="px-4 py-3"><SortableHeader label="Статус" column="status" current={colSort} onToggle={toggleColSort} /></th>
-                      <th className="px-4 py-3"><SortableHeader label="Создана" column="date" current={colSort} onToggle={toggleColSort} /></th>
-                      <th className="px-4 py-3"><SortableHeader label="Менеджер" column="hr" current={colSort} onToggle={toggleColSort} /></th>
-                      <th className="pl-2 pr-5 py-3 w-10" />
-                    </tr>
-                  </thead>
+              <TableCard>
+                <DataTable className="text-left">
+                  <DataHead>
+                    <DataSelectHeadCell checked={allSelected} onCheckedChange={toggleAll} />
+                    <DataHeadCell style={{ minWidth: 450 }}>Вакансия</DataHeadCell>
+                    <DataHeadCell>Город</DataHeadCell>
+                    <DataHeadCell sortable sortDir={colSort?.column === "status" ? colSort.dir : null} onSort={() => toggleColSort("status")}>Статус</DataHeadCell>
+                    <DataHeadCell sortable sortDir={colSort?.column === "date" ? colSort.dir : null} onSort={() => toggleColSort("date")}>Создана</DataHeadCell>
+                    <DataHeadCell sortable sortDir={colSort?.column === "hr" ? colSort.dir : null} onSort={() => toggleColSort("hr")}>Менеджер</DataHeadCell>
+                    <DataHeadCell width="40px" className="pl-2 pr-5"> </DataHeadCell>
+                  </DataHead>
                   <tbody>
                     {filtered.map((v, i) => (
                       <RowContextMenu key={v.id} v={v} onDuplicate={handleDuplicate} onArchive={handleArchive} onDelete={setDeleteTarget}>
@@ -714,8 +681,8 @@ export default function VacanciesPage() {
                       </RowContextMenu>
                     ))}
                   </tbody>
-                </table>
-              </div>
+                </DataTable>
+              </TableCard>
             )}
           </div>
         </div>
