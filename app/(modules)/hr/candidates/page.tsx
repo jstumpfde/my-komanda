@@ -7,17 +7,17 @@ import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import { Checkbox } from "@/components/ui/checkbox"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select"
-import { Search, Users, ListFilter, MoreHorizontal, UserPlus, Archive, XCircle, Loader2, Star, Eye, ChevronDown } from "lucide-react"
+import { Search, Users, MoreHorizontal, UserPlus, Archive, XCircle, Loader2, Star, Eye, ChevronDown } from "lucide-react"
 import { useDebounce } from "@/hooks/use-debounce"
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
+import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell, DataSelectHeadCell, DataSelectCell } from "@/components/ui/data-table"
 import Link from "next/link"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
@@ -102,23 +102,6 @@ function progressTextClass(percent: number | null, isActive: boolean): string {
 }
 
 type ColumnSort = { column: string; dir: "asc" | "desc" } | null
-
-function SortableHeader({
-  label, column, current, onToggle,
-}: {
-  label: string; column: string; current: ColumnSort; onToggle: (col: string) => void
-}) {
-  const isActive = current?.column === column
-  const dir = isActive ? current.dir : null
-  return (
-    <button type="button" onClick={() => onToggle(column)}
-      className={cn("inline-flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider select-none transition-colors",
-        isActive ? "text-foreground" : "text-muted-foreground hover:text-foreground")}>
-      <ListFilter className={cn("size-4 transition-transform", dir === "desc" && "scale-y-[-1]", !isActive && "opacity-40")} />
-      {label}
-    </button>
-  )
-}
 
 // ─── Page ────────────────────────────────────────────────────────────────────
 
@@ -350,47 +333,39 @@ export default function CandidatesPage() {
 
             {/* Table */}
             {!loading && filtered.length > 0 && (
-              <div className="rounded-xl border border-border bg-card overflow-hidden">
-                <table className="w-full text-left">
-                  <thead>
-                    <tr className="bg-muted/50 border-b border-border">
-                      <th className="pl-5 pr-2 py-3 w-10"><Checkbox checked={allSelected} onCheckedChange={toggleAll} /></th>
-                      <th className="px-2 py-3 w-[40px]"></th>
-                      <th className="px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">ФИО</th>
-                      <th className="px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Вакансия</th>
-                      <th className="px-4 py-3"><SortableHeader label="Статус" column="status" current={colSort} onToggle={toggleColSort} /></th>
-                      <th className="px-4 py-3"><SortableHeader label="Прогресс" column="progress" current={colSort} onToggle={toggleColSort} /></th>
-                      <th className="px-4 py-3"><SortableHeader label="Блоки" column="blocks" current={colSort} onToggle={toggleColSort} /></th>
-                      <th className="px-4 py-3"><SortableHeader label="Дата отклика" column="date" current={colSort} onToggle={toggleColSort} /></th>
-                      <th className="px-4 py-3"><SortableHeader label="Источник" column="source" current={colSort} onToggle={toggleColSort} /></th>
-                      <th className="px-4 py-3 w-[60px] text-xs font-medium text-muted-foreground uppercase tracking-wider">Действия</th>
-                    </tr>
-                  </thead>
+              <TableCard className="shadow-none">
+                <DataTable className="text-left">
+                  <DataHead>
+                    <DataSelectHeadCell checked={allSelected} onCheckedChange={toggleAll} />
+                    <DataHeadCell width="40px" className="px-2"> </DataHeadCell>
+                    <DataHeadCell>ФИО</DataHeadCell>
+                    <DataHeadCell>Вакансия</DataHeadCell>
+                    <DataHeadCell sortable sortDir={colSort?.column === "status" ? colSort.dir : null} onSort={() => toggleColSort("status")}>Статус</DataHeadCell>
+                    <DataHeadCell sortable sortDir={colSort?.column === "progress" ? colSort.dir : null} onSort={() => toggleColSort("progress")}>Прогресс</DataHeadCell>
+                    <DataHeadCell sortable sortDir={colSort?.column === "blocks" ? colSort.dir : null} onSort={() => toggleColSort("blocks")}>Блоки</DataHeadCell>
+                    <DataHeadCell sortable sortDir={colSort?.column === "date" ? colSort.dir : null} onSort={() => toggleColSort("date")}>Дата отклика</DataHeadCell>
+                    <DataHeadCell sortable sortDir={colSort?.column === "source" ? colSort.dir : null} onSort={() => toggleColSort("source")}>Источник</DataHeadCell>
+                    <DataHeadCell width="60px">Действия</DataHeadCell>
+                  </DataHead>
                   <tbody>
-                    {filtered.map((c, i) => (
-                      <tr key={c.id}
+                    {filtered.map((c) => (
+                      <DataRow
+                        key={c.id}
                         onClick={() => router.push(`/hr/candidates/${c.id}`)}
-                        className={cn("transition-colors cursor-pointer hover:bg-accent/40",
-                          selected.has(c.id) && "bg-primary/[0.04]",
-                          i < filtered.length - 1 && "border-b border-border/60",
-                        )}>
-                        <td className="pl-5 pr-2 py-3.5" onClick={(e) => e.stopPropagation()}>
-                          <Checkbox checked={selected.has(c.id)} onCheckedChange={() => toggleOne(c.id)} />
-                        </td>
-                        <td className="px-2 py-3.5" onClick={(e) => e.stopPropagation()}>
+                        className={cn("cursor-pointer", selected.has(c.id) && "bg-primary/[0.04]")}
+                      >
+                        <DataSelectCell checked={selected.has(c.id)} onCheckedChange={() => toggleOne(c.id)} />
+                        <DataCell className="px-2" onClick={(e) => e.stopPropagation()}>
                           <button
                             type="button"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              toggleFavorite(c.id)
-                            }}
+                            onClick={(e) => { e.stopPropagation(); toggleFavorite(c.id) }}
                             className="inline-flex items-center justify-center p-1 rounded hover:bg-accent/60 transition-colors"
                             aria-label={c.isFavorite ? "Убрать из избранного" : "В избранное"}
                           >
                             <Star className={cn("size-4", c.isFavorite ? "fill-amber-400 text-amber-400" : "text-muted-foreground/40")} />
                           </button>
-                        </td>
-                        <td className="px-4 py-3.5">
+                        </DataCell>
+                        <DataCell>
                           <div className="flex items-center gap-3">
                             <Avatar className="size-8">
                               <AvatarFallback className="text-xs font-bold text-white" style={{ backgroundColor: avatarColor(c.id) }}>
@@ -398,35 +373,35 @@ export default function CandidatesPage() {
                               </AvatarFallback>
                             </Avatar>
                             <div>
-                              <Link href={`/hr/candidates/${c.id}`} onClick={(e) => e.stopPropagation()} className="text-sm font-medium text-foreground hover:text-primary hover:underline transition-colors">{c.name}</Link>
+                              <Link href={`/hr/candidates/${c.id}`} onClick={(e) => e.stopPropagation()} className="font-medium text-foreground hover:text-primary hover:underline transition-colors">{c.name}</Link>
                               <p className="text-xs text-muted-foreground">{c.city ?? ""}</p>
                             </div>
                           </div>
-                        </td>
-                        <td className="px-4 py-3.5 text-sm text-muted-foreground">{c.vacancyTitle}</td>
-                        <td className="px-4 py-3.5">
+                        </DataCell>
+                        <DataCell className="text-muted-foreground">{c.vacancyTitle}</DataCell>
+                        <DataCell>
                           <Badge variant="outline" className={cn("border-0 text-xs", getStageColorClasses(c.stage))}>
                             {getStageLabel(c.stage)}
                           </Badge>
-                        </td>
-                        <td className="px-4 py-3.5">
+                        </DataCell>
+                        <DataCell>
                           {c.progressPercent === null || c.demoTotalBlocks === 0 ? (
-                            <span className="text-sm text-muted-foreground">—</span>
+                            <span className="text-muted-foreground">—</span>
                           ) : (
-                            <span className={cn("text-sm font-medium tabular-nums", progressTextClass(c.progressPercent, c.isActive))}>
+                            <span className={cn("font-medium tabular-nums", progressTextClass(c.progressPercent, c.isActive))}>
                               {c.progressPercent}%
                             </span>
                           )}
-                        </td>
-                        <td className="px-4 py-3.5 text-sm text-muted-foreground tabular-nums whitespace-nowrap">
+                        </DataCell>
+                        <DataCell className="text-muted-foreground tabular-nums whitespace-nowrap">
                           {c.demoTotalBlocks === 0 ? "—" : `${c.demoCompletedBlocks} / ${c.demoTotalBlocks}`}
-                        </td>
-                        <td className="px-4 py-3.5 text-sm text-muted-foreground whitespace-nowrap">{formatDate(c.createdAt)}</td>
-                        <td className="px-4 py-3.5 text-sm text-muted-foreground">{SOURCE_LABELS[c.source ?? ""] ?? c.source ?? "—"}</td>
-                        <td className="px-4 py-3.5" onClick={e => e.stopPropagation()}>
+                        </DataCell>
+                        <DataCell className="text-muted-foreground whitespace-nowrap">{formatDate(c.createdAt)}</DataCell>
+                        <DataCell className="text-muted-foreground">{SOURCE_LABELS[c.source ?? ""] ?? c.source ?? "—"}</DataCell>
+                        <DataCell onClick={(e) => e.stopPropagation()}>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-7 w-7">
+                              <Button variant="ghost" size="icon" className="h-8 w-8">
                                 <MoreHorizontal className="w-4 h-4" />
                               </Button>
                             </DropdownMenuTrigger>
@@ -446,12 +421,12 @@ export default function CandidatesPage() {
                               </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
-                        </td>
-                      </tr>
+                        </DataCell>
+                      </DataRow>
                     ))}
                   </tbody>
-                </table>
-              </div>
+                </DataTable>
+              </TableCard>
             )}
 
             {/* Load more — серверная пагинация по 50 строк */}
