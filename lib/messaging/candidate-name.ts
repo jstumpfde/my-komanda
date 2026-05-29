@@ -22,11 +22,31 @@ export interface CandidateFirstName {
   fallback:  boolean // true — имя из hh не нашли, использовали fallback по candidates.name
 }
 
+// Заглушки, которыми бэкфиллится candidates.name когда hh не дал имени.
+// Это НЕ имена — приветствие по ним выглядело криво («с, привет» из второго
+// слова "Кандидат с hh.ru»). Трактуем как «имени нет» → нейтральное приветствие.
+const NON_NAME_VALUES = new Set(["кандидат с hh.ru", "кандидат"])
+
+// Похоже ли значение на реальное имя, по которому можно обращаться?
+// Отсекаем: пусто, заглушки бэкфилла («Кандидат с hh.ru»), «скрытое имя» с hh
+// («Аноним» / «Анонимный соискатель»). По ним обращаться по имени нельзя —
+// нужно нейтральное «Здравствуйте» (а не «Здравствуйте, Аноним»).
+function isRealName(s: string | null | undefined): boolean {
+  const c = (s ?? "").trim().toLowerCase()
+  if (!c) return false
+  if (NON_NAME_VALUES.has(c)) return false
+  if (/hh\.ru/.test(c)) return false
+  if (/аноним/.test(c)) return false
+  return true
+}
+
 // Fallback по candidates.name: формат "Фамилия Имя [Отчество]" → берём ВТОРОЕ
-// слово (имя). Если слово одно — его. Если пусто — "Здравствуйте".
+// слово (имя). Если слово одно — его. Если пусто/заглушка/аноним — "Здравствуйте".
 function fallbackFromFullName(fullName: string): string {
+  if (!isRealName(fullName)) return "Здравствуйте"
   const parts = fullName.trim().split(/\s+/).filter(Boolean)
-  return parts[1] || parts[0] || "Здравствуйте"
+  const name = parts[1] || parts[0] || ""
+  return isRealName(name) ? name : "Здравствуйте"
 }
 
 export async function getCandidateFirstName(candidateId: string): Promise<CandidateFirstName> {
@@ -59,7 +79,7 @@ export async function getCandidateFirstName(candidateId: string): Promise<Candid
     console.warn("[candidate-name] hh lookup failed:", err instanceof Error ? err.message : err)
   }
 
-  if (hhFirstName) {
+  if (hhFirstName && isRealName(hhFirstName)) {
     return { firstName: hhFirstName, fallback: false }
   }
 

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { eq, and, lte, gte, sql } from "drizzle-orm"
+import { eq, and, lte, gte, ne, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { vacancies, candidates, followUpMessages, followUpCampaigns, hhResponses, companies } from "@/lib/db/schema"
 import { getValidToken } from "@/lib/hh-helpers"
@@ -320,6 +320,26 @@ async function processOneTouch(
   if (!tokenResult) {
     await db.update(followUpMessages).set({ status: "failed", errorMessage: "no_hh_token" }).where(eq(followUpMessages.id, msg.id))
     return { outcome: "failed", reason: "no_hh_token" }
+  }
+
+  // Дедуп: не отправляем кандидату ИДЕНТИЧНЫЙ по тексту дожим повторно. Дубли
+  // рождались из задвоенных touch-строк (один run обрабатывал их последовательно
+  // с задержкой ~31с → кандидат получал одно и то же дважды). Если такой же текст
+  // этому кандидату уже уходил — отменяем текущую строку как дубль. Разные касания
+  // (разный текст) не затрагиваются. Реактивный диалог чат-бота — не здесь.
+  const [dupSent] = await db
+    .select({ id: followUpMessages.id })
+    .from(followUpMessages)
+    .where(and(
+      eq(followUpMessages.candidateId, msg.candidateId),
+      eq(followUpMessages.status, "sent"),
+      eq(followUpMessages.messageText, msg.messageText),
+      ne(followUpMessages.id, msg.id),
+    ))
+    .limit(1)
+  if (dupSent) {
+    await db.update(followUpMessages).set({ status: "cancelled", errorMessage: "duplicate_text" }).where(eq(followUpMessages.id, msg.id))
+    return { outcome: "cancelled", reason: "duplicate_text" }
   }
 
   // Подставляем переменные в текст касания (имя из кандидата, должность, ссылка).

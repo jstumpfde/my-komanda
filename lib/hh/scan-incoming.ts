@@ -177,6 +177,12 @@ async function applyRejection(args: {
     .limit(1)
   const fromStage = prev?.stage ?? "unknown"
 
+  // Guard от повторного отказа: если кандидат уже rejected — ничего не делаем и
+  // НЕ шлём второе прощальное сообщение (иначе в чате несколько отказов подряд).
+  if (fromStage === "rejected") {
+    return false
+  }
+
   await db.update(candidates).set({
     stage: "rejected",
     automationPaused: true,
