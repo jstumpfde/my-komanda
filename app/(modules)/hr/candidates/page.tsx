@@ -333,7 +333,7 @@ export default function CandidatesPage() {
 
             {/* Table */}
             {!loading && filtered.length > 0 && (
-              <TableCard className="shadow-none">
+              <TableCard>
                 <DataTable className="text-left">
                   <DataHead>
                     <DataSelectHeadCell checked={allSelected} onCheckedChange={toggleAll} />
