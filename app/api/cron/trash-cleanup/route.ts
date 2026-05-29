@@ -17,10 +17,13 @@ import { vacancies, companies, demoTemplates, questionnaireTemplates } from "@/l
 import { checkCronAuth } from "@/lib/cron/auth"
 import { startCronRun, finishCronRun } from "@/lib/cron/record-run"
 import { hardDeleteVacancy } from "@/lib/vacancies/hard-delete"
+import { hardDeleteCompany } from "@/lib/companies/hard-delete"
 
 const CRON_NAME = "trash-cleanup"
 // Предохранитель: не сносим больше N вакансий за один прогон.
 const MAX_PER_RUN = 200
+// Компании сносим осторожнее — не больше N за прогон (это удаление целого тенанта).
+const MAX_COMPANIES_PER_RUN = 20
 
 async function handle(req: NextRequest) {
   const auth = checkCronAuth(req)
@@ -117,12 +120,41 @@ async function handle(req: NextRequest) {
       }
     }
 
+    // ── Корзина компаний (миграция 0148) ────────────────────────────────────
+    // Необратимое удаление целого тенанта — поэтому осторожно: только из корзины
+    // (deleted_at), старше собственного trash_retention_days, малыми партиями.
+    // Доп. предохранитель: пропускаем компании с активной подпиской.
+    const dueCompanies = await db
+      .select({ id: companies.id })
+      .from(companies)
+      .where(and(
+        isNotNull(companies.deletedAt),
+        sql`${companies.subscriptionStatus} IS DISTINCT FROM 'active'`,
+        sql`${companies.deletedAt} < now() - make_interval(days => ${companies.trashRetentionDays})`,
+      ))
+      .orderBy(companies.deletedAt)
+      .limit(MAX_COMPANIES_PER_RUN)
+
+    let deletedCompanies = 0
+    for (const c of dueCompanies) {
+      try {
+        const res = await hardDeleteCompany(c.id)
+        if (res.deleted) deletedCompanies++
+        else if (res.error) { errors.push(`company ${c.id}: ${res.error}`) }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        errors.push(`company ${c.id}: ${msg}`)
+        console.error("[trash-cleanup] failed to delete company", c.id, msg)
+      }
+    }
+
     const metadata = {
       due:               due.length,
       deletedVacancies,
       deletedCandidates,
       deletedTemplates,
       deletedQuestionnaires,
+      deletedCompanies,
       templatesByCompany,
       errors:            errors.length,
     }
@@ -132,6 +164,7 @@ async function handle(req: NextRequest) {
       vacancies_deleted: deletedVacancies,
       templates_deleted: deletedTemplates,
       questionnaires_deleted: deletedQuestionnaires,
+      companies_deleted: deletedCompanies,
       by_company:        templatesByCompany,
       deletedCandidates,
       errors:            errors.length,

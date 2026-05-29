@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog"
@@ -20,7 +21,7 @@ import {
 import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell, DataSelectHeadCell, DataSelectCell } from "@/components/ui/data-table"
 import { cn } from "@/lib/utils"
 import {
-  Shield, Search, Eye, Lock, Unlock, CalendarPlus, MoreHorizontal, Trash2, AlertTriangle,
+  Shield, Search, Eye, Lock, Unlock, CalendarPlus, MoreHorizontal, Trash2, Trash, RotateCcw, AlertTriangle,
   ChevronLeft, ChevronRight, Loader2,
 } from "lucide-react"
 import { toast } from "sonner"
@@ -59,7 +60,6 @@ const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
   paused:    { label: "Пауза",    color: "bg-muted text-muted-foreground border-border" },
 }
 
-// Фильтр по статусу — единый дропдаун (как на странице вакансий).
 const STATUS_FILTER = [
   { value: "all",       label: "Все статусы" },
   { value: "trial",     label: "Пробный" },
@@ -84,8 +84,6 @@ function formatDate(dateStr: string | null) {
   return new Date(dateStr).toLocaleDateString("ru-RU")
 }
 
-// ─── Хук debounce ─────────────────────────────────────────────────────────────
-
 function useDebounce<T>(value: T, delay: number): T {
   const [debouncedValue, setDebouncedValue] = useState<T>(value)
   useEffect(() => {
@@ -97,13 +95,16 @@ function useDebounce<T>(value: T, delay: number): T {
 
 // ─── Основная страница ────────────────────────────────────────────────────────
 
+type Tab = "active" | "trash"
+
 function AdminClientsInner() {
   const searchParams = useSearchParams()
 
+  const [tab, setTab] = useState<Tab>("active")
   const [search, setSearch] = useState(searchParams.get("search") ?? "")
   const [sort, setSort] = useState(searchParams.get("sort") ?? "created_at")
-  const [page, setPage] = useState(parseInt(searchParams.get("page") ?? "1"))
-  const [statusFilter, setStatusFilter] = useState(searchParams.get("status") ?? "all")
+  const [page, setPage] = useState(1)
+  const [statusFilter, setStatusFilter] = useState("all")
   const [pageSize, setPageSize] = useState(20)
 
   const debouncedSearch = useDebounce(search, 400)
@@ -113,17 +114,21 @@ function AdminClientsInner() {
   const [extendingId, setExtendingId] = useState<string | null>(null)
   const [blockingId, setBlockingId] = useState<string | null>(null)
 
-  // Выбор строк + массовые действия
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [bulkBusy, setBulkBusy] = useState(false)
-  // Удаление компании (необратимо) — подтверждение вводом названия
-  const [deleteTarget, setDeleteTarget] = useState<ClientRow | null>(null)
-  const [deleteTyped, setDeleteTyped] = useState("")
-  const [deleting, setDeleting] = useState(false)
 
-  // Загрузка данных
+  // В корзину (обратимо) — лёгкое подтверждение
+  const [trashTarget, setTrashTarget] = useState<ClientRow | null>(null)
+  const [trashing, setTrashing] = useState(false)
+  // Удалить навсегда (необратимо) — подтверждение вводом названия
+  const [permanentTarget, setPermanentTarget] = useState<ClientRow | null>(null)
+  const [permanentTyped, setPermanentTyped] = useState("")
+  const [permanentBusy, setPermanentBusy] = useState(false)
+
+  const isTrash = tab === "trash"
+
   const fetchData = useCallback(async (params: {
-    search: string, status: string, page: number, sort: string, pageSize: number
+    search: string, status: string, page: number, sort: string, pageSize: number, trashed: boolean
   }) => {
     setLoading(true)
     try {
@@ -133,27 +138,26 @@ function AdminClientsInner() {
       q.set("page", String(params.page))
       q.set("sort", params.sort)
       q.set("limit", String(params.pageSize))
+      if (params.trashed) q.set("trashed", "true")
 
       const res = await fetch(`/api/admin/clients?${q.toString()}`)
-      if (res.ok) {
-        const json = await res.json()
-        setData(json)
-      }
+      if (res.ok) setData(await res.json())
     } finally {
       setLoading(false)
     }
   }, [])
 
   useEffect(() => {
-    fetchData({ search: debouncedSearch, status: statusFilter, page, sort, pageSize })
-  }, [debouncedSearch, statusFilter, page, sort, pageSize, fetchData])
+    fetchData({ search: debouncedSearch, status: statusFilter, page, sort, pageSize, trashed: isTrash })
+  }, [debouncedSearch, statusFilter, page, sort, pageSize, isTrash, fetchData])
 
-  // При изменении фильтров/размера страницы сбрасываем на первую страницу
+  // При смене вкладки/фильтров/размера — на первую страницу и сбрасываем выбор
   useEffect(() => {
     setPage(1)
-  }, [debouncedSearch, statusFilter, sort, pageSize])
+    setSelected(new Set())
+  }, [debouncedSearch, statusFilter, sort, pageSize, tab])
 
-  const refetch = () => fetchData({ search: debouncedSearch, status: statusFilter, page, sort, pageSize })
+  const refetch = () => fetchData({ search: debouncedSearch, status: statusFilter, page, sort, pageSize, trashed: isTrash })
 
   // ── Выбор строк ────────────────────────────────────────────────────────────
   const pageIds = data.data.map(c => c.id)
@@ -163,15 +167,14 @@ function AdminClientsInner() {
   })
   const toggleAll = () => setSelected(allSelected ? new Set() : new Set(pageIds))
 
-  // ── Массовые действия (по выбранным) — блокировка/разблокировка ──────────────
+  // ── Массовые действия (только активные) ─────────────────────────────────────
   async function bulkSetStatus(status: "paused" | "active") {
     if (selected.size === 0) return
     setBulkBusy(true)
     try {
       await Promise.all([...selected].map(id =>
         fetch(`/api/admin/clients/${id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
+          method: "PATCH", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ subscriptionStatus: status }),
         })
       ))
@@ -191,8 +194,7 @@ function AdminClientsInner() {
       const base = client.trialEndsAt ? new Date(client.trialEndsAt) : new Date()
       const newDate = new Date(base.getTime() + 14 * 24 * 60 * 60 * 1000)
       const res = await fetch(`/api/admin/clients/${client.id}/subscription`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        method: "PUT", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ trialEndsAt: newDate.toISOString() }),
       })
       if (res.ok) refetch()
@@ -206,8 +208,7 @@ function AdminClientsInner() {
     setBlockingId(client.id)
     try {
       const res = await fetch(`/api/admin/clients/${client.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        method: "PATCH", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ subscriptionStatus: isBlocked ? "active" : "paused" }),
       })
       if (res.ok) refetch()
@@ -216,28 +217,61 @@ function AdminClientsInner() {
     }
   }
 
-  // ── Удаление компании (необратимо) ───────────────────────────────────────────
-  async function handleDelete() {
-    if (!deleteTarget) return
-    setDeleting(true)
+  // ── В корзину (soft-delete) ──────────────────────────────────────────────────
+  async function handleTrash() {
+    if (!trashTarget) return
+    setTrashing(true)
     try {
-      const res = await fetch(`/api/admin/clients/${deleteTarget.id}`, { method: "DELETE" })
+      const res = await fetch(`/api/admin/clients/${trashTarget.id}`, { method: "DELETE" })
       if (res.ok) {
-        toast.success("Компания удалена")
-        setDeleteTarget(null)
-        setDeleteTyped("")
+        toast.success("Компания перемещена в корзину")
+        setTrashTarget(null)
         refetch()
       } else {
-        const body = await res.json().catch(() => ({}))
-        toast.error(body.error || "Не удалось удалить")
+        const b = await res.json().catch(() => ({}))
+        toast.error(b.error || "Не удалось переместить")
       }
     } catch {
       toast.error("Ошибка сети")
     } finally {
-      setDeleting(false)
+      setTrashing(false)
     }
   }
-  const deleteConfirmed = deleteTarget !== null && deleteTyped.trim() === deleteTarget.name.trim()
+
+  // ── Восстановить из корзины ──────────────────────────────────────────────────
+  async function handleRestore(client: ClientRow) {
+    try {
+      const res = await fetch(`/api/admin/clients/${client.id}/restore`, { method: "POST" })
+      if (!res.ok) { toast.error("Не удалось восстановить"); return }
+      toast.success("Компания восстановлена")
+      refetch()
+    } catch {
+      toast.error("Ошибка сети")
+    }
+  }
+
+  // ── Удалить навсегда (необратимо) ────────────────────────────────────────────
+  async function handlePermanent() {
+    if (!permanentTarget) return
+    setPermanentBusy(true)
+    try {
+      const res = await fetch(`/api/admin/clients/${permanentTarget.id}/permanent`, { method: "DELETE" })
+      if (res.ok) {
+        toast.success("Компания удалена навсегда")
+        setPermanentTarget(null)
+        setPermanentTyped("")
+        refetch()
+      } else {
+        const b = await res.json().catch(() => ({}))
+        toast.error(b.error || "Не удалось удалить")
+      }
+    } catch {
+      toast.error("Ошибка сети")
+    } finally {
+      setPermanentBusy(false)
+    }
+  }
+  const permanentConfirmed = permanentTarget !== null && permanentTyped.trim() === permanentTarget.name.trim()
 
   return (
     <SidebarProvider defaultOpen={true}>
@@ -248,15 +282,19 @@ function AdminClientsInner() {
           <div className="py-6 px-6 lg:px-14">
 
             {/* Заголовок */}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <Shield className="w-5 h-5 text-primary" />
-                  <h1 className="text-2xl font-semibold text-foreground">Клиенты</h1>
-                </div>
-                <p className="text-muted-foreground text-sm">Управление клиентскими аккаунтами</p>
-              </div>
+            <div className="flex items-center gap-2 mb-1">
+              <Shield className="w-5 h-5 text-primary" />
+              <h1 className="text-2xl font-semibold text-foreground">Клиенты</h1>
             </div>
+            <p className="text-muted-foreground text-sm mb-5">Управление клиентскими аккаунтами</p>
+
+            {/* Вкладки */}
+            <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)} className="mb-4">
+              <TabsList>
+                <TabsTrigger value="active">Активные</TabsTrigger>
+                <TabsTrigger value="trash" className="gap-1.5"><Trash2 className="w-3.5 h-3.5" />Корзина</TabsTrigger>
+              </TabsList>
+            </Tabs>
 
             {/* Поиск и фильтры — в одну строку */}
             <div className="flex items-center gap-3 flex-wrap mb-4">
@@ -277,8 +315,8 @@ function AdminClientsInner() {
               </Select>
             </div>
 
-            {/* Панель массовых действий над выбранными */}
-            {selected.size > 0 && (
+            {/* Панель массовых действий (только на активных) */}
+            {!isTrash && selected.size > 0 && (
               <div className="flex items-center gap-3 mb-3 rounded-lg border border-border bg-muted/40 px-4 py-2">
                 <span className="text-sm font-medium">Выбрано: {selected.size}</span>
                 <div className="h-4 w-px bg-border" />
@@ -298,7 +336,7 @@ function AdminClientsInner() {
             <TableCard>
               <DataTable containerClassName="overflow-x-auto">
                 <DataHead>
-                  <DataSelectHeadCell checked={allSelected} onCheckedChange={toggleAll} />
+                  {!isTrash && <DataSelectHeadCell checked={allSelected} onCheckedChange={toggleAll} />}
                   <DataHeadCell sortable sortDir={sort === "name" ? "desc" : null} onSort={() => setSort("name")}>Компания</DataHeadCell>
                   <DataHeadCell>ИНН</DataHeadCell>
                   <DataHeadCell>Тариф</DataHeadCell>
@@ -310,37 +348,26 @@ function AdminClientsInner() {
                 </DataHead>
                 <tbody>
                   {loading && (
-                    <tr>
-                      <td colSpan={9} className="text-center py-8">
-                        <Loader2 className="w-5 h-5 animate-spin mx-auto text-muted-foreground" />
-                      </td>
-                    </tr>
+                    <tr><td colSpan={9} className="text-center py-8"><Loader2 className="w-5 h-5 animate-spin mx-auto text-muted-foreground" /></td></tr>
                   )}
                   {!loading && data.data.length === 0 && (
-                    <tr>
-                      <td colSpan={9} className="text-center py-8 text-sm text-muted-foreground">
-                        Нет клиентов по выбранным фильтрам
-                      </td>
-                    </tr>
+                    <tr><td colSpan={9} className="text-center py-8 text-sm text-muted-foreground">
+                      {isTrash ? "Корзина пуста" : "Нет клиентов по выбранным фильтрам"}
+                    </td></tr>
                   )}
                   {!loading && data.data.map(client => {
-                    const statusCfg = STATUS_CONFIG[client.subscriptionStatus ?? ""] ?? {
-                      label: client.subscriptionStatus ?? "—", color: ""
-                    }
+                    const statusCfg = STATUS_CONFIG[client.subscriptionStatus ?? ""] ?? { label: client.subscriptionStatus ?? "—", color: "" }
                     const isBlocking = blockingId === client.id
                     const isExtending = extendingId === client.id
                     const isBlocked = client.subscriptionStatus === "paused"
-                    const isActive = client.subscriptionStatus === "active"
 
                     return (
                       <DataRow key={client.id} className={cn("group", selected.has(client.id) && "bg-primary/[0.04]")}>
-                        <DataSelectCell checked={selected.has(client.id)} onCheckedChange={() => toggleOne(client.id)} />
+                        {!isTrash && <DataSelectCell checked={selected.has(client.id)} onCheckedChange={() => toggleOne(client.id)} />}
                         <DataCell>
                           <Link href={`/admin/clients/${client.id}`} className="block min-w-0">
                             <p className="font-medium text-foreground group-hover:text-primary transition-colors truncate">{client.name}</p>
-                            {client.directorEmail && (
-                              <p className="text-xs text-muted-foreground truncate">{client.directorEmail}</p>
-                            )}
+                            {client.directorEmail && <p className="text-xs text-muted-foreground truncate">{client.directorEmail}</p>}
                           </Link>
                         </DataCell>
                         <DataCell className="text-muted-foreground">{client.inn ?? "—"}</DataCell>
@@ -350,8 +377,7 @@ function AdminClientsInner() {
                                 <p className="font-medium text-foreground">{client.planName}</p>
                                 <p className="text-xs text-muted-foreground">{formatPrice(client.planPrice)}</p>
                               </div>
-                            : <span className="text-muted-foreground">—</span>
-                          }
+                            : <span className="text-muted-foreground">—</span>}
                         </DataCell>
                         <DataCell align="center">
                           <Badge variant="outline" className={cn("text-xs", statusCfg.color)}>{statusCfg.label}</Badge>
@@ -371,29 +397,45 @@ function AdminClientsInner() {
                                 <DropdownMenuItem asChild className="gap-2 cursor-pointer">
                                   <Link href={`/admin/clients/${client.id}`}><Eye className="h-3.5 w-3.5" />Просмотр</Link>
                                 </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  className={cn("gap-2 cursor-pointer", !isBlocked && "text-destructive focus:text-destructive")}
-                                  disabled={isBlocking}
-                                  onClick={() => handleBlock(client)}
-                                >
-                                  {isBlocking ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Lock className="h-3.5 w-3.5" />}
-                                  {isBlocked ? "Разблокировать" : "Заблокировать"}
-                                </DropdownMenuItem>
-                                {client.subscriptionStatus === "trial" && (
-                                  <DropdownMenuItem className="gap-2 cursor-pointer" disabled={isExtending} onClick={() => handleExtend(client)}>
-                                    {isExtending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CalendarPlus className="h-3.5 w-3.5" />}
-                                    Продлить trial на 14 дней
-                                  </DropdownMenuItem>
+
+                                {isTrash ? (
+                                  <>
+                                    <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => handleRestore(client)}>
+                                      <RotateCcw className="h-3.5 w-3.5" />Восстановить
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem
+                                      className="gap-2 cursor-pointer text-destructive focus:text-destructive"
+                                      onClick={() => { setPermanentTyped(""); setPermanentTarget(client) }}
+                                    >
+                                      <Trash className="h-3.5 w-3.5" />Удалить навсегда
+                                    </DropdownMenuItem>
+                                  </>
+                                ) : (
+                                  <>
+                                    <DropdownMenuItem
+                                      className={cn("gap-2 cursor-pointer", !isBlocked && "text-destructive focus:text-destructive")}
+                                      disabled={isBlocking}
+                                      onClick={() => handleBlock(client)}
+                                    >
+                                      {isBlocking ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Lock className="h-3.5 w-3.5" />}
+                                      {isBlocked ? "Разблокировать" : "Заблокировать"}
+                                    </DropdownMenuItem>
+                                    {client.subscriptionStatus === "trial" && (
+                                      <DropdownMenuItem className="gap-2 cursor-pointer" disabled={isExtending} onClick={() => handleExtend(client)}>
+                                        {isExtending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CalendarPlus className="h-3.5 w-3.5" />}
+                                        Продлить trial на 14 дней
+                                      </DropdownMenuItem>
+                                    )}
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem
+                                      className="gap-2 cursor-pointer text-destructive focus:text-destructive"
+                                      onClick={() => setTrashTarget(client)}
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />В корзину
+                                    </DropdownMenuItem>
+                                  </>
                                 )}
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem
-                                  className="gap-2 cursor-pointer text-destructive focus:text-destructive"
-                                  disabled={isActive}
-                                  title={isActive ? "Нельзя удалить компанию с активной подпиской" : undefined}
-                                  onClick={() => { setDeleteTyped(""); setDeleteTarget(client) }}
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />Удалить
-                                </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>
                           </div>
@@ -405,12 +447,11 @@ function AdminClientsInner() {
               </DataTable>
             </TableCard>
 
-            {/* Футер: «Показано», пагинация, выбор размера страницы */}
+            {/* Футер */}
             <div className="flex items-center justify-between gap-4 mt-4 flex-wrap">
               <p className="text-sm text-muted-foreground">
-                {data.total > 0 ? `Показано ${data.data.length} из ${data.total}` : "Нет данных"}
+                {data.total > 0 ? `Показано ${data.data.length} из ${data.total}` : (isTrash ? "Корзина пуста" : "Нет данных")}
               </p>
-
               <div className="flex items-center gap-4 flex-wrap">
                 {data.totalPages > 1 && (
                   <div className="flex items-center gap-2">
@@ -421,9 +462,7 @@ function AdminClientsInner() {
                       const p = Math.max(1, Math.min(data.totalPages - 4, page - 2)) + i
                       if (p < 1 || p > data.totalPages) return null
                       return (
-                        <Button key={p} variant={p === page ? "default" : "outline"} size="sm" className="w-8 h-8 p-0" onClick={() => setPage(p)}>
-                          {p}
-                        </Button>
+                        <Button key={p} variant={p === page ? "default" : "outline"} size="sm" className="w-8 h-8 p-0" onClick={() => setPage(p)}>{p}</Button>
                       )
                     })}
                     <Button variant="outline" size="sm" disabled={page >= data.totalPages || loading} onClick={() => setPage(p => p + 1)} className="gap-1">
@@ -431,14 +470,11 @@ function AdminClientsInner() {
                     </Button>
                   </div>
                 )}
-
                 <div className="flex items-center gap-2">
                   <Label className="text-sm text-muted-foreground">По:</Label>
                   <Select value={String(pageSize)} onValueChange={v => setPageSize(Number(v))}>
                     <SelectTrigger className="h-8 w-[76px]"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {PAGE_SIZES.map(n => <SelectItem key={n} value={String(n)}>{n}</SelectItem>)}
-                    </SelectContent>
+                    <SelectContent>{PAGE_SIZES.map(n => <SelectItem key={n} value={String(n)}>{n}</SelectItem>)}</SelectContent>
                   </Select>
                   <span className="text-sm text-muted-foreground">на стр.</span>
                 </div>
@@ -448,25 +484,43 @@ function AdminClientsInner() {
         </main>
       </SidebarInset>
 
-      {/* Удаление компании — подтверждение вводом названия */}
-      <Dialog open={!!deleteTarget} onOpenChange={(o) => { if (!o) { setDeleteTarget(null); setDeleteTyped("") } }}>
+      {/* В корзину — лёгкое подтверждение */}
+      <Dialog open={!!trashTarget} onOpenChange={(o) => { if (!o) setTrashTarget(null) }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Переместить в корзину?</DialogTitle>
+            <DialogDescription>
+              Компания «{trashTarget?.name}» будет перемещена в корзину. Вы сможете восстановить её позже.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2 mt-2">
+            <Button variant="outline" size="sm" onClick={() => setTrashTarget(null)} disabled={trashing}>Отмена</Button>
+            <Button variant="destructive" size="sm" onClick={handleTrash} disabled={trashing} className="gap-1.5">
+              {trashing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}В корзину
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Удалить навсегда — подтверждение вводом названия */}
+      <Dialog open={!!permanentTarget} onOpenChange={(o) => { if (!o) { setPermanentTarget(null); setPermanentTyped("") } }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-destructive">
-              <AlertTriangle className="size-4" />Удалить компанию?
+              <AlertTriangle className="size-4" />Удалить навсегда?
             </DialogTitle>
             <DialogDescription>
-              Компания «{deleteTarget?.name}» будет удалена со всеми данными без возможности восстановления.
+              Компания «{permanentTarget?.name}» и все её данные (пользователи, вакансии, кандидаты) будут удалены без возможности восстановления.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-1.5">
             <Label htmlFor="confirm-company" className="text-xs">Введите название компании для подтверждения:</Label>
-            <Input id="confirm-company" value={deleteTyped} onChange={e => setDeleteTyped(e.target.value)} placeholder={deleteTarget?.name} autoComplete="off" />
+            <Input id="confirm-company" value={permanentTyped} onChange={e => setPermanentTyped(e.target.value)} placeholder={permanentTarget?.name} autoComplete="off" />
           </div>
           <div className="flex justify-end gap-2 mt-2">
-            <Button variant="outline" size="sm" onClick={() => { setDeleteTarget(null); setDeleteTyped("") }} disabled={deleting}>Отмена</Button>
-            <Button variant="destructive" size="sm" onClick={handleDelete} disabled={!deleteConfirmed || deleting} className="gap-1.5">
-              {deleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}Удалить
+            <Button variant="outline" size="sm" onClick={() => { setPermanentTarget(null); setPermanentTyped("") }} disabled={permanentBusy}>Отмена</Button>
+            <Button variant="destructive" size="sm" onClick={handlePermanent} disabled={!permanentConfirmed || permanentBusy} className="gap-1.5">
+              {permanentBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash className="w-3.5 h-3.5" />}Удалить навсегда
             </Button>
           </div>
         </DialogContent>

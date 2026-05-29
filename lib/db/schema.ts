@@ -162,6 +162,10 @@ export const companies = pgTable("companies", {
   // удаляет вакансии навсегда, когда deleted_at старше trash_retention_days.
   // Допустимые значения 1/3/7/14/30/60/90, дефолт 30.
   trashRetentionDays:       integer("trash_retention_days").notNull().default(30),
+  // Корзина компаний (миграция 0148): NULL — активна; не-NULL — в корзине,
+  // cron trash-cleanup удалит навсегда через trash_retention_days. Признак
+  // корзины — deleted_at (как у вакансий), отдельного статуса не вводим.
+  deletedAt:          timestamp("deleted_at"),
   createdAt:          timestamp("created_at").defaultNow(),
   updatedAt:          timestamp("updated_at").defaultNow(),
 })
