@@ -3,6 +3,7 @@ import { and, eq, isNull } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { demoTemplates } from "@/lib/db/schema"
 import { requireCompany } from "@/lib/api-helpers"
+import { denyIfNotDevAccess } from "@/lib/dev-guard"
 
 // ─── Block & lesson helpers ──────────────────────────────────────────────────
 
@@ -486,6 +487,8 @@ const ALL_TEMPLATES = [TEMPLATE_B2B_SALES, TEMPLATE_IT_DEV, TEMPLATE_WORKER, TEM
 // ─── Handler ────────────────────────────────────────────────────────────────
 
 export async function POST() {
+  const denied = await denyIfNotDevAccess()
+  if (denied) return denied
   try {
     await requireCompany()
   } catch (err) {

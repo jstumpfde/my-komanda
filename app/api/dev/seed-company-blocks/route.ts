@@ -10,6 +10,7 @@ import { NextResponse } from "next/server"
 import { and, eq, isNull } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { demoTemplates } from "@/lib/db/schema"
+import { denyIfNotDevAccess } from "@/lib/dev-guard"
 
 // Хелперы для формирования HTML-контента
 
@@ -245,6 +246,8 @@ const COMPANY_BLOCKS = [
 // ─── Handler ────────────────────────────────────────────────────────────────
 
 export async function POST() {
+  const denied = await denyIfNotDevAccess()
+  if (denied) return denied
   try {
     const results: Array<{ name: string; action: "created" | "updated"; id: string; placeholders: number }> = []
 

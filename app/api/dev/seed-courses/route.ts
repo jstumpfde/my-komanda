@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server"
 import { requireCompany } from "@/lib/api-helpers"
+import { denyIfNotDevAccess } from "@/lib/dev-guard"
 import { db } from "@/lib/db"
 import { courses, lessons } from "@/lib/db/schema"
 import { eq } from "drizzle-orm"
 
 export async function GET() {
+  const denied = await denyIfNotDevAccess()
+  if (denied) return denied
   let user: { companyId: string; id?: string }
   try { user = await requireCompany() } catch { return NextResponse.json({ error: "Unauthorized" }, { status: 401 }) }
 
