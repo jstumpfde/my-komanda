@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/select"
 import { Activity, Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { getStageLabel, getStageColorClasses } from "@/lib/stages"
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -36,25 +37,8 @@ interface VacancyOption {
   title: string
 }
 
-const STATUS_LABELS: Record<string, string> = {
-  new: "Новый", demo: "На демо", scheduled: "Интервью назначено", interviewed: "Интервью пройдено",
-  interview: "Интервью", decision: "Решение", offer: "Оффер", hired: "Принят",
-  rejected: "Отказ", talent_pool: "Резерв", pending: "Ожидание",
-}
-
-const STATUS_COLORS: Record<string, string> = {
-  new:          "bg-sky-500/15 text-sky-700 dark:text-sky-400",
-  demo:         "bg-blue-500/15 text-blue-700 dark:text-blue-400",
-  scheduled:    "bg-amber-500/15 text-amber-700 dark:text-amber-400",
-  interviewed:  "bg-orange-500/15 text-orange-700 dark:text-orange-400",
-  interview:    "bg-violet-500/15 text-violet-700 dark:text-violet-400",
-  decision:     "bg-amber-500/15 text-amber-700 dark:text-amber-400",
-  offer:        "bg-amber-500/15 text-amber-700 dark:text-amber-400",
-  hired:        "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
-  rejected:     "bg-muted text-muted-foreground",
-  talent_pool:  "bg-blue-500/15 text-blue-700 dark:text-blue-400",
-  pending:      "bg-gray-500/15 text-gray-600 dark:text-gray-400",
-}
+// Лейблы и цвета статусов — единый источник правды в lib/stages.ts
+// (getStageLabel / getStageColorClasses), локальные карты убраны (баг A1).
 
 const STATUS_ORDER: Record<string, number> = {
   new: 0, demo: 1, scheduled: 2, interviewed: 3, interview: 3,
@@ -311,10 +295,10 @@ export function CandidatesProgressList({
                       variant="outline"
                       className={cn(
                         "border-0 text-xs",
-                        STATUS_COLORS[c.stage] ?? "bg-muted text-muted-foreground",
+                        getStageColorClasses(c.stage),
                       )}
                     >
-                      {STATUS_LABELS[c.stage] ?? c.stage}
+                      {getStageLabel(c.stage)}
                     </Badge>
                     {c.isActive && (
                       <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-0 gap-1.5 font-normal text-[11px]">

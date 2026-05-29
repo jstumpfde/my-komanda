@@ -286,19 +286,39 @@ export const DEMO_OPENED_STAGE_SLUGS: StageSlug[] = [
 // ───────────────────────────────────────────────────────────────────
 // Legacy slug → читаемый лейбл
 // ───────────────────────────────────────────────────────────────────
-// В исторических данных встречаются slug, которых нет в PLATFORM_STAGES:
-// `demo`, `interviewed`, `final_decision`, `wants_contact`. По проду на 2026-05-11
-// все они = 0 записей в candidates.stage, но могут встречаться в stage_history.
-// Этот словарь обеспечивает читаемый fallback в getStageLabel — без него
-// история показывала бы slug как есть.
+// В исторических данных и в части пайплайна встречаются slug, которых нет в
+// PLATFORM_STAGES. По проду на 2026-05-29 они ЖИВЫЕ (а не нулевые, как было
+// в Ф2): demo=437, interviewed=85, final_decision=5, offer=100, preboarding=1.
+// Это вторая, параллельная система статусов (см. баг B9/Г1) — пока канон с ней
+// не объединён, этот словарь даёт читаемый fallback в getStageLabel, чтобы в UI
+// нигде не светился сырой slug.
 //
-// Удалить можно после Ф6, когда переписывание hh/sync и фильтра окончательно
+// offer — алиас канонического offer_sent (не отдельная стадия).
+// preboarding — этап между оффером и выходом; держим как алиас, не каноним.
+// Удалить можно после Г1, когда переписывание hh/sync и фильтра окончательно
 // уберёт упоминания этих slug из новых записей.
 export const LEGACY_STAGE_LABELS: Record<string, string> = {
   demo: "На демо",
   interviewed: "Прошёл интервью",
   final_decision: "Финальное решение",
   wants_contact: "Хочет контакт",
+  offer: "Оффер",
+  preboarding: "Пребординг",
+  talent_pool: "Резерв",      // цель кнопки «В резерв» в карточке кандидата
+  pending: "Ожидание",
+}
+
+// Цвет для legacy-slug — выравниваем по каноническому «родственнику», чтобы
+// бейджи выглядели одинаково во всех экранах через getStageColorClasses.
+export const LEGACY_STAGE_COLORS: Record<string, StageColor> = {
+  demo: "indigo",           // = demo_opened
+  interviewed: "purple",    // = interview
+  final_decision: "amber",  // = decision
+  offer: "emerald",         // = offer_sent
+  preboarding: "lime",      // между «Оффер» и «Нанят»
+  wants_contact: "slate",
+  talent_pool: "blue",
+  pending: "slate",
 }
 
 // ───────────────────────────────────────────────────────────────────
@@ -463,7 +483,8 @@ export function getStageLabel(slug: string | null | undefined, pipeline?: Vacanc
 }
 
 export function getStageColor(slug: string | null | undefined, pipeline?: VacancyPipelineV2 | null): StageColor {
-  if (!slug || !STAGE_SLUG_SET.has(slug as StageSlug)) return "slate"
+  if (!slug) return "slate"
+  if (!STAGE_SLUG_SET.has(slug as StageSlug)) return LEGACY_STAGE_COLORS[slug] ?? "slate"
   const stageSlug = slug as StageSlug
   const cfg = findCfg(pipeline, stageSlug)
   if (cfg?.customColor) return cfg.customColor

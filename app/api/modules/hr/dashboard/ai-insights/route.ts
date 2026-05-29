@@ -11,6 +11,7 @@ import { and, eq, gte, isNull, sql, type SQL } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { candidates, vacancies } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
+import { getStageLabel } from "@/lib/stages"
 
 export async function GET(req: Request) {
   try {
@@ -113,7 +114,7 @@ export async function GET(req: Request) {
           key:         "stuck_candidates",
           title:       "Висят без ответа",
           value:       String(stuck),
-          description: stuck > 0 ? "primary_contact · 24+ часов" : "Все актуальны",
+          description: stuck > 0 ? `${getStageLabel("primary_contact")} · 24+ часов` : "Все актуальны",
           link:        "/hr/candidates?stage=primary_contact",
         },
         {

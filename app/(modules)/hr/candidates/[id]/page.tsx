@@ -16,6 +16,7 @@ import {
   ExternalLink, Video as VideoIcon, Mic, Image as ImageIcon, Download,
 } from "lucide-react"
 import Link from "next/link"
+import { getStageLabel, getStageColorClasses } from "@/lib/stages"
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -61,18 +62,14 @@ interface Candidate {
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
-const STAGE_CONFIG: Record<string, { label: string; cls: string }> = {
-  new:          { label: "Новый",              cls: "bg-sky-500/15 text-sky-700" },
-  demo:         { label: "Демо",                cls: "bg-violet-500/15 text-violet-700" },
-  scheduled:    { label: "Интервью назначено",  cls: "bg-amber-500/15 text-amber-700" },
-  interviewed:  { label: "Интервью пройдено",   cls: "bg-orange-500/15 text-orange-700" },
-  hired:        { label: "Нанят",              cls: "bg-emerald-500/15 text-emerald-700" },
-  rejected:     { label: "Отказ",              cls: "bg-red-500/15 text-red-700" },
-  decision:     { label: "Решение",            cls: "bg-amber-500/15 text-amber-700" },
-  interview:    { label: "Интервью",           cls: "bg-orange-500/15 text-orange-700" },
-  talent_pool:  { label: "Резерв",             cls: "bg-blue-500/15 text-blue-700" },
-  pending:      { label: "Ожидание",           cls: "bg-gray-500/15 text-gray-700" },
-}
+// Лейбл и цвет стадии — из единого источника lib/stages.ts (баг A1),
+// см. getStageLabel / getStageColorClasses ниже (stageCfg).
+// Список стадий, выставляемых HR вручную из карточки (порядок сохранён как был);
+// лейблы — через getStageLabel. Унификация набора — отдельно в Г1/B9.
+const MANUAL_STAGES = [
+  "new", "demo", "scheduled", "interviewed", "hired",
+  "rejected", "decision", "interview", "talent_pool", "pending",
+]
 
 const SOURCE_LABELS: Record<string, string> = {
   hh: "hh.ru", avito: "Авито", telegram: "Telegram", site: "Сайт", referral: "Реферал", manual: "Вручную", direct: "Прямой",
@@ -213,7 +210,7 @@ export default function CandidateDetailPage() {
       if (!res.ok) throw new Error()
       const updated = await res.json()
       setCandidate(prev => prev ? { ...prev, stage: updated.stage } : prev)
-      toast.success(`Этап изменён: ${STAGE_CONFIG[stage]?.label ?? stage}`)
+      toast.success(`Этап изменён: ${getStageLabel(stage)}`)
     } catch { toast.error("Ошибка смены этапа") }
     finally { setStageChanging(false) }
   }
@@ -247,7 +244,7 @@ export default function CandidateDetailPage() {
     )
   }
 
-  const stageCfg = STAGE_CONFIG[candidate.stage] ?? { label: candidate.stage, cls: "bg-muted text-muted-foreground" }
+  const stageCfg = { label: getStageLabel(candidate.stage), cls: getStageColorClasses(candidate.stage) }
   const demoBlocks = candidate.demoProgressJson?.blocks ?? []
   const anketaAnswers = candidate.anketaAnswers ?? []
   const mediaRecordings = extractMediaRecordings(candidate.anketaAnswers)
@@ -321,8 +318,8 @@ export default function CandidateDetailPage() {
             <Select value={candidate.stage} onValueChange={(v) => changeStage(v)}>
               <SelectTrigger className="h-8 w-[160px] text-xs bg-[var(--input-bg)]"><SelectValue placeholder="Сменить этап" /></SelectTrigger>
               <SelectContent>
-                {Object.entries(STAGE_CONFIG).map(([key, cfg]) => (
-                  <SelectItem key={key} value={key}>{cfg.label}</SelectItem>
+                {MANUAL_STAGES.map((key) => (
+                  <SelectItem key={key} value={key}>{getStageLabel(key)}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
