@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs"
 import { db } from "@/lib/db"
 import { users } from "@/lib/db/schema"
 import { requireAuth, apiError, apiSuccess } from "@/lib/api-helpers"
+import { isPlatformAdminEmail } from "@/lib/platform/auth"
 
 // GET /api/auth/me — текущий пользователь
 export async function GET() {
@@ -26,7 +27,10 @@ export async function GET() {
 
     if (!user) return apiError("Пользователь не найден", 404)
 
-    return apiSuccess(user)
+    // Платформенный админ (PLATFORM_ADMIN_EMAILS) — для UI-гейтов (например
+    // «Назначить анкету всем компаниям» в библиотеке). Мутации всё равно
+    // перепроверяются на сервере.
+    return apiSuccess({ ...user, isPlatformAdmin: isPlatformAdminEmail(user.email) })
   } catch (err) {
     if (err instanceof Response) return err
     console.error("[auth/me GET] error:", err)

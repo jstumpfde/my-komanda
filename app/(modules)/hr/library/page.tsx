@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Plus, Eye, Pencil, Trash2, Loader2, Copy, BookOpen, FileText, Search, Puzzle, ListChecks, RotateCcw, Trash, AlertTriangle } from "lucide-react"
+import { Plus, Eye, Pencil, Trash2, Loader2, Copy, BookOpen, FileText, Search, Puzzle, ListChecks, RotateCcw, Trash, AlertTriangle, MoreHorizontal, Globe, Lock } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -11,7 +11,9 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog"
@@ -35,8 +37,9 @@ interface TemplateData {
   updatedAt: string
 }
 
-// Шаблон анкеты — реальная сущность (questionnaire_templates, миграция 0147).
-// questions хранится как Question[] (course-types); счётчики считаем из массива.
+// Шаблон анкеты (questionnaire_templates, миграция 0147). questions хранится
+// как Question[] (course-types); счётчики считаем из массива. Тип анкеты пока
+// один — «Кандидат» (остальные не подключены), поэтому в UI его не показываем.
 interface QuestionnaireTemplate {
   id: string
   name: string
@@ -47,12 +50,11 @@ interface QuestionnaireTemplate {
   createdAt: string
 }
 
-/** Типы материалов, которые реально хранятся в demo_templates (length-based).
- *  Анкеты — отдельная сущность (questionnaire_templates), не входит в этот тип. */
+/** Типы материалов, которые реально хранятся в demo_templates (length-based). */
 type CreatableType = "demo" | "block" | "test"
 
-// Унифицированная строка корзины: материалы (demo_templates) и анкеты
-// (questionnaire_templates) лежат в разных таблицах, но показываются вместе.
+// Унифицированная строка корзины: материалы и анкеты лежат в разных таблицах,
+// но показываются вместе.
 interface TrashRow {
   id: string
   name: string
@@ -64,17 +66,13 @@ interface TrashRow {
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
-const QUESTIONNAIRE_TYPE: Record<string, { label: string; cls: string }> = {
-  candidate: { label: "Кандидат", cls: "bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-400" },
-  client: { label: "Заказчик", cls: "bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400" },
-  post_demo: { label: "После демо", cls: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400" },
-}
+const TRASH_ANKETA_CLS = "bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-400"
 
 // Копирайт пустого состояния + диалога создания по типу материала.
 const TYPE_COPY: Record<CreatableType, {
-  plural: string          // «Нет {plural}»
-  createBtn: string       // кнопка в empty-state / option в диалоге
-  dialogDesc: string      // подпись опции в диалоге «Что создать?»
+  plural: string
+  createBtn: string
+  dialogDesc: string
 }> = {
   demo:  { plural: "демонстраций", createBtn: "Создать первую демонстрацию", dialogDesc: "Полное демо вакансии" },
   block: { plural: "блоков",       createBtn: "Создать первый блок",          dialogDesc: "Переиспользуемый блок («О компании» и т.п.)" },
@@ -82,15 +80,11 @@ const TYPE_COPY: Record<CreatableType, {
 }
 
 const DIALOG_TITLE: Record<CreatableType, string> = {
-  demo: "Демонстрация",
-  block: "Блок",
-  test: "Тест",
+  demo: "Демонстрация", block: "Блок", test: "Тест",
 }
 
 const CREATE_ICON: Record<CreatableType, typeof BookOpen> = {
-  demo: BookOpen,
-  block: Puzzle,
-  test: ListChecks,
+  demo: BookOpen, block: Puzzle, test: ListChecks,
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
@@ -98,6 +92,22 @@ const CREATE_ICON: Record<CreatableType, typeof BookOpen> = {
 function formatDate(d: string) {
   if (!d) return "—"
   return new Date(d).toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric" })
+}
+
+// Меню-«точки» (kebab) — как в вакансиях. Триггер + контент передаётся детьми.
+function RowMenu({ children }: { children: React.ReactNode }) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="sm" className="h-8 w-8 p-0" title="Действия">
+          <MoreHorizontal className="h-4 w-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-52">
+        {children}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
 }
 
 // ─── Empty state (переиспользуемый) ─────────────────────────────────────────
@@ -119,7 +129,7 @@ function EmptyMaterialsState({ type, onCreate }: { type: CreatableType; onCreate
   )
 }
 
-// ─── Materials table (демо / блоки / тесты — одинаковая структура) ──────────
+// ─── Materials table (демо / блоки / тесты) ──────────────────────────────────
 
 function MaterialsTable({ rows, onDelete, onDuplicate }: {
   rows: TemplateData[]
@@ -136,7 +146,7 @@ function MaterialsTable({ rows, onDelete, onDuplicate }: {
             <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3 w-[180px]">Должность</th>
             <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3 w-[80px]">Блоков</th>
             <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3 w-[120px]">Создан</th>
-            <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3 w-[120px]">Действия</th>
+            <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3 w-[80px]">Действия</th>
           </tr>
         </thead>
         <tbody>
@@ -163,24 +173,28 @@ function MaterialsTable({ rows, onDelete, onDuplicate }: {
                 <td className="px-4 py-3 text-center text-sm text-muted-foreground">{sectionsCount}</td>
                 <td className="px-4 py-3 text-sm text-muted-foreground whitespace-nowrap">{formatDate(t.createdAt)}</td>
                 <td className="px-4 py-3">
-                  <div className="flex items-center gap-0.5 justify-end">
-                    <Button size="sm" variant="ghost" className="h-8 w-8 p-0" asChild title="Просмотр">
-                      <Link href={`/hr/library/preview/${t.id}`} target="_blank"><Eye className="h-4 w-4" /></Link>
-                    </Button>
-                    {/* Редактирование недоступно для системных (PATCH tenant-scoped → 404) */}
-                    {!t.isSystem && (
-                      <Button size="sm" variant="ghost" className="h-8 w-8 p-0" asChild title="Редактировать">
-                        <Link href={`/hr/library/create/editor?id=${t.id}`}><Pencil className="h-4 w-4" /></Link>
-                      </Button>
-                    )}
-                    <Button size="sm" variant="ghost" className="h-8 w-8 p-0" title="Дублировать" onClick={() => onDuplicate(t)}>
-                      <Copy className="h-4 w-4" />
-                    </Button>
-                    {!t.isSystem && (
-                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive" title="Удалить" onClick={() => onDelete(t.id)}>
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    )}
+                  <div className="flex justify-end">
+                    <RowMenu>
+                      <DropdownMenuItem asChild className="gap-2 cursor-pointer">
+                        <Link href={`/hr/library/preview/${t.id}`} target="_blank"><Eye className="h-3.5 w-3.5" />Просмотр</Link>
+                      </DropdownMenuItem>
+                      {!t.isSystem && (
+                        <DropdownMenuItem asChild className="gap-2 cursor-pointer">
+                          <Link href={`/hr/library/create/editor?id=${t.id}`}><Pencil className="h-3.5 w-3.5" />Редактировать</Link>
+                        </DropdownMenuItem>
+                      )}
+                      <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => onDuplicate(t)}>
+                        <Copy className="h-3.5 w-3.5" />Дублировать
+                      </DropdownMenuItem>
+                      {!t.isSystem && (
+                        <>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem className="gap-2 cursor-pointer text-destructive focus:text-destructive" onClick={() => onDelete(t.id)}>
+                            <Trash2 className="h-3.5 w-3.5" />Удалить
+                          </DropdownMenuItem>
+                        </>
+                      )}
+                    </RowMenu>
                   </div>
                 </td>
               </tr>
@@ -194,11 +208,14 @@ function MaterialsTable({ rows, onDelete, onDuplicate }: {
 
 // ─── Questionnaires table (анкеты) ──────────────────────────────────────────
 
-function QuestionnairesTable({ rows, onEdit, onDuplicate, onDelete }: {
+function QuestionnairesTable({ rows, isPlatformAdmin, onEdit, onDuplicate, onDelete, onAssignAll, onUnassignAll }: {
   rows: QuestionnaireTemplate[]
+  isPlatformAdmin: boolean
   onEdit: (q: QuestionnaireTemplate) => void
   onDuplicate: (q: QuestionnaireTemplate) => void
   onDelete: (id: string) => void
+  onAssignAll: (q: QuestionnaireTemplate) => void
+  onUnassignAll: (q: QuestionnaireTemplate) => void
 }) {
   return (
     <div className="max-h-[60vh] overflow-auto">
@@ -206,16 +223,14 @@ function QuestionnairesTable({ rows, onEdit, onDuplicate, onDelete }: {
         <thead className="bg-muted/50 border-b border-t border-border sticky top-0">
           <tr>
             <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Название</th>
-            <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3 w-[120px]">Тип</th>
-            <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3 w-[100px]">Вопросов</th>
+            <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3 w-[110px]">Вопросов</th>
             <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3 w-[110px]">Обязат.</th>
             <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3 w-[120px]">Создан</th>
-            <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3 w-[120px]">Действия</th>
+            <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3 w-[80px]">Действия</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((q) => {
-            const tb = QUESTIONNAIRE_TYPE[q.type]
             const total = Array.isArray(q.questions) ? q.questions.length : 0
             const required = Array.isArray(q.questions) ? q.questions.filter((x) => x?.required).length : 0
             return (
@@ -223,28 +238,48 @@ function QuestionnairesTable({ rows, onEdit, onDuplicate, onDelete }: {
                 <td className="px-4 py-3">
                   <button type="button" onClick={() => onEdit(q)} className="flex items-center gap-2 min-w-0 text-left">
                     <span className="text-sm font-medium text-foreground group-hover:text-primary transition-colors truncate">{q.name}</span>
-                    {q.isSystem && <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 shrink-0 font-normal">Системный</Badge>}
+                    {q.isSystem && (
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 shrink-0 font-normal gap-0.5">
+                        <Globe className="h-2.5 w-2.5" />Всем
+                      </Badge>
+                    )}
                   </button>
-                </td>
-                <td className="px-4 py-3">
-                  {tb && <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium", tb.cls)}>{tb.label}</span>}
                 </td>
                 <td className="px-4 py-3 text-center text-sm text-muted-foreground">{total}</td>
                 <td className="px-4 py-3 text-center text-sm text-muted-foreground">{required}</td>
                 <td className="px-4 py-3 text-sm text-muted-foreground whitespace-nowrap">{formatDate(q.createdAt)}</td>
                 <td className="px-4 py-3">
-                  <div className="flex items-center gap-0.5 justify-end">
-                    <Button size="sm" variant="ghost" className="h-8 w-8 p-0" title={q.isSystem ? "Просмотр" : "Редактировать"} onClick={() => onEdit(q)}>
-                      {q.isSystem ? <Eye className="h-4 w-4" /> : <Pencil className="h-4 w-4" />}
-                    </Button>
-                    <Button size="sm" variant="ghost" className="h-8 w-8 p-0" title="Дублировать" onClick={() => onDuplicate(q)}>
-                      <Copy className="h-4 w-4" />
-                    </Button>
-                    {!q.isSystem && (
-                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive" title="Удалить" onClick={() => onDelete(q.id)}>
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    )}
+                  <div className="flex justify-end">
+                    <RowMenu>
+                      <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => onEdit(q)}>
+                        {q.isSystem ? <><Eye className="h-3.5 w-3.5" />Просмотр</> : <><Pencil className="h-3.5 w-3.5" />Редактировать</>}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => onDuplicate(q)}>
+                        <Copy className="h-3.5 w-3.5" />Дублировать
+                      </DropdownMenuItem>
+                      {isPlatformAdmin && (
+                        <>
+                          <DropdownMenuSeparator />
+                          {q.isSystem ? (
+                            <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => onUnassignAll(q)}>
+                              <Lock className="h-3.5 w-3.5" />Снять у всех
+                            </DropdownMenuItem>
+                          ) : (
+                            <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => onAssignAll(q)}>
+                              <Globe className="h-3.5 w-3.5" />Назначить всем компаниям
+                            </DropdownMenuItem>
+                          )}
+                        </>
+                      )}
+                      {!q.isSystem && (
+                        <>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem className="gap-2 cursor-pointer text-destructive focus:text-destructive" onClick={() => onDelete(q.id)}>
+                            <Trash2 className="h-3.5 w-3.5" />Удалить
+                          </DropdownMenuItem>
+                        </>
+                      )}
+                    </RowMenu>
                   </div>
                 </td>
               </tr>
@@ -258,7 +293,6 @@ function QuestionnairesTable({ rows, onEdit, onDuplicate, onDelete }: {
 
 // ─── Trash (корзина) — материалы + анкеты вместе ────────────────────────────
 
-// Дней до автоудаления = retention − прошедшие дни с deleted_at.
 function trashDaysLeft(deletedAt: string | null, retentionDays: number): number {
   if (!deletedAt) return retentionDays
   const elapsedDays = Math.floor((Date.now() - new Date(deletedAt).getTime()) / 86_400_000)
@@ -277,10 +311,10 @@ function TrashTable({ rows, retentionDays, onRestore, onPermanent }: {
         <thead className="bg-muted/50 border-b border-t border-border sticky top-0">
           <tr>
             <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Название</th>
-            <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3 w-[120px]">Тип</th>
+            <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3 w-[140px]">Тип</th>
             <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3 w-[120px]">Удалён</th>
             <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3 w-[140px]">До удаления</th>
-            <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3 w-[150px]">Действия</th>
+            <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3 w-[80px]">Действия</th>
           </tr>
         </thead>
         <tbody>
@@ -302,13 +336,16 @@ function TrashTable({ rows, retentionDays, onRestore, onPermanent }: {
                   </span>
                 </td>
                 <td className="px-4 py-3">
-                  <div className="flex items-center gap-1 justify-end">
-                    <Button size="sm" variant="ghost" className="h-8 gap-1 px-2 text-xs" title="Восстановить" onClick={() => onRestore(t)}>
-                      <RotateCcw className="h-4 w-4" />Восстановить
-                    </Button>
-                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive" title="Удалить навсегда" onClick={() => onPermanent(t)}>
-                      <Trash className="h-4 w-4" />
-                    </Button>
+                  <div className="flex justify-end">
+                    <RowMenu>
+                      <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => onRestore(t)}>
+                        <RotateCcw className="h-3.5 w-3.5" />Восстановить
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem className="gap-2 cursor-pointer text-destructive focus:text-destructive" onClick={() => onPermanent(t)}>
+                        <Trash className="h-3.5 w-3.5" />Удалить навсегда
+                      </DropdownMenuItem>
+                    </RowMenu>
                   </div>
                 </td>
               </tr>
@@ -320,8 +357,7 @@ function TrashTable({ rows, retentionDays, onRestore, onPermanent }: {
   )
 }
 
-// Подтверждение необратимого удаления вводом точного названия. apiBase зависит
-// от вида (материал / анкета), чтобы дёргать правильный permanent-эндпоинт.
+// Подтверждение необратимого удаления вводом точного названия.
 function PermanentDeleteDialog({ target, open, onOpenChange, onDeleted }: {
   target: TrashRow | null
   open: boolean
@@ -389,10 +425,10 @@ export default function LibraryPage() {
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [deleteQId, setDeleteQId] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [isPlatformAdmin, setIsPlatformAdmin] = useState(false)
   // Анкеты — главное, с них начинают → вкладка по умолчанию.
   const [activeTab, setActiveTab] = useState<TabKey>("questionnaires")
   const [search, setSearch] = useState("")
-  const [typeFilter, setTypeFilter] = useState<"all" | "candidate" | "client" | "post_demo">("all")
   const [createOpen, setCreateOpen] = useState(false)
   // Корзина: удалённые материалы и анкеты грузятся отдельными запросами.
   const [trashedRows, setTrashedRows] = useState<TemplateData[]>([])
@@ -400,7 +436,6 @@ export default function LibraryPage() {
   const [retentionDays, setRetentionDays] = useState(30)
   const [permanentTarget, setPermanentTarget] = useState<TrashRow | null>(null)
 
-  // Тип материала выводится из length (см. getMaterialType).
   const demoRows  = useMemo(() => templates.filter(t => getMaterialType(t.length) === "demo"),  [templates])
   const blockRows = useMemo(() => templates.filter(t => getMaterialType(t.length) === "block"), [templates])
   const testRows  = useMemo(() => templates.filter(t => getMaterialType(t.length) === "test"),  [templates])
@@ -412,11 +447,8 @@ export default function LibraryPage() {
 
   const filteredQuestionnaires = useMemo(() => {
     const q = search.trim().toLowerCase()
-    return questionnaires.filter(x =>
-      (typeFilter === "all" || x.type === typeFilter) &&
-      (!q || x.name.toLowerCase().includes(q))
-    )
-  }, [questionnaires, search, typeFilter])
+    return q ? questionnaires.filter(x => x.name.toLowerCase().includes(q)) : questionnaires
+  }, [questionnaires, search])
 
   // Единый список корзины: материалы + анкеты.
   const trashRows = useMemo<TrashRow[]>(() => {
@@ -424,14 +456,12 @@ export default function LibraryPage() {
       const mt = MATERIAL_TYPE_LABELS[getMaterialType(t.length)]
       return { id: t.id, name: t.name, typeLabel: mt.label, typeCls: mt.cls, deletedAt: t.deletedAt, kind: "material" }
     })
-    const qs: TrashRow[] = trashedQ.map((q) => {
-      const tb = QUESTIONNAIRE_TYPE[q.type] ?? { label: "Анкета", cls: "bg-muted text-muted-foreground" }
-      return { id: q.id, name: q.name, typeLabel: `Анкета · ${tb.label}`, typeCls: tb.cls, deletedAt: q.deletedAt, kind: "questionnaire" }
-    })
+    const qs: TrashRow[] = trashedQ.map((q) => (
+      { id: q.id, name: q.name, typeLabel: "Анкета", typeCls: TRASH_ANKETA_CLS, deletedAt: q.deletedAt, kind: "questionnaire" }
+    ))
     return [...mats, ...qs].sort((a, b) => (b.deletedAt ?? "").localeCompare(a.deletedAt ?? ""))
   }, [trashedRows, trashedQ])
 
-  // Демо ведём через богатый мастер; блок/тест — напрямую редактор; анкета — свой редактор.
   const startCreate = (kind: CreatableType) => {
     setCreateOpen(false)
     if (kind === "demo") router.push("/hr/library/create")
@@ -470,7 +500,7 @@ export default function LibraryPage() {
     fetch("/api/demo-templates?trashed=true")
       .then((r) => r.json())
       .then((data) => { const rows = data.data ?? data; setTrashedRows(Array.isArray(rows) ? rows : []) })
-      .catch(() => { /* корзина просто будет пустой */ })
+      .catch(() => { /* пусто */ })
     fetch("/api/questionnaire-templates?trashed=true")
       .then((r) => r.json())
       .then((data) => { const rows = data.data ?? data; setTrashedQ(Array.isArray(rows) ? rows : []) })
@@ -478,7 +508,6 @@ export default function LibraryPage() {
   }
 
   useEffect(() => {
-    // Открыть нужную вкладку, если пришли с ?tab=... (например из редактора анкеты).
     if (typeof window !== "undefined") {
       const tab = new URLSearchParams(window.location.search).get("tab") as TabKey | null
       if (tab && ["questionnaires", "demos", "blocks", "tests", "trash"].includes(tab)) setActiveTab(tab)
@@ -486,13 +515,17 @@ export default function LibraryPage() {
     fetchTemplates()
     fetchQuestionnaires()
     fetchTrashed()
+    fetch("/api/auth/me")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { setIsPlatformAdmin(!!(d?.data ?? d)?.isPlatformAdmin) })
+      .catch(() => { /* не админ */ })
     fetch("/api/modules/hr/company/trash-retention")
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => { const days = (d?.data ?? d)?.retentionDays; if (typeof days === "number") setRetentionDays(days) })
       .catch(() => { /* дефолт 30 */ })
   }, [])
 
-  // ── Материалы: удаление / восстановление / дублирование ──────────────────
+  // ── Материалы ────────────────────────────────────────────────────────────
   const handleDelete = async () => {
     if (!deleteId) return
     setDeleting(true)
@@ -518,12 +551,7 @@ export default function LibraryPage() {
       const res = await fetch("/api/demo-templates", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: `${t.name} (копия)`.slice(0, 76),
-          niche: t.niche,
-          length: t.length,
-          sections: t.sections,
-        }),
+        body: JSON.stringify({ name: `${t.name} (копия)`.slice(0, 76), niche: t.niche, length: t.length, sections: t.sections }),
       })
       if (!res.ok) { toast.error("Не удалось дублировать"); return }
       toast.success("Создана копия шаблона")
@@ -533,7 +561,7 @@ export default function LibraryPage() {
     }
   }
 
-  // ── Анкеты: редактирование / дублирование / удаление ─────────────────────
+  // ── Анкеты ───────────────────────────────────────────────────────────────
   const editQuestionnaire = (q: QuestionnaireTemplate) => {
     router.push(`/hr/library/anketa-editor?id=${q.id}`)
   }
@@ -543,11 +571,7 @@ export default function LibraryPage() {
       const res = await fetch("/api/questionnaire-templates", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: `${q.name} (копия)`.slice(0, 120),
-          type: q.type,
-          questions: q.questions,
-        }),
+        body: JSON.stringify({ name: `${q.name} (копия)`.slice(0, 120), type: q.type, questions: q.questions }),
       })
       if (!res.ok) { toast.error("Не удалось дублировать"); return }
       toast.success("Создана копия анкеты")
@@ -577,7 +601,25 @@ export default function LibraryPage() {
     setDeleteQId(null)
   }
 
-  // ── Корзина: восстановление (диспетчеризация по виду) ─────────────────────
+  // Платформенный админ: раздать всем компаниям / снять (возврат в приватные).
+  const assignAll = async (q: QuestionnaireTemplate) => {
+    try {
+      const res = await fetch(`/api/questionnaire-templates/${q.id}/assign-all`, { method: "POST" })
+      if (!res.ok) { toast.error("Не удалось назначить"); return }
+      toast.success("Анкета доступна всем компаниям")
+      fetchQuestionnaires()
+    } catch { toast.error("Ошибка сети") }
+  }
+  const unassignAll = async (q: QuestionnaireTemplate) => {
+    try {
+      const res = await fetch(`/api/questionnaire-templates/${q.id}/unassign-all`, { method: "POST" })
+      if (!res.ok) { toast.error("Не удалось снять"); return }
+      toast.success("Анкета снята у всех (осталась в вашей компании)")
+      fetchQuestionnaires()
+    } catch { toast.error("Ошибка сети") }
+  }
+
+  // ── Корзина: восстановление ───────────────────────────────────────────────
   const handleRestore = async (t: TrashRow) => {
     const base = t.kind === "questionnaire" ? "/api/questionnaire-templates" : "/api/demo-templates"
     try {
@@ -592,7 +634,6 @@ export default function LibraryPage() {
     }
   }
 
-  // Один и тот же рендер для вкладок демо/блоки/тесты.
   const renderMaterialsTab = (kind: CreatableType, rows: TemplateData[]) => {
     const shown = bySearch(rows)
     return (
@@ -626,7 +667,6 @@ export default function LibraryPage() {
         <DashboardHeader />
         <div className="flex-1 overflow-auto bg-background min-w-0">
           <div className="px-6 py-6 lg:px-10">
-            {/* Header */}
             <div className="mb-6">
               <h1 className="text-2xl font-bold tracking-tight">Библиотека</h1>
               <p className="text-sm text-muted-foreground mt-1">Шаблоны анкет, демонстраций, блоков и тестов</p>
@@ -666,19 +706,6 @@ export default function LibraryPage() {
                       className="pl-8 h-9 text-sm"
                     />
                   </div>
-                  {activeTab === "questionnaires" && (
-                    <Select value={typeFilter} onValueChange={(v) => setTypeFilter(v as typeof typeFilter)}>
-                      <SelectTrigger className="h-9 w-[150px] text-sm">
-                        <SelectValue placeholder="Тип" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">Все типы</SelectItem>
-                        <SelectItem value="candidate">Кандидат</SelectItem>
-                        <SelectItem value="client">Заказчик</SelectItem>
-                        <SelectItem value="post_demo">После демо</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  )}
                   <Button size="sm" className="gap-1.5 h-9 shrink-0" onClick={() => setCreateOpen(true)}>
                     <Plus className="h-4 w-4" />Создать шаблон
                   </Button>
@@ -697,7 +724,7 @@ export default function LibraryPage() {
                         <Loader2 className="w-4 h-4 animate-spin" />Загрузка...
                       </div>
                     ) : filteredQuestionnaires.length === 0 ? (
-                      search.trim() || typeFilter !== "all" ? (
+                      search.trim() ? (
                         <div className="flex flex-col items-center justify-center py-12 text-center px-4">
                           <Search className="h-10 w-10 text-muted-foreground/30 mb-3" />
                           <p className="text-sm text-muted-foreground">Ничего не найдено</p>
@@ -717,9 +744,12 @@ export default function LibraryPage() {
                     ) : (
                       <QuestionnairesTable
                         rows={filteredQuestionnaires}
+                        isPlatformAdmin={isPlatformAdmin}
                         onEdit={editQuestionnaire}
                         onDuplicate={duplicateQuestionnaire}
                         onDelete={(id) => setDeleteQId(id)}
+                        onAssignAll={assignAll}
+                        onUnassignAll={unassignAll}
                       />
                     )}
                   </CardContent>
@@ -762,7 +792,6 @@ export default function LibraryPage() {
             <DialogDescription>Выберите тип материала для библиотеки</DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
-            {/* Анкета — первой, это основной материал */}
             <button
               type="button"
               onClick={startCreateAnketa}
@@ -771,7 +800,7 @@ export default function LibraryPage() {
               <FileText className="h-5 w-5 mt-0.5 shrink-0 text-muted-foreground" />
               <div className="min-w-0">
                 <p className="text-sm font-semibold">Анкета</p>
-                <p className="text-xs text-muted-foreground">Набор вопросов для вакансии (кандидат / заказчик / после демо)</p>
+                <p className="text-xs text-muted-foreground">Набор вопросов для вакансии</p>
               </div>
             </button>
             {(["demo", "test", "block"] as CreatableType[]).map((kind) => {

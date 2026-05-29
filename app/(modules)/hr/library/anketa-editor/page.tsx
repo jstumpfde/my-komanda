@@ -7,7 +7,6 @@ import { ArrowLeft, Save, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
@@ -15,13 +14,9 @@ import { QuestionEditor } from "@/components/vacancies/anketa-tab"
 import { type Question } from "@/lib/course-types"
 import { toast } from "sonner"
 
+// Тип анкеты пока один — «Кандидат» (остальные не подключены), поэтому в UI
+// выбора типа нет; сохраняем существующий тип записи как есть.
 type AnketaType = "candidate" | "client" | "post_demo"
-
-const TYPE_OPTIONS: { value: AnketaType; label: string }[] = [
-  { value: "candidate", label: "Кандидат" },
-  { value: "client", label: "Заказчик" },
-  { value: "post_demo", label: "После демо" },
-]
 
 function AnketaEditorInner() {
   const router = useRouter()
@@ -111,28 +106,15 @@ function AnketaEditorInner() {
             )}
 
             {/* Meta */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="sm:col-span-2 space-y-1.5">
-                <Label htmlFor="anketa-name">Название</Label>
-                <Input
-                  id="anketa-name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Например: Анкета кандидата — базовая"
-                  disabled={isSystem}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Тип</Label>
-                <Select value={type} onValueChange={(v) => setType(v as AnketaType)} disabled={isSystem}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {TYPE_OPTIONS.map((o) => (
-                      <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+            <div className="space-y-1.5 max-w-md">
+              <Label htmlFor="anketa-name">Название</Label>
+              <Input
+                id="anketa-name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Например: Анкета кандидата — базовая"
+                disabled={isSystem}
+              />
             </div>
 
             {/* Questions */}
