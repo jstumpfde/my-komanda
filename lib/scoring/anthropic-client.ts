@@ -1,6 +1,7 @@
 import { readFileSync } from "fs"
 import { join } from "path"
 import Anthropic from "@anthropic-ai/sdk"
+import { getClaudeApiUrl } from "@/lib/claude-proxy"
 
 // Ключ из окружения; в dev — фолбэк на .env.local (дев-сервер мог стартовать
 // до появления ключа). В проде process.env всегда заполнен → файл не читаем.
@@ -17,5 +18,7 @@ function resolveApiKey(): string | undefined {
 }
 
 export function getScoringClient(): Anthropic {
-  return new Anthropic({ apiKey: resolveApiKey() })
+  // baseURL = прокси (CLAUDE_PROXY_URL), как и остальной AI-код: прод ходит в
+  // Claude только через прокси, прямой api.anthropic.com недоступен.
+  return new Anthropic({ apiKey: resolveApiKey(), baseURL: getClaudeApiUrl() })
 }
