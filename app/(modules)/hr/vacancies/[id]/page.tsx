@@ -23,7 +23,6 @@ import type { CandidateSortMode } from "@/lib/candidate-sort"
 import { CandidateDrawer } from "@/components/candidates/candidate-drawer"
 import { RubricRankPanel } from "@/components/candidates/rubric-rank-panel"
 import { BulkActionsBar, type BulkAction } from "@/components/dashboard/bulk-actions-bar"
-import { AddCandidateDialog } from "@/components/dashboard/add-candidate-dialog"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { Textarea } from "@/components/ui/textarea"
@@ -662,7 +661,6 @@ export default function VacancyPage() {
 // filters перемещён выше — см. строку перед useCandidates
   const [drawerCandidateId, setDrawerCandidateId] = useState<string | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
-  const [addDialogOpen, setAddDialogOpen] = useState(false)
   // Bulk-selection state (только список — выделение между кандидатами)
   const [selectedCandidateIds, setSelectedCandidateIds] = useState<Set<string>>(new Set())
   const [bulkBusy, setBulkBusy] = useState(false)
@@ -1363,11 +1361,6 @@ export default function VacancyPage() {
       toast.success(`${candidate.name} → следующий этап`)
       await updateStage(candidateId, nextId)
     }
-  }
-
-  const handleAddCandidate = (candidate: Candidate) => {
-    setColumns((p) => p.map((c) => c.id !== "new" ? c : { ...c, candidates: [...c.candidates, candidate], count: c.candidates.length + 1 }))
-    toast.success(`${candidate.name} добавлен`)
   }
 
   // ─── Bulk actions (плавающая панель) ────────────────────────────────────
@@ -3473,8 +3466,6 @@ export default function VacancyPage() {
           </div>
         </main>
       </SidebarInset>
-
-      <AddCandidateDialog open={addDialogOpen} onOpenChange={setAddDialogOpen} onAdd={handleAddCandidate} />
 
       {/* ── Paste text dialog ── */}
       <Dialog open={textDialogOpen} onOpenChange={(o) => { if (!pasteBusy) { setTextDialogOpen(o); if (!o) setPasteText("") } }}>
