@@ -185,6 +185,63 @@ export async function POST(req: NextRequest) {
       console.warn("[POST /api/modules/hr/vacancies] default funnel template lookup failed:", err)
     }
 
+    // drizzle/0156: применяем дефолты найма компании (companies.hiringDefaultsJson)
+    // к новой вакансии. Консервативно — только однозначные маппинги. Если дефолтов
+    // нет/пусто ({}) — поведение создания вакансии остаётся прежним. Любая ошибка
+    // не должна ронять создание вакансии (try/catch, продолжаем без дефолтов).
+    try {
+      const [companyDefaults] = await db.select({
+        hiringDefaultsJson: companies.hiringDefaultsJson,
+      })
+        .from(companies)
+        .where(eq(companies.id, user.companyId))
+        .limit(1)
+
+      const hd = companyDefaults?.hiringDefaultsJson
+      if (hd && typeof hd === "object") {
+        // 1) Стоп-факторы — только если явно включён applyStopFactorsOnCreate
+        //    и набор дефолтов непуст.
+        if (
+          hd.applyStopFactorsOnCreate === true &&
+          hd.stopFactorsDefaults &&
+          Object.keys(hd.stopFactorsDefaults).length > 0
+        ) {
+          insertValues.stopFactorsJson = hd.stopFactorsDefaults
+        }
+
+        // 2) Расписание — переносим значения времени/таймзоны/дней. НЕ трогаем
+        //    scheduleEnabled (оставляем дефолт вакансии = true), только значения.
+        const sched = hd.schedule
+        if (sched) {
+          if (sched.timezone) insertValues.scheduleTimezone = sched.timezone
+          if (sched.interviewFrom) insertValues.scheduleStart = sched.interviewFrom
+          if (sched.interviewTo) insertValues.scheduleEnd = sched.interviewTo
+          // Дни недели: hd хранит строки "mon".."sun", вакансия — number[] 1=Пн..7=Вс.
+          if (Array.isArray(sched.interviewDays) && sched.interviewDays.length > 0) {
+            const dayMap: Record<string, number> = {
+              mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6, sun: 7,
+            }
+            const mapped = sched.interviewDays
+              .map((d) => dayMap[String(d).toLowerCase().slice(0, 3)])
+              .filter((n): n is number => typeof n === "number")
+            // Переносим только если ВСЕ дни распознаны (иначе маппинг неоднозначен — пропускаем).
+            if (mapped.length === sched.interviewDays.length) {
+              insertValues.scheduleWorkingDays = Array.from(new Set(mapped)).sort((a, b) => a - b)
+            }
+          }
+        }
+
+        // 3) hd.automation (autoDemo/autoInvite/minScore/autoReject) — ОТЛОЖЕНО.
+        //    В схеме vacancies нет прямых одноимённых полей: aiProcessSettings —
+        //    untyped jsonb без устоявшегося контракта этих ключей, а
+        //    autoProcessingEnabled — это совсем другое (авто-разбор hh-откликов
+        //    cron'ом, не autoDemo/autoInvite). Чтобы не выдумывать соответствие
+        //    и не менять поведение скоринга/автоматизации — не маппим.
+      }
+    } catch (err) {
+      console.warn("[POST /api/modules/hr/vacancies] hiring defaults apply failed:", err)
+    }
+
     // createdBy might be null for some auth flows — make it optional
     if (user.id) insertValues.createdBy = user.id
     if (body.description?.trim()) insertValues.description = body.description.trim()
