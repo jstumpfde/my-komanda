@@ -3,17 +3,60 @@
 
 import type { ScoringSpec, WeightLevel, Criterion } from "./types"
 
+// Встроенные оси оценки ПРОФЕССИОНАЛЬНОЙ пригодности.
+//
+// ВАЖНО (TZ-SCORING-FILTERS-SPLIT): город и формат работы здесь НАМЕРЕННО
+// отсутствуют — это жёсткие ФИЛЬТРЫ (vacancy.stopFactorsJson → проверяются в
+// process-queue ДО скоринга), а не балльные критерии. Раньше они были осями с
+// весом nice и давали по 100 баллов за «Москва»/«удалёнка», вытягивая слабых
+// кандидатов вверх. Теперь оценка считает только профпригодность.
+//
+// Дефолтные веса: профессиональное ядро (опыт в отрасли + конкретные навыки) —
+// «Критично»; зарплата — «Важно»; образование/управление — «Желательно».
+// HR переопределяет любой вес в анкете (aiWeights), а сверх этих осей может
+// добавить СВОИ критерии под конкретную вакансию (aiCustomCriteria).
 const WEIGHT_AXES: Array<{ key: string; label: string; hint: string; def: WeightLevel }> = [
-  { key: "industry_experience", label: "Опыт в отрасли",          hint: "релевантный опыт в этой сфере", def: "important" },
+  { key: "industry_experience", label: "Опыт в отрасли",          hint: "релевантный опыт в этой сфере", def: "critical" },
+  { key: "specific_skills",     label: "Конкретные навыки",       hint: "наличие требуемых hard-навыков", def: "critical" },
+  { key: "salary_match",        label: "Зарплатное соответствие", hint: "ожидания в пределах вилки", def: "important" },
   { key: "management",          label: "Опыт управления",         hint: "руководство людьми/проектами", def: "nice" },
   { key: "education",           label: "Профильное образование",  hint: "профильное образование", def: "nice" },
-  { key: "specific_skills",     label: "Конкретные навыки",       hint: "наличие требуемых hard-навыков", def: "important" },
-  { key: "salary_match",        label: "Зарплатное соответствие", hint: "ожидания в пределах вилки", def: "important" },
-  { key: "work_format",         label: "Формат работы",           hint: "готовность к указанному формату", def: "nice" },
-  { key: "location",            label: "Город / локация",         hint: "соответствие локации", def: "nice" },
 ]
 
 const VALID: WeightLevel[] = ["critical", "important", "nice", "irrelevant"]
+
+// Кастомный критерий из анкеты вакансии (anketa.aiCustomCriteria).
+// Позволяет HR задать произвольное число своих осей оценки сверх встроенных —
+// движок (rubric.ts) строит схему динамически, число критериев не ограничено.
+interface RawCustomCriterion { key?: unknown; label?: unknown; hint?: unknown; weight?: unknown }
+
+function parseCustomCriteria(raw: unknown, usedKeys: Set<string>): Criterion[] {
+  if (!Array.isArray(raw)) return []
+  const out: Criterion[] = []
+  for (const item of raw as RawCustomCriterion[]) {
+    if (!item || typeof item !== "object") continue
+    const label = typeof item.label === "string" ? item.label.trim() : ""
+    if (!label) continue
+    const weight = (typeof item.weight === "string" && VALID.includes(item.weight as WeightLevel)
+      ? item.weight : "important") as WeightLevel
+    if (weight === "irrelevant") continue
+    // Ключ: из item.key или slug из label; гарантируем уникальность.
+    let key = typeof item.key === "string" && item.key.trim()
+      ? item.key.trim()
+      : "custom_" + label.toLowerCase().replace(/[^a-zа-я0-9]+/gi, "_").replace(/^_+|_+$/g, "").slice(0, 40)
+    if (!key) key = "custom"
+    let uniq = key, i = 2
+    while (usedKeys.has(uniq)) uniq = `${key}_${i++}`
+    usedKeys.add(uniq)
+    out.push({
+      key: uniq,
+      label: label.slice(0, 80),
+      weight,
+      hint: typeof item.hint === "string" ? item.hint.trim().slice(0, 200) : undefined,
+    })
+  }
+  return out
+}
 
 function num(v: unknown): number | undefined {
   if (v === undefined || v === null || v === "") return undefined
@@ -32,7 +75,7 @@ export function buildSpecFromAnketa(anketa: Record<string, unknown> | null | und
   const a = anketa ?? {}
   const weights = (a.aiWeights && typeof a.aiWeights === "object" ? a.aiWeights : {}) as Record<string, unknown>
 
-  const criteria: Criterion[] = WEIGHT_AXES
+  const builtin: Criterion[] = WEIGHT_AXES
     .map(ax => {
       const w = weights[ax.key]
       return {
@@ -45,6 +88,12 @@ export function buildSpecFromAnketa(anketa: Record<string, unknown> | null | und
     // Оси с весом «Не важно» в анкете не оцениваем и не показываем
     // (например «Опыт управления» для ассистента).
     .filter(c => c.weight !== "irrelevant")
+
+  // Кастомные критерии вакансии (anketa.aiCustomCriteria) — произвольное число
+  // сверх встроенных. Ключи уникализируются относительно встроенных.
+  const usedKeys = new Set(builtin.map(c => c.key))
+  const custom = parseCustomCriteria(a.aiCustomCriteria, usedKeys)
+  const criteria: Criterion[] = [...builtin, ...custom]
 
   const responsibilities = str(a.responsibilities)
   const requirements = str(a.requirements)

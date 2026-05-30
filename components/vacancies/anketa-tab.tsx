@@ -88,6 +88,8 @@ interface AnketaData {
   aiStopFactors: string[]
   aiIdealProfile: string
   aiWeights: Record<string, AiWeightLevel>
+  // Кастомные критерии оценки сверх встроенных (произвольное число под вакансию).
+  aiCustomCriteria: { label: string; weight: AiWeightLevel; hint?: string }[]
 }
 
 interface StopFactor {
@@ -187,24 +189,24 @@ const AI_WEIGHT_OPTIONS: { value: AiWeightLevel; label: string }[] = [
   { value: "irrelevant", label: "Не важно" },
 ]
 
+// Встроенные критерии ОЦЕНКИ профпригодности. Город и формат работы убраны
+// намеренно — это жёсткие ФИЛЬТРЫ (стоп-факторы вакансии), а не баллы
+// (см. lib/scoring/vacancy-spec.ts и TZ-SCORING-FILTERS-SPLIT). Сверх этих осей
+// HR может добавить свои критерии ниже (aiCustomCriteria).
 const AI_WEIGHT_CRITERIA = [
   { id: "industry_experience", label: "Опыт в отрасли" },
-  { id: "management", label: "Опыт управления" },
-  { id: "education", label: "Образование" },
   { id: "specific_skills", label: "Конкретные навыки" },
   { id: "salary_match", label: "Зарплатное соответствие" },
-  { id: "work_format", label: "Формат работы" },
-  { id: "location", label: "Город/локация" },
+  { id: "management", label: "Опыт управления" },
+  { id: "education", label: "Образование" },
 ]
 
 const DEFAULT_AI_WEIGHTS: Record<string, AiWeightLevel> = {
-  industry_experience: "important",
+  industry_experience: "critical",
+  specific_skills: "critical",
+  salary_match: "important",
   management: "nice",
   education: "nice",
-  specific_skills: "important",
-  salary_match: "important",
-  work_format: "nice",
-  location: "nice",
 }
 
 const PAY_FREQUENCY_OPTIONS = [
@@ -313,7 +315,7 @@ function emptyAnketa(): AnketaData {
     questions: [],
     screeningQuestions: [], hhDescription: "",
     aiMinExperience: "", aiRequiredHardSkills: [], aiStopFactors: [],
-    aiIdealProfile: "", aiWeights: { ...DEFAULT_AI_WEIGHTS },
+    aiIdealProfile: "", aiWeights: { ...DEFAULT_AI_WEIGHTS }, aiCustomCriteria: [],
   }
 }
 
@@ -330,6 +332,8 @@ function cleanText(s: string): string {
 
 function migrateAnketa(saved: Record<string, unknown>): AnketaData {
   const d = { ...emptyAnketa(), ...saved } as AnketaData
+  // aiCustomCriteria: защита от старого/битого значения (должен быть массив)
+  if (!Array.isArray(d.aiCustomCriteria)) d.aiCustomCriteria = []
   // employment: string -> string[]
   if (typeof d.employment === "string" && d.employment) {
     d.employment = [d.employment as string]
@@ -2527,6 +2531,73 @@ function AiProfileSection({ data, set }: {
                 </div>
               ))}
             </div>
+
+            {/* Кастомные критерии: произвольное число под вакансию */}
+            {data.aiCustomCriteria.length > 0 && (
+              <div className="space-y-2 pt-1">
+                {data.aiCustomCriteria.map((cc, idx) => (
+                  <div key={idx} className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                      <Input
+                        value={cc.label}
+                        onChange={e => {
+                          const next = [...data.aiCustomCriteria]
+                          next[idx] = { ...next[idx], label: e.target.value }
+                          set("aiCustomCriteria", next)
+                        }}
+                        placeholder="Свой критерий (напр. «Опыт в B2B-продажах»)"
+                        className="h-7 text-sm"
+                      />
+                      <button
+                        type="button"
+                        title="Удалить критерий"
+                        onClick={() => set("aiCustomCriteria", data.aiCustomCriteria.filter((_, i) => i !== idx))}
+                        className="text-muted-foreground hover:text-destructive shrink-0 px-1"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                    <div className="flex gap-0.5 shrink-0">
+                      {AI_WEIGHT_OPTIONS.map(opt => (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => {
+                            const next = [...data.aiCustomCriteria]
+                            next[idx] = { ...next[idx], weight: opt.value }
+                            set("aiCustomCriteria", next)
+                          }}
+                          className={cn(
+                            "px-2 py-0.5 rounded text-[10px] font-medium border transition-colors",
+                            cc.weight === opt.value
+                              ? opt.value === "critical" ? "bg-red-100 dark:bg-red-950/30 text-red-700 dark:text-red-300 border-red-300 dark:border-red-800"
+                                : opt.value === "important" ? "bg-amber-100 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-800"
+                                : opt.value === "nice" ? "bg-blue-100 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-800"
+                                : "bg-muted text-muted-foreground border-border"
+                              : "bg-background text-muted-foreground border-border hover:bg-accent"
+                          )}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={() => set("aiCustomCriteria", [...data.aiCustomCriteria, { label: "", weight: "important" as AiWeightLevel }])}
+              className="text-xs text-primary hover:underline"
+            >
+              + Добавить свой критерий
+            </button>
+
+            <p className="text-[11px] text-muted-foreground leading-snug pt-1">
+              Город и формат работы здесь не оцениваются баллом — это жёсткие фильтры
+              (раздел «Стоп-факторы»): неподходящие кандидаты отсеиваются до оценки.
+            </p>
           </div>
         </div>
       )}
