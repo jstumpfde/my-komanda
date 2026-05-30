@@ -12,6 +12,7 @@ import {
   yuliaConversations,
   yuliaMessages,
   users,
+  cronRuns,
 } from "@/lib/db/schema"
 import { YULIA_SYSTEM_PROMPT } from "@/lib/ai/yulia/prompts"
 import { listMigrationsWithStatus } from "@/lib/platform/settings-migrations"
@@ -145,8 +146,29 @@ export default async function PlatformAdminPage() {
     .orderBy(desc(yuliaConversations.updatedAt))
     .limit(30)
 
+  // Cron: последние запуски (мониторинг auto-invoices и др.).
+  const cronRunsRows = await db
+    .select({
+      id:           cronRuns.id,
+      cronName:     cronRuns.cronName,
+      startedAt:    cronRuns.startedAt,
+      finishedAt:   cronRuns.finishedAt,
+      status:       cronRuns.status,
+      durationMs:   cronRuns.durationMs,
+      errorMessage: cronRuns.errorMessage,
+      metadata:     cronRuns.metadata,
+    })
+    .from(cronRuns)
+    .orderBy(desc(cronRuns.startedAt))
+    .limit(50)
+
   return (
     <PlatformAdminClient
+      cronRuns={cronRunsRows.map(r => ({
+        ...r,
+        startedAt:  r.startedAt ? r.startedAt.toISOString() : null,
+        finishedAt: r.finishedAt ? r.finishedAt.toISOString() : null,
+      }))}
       migrations={migrations.map(m => ({
         ...m,
         appliedAt: m.appliedAt ? m.appliedAt.toISOString() : null,

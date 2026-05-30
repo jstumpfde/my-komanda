@@ -3,6 +3,7 @@ import { db } from "@/lib/db"
 import { companies, invoices, plans, subscriptionHistory } from "@/lib/db/schema"
 import { and, eq, gte, lte, isNotNull, count, desc } from "drizzle-orm"
 import { checkCronAuth } from "@/lib/cron/auth"
+import { startCronRun, finishCronRun } from "@/lib/cron/record-run"
 import { sendInvoiceDocument } from "@/lib/billing/send-documents"
 
 // POST /api/cron/auto-invoices — за 7 календарных дней до конца оплаченного
@@ -22,6 +23,7 @@ export async function POST(req: NextRequest) {
   const auth = checkCronAuth(req)
   if (!auth.ok) return auth.response
 
+  const run = await startCronRun("auto-invoices")
   const now = new Date()
   const in7 = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
 
@@ -103,5 +105,6 @@ export async function POST(req: NextRequest) {
 
   const created = results.filter(r => r.created).length
   console.log(`[auto-invoices] due=${due.length} created=${created}`)
+  await finishCronRun(run.id, "ok", { due: due.length, created })
   return NextResponse.json({ at: now.toISOString(), due: due.length, created, results })
 }

@@ -113,7 +113,19 @@ interface YuliaProps {
   conversations: YuliaConvItem[]
 }
 
+interface CronRunItem {
+  id: string
+  cronName: string
+  startedAt: string | null
+  finishedAt: string | null
+  status: string
+  durationMs: number | null
+  errorMessage: string | null
+  metadata: unknown
+}
+
 interface Props {
+  cronRuns: CronRunItem[]
   migrations: MigrationItem[]
   companies: CompanyItem[]
   companiesTotal: number
@@ -147,6 +159,7 @@ function fmtDate(s: string | null): string {
 }
 
 export function PlatformAdminClient({
+  cronRuns,
   migrations,
   companies,
   companiesTotal,
@@ -175,6 +188,7 @@ export function PlatformAdminClient({
           <TabsTrigger value="vacancies">AI vacancies ({vacancies.length})</TabsTrigger>
           <TabsTrigger value="templates">Templates ({templates.length})</TabsTrigger>
           <TabsTrigger value="yulia">Yulia ({yulia.metrics.total})</TabsTrigger>
+          <TabsTrigger value="cron">Cron</TabsTrigger>
           <TabsTrigger value="emergency" className="text-red-600">Emergency</TabsTrigger>
           <TabsTrigger value="logs">Logs</TabsTrigger>
         </TabsList>
@@ -193,6 +207,9 @@ export function PlatformAdminClient({
         </TabsContent>
         <TabsContent value="yulia" className="mt-4">
           <YuliaTab data={yulia} />
+        </TabsContent>
+        <TabsContent value="cron" className="mt-4">
+          <CronTab items={cronRuns} />
         </TabsContent>
         <TabsContent value="emergency" className="mt-4">
           <EmergencyTab />
@@ -880,6 +897,52 @@ function LogsTab({ items }: { items: ActionItem[] }) {
             ))}
             {items.length === 0 && (
               <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground">Действий пока нет</TableCell></TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
+  )
+}
+
+function CronTab({ items }: { items: CronRunItem[] }) {
+  const statusColor = (s: string) =>
+    s === "ok"      ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800" :
+    s === "error"   ? "bg-red-500/10 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800" :
+    s === "running" ? "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800" :
+                      "bg-muted text-muted-foreground border-border"
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Запуски cron (последние 50)</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Cron</TableHead>
+              <TableHead>Старт</TableHead>
+              <TableHead>Статус</TableHead>
+              <TableHead>Длит.</TableHead>
+              <TableHead>Результат</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {items.map(r => (
+              <TableRow key={r.id}>
+                <TableCell className="font-medium text-xs whitespace-nowrap">{r.cronName}</TableCell>
+                <TableCell className="text-xs whitespace-nowrap">{fmtDate(r.startedAt)}</TableCell>
+                <TableCell><Badge variant="outline" className={statusColor(r.status)}>{r.status}</Badge></TableCell>
+                <TableCell className="text-xs whitespace-nowrap">{r.durationMs != null ? `${(r.durationMs / 1000).toFixed(1)}с` : "—"}</TableCell>
+                <TableCell className="font-mono text-xs">
+                  {r.errorMessage
+                    ? <span className="text-red-600 dark:text-red-400">{r.errorMessage}</span>
+                    : (r.metadata ? JSON.stringify(r.metadata) : "—")}
+                </TableCell>
+              </TableRow>
+            ))}
+            {items.length === 0 && (
+              <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground">Запусков пока нет</TableCell></TableRow>
             )}
           </TableBody>
         </Table>
