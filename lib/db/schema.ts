@@ -194,6 +194,8 @@ export const companies = pgTable("companies", {
   // Группа 34: per-company чат для HR-уведомлений (новые отклики,
   // AI-эскалации). Главный канал Юрия — отдельный, не здесь.
   telegramChatId:      text("telegram_chat_id"),
+  // drizzle/0158 — для будущего Telegram-канала чат-бота (токен бота-кандидата)
+  candidateBotToken:   text("candidate_bot_token"),
   // Privacy policy (per-company, ФЗ-152) — null = используется дефолтный шаблон
   privacyPolicyHtml:        text("privacy_policy_html"),
   privacyPolicyUpdatedAt:   timestamp("privacy_policy_updated_at"),
@@ -872,6 +874,9 @@ export const candidates = pgTable("candidates", {
   // См. drizzle/0135_chatbot_delays.sql.
   shortMessagesSentCount: integer("short_messages_sent_count").notNull().default(0),
   lastShortMessageAt:     timestamp("last_short_message_at", { withTimezone: true }),
+  // drizzle/0158 — для будущего Telegram-канала чат-бота (связка с чатом кандидата)
+  telegramChatId:   text("telegram_chat_id"),
+  telegramUsername: text("telegram_username"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 })
