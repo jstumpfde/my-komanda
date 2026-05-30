@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import { cn } from "@/lib/utils"
-import { Search, Building2, CheckCircle2, XCircle, FileText, MoreHorizontal, Loader2 } from "lucide-react"
+import { Search, Building2, CheckCircle2, XCircle, FileText, FileCheck2, MoreHorizontal, Loader2 } from "lucide-react"
 import { toast } from "sonner"
 import { formatPrice, formatDate, useDebounce, TableFooter } from "./shared"
 
@@ -179,7 +179,12 @@ export function InvoicesTab() {
                         <DropdownMenuContent align="end" className="w-52">
                           <DropdownMenuItem asChild className="gap-2 cursor-pointer">
                             <a href={`/api/admin/invoices/${inv.id}/pdf`} target="_blank" rel="noopener noreferrer">
-                              <FileText className="h-3.5 w-3.5" />Открыть PDF
+                              <FileText className="h-3.5 w-3.5" />Открыть счёт (PDF)
+                            </a>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem asChild className="gap-2 cursor-pointer">
+                            <a href={`/api/admin/invoices/${inv.id}/act`} target="_blank" rel="noopener noreferrer">
+                              <FileCheck2 className="h-3.5 w-3.5" />Открыть акт
                             </a>
                           </DropdownMenuItem>
                           {!isFinal && (
