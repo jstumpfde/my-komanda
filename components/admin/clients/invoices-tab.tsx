@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import { cn } from "@/lib/utils"
-import { Search, Building2, CheckCircle2, XCircle, FileText, FileCheck2, MoreHorizontal, Loader2 } from "lucide-react"
+import { Search, Building2, CheckCircle2, XCircle, FileText, FileCheck2, Send, MoreHorizontal, Loader2 } from "lucide-react"
 import { toast } from "sonner"
 import { formatPrice, formatDate, useDebounce, TableFooter } from "./shared"
 
@@ -107,6 +107,23 @@ export function InvoicesTab() {
     }
   }
 
+  async function sendDoc(invoice: InvoiceRow, kind: "invoice" | "act") {
+    setBusyId(invoice.id)
+    try {
+      const res = await fetch(`/api/admin/invoices/${invoice.id}/send`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind }),
+      })
+      const b = await res.json().catch(() => ({}))
+      if (res.ok) toast.success(`${kind === "act" ? "Акт" : "Счёт"} отправлен на ${b.to}`)
+      else toast.error(b.error || "Не удалось отправить")
+    } catch {
+      toast.error("Ошибка сети")
+    } finally {
+      setBusyId(null)
+    }
+  }
+
   return (
     <>
       {/* Поиск и фильтры */}
@@ -186,6 +203,12 @@ export function InvoicesTab() {
                             <a href={`/api/admin/invoices/${inv.id}/act`} target="_blank" rel="noopener noreferrer">
                               <FileCheck2 className="h-3.5 w-3.5" />Открыть акт
                             </a>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => sendDoc(inv, "invoice")}>
+                            <Send className="h-3.5 w-3.5" />Отправить счёт на email
+                          </DropdownMenuItem>
+                          <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => sendDoc(inv, "act")}>
+                            <Send className="h-3.5 w-3.5" />Отправить акт на email
                           </DropdownMenuItem>
                           {!isFinal && (
                             <>

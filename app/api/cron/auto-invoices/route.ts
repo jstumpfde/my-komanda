@@ -3,6 +3,7 @@ import { db } from "@/lib/db"
 import { companies, invoices, plans, subscriptionHistory } from "@/lib/db/schema"
 import { and, eq, gte, lte, isNotNull, count, desc } from "drizzle-orm"
 import { checkCronAuth } from "@/lib/cron/auth"
+import { sendInvoiceDocument } from "@/lib/billing/send-documents"
 
 // POST /api/cron/auto-invoices — за 7 календарных дней до конца оплаченного
 // периода формирует счёт на продление для компаний с auto_invoice_enabled.
@@ -90,7 +91,14 @@ export async function POST(req: NextRequest) {
       details: { invoiceId: inv.id, months, periodStart: nextStart },
     })
 
-    results.push({ company: c.id, created: inv.invoiceNumber, months })
+    // Отправка счёта на email (на стейджинге/деве реально не уходит).
+    let emailed = false, emailReason: string | undefined
+    try {
+      const r = await sendInvoiceDocument(inv.id, "invoice")
+      emailed = r.sent; emailReason = r.reason
+    } catch (e) { emailReason = e instanceof Error ? e.message : String(e) }
+
+    results.push({ company: c.id, created: inv.invoiceNumber, months, emailed, emailReason })
   }
 
   const created = results.filter(r => r.created).length

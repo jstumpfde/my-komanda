@@ -3,6 +3,7 @@ import { db } from "@/lib/db"
 import { invoices, companies } from "@/lib/db/schema"
 import { eq } from "drizzle-orm"
 import { requirePlatformAdmin, apiError, apiSuccess } from "@/lib/api-helpers"
+import { sendInvoiceDocument } from "@/lib/billing/send-documents"
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -41,6 +42,12 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     await db.update(companies)
       .set({ currentPeriodEnd: new Date(updated.periodEnd), subscriptionStatus: "active", updatedAt: new Date() })
       .where(eq(companies.id, updated.companyId))
+  }
+
+  // Авто-отправка закрывающего акта (если включена автоматизация документов).
+  if (status === "paid") {
+    const [co] = await db.select({ auto: companies.autoInvoiceEnabled }).from(companies).where(eq(companies.id, updated.companyId)).limit(1)
+    if (co?.auto) { try { await sendInvoiceDocument(updated.id, "act") } catch { /* не блокируем ответ */ } }
   }
 
   return apiSuccess({ id: updated.id, status: updated.status, paidAt: updated.paidAt })
