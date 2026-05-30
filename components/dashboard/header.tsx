@@ -16,6 +16,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { useSidebar } from "@/components/ui/sidebar"
 import { Badge } from "@/components/ui/badge"
 import { useAuth, ROLE_LABELS, ROLE_ICONS, type UserRole } from "@/lib/auth"
+import { SubscriptionBanner } from "@/components/billing/subscription-banner"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 
@@ -151,6 +152,10 @@ export function DashboardHeader() {
 
   return (
     <>
+      {/* Плашка подписки: обратный отсчёт пробного периода / призыв продлить.
+          В обычном состоянии (активный тариф) ничего не рендерит. */}
+      <SubscriptionBanner />
+
       {/* View-as banner */}
       {isViewingAs && (
         <div className="bg-amber-400 text-amber-950 px-4 py-1.5 flex items-center justify-between text-sm">
