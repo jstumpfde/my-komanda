@@ -15,6 +15,7 @@ export interface CardDisplaySettings {
   showSalaryFull: boolean
   showScore: boolean          // колонка «AI-оцен.» (оценка анкеты)
   showResumeScore?: boolean   // колонка «AI-резм.» (скоринг резюме); undefined = показывать
+  showRubricScore?: boolean   // колонка «Рубрика» (новый shadow-движок); undefined = показывать
   showAge: boolean
   showSource: boolean
   showCity: boolean
@@ -32,6 +33,7 @@ interface CardSettingsProps {
 
 const settingsLabels: { key: keyof CardDisplaySettings; label: string }[] = [
   { key: "showScore", label: "AI скоринг" },
+  { key: "showRubricScore", label: "Рубрика" },
   { key: "showSalaryFull", label: "Зарплата" },
   { key: "showCity", label: "Город" },
 

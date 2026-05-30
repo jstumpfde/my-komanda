@@ -14,7 +14,7 @@ import { MapPin, CheckCircle2, XCircle, ArrowRight, ThumbsUp, Clock, ArrowUp, Ar
 import { DemoProgressBar, calcDemoPercent, calcDemoFraction } from "@/components/hr/demo-progress-bar"
 import { getStageLabel, getStageColorClasses } from "@/lib/stages"
 
-export type ListSortKey = "favorite" | "name" | "aiScore" | "resumeScore" | "progress" | "salary" | "responseDate" | "status" | "city" | "source"
+export type ListSortKey = "favorite" | "name" | "aiScore" | "resumeScore" | "rubricScore" | "progress" | "salary" | "responseDate" | "status" | "city" | "source"
 export type ListSortDir = "asc" | "desc"
 export interface ListSortState {
   key: ListSortKey
@@ -59,6 +59,7 @@ const DEFAULT_DIR: Record<ListSortKey, ListSortDir> = {
   name:         "asc",
   aiScore:      "desc",
   resumeScore:  "desc",
+  rubricScore:  "desc",
   progress:     "desc",
   salary:       "desc",
   responseDate: "desc",
@@ -150,6 +151,7 @@ export function ListView({
   const showCity         = settings.showCity
   const showScore        = settings.showScore          // AI-оцен. (оценка анкеты)
   const showResumeScore  = settings.showResumeScore !== false  // AI-резм. (undefined = вкл)
+  const showRubricScore  = settings.showRubricScore === true   // Рубрика (тест; по умолч. выкл)
   const showSalary       = settings.showSalary || settings.showSalaryFull
   const showSource       = settings.showSource
   const showActions      = settings.showActions
@@ -184,6 +186,9 @@ export function ListView({
         }
         case "resumeScore": {
           return mul * ((a.resumeScore ?? -1) - (b.resumeScore ?? -1))
+        }
+        case "rubricScore": {
+          return mul * ((a.rubricScore ?? -1) - (b.rubricScore ?? -1))
         }
         case "progress": {
           return mul * ((progressPercentOf(a) ?? -1) - (progressPercentOf(b) ?? -1))
@@ -274,6 +279,7 @@ export function ListView({
   if (showProgress) cols.push("minmax(95px, 1.2fr)")    // Демо
   if (showResumeScore) cols.push("60px")                // AI-резм. — AI-скор резюме (фикс, w-8 badge + место под header)
   if (showScore) cols.push("minmax(60px, 0.85fr)")      // AI-оцен.
+  if (showRubricScore) cols.push("64px")                // Рубрика — новый shadow-движок
   if (showSalary) cols.push("minmax(95px, 1.1fr)")      // Зарплата — ужата (длинных чисел редко > 7 симв)
   if (showCity) cols.push("minmax(120px, 2fr)")         // Город
   if (showResponseDate) cols.push("minmax(70px, 0.7fr)") // Дата — "DD.MM.YY" укладывается в 70px
@@ -375,6 +381,7 @@ export function ListView({
         {showProgress && <SortHeader label="Демо" sortKey="progress" sort={sort} onToggle={handleSort} align="center" />}
         {showResumeScore && <SortHeader label="AI-резм." sortKey="resumeScore" sort={sort} onToggle={handleSort} align="center" />}
         {showScore && <SortHeader label="AI-оцен." sortKey="aiScore" sort={sort} onToggle={handleSort} align="center" />}
+        {showRubricScore && <SortHeader label="Рубрика" sortKey="rubricScore" sort={sort} onToggle={handleSort} align="center" />}
         {showSalary && <SortHeader label="Зарплата" sortKey="salary" sort={sort} onToggle={handleSort} align="center" />}
         {showCity && <SortHeader label="Город" sortKey="city" sort={sort} onToggle={handleSort} align="left" />}
         {showResponseDate && <SortHeader label="Дата" sortKey="responseDate" sort={sort} onToggle={handleSort} align="center" />}
@@ -511,6 +518,25 @@ export function ListView({
                   >
                     {aiActuallyRan ? candidate.aiScore : "—"}
                   </Badge>
+                </div>
+              )}
+
+              {/* Рубрика — новый shadow-движок соответствия */}
+              {showRubricScore && (
+                <div className="flex items-center justify-center" title="Соответствие по рубрике (тест)">
+                  {candidate.rubricScore != null ? (
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "text-[11px] font-semibold border px-1.5 py-0 h-5 w-8 justify-center",
+                        getScoreColor(candidate.rubricScore),
+                      )}
+                    >
+                      {candidate.rubricScore}
+                    </Badge>
+                  ) : (
+                    <span className="text-muted-foreground/40 text-xs">—</span>
+                  )}
                 </div>
               )}
 
