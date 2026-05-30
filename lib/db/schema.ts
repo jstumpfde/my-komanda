@@ -767,6 +767,11 @@ export const candidates = pgTable("candidates", {
   aiScoreV1:        real("ai_score_v1"),
   aiScoreV2:        real("ai_score_v2"),
   aiScoreV2Details: jsonb("ai_score_v2_details").$type<CandidateScoreV2>(),
+  // Рубричный движок соответствия (shadow, миграция 0151). Считается параллельно
+  // существующим скорерам и НЕ влияет на автодействия — для сравнения/обкатки.
+  rubricScore:      integer("rubric_score"),
+  rubricDetails:    jsonb("rubric_details"),     // RubricResult (lib/scoring/types)
+  rubricScoredAt:   timestamp("rubric_scored_at"),
   // AI-скор по данным резюме (hh.ru / анкета) — выставляется в момент приёма
   // отклика, до демо. Шкала 0..100, NULL = не оценивали. Отдельно от aiScore
   // (он считается после прохождения демо и включает ответы на вопросы).
