@@ -16,60 +16,14 @@
 import Anthropic from "@anthropic-ai/sdk"
 import { AI_SAFETY_PROMPT } from "@/lib/ai-safety"
 import { getScoringClient } from "./anthropic-client"
+import {
+  WEIGHT_VALUES, WEIGHT_LABELS,
+  type WeightLevel, type ScoringSpec, type Confidence, type Verdict,
+  type CriterionResult, type RubricResult,
+} from "./types"
 
-export type WeightLevel = "critical" | "important" | "nice" | "irrelevant"
-
-// Веса критериев. «Критично» весит втрое против «желательно», «не важно» = 0.
-export const WEIGHT_VALUES: Record<WeightLevel, number> = {
-  critical: 3, important: 2, nice: 1, irrelevant: 0,
-}
-export const WEIGHT_LABELS: Record<WeightLevel, string> = {
-  critical: "Критично", important: "Важно", nice: "Желательно", irrelevant: "Не важно",
-}
-
-export interface Criterion {
-  key: string
-  label: string
-  weight: WeightLevel
-  hint?: string   // что именно проверять — уходит в промпт
-}
-
-export interface ScoringSpec {
-  vacancyTitle: string
-  positionSummary: string        // сжатые обязанности + требования
-  requiredSkills: string[]
-  niceSkills?: string[]
-  idealProfile?: string          // «описание идеального кандидата» из анкеты
-  minExperienceYears?: number
-  salaryFrom?: number
-  salaryTo?: number
-  location?: string
-  workFormat?: string
-  knockouts?: string[]           // жёсткие стоп-факторы → verdict reject, балл 0
-  criteria: Criterion[]
-}
-
-export type Confidence = "low" | "medium" | "high"
-export type Verdict = "strong" | "maybe" | "weak" | "reject"
-
-export interface CriterionResult {
-  key: string
-  label: string
-  weight: WeightLevel
-  score: number          // 0-100 от модели
-  evidence: string       // цитата/перефраз из резюме или «нет данных»
-  confidence: Confidence
-}
-
-export interface RubricResult {
-  total: number          // 0-100 взвешенный (считается кодом)
-  verdict: Verdict
-  knockoutHit: string | null
-  criteria: CriterionResult[]
-  summary: string
-  model: string
-  cache: { creationTokens: number; readTokens: number }  // диагностика prompt-кэша
-}
+// Реэкспорт типов/констант для серверных потребителей (клиенты импортируют из ./types).
+export * from "./types"
 
 const MODEL = "claude-sonnet-4-20250514"
 

@@ -16,7 +16,7 @@ import { Progress } from "@/components/ui/progress"
 import { cn } from "@/lib/utils"
 import { FlaskConical, Sparkles, Loader2, CheckCircle2, AlertTriangle, XCircle, Quote } from "lucide-react"
 import { MARKETING_SPEC, SAMPLE_CANDIDATES } from "@/lib/scoring/sample-marketing"
-import { WEIGHT_LABELS, type RubricResult, type WeightLevel, type Verdict } from "@/lib/scoring/rubric"
+import { WEIGHT_LABELS, type RubricResult, type WeightLevel, type Verdict } from "@/lib/scoring/types"
 
 const WEIGHT_BADGE: Record<WeightLevel, string> = {
   critical:   "bg-red-500/10 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800",

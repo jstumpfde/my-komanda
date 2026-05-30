@@ -2,7 +2,7 @@
 // (составлена по анкете вакансии на проде) + примеры резюме разного качества.
 // Используется страницей /hr/scoring-lab. Чистые данные, без серверной логики.
 
-import type { ScoringSpec } from "./rubric"
+import type { ScoringSpec } from "./types"
 
 export const MARKETING_SPEC: ScoringSpec = {
   vacancyTitle: "Ассистент по маркетингу (удалённо, B2B) от 85к",

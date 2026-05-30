@@ -6,7 +6,7 @@
 import type Anthropic from "@anthropic-ai/sdk"
 import { AI_SAFETY_PROMPT } from "@/lib/ai-safety"
 import { getScoringClient } from "./anthropic-client"
-import type { ScoringSpec, WeightLevel } from "./rubric"
+import type { ScoringSpec, WeightLevel } from "./types"
 
 // Поля, которые собирает публичная интейк-форма (app/(public)/intake/[token]).
 export interface IntakeData {
