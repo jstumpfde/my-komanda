@@ -14,6 +14,7 @@ import { Separator } from "@/components/ui/separator"
 import { Textarea } from "@/components/ui/textarea"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { RubricShadowSection } from "@/components/candidates/rubric-shadow-section"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -1266,6 +1267,8 @@ export function CandidateDrawer({
                     scoreV2={candidate.aiScoreV2 ?? null}
                   />
                 )}
+                {/* Shadow: рубричное соответствие (параллельно, не влияет на стадию). */}
+                <RubricShadowSection candidateId={candidate.id} />
                 {candidate.aiScore != null ? (
                   <>
                     <div className="flex flex-col items-center gap-2 py-4">
