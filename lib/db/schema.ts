@@ -144,6 +144,10 @@ export const companies = pgTable("companies", {
   trialEndsAt:        timestamp("trial_ends_at"),
   subscriptionStatus: text("subscription_status").default("trial"), // 'trial'|'active'|'paused'|'cancelled'|'expired'
   currentPlanId:      uuid("current_plan_id").references(() => plans.id),
+  // Дата конца оплаченного периода (миграция 0150). Выставляется при оплате
+  // счёта (= invoice.periodEnd). По ней считается отсчёт для платных тарифов и
+  // авто-счёт на продление за 7 дней (cron /api/cron/auto-invoices).
+  currentPeriodEnd:   timestamp("current_period_end"),
   // Telegram bot (multitenant knowledge base assistant) +
   // Группа 34: тот же токен переиспользуется как HR-уведомления, если
   // указан telegramChatId компании. См. lib/telegram/send-to-company.ts.

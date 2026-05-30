@@ -42,13 +42,15 @@ export function SubscriptionBanner() {
   const isExpired = sub.status === "expired"
   const isPaused = sub.status === "paused"
 
-  const trialDays = isTrial && days !== null ? days : null
+  const isActive = sub.status === "active"
+  // Считаем дни и для триала, и для оплаченного периода (currentPeriodEnd).
+  const countDays = (isTrial || isActive) && days !== null ? days : null
   // Окно напоминания — не раньше 7 календарных дней до конца.
   //   7–4 дня  → «ярко» (soft): жёлтая, можно скрыть на сессию.
   //   ≤3 дня   → «сильно» (urgent): оранжевая, жирнее, не скрывается.
   //   истёк/пауза → «жёстко» (hard): красная, не скрывается.
-  const soft   = trialDays !== null && trialDays >= 4 && trialDays <= 7
-  const urgent = trialDays !== null && trialDays <= 3
+  const soft   = countDays !== null && countDays >= 4 && countDays <= 7
+  const urgent = countDays !== null && countDays <= 3
   const hard   = isExpired || isPaused
 
   if (!soft && !urgent && !hard) return null
@@ -59,13 +61,14 @@ export function SubscriptionBanner() {
     return null
   }
 
+  const what = isTrial ? "Пробный период" : "Оплаченный период"
   const message = hard
     ? (isPaused
         ? "Доступ приостановлен. Выберите тариф, чтобы продолжить работу."
         : "Пробный период завершён. Выберите тариф, чтобы продолжить.")
     : days === 0
-      ? "Пробный период заканчивается сегодня — продлите, чтобы не потерять доступ."
-      : `Пробный период заканчивается через ${days} ${plural(days!, "день", "дня", "дней")}.`
+      ? `${what} заканчивается сегодня — продлите, чтобы не потерять доступ.`
+      : `${what} заканчивается через ${days} ${plural(days!, "день", "дня", "дней")}.`
 
   const tone = hard
     ? "bg-red-500/15 text-red-800 dark:text-red-300 border-red-300/50 font-semibold"

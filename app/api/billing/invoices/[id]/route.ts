@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
-import { invoices } from "@/lib/db/schema"
+import { invoices, companies } from "@/lib/db/schema"
 import { eq, and } from "drizzle-orm"
 import { apiError, requireAuth, requireCompany } from "@/lib/api-helpers"
 
@@ -59,6 +59,14 @@ export async function PATCH(
     .returning()
 
   if (!updated) return apiError("Счёт не найден", 404)
+
+  // Оплата счёта = активная подписка с известным концом периода.
+  if (status === "paid" && updated.periodEnd) {
+    await db.update(companies)
+      .set({ currentPeriodEnd: new Date(updated.periodEnd), subscriptionStatus: "active", updatedAt: new Date() })
+      .where(eq(companies.id, updated.companyId))
+  }
+
   return NextResponse.json(updated)
 }
 
