@@ -42,16 +42,20 @@ export function SubscriptionBanner() {
   const isExpired = sub.status === "expired"
   const isPaused = sub.status === "paused"
 
-  // Мягкое предупреждение (trial с остатком ≤ 7 дней) — можно скрыть на сессию.
-  const softWarning = isTrial && days !== null && days <= 7
-  // Жёсткое (истёк/приостановлен) — не скрывается.
-  const hard = isExpired || isPaused
+  const trialDays = isTrial && days !== null ? days : null
+  // Окно напоминания — не раньше 7 календарных дней до конца.
+  //   7–4 дня  → «ярко» (soft): жёлтая, можно скрыть на сессию.
+  //   ≤3 дня   → «сильно» (urgent): оранжевая, жирнее, не скрывается.
+  //   истёк/пауза → «жёстко» (hard): красная, не скрывается.
+  const soft   = trialDays !== null && trialDays >= 4 && trialDays <= 7
+  const urgent = trialDays !== null && trialDays <= 3
+  const hard   = isExpired || isPaused
 
-  if (!softWarning && !hard) return null
+  if (!soft && !urgent && !hard) return null
 
-  // Ключ скрытия зависит от дня — назавтра плашка вернётся.
+  // Скрыть можно только мягкую плашку; ключ зависит от дня — назавтра вернётся.
   const dismissKey = `mk_sub_banner_${sub.status}_${days ?? "x"}`
-  if (softWarning && !hard && (dismissed || (typeof window !== "undefined" && sessionStorage.getItem(dismissKey)))) {
+  if (soft && (dismissed || (typeof window !== "undefined" && sessionStorage.getItem(dismissKey)))) {
     return null
   }
 
@@ -60,12 +64,14 @@ export function SubscriptionBanner() {
         ? "Доступ приостановлен. Выберите тариф, чтобы продолжить работу."
         : "Пробный период завершён. Выберите тариф, чтобы продолжить.")
     : days === 0
-      ? "Пробный период заканчивается сегодня."
+      ? "Пробный период заканчивается сегодня — продлите, чтобы не потерять доступ."
       : `Пробный период заканчивается через ${days} ${plural(days!, "день", "дня", "дней")}.`
 
   const tone = hard
-    ? "bg-red-500/15 text-red-800 dark:text-red-300 border-red-300/50"
-    : "bg-amber-400/20 text-amber-900 dark:text-amber-200 border-amber-400/40"
+    ? "bg-red-500/15 text-red-800 dark:text-red-300 border-red-300/50 font-semibold"
+    : urgent
+      ? "bg-orange-500/20 text-orange-900 dark:text-orange-200 border-orange-400/50 font-semibold"
+      : "bg-amber-400/20 text-amber-900 dark:text-amber-200 border-amber-400/40"
 
   return (
     <div className={`flex items-center justify-between gap-3 border-b px-4 py-1.5 text-sm ${tone}`}>
@@ -77,7 +83,7 @@ export function SubscriptionBanner() {
         <Button asChild size="sm" className="h-7 text-xs">
           <Link href="/settings/billing">{hard ? "Выбрать тариф" : "Продлить"}</Link>
         </Button>
-        {softWarning && !hard && (
+        {soft && (
           <Button
             variant="ghost" size="icon" className="h-7 w-7"
             title="Скрыть до завтра"
