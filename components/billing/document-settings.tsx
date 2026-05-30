@@ -115,25 +115,23 @@ export function DocumentSettings() {
         )}
       </div>
 
-      {/* ЭДО — задел на будущее */}
+      {/* ЭДО — Диадок (Контур). Задел на будущее: подключение API позже. */}
       <div className="space-y-3 max-w-2xl border-t pt-4">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <Label className="text-sm">Электронный документооборот (ЭДО)</Label>
-            <p className="text-xs text-muted-foreground">Обмен документами через оператора ЭДО (Диадок, СБИС и т.п.). Подключение появится позже — пока можно указать реквизиты.</p>
+            <Label className="text-sm">ЭДО через Диадок</Label>
+            <p className="text-xs text-muted-foreground">Обмен счетами и актами через Контур.Диадок. Автоматическая отправка появится позже — пока укажите идентификатор организации в Диадоке.</p>
           </div>
-          <Switch checked={!!s.edoEnabled} onCheckedChange={v => patch({ edoEnabled: v })} />
+          <Switch
+            checked={!!s.edoEnabled}
+            onCheckedChange={v => patch({ edoEnabled: v, ...(v && !s.edoProvider ? { edoProvider: "Диадок" } : {}) })}
+          />
         </div>
         {s.edoEnabled && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label className="text-sm">Оператор ЭДО</Label>
-              <Input value={s.edoProvider ?? ""} onChange={e => patch({ edoProvider: e.target.value })} placeholder="Диадок / СБИС / …" />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-sm">Идентификатор участника</Label>
-              <Input value={s.edoOperatorId ?? ""} onChange={e => patch({ edoOperatorId: e.target.value })} placeholder="2AE..." />
-            </div>
+          <div className="space-y-1.5 max-w-md">
+            <Label className="text-sm">Идентификатор организации в Диадок</Label>
+            <Input value={s.edoOperatorId ?? ""} onChange={e => patch({ edoOperatorId: e.target.value })} placeholder="напр. 2AE3D09F-..." />
+            <p className="text-xs text-muted-foreground">ID участника ЭДО (box_id). В Диадоке: Настройки → Реквизиты организации.</p>
           </div>
         )}
       </div>
