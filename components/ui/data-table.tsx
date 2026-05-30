@@ -55,16 +55,24 @@ export function TableCard({ className, ...props }: React.ComponentProps<typeof C
   return <Card className={cn("py-0 overflow-hidden", className)} {...props} />
 }
 
-// Скролл-контейнер + сама таблица. Липкая шапка работает в паре с maxHeight.
+// Скролл-контейнер + сама таблица.
+// По умолчанию ВНУТРЕННЕЙ вертикальной прокрутки НЕТ — таблица показывает все
+// строки целиком (сколько указано на странице — столько видно), скроллится
+// страница. Горизонтальный скролл остаётся для широких таблиц.
+// maxHeight задаётся ЯВНО только там, где действительно нужна внутренняя
+// прокрутка (тогда же имеет смысл липкая шапка — DataHead sticky).
 export function DataTable({
   className,
-  maxHeight = "60vh",
+  maxHeight,
   containerClassName,
   children,
   ...props
 }: React.ComponentProps<"table"> & { maxHeight?: string; containerClassName?: string }) {
   return (
-    <div className={cn("overflow-auto", containerClassName)} style={{ maxHeight }}>
+    <div
+      className={cn(maxHeight ? "overflow-auto" : "overflow-x-auto", containerClassName)}
+      style={maxHeight ? { maxHeight } : undefined}
+    >
       <table className={cn("w-full", className)} {...props}>
         {children}
       </table>
@@ -73,9 +81,11 @@ export function DataTable({
 }
 
 // Шапка. Дети — <DataHeadCell> / <DataSelectHeadCell> (оборачиваются в <tr>).
-export function DataHead({ className, children }: { className?: string; children: React.ReactNode }) {
+// sticky — липкая шапка; включать ТОЛЬКО вместе с внутренней прокруткой
+// (DataTable maxHeight), иначе строки налезают на шапку при прокрутке страницы.
+export function DataHead({ className, children, sticky }: { className?: string; children: React.ReactNode; sticky?: boolean }) {
   return (
-    <thead className={cn("bg-muted/50 border-b border-t border-border sticky top-0 z-10", className)}>
+    <thead className={cn("bg-muted/50 border-b border-t border-border", sticky && "sticky top-0 z-10", className)}>
       <tr>{children}</tr>
     </thead>
   )
