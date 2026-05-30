@@ -31,6 +31,25 @@ interface DocSettings {
   postalCode: string | null
 }
 
+// Разобрать адрес-блоб компании в индекс/город/адрес: выкинуть страну и
+// боилерплейт, не дублировать город, сократить «административный округ».
+function cleanRussianAddress(blob: string | null, fallbackCity: string | null, fallbackIndex: string | null) {
+  let a = (blob ?? "").trim()
+  const index = a.match(/\b(\d{6})\b/)?.[1] ?? (fallbackIndex ?? "")
+  a = a.replace(/\b\d{6}\b/g, " ")
+  a = a.replace(/российск(?:ая|ой)\s+федерац(?:ия|ии)/gi, " ")
+       .replace(/\bроссия\b/gi, " ")
+       .replace(/столица[^,]*/gi, " ")
+       .replace(/город\s+федерального\s+значения/gi, " ")
+  let city = (fallbackCity ?? "").trim()
+  const cm = a.match(/(?:^|,)\s*(?:г\.?|город)\s+([А-ЯЁ][А-Яа-яЁё-]+)/)
+  if (cm) city = cm[1]
+  if (city) a = a.replace(new RegExp(`(?:г\\.?\\s*|город\\s+)?${city}\\b`, "gi"), " ")
+  a = a.replace(/административный\s+округ/gi, "адм. округ")
+  a = a.replace(/\s*,\s*/g, ", ").replace(/(?:,\s*){2,}/g, ", ").replace(/^[\s,]+|[\s,]+$/g, "").replace(/\s{2,}/g, " ")
+  return { index, city, address: a }
+}
+
 export function DocumentSettings() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -49,10 +68,11 @@ export function DocumentSettings() {
   function pullFromCompany(kind: "legal" | "postal") {
     if (!s) return
     const addr = kind === "legal" ? s.legalAddress : s.postalAddress
+    const { index, city, address } = cleanRussianAddress(addr, s.city, s.postalCode)
     patch({
-      paperInvoiceAddress: addr ?? s.paperInvoiceAddress ?? "",
-      paperInvoiceCity: s.city ?? s.paperInvoiceCity ?? "",
-      paperInvoiceIndex: s.postalCode ?? s.paperInvoiceIndex ?? "",
+      paperInvoiceAddress: address || s.paperInvoiceAddress || "",
+      paperInvoiceCity: city || s.paperInvoiceCity || "",
+      paperInvoiceIndex: index || s.paperInvoiceIndex || "",
     })
     toast.success(kind === "legal" ? "Подтянут юридический адрес" : "Подтянут фактический адрес")
   }

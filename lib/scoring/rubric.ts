@@ -111,12 +111,10 @@ export async function scoreResumeRubric(
     max_tokens: 2000,
     tools: [buildTool(spec)],
     tool_choice: { type: "tool", name: "submit_assessment" },
-    // Спецификация вакансии — в системном блоке с cache_control: одинакова для
-    // всех кандидатов вакансии, поэтому кэшируется и не пересылается каждый раз.
-    system: [
-      { type: "text", text: SYSTEM_INTRO },
-      { type: "text", text: specText, cache_control: { type: "ephemeral" } },
-    ],
+    // Системный промпт — плоской строкой (как в ai-screen-resume), без
+    // cache_control: прокси не обязан его релеить, а каждый кандидат всё равно
+    // считается отдельным запросом.
+    system: `${SYSTEM_INTRO}\n\n${specText}`,
     messages: [
       { role: "user", content: `РЕЗЮМЕ КАНДИДАТА:\n\n${resumeText}` },
     ],

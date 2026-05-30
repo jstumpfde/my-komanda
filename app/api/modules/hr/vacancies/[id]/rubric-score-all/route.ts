@@ -6,7 +6,9 @@ import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { scoreResumeRubric } from "@/lib/scoring/rubric"
 import { buildSpecFromAnketa, buildResumeText } from "@/lib/scoring/vacancy-spec"
 
-const MAX_PER_RUN = 50
+// Малая порция за вызов + параллельный счёт, чтобы уложиться в таймаут шлюза.
+// Остальных добивают повторным нажатием «Дооценить».
+const MAX_PER_RUN = 8
 
 // POST /api/modules/hr/vacancies/[id]/rubric-score-all?force=1
 // Shadow-батч: считает рубричный балл для кандидатов вакансии (по умолчанию —
@@ -47,16 +49,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const hasMore = rows.length > MAX_PER_RUN
     const batch = rows.slice(0, MAX_PER_RUN)
 
-    const ranked: Array<{ id: string; name: string | null; total: number; verdict: string }> = []
-    for (const c of batch) {
-      try {
-        const result = await scoreResumeRubric(spec, buildResumeText(c))
-        await db.update(candidates)
-          .set({ rubricScore: result.total, rubricDetails: result, rubricScoredAt: new Date() })
-          .where(eq(candidates.id, c.id))
-        ranked.push({ id: c.id, name: c.name, total: result.total, verdict: result.verdict })
-      } catch { /* пропускаем сбойного кандидата */ }
-    }
+    // Параллельно (быстро укладываемся в таймаут), сбойные кандидаты пропускаем.
+    const settled = await Promise.allSettled(batch.map(async c => {
+      const result = await scoreResumeRubric(spec, buildResumeText(c))
+      await db.update(candidates)
+        .set({ rubricScore: result.total, rubricDetails: result, rubricScoredAt: new Date() })
+        .where(eq(candidates.id, c.id))
+      return { id: c.id, name: c.name, total: result.total, verdict: result.verdict }
+    }))
+    const ranked = settled.flatMap(s => s.status === "fulfilled" ? [s.value] : [])
 
     ranked.sort((a, b) => b.total - a.total)
     return apiSuccess({ scored: ranked.length, hasMore, ranked })
