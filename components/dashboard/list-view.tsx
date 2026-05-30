@@ -151,7 +151,7 @@ export function ListView({
   const showCity         = settings.showCity
   const showScore        = settings.showScore          // AI-оцен. (оценка анкеты)
   const showResumeScore  = settings.showResumeScore !== false  // AI-резм. (undefined = вкл)
-  const showRubricScore  = settings.showRubricScore === true   // Рубрика (тест; по умолч. выкл)
+  const showRubricScore  = settings.showRubricScore !== false  // Рубрика (по умолчанию вкл, как AI-резм)
   const showSalary       = settings.showSalary || settings.showSalaryFull
   const showSource       = settings.showSource
   const showActions      = settings.showActions

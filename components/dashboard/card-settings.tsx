@@ -33,7 +33,6 @@ interface CardSettingsProps {
 
 const settingsLabels: { key: keyof CardDisplaySettings; label: string }[] = [
   { key: "showScore", label: "AI скоринг" },
-  { key: "showRubricScore", label: "Рубрика" },
   { key: "showSalaryFull", label: "Зарплата" },
   { key: "showCity", label: "Город" },
 
