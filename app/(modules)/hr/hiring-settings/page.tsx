@@ -22,8 +22,21 @@ import { IntegrationsContent } from "@/components/hr/integrations-content"
 import { AiAbuseModeSettings } from "@/components/company/ai-abuse-mode-settings"
 import { SendDelaySettings } from "@/components/company/send-delay-settings"
 import { TrashRetentionSettings } from "@/components/company/trash-retention-settings"
+import type { CompanyHiringDefaults, VacancyStopFactors } from "@/lib/db/schema"
 
 // ─── Constants ─────────────────────────────────────────────────────────────
+
+const HIRING_DEFAULTS_URL = "/api/modules/hr/company/hiring-defaults"
+
+async function patchHiringDefaults(patch: Partial<CompanyHiringDefaults>) {
+  const res = await fetch(HIRING_DEFAULTS_URL, {
+    method:  "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body:    JSON.stringify(patch),
+  })
+  if (!res.ok) throw new Error("save_failed")
+  return res.json() as Promise<{ hiringDefaults: CompanyHiringDefaults }>
+}
 
 const INTERVIEW_DAYS = [
   { id: "mon", label: "Пн" }, { id: "tue", label: "Вт" }, { id: "wed", label: "Ср" },
@@ -132,6 +145,10 @@ export default function HiringSettingsPage() {
   const [maxPerDay, setMaxPerDay] = useState("8")
   const [remind24h, setRemind24h] = useState(true)
   const [remind2h, setRemind2h] = useState(true)
+  const [interviewMethods, setInterviewMethods] = useState<string[]>(["zoom", "meet", "telegram", "phone", "office"])
+  const [officeAddress, setOfficeAddress] = useState("")
+  const [timezone, setTimezone] = useState("Europe/Moscow")
+  const [savingSchedule, setSavingSchedule] = useState(false)
 
   // ── General: company selector toggle ──
   const [showCompanySelector, setShowCompanySelector] = useState(false)
@@ -204,44 +221,52 @@ export default function HiringSettingsPage() {
     toast.success("Настройки обратной связи сохранены")
   }
 
-  // ── Data retention ──
+  // ── Data retention (ФЗ-152) — сохраняется на сервер (только хранение значения) ──
   const [dataRetention, setDataRetention] = useState("6months")
-  useEffect(() => {
-    const saved = localStorage.getItem("mk_hr_data_retention")
-    if (saved) setDataRetention(saved)
-  }, [])
-  const saveDataRetention = (val: string) => {
+  const [savingRetention, setSavingRetention] = useState(false)
+  const saveDataRetention = async (val: string) => {
     setDataRetention(val)
-    localStorage.setItem("mk_hr_data_retention", val)
-    toast.success("Настройки хранения данных сохранены")
+    setSavingRetention(true)
+    try {
+      await patchHiringDefaults({ dataRetention: val })
+      toast.success("Настройки хранения данных сохранены")
+    } catch {
+      toast.error("Не удалось сохранить")
+    } finally {
+      setSavingRetention(false)
+    }
   }
 
-  // ── Webhooks ──
+  // ── Webhooks (на сервер) ──
   const [webhookUrl, setWebhookUrl] = useState("")
   const [webhookEvents, setWebhookEvents] = useState<Record<string, boolean>>({ new_candidate: false, ai_screening: false, stage_change: false, offer: false, reject: false })
-  useEffect(() => {
+  const [savingWebhook, setSavingWebhook] = useState(false)
+  const saveWebhooks = async () => {
+    setSavingWebhook(true)
     try {
-      const saved = localStorage.getItem("mk_hr_webhooks")
-      if (saved) { const p = JSON.parse(saved); setWebhookUrl(p.url || ""); setWebhookEvents(p.events || {}) }
-    } catch {}
-  }, [])
-  const saveWebhooks = () => {
-    localStorage.setItem("mk_hr_webhooks", JSON.stringify({ url: webhookUrl, events: webhookEvents }))
-    toast.success("Настройки webhook сохранены")
+      await patchHiringDefaults({ webhooks: { url: webhookUrl, events: webhookEvents } })
+      toast.success("Настройки webhook сохранены")
+    } catch {
+      toast.error("Не удалось сохранить")
+    } finally {
+      setSavingWebhook(false)
+    }
   }
 
-  // ── Bitrix24 ──
+  // ── Bitrix24 (на сервер) ──
   const [bitrixUrl, setBitrixUrl] = useState("")
   const [bitrixTrigger, setBitrixTrigger] = useState("offer")
-  useEffect(() => {
+  const [savingBitrix, setSavingBitrix] = useState(false)
+  const saveBitrix = async () => {
+    setSavingBitrix(true)
     try {
-      const saved = localStorage.getItem("mk_hr_bitrix_integration")
-      if (saved) { const p = JSON.parse(saved); setBitrixUrl(p.url || ""); setBitrixTrigger(p.trigger || "offer") }
-    } catch {}
-  }, [])
-  const saveBitrix = () => {
-    localStorage.setItem("mk_hr_bitrix_integration", JSON.stringify({ url: bitrixUrl, trigger: bitrixTrigger }))
-    toast.success("Интеграция с Битрикс24 сохранена")
+      await patchHiringDefaults({ bitrix: { url: bitrixUrl, trigger: bitrixTrigger } })
+      toast.success("Интеграция с Битрикс24 сохранена")
+    } catch {
+      toast.error("Не удалось сохранить")
+    } finally {
+      setSavingBitrix(false)
+    }
   }
 
   // ── Funnel state ──
@@ -250,6 +275,7 @@ export default function HiringSettingsPage() {
   const [autoInvite, setAutoInvite] = useState(false)
   const [minScore, setMinScore] = useState("70")
   const [autoReject, setAutoReject] = useState(false)
+  const [savingFunnel, setSavingFunnel] = useState(false)
 
   // ── Messages state ──
   const [templates, setTemplates] = useState<MessageTemplate[]>(DEFAULT_TEMPLATES)
@@ -274,8 +300,10 @@ export default function HiringSettingsPage() {
   const [sfCitizenshipValue, setSfCitizenshipValue] = useState("")
   const [sfSalary, setSfSalary] = useState(false)
   const [sfSalaryValue, setSfSalaryValue] = useState("")
+  // Тумблер «Применять стоп-факторы автоматически при создании вакансии».
   const [sfAutoReject, setSfAutoReject] = useState(false)
   const [sfRejectTemplate, setSfRejectTemplate] = useState("Вежливый отказ")
+  const [savingStopFactors, setSavingStopFactors] = useState(false)
 
   // ── Branding state ──
   const [brandCompanyName, setBrandCompanyName] = useState("")
@@ -288,6 +316,167 @@ export default function HiringSettingsPage() {
   // ── Helpers ──
   const toggleDay = (id: string) =>
     setInterviewDays((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n })
+
+  const toggleInterviewMethod = (id: string) =>
+    setInterviewMethods((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id])
+
+  // ── Гидратация всех серверных дефолтов одним GET ──
+  useEffect(() => {
+    fetch(HIRING_DEFAULTS_URL)
+      .then((r) => r.ok ? r.json() : null)
+      .then((d: { hiringDefaults?: CompanyHiringDefaults } | null) => {
+        const hd = d?.hiringDefaults
+        if (!hd) return
+
+        // Расписание
+        const s = hd.schedule
+        if (s) {
+          if (s.slotDuration) setSlotDuration(s.slotDuration)
+          if (s.bufferTime) setBufferTime(s.bufferTime)
+          if (s.interviewFrom) setInterviewFrom(s.interviewFrom)
+          if (s.interviewTo) setInterviewTo(s.interviewTo)
+          if (Array.isArray(s.interviewDays)) setInterviewDays(new Set(s.interviewDays))
+          if (s.maxPerDay) setMaxPerDay(s.maxPerDay)
+          if (typeof s.remind24h === "boolean") setRemind24h(s.remind24h)
+          if (typeof s.remind2h === "boolean") setRemind2h(s.remind2h)
+          if (Array.isArray(s.interviewMethods)) setInterviewMethods(s.interviewMethods)
+          if (typeof s.officeAddress === "string") setOfficeAddress(s.officeAddress)
+          if (s.timezone) setTimezone(s.timezone)
+        }
+
+        // Webhooks
+        if (hd.webhooks) {
+          if (hd.webhooks.url) setWebhookUrl(hd.webhooks.url)
+          if (hd.webhooks.events) setWebhookEvents((prev) => ({ ...prev, ...hd.webhooks!.events }))
+        }
+
+        // Битрикс24
+        if (hd.bitrix) {
+          if (hd.bitrix.url) setBitrixUrl(hd.bitrix.url)
+          if (hd.bitrix.trigger) setBitrixTrigger(hd.bitrix.trigger)
+        }
+
+        // Хранение данных
+        if (hd.dataRetention) setDataRetention(hd.dataRetention)
+
+        // Стоп-факторы-дефолты (VacancyStopFactors → плоские sf*)
+        const sf = hd.stopFactorsDefaults
+        if (sf) {
+          if (sf.city?.enabled) {
+            setSfCity(true)
+            if (sf.city.allowedCities?.length) setSfCityValue(sf.city.allowedCities.join(", "))
+          }
+          if (sf.format?.enabled) setSfFormat(true)
+          if (sf.age?.enabled) {
+            setSfAge(true)
+            if (sf.age.minAge != null) setSfAgeMin(String(sf.age.minAge))
+            if (sf.age.maxAge != null) setSfAgeMax(String(sf.age.maxAge))
+          }
+          if (sf.experience?.enabled) {
+            setSfExperience(true)
+            if (sf.experience.minYears != null) setSfExpValue(String(sf.experience.minYears))
+          }
+          if (sf.documents?.enabled) setSfDocs(true)
+          if (sf.citizenship?.enabled) {
+            setSfCitizenship(true)
+            if (sf.citizenship.allowed?.length) setSfCitizenshipValue(sf.citizenship.allowed.join(", "))
+          }
+          if (sf.salaryExpectation?.enabled) {
+            setSfSalary(true)
+            if (sf.salaryExpectation.maxAmount != null) setSfSalaryValue(String(sf.salaryExpectation.maxAmount))
+          }
+        }
+        if (typeof hd.applyStopFactorsOnCreate === "boolean") setSfAutoReject(hd.applyStopFactorsOnCreate)
+
+        // Автоматизация воронки
+        if (hd.automation) {
+          if (typeof hd.automation.autoDemo === "boolean") setAutoDemo(hd.automation.autoDemo)
+          if (typeof hd.automation.autoInvite === "boolean") setAutoInvite(hd.automation.autoInvite)
+          if (hd.automation.minScore != null) setMinScore(String(hd.automation.minScore))
+          if (typeof hd.automation.autoReject === "boolean") setAutoReject(hd.automation.autoReject)
+        }
+        if (hd.funnelScenario) setSelectedScenario(hd.funnelScenario)
+      })
+      .catch(() => {})
+  }, [])
+
+  // ── Сохранение: Расписание ──
+  const handleSaveSchedule = async () => {
+    setSavingSchedule(true)
+    try {
+      await patchHiringDefaults({
+        schedule: {
+          slotDuration,
+          bufferTime,
+          interviewFrom,
+          interviewTo,
+          interviewDays: Array.from(interviewDays),
+          maxPerDay,
+          remind24h,
+          remind2h,
+          timezone,
+          interviewMethods,
+          officeAddress,
+        },
+      })
+      toast.success("Настройки интервью сохранены")
+    } catch {
+      toast.error("Не удалось сохранить")
+    } finally {
+      setSavingSchedule(false)
+    }
+  }
+
+  // ── Сохранение: Стоп-факторы-дефолты (плоские sf* → VacancyStopFactors) ──
+  const handleSaveStopFactors = async () => {
+    setSavingStopFactors(true)
+    const stopFactorsDefaults: VacancyStopFactors = {
+      city: sfCity
+        ? { enabled: true, allowedCities: sfCityValue ? sfCityValue.split(",").map((c) => c.trim()).filter(Boolean) : [] }
+        : { enabled: false },
+      format: { enabled: sfFormat },
+      age: sfAge
+        ? { enabled: true, minAge: Number(sfAgeMin) || undefined, maxAge: Number(sfAgeMax) || undefined }
+        : { enabled: false },
+      experience: sfExperience
+        ? { enabled: true, minYears: Number(sfExpValue) || undefined }
+        : { enabled: false },
+      documents: { enabled: sfDocs },
+      citizenship: sfCitizenship
+        ? { enabled: true, allowed: sfCitizenshipValue ? sfCitizenshipValue.split(",").map((c) => c.trim()).filter(Boolean) : [] }
+        : { enabled: false },
+      salaryExpectation: sfSalary
+        ? { enabled: true, maxAmount: Number(sfSalaryValue) || undefined }
+        : { enabled: false },
+    }
+    try {
+      // TODO(next): копировать эти дефолты (stopFactorsJson) в новую вакансию при
+      // создании, если applyStopFactorsOnCreate=true — делается отдельным заходом
+      // в app/api/modules/hr/vacancies/route.ts (POST). Сейчас только хранение.
+      await patchHiringDefaults({ stopFactorsDefaults, applyStopFactorsOnCreate: sfAutoReject })
+      toast.success("Стоп-факторы сохранены")
+    } catch {
+      toast.error("Не удалось сохранить")
+    } finally {
+      setSavingStopFactors(false)
+    }
+  }
+
+  // ── Сохранение: Автоматизация воронки + сценарий ──
+  const handleSaveFunnel = async () => {
+    setSavingFunnel(true)
+    try {
+      await patchHiringDefaults({
+        automation: { autoDemo, autoInvite, minScore: Number(minScore) || undefined, autoReject },
+        funnelScenario: selectedScenario,
+      })
+      toast.success("Настройки воронки сохранены")
+    } catch {
+      toast.error("Ошибка сохранения")
+    } finally {
+      setSavingFunnel(false)
+    }
+  }
 
   const openNewTemplate = () => {
     setEditingTemplate(null)
@@ -468,7 +657,7 @@ export default function HiringSettingsPage() {
                 <CardDescription>В соответствии с ФЗ-152 персональные данные отказанных кандидатов будут автоматически удалены</CardDescription>
               </CardHeader>
               <CardContent>
-                <Select value={dataRetention} onValueChange={saveDataRetention}>
+                <Select value={dataRetention} onValueChange={saveDataRetention} disabled={savingRetention}>
                   <SelectTrigger className="w-[280px] h-9"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="immediate">Сразу после отказа</SelectItem>
@@ -506,7 +695,7 @@ export default function HiringSettingsPage() {
                     ))}
                   </div>
                 </div>
-                <Button size="sm" className="h-8 text-xs" onClick={saveWebhooks}>Сохранить</Button>
+                <Button size="sm" className="h-8 text-xs" onClick={saveWebhooks} disabled={savingWebhook}>Сохранить</Button>
               </CardContent>
             </Card>
 
@@ -532,7 +721,7 @@ export default function HiringSettingsPage() {
                     </SelectContent>
                   </Select>
                 </div>
-                <Button size="sm" className="h-8 text-xs" onClick={saveBitrix}>Сохранить</Button>
+                <Button size="sm" className="h-8 text-xs" onClick={saveBitrix} disabled={savingBitrix}>Сохранить</Button>
               </CardContent>
             </Card>
 
@@ -570,7 +759,12 @@ export default function HiringSettingsPage() {
                         { id: "office",    label: "Встреча в офисе" },
                       ].map(t => (
                         <label key={t.id} className="flex items-center gap-2 text-sm">
-                          <input type="checkbox" defaultChecked className="rounded" />
+                          <input
+                            type="checkbox"
+                            checked={interviewMethods.includes(t.id)}
+                            onChange={() => toggleInterviewMethod(t.id)}
+                            className="rounded"
+                          />
                           {t.label}
                         </label>
                       ))}
@@ -579,12 +773,14 @@ export default function HiringSettingsPage() {
                         <Textarea
                           placeholder="Москва, ул. Тверская, 1, БЦ «Альфа», 3 этаж"
                           rows={2}
+                          value={officeAddress}
+                          onChange={(e) => setOfficeAddress(e.target.value)}
                           className="text-sm bg-[var(--input-bg)]"
                         />
                       </div>
                       <div className="space-y-1.5 pt-2">
                         <Label className="text-xs text-muted-foreground">Часовой пояс HR</Label>
-                        <Select defaultValue="Europe/Moscow">
+                        <Select value={timezone} onValueChange={setTimezone}>
                           <SelectTrigger className="h-9 text-sm bg-[var(--input-bg)] w-full"><SelectValue /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="Europe/Kaliningrad">Калининград (UTC+2)</SelectItem>
@@ -747,7 +943,7 @@ export default function HiringSettingsPage() {
                   </Card>
 
                   <div className="flex justify-end">
-                    <Button className="gap-2" onClick={() => toast.success("Настройки интервью сохранены")}>
+                    <Button className="gap-2" onClick={handleSaveSchedule} disabled={savingSchedule}>
                       <Save className="size-4" />Сохранить
                     </Button>
                   </div>
@@ -825,37 +1021,7 @@ export default function HiringSettingsPage() {
                   </Card>
 
                   <div className="flex justify-end">
-                    <Button className="gap-2" onClick={async () => {
-                      try {
-                        const stages = FUNNEL_SCENARIOS[selectedScenario].stages
-                        const stagesPayload = stages.map((title, i) => ({
-                          title,
-                          slug: title.toLowerCase().replace(/[^a-zа-яё0-9]/gi, "_").replace(/_+/g, "_"),
-                          sort_order: i,
-                          color: i === stages.length - 1 ? "#22C55E" : i === 0 ? "#3B82F6" : "#8B5CF6",
-                        }))
-                        // Get existing stages to update or create
-                        const res = await fetch("/api/funnel-stages")
-                        if (res.ok) {
-                          const existing = await res.json()
-                          if (Array.isArray(existing) && existing.length > 0) {
-                            const updatePayload = existing.map((s: { id: string }, i: number) => ({
-                              id: s.id,
-                              title: stagesPayload[i]?.title ?? s.id,
-                              slug: stagesPayload[i]?.slug ?? "stage_" + i,
-                              sort_order: i,
-                              color: stagesPayload[i]?.color ?? "#3B82F6",
-                            }))
-                            await fetch("/api/funnel-stages", {
-                              method: "PUT",
-                              headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify(updatePayload),
-                            })
-                          }
-                        }
-                        toast.success("Настройки воронки сохранены")
-                      } catch { toast.error("Ошибка сохранения") }
-                    }}>
+                    <Button className="gap-2" onClick={handleSaveFunnel} disabled={savingFunnel}>
                       <Save className="size-4" />Сохранить
                     </Button>
                   </div>
@@ -1150,7 +1316,7 @@ export default function HiringSettingsPage() {
                   </Card>
 
                   <div className="flex justify-end">
-                    <Button className="gap-2" onClick={() => toast.success("Стоп-факторы сохранены")}>
+                    <Button className="gap-2" onClick={handleSaveStopFactors} disabled={savingStopFactors}>
                       <Save className="size-4" />Сохранить
                     </Button>
                   </div>

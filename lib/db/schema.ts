@@ -83,6 +83,38 @@ export interface CompanyBrandingExtra {
   fontFamily?:  string  // "inter" | "manrope" | "ibm-plex" | "roboto"
 }
 
+// ── CompanyHiringDefaults (drizzle/0156) ──
+// Дефолты компании для всех вакансий (HR → Настройки найма).
+// Хранится в companies.hiring_defaults_json. VacancyStopFactors определён ниже
+// в этом же модуле (типы хойстятся, порядок объявления не важен).
+export interface CompanyHiringDefaults {
+  schedule?: {
+    slotDuration?:     string
+    bufferTime?:       string
+    interviewFrom?:    string
+    interviewTo?:      string
+    interviewDays?:    string[]
+    maxPerDay?:        string
+    remind24h?:        boolean
+    remind2h?:         boolean
+    timezone?:         string
+    interviewMethods?: string[]
+    officeAddress?:    string
+  }
+  stopFactorsDefaults?:      VacancyStopFactors
+  applyStopFactorsOnCreate?: boolean
+  automation?: {
+    autoDemo?:   boolean
+    autoInvite?: boolean
+    minScore?:   number
+    autoReject?: boolean
+  }
+  funnelScenario?: string
+  dataRetention?:  string
+  webhooks?: { url?: string; events?: Record<string, boolean> }
+  bitrix?:   { url?: string; trigger?: string }
+}
+
 export const companies = pgTable("companies", {
   id:                 uuid("id").primaryKey().defaultRandom(),
   name:               text("name").notNull(),
@@ -181,6 +213,8 @@ export const companies = pgTable("companies", {
   // удаляет вакансии навсегда, когда deleted_at старше trash_retention_days.
   // Допустимые значения 1/3/7/14/30/60/90, дефолт 30.
   trashRetentionDays:       integer("trash_retention_days").notNull().default(30),
+  // Дефолты найма (расписание/webhooks/битрикс/хранение/стоп-факторы/автоматизация) (drizzle/0156)
+  hiringDefaultsJson:       jsonb("hiring_defaults_json").$type<CompanyHiringDefaults>().notNull().default({}),
   // Корзина компаний (миграция 0148): NULL — активна; не-NULL — в корзине,
   // cron trash-cleanup удалит навсегда через trash_retention_days. Признак
   // корзины — deleted_at (как у вакансий), отдельного статуса не вводим.
