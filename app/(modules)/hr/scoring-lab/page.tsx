@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
 import { Progress } from "@/components/ui/progress"
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 import { FlaskConical, Sparkles, Loader2, CheckCircle2, AlertTriangle, XCircle, Quote, ChevronDown, ChevronUp } from "lucide-react"
 import { MARKETING_SPEC, SAMPLE_CANDIDATES } from "@/lib/scoring/sample-marketing"
@@ -169,10 +170,16 @@ export default function ScoringLabPage() {
                               </button>
                             )}
                           </CardTitle>
-                          <Button size="sm" variant="outline" className="gap-1.5" disabled={st.loading} onClick={() => score(c.id)}>
-                            {st.loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-                            {st.result ? "Переоценить" : "Оценить"}
-                          </Button>
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button size="icon" variant="outline" className="h-8 w-8 shrink-0" disabled={st.loading} onClick={() => score(c.id)}>
+                                  {st.loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>{st.result ? "Переоценить" : "Оценить"}</TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
                         </div>
                       </CardHeader>
                       <CardContent className="space-y-3">
