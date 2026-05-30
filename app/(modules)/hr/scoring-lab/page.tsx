@@ -3,6 +3,9 @@
 // Лаборатория скоринга (прототип): спецификация вакансии «Помощник по маркетингу»
 // + примеры резюме. Движок реально зовёт Claude и показывает раскладку «почему N%».
 // Открыть: /hr/scoring-lab
+//
+// Компактный вид: балл + вердикт показываются в шапке кандидата (как будет в
+// реальной карточке), детальная раскладка сворачивается/раскрывается по клику.
 
 import { useState } from "react"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
@@ -14,7 +17,7 @@ import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
 import { Progress } from "@/components/ui/progress"
 import { cn } from "@/lib/utils"
-import { FlaskConical, Sparkles, Loader2, CheckCircle2, AlertTriangle, XCircle, Quote } from "lucide-react"
+import { FlaskConical, Sparkles, Loader2, CheckCircle2, AlertTriangle, XCircle, Quote, ChevronDown, ChevronUp } from "lucide-react"
 import { MARKETING_SPEC, SAMPLE_CANDIDATES } from "@/lib/scoring/sample-marketing"
 import { WEIGHT_LABELS, type RubricResult, type WeightLevel, type Verdict } from "@/lib/scoring/types"
 
@@ -25,11 +28,11 @@ const WEIGHT_BADGE: Record<WeightLevel, string> = {
   irrelevant: "bg-muted text-muted-foreground border-border",
 }
 
-const VERDICT_CFG: Record<Verdict, { label: string; color: string; icon: typeof CheckCircle2 }> = {
-  strong: { label: "Сильное соответствие", color: "text-emerald-600 dark:text-emerald-400", icon: CheckCircle2 },
-  maybe:  { label: "Под вопросом",          color: "text-amber-600 dark:text-amber-400",   icon: AlertTriangle },
-  weak:   { label: "Слабое соответствие",   color: "text-muted-foreground",                icon: AlertTriangle },
-  reject: { label: "Стоп-фактор — отказ",   color: "text-red-600 dark:text-red-400",        icon: XCircle },
+const VERDICT_CFG: Record<Verdict, { label: string; short: string; color: string; chip: string; icon: typeof CheckCircle2 }> = {
+  strong: { label: "Сильное соответствие", short: "сильный",      color: "text-emerald-600 dark:text-emerald-400", chip: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800", icon: CheckCircle2 },
+  maybe:  { label: "Под вопросом",          short: "под вопросом", color: "text-amber-600 dark:text-amber-400",     chip: "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800",       icon: AlertTriangle },
+  weak:   { label: "Слабое соответствие",   short: "слабый",       color: "text-muted-foreground",                  chip: "bg-muted text-muted-foreground border-border",                                                    icon: AlertTriangle },
+  reject: { label: "Стоп-фактор — отказ",   short: "отказ",        color: "text-red-600 dark:text-red-400",         chip: "bg-red-500/10 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800",                  icon: XCircle },
 }
 
 function scoreColor(score: number) {
@@ -43,11 +46,12 @@ interface CardState {
   loading: boolean
   result: RubricResult | null
   error: string | null
+  expanded: boolean
 }
 
 export default function ScoringLabPage() {
   const [cards, setCards] = useState<Record<string, CardState>>(() =>
-    Object.fromEntries(SAMPLE_CANDIDATES.map(c => [c.id, { resume: c.resume, loading: false, result: null, error: null }])),
+    Object.fromEntries(SAMPLE_CANDIDATES.map(c => [c.id, { resume: c.resume, loading: false, result: null, error: null, expanded: false }])),
   )
 
   function patch(id: string, p: Partial<CardState>) {
@@ -73,6 +77,15 @@ export default function ScoringLabPage() {
   async function scoreAll() {
     for (const c of SAMPLE_CANDIDATES) await score(c.id)
   }
+
+  // Раскрыть/свернуть все оценённые карточки.
+  const anyExpanded = Object.values(cards).some(c => c.result && c.expanded)
+  function toggleAll() {
+    setCards(prev => Object.fromEntries(
+      Object.entries(prev).map(([id, c]) => [id, { ...c, expanded: c.result ? !anyExpanded : c.expanded }]),
+    ))
+  }
+  const scoredCount = Object.values(cards).filter(c => c.result).length
 
   return (
     <SidebarProvider defaultOpen={true}>
@@ -123,6 +136,11 @@ export default function ScoringLabPage() {
                   <Button onClick={scoreAll} className="w-full gap-1.5">
                     <Sparkles className="w-4 h-4" />Оценить всех
                   </Button>
+                  {scoredCount > 0 && (
+                    <Button onClick={toggleAll} variant="outline" className="w-full gap-1.5">
+                      {anyExpanded ? <><ChevronUp className="w-4 h-4" />Свернуть все</> : <><ChevronDown className="w-4 h-4" />Раскрыть все</>}
+                    </Button>
+                  )}
                 </CardContent>
               </Card>
 
@@ -130,17 +148,30 @@ export default function ScoringLabPage() {
               <div className="space-y-4">
                 {SAMPLE_CANDIDATES.map(c => {
                   const st = cards[c.id]
+                  const v = st.result ? VERDICT_CFG[st.result.verdict] : null
                   return (
                     <Card key={c.id}>
                       <CardHeader className="pb-3">
                         <div className="flex items-center justify-between gap-3 flex-wrap">
-                          <CardTitle className="text-base flex items-center gap-2">
+                          <CardTitle className="text-base flex items-center gap-2 flex-wrap">
                             {c.label}
                             <span className="text-xs font-normal text-muted-foreground">({c.hint})</span>
+                            {/* Балл + вердикт прямо в шапке, кликабельно → раскрыть разбор */}
+                            {st.result && v && (
+                              <button
+                                type="button"
+                                onClick={() => patch(c.id, { expanded: !st.expanded })}
+                                className={cn("inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold", v.chip)}
+                              >
+                                <span className="tabular-nums">{st.result.total}%</span>
+                                <span className="font-medium">· {v.short}</span>
+                                {st.expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                              </button>
+                            )}
                           </CardTitle>
                           <Button size="sm" variant="outline" className="gap-1.5" disabled={st.loading} onClick={() => score(c.id)}>
                             {st.loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-                            Оценить
+                            {st.result ? "Переоценить" : "Оценить"}
                           </Button>
                         </div>
                       </CardHeader>
@@ -153,7 +184,7 @@ export default function ScoringLabPage() {
 
                         {st.error && <p className="text-sm text-red-600 dark:text-red-400">{st.error}</p>}
 
-                        {st.result && <ResultView result={st.result} />}
+                        {st.result && st.expanded && <ResultDetails result={st.result} />}
                       </CardContent>
                     </Card>
                   )
@@ -167,20 +198,10 @@ export default function ScoringLabPage() {
   )
 }
 
-function ResultView({ result }: { result: RubricResult }) {
-  const v = VERDICT_CFG[result.verdict]
-  const VIcon = v.icon
+// Детальная раскладка (раскрывается по клику на бейдж балла).
+function ResultDetails({ result }: { result: RubricResult }) {
   return (
     <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3">
-      {/* Итог */}
-      <div className="flex items-center gap-3">
-        <div className={cn("text-3xl font-bold tabular-nums", scoreColor(result.total))}>{result.total}<span className="text-lg">%</span></div>
-        <div className="flex items-center gap-1.5">
-          <VIcon className={cn("w-4 h-4", v.color)} />
-          <span className={cn("text-sm font-medium", v.color)}>{v.label}</span>
-        </div>
-      </div>
-
       {result.knockoutHit && (
         <div className="flex items-start gap-2 rounded-md bg-red-500/10 border border-red-200 dark:border-red-800 px-3 py-2 text-sm text-red-700 dark:text-red-400">
           <XCircle className="w-4 h-4 mt-0.5 shrink-0" />
@@ -190,7 +211,6 @@ function ResultView({ result }: { result: RubricResult }) {
 
       <p className="text-sm text-foreground">{result.summary}</p>
 
-      {/* Раскладка по критериям */}
       <div className="space-y-2.5 pt-1">
         {result.criteria.map(c => (
           <div key={c.key} className="space-y-1">
