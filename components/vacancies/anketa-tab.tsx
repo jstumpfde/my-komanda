@@ -1714,6 +1714,9 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
           </div>
           <TagInputWithSuggestions tags={data.unacceptableSkills} onChange={v => set("unacceptableSkills", v)} placeholder="Что неприемлемо..." suggestions={UNACCEPTABLE_SUGGESTIONS} customType="skill" />
         </div>
+        <p className="text-[11px] text-muted-foreground leading-snug">
+          Основные настройки AI-оценки — в блоке «AI-профиль кандидата» ниже; эти поля используются как запасной вариант.
+        </p>
 
         {/* Stop factors */}
         <div className="space-y-2 pt-2 border-t">
@@ -2386,7 +2389,9 @@ function AiProfileSection({ data, set }: {
   data: AnketaData
   set: <K extends keyof AnketaData>(key: K, value: AnketaData[K]) => void
 }) {
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(true)
+  // Индекс свежедобавленного критерия — на него ставим autoFocus
+  const [focusCriterionIdx, setFocusCriterionIdx] = useState<number | null>(null)
 
   const hasSomeData = data.aiIdealProfile || data.aiRequiredHardSkills.length > 0
     || data.aiStopFactors.length > 0 || data.aiMinExperience
@@ -2444,53 +2449,9 @@ function AiProfileSection({ data, set }: {
             </Button>
           )}
 
-          {/* Min experience */}
+          {/* Идеальный кандидат — общее описание в свободной форме */}
           <div className="space-y-1.5">
-            <Label className="text-xs">Минимальный опыт для AI-фильтра (лет)</Label>
-            <Input
-              type="number"
-              min={0}
-              value={data.aiMinExperience}
-              onChange={e => set("aiMinExperience", e.target.value)}
-              placeholder="0"
-              className="h-9 bg-[var(--input-bg)] border border-input w-24"
-            />
-            <p className="text-[10px] text-muted-foreground">AI будет автоматически снижать рейтинг кандидатам с опытом менее указанного</p>
-          </div>
-
-          {/* Required hard skills */}
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-2">
-              <Label className="text-xs">Обязательные компетенции (hard skills)</Label>
-              <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-primary border-primary/30">AI-скрининг</Badge>
-            </div>
-            <TagInput
-              tags={data.aiRequiredHardSkills}
-              onChange={v => set("aiRequiredHardSkills", v)}
-              placeholder="Добавить навык..."
-              customType="skill"
-            />
-            <p className="text-[10px] text-muted-foreground">Кандидат без этих навыков получит рейтинг ниже 50%</p>
-          </div>
-
-          {/* AI stop factors */}
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-2">
-              <Label className="text-xs text-destructive/80">Автоматический отказ — стоп-факторы</Label>
-              <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-primary border-primary/30">AI-скрининг</Badge>
-            </div>
-            <TagInput
-              tags={data.aiStopFactors}
-              onChange={v => set("aiStopFactors", v)}
-              placeholder="Нет опыта B2B, Нет опыта управления..."
-              customType="stop_factor"
-            />
-            <p className="text-[10px] text-muted-foreground">Если у кандидата есть хотя бы один стоп-фактор — автоматический отказ (рейтинг 0)</p>
-          </div>
-
-          {/* Ideal profile */}
-          <div className="space-y-1.5">
-            <Label className="text-xs">Описание идеального кандидата</Label>
+            <Label className="text-xs">Идеальный кандидат (в свободной форме)</Label>
             <Textarea
               value={data.aiIdealProfile}
               onChange={e => set("aiIdealProfile", e.target.value)}
@@ -2501,9 +2462,64 @@ function AiProfileSection({ data, set }: {
             <p className="text-[10px] text-muted-foreground">AI будет сравнивать каждое резюме с этим описанием</p>
           </div>
 
-          {/* AI weights */}
-          <div className="space-y-2">
-            <Label className="text-xs font-semibold">Приоритеты оценки</Label>
+          {/* ── Подблок 1: Жёсткие требования (фильтры отсева) ── */}
+          <div className="space-y-3 border-t pt-3">
+            <div>
+              <div className="text-sm font-semibold">🚫 Жёсткие требования (фильтры отсева)</div>
+              <p className="text-[11px] text-muted-foreground">Не соответствует → отказ или низкий рейтинг</p>
+            </div>
+
+            {/* Required hard skills */}
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2">
+                <Label className="text-xs">Обязательные компетенции (hard skills)</Label>
+                <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-primary border-primary/30">AI-скрининг</Badge>
+              </div>
+              <TagInput
+                tags={data.aiRequiredHardSkills}
+                onChange={v => set("aiRequiredHardSkills", v)}
+                placeholder="Добавить навык..."
+                customType="skill"
+              />
+              <p className="text-[10px] text-muted-foreground">Кандидат без этих навыков получит рейтинг ниже 50%</p>
+            </div>
+
+            {/* AI stop factors */}
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2">
+                <Label className="text-xs text-destructive/80">Автоматический отказ — стоп-факторы</Label>
+                <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-primary border-primary/30">AI-скрининг</Badge>
+              </div>
+              <TagInput
+                tags={data.aiStopFactors}
+                onChange={v => set("aiStopFactors", v)}
+                placeholder="Нет опыта B2B, Нет опыта управления..."
+                customType="stop_factor"
+              />
+              <p className="text-[10px] text-muted-foreground">Если у кандидата есть хотя бы один стоп-фактор — автоматический отказ (рейтинг 0)</p>
+            </div>
+
+            {/* Min experience */}
+            <div className="space-y-1.5">
+              <Label className="text-xs">Минимальный опыт для AI-фильтра (лет)</Label>
+              <Input
+                type="number"
+                min={0}
+                value={data.aiMinExperience}
+                onChange={e => set("aiMinExperience", e.target.value)}
+                placeholder="0"
+                className="h-9 bg-[var(--input-bg)] border border-input w-24"
+              />
+              <p className="text-[10px] text-muted-foreground">AI будет автоматически снижать рейтинг кандидатам с опытом менее указанного</p>
+            </div>
+          </div>
+
+          {/* ── Подблок 2: Критерии оценки (влияют на балл) ── */}
+          <div className="space-y-2 border-t pt-3">
+            <div>
+              <div className="text-sm font-semibold">⚖️ Критерии оценки (влияют на балл)</div>
+              <p className="text-[11px] text-muted-foreground">Влияют на итоговый балл, не отсеивают кандидата</p>
+            </div>
             <div className="space-y-2">
               {AI_WEIGHT_CRITERIA.map(criterion => (
                 <div key={criterion.id} className="flex items-center justify-between gap-3">
@@ -2536,16 +2552,18 @@ function AiProfileSection({ data, set }: {
             {data.aiCustomCriteria.length > 0 && (
               <div className="space-y-2 pt-1">
                 {data.aiCustomCriteria.map((cc, idx) => (
-                  <div key={idx} className="flex items-center justify-between gap-3">
+                  <div key={idx} className="space-y-0.5">
+                  <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-1.5 flex-1 min-w-0">
                       <Input
+                        autoFocus={focusCriterionIdx === idx}
                         value={cc.label}
                         onChange={e => {
                           const next = [...data.aiCustomCriteria]
                           next[idx] = { ...next[idx], label: e.target.value }
                           set("aiCustomCriteria", next)
                         }}
-                        placeholder="Свой критерий (напр. «Опыт в B2B-продажах»)"
+                        placeholder="Например: Опыт в EdTech / Знание 1С"
                         className="h-7 text-sm"
                       />
                       <button
@@ -2582,13 +2600,23 @@ function AiProfileSection({ data, set }: {
                       ))}
                     </div>
                   </div>
+                  {!cc.label.trim() && (
+                    <p className="text-[11px] text-muted-foreground pl-0.5">
+                      Введите название — пустой критерий игнорируется при оценке
+                    </p>
+                  )}
+                  </div>
                 ))}
               </div>
             )}
 
             <button
               type="button"
-              onClick={() => set("aiCustomCriteria", [...data.aiCustomCriteria, { label: "", weight: "important" as AiWeightLevel }])}
+              onClick={() => {
+                const next = [...data.aiCustomCriteria, { label: "", weight: "important" as AiWeightLevel }]
+                set("aiCustomCriteria", next)
+                setFocusCriterionIdx(next.length - 1)
+              }}
               className="text-xs text-primary hover:underline"
             >
               + Добавить свой критерий
