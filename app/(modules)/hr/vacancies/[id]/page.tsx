@@ -267,6 +267,16 @@ export default function VacancyPage() {
         experienceIdeal: parsed.experienceIdeal ?? existingAnketa.experienceIdeal ?? "",
         conditions: parsed.conditions ?? existingAnketa.conditions ?? [],
         screeningQuestions: parsed.screeningQuestions ?? existingAnketa.screeningQuestions ?? [],
+        // AI-профиль кандидата — заполняем из AI, не затирая ручное непустым→[].
+        aiIdealProfile: (parsed.aiIdealProfile as string) || existingAnketa.aiIdealProfile || "",
+        aiRequiredHardSkills: Array.isArray(parsed.aiRequiredHardSkills) && parsed.aiRequiredHardSkills.length
+          ? parsed.aiRequiredHardSkills : (existingAnketa.aiRequiredHardSkills ?? []),
+        aiStopFactors: Array.isArray(parsed.aiStopFactors) && parsed.aiStopFactors.length
+          ? parsed.aiStopFactors : (existingAnketa.aiStopFactors ?? []),
+        aiWeights: {
+          ...((existingAnketa.aiWeights as Record<string, unknown>) || {}),
+          ...((parsed.aiWeights as Record<string, unknown>) || {}),
+        },
         hhDescription: parsed.hhDescription ?? existingAnketa.hhDescription ?? "",
       }
       const body: Record<string, unknown> = {

@@ -1038,6 +1038,13 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
       hiringPlan: result.hiringPlan && result.hiringPlan > 1 ? result.hiringPlan : prev.hiringPlan,
       conditions: result.conditions.length > 0 ? result.conditions : prev.conditions,
       screeningQuestions: result.screeningQuestions.length > 0 ? result.screeningQuestions : prev.screeningQuestions,
+      // AI-профиль кандидата — мержим только непустое, не затирая ручные правки.
+      aiIdealProfile: result.aiIdealProfile || prev.aiIdealProfile,
+      aiRequiredHardSkills: result.aiRequiredHardSkills && result.aiRequiredHardSkills.length > 0 ? result.aiRequiredHardSkills : prev.aiRequiredHardSkills,
+      aiStopFactors: result.aiStopFactors && result.aiStopFactors.length > 0 ? result.aiStopFactors : prev.aiStopFactors,
+      aiWeights: result.aiWeights && Object.keys(result.aiWeights).length > 0
+        ? { ...prev.aiWeights, ...(result.aiWeights as Record<string, AiWeightLevel>) }
+        : prev.aiWeights,
       hhDescription: result.hhDescription || prev.hhDescription,
     }))
     if (result.positionTitle) onTitleChange?.(result.positionTitle)

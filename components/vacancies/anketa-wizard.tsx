@@ -34,6 +34,11 @@ export interface ParsedVacancy {
   conditions: string[]
   screeningQuestions: string[]
   hhDescription: string
+  // AI-профиль кандидата (для авто-скрининга) — заполняется parse-vacancy.
+  aiIdealProfile?: string
+  aiRequiredHardSkills?: string[]
+  aiStopFactors?: string[]
+  aiWeights?: Record<string, string>
 }
 
 interface AnketaWizardProps {
