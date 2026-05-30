@@ -583,6 +583,14 @@ export interface VacancyAiProcessSettings {
    */
   prequalificationMode?: "direct_demo" | "prequal_then_demo" | "prequal_only"
 
+  /**
+   * Задержка отказа в минутах (drizzle/0155). Все авто-отказы откладываются на
+   * это время и исполняются cron'ом в рабочее время вакансии. 0 = мгновенно.
+   * Дефолт 300 (5 ч) — отклик утром → отказ ~к обеду. Применяется ко ВСЕМ
+   * причинам (стоп-факторы, провал предкв, «не интересно» в чате, security).
+   */
+  rejectionDelayMinutes?: number
+
   // ── Legacy (Сессии 1-5), оставлены для совместимости ────────────────
   /** @deprecated → переименовано в minScoreLower; пишем оба для backward compat. */
   minScore?:             number
@@ -792,6 +800,12 @@ export const candidates = pgTable("candidates", {
   autoProcessingStopped: boolean("auto_processing_stopped").notNull().default(false),
   autoProcessingStoppedReason: text("auto_processing_stopped_reason"),
   autoProcessingStoppedAt: timestamp("auto_processing_stopped_at", { withTimezone: true }),
+  // Отложенный отказ (drizzle/0155). Никаких мгновенных авто-отказов: точки
+  // отказа ставят pendingRejectionAt = триггер + задержка вакансии, cron
+  // /api/cron/pending-rejections исполняет в рабочее время. NULL = не запланирован.
+  pendingRejectionAt:     timestamp("pending_rejection_at", { withTimezone: true }),
+  pendingRejectionReason: text("pending_rejection_reason"),
+  pendingRejectionSetAt:  timestamp("pending_rejection_set_at", { withTimezone: true }),
   // v5: AI-классификатор ответов в hh-чате может выставить паузу автоматизации
   // (например, при rejection или wants_personal_contact).
   automationPaused: boolean("automation_paused").notNull().default(false),

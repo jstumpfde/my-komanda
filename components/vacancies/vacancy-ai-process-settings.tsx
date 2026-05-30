@@ -52,6 +52,10 @@ export function VacancyAiProcessSettings({ vacancyId, initial, initialAiScoringE
     ),
   )
   const [rejectMessage, setRejectMessage] = useState<string>(initial?.rejectMessage ?? DEFAULT_REJECT)
+  // Задержка отказа (минуты). 0 = мгновенно. Дефолт 300 (5 ч).
+  const [rejectionDelay, setRejectionDelay] = useState<number>(
+    typeof initial?.rejectionDelayMinutes === "number" ? initial.rejectionDelayMinutes : 300,
+  )
   const [saving, setSaving] = useState(false)
   // P0-50: sticky-bar считывает loaded — пока initial не подсунули, секцию игнорим.
   const loaded = initial !== undefined
@@ -66,6 +70,7 @@ export function VacancyAiProcessSettings({ vacancyId, initial, initialAiScoringE
     if (typeof initial.rejectMessage === "string" && initial.rejectMessage.length > 0) {
       setRejectMessage(initial.rejectMessage)
     }
+    if (typeof initial.rejectionDelayMinutes === "number") setRejectionDelay(initial.rejectionDelayMinutes)
   }, [initial])
 
   useEffect(() => {
@@ -96,6 +101,7 @@ export function VacancyAiProcessSettings({ vacancyId, initial, initialAiScoringE
           minScore:             lower,
           midRangeAction,
           rejectMessage,
+          rejectionDelayMinutes: rejectionDelay,
           aiScoringEnabled,
         }),
       })
@@ -114,7 +120,7 @@ export function VacancyAiProcessSettings({ vacancyId, initial, initialAiScoringE
     sectionKey: `ai-process:${vacancyId}`,
     tabKey: "followup",
     loaded,
-    watchedValues: { aiScoringEnabled, upper, lower, midRangeAction, rejectMessage },
+    watchedValues: { aiScoringEnabled, upper, lower, midRangeAction, rejectMessage, rejectionDelay },
     save: handleSave,
   })
   void saving
@@ -252,6 +258,36 @@ export function VacancyAiProcessSettings({ vacancyId, initial, initialAiScoringE
           </p>
         </div>
 
+        {/* Задержка отказа — единая для ВСЕХ причин (стоп-факторы, низкий балл,
+            «не интересно» в чате). 0 = мгновенно. */}
+        <div>
+          <Label className="text-xs font-medium mb-1.5 block">Задержка перед отказом</Label>
+          <div className="flex items-center gap-2">
+            <input
+              type="number"
+              min={0}
+              step={5}
+              value={rejectionDelay}
+              onChange={e => setRejectionDelay(Math.max(0, Math.round(Number(e.target.value) || 0)))}
+              className="h-8 w-24 rounded-md border bg-background px-2 text-sm tabular-nums"
+              disabled={disabled}
+            />
+            <span className="text-xs text-muted-foreground">минут</span>
+          </div>
+          <p className={cn(
+            "text-[11px] mt-1.5 flex items-center gap-1",
+            rejectionDelay === 0 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground",
+          )}>
+            {rejectionDelay === 0
+              ? <>⚡ Отказ будет отправлен <b>мгновенно</b>, как только сработает.</>
+              : <>🕐 Отказ уйдёт <b>{formatDelay(rejectionDelay)}</b> после срабатывания и только в рабочее время вакансии.</>}
+          </p>
+          <p className="text-[11px] text-muted-foreground mt-1">
+            Действует на все авто-отказы: стоп-факторы, низкий балл, «не интересно» в чате.
+            Кандидат это время виден в списке — отказ можно отменить.
+          </p>
+        </div>
+
       </CardContent>
     </Card>
   )
@@ -260,4 +296,12 @@ export function VacancyAiProcessSettings({ vacancyId, initial, initialAiScoringE
 // helper: cn (используется внутри компонента, чтобы не плодить лишних импортов)
 function cn(...parts: Array<string | undefined | false>): string {
   return parts.filter(Boolean).join(" ")
+}
+
+// «300» → «через 5 ч», «90» → «через 1 ч 30 мин», «45» → «через 45 мин».
+function formatDelay(min: number): string {
+  if (min < 60) return `через ${min} мин`
+  const h = Math.floor(min / 60)
+  const m = min % 60
+  return m === 0 ? `через ${h} ч` : `через ${h} ч ${m} мин`
 }

@@ -59,6 +59,11 @@ export async function PUT(
         ? (body.midRangeAction as VacancyAiProcessSettings["midRangeAction"])
         : "prequalification"
     }
+    // Задержка отказа (минуты). 0 = мгновенно. Кламп 0..43200 (30 дней).
+    if (body.rejectionDelayMinutes !== undefined) {
+      const n = Number(body.rejectionDelayMinutes)
+      if (Number.isFinite(n)) settings.rejectionDelayMinutes = Math.max(0, Math.min(43200, Math.round(n)))
+    }
     if (body.prequalificationMode !== undefined) {
       const allowed: VacancyAiProcessSettings["prequalificationMode"][] =
         ["direct_demo", "prequal_then_demo", "prequal_only"]
