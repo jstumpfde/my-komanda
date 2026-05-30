@@ -306,10 +306,11 @@ export function AiChatbotSettings({ vacancyId }: { vacancyId: string }) {
   const testTelegram = async () => {
     setTgTesting(true)
     try {
-      const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}/ai-chatbot/test-telegram`, {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ channel: settings.telegramChannel }),
+      // AI-эскалации уходят в Telegram через бот компании
+      // (companies.telegramBotToken + telegramChatId), поэтому проверяем
+      // company-роут. Роута /vacancies/[id]/ai-chatbot/test-telegram нет (404).
+      const res = await fetch(`/api/modules/hr/company/telegram/test`, {
+        method: "POST",
       })
       const data = await res.json() as { ok?: boolean; error?: string }
       if (!res.ok || !data.ok) throw new Error(data.error || "telegram_failed")

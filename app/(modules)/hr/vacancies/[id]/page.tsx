@@ -3610,7 +3610,7 @@ export default function VacancyPage() {
                   if (useListPaginated) {
                     // Пагинированный список: кандидат в paginated.*, не в columns.
                     const candidate = paginatedColumns?.[0]?.candidates.find(c => c.id === rejectCandidateId)
-                    toast.error(`${candidate?.name ?? "Кандидат"} — отказ`)
+                    toast.success(`${candidate?.name ?? "Кандидат"} отклонён`)
                     const ok = await paginated.updateStage(rejectCandidateId, "rejected")
                     if (ok) paginated.refetch(); else toast.error("Не удалось отказать")
                     if (candidate?.aiScore != null && candidate.aiScore >= 50) {
@@ -3620,7 +3620,7 @@ export default function VacancyPage() {
                   } else {
                     const candidate = columns.find(c => c.id === rejectColumnId)?.candidates.find(c => c.id === rejectCandidateId)
                     setColumns(p => p.map(c => c.id !== rejectColumnId ? c : { ...c, candidates: c.candidates.filter(x => x.id !== rejectCandidateId), count: c.candidates.filter(x => x.id !== rejectCandidateId).length }))
-                    toast.error(`${candidate?.name ?? "Кандидат"} — отказ`)
+                    toast.success(`${candidate?.name ?? "Кандидат"} отклонён`)
                     await updateStage(rejectCandidateId, "rejected")
                     // Suggest talent pool for candidates with decent AI score
                     if (candidate?.aiScore != null && candidate.aiScore >= 50) {
