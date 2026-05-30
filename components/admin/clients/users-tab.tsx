@@ -14,7 +14,7 @@ import {
   DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent,
   DropdownMenuSubTrigger, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
+import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell, DataSelectHeadCell, DataSelectCell } from "@/components/ui/data-table"
 import { cn } from "@/lib/utils"
 import { Search, Building2, Lock, Unlock, MoreHorizontal, Loader2, UserCog, Trash2, RotateCcw, Eraser } from "lucide-react"
 import { toast } from "sonner"
@@ -64,6 +64,28 @@ export function UsersTab({ trashed }: { trashed: boolean }) {
   const [busyId, setBusyId] = useState<string | null>(null)
   const [cleanupOpen, setCleanupOpen] = useState(false)
   const [cleaning, setCleaning] = useState(false)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [bulkBusy, setBulkBusy] = useState(false)
+
+  const pageIds = data.data.map(u => u.id)
+  const allSelected = pageIds.length > 0 && pageIds.every(id => selected.has(id))
+  const toggleOne = (id: string) => setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+  const toggleAll = () => setSelected(allSelected ? new Set() : new Set(pageIds))
+
+  // Массовые действия над выбранными.
+  async function bulkRun(fn: (id: string) => Promise<Response>, okMsg: string) {
+    if (selected.size === 0) return
+    setBulkBusy(true)
+    try {
+      await Promise.all([...selected].map(fn))
+      toast.success(`${okMsg}: ${selected.size}`)
+      setSelected(new Set())
+      fetchData()
+    } catch { toast.error("Ошибка массового действия") } finally { setBulkBusy(false) }
+  }
+  const bulkBlock   = (active: boolean) => bulkRun(id => fetch(`/api/admin/users/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ isActive: active }) }), active ? "Разблокировано" : "Заблокировано")
+  const bulkTrash   = () => bulkRun(id => fetch(`/api/admin/users/${id}`, { method: "DELETE" }), "В корзину")
+  const bulkRestore = () => bulkRun(id => fetch(`/api/admin/users/${id}/restore`, { method: "POST" }), "Восстановлено")
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -83,7 +105,7 @@ export function UsersTab({ trashed }: { trashed: boolean }) {
   }, [debouncedSearch, roleFilter, statusFilter, page, pageSize, trashed])
 
   useEffect(() => { fetchData() }, [fetchData])
-  useEffect(() => { setPage(1) }, [debouncedSearch, roleFilter, statusFilter, pageSize, trashed])
+  useEffect(() => { setPage(1); setSelected(new Set()) }, [debouncedSearch, roleFilter, statusFilter, pageSize, trashed])
 
   async function patchUser(user: UserRow, payload: { role?: string; isActive?: boolean }) {
     setBusyId(user.id)
@@ -171,10 +193,37 @@ export function UsersTab({ trashed }: { trashed: boolean }) {
         )}
       </div>
 
+      {/* Массовые действия */}
+      {selected.size > 0 && (
+        <div className="flex items-center gap-3 mb-3 rounded-lg border border-border bg-muted/40 px-4 py-2 flex-wrap">
+          <span className="text-sm font-medium">Выбрано: {selected.size}</span>
+          <div className="h-4 w-px bg-border" />
+          {trashed ? (
+            <Button size="sm" variant="ghost" className="h-8 gap-1.5" disabled={bulkBusy} onClick={bulkRestore}>
+              {bulkBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}Восстановить
+            </Button>
+          ) : (
+            <>
+              <Button size="sm" variant="ghost" className="h-8 gap-1.5" disabled={bulkBusy} onClick={() => bulkBlock(false)}>
+                {bulkBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Lock className="h-3.5 w-3.5" />}Заблокировать
+              </Button>
+              <Button size="sm" variant="ghost" className="h-8 gap-1.5" disabled={bulkBusy} onClick={() => bulkBlock(true)}>
+                {bulkBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Unlock className="h-3.5 w-3.5" />}Разблокировать
+              </Button>
+              <Button size="sm" variant="ghost" className="h-8 gap-1.5 text-destructive hover:text-destructive" disabled={bulkBusy} onClick={bulkTrash}>
+                {bulkBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}В корзину
+              </Button>
+            </>
+          )}
+          <Button size="sm" variant="ghost" className="h-8 ml-auto text-muted-foreground" onClick={() => setSelected(new Set())}>Снять выбор</Button>
+        </div>
+      )}
+
       {/* Таблица */}
       <TableCard>
         <DataTable containerClassName="overflow-x-auto">
           <DataHead>
+            <DataSelectHeadCell checked={allSelected} onCheckedChange={toggleAll} />
             <DataHeadCell>Имя</DataHeadCell>
             <DataHeadCell>Email</DataHeadCell>
             <DataHeadCell>Роль</DataHeadCell>
@@ -185,10 +234,10 @@ export function UsersTab({ trashed }: { trashed: boolean }) {
           </DataHead>
           <tbody>
             {loading && (
-              <tr><td colSpan={7} className="text-center py-8"><Loader2 className="w-5 h-5 animate-spin mx-auto text-muted-foreground" /></td></tr>
+              <tr><td colSpan={8} className="text-center py-8"><Loader2 className="w-5 h-5 animate-spin mx-auto text-muted-foreground" /></td></tr>
             )}
             {!loading && data.data.length === 0 && (
-              <tr><td colSpan={7} className="text-center py-8 text-sm text-muted-foreground">
+              <tr><td colSpan={8} className="text-center py-8 text-sm text-muted-foreground">
                 {trashed ? "Корзина пуста" : "Нет пользователей по выбранным фильтрам"}
               </td></tr>
             )}
@@ -196,7 +245,8 @@ export function UsersTab({ trashed }: { trashed: boolean }) {
               const isBlocked = user.isActive === false
               const isBusy = busyId === user.id
               return (
-                <DataRow key={user.id} className="group">
+                <DataRow key={user.id} className={cn("group", selected.has(user.id) && "bg-primary/[0.04]")}>
+                  <DataSelectCell checked={selected.has(user.id)} onCheckedChange={() => toggleOne(user.id)} />
                   <DataCell>
                     <p className="font-medium text-foreground truncate" title={user.name}>{user.name}</p>
                     {user.position && <p className="text-xs text-muted-foreground truncate">{user.position}</p>}

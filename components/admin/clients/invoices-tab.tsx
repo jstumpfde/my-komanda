@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
+import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell, DataSelectHeadCell, DataSelectCell } from "@/components/ui/data-table"
 import { cn } from "@/lib/utils"
 import { Search, Building2, CheckCircle2, XCircle, FileText, FileCheck2, Send, RotateCcw, MoreHorizontal, Loader2 } from "lucide-react"
 import { toast } from "sonner"
@@ -67,6 +67,24 @@ export function InvoicesTab({ trashed }: { trashed: boolean }) {
   const [loading, setLoading] = useState(false)
   const [data, setData] = useState<ApiResponse>({ data: [], total: 0, page: 1, totalPages: 1 })
   const [busyId, setBusyId] = useState<string | null>(null)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [bulkBusy, setBulkBusy] = useState(false)
+
+  const pageIds = data.data.map(i => i.id)
+  const allSelected = pageIds.length > 0 && pageIds.every(id => selected.has(id))
+  const toggleOne = (id: string) => setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+  const toggleAll = () => setSelected(allSelected ? new Set() : new Set(pageIds))
+
+  async function bulkStatus(status: "paid" | "cancelled" | "issued", okMsg: string) {
+    if (selected.size === 0) return
+    setBulkBusy(true)
+    try {
+      await Promise.all([...selected].map(id => fetch(`/api/admin/invoices/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) })))
+      toast.success(`${okMsg}: ${selected.size}`)
+      setSelected(new Set())
+      fetchData()
+    } catch { toast.error("Ошибка массового действия") } finally { setBulkBusy(false) }
+  }
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -85,7 +103,7 @@ export function InvoicesTab({ trashed }: { trashed: boolean }) {
   }, [debouncedSearch, statusFilter, page, pageSize, trashed])
 
   useEffect(() => { fetchData() }, [fetchData])
-  useEffect(() => { setPage(1) }, [debouncedSearch, statusFilter, pageSize, trashed])
+  useEffect(() => { setPage(1); setSelected(new Set()) }, [debouncedSearch, statusFilter, pageSize, trashed])
 
   async function setStatus(invoice: InvoiceRow, status: "paid" | "cancelled" | "issued") {
     setBusyId(invoice.id)
@@ -146,10 +164,34 @@ export function InvoicesTab({ trashed }: { trashed: boolean }) {
         </Select>
       </div>
 
+      {/* Массовые действия */}
+      {selected.size > 0 && (
+        <div className="flex items-center gap-3 mb-3 rounded-lg border border-border bg-muted/40 px-4 py-2 flex-wrap">
+          <span className="text-sm font-medium">Выбрано: {selected.size}</span>
+          <div className="h-4 w-px bg-border" />
+          {trashed ? (
+            <Button size="sm" variant="ghost" className="h-8 gap-1.5" disabled={bulkBusy} onClick={() => bulkStatus("issued", "Восстановлено")}>
+              {bulkBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}Восстановить
+            </Button>
+          ) : (
+            <>
+              <Button size="sm" variant="ghost" className="h-8 gap-1.5" disabled={bulkBusy} onClick={() => bulkStatus("paid", "Отмечено оплаченными")}>
+                {bulkBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}Отметить оплаченными
+              </Button>
+              <Button size="sm" variant="ghost" className="h-8 gap-1.5 text-destructive hover:text-destructive" disabled={bulkBusy} onClick={() => bulkStatus("cancelled", "Аннулировано")}>
+                {bulkBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <XCircle className="h-3.5 w-3.5" />}Аннулировать
+              </Button>
+            </>
+          )}
+          <Button size="sm" variant="ghost" className="h-8 ml-auto text-muted-foreground" onClick={() => setSelected(new Set())}>Снять выбор</Button>
+        </div>
+      )}
+
       {/* Таблица */}
       <TableCard>
         <DataTable containerClassName="overflow-x-auto">
           <DataHead>
+            <DataSelectHeadCell checked={allSelected} onCheckedChange={toggleAll} />
             <DataHeadCell>Номер</DataHeadCell>
             <DataHeadCell>Компания</DataHeadCell>
             <DataHeadCell align="right">Сумма</DataHeadCell>
@@ -161,17 +203,18 @@ export function InvoicesTab({ trashed }: { trashed: boolean }) {
           </DataHead>
           <tbody>
             {loading && (
-              <tr><td colSpan={8} className="text-center py-8"><Loader2 className="w-5 h-5 animate-spin mx-auto text-muted-foreground" /></td></tr>
+              <tr><td colSpan={9} className="text-center py-8"><Loader2 className="w-5 h-5 animate-spin mx-auto text-muted-foreground" /></td></tr>
             )}
             {!loading && data.data.length === 0 && (
-              <tr><td colSpan={8} className="text-center py-8 text-sm text-muted-foreground">Нет счетов по выбранным фильтрам</td></tr>
+              <tr><td colSpan={9} className="text-center py-8 text-sm text-muted-foreground">Нет счетов по выбранным фильтрам</td></tr>
             )}
             {!loading && data.data.map(inv => {
               const statusCfg = STATUS_CONFIG[inv.status] ?? { label: inv.status, color: "" }
               const isBusy = busyId === inv.id
               const isFinal = inv.status === "paid" || inv.status === "cancelled"
               return (
-                <DataRow key={inv.id} className="group">
+                <DataRow key={inv.id} className={cn("group", selected.has(inv.id) && "bg-primary/[0.04]")}>
+                  <DataSelectCell checked={selected.has(inv.id)} onCheckedChange={() => toggleOne(inv.id)} />
                   <DataCell className="font-medium text-foreground whitespace-nowrap">{inv.invoiceNumber}</DataCell>
                   <DataCell>
                     <Link href={`/admin/clients/${inv.companyId}`} className="text-foreground hover:text-primary transition-colors inline-flex items-center gap-1.5">
