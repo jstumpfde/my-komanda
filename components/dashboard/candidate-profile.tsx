@@ -167,13 +167,41 @@ const channelIcons: Record<string, { icon: typeof MessageSquare; color: string }
 
 // ─── Тест (Этап 2) ──────────────────────────────────────────
 
+interface TestStructuredAnswer {
+  blockId:    string
+  questionId: string
+  answerType: string
+  value:      string
+}
+interface TestAnswersJson {
+  answers?:   TestStructuredAnswer[]
+  objective?: { gradedCount?: number; maxPoints?: number; gotPoints?: number; score?: number } | null
+}
 interface TestSubmissionRow {
   id:          string
   answerText:  string | null
   fileUrl:     string | null
+  answersJson: TestAnswersJson | null
   aiScore:     number | null
   aiReasoning: string | null
   submittedAt: string | null
+}
+
+const TEST_ANSWER_TYPE_LABEL: Record<string, string> = {
+  short: "Короткий ответ",
+  long: "Развёрнутый ответ",
+  text: "Текст",
+  yesno: "Да/Нет",
+  single: "Один вариант",
+  multiple: "Несколько вариантов",
+  sort: "Сортировка",
+  video: "Видео",
+}
+
+// Отображаемое значение ответа: yesno → Да/Нет, мультивыбор/сортировка → через запятую.
+function formatTestAnswerValue(a: TestStructuredAnswer): string {
+  if (a.answerType === "yesno") return a.value === "yes" ? "Да" : a.value === "no" ? "Нет" : a.value
+  return a.value.split("|||").join(", ")
 }
 interface TestSubmissionData {
   submission: TestSubmissionRow | null
@@ -536,8 +564,27 @@ export function CandidateProfile({ candidate, columnId, columnTitle, columnColor
                               </button>
                             )}
                           </div>
-                        ) : (
+                        ) : !sub.answersJson?.answers ? (
                           <p className="text-sm text-muted-foreground">Текстовый ответ не приложен</p>
+                        ) : null}
+
+                        {/* Структурированные ответы по вопросам (single/multiple/yesno/sort/short/long) */}
+                        {Array.isArray(sub.answersJson?.answers) && sub.answersJson!.answers!.length > 0 && (
+                          <div className="space-y-2">
+                            {(sub.answersJson!.objective && (sub.answersJson!.objective.maxPoints ?? 0) > 0) && (
+                              <p className="text-xs text-muted-foreground">
+                                Автопроверка: <span className="font-semibold text-foreground">{sub.answersJson!.objective!.gotPoints ?? 0} из {sub.answersJson!.objective!.maxPoints} баллов</span> ({sub.answersJson!.objective!.score ?? 0}%)
+                              </p>
+                            )}
+                            {sub.answersJson!.answers!
+                              .filter((a) => a.value?.trim())
+                              .map((a) => (
+                                <div key={a.questionId} className="rounded-lg border border-border p-2">
+                                  <p className="text-[11px] text-muted-foreground">{TEST_ANSWER_TYPE_LABEL[a.answerType] || a.answerType}</p>
+                                  <p className="text-sm text-foreground whitespace-pre-wrap break-words">{formatTestAnswerValue(a)}</p>
+                                </div>
+                              ))}
+                          </div>
                         )}
 
                         {/* Файл (заглушка — ссылка появится позже) */}

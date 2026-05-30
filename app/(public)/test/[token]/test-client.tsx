@@ -1,14 +1,18 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { Loader2, CheckCircle2, Send } from "lucide-react"
+import { useEffect, useMemo, useState } from "react"
+import { Loader2, CheckCircle2, Send, ChevronUp, ChevronDown } from "lucide-react"
+import type { Block, Lesson, Question } from "@/lib/course-types"
 
-// Этап 1 (базово): простой read-only рендер уроков теста + поле ответа.
-// Намеренно проще demo-client: без AI-чата и медиаплеера — текст/HTML контент
-// (то, что HR обычно кладёт в задание). Богатый медиарендер — позже.
+// Прохождение тестового задания кандидатом.
+// Рендерит структурированные вопросы task-блоков (single/multiple/yesno/sort/
+// short/long) по образцу demo-client (тот же контракт значений: множественные
+// и порядок — строки через "|||", yesno — "yes"/"no"). Если у теста нет
+// структурированных вопросов — fallback на единое текстовое поле (legacy).
 
-interface Block { type?: string; content?: string; taskTitle?: string; taskDescription?: string }
-interface Lesson { id?: string; emoji?: string; title?: string; blocks?: Block[] }
+const SEP = "|||"     // разделитель множественных значений (как в demo-client)
+const MIN_LEN = 10    // минимум для legacy-textarea
+
 interface TestData {
   candidateName: string
   vacancyTitle: string
@@ -19,13 +23,140 @@ interface TestData {
   alreadySubmitted: boolean
 }
 
-const MIN_LEN = 10
+// ─── Рендер одного вопроса (порт QuestionInput из demo-client) ─────────────
+function QuestionInput({
+  question,
+  value,
+  onChange,
+  primary,
+}: {
+  question: Question
+  value: string
+  onChange: (val: string) => void
+  primary: string
+}) {
+  const type = question.answerType
+
+  if (type === "single") {
+    return (
+      <div className="space-y-1.5">
+        {question.options.map((opt, i) => (
+          <label key={i} className="flex items-center gap-2 cursor-pointer text-sm">
+            <input
+              type="radio"
+              name={question.id}
+              checked={value === opt}
+              onChange={() => onChange(opt)}
+              className="w-4 h-4"
+              style={{ accentColor: primary }}
+            />
+            <span>{opt}</span>
+          </label>
+        ))}
+      </div>
+    )
+  }
+
+  if (type === "multiple") {
+    const selected = value ? value.split(SEP) : []
+    const toggle = (opt: string) => {
+      const next = selected.includes(opt)
+        ? selected.filter((s) => s !== opt)
+        : [...selected, opt]
+      onChange(next.join(SEP))
+    }
+    return (
+      <div className="space-y-1.5">
+        {question.options.map((opt, i) => (
+          <label key={i} className="flex items-center gap-2 cursor-pointer text-sm">
+            <input
+              type="checkbox"
+              checked={selected.includes(opt)}
+              onChange={() => toggle(opt)}
+              className="w-4 h-4"
+              style={{ accentColor: primary }}
+            />
+            <span>{opt}</span>
+          </label>
+        ))}
+      </div>
+    )
+  }
+
+  if (type === "sort") {
+    // Порядок хранится как строки через SEP (как в demo-client).
+    const current = value ? value.split(SEP) : [...question.options]
+    for (const opt of question.options) {
+      if (!current.includes(opt)) current.push(opt)
+    }
+    const order = current.filter((o) => question.options.includes(o))
+    const move = (idx: number, dir: -1 | 1) => {
+      const j = idx + dir
+      if (j < 0 || j >= order.length) return
+      const next = [...order]
+      ;[next[idx], next[j]] = [next[j], next[idx]]
+      onChange(next.join(SEP))
+    }
+    return (
+      <div className="space-y-1.5">
+        <p className="text-xs opacity-60">Расставьте в правильном порядке</p>
+        {order.map((opt, i) => (
+          <div key={opt} className="flex items-center gap-2 rounded-lg border border-black/15 bg-white p-2 text-sm text-slate-900">
+            <span className="flex h-5 w-5 items-center justify-center rounded-full text-xs font-semibold text-white" style={{ backgroundColor: primary }}>{i + 1}</span>
+            <span className="flex-1">{opt}</span>
+            <div className="flex flex-col">
+              <button type="button" onClick={() => move(i, -1)} disabled={i === 0} className="disabled:opacity-30" aria-label="Вверх">
+                <ChevronUp className="w-4 h-4" />
+              </button>
+              <button type="button" onClick={() => move(i, 1)} disabled={i === order.length - 1} className="disabled:opacity-30" aria-label="Вниз">
+                <ChevronDown className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  if (type === "yesno") {
+    // value хранится как "yes"/"no" (совпадает с demo-client).
+    return (
+      <div className="flex gap-4">
+        {[{ v: "yes", label: "Да" }, { v: "no", label: "Нет" }].map((o) => (
+          <label key={o.v} className="flex items-center gap-2 cursor-pointer text-sm">
+            <input
+              type="radio"
+              name={question.id}
+              checked={value === o.v}
+              onChange={() => onChange(o.v)}
+              className="w-4 h-4"
+              style={{ accentColor: primary }}
+            />
+            <span>{o.label}</span>
+          </label>
+        ))}
+      </div>
+    )
+  }
+
+  // short, long, text (legacy "video" обрабатываем как текст)
+  return (
+    <textarea
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder="Ваш ответ…"
+      rows={type === "long" ? 5 : 2}
+      className="w-full rounded-lg border border-black/15 bg-white p-2.5 text-sm outline-none focus:border-black/30 text-slate-900"
+    />
+  )
+}
 
 export function TestClient({ token }: { token: string }) {
   const [data, setData] = useState<TestData | null>(null)
   const [status, setStatus] = useState<"loading" | "ready" | "error" | "done">("loading")
   const [errorMsg, setErrorMsg] = useState("")
-  const [answer, setAnswer] = useState("")
+  const [answers, setAnswers] = useState<Record<string, string>>({}) // questionId → value
+  const [answer, setAnswer] = useState("")                            // legacy textarea
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
@@ -40,14 +171,51 @@ export function TestClient({ token }: { token: string }) {
       .catch(() => { setErrorMsg("Ошибка сети"); setStatus("error") })
   }, [token])
 
+  // Все вопросы task-блоков (с привязкой к blockId).
+  const questions = useMemo(() => {
+    const out: { blockId: string; q: Question }[] = []
+    for (const lesson of data?.lessons ?? []) {
+      for (const b of (lesson.blocks ?? []) as Block[]) {
+        if (b.type === "task" && Array.isArray(b.questions)) {
+          for (const q of b.questions) out.push({ blockId: b.id, q })
+        }
+      }
+    }
+    return out
+  }, [data])
+
+  const hasStructured = questions.length > 0
+
+  const setQ = (id: string, val: string) => setAnswers((prev) => ({ ...prev, [id]: val }))
+
+  const requiredMissing = hasStructured
+    ? questions.some(({ q }) => q.required && !(answers[q.id] ?? "").trim())
+    : false
+  const anyAnswered = hasStructured
+    ? questions.some(({ q }) => (answers[q.id] ?? "").trim().length > 0)
+    : answer.trim().length >= MIN_LEN
+  const canSubmit = hasStructured ? (anyAnswered && !requiredMissing) : anyAnswered
+
   const submit = async () => {
-    if (answer.trim().length < MIN_LEN) return
+    if (!canSubmit) return
     setSubmitting(true)
+    setErrorMsg("")
     try {
+      const payload = hasStructured
+        ? {
+            structuredAnswers: questions.map(({ blockId, q }) => ({
+              blockId,
+              questionId: q.id,
+              answerType: q.answerType,
+              value: answers[q.id] ?? "",
+            })),
+          }
+        : { answerText: answer }
+
       const r = await fetch(`/api/public/test/${token}/submit`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ answerText: answer }),
+        body: JSON.stringify(payload),
       })
       const json = await r.json().catch(() => null)
       if (!r.ok) { setErrorMsg(json?.error || "Не удалось отправить"); setSubmitting(false); return }
@@ -95,19 +263,44 @@ export function TestClient({ token }: { token: string }) {
         </header>
 
         {data?.settings.instructions && (
-          <div className="rounded-lg border border-black/10 bg-white/60 p-4 text-sm whitespace-pre-wrap">{data.settings.instructions}</div>
+          <div className="rounded-lg border border-black/10 bg-white/60 p-4 text-sm whitespace-pre-wrap text-slate-900">{data.settings.instructions}</div>
         )}
 
-        {/* Read-only контент уроков теста (текст/HTML — базовый рендер). */}
+        {/* Уроки теста: текст/HTML контент + интерактивные task-блоки */}
         {data?.lessons.map((lesson, li) => (
           <section key={lesson.id ?? li} className="space-y-3">
             {lesson.title && <h2 className="text-lg font-semibold">{lesson.emoji ? `${lesson.emoji} ` : ""}{lesson.title}</h2>}
-            {(lesson.blocks ?? []).map((b, bi) => {
+            {((lesson.blocks ?? []) as Block[]).map((b, bi) => {
+              if (b.type === "task" && Array.isArray(b.questions) && b.questions.length > 0) {
+                return (
+                  <div key={b.id ?? bi} className="space-y-4 rounded-lg border border-black/10 bg-white/60 p-4">
+                    {b.taskTitle?.trim() && <h3 className="font-semibold">{b.taskTitle}</h3>}
+                    {b.taskDescription?.trim() && (
+                      <p className="text-sm opacity-80 whitespace-pre-wrap">{b.taskDescription}</p>
+                    )}
+                    {b.questions.map((q) => (
+                      <div key={q.id} className="space-y-1.5">
+                        <label className="text-sm font-medium block">
+                          {q.text}{q.required && <span className="text-red-500"> *</span>}
+                        </label>
+                        <QuestionInput
+                          question={q}
+                          value={answers[q.id] ?? ""}
+                          onChange={(val) => setQ(q.id, val)}
+                          primary={primary}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )
+              }
+              // Не-task блок: показываем текст/HTML контент (read-only).
               const html = typeof b.content === "string" ? b.content : ""
               const taskTitle = b.taskTitle?.trim()
               const taskDesc = b.taskDescription?.trim()
+              if (!html && !taskTitle && !taskDesc) return null
               return (
-                <div key={bi} className="space-y-2">
+                <div key={b.id ?? bi} className="space-y-2">
                   {html && <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: html }} />}
                   {taskTitle && <p className="font-medium">{taskTitle}</p>}
                   {taskDesc && <p className="text-sm opacity-80 whitespace-pre-wrap">{taskDesc}</p>}
@@ -117,29 +310,38 @@ export function TestClient({ token }: { token: string }) {
           </section>
         ))}
 
-        {/* Поле ответа */}
-        <div className="space-y-2 border-t border-black/10 pt-5">
-          <label className="text-sm font-medium">Ваш ответ</label>
-          <textarea
-            value={answer}
-            onChange={(e) => setAnswer(e.target.value)}
-            rows={8}
-            placeholder="Напишите ваш ответ на задание…"
-            className="w-full rounded-lg border border-black/15 bg-white p-3 text-sm outline-none focus:border-black/30 text-slate-900"
-          />
-          <div className="flex items-center justify-between">
-            <span className="text-xs opacity-60">{answer.trim().length < MIN_LEN ? `Минимум ${MIN_LEN} символов` : " "}</span>
-            <button
-              onClick={submit}
-              disabled={submitting || answer.trim().length < MIN_LEN}
-              className="inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-              style={{ backgroundColor: primary }}
-            >
-              {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-              Отправить
-            </button>
+        {/* Legacy: единое текстовое поле, если структурированных вопросов нет */}
+        {!hasStructured && (
+          <div className="space-y-2 border-t border-black/10 pt-5">
+            <label className="text-sm font-medium">Ваш ответ</label>
+            <textarea
+              value={answer}
+              onChange={(e) => setAnswer(e.target.value)}
+              rows={8}
+              placeholder="Напишите ваш ответ на задание…"
+              className="w-full rounded-lg border border-black/15 bg-white p-3 text-sm outline-none focus:border-black/30 text-slate-900"
+            />
+            <span className="text-xs opacity-60">{answer.trim().length < MIN_LEN ? `Минимум ${MIN_LEN} символов` : " "}</span>
           </div>
+        )}
+
+        {/* Кнопка отправки */}
+        <div className="border-t border-black/10 pt-5 flex items-center justify-between">
+          <span className="text-xs opacity-60">
+            {hasStructured && requiredMissing ? "Ответьте на обязательные вопросы (*)" : " "}
+          </span>
+          <button
+            onClick={submit}
+            disabled={submitting || !canSubmit}
+            className="inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+            style={{ backgroundColor: primary }}
+          >
+            {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+            Отправить
+          </button>
         </div>
+
+        {errorMsg && <p className="text-sm text-red-600">{errorMsg}</p>}
       </div>
     </div>
   )

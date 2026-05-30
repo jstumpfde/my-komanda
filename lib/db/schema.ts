@@ -668,6 +668,9 @@ export const testSubmissions = pgTable("test_submissions", {
   demoId:      uuid("demo_id").references(() => demos.id, { onDelete: "set null" }),
   answerText:  text("answer_text"),
   fileUrl:     text("file_url"),
+  // Структурированные ответы кандидата на вопросы task-блоков теста.
+  // Формат: { answers: StructuredAnswer[], objective: ObjectiveResult|null }.
+  answersJson: jsonb("answers_json"),
   aiScore:     integer("ai_score"),
   aiReasoning: text("ai_reasoning"),
   submittedAt: timestamp("submitted_at").defaultNow(),

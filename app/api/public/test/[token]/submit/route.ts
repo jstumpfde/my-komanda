@@ -6,26 +6,67 @@ import { apiError, apiSuccess } from "@/lib/api-helpers"
 import { isShortId } from "@/lib/short-id"
 import { scoreTestSubmission } from "@/lib/ai-score-test"
 import { scheduleTestAfterMessage } from "@/lib/messaging/test-after-message"
+import {
+  scoreObjective,
+  collectTaskQuestions,
+  type StructuredAnswer,
+  type ObjectiveResult,
+} from "@/lib/score-test-objective"
+import type { Question } from "@/lib/course-types"
 
 const MIN_ANSWER_LEN = 10
 const DEFAULT_PASSING_SCORE = 70
 
 // Приём ответа кандидата на тестовое задание. Token — единственный ключ.
-// Этап 1: только текстовый ответ (file_url зарезервирован).
-// Этап 2: AI-скоринг ответа (Haiku) + ветвление стадии в auto-режиме +
-// опциональное «сообщение после теста». Скоринг идёт fire-and-forget
-// (как AI-скоринг демо в /api/public/demo/[token]/answer) — кандидат не ждёт
-// ответа модели; стадия/score дозаполняются фоном.
+//
+// Два режима (обратная совместимость):
+//   • structuredAnswers[] — кандидат отвечал на вопросы task-блоков (новое).
+//   • answerText           — единое текстовое поле (legacy, если у теста нет
+//                            структурированных вопросов).
+//
+// Скоринг:
+//   • Объективные вопросы (single/multiple/yesno/sort) считаются В КОДЕ
+//     (lib/score-test-objective) — сравнение с эталоном + сумма баллов.
+//   • Субъективные (short/long/text) и legacy-текст — через AI (scoreTestSubmission).
+//   • Итог: если есть оцениваемые объективные баллы (maxPoints>0) — берём
+//     объективный %; при наличии и AI-части — среднее; иначе AI. Сравнивается
+//     с passing score.
+//
+// Скоринг — fire-and-forget (как AI-скоринг демо): кандидат не ждёт модель.
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ token: string }> },
 ) {
   try {
     const { token } = await params
-    const body = await req.json().catch(() => ({})) as { answerText?: unknown }
+    const body = await req.json().catch(() => ({})) as {
+      answerText?: unknown
+      structuredAnswers?: unknown
+    }
 
+    // ─── Парсим оба формата ────────────────────────────────────────────────
+    const structured: StructuredAnswer[] = Array.isArray(body.structuredAnswers)
+      ? (body.structuredAnswers as unknown[])
+          .filter((a): a is Record<string, unknown> => !!a && typeof a === "object")
+          .map((a) => ({
+            blockId:    typeof a.blockId === "string" ? a.blockId : "",
+            questionId: typeof a.questionId === "string" ? a.questionId : "",
+            answerType: typeof a.answerType === "string" ? a.answerType : "",
+            value:      typeof a.value === "string" ? a.value : String(a.value ?? ""),
+          }))
+          .filter((a) => a.questionId)
+      : []
+
+    const hasStructured = structured.length > 0
     const answerText = typeof body.answerText === "string" ? body.answerText.trim() : ""
-    if (answerText.length < MIN_ANSWER_LEN) {
+
+    // Валидация: либо непустые структурированные ответы, либо текст ≥ MIN_LEN.
+    if (hasStructured) {
+      const anyNonEmpty = structured.some((a) => a.value.trim().length > 0)
+      if (!anyNonEmpty) {
+        return apiError("Ответьте хотя бы на один вопрос", 400)
+      }
+    } else if (answerText.length < MIN_ANSWER_LEN) {
       return apiError(`Ответ слишком короткий (минимум ${MIN_ANSWER_LEN} символов)`, 400)
     }
 
@@ -37,7 +78,7 @@ export async function POST(
     if (!candidate) return apiError("Кандидат не найден", 404)
 
     const [demo] = await db
-      .select({ id: demos.id, postDemoSettings: demos.postDemoSettings })
+      .select({ id: demos.id, lessonsJson: demos.lessonsJson, postDemoSettings: demos.postDemoSettings })
       .from(demos)
       .where(and(eq(demos.vacancyId, candidate.vacancyId), eq(demos.kind, "test")))
       .orderBy(desc(demos.updatedAt))
@@ -51,25 +92,58 @@ export async function POST(
       .limit(1)
     if (existing) return apiSuccess({ ok: true, alreadySubmitted: true })
 
+    // ─── Объективный скоринг в КОДЕ (синхронно, дёшево) ────────────────────
+    const lessons = Array.isArray(demo?.lessonsJson) ? (demo.lessonsJson as any[]) : []
+    const taskQuestions: Question[] = collectTaskQuestions(lessons)
+
+    const answersByQuestion: Record<string, string> = {}
+    for (const a of structured) answersByQuestion[a.questionId] = a.value
+
+    const objective: ObjectiveResult | null = hasStructured
+      ? scoreObjective(taskQuestions, answersByQuestion)
+      : null
+
+    // Свободный текст для AI: legacy answerText ИЛИ конкатенация субъективных
+    // ответов (short/long/text) с текстами вопросов.
+    let freeText = answerText
+    if (hasStructured) {
+      const qById = new Map(taskQuestions.map((q) => [q.id, q]))
+      const parts: string[] = []
+      for (const a of structured) {
+        const q = qById.get(a.questionId)
+        const t = q?.answerType ?? a.answerType
+        if ((t === "short" || t === "long" || t === "text") && a.value.trim()) {
+          parts.push(`${q?.text || "Вопрос"}: ${a.value.trim()}`)
+        }
+      }
+      freeText = parts.join("\n\n")
+    }
+
     const [inserted] = await db.insert(testSubmissions).values({
       candidateId: candidate.id,
       demoId:      demo?.id ?? null,
-      answerText,
+      // answerText сохраняем для обратной совместимости с карточкой HR
+      // (показывает консолидированный текст). Если структурированный тест без
+      // текстовых ответов — null.
+      answerText:  hasStructured ? (freeText || null) : (answerText || null),
+      answersJson: hasStructured ? { answers: structured, objective } : null,
+      // Объективный балл проставляем сразу (если он есть). AI может дополнить.
+      aiScore:     objective && objective.maxPoints > 0 ? objective.score : null,
     }).returning({ id: testSubmissions.id })
 
-    // Базовая стадия — test_task_done (как в Этапе 1). В auto-режиме фоновый
-    // скоринг может переписать её на test_passed/test_failed.
+    // Базовая стадия — test_task_done. В auto-режиме скоринг переписывает её.
     await db.update(candidates)
       .set({ stage: "test_task_done", updatedAt: new Date() })
       .where(eq(candidates.id, candidate.id))
 
-    // Fire-and-forget AI-скоринг (см. void runAbScoring в demo/answer).
+    // Fire-and-forget скоринг (стадия/AI-балл дозаполняются фоном).
     if (inserted?.id) {
       void processTestScoring({
         submissionId: inserted.id,
         candidateId:  candidate.id,
         vacancyId:    candidate.vacancyId,
-        answerText,
+        freeText,
+        objective,
         settings:     (demo?.postDemoSettings as PostDemoSettings | null) ?? {},
       })
     }
@@ -86,17 +160,18 @@ async function processTestScoring(args: {
   submissionId: string
   candidateId:  string
   vacancyId:    string
-  answerText:   string
+  freeText:     string
+  objective:    ObjectiveResult | null
   settings:     PostDemoSettings
 }): Promise<void> {
-  const { submissionId, candidateId, vacancyId, answerText, settings } = args
+  const { submissionId, candidateId, vacancyId, freeText, objective, settings } = args
 
   // Обратная совместимость: undefined → 'assisted'.
   const checkMode = settings.testCheckMode === "auto" || settings.testCheckMode === "manual"
     ? settings.testCheckMode
     : "assisted"
 
-  // manual — AI не запускаем вовсе.
+  // manual — AI не запускаем вовсе (объективный балл уже записан при insert).
   if (checkMode === "manual") return
 
   const passingScore = typeof settings.testPassingScore === "number"
@@ -104,27 +179,49 @@ async function processTestScoring(args: {
     : DEFAULT_PASSING_SCORE
   const taskText = typeof settings.testTaskInstructions === "string" ? settings.testTaskInstructions : ""
 
-  let score: number
-  try {
-    const result = await scoreTestSubmission({
-      taskText,
-      answerText,
-      hrPrompt: settings.testAiPrompt,
-    })
-    score = result.score
+  const hasObjective = !!objective && objective.maxPoints > 0
+  const hasFreeText = freeText.trim().length > 0
+
+  // Итоговый балл. Приоритет: объективный % (если есть оцениваемые баллы),
+  // плюс усреднение с AI при наличии свободного текста. Если нет ни того, ни
+  // другого — выходим (стадия test_task_done, HR проверит руками).
+  let finalScore: number | null = hasObjective ? objective!.score : null
+
+  if (hasFreeText) {
+    try {
+      const result = await scoreTestSubmission({
+        taskText,
+        answerText: freeText,
+        hrPrompt: settings.testAiPrompt,
+      })
+      finalScore = hasObjective
+        ? Math.round((objective!.score + result.score) / 2)
+        : result.score
+      const reasoning = hasObjective
+        ? `Автопроверка: ${objective!.gotPoints} из ${objective!.maxPoints} баллов (${objective!.score}%). ${result.reasoning}`
+        : result.reasoning
+      await db.update(testSubmissions)
+        .set({ aiScore: finalScore, aiReasoning: reasoning })
+        .where(eq(testSubmissions.id, submissionId))
+    } catch (err) {
+      console.error("[test scoring] AI failed:", err instanceof Error ? err.message : err)
+      // AI упал — остаётся объективный балл (если был), его и используем.
+    }
+  } else if (hasObjective) {
+    // Только объективные вопросы — фиксируем итог и обоснование.
     await db.update(testSubmissions)
-      .set({ aiScore: result.score, aiReasoning: result.reasoning })
+      .set({
+        aiScore: objective!.score,
+        aiReasoning: `Автопроверка: ${objective!.gotPoints} из ${objective!.maxPoints} баллов (${objective!.score}%).`,
+      })
       .where(eq(testSubmissions.id, submissionId))
-  } catch (err) {
-    // AI не ответил — стадия остаётся test_task_done, HR проверит вручную.
-    console.error("[test scoring] failed:", err instanceof Error ? err.message : err)
-    return
   }
 
+  if (finalScore == null) return // нечего оценивать автоматически
+
   // auto: стадия по порогу + сообщение после теста только при прохождении.
-  // assisted: стадию решает HR через карточку; сообщение шлётся по «Принять».
   if (checkMode === "auto") {
-    const passed = score >= passingScore
+    const passed = finalScore >= passingScore
     await db.update(candidates)
       .set({ stage: passed ? "test_passed" : "test_failed", updatedAt: new Date() })
       .where(eq(candidates.id, candidateId))
