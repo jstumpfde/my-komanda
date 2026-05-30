@@ -21,6 +21,7 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 import { formatPrice, formatDate, useDebounce, TableFooter } from "./shared"
+import { CompanySheet, type CompanySheetRow } from "./company-sheet"
 
 // ─── Типы ─────────────────────────────────────────────────────────────────────
 
@@ -64,7 +65,7 @@ const STATUS_FILTER = [
   { value: "cancelled", label: "Отменён" },
 ]
 
-export function CompaniesTab({ trashed }: { trashed: boolean }) {
+export function CompaniesTab({ trashed = false }: { trashed?: boolean }) {
   const searchParams = useSearchParams()
 
   const [search, setSearch] = useState(searchParams.get("search") ?? "")
@@ -88,6 +89,11 @@ export function CompaniesTab({ trashed }: { trashed: boolean }) {
   const [permanentTarget, setPermanentTarget] = useState<ClientRow | null>(null)
   const [permanentTyped, setPermanentTyped] = useState("")
   const [permanentBusy, setPermanentBusy] = useState(false)
+
+  // Боковая панель компании (краткая сводка)
+  const [sheetClient, setSheetClient] = useState<CompanySheetRow | null>(null)
+  const [sheetOpen, setSheetOpen] = useState(false)
+  const openSheet = (client: ClientRow) => { setSheetClient(client); setSheetOpen(true) }
 
   const isTrash = trashed
 
@@ -302,10 +308,10 @@ export function CompaniesTab({ trashed }: { trashed: boolean }) {
                 <DataRow key={client.id} className={cn("group", selected.has(client.id) && "bg-primary/[0.04]")}>
                   {!isTrash && <DataSelectCell checked={selected.has(client.id)} onCheckedChange={() => toggleOne(client.id)} />}
                   <DataCell>
-                    <Link href={`/admin/clients/${client.id}`} className="block max-w-[44ch]">
+                    <button type="button" onClick={() => openSheet(client)} className="block max-w-[44ch] text-left">
                       <p className="font-medium text-foreground group-hover:text-primary transition-colors truncate" title={client.name}>{client.name}</p>
                       {client.directorEmail && <p className="text-xs text-muted-foreground truncate">{client.directorEmail}</p>}
-                    </Link>
+                    </button>
                   </DataCell>
                   <DataCell className="text-muted-foreground">{client.inn ?? "—"}</DataCell>
                   <DataCell className="whitespace-nowrap">
@@ -389,6 +395,9 @@ export function CompaniesTab({ trashed }: { trashed: boolean }) {
         loading={loading} pageSize={pageSize} onPage={setPage} onPageSize={setPageSize}
         emptyText={isTrash ? "Корзина пуста" : "Нет данных"}
       />
+
+      {/* Боковая панель компании */}
+      <CompanySheet client={sheetClient} open={sheetOpen} onOpenChange={setSheetOpen} onChanged={refetch} />
 
       {/* В корзину — лёгкое подтверждение */}
       <Dialog open={!!trashTarget} onOpenChange={(o) => { if (!o) setTrashTarget(null) }}>

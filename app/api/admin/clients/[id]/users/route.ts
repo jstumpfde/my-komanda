@@ -22,8 +22,10 @@ export async function GET(_req: NextRequest, { params }: Params) {
       name: users.name,
       email: users.email,
       role: users.role,
+      position: users.position,
       isActive: users.isActive,
       avatarUrl: users.avatarUrl,
+      telegramChatId: users.telegramChatId,
       createdAt: users.createdAt,
     })
     .from(users)

@@ -50,7 +50,7 @@ const STATUS_FILTER = [
   { value: "blocked", label: "Заблокированные" },
 ]
 
-export function UsersTab({ trashed }: { trashed: boolean }) {
+export function UsersTab({ trashed = false }: { trashed?: boolean }) {
   const [search, setSearch] = useState("")
   const [roleFilter, setRoleFilter] = useState("all")
   const [statusFilter, setStatusFilter] = useState("all")

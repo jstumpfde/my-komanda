@@ -56,7 +56,7 @@ function formatPeriod(start: string | null, end: string | null) {
   return `${formatDate(start)} — ${formatDate(end)}`
 }
 
-export function InvoicesTab({ trashed }: { trashed: boolean }) {
+export function InvoicesTab({ trashed = false }: { trashed?: boolean }) {
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [page, setPage] = useState(1)

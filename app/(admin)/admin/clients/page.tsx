@@ -1,6 +1,6 @@
 "use client"
 
-import { Suspense, useState, useEffect } from "react"
+import { Suspense, useState, useEffect, useCallback } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
@@ -10,9 +10,10 @@ import { Shield, Building2, Users, FileText, Trash2 } from "lucide-react"
 import { CompaniesTab } from "@/components/admin/clients/companies-tab"
 import { UsersTab } from "@/components/admin/clients/users-tab"
 import { InvoicesTab } from "@/components/admin/clients/invoices-tab"
+import { TrashTab } from "@/components/admin/clients/trash-tab"
 
-type View = "companies" | "users" | "invoices"
-const VIEWS: View[] = ["companies", "users", "invoices"]
+type View = "companies" | "users" | "invoices" | "trash"
+const VIEWS: View[] = ["companies", "users", "invoices", "trash"]
 
 // Счётчик в табе: маленькая «пилюля» с числом.
 function TabCount({ n }: { n: number }) {
@@ -28,24 +29,25 @@ function AdminClientsInner() {
   const searchParams = useSearchParams()
   const initial = searchParams.get("view")
   const [view, setView] = useState<View>(VIEWS.includes(initial as View) ? (initial as View) : "companies")
-  // Подвид: Активные / Корзина — общий для всех табов (в URL ?sub=trash).
-  const [sub, setSub] = useState<"active" | "trash">(searchParams.get("sub") === "trash" ? "trash" : "active")
-  const trashed = sub === "trash"
 
-  // Счётчики на табах (всего по платформе). Лёгкий запрос limit=1 → читаем total.
-  const [counts, setCounts] = useState<{ companies: number; users: number; invoices: number } | null>(null)
-  useEffect(() => {
-    let alive = true
+  // Счётчики на табах (всего по платформе) + общий счётчик корзины.
+  const [counts, setCounts] = useState<{ companies: number; users: number; invoices: number; trash: number } | null>(null)
+  const loadCounts = useCallback(() => {
     Promise.all([
       fetch("/api/admin/clients?limit=1").then(r => r.ok ? r.json() : null),
       fetch("/api/admin/users?limit=1").then(r => r.ok ? r.json() : null),
       fetch("/api/admin/invoices?limit=1").then(r => r.ok ? r.json() : null),
-    ]).then(([c, u, i]) => {
-      if (!alive) return
-      setCounts({ companies: c?.total ?? 0, users: u?.total ?? 0, invoices: i?.total ?? 0 })
+      fetch("/api/admin/trash").then(r => r.ok ? r.json() : null),
+    ]).then(([c, u, i, t]) => {
+      setCounts({
+        companies: c?.total ?? 0,
+        users: u?.total ?? 0,
+        invoices: i?.total ?? 0,
+        trash: t?.counts?.total ?? 0,
+      })
     }).catch(() => {})
-    return () => { alive = false }
   }, [])
+  useEffect(() => { loadCounts() }, [loadCounts])
 
   function changeView(v: string) {
     const next = v as View
@@ -54,16 +56,6 @@ function AdminClientsInner() {
     const params = new URLSearchParams(Array.from(searchParams.entries()))
     if (next === "companies") params.delete("view")
     else params.set("view", next)
-    const qs = params.toString()
-    router.replace(qs ? `/admin/clients?${qs}` : "/admin/clients", { scroll: false })
-  }
-
-  function changeSub(v: string) {
-    const next = v === "trash" ? "trash" : "active"
-    setSub(next)
-    const params = new URLSearchParams(Array.from(searchParams.entries()))
-    if (next === "active") params.delete("sub")
-    else params.set("sub", "trash")
     const qs = params.toString()
     router.replace(qs ? `/admin/clients?${qs}` : "/admin/clients", { scroll: false })
   }
@@ -83,27 +75,22 @@ function AdminClientsInner() {
             </div>
             <p className="text-muted-foreground text-sm mb-5">Управление компаниями, пользователями и счетами платформы</p>
 
-            {/* Табы хаба в одну строку: Компании/Пользователи/Счета | Активные/Корзина */}
+            {/* Табы хаба: Компании / Пользователи / Счета / Корзина */}
             <div className="flex items-center gap-3 flex-wrap mb-5">
               <Tabs value={view} onValueChange={changeView}>
                 <TabsList>
                   <TabsTrigger value="companies" className="gap-1.5"><Building2 className="w-3.5 h-3.5" />Компании{counts && <TabCount n={counts.companies} />}</TabsTrigger>
                   <TabsTrigger value="users" className="gap-1.5"><Users className="w-3.5 h-3.5" />Пользователи{counts && <TabCount n={counts.users} />}</TabsTrigger>
                   <TabsTrigger value="invoices" className="gap-1.5"><FileText className="w-3.5 h-3.5" />Счета{counts && <TabCount n={counts.invoices} />}</TabsTrigger>
-                </TabsList>
-              </Tabs>
-              <div className="h-6 w-px bg-border" />
-              <Tabs value={sub} onValueChange={changeSub}>
-                <TabsList>
-                  <TabsTrigger value="active">Активные</TabsTrigger>
-                  <TabsTrigger value="trash" className="gap-1.5"><Trash2 className="w-3.5 h-3.5" />Корзина</TabsTrigger>
+                  <TabsTrigger value="trash" className="gap-1.5"><Trash2 className="w-3.5 h-3.5" />Корзина{counts && counts.trash > 0 && <TabCount n={counts.trash} />}</TabsTrigger>
                 </TabsList>
               </Tabs>
             </div>
 
-            {view === "companies" && <CompaniesTab trashed={trashed} />}
-            {view === "users" && <UsersTab trashed={trashed} />}
-            {view === "invoices" && <InvoicesTab trashed={trashed} />}
+            {view === "companies" && <CompaniesTab />}
+            {view === "users" && <UsersTab />}
+            {view === "invoices" && <InvoicesTab />}
+            {view === "trash" && <TrashTab onChanged={loadCounts} />}
 
           </div>
         </main>

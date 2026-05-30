@@ -1,9 +1,11 @@
 // GET/POST /api/cron/trash-cleanup
-// Защищён X-Cron-Secret. Раз в сутки (03:00 МСК) удаляет НАВСЕГДА вакансии,
-// которые лежат в корзине (vacancies.deleted_at IS NOT NULL) дольше, чем
-// companies.trash_retention_days. Вместе с вакансией удаляются её кандидаты,
-// демо и hh-привязки (см. lib/vacancies/hard-delete.ts). Кандидаты других
-// вакансий не затрагиваются (candidates.vacancy_id один-к-одному).
+// Защищён X-Cron-Secret. Раз в сутки (03:00 МСК) удаляет НАВСЕГДА:
+//  • вакансии/материалы/анкеты в корзине дольше per-company trash_retention_days
+//    (вместе с вакансией — её кандидаты/демо/hh, см. lib/vacancies/hard-delete.ts);
+//  • единую Корзину /admin/clients (компании / пользователи-сироты /
+//    аннулированные счета) дольше ПЛАТФОРМЕННОГО срока
+//    platform_settings.trash_retention_days (дефолт 7, настраивается в UI Корзины).
+// Кандидаты других вакансий не затрагиваются (candidates.vacancy_id один-к-одному).
 //
 // Crontab на сервере (см. scripts / CLAUDE.md):
 //   0 0 * * * curl -s -X POST -H "X-Cron-Secret: $CRON_SECRET" \
@@ -11,13 +13,14 @@
 //   (00:00 UTC = 03:00 МСК)
 
 import { NextRequest, NextResponse } from "next/server"
-import { and, isNotNull, inArray, sql } from "drizzle-orm"
+import { and, eq, isNotNull, inArray, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { vacancies, companies, demoTemplates, questionnaireTemplates } from "@/lib/db/schema"
+import { vacancies, companies, demoTemplates, questionnaireTemplates, users, invoices } from "@/lib/db/schema"
 import { checkCronAuth } from "@/lib/cron/auth"
 import { startCronRun, finishCronRun } from "@/lib/cron/record-run"
 import { hardDeleteVacancy } from "@/lib/vacancies/hard-delete"
 import { hardDeleteCompany } from "@/lib/companies/hard-delete"
+import { getTrashRetentionDays } from "@/lib/platform/settings"
 
 const CRON_NAME = "trash-cleanup"
 // Предохранитель: не сносим больше N вакансий за один прогон.
@@ -31,6 +34,11 @@ async function handle(req: NextRequest) {
 
   const run = await startCronRun(CRON_NAME).catch(() => null)
   try {
+    // Единая Корзина /admin/clients (компании/пользователи/счета) использует
+    // ОДИН платформенный срок (platform_settings.trash_retention_days, дефолт 7).
+    // Корзины вакансий/материалов остаются на per-company trash_retention_days.
+    const platformRetentionDays = await getTrashRetentionDays()
+
     // Кандидаты на удаление: в корзине дольше, чем trash_retention_days компании.
     const due = await db
       .select({
@@ -120,9 +128,13 @@ async function handle(req: NextRequest) {
       }
     }
 
-    // ── Корзина компаний (миграция 0148) ────────────────────────────────────
-    // Необратимое удаление целого тенанта — поэтому осторожно: только из корзины
-    // (deleted_at), старше собственного trash_retention_days, малыми партиями.
+    // ── Единая Корзина /admin/clients (платформенный срок) ───────────────────
+    // Компании / пользователи / аннулированные счета удаляются по ОДНОМУ сроку
+    // platform_settings.trash_retention_days (дефолт 7), а не per-company.
+    const platformCutoff = sql`now() - make_interval(days => ${platformRetentionDays})`
+
+    // Компании. Необратимое удаление целого тенанта — осторожно: только из
+    // корзины (deleted_at), старше платформенного срока, малыми партиями.
     // Доп. предохранитель: пропускаем компании с активной подпиской.
     const dueCompanies = await db
       .select({ id: companies.id })
@@ -130,7 +142,7 @@ async function handle(req: NextRequest) {
       .where(and(
         isNotNull(companies.deletedAt),
         sql`${companies.subscriptionStatus} IS DISTINCT FROM 'active'`,
-        sql`${companies.deletedAt} < now() - make_interval(days => ${companies.trashRetentionDays})`,
+        sql`${companies.deletedAt} < ${platformCutoff}`,
       ))
       .orderBy(companies.deletedAt)
       .limit(MAX_COMPANIES_PER_RUN)
@@ -148,13 +160,67 @@ async function handle(req: NextRequest) {
       }
     }
 
+    // Пользователи в корзине (deleted_at) старше платформенного срока.
+    // Удаляем только сирот: их компания НЕ в корзине (компания в корзине уйдёт
+    // целиком через hardDeleteCompany выше, отдельно юзеров трогать не нужно).
+    let deletedUsers = 0
+    const dueUsers = await db
+      .select({ id: users.id })
+      .from(users)
+      .leftJoin(companies, eq(users.companyId, companies.id))
+      .where(and(
+        isNotNull(users.deletedAt),
+        sql`${users.deletedAt} < ${platformCutoff}`,
+        sql`${companies.deletedAt} IS NULL`,
+      ))
+      .orderBy(users.deletedAt)
+      .limit(MAX_PER_RUN)
+    if (dueUsers.length > 0) {
+      try {
+        await db.delete(users).where(inArray(users.id, dueUsers.map(u => u.id)))
+        deletedUsers = dueUsers.length
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        errors.push(`users: ${msg}`)
+        console.error("[trash-cleanup] failed to delete users", msg)
+      }
+    }
+
+    // Аннулированные счета (= корзина счетов) старше платформенного срока.
+    // Не трогаем счета компаний, которые сами в корзине (уйдут каскадом).
+    let deletedInvoices = 0
+    const dueInvoices = await db
+      .select({ id: invoices.id })
+      .from(invoices)
+      .leftJoin(companies, eq(invoices.companyId, companies.id))
+      .where(and(
+        eq(invoices.status, "cancelled"),
+        sql`${invoices.createdAt} < ${platformCutoff}`,
+        sql`${companies.deletedAt} IS NULL`,
+      ))
+      .orderBy(invoices.createdAt)
+      .limit(MAX_PER_RUN)
+    if (dueInvoices.length > 0) {
+      try {
+        await db.delete(invoices).where(inArray(invoices.id, dueInvoices.map(i => i.id)))
+        deletedInvoices = dueInvoices.length
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        errors.push(`invoices: ${msg}`)
+        console.error("[trash-cleanup] failed to delete invoices", msg)
+      }
+    }
+
     const metadata = {
       due:               due.length,
+      platformRetentionDays,
       deletedVacancies,
       deletedCandidates,
       deletedTemplates,
       deletedQuestionnaires,
       deletedCompanies,
+      deletedUsers,
+      deletedInvoices,
       templatesByCompany,
       errors:            errors.length,
     }
@@ -165,6 +231,8 @@ async function handle(req: NextRequest) {
       templates_deleted: deletedTemplates,
       questionnaires_deleted: deletedQuestionnaires,
       companies_deleted: deletedCompanies,
+      users_deleted:     deletedUsers,
+      invoices_deleted:  deletedInvoices,
       by_company:        templatesByCompany,
       deletedCandidates,
       errors:            errors.length,

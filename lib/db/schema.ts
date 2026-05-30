@@ -2273,6 +2273,14 @@ export const platformSettingsMigrations = pgTable("platform_settings_migrations"
   index("idx_psm_applied").on(t.appliedAt),
 ])
 
+// Платформенные KV-настройки (drizzle/0154). Первое применение —
+// 'trash_retention_days' (срок авто-удаления единой Корзины /admin/clients).
+export const platformSettings = pgTable("platform_settings", {
+  key:       text("key").primaryKey(),
+  value:     jsonb("value").notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+})
+
 // Group 14: журнал «emergency broadcast» действий — kill switch AI-чат-бота
 // у всех компаний, добавление глобального стоп-слова и т.п. Любой POST на
 // /api/platform/emergency/* пишет сюда строку с payload и result.
