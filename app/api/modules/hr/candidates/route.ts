@@ -11,6 +11,7 @@ type SortKey =
   | "favorite"
   | "aiScore"
   | "resumeScore"
+  | "rubricScore"
   | "salary"
   | "responseDate"
   | "status"
@@ -23,7 +24,7 @@ type SortKey =
   | "hrQueue"
 
 const ALLOWED_SORT_KEYS: ReadonlySet<SortKey> = new Set<SortKey>([
-  "favorite", "aiScore", "resumeScore", "salary", "responseDate", "status", "progress",
+  "favorite", "aiScore", "resumeScore", "rubricScore", "salary", "responseDate", "status", "progress",
   "createdAt", "name", "stage", "city", "source", "hrQueue",
 ])
 
@@ -118,6 +119,13 @@ function buildOrderBy(key: SortKey | null, dir: "asc" | "desc"): SQL[] {
       dir === "asc"
         ? sql`${candidates.resumeScore} ASC NULLS LAST`
         : sql`${candidates.resumeScore} DESC NULLS LAST`,
+      desc(candidates.createdAt),
+      tiebreak,
+    ]
+    case "rubricScore": return [
+      dir === "asc"
+        ? sql`${candidates.rubricScore} ASC NULLS LAST`
+        : sql`${candidates.rubricScore} DESC NULLS LAST`,
       desc(candidates.createdAt),
       tiebreak,
     ]
@@ -232,6 +240,7 @@ export async function GET(req: NextRequest) {
           score: candidates.score,
           aiScore: candidates.aiScore,
           resumeScore: candidates.resumeScore,
+          rubricScore: candidates.rubricScore,
           vacancyId: candidates.vacancyId,
           vacancyTitle: vacancies.title,
           createdAt: candidates.createdAt,
