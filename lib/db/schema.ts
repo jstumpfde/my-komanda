@@ -131,6 +131,16 @@ export const companies = pgTable("companies", {
   // billing / subscription
   planId:             uuid("plan_id").references(() => plans.id),
   billingEmail:       text("billing_email"),
+  // Документооборот (миграция 0149): счета/акты шлются на billingEmail.
+  // paperInvoicesRequired — клиенту нужны бумажные оригиналы; адрес — куда слать.
+  // autoInvoiceEnabled — авто-создание счёта за 7 дней (по умолчанию выкл).
+  // edo* — задел под подключение ЭДО (Диадок/СБИС/…) в будущем.
+  paperInvoicesRequired: boolean("paper_invoices_required").default(false),
+  paperInvoiceAddress:   text("paper_invoice_address"),
+  autoInvoiceEnabled:    boolean("auto_invoice_enabled").default(false),
+  edoEnabled:            boolean("edo_enabled").default(false),
+  edoProvider:           text("edo_provider"),
+  edoOperatorId:         text("edo_operator_id"),
   trialEndsAt:        timestamp("trial_ends_at"),
   subscriptionStatus: text("subscription_status").default("trial"), // 'trial'|'active'|'paused'|'cancelled'|'expired'
   currentPlanId:      uuid("current_plan_id").references(() => plans.id),
