@@ -51,3 +51,25 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
   return apiSuccess(updated)
 }
+
+// DELETE /api/admin/users/[id] — в корзину (soft-delete, обратимо).
+export async function DELETE(_req: NextRequest, { params }: Params) {
+  let currentUser
+  try {
+    currentUser = await requirePlatformAdmin()
+  } catch (e) {
+    return e as Response
+  }
+
+  const { id } = await params
+  if (currentUser.id === id) return apiError("Нельзя удалить собственный аккаунт", 400)
+
+  const [updated] = await db
+    .update(users)
+    .set({ deletedAt: new Date() })
+    .where(eq(users.id, id))
+    .returning({ id: users.id })
+
+  if (!updated) return apiError("Пользователь не найден", 404)
+  return apiSuccess({ trashed: true })
+}

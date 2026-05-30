@@ -6,7 +6,7 @@ import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Shield, Building2, Users, FileText } from "lucide-react"
+import { Shield, Building2, Users, FileText, Trash2 } from "lucide-react"
 import { CompaniesTab } from "@/components/admin/clients/companies-tab"
 import { UsersTab } from "@/components/admin/clients/users-tab"
 import { InvoicesTab } from "@/components/admin/clients/invoices-tab"
@@ -28,6 +28,9 @@ function AdminClientsInner() {
   const searchParams = useSearchParams()
   const initial = searchParams.get("view")
   const [view, setView] = useState<View>(VIEWS.includes(initial as View) ? (initial as View) : "companies")
+  // Подвид: Активные / Корзина — общий для всех табов (в URL ?sub=trash).
+  const [sub, setSub] = useState<"active" | "trash">(searchParams.get("sub") === "trash" ? "trash" : "active")
+  const trashed = sub === "trash"
 
   // Счётчики на табах (всего по платформе). Лёгкий запрос limit=1 → читаем total.
   const [counts, setCounts] = useState<{ companies: number; users: number; invoices: number } | null>(null)
@@ -55,6 +58,16 @@ function AdminClientsInner() {
     router.replace(qs ? `/admin/clients?${qs}` : "/admin/clients", { scroll: false })
   }
 
+  function changeSub(v: string) {
+    const next = v === "trash" ? "trash" : "active"
+    setSub(next)
+    const params = new URLSearchParams(Array.from(searchParams.entries()))
+    if (next === "active") params.delete("sub")
+    else params.set("sub", "trash")
+    const qs = params.toString()
+    router.replace(qs ? `/admin/clients?${qs}` : "/admin/clients", { scroll: false })
+  }
+
   return (
     <SidebarProvider defaultOpen={true}>
       <DashboardSidebar />
@@ -70,18 +83,27 @@ function AdminClientsInner() {
             </div>
             <p className="text-muted-foreground text-sm mb-5">Управление компаниями, пользователями и счетами платформы</p>
 
-            {/* Верхние табы хаба */}
-            <Tabs value={view} onValueChange={changeView} className="mb-5">
-              <TabsList>
-                <TabsTrigger value="companies" className="gap-1.5"><Building2 className="w-3.5 h-3.5" />Компании{counts && <TabCount n={counts.companies} />}</TabsTrigger>
-                <TabsTrigger value="users" className="gap-1.5"><Users className="w-3.5 h-3.5" />Пользователи{counts && <TabCount n={counts.users} />}</TabsTrigger>
-                <TabsTrigger value="invoices" className="gap-1.5"><FileText className="w-3.5 h-3.5" />Счета{counts && <TabCount n={counts.invoices} />}</TabsTrigger>
-              </TabsList>
-            </Tabs>
+            {/* Табы хаба в одну строку: Компании/Пользователи/Счета | Активные/Корзина */}
+            <div className="flex items-center gap-3 flex-wrap mb-5">
+              <Tabs value={view} onValueChange={changeView}>
+                <TabsList>
+                  <TabsTrigger value="companies" className="gap-1.5"><Building2 className="w-3.5 h-3.5" />Компании{counts && <TabCount n={counts.companies} />}</TabsTrigger>
+                  <TabsTrigger value="users" className="gap-1.5"><Users className="w-3.5 h-3.5" />Пользователи{counts && <TabCount n={counts.users} />}</TabsTrigger>
+                  <TabsTrigger value="invoices" className="gap-1.5"><FileText className="w-3.5 h-3.5" />Счета{counts && <TabCount n={counts.invoices} />}</TabsTrigger>
+                </TabsList>
+              </Tabs>
+              <div className="h-6 w-px bg-border" />
+              <Tabs value={sub} onValueChange={changeSub}>
+                <TabsList>
+                  <TabsTrigger value="active">Активные</TabsTrigger>
+                  <TabsTrigger value="trash" className="gap-1.5"><Trash2 className="w-3.5 h-3.5" />Корзина</TabsTrigger>
+                </TabsList>
+              </Tabs>
+            </div>
 
-            {view === "companies" && <CompaniesTab />}
-            {view === "users" && <UsersTab />}
-            {view === "invoices" && <InvoicesTab />}
+            {view === "companies" && <CompaniesTab trashed={trashed} />}
+            {view === "users" && <UsersTab trashed={trashed} />}
+            {view === "invoices" && <InvoicesTab trashed={trashed} />}
 
           </div>
         </main>

@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server"
 import { db } from "@/lib/db"
 import { invoices, companies } from "@/lib/db/schema"
-import { ilike, or, eq, count, desc, and, inArray } from "drizzle-orm"
+import { ilike, or, eq, ne, count, desc, and, inArray } from "drizzle-orm"
 import { requirePlatformAdmin, apiSuccess } from "@/lib/api-helpers"
 
 // GET /api/admin/invoices — cross-tenant список счетов платформы.
@@ -45,6 +45,10 @@ export async function GET(req: NextRequest) {
   }
   if (companyId) conditions.push(eq(invoices.companyId, companyId))
   if (status) conditions.push(eq(invoices.status, status))
+
+  // Корзина счетов = аннулированные. Активные — всё, кроме cancelled.
+  const trashed = searchParams.get("trashed") === "true"
+  conditions.push(trashed ? eq(invoices.status, "cancelled") : ne(invoices.status, "cancelled"))
 
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined
 

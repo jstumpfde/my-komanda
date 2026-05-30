@@ -7,13 +7,16 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+} from "@/components/ui/dialog"
+import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuRadioGroup,
   DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent,
   DropdownMenuSubTrigger, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import { cn } from "@/lib/utils"
-import { Search, Building2, Lock, Unlock, MoreHorizontal, Loader2, UserCog } from "lucide-react"
+import { Search, Building2, Lock, Unlock, MoreHorizontal, Loader2, UserCog, Trash2, RotateCcw, Eraser } from "lucide-react"
 import { toast } from "sonner"
 import { formatDate, useDebounce, ROLE_LABELS, CLIENT_ROLES, TableFooter } from "./shared"
 
@@ -47,7 +50,7 @@ const STATUS_FILTER = [
   { value: "blocked", label: "Заблокированные" },
 ]
 
-export function UsersTab() {
+export function UsersTab({ trashed }: { trashed: boolean }) {
   const [search, setSearch] = useState("")
   const [roleFilter, setRoleFilter] = useState("all")
   const [statusFilter, setStatusFilter] = useState("all")
@@ -59,6 +62,8 @@ export function UsersTab() {
   const [loading, setLoading] = useState(false)
   const [data, setData] = useState<ApiResponse>({ data: [], total: 0, page: 1, totalPages: 1 })
   const [busyId, setBusyId] = useState<string | null>(null)
+  const [cleanupOpen, setCleanupOpen] = useState(false)
+  const [cleaning, setCleaning] = useState(false)
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -67,6 +72,7 @@ export function UsersTab() {
       if (debouncedSearch) q.set("search", debouncedSearch)
       if (roleFilter !== "all") q.set("role", roleFilter)
       if (statusFilter !== "all") q.set("status", statusFilter)
+      if (trashed) q.set("trashed", "true")
       q.set("page", String(page))
       q.set("limit", String(pageSize))
       const res = await fetch(`/api/admin/users?${q.toString()}`)
@@ -74,10 +80,10 @@ export function UsersTab() {
     } finally {
       setLoading(false)
     }
-  }, [debouncedSearch, roleFilter, statusFilter, page, pageSize])
+  }, [debouncedSearch, roleFilter, statusFilter, page, pageSize, trashed])
 
   useEffect(() => { fetchData() }, [fetchData])
-  useEffect(() => { setPage(1) }, [debouncedSearch, roleFilter, statusFilter, pageSize])
+  useEffect(() => { setPage(1) }, [debouncedSearch, roleFilter, statusFilter, pageSize, trashed])
 
   async function patchUser(user: UserRow, payload: { role?: string; isActive?: boolean }) {
     setBusyId(user.id)
@@ -100,6 +106,37 @@ export function UsersTab() {
     } finally {
       setBusyId(null)
     }
+  }
+
+  async function trashUser(user: UserRow) {
+    setBusyId(user.id)
+    try {
+      const res = await fetch(`/api/admin/users/${user.id}`, { method: "DELETE" })
+      if (res.ok) { toast.success("Перемещён в корзину"); fetchData() }
+      else { const b = await res.json().catch(() => ({})); toast.error(b.error || "Не удалось") }
+    } catch { toast.error("Ошибка сети") } finally { setBusyId(null) }
+  }
+
+  async function restoreUser(user: UserRow) {
+    setBusyId(user.id)
+    try {
+      const res = await fetch(`/api/admin/users/${user.id}/restore`, { method: "POST" })
+      if (res.ok) { toast.success("Восстановлен"); fetchData() }
+      else { const b = await res.json().catch(() => ({})); toast.error(b.error || "Не удалось") }
+    } catch { toast.error("Ошибка сети") } finally { setBusyId(null) }
+  }
+
+  async function runCleanup() {
+    setCleaning(true)
+    try {
+      const res = await fetch("/api/admin/users/cleanup", { method: "POST" })
+      const b = await res.json().catch(() => ({}))
+      if (res.ok) {
+        toast.success(b.trashed > 0 ? `В корзину перемещено: ${b.trashed}` : "Нечего чистить")
+        setCleanupOpen(false)
+        fetchData()
+      } else toast.error(b.error || "Не удалось")
+    } catch { toast.error("Ошибка сети") } finally { setCleaning(false) }
   }
 
   return (
@@ -127,6 +164,11 @@ export function UsersTab() {
             {STATUS_FILTER.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
           </SelectContent>
         </Select>
+        {!trashed && (
+          <Button variant="outline" size="sm" className="h-9 gap-1.5 ml-auto" onClick={() => setCleanupOpen(true)}>
+            <Eraser className="w-3.5 h-3.5" />Очистить
+          </Button>
+        )}
       </div>
 
       {/* Таблица */}
@@ -146,7 +188,9 @@ export function UsersTab() {
               <tr><td colSpan={7} className="text-center py-8"><Loader2 className="w-5 h-5 animate-spin mx-auto text-muted-foreground" /></td></tr>
             )}
             {!loading && data.data.length === 0 && (
-              <tr><td colSpan={7} className="text-center py-8 text-sm text-muted-foreground">Нет пользователей по выбранным фильтрам</td></tr>
+              <tr><td colSpan={7} className="text-center py-8 text-sm text-muted-foreground">
+                {trashed ? "Корзина пуста" : "Нет пользователей по выбранным фильтрам"}
+              </td></tr>
             )}
             {!loading && data.data.map(user => {
               const isBlocked = user.isActive === false
@@ -167,7 +211,7 @@ export function UsersTab() {
                           <Building2 className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                           <span className="truncate max-w-[28ch]" title={user.companyName ?? ""}>{user.companyName ?? "—"}</span>
                         </Link>
-                      : <span className="text-muted-foreground">—</span>}
+                      : <span className="text-muted-foreground">— без компании</span>}
                   </DataCell>
                   <DataCell align="center">
                     <Badge variant="outline" className={cn("text-xs",
@@ -188,32 +232,44 @@ export function UsersTab() {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-56">
                           {user.companyId && (
+                            <DropdownMenuItem asChild className="gap-2 cursor-pointer">
+                              <Link href={`/admin/clients/${user.companyId}`}><Building2 className="h-3.5 w-3.5" />Открыть компанию</Link>
+                            </DropdownMenuItem>
+                          )}
+                          {trashed ? (
                             <>
-                              <DropdownMenuItem asChild className="gap-2 cursor-pointer">
-                                <Link href={`/admin/clients/${user.companyId}`}><Building2 className="h-3.5 w-3.5" />Открыть компанию</Link>
+                              {user.companyId && <DropdownMenuSeparator />}
+                              <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => restoreUser(user)}>
+                                <RotateCcw className="h-3.5 w-3.5" />Восстановить
+                              </DropdownMenuItem>
+                            </>
+                          ) : (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuSub>
+                                <DropdownMenuSubTrigger className="gap-2"><UserCog className="h-3.5 w-3.5" />Сменить роль</DropdownMenuSubTrigger>
+                                <DropdownMenuSubContent>
+                                  <DropdownMenuLabel className="text-xs">Роль пользователя</DropdownMenuLabel>
+                                  <DropdownMenuRadioGroup value={user.role} onValueChange={(v) => { if (v !== user.role) patchUser(user, { role: v }) }}>
+                                    {CLIENT_ROLES.map(r => (
+                                      <DropdownMenuRadioItem key={r} value={r} className="cursor-pointer">{ROLE_LABELS[r] ?? r}</DropdownMenuRadioItem>
+                                    ))}
+                                  </DropdownMenuRadioGroup>
+                                </DropdownMenuSubContent>
+                              </DropdownMenuSub>
+                              <DropdownMenuItem
+                                className={cn("gap-2 cursor-pointer", !isBlocked && "text-destructive focus:text-destructive")}
+                                onClick={() => patchUser(user, { isActive: isBlocked })}
+                              >
+                                {isBlocked ? <Unlock className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
+                                {isBlocked ? "Разблокировать" : "Заблокировать"}
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
+                              <DropdownMenuItem className="gap-2 cursor-pointer text-destructive focus:text-destructive" onClick={() => trashUser(user)}>
+                                <Trash2 className="h-3.5 w-3.5" />В корзину
+                              </DropdownMenuItem>
                             </>
                           )}
-                          <DropdownMenuSub>
-                            <DropdownMenuSubTrigger className="gap-2"><UserCog className="h-3.5 w-3.5" />Сменить роль</DropdownMenuSubTrigger>
-                            <DropdownMenuSubContent>
-                              <DropdownMenuLabel className="text-xs">Роль пользователя</DropdownMenuLabel>
-                              <DropdownMenuRadioGroup value={user.role} onValueChange={(v) => { if (v !== user.role) patchUser(user, { role: v }) }}>
-                                {CLIENT_ROLES.map(r => (
-                                  <DropdownMenuRadioItem key={r} value={r} className="cursor-pointer">{ROLE_LABELS[r] ?? r}</DropdownMenuRadioItem>
-                                ))}
-                              </DropdownMenuRadioGroup>
-                            </DropdownMenuSubContent>
-                          </DropdownMenuSub>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            className={cn("gap-2 cursor-pointer", !isBlocked && "text-destructive focus:text-destructive")}
-                            onClick={() => patchUser(user, { isActive: isBlocked })}
-                          >
-                            {isBlocked ? <Unlock className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
-                            {isBlocked ? "Разблокировать" : "Заблокировать"}
-                          </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </div>
@@ -228,8 +284,26 @@ export function UsersTab() {
       <TableFooter
         shown={data.data.length} total={data.total} page={page} totalPages={data.totalPages}
         loading={loading} pageSize={pageSize} onPage={setPage} onPageSize={setPageSize}
-        emptyText="Нет пользователей"
+        emptyText={trashed ? "Корзина пуста" : "Нет пользователей"}
       />
+
+      {/* Очистка: наблюдатели + осиротевшие → в корзину */}
+      <Dialog open={cleanupOpen} onOpenChange={setCleanupOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Очистить список?</DialogTitle>
+            <DialogDescription>
+              В корзину будут перемещены: пользователи с ролью «Наблюдатель» (обычно демо) и осиротевшие — без компании или с несуществующей компанией. Действие обратимо (восстановление из «Корзины»).
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2 mt-2">
+            <Button variant="outline" size="sm" onClick={() => setCleanupOpen(false)} disabled={cleaning}>Отмена</Button>
+            <Button variant="destructive" size="sm" onClick={runCleanup} disabled={cleaning} className="gap-1.5">
+              {cleaning ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Eraser className="w-3.5 h-3.5" />}В корзину
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }

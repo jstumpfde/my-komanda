@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import { cn } from "@/lib/utils"
-import { Search, Building2, CheckCircle2, XCircle, FileText, FileCheck2, Send, MoreHorizontal, Loader2 } from "lucide-react"
+import { Search, Building2, CheckCircle2, XCircle, FileText, FileCheck2, Send, RotateCcw, MoreHorizontal, Loader2 } from "lucide-react"
 import { toast } from "sonner"
 import { formatPrice, formatDate, useDebounce, TableFooter } from "./shared"
 
@@ -56,7 +56,7 @@ function formatPeriod(start: string | null, end: string | null) {
   return `${formatDate(start)} — ${formatDate(end)}`
 }
 
-export function InvoicesTab() {
+export function InvoicesTab({ trashed }: { trashed: boolean }) {
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [page, setPage] = useState(1)
@@ -74,6 +74,7 @@ export function InvoicesTab() {
       const q = new URLSearchParams()
       if (debouncedSearch) q.set("search", debouncedSearch)
       if (statusFilter !== "all") q.set("status", statusFilter)
+      if (trashed) q.set("trashed", "true")
       q.set("page", String(page))
       q.set("limit", String(pageSize))
       const res = await fetch(`/api/admin/invoices?${q.toString()}`)
@@ -81,12 +82,12 @@ export function InvoicesTab() {
     } finally {
       setLoading(false)
     }
-  }, [debouncedSearch, statusFilter, page, pageSize])
+  }, [debouncedSearch, statusFilter, page, pageSize, trashed])
 
   useEffect(() => { fetchData() }, [fetchData])
-  useEffect(() => { setPage(1) }, [debouncedSearch, statusFilter, pageSize])
+  useEffect(() => { setPage(1) }, [debouncedSearch, statusFilter, pageSize, trashed])
 
-  async function setStatus(invoice: InvoiceRow, status: "paid" | "cancelled") {
+  async function setStatus(invoice: InvoiceRow, status: "paid" | "cancelled" | "issued") {
     setBusyId(invoice.id)
     try {
       const res = await fetch(`/api/admin/invoices/${invoice.id}`, {
@@ -94,7 +95,7 @@ export function InvoicesTab() {
         body: JSON.stringify({ status }),
       })
       if (res.ok) {
-        toast.success(status === "paid" ? "Счёт отмечен оплаченным" : "Счёт аннулирован")
+        toast.success(status === "paid" ? "Счёт отмечен оплаченным" : status === "issued" ? "Счёт восстановлен" : "Счёт аннулирован")
         fetchData()
       } else {
         const b = await res.json().catch(() => ({}))
@@ -210,7 +211,14 @@ export function InvoicesTab() {
                           <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => sendDoc(inv, "act")}>
                             <Send className="h-3.5 w-3.5" />Отправить акт на email
                           </DropdownMenuItem>
-                          {!isFinal && (
+                          {trashed ? (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => setStatus(inv, "issued")}>
+                                <RotateCcw className="h-3.5 w-3.5" />Восстановить
+                              </DropdownMenuItem>
+                            </>
+                          ) : !isFinal ? (
                             <>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => setStatus(inv, "paid")}>
@@ -220,10 +228,10 @@ export function InvoicesTab() {
                                 className="gap-2 cursor-pointer text-destructive focus:text-destructive"
                                 onClick={() => setStatus(inv, "cancelled")}
                               >
-                                <XCircle className="h-3.5 w-3.5" />Аннулировать
+                                <XCircle className="h-3.5 w-3.5" />Аннулировать (в корзину)
                               </DropdownMenuItem>
                             </>
-                          )}
+                          ) : null}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </div>

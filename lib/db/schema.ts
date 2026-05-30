@@ -210,6 +210,9 @@ export const users = pgTable("users", {
   customSchedule: jsonb("custom_schedule"),          // { enabled, days: { mon: { active, start, end }, ... } }
   telegramChatId: text("telegram_chat_id"),
   isActive: boolean("is_active").default(true),
+  // Корзина пользователей (миграция 0152): soft-delete для очистки списка
+  // (демо-наблюдатели, осиротевшие). NULL = активный.
+  deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").defaultNow(),
 })
 

@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server"
 import { db } from "@/lib/db"
 import { users, companies } from "@/lib/db/schema"
-import { ilike, or, eq, count, asc, desc, and, inArray } from "drizzle-orm"
+import { ilike, or, eq, count, asc, desc, and, inArray, isNull, isNotNull } from "drizzle-orm"
 import { requirePlatformAdmin, apiSuccess } from "@/lib/api-helpers"
 
 // GET /api/admin/users — cross-tenant список всех пользователей платформы.
@@ -53,6 +53,10 @@ export async function GET(req: NextRequest) {
   if (role) conditions.push(eq(users.role, role))
   if (status === "active") conditions.push(eq(users.isActive, true))
   if (status === "blocked") conditions.push(eq(users.isActive, false))
+
+  // Корзина: по умолчанию активные (deleted_at IS NULL); ?trashed=true — корзина.
+  const trashed = searchParams.get("trashed") === "true"
+  conditions.push(trashed ? isNotNull(users.deletedAt) : isNull(users.deletedAt))
 
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined
 

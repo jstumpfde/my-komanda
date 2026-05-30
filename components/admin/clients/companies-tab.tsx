@@ -7,7 +7,6 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog"
@@ -65,12 +64,9 @@ const STATUS_FILTER = [
   { value: "cancelled", label: "Отменён" },
 ]
 
-type SubTab = "active" | "trash"
-
-export function CompaniesTab() {
+export function CompaniesTab({ trashed }: { trashed: boolean }) {
   const searchParams = useSearchParams()
 
-  const [tab, setTab] = useState<SubTab>("active")
   const [search, setSearch] = useState(searchParams.get("search") ?? "")
   const [sort, setSort] = useState(searchParams.get("sort") ?? "created_at")
   const [page, setPage] = useState(1)
@@ -93,7 +89,7 @@ export function CompaniesTab() {
   const [permanentTyped, setPermanentTyped] = useState("")
   const [permanentBusy, setPermanentBusy] = useState(false)
 
-  const isTrash = tab === "trash"
+  const isTrash = trashed
 
   const fetchData = useCallback(async (params: {
     search: string, status: string, page: number, sort: string, pageSize: number, trashed: boolean
@@ -122,7 +118,7 @@ export function CompaniesTab() {
   useEffect(() => {
     setPage(1)
     setSelected(new Set())
-  }, [debouncedSearch, statusFilter, sort, pageSize, tab])
+  }, [debouncedSearch, statusFilter, sort, pageSize, trashed])
 
   const refetch = () => fetchData({ search: debouncedSearch, status: statusFilter, page, sort, pageSize, trashed: isTrash })
 
@@ -237,14 +233,6 @@ export function CompaniesTab() {
 
   return (
     <>
-      {/* Подвкладки: Активные / Корзина */}
-      <Tabs value={tab} onValueChange={(v) => setTab(v as SubTab)} className="mb-4">
-        <TabsList>
-          <TabsTrigger value="active">Активные</TabsTrigger>
-          <TabsTrigger value="trash" className="gap-1.5"><Trash2 className="w-3.5 h-3.5" />Корзина</TabsTrigger>
-        </TabsList>
-      </Tabs>
-
       {/* Поиск и фильтры */}
       <div className="flex items-center gap-3 flex-wrap mb-4">
         <div className="relative flex-1 min-w-[220px] max-w-sm">
