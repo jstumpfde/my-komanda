@@ -1,6 +1,6 @@
 "use client"
 
-import { Suspense, useState } from "react"
+import { Suspense, useState, useEffect } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
@@ -14,11 +14,35 @@ import { InvoicesTab } from "@/components/admin/clients/invoices-tab"
 type View = "companies" | "users" | "invoices"
 const VIEWS: View[] = ["companies", "users", "invoices"]
 
+// Счётчик в табе: маленькая «пилюля» с числом.
+function TabCount({ n }: { n: number }) {
+  return (
+    <span className="ml-1 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-muted-foreground">
+      {n.toLocaleString("ru-RU")}
+    </span>
+  )
+}
+
 function AdminClientsInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const initial = searchParams.get("view")
   const [view, setView] = useState<View>(VIEWS.includes(initial as View) ? (initial as View) : "companies")
+
+  // Счётчики на табах (всего по платформе). Лёгкий запрос limit=1 → читаем total.
+  const [counts, setCounts] = useState<{ companies: number; users: number; invoices: number } | null>(null)
+  useEffect(() => {
+    let alive = true
+    Promise.all([
+      fetch("/api/admin/clients?limit=1").then(r => r.ok ? r.json() : null),
+      fetch("/api/admin/users?limit=1").then(r => r.ok ? r.json() : null),
+      fetch("/api/admin/invoices?limit=1").then(r => r.ok ? r.json() : null),
+    ]).then(([c, u, i]) => {
+      if (!alive) return
+      setCounts({ companies: c?.total ?? 0, users: u?.total ?? 0, invoices: i?.total ?? 0 })
+    }).catch(() => {})
+    return () => { alive = false }
+  }, [])
 
   function changeView(v: string) {
     const next = v as View
@@ -49,9 +73,9 @@ function AdminClientsInner() {
             {/* Верхние табы хаба */}
             <Tabs value={view} onValueChange={changeView} className="mb-5">
               <TabsList>
-                <TabsTrigger value="companies" className="gap-1.5"><Building2 className="w-3.5 h-3.5" />Компании</TabsTrigger>
-                <TabsTrigger value="users" className="gap-1.5"><Users className="w-3.5 h-3.5" />Пользователи</TabsTrigger>
-                <TabsTrigger value="invoices" className="gap-1.5"><FileText className="w-3.5 h-3.5" />Счета</TabsTrigger>
+                <TabsTrigger value="companies" className="gap-1.5"><Building2 className="w-3.5 h-3.5" />Компании{counts && <TabCount n={counts.companies} />}</TabsTrigger>
+                <TabsTrigger value="users" className="gap-1.5"><Users className="w-3.5 h-3.5" />Пользователи{counts && <TabCount n={counts.users} />}</TabsTrigger>
+                <TabsTrigger value="invoices" className="gap-1.5"><FileText className="w-3.5 h-3.5" />Счета{counts && <TabCount n={counts.invoices} />}</TabsTrigger>
               </TabsList>
             </Tabs>
 
