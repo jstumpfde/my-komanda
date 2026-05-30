@@ -21,6 +21,7 @@ import { SortMenu } from "@/components/dashboard/sort-menu"
 import { Tooltip as UITooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip"
 import type { CandidateSortMode } from "@/lib/candidate-sort"
 import { CandidateDrawer } from "@/components/candidates/candidate-drawer"
+import { RubricRankPanel } from "@/components/candidates/rubric-rank-panel"
 import { BulkActionsBar, type BulkAction } from "@/components/dashboard/bulk-actions-bar"
 import { AddCandidateDialog } from "@/components/dashboard/add-candidate-dialog"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
@@ -2397,6 +2398,12 @@ export default function VacancyPage() {
               </TabsContent>
 
               <TabsContent value="candidates">
+                {/* Рубричное ранжирование (shadow) */}
+                <RubricRankPanel
+                  vacancyId={id}
+                  onOpenCandidate={(cid) => { setDrawerCandidateId(cid); setDrawerOpen(true) }}
+                />
+
                 {/* Talent Pool radar */}
                 {talentMatches.length > 0 && !talentRadarHidden && (
                   <div className="mb-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
