@@ -760,6 +760,37 @@ export default function VacancyPage() {
   }, [activeTab])
   const [settingsSection, setSettingsSection] = useState<SettingsSectionId>(initialSettingsSection)
   const [anPeriod, setAnPeriod] = useState("all")
+  // Аналитика: серверная агрегация по ВСЕЙ вакансии (источник истины — БД,
+  // а не выгруженный на клиент массив columns). Период anPeriod дёргает
+  // endpoint заново; маппинг today→7d (серверный фильтр работает по дням).
+  const [analytics, setAnalytics] = useState<{
+    total: number
+    inProgress: number
+    rejected: number
+    hired: number
+    avgScore: number
+    vacancyCreatedAt: string | null
+    stageCounts: Record<string, number>
+    funnelStages: { stage: string; count: number; color: string }[]
+    sourceData: { source: string; count: number; avgScore: number; pct: number }[]
+    scoreRanges: { range: string; count: number; color: string }[]
+  } | null>(null)
+  const [analyticsLoading, setAnalyticsLoading] = useState(false)
+
+  useEffect(() => {
+    if (activeTab !== "analytics") return
+    const periodMap: Record<string, string> = { all: "all", today: "7d", "7d": "7d", "30d": "30d", "90d": "90d" }
+    const period = periodMap[anPeriod] ?? "all"
+    let cancelled = false
+    setAnalyticsLoading(true)
+    fetch(`/api/modules/hr/vacancies/${id}/analytics?period=${period}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => { if (!cancelled) setAnalytics(data) })
+      .catch(() => { if (!cancelled) setAnalytics(null) })
+      .finally(() => { if (!cancelled) setAnalyticsLoading(false) })
+    return () => { cancelled = true }
+  }, [activeTab, id, anPeriod])
+
   const [anSources, setAnSources] = useState<string[]>([])
   const [anCities, setAnCities] = useState<string[]>([])
   const [anFormats, setAnFormats] = useState<string[]>([])
@@ -2483,34 +2514,26 @@ export default function VacancyPage() {
                 {(() => {
                   const ttStyle = { backgroundColor: "var(--popover)", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "12px" }
 
-                  // ─── Apply analytics filters ───
-                  const now = Date.now()
-                  const periodMs: Record<string, number> = { today: 86400000, "7d": 7 * 86400000, "30d": 30 * 86400000, all: Infinity }
-                  const maxAge = periodMs[anPeriod] || Infinity
+                  // ─── Источник истины — серверная агрегация по ВСЕЙ вакансии ───
+                  // (endpoint /analytics, фетчится при открытии таба и смене
+                  // периода). Раньше всё считалось из columns — на вакансиях с
+                  // серверной пагинацией выборка неполная → цифры занижались и
+                  // расходились с шапкой. Период единый для всех блоков.
+                  const anTotal = analytics?.total ?? 0
+                  // Воронка/источники/распределение — напрямую из server payload.
+                  const funnelStages = analytics?.funnelStages ?? []
+                  const funnelData = funnelStages
+                  const srcColors: Record<string, string> = { "hh.ru": "#D6001C", "hh": "#D6001C", "Avito": "#00AAFF", "avito": "#00AAFF", "SuperJob": "#0066CC", "superjob": "#0066CC", "Telegram": "#26A5E4", "telegram": "#26A5E4", "WhatsApp": "#25D366", "whatsapp": "#25D366", "Сайт": "#F59E0B", "site": "#F59E0B", "Реферал": "#8B5CF6", "referral": "#8B5CF6", "LinkedIn": "#0A66C2" }
+                  const sourceData = (analytics?.sourceData ?? []).map((s) => ({
+                    ...s, color: srcColors[s.source] || "#94a3b8",
+                  }))
+                  const scoreRanges = analytics?.scoreRanges ?? []
+                  const avgScore = analytics?.avgScore ?? 0
+                  const daysActive = analytics?.vacancyCreatedAt
+                    ? Math.floor((Date.now() - new Date(analytics.vacancyCreatedAt).getTime()) / 86400000)
+                    : (apiVacancy?.createdAt ? Math.floor((Date.now() - new Date(apiVacancy.createdAt).getTime()) / 86400000) : 0)
 
-                  const allCands = columns.flatMap((c) => c.candidates).filter((c) => {
-                    if (maxAge < Infinity && (now - c.addedAt.getTime()) > maxAge) return false
-                    if (anSources.length > 0 && !anSources.includes(c.source)) return false
-                    if (anCities.length > 0 && !anCities.includes(c.city)) return false
-                    if (anFormats.length > 0) { const f = (c as any).workFormat || "office"; if (!anFormats.includes(f)) return false }
-                    if (c.salaryMin < anSalaryMin || c.salaryMax > anSalaryMax) return false
-                    if (c.score < anScoreMin) return false
-                    if (anStages.length > 0) {
-                      const col = columns.find((col) => col.candidates.some((x) => x.id === c.id))
-                      if (col && !anStages.includes(col.id)) return false
-                    }
-                    return true
-                  })
-
-                  // Dynamic filter options
-                  const allRaw = columns.flatMap((c) => c.candidates)
-                  const cityOptions = Array.from(new Set(allRaw.map((c) => c.city))).sort()
-                  const sourceOptions = Array.from(new Set(allRaw.map((c) => c.source))).sort()
-                  const hasAnFilters = anPeriod !== "all" || anSources.length > 0 || anCities.length > 0 || anFormats.length > 0 || anSalaryMin > 0 || anSalaryMax < 300000 || anScoreMin > 0 || anStages.length > 0
-                  const resetAnFilters = () => { setAnPeriod("all"); setAnSources([]); setAnCities([]); setAnFormats([]); setAnSalaryMin(0); setAnSalaryMax(300000); setAnScoreMin(0); setAnStages([]) }
                   // Минимальный «значимый» объём, при котором конверсия имеет смысл.
-                  // На малой выборке (< 5 прошли предыдущий этап) проценты — шум,
-                  // и тревога «Здесь теряем больше всего» вводит в заблуждение.
                   const ALARM_MIN_PREV = 5
                   const ALARM_MAX_PCT = 30
                   const transitions = funnelStages.slice(1).map((s, i) => {
@@ -2522,12 +2545,6 @@ export default function VacancyPage() {
                       to: s.stage,
                       pct,
                       hasData,
-                      // Тревогу показываем только если: (1) есть данные на старте
-                      // перехода, (2) через этап реально прошёл репрезентативный
-                      // объём, (3) конверсия низкая, (4) на целевой этап реально
-                      // кто-то дошёл (s.count >= 1) — без этого пустой этап с 0
-                      // кандидатами всегда подсвечивается как «бутылочное горло»,
-                      // хотя на самом деле просто никто туда пока не классифицирован.
                       eligibleForAlarm: hasData && prev >= ALARM_MIN_PREV && pct <= ALARM_MAX_PCT && s.count >= 1,
                     }
                   })
@@ -2535,31 +2552,32 @@ export default function VacancyPage() {
                   const minPct = eligibleAlarms.length > 0
                     ? Math.min(...eligibleAlarms.map((t) => t.pct))
                     : -1
-                  const overallConv = totalCandidates > 0 ? ((funnelStages[funnelStages.length - 1].count / totalCandidates) * 100).toFixed(1) : "0"
-
-                  // Sources
-                  const srcMap = new Map<string, { count: number; scoreSum: number }>()
-                  allCands.forEach((c) => {
-                    const e = srcMap.get(c.source) || { count: 0, scoreSum: 0 }
-                    e.count++; e.scoreSum += c.score
-                    srcMap.set(c.source, e)
-                  })
-                  const srcColors: Record<string, string> = { "hh.ru": "#D6001C", "hh": "#D6001C", "Avito": "#00AAFF", "avito": "#00AAFF", "SuperJob": "#0066CC", "superjob": "#0066CC", "Telegram": "#26A5E4", "telegram": "#26A5E4", "WhatsApp": "#25D366", "whatsapp": "#25D366", "Сайт": "#F59E0B", "site": "#F59E0B", "Реферал": "#8B5CF6", "referral": "#8B5CF6", "LinkedIn": "#0A66C2" }
-                  const sourceData = Array.from(srcMap.entries()).map(([source, d]) => ({
-                    source, count: d.count, avgScore: d.count > 0 ? Math.round(d.scoreSum / d.count) : 0,
-                    pct: totalCandidates > 0 ? Math.round((d.count / totalCandidates) * 100) : 0,
-                    color: srcColors[source] || "#94a3b8",
-                  })).sort((a, b) => b.count - a.count)
-
-                  // Score distribution
-                  const scoreRanges = [
-                    { range: "0-40 (низкий)", count: allCands.filter((c) => c.score <= 40).length, color: "#ef4444" },
-                    { range: "41-70 (средний)", count: allCands.filter((c) => c.score > 40 && c.score <= 70).length, color: "#f59e0b" },
-                    { range: "71-100 (высокий)", count: allCands.filter((c) => c.score > 70).length, color: "#22c55e" },
-                  ]
+                  const overallConv = anTotal > 0 && funnelStages.length > 0
+                    ? ((funnelStages[funnelStages.length - 1].count / anTotal) * 100).toFixed(1)
+                    : "0"
 
                   return (
                     <div className="space-y-4 max-w-[1200px] mx-auto">
+                      {/* Период — единый серверный фильтр для ВСЕХ блоков ниже */}
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-xs text-muted-foreground">
+                          {analyticsLoading
+                            ? "Загрузка аналитики…"
+                            : `Данные по всей вакансии${anPeriod === "all" ? "" : " за выбранный период"}`}
+                        </p>
+                        <Select value={anPeriod} onValueChange={setAnPeriod}>
+                          <SelectTrigger className="w-[200px] h-8 text-xs">
+                            <SelectValue placeholder="Период" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">Всё время</SelectItem>
+                            <SelectItem value="7d">Последние 7 дней</SelectItem>
+                            <SelectItem value="30d">Последние 30 дней</SelectItem>
+                            <SelectItem value="90d">Последние 90 дней</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
                       {/* Funnel chart + 3 metric cards */}
                       <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-4">
                         <Card>
@@ -2596,10 +2614,10 @@ export default function VacancyPage() {
 
                         {/* 4 metric cards — 2x2 grid */}
                         <div className="grid grid-cols-2 gap-3">
-                          <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Всего кандидатов</p><p className="text-2xl font-bold text-blue-600 mt-1">{totalCandidates}</p></CardContent></Card>
+                          <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Всего кандидатов</p><p className="text-2xl font-bold text-blue-600 mt-1">{anTotal}</p></CardContent></Card>
                           <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Конверсия воронки</p><p className="text-2xl font-bold text-emerald-600 mt-1">{overallConv}%</p></CardContent></Card>
-                          <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Ср. AI-скор</p><p className="text-2xl font-bold text-purple-600 mt-1">{allCands.length > 0 ? Math.round(allCands.reduce((a, c) => a + c.score, 0) / allCands.length) : 0}</p></CardContent></Card>
-                          <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Дней активна</p><p className="text-2xl font-bold text-amber-600 mt-1">{apiVacancy?.createdAt ? Math.floor((Date.now() - new Date(apiVacancy.createdAt).getTime()) / 86400000) : 0}</p></CardContent></Card>
+                          <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Ср. AI-скор</p><p className="text-2xl font-bold text-purple-600 mt-1">{avgScore}</p></CardContent></Card>
+                          <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Дней активна</p><p className="text-2xl font-bold text-amber-600 mt-1">{daysActive}</p></CardContent></Card>
                         </div>
                       </div>
 
