@@ -10,7 +10,6 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
-import { Textarea } from "@/components/ui/textarea"
 import { Loader2, FileText } from "lucide-react"
 import { toast } from "sonner"
 
@@ -18,11 +17,18 @@ interface DocSettings {
   billingEmail: string | null
   paperInvoicesRequired: boolean | null
   paperInvoiceAddress: string | null
+  paperInvoiceIndex: string | null
+  paperInvoiceCity: string | null
+  paperInvoiceRecipient: string | null
   autoInvoiceEnabled: boolean | null
   edoEnabled: boolean | null
   edoProvider: string | null
   edoOperatorId: string | null
+  // Для «подтянуть из адреса компании»:
   postalAddress: string | null
+  legalAddress: string | null
+  city: string | null
+  postalCode: string | null
 }
 
 export function DocumentSettings() {
@@ -39,6 +45,18 @@ export function DocumentSettings() {
 
   function patch(p: Partial<DocSettings>) { setS(prev => prev ? { ...prev, ...p } : prev) }
 
+  // Подтянуть адрес для оригиналов из адреса компании (юр./факт.-почтового).
+  function pullFromCompany(kind: "legal" | "postal") {
+    if (!s) return
+    const addr = kind === "legal" ? s.legalAddress : s.postalAddress
+    patch({
+      paperInvoiceAddress: addr ?? s.paperInvoiceAddress ?? "",
+      paperInvoiceCity: s.city ?? s.paperInvoiceCity ?? "",
+      paperInvoiceIndex: s.postalCode ?? s.paperInvoiceIndex ?? "",
+    })
+    toast.success(kind === "legal" ? "Подтянут юридический адрес" : "Подтянут фактический адрес")
+  }
+
   async function save() {
     if (!s) return
     setSaving(true)
@@ -50,6 +68,9 @@ export function DocumentSettings() {
           billingEmail: s.billingEmail ?? "",
           paperInvoicesRequired: !!s.paperInvoicesRequired,
           paperInvoiceAddress: s.paperInvoiceAddress ?? "",
+          paperInvoiceIndex: s.paperInvoiceIndex ?? "",
+          paperInvoiceCity: s.paperInvoiceCity ?? "",
+          paperInvoiceRecipient: s.paperInvoiceRecipient ?? "",
           autoInvoiceEnabled: !!s.autoInvoiceEnabled,
           edoEnabled: !!s.edoEnabled,
           edoProvider: s.edoProvider ?? "",
@@ -102,15 +123,33 @@ export function DocumentSettings() {
           <Switch checked={!!s.paperInvoicesRequired} onCheckedChange={v => patch({ paperInvoicesRequired: v })} />
         </div>
         {s.paperInvoicesRequired && (
-          <div className="space-y-1.5">
-            <Label className="text-sm">Адрес для оригиналов</Label>
-            <Textarea
-              rows={2}
-              value={s.paperInvoiceAddress ?? ""}
-              onChange={e => patch({ paperInvoiceAddress: e.target.value })}
-              placeholder={s.postalAddress ? `Напр.: ${s.postalAddress}` : "Индекс, город, улица, дом, офис, получатель"}
-              className="resize-none"
-            />
+          <div className="space-y-3 rounded-lg border border-border p-3">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <Label className="text-sm font-medium">Адрес для оригиналов</Label>
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-muted-foreground">подтянуть:</span>
+                <Button type="button" variant="outline" size="sm" className="h-7 text-xs" onClick={() => pullFromCompany("legal")}>Юридический</Button>
+                <Button type="button" variant="outline" size="sm" className="h-7 text-xs" onClick={() => pullFromCompany("postal")}>Фактический</Button>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Получатель</Label>
+              <Input value={s.paperInvoiceRecipient ?? ""} onChange={e => patch({ paperInvoiceRecipient: e.target.value })} placeholder="ООО «Компания» / ФИО" className="h-9" />
+            </div>
+            <div className="grid grid-cols-[120px_1fr] gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Индекс</Label>
+                <Input value={s.paperInvoiceIndex ?? ""} onChange={e => patch({ paperInvoiceIndex: e.target.value })} placeholder="101000" className="h-9" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Город</Label>
+                <Input value={s.paperInvoiceCity ?? ""} onChange={e => patch({ paperInvoiceCity: e.target.value })} placeholder="Москва" className="h-9" />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Улица, дом, офис</Label>
+              <Input value={s.paperInvoiceAddress ?? ""} onChange={e => patch({ paperInvoiceAddress: e.target.value })} placeholder="ул. Тверская, д. 1, оф. 100" className="h-9" />
+            </div>
           </div>
         )}
       </div>

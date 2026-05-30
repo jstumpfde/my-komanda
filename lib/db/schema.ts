@@ -136,7 +136,12 @@ export const companies = pgTable("companies", {
   // autoInvoiceEnabled — авто-создание счёта за 7 дней (по умолчанию выкл).
   // edo* — задел под подключение ЭДО (Диадок/СБИС/…) в будущем.
   paperInvoicesRequired: boolean("paper_invoices_required").default(false),
+  // Адрес для оригиналов — отдельные ячейки (миграция 0153). paperInvoiceAddress
+  // = улица/дом/офис; индекс/город/получатель — отдельно.
   paperInvoiceAddress:   text("paper_invoice_address"),
+  paperInvoiceIndex:     text("paper_invoice_index"),
+  paperInvoiceCity:      text("paper_invoice_city"),
+  paperInvoiceRecipient: text("paper_invoice_recipient"),
   autoInvoiceEnabled:    boolean("auto_invoice_enabled").default(false),
   edoEnabled:            boolean("edo_enabled").default(false),
   edoProvider:           text("edo_provider"),

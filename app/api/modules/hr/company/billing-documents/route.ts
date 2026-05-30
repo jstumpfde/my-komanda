@@ -17,12 +17,18 @@ export async function GET() {
         billingEmail:          companies.billingEmail,
         paperInvoicesRequired: companies.paperInvoicesRequired,
         paperInvoiceAddress:   companies.paperInvoiceAddress,
+        paperInvoiceIndex:     companies.paperInvoiceIndex,
+        paperInvoiceCity:      companies.paperInvoiceCity,
+        paperInvoiceRecipient: companies.paperInvoiceRecipient,
         autoInvoiceEnabled:    companies.autoInvoiceEnabled,
         edoEnabled:            companies.edoEnabled,
         edoProvider:           companies.edoProvider,
         edoOperatorId:         companies.edoOperatorId,
+        // Для кнопок «подтянуть из адреса компании»:
         postalAddress:         companies.postalAddress,
         legalAddress:          companies.legalAddress,
+        city:                  companies.city,
+        postalCode:            companies.postalCode,
       })
       .from(companies)
       .where(eq(companies.id, user.companyId))
@@ -44,6 +50,9 @@ export async function PATCH(req: NextRequest) {
     if (typeof body.billingEmail === "string")          updates.billingEmail = body.billingEmail.trim() || null
     if (typeof body.paperInvoicesRequired === "boolean") updates.paperInvoicesRequired = body.paperInvoicesRequired
     if (typeof body.paperInvoiceAddress === "string")    updates.paperInvoiceAddress = body.paperInvoiceAddress.trim() || null
+    if (typeof body.paperInvoiceIndex === "string")      updates.paperInvoiceIndex = body.paperInvoiceIndex.trim() || null
+    if (typeof body.paperInvoiceCity === "string")       updates.paperInvoiceCity = body.paperInvoiceCity.trim() || null
+    if (typeof body.paperInvoiceRecipient === "string")  updates.paperInvoiceRecipient = body.paperInvoiceRecipient.trim() || null
     if (typeof body.autoInvoiceEnabled === "boolean")    updates.autoInvoiceEnabled = body.autoInvoiceEnabled
     if (typeof body.edoEnabled === "boolean")            updates.edoEnabled = body.edoEnabled
     if (typeof body.edoProvider === "string")            updates.edoProvider = body.edoProvider.trim() || null
