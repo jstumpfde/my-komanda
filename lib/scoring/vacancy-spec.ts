@@ -32,15 +32,19 @@ export function buildSpecFromAnketa(anketa: Record<string, unknown> | null | und
   const a = anketa ?? {}
   const weights = (a.aiWeights && typeof a.aiWeights === "object" ? a.aiWeights : {}) as Record<string, unknown>
 
-  const criteria: Criterion[] = WEIGHT_AXES.map(ax => {
-    const w = weights[ax.key]
-    return {
-      key: ax.key,
-      label: ax.label,
-      weight: (typeof w === "string" && VALID.includes(w as WeightLevel) ? w : ax.def) as WeightLevel,
-      hint: ax.hint,
-    }
-  })
+  const criteria: Criterion[] = WEIGHT_AXES
+    .map(ax => {
+      const w = weights[ax.key]
+      return {
+        key: ax.key,
+        label: ax.label,
+        weight: (typeof w === "string" && VALID.includes(w as WeightLevel) ? w : ax.def) as WeightLevel,
+        hint: ax.hint,
+      }
+    })
+    // Оси с весом «Не важно» в анкете не оцениваем и не показываем
+    // (например «Опыт управления» для ассистента).
+    .filter(c => c.weight !== "irrelevant")
 
   const responsibilities = str(a.responsibilities)
   const requirements = str(a.requirements)

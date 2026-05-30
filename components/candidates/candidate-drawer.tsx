@@ -974,6 +974,7 @@ export function CandidateDrawer({
               <TabsTrigger value="answers" className="text-[10px] px-1 py-1.5">Ответы</TabsTrigger>
               <TabsTrigger value="chat" className="text-[10px] px-1 py-1.5">Чат hh</TabsTrigger>
               <TabsTrigger value="ai" className="text-[10px] px-1 py-1.5">AI-оценка</TabsTrigger>
+              <TabsTrigger value="rubric" className="text-[10px] px-1 py-1.5">Рубрика</TabsTrigger>
               <TabsTrigger value="channels" className="text-[10px] px-1 py-1.5">Каналы</TabsTrigger>
               <TabsTrigger value="history" className="text-[10px] px-1 py-1.5">История</TabsTrigger>
             </TabsList>
@@ -1267,8 +1268,6 @@ export function CandidateDrawer({
                     scoreV2={candidate.aiScoreV2 ?? null}
                   />
                 )}
-                {/* Shadow: рубричное соответствие (параллельно, не влияет на стадию). */}
-                <RubricShadowSection candidateId={candidate.id} />
                 {candidate.aiScore != null ? (
                   <>
                     <div className="flex flex-col items-center gap-2 py-4">
@@ -1345,6 +1344,14 @@ export function CandidateDrawer({
                     </p>
                   </div>
                 )}
+              </TabsContent>
+
+              {/* ── Рубрика (новый shadow-движок, отдельно от старой AI-оценки) ── */}
+              <TabsContent value="rubric" className="px-6 py-4 pb-28 mt-0 space-y-4">
+                <p className="text-xs text-muted-foreground">
+                  Новая оценка соответствия по критериям анкеты. Считается параллельно старой AI-оценке и не влияет на стадию.
+                </p>
+                <RubricShadowSection candidateId={candidate.id} />
               </TabsContent>
 
               {/* ── Другие каналы ────────────────────────────────── */}
