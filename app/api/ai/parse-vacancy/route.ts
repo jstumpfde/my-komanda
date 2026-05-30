@@ -62,6 +62,21 @@ requiredSkills (Обязательные навыки — массив):
 desiredSkills (Желательные навыки — массив):
 Навыки которые указаны как "желательно", "будет плюсом", "преимущество".
 
+═══ AI-ПРОФИЛЬ КАНДИДАТА (для автоматического скрининга резюме) ═══
+aiIdealProfile (Портрет идеального кандидата):
+2-3 предложения: кто идеально подходит под ЭТУ должность (опыт, ключевые навыки, бэкграунд). Используется для сравнения с резюме. Без воды.
+
+aiRequiredHardSkills (Обязательные hard skills — массив):
+3-6 критичных профессиональных навыков, без которых кандидат не подходит. Короткие фразы.
+
+aiStopFactors (Стоп-факторы для авто-отказа — массив):
+Явные дисквалификаторы (нет профильного опыта, неподходящий формат и т.п.). Только то, что РЕАЛЬНО дисквалифицирует. Если явных нет — [].
+
+aiWeights (Приоритеты оценки — объект):
+По каждой оси укажи важность: "critical" | "important" | "nice" | "irrelevant".
+Оси: industry_experience (опыт в отрасли), management (опыт управления), education (образование), specific_skills (конкретные навыки), salary_match (зарплатное соответствие), work_format (формат работы), location (город/локация).
+Выводи важность из текста: что подчёркнуто как ключевое → critical; важное → important; для управленческих ролей management → critical/important, для рядовых → nice.
+
 ═══ ФОРМАТ JSON ═══
 {
   "positionTitle": "название должности (кратко, без компании)",
@@ -87,6 +102,10 @@ desiredSkills (Желательные навыки — массив):
   "employeeType": "permanent|temporary (постоянный или временный/проектный)",
   "hiringPlan": "число (количество мест, если указано '2 человека' → 2, по умолчанию 1)",
   "screeningQuestions": ["5 вопросов проверяющих ключевые компетенции для ЭТОЙ должности"],
+  "aiIdealProfile": "2-3 предложения о идеальном кандидате (или пустая строка)",
+  "aiRequiredHardSkills": ["навык1", "навык2"],
+  "aiStopFactors": ["стоп-фактор1"],
+  "aiWeights": { "industry_experience": "important", "management": "nice", "education": "nice", "specific_skills": "important", "salary_match": "important", "work_format": "nice", "location": "nice" },
   "hhDescription": "<h3>О компании</h3><p>...</p><h3>Обязанности</h3><ul><li>...</li></ul><h3>Требования</h3><ul><li>...</li></ul><h3>Условия</h3><ul><li>...</li></ul>"
 }`
 
@@ -172,12 +191,34 @@ function normalize(parsed: Record<string, unknown>) {
     hiringPlan: Number(parsed.hiringPlan) || 1,
     conditions: toStringArray(parsed.conditions),
     screeningQuestions: toStringArray(parsed.screeningQuestions),
+    // AI-профиль кандидата (для авто-скрининга). Аддитивно — consumer мержит
+    // только непустые значения поверх существующих.
+    aiIdealProfile: String(parsed.aiIdealProfile || ""),
+    aiRequiredHardSkills: toStringArray(parsed.aiRequiredHardSkills),
+    aiStopFactors: toStringArray(parsed.aiStopFactors),
+    aiWeights: normalizeWeights(parsed.aiWeights),
     hhDescription: String(parsed.hhDescription || ""),
   }
 }
 
 function toStringArray(val: unknown): string[] {
   return Array.isArray(val) ? val.map(String) : []
+}
+
+const WEIGHT_KEYS = ["industry_experience", "management", "education", "specific_skills", "salary_match", "work_format", "location"] as const
+const WEIGHT_VALUES = ["critical", "important", "nice", "irrelevant"]
+
+// Возвращает только валидные веса (ключ из набора, значение из набора).
+// Пустой объект если AI ничего адекватного не дал — consumer оставит дефолты.
+function normalizeWeights(val: unknown): Record<string, string> {
+  if (!val || typeof val !== "object") return {}
+  const src = val as Record<string, unknown>
+  const out: Record<string, string> = {}
+  for (const k of WEIGHT_KEYS) {
+    const v = src[k]
+    if (typeof v === "string" && WEIGHT_VALUES.includes(v)) out[k] = v
+  }
+  return out
 }
 
 // ─── Fallback parser when no API key ───────────────────────────────────────

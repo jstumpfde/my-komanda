@@ -83,6 +83,10 @@ export async function POST(
     if (d.title && typeof d.title === "string") d.title = truncate(sanitizeHtml(d.title), 100)
     if (d.description && typeof d.description === "string") d.description = truncate(sanitizeHtml(d.description), 5000)
     if (d.requirements && typeof d.requirements === "string") d.requirements = truncate(sanitizeHtml(d.requirements), 5000)
+    // Блок критериев отбора (для скоринга кандидатов) — тоже санитайзим.
+    for (const k of ["mustHave", "dealBreakers", "goodExample", "badExample", "topPriority"] as const) {
+      if (d[k] && typeof d[k] === "string") d[k] = truncate(sanitizeHtml(d[k] as string), 3000)
+    }
     if (d.contactName && typeof d.contactName === "string") d.contactName = truncate(sanitizeHtml(d.contactName), 100)
     if (d.contactEmail && typeof d.contactEmail === "string" && !isValidEmail(d.contactEmail)) {
       return NextResponse.json({ error: "Некорректный email" }, { status: 400 })
