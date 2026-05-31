@@ -103,7 +103,7 @@ async function loadContext(candidateId: string): Promise<{
  * кандидат не привязан к hh-отклику или нет валидного токена —
  * это нормальные ситуации, не ошибки.
  */
-export async function trySyncRejectToHh(candidateId: string): Promise<boolean> {
+export async function trySyncRejectToHh(candidateId: string, customMessage?: string | null): Promise<boolean> {
   try {
     const ctx = await loadContext(candidateId)
     if (!ctx) return false
@@ -111,12 +111,19 @@ export async function trySyncRejectToHh(candidateId: string): Promise<boolean> {
     const token = await getValidToken(ctx.vac.companyId)
     if (!token) return false
 
-    const { firstName } = await getCandidateFirstName(ctx.cand.id)
-    const tpl = ctx.vac.aiProcessSettings.rejectMessage?.trim() || DEFAULT_REJECT_MESSAGE
-    const message = renderTemplate(tpl, {
-      name:    firstName,
-      vacancy: ctx.vac.title,
-    })
+    // customMessage (Заход 3) — уже отрендеренный текст. Если задан, шлём его
+    // вместо generic rejectMessage вакансии (факторные тексты стоп-факторов).
+    let message: string
+    if (typeof customMessage === "string" && customMessage.trim().length > 0) {
+      message = customMessage
+    } else {
+      const { firstName } = await getCandidateFirstName(ctx.cand.id)
+      const tpl = ctx.vac.aiProcessSettings.rejectMessage?.trim() || DEFAULT_REJECT_MESSAGE
+      message = renderTemplate(tpl, {
+        name:    firstName,
+        vacancy: ctx.vac.title,
+      })
+    }
 
     await changeNegotiationState(token.accessToken, ctx.hh.hhResponseId, "discard", message)
     console.info(`[hh:sync-stage] reject → ${ctx.hh.hhResponseId} (cand ${ctx.cand.id})`)

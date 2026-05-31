@@ -15,7 +15,8 @@ import { eq, and } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { candidates, vacancies, candidateQualificationAnswers, hhResponses } from "@/lib/db/schema"
 import type { VacancyAiProcessSettings } from "@/lib/db/schema"
-import { trySyncRejectToHh, trySyncInviteToHh } from "@/lib/hh/sync-stage"
+import { trySyncInviteToHh } from "@/lib/hh/sync-stage"
+import { scheduleRejection, rejectionDelayMinutes } from "@/lib/rejection/execute"
 
 interface FinalizeArgs {
   candidateId: string
@@ -86,18 +87,25 @@ export async function finalizePrequalification(args: FinalizeArgs): Promise<Fina
     const reason  = `prequalification_${verdict}`
 
     if (verdict === "failed") {
-      // Reject. Сохраняем stage='rejected' + auto-stopped + soft reject в hh.
+      // Заход 3: отказ откладывается. Фиксируем провал предквалификации и
+      // останавливаем автообработку, НО stage='rejected' и сообщение в hh
+      // ставит cron pending-rejections, когда истечёт задержка вакансии
+      // (в рабочее время). delay=0 → cron исполнит на ближайшем прогоне.
+      const aiSettings = (cand.aiSettings as VacancyAiProcessSettings | null) ?? null
       await db.update(candidates).set({
-        stage:                       "rejected",
         autoProcessingStopped:       true,
         autoProcessingStoppedReason: "prequalification_failed",
         autoProcessingStoppedAt:     now,
         prequalificationStatus:      "failed",
         prequalificationCompletedAt: now,
-        stageHistory: [...history, { from: fromStage, to: "rejected", at: nowIso, reason }],
+        stageHistory: [...history, { from: fromStage, to: fromStage, at: nowIso, reason }],
         updatedAt: now,
       }).where(eq(candidates.id, args.candidateId))
-      await trySyncRejectToHh(args.candidateId)
+      await scheduleRejection({
+        candidateId:  args.candidateId,
+        reason:       "prequalification_failed",
+        delayMinutes: rejectionDelayMinutes(aiSettings),
+      })
     } else {
       // passed или no_answer:
       //   • prequal_only — demo не отправляется, кандидат → anketa_filled,

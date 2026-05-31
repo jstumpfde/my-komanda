@@ -845,6 +845,10 @@ export const candidates = pgTable("candidates", {
   pendingRejectionAt:     timestamp("pending_rejection_at", { withTimezone: true }),
   pendingRejectionReason: text("pending_rejection_reason"),
   pendingRejectionSetAt:  timestamp("pending_rejection_set_at", { withTimezone: true }),
+  // Отрендеренный текст отказа на момент планирования (Заход 3). NULL =
+  // использовать generic rejectMessage вакансии. Нужен для факторных текстов
+  // стоп-факторов, которые иначе потерялись бы при отложенном отказе.
+  pendingRejectionMessage: text("pending_rejection_message"),
   // v5: AI-классификатор ответов в hh-чате может выставить паузу автоматизации
   // (например, при rejection или wants_personal_contact).
   automationPaused: boolean("automation_paused").notNull().default(false),

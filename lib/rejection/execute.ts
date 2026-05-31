@@ -34,8 +34,12 @@ export async function scheduleRejection(args: {
   candidateId: string
   reason: string
   delayMinutes: number
+  // Уже отрендеренный текст отказа. Если задан — кандидат получит его при
+  // исполнении (нужно для факторных текстов стоп-факторов). NULL/пусто =
+  // generic rejectMessage вакансии.
+  message?: string | null
 }): Promise<{ scheduled: boolean; at: Date | null }> {
-  const { candidateId, reason, delayMinutes } = args
+  const { candidateId, reason, delayMinutes, message } = args
 
   const [cand] = await db
     .select({ stage: candidates.stage, pendingRejectionAt: candidates.pendingRejectionAt })
@@ -50,10 +54,11 @@ export async function scheduleRejection(args: {
   const now = new Date()
   const at = new Date(now.getTime() + Math.max(0, delayMinutes) * 60_000)
   await db.update(candidates).set({
-    pendingRejectionAt:     at,
-    pendingRejectionReason: reason,
-    pendingRejectionSetAt:  now,
-    updatedAt:              now,
+    pendingRejectionAt:      at,
+    pendingRejectionReason:  reason,
+    pendingRejectionSetAt:   now,
+    pendingRejectionMessage: typeof message === "string" && message.trim().length > 0 ? message : null,
+    updatedAt:               now,
   }).where(eq(candidates.id, candidateId))
 
   return { scheduled: true, at }
@@ -62,10 +67,11 @@ export async function scheduleRejection(args: {
 // Отменить запланированный отказ (HR передумал / кандидат ответил и т.п.).
 export async function cancelScheduledRejection(candidateId: string): Promise<void> {
   await db.update(candidates).set({
-    pendingRejectionAt:     null,
-    pendingRejectionReason: null,
-    pendingRejectionSetAt:  null,
-    updatedAt:              new Date(),
+    pendingRejectionAt:      null,
+    pendingRejectionReason:  null,
+    pendingRejectionSetAt:   null,
+    pendingRejectionMessage: null,
+    updatedAt:               new Date(),
   }).where(eq(candidates.id, candidateId))
 }
 
@@ -79,7 +85,11 @@ export async function executeRejection(args: {
   const { candidateId, reason } = args
 
   const [prev] = await db
-    .select({ stage: candidates.stage, stageHistory: candidates.stageHistory })
+    .select({
+      stage:        candidates.stage,
+      stageHistory: candidates.stageHistory,
+      message:      candidates.pendingRejectionMessage,
+    })
     .from(candidates)
     .where(eq(candidates.id, candidateId))
     .limit(1)
@@ -103,6 +113,7 @@ export async function executeRejection(args: {
     pendingRejectionAt:          null,
     pendingRejectionReason:      null,
     pendingRejectionSetAt:       null,
+    pendingRejectionMessage:     null,
     stageHistory: [...history, {
       from:   fromStage,
       to:     "rejected",
@@ -121,8 +132,9 @@ export async function executeRejection(args: {
     eq(followUpMessages.status, "pending"),
   ))
 
-  // Сообщение об отказе + discard в hh (текст берётся из вакансии внутри).
-  await trySyncRejectToHh(candidateId).catch(() => false)
+  // Сообщение об отказе + discard в hh. Если на момент планирования был
+  // сохранён кастомный текст (стоп-фактор) — шлём его; иначе generic из вакансии.
+  await trySyncRejectToHh(candidateId, prev.message).catch(() => false)
 
   return { rejected: true }
 }

@@ -19,6 +19,7 @@ import { isFollowUpPreset } from "@/lib/followup/presets"
 import { canSendNow } from "@/lib/schedule/can-send-now"
 import { screenResume } from "@/lib/ai-screen-resume"
 import { trySyncRejectToHh } from "@/lib/hh/sync-stage"
+import { scheduleRejection, rejectionDelayMinutes } from "@/lib/rejection/execute"
 import { startPrequalification } from "@/lib/prequalification/start"
 import { renderTemplate } from "@/lib/template-renderer"
 import { matchStopFactors, type StopFactorMatch } from "@/lib/funnel-builder/stop-factors-matcher"
@@ -716,25 +717,28 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
           const nowIso = new Date().toISOString()
           const nowTs  = new Date()
 
+          // Заход 3: отказ откладывается. Останавливаем автообработку и
+          // фиксируем причину, НО stage='rejected' и сообщение в hh ставит
+          // cron pending-rejections по истечении задержки вакансии (в рабочее
+          // время). Кастомный факторный текст рендерим СЕЙЧАС и сохраняем —
+          // иначе при отложенном отказе ушёл бы generic текст вакансии.
           await db.update(candidates)
             .set({
-              stage:                       "rejected",
               autoProcessingStopped:       true,
               autoProcessingStoppedReason: `stop_factor:${stopFactorMatch.factor}`,
               autoProcessingStoppedAt:     nowTs,
               stageHistory: [...history, {
                 from:    fromStage,
-                to:      "rejected",
+                to:      fromStage,
                 at:      nowIso,
-                reason:  `stop_factor:${stopFactorMatch.factor}`,
+                reason:  `stop_factor_scheduled:${stopFactorMatch.factor}`,
               }],
               updatedAt: nowTs,
             })
             .where(eq(candidates.id, candidateId))
 
-          // Отправляем кастомный текст отказа через hh (discard_by_employer).
-          // Не используем trySyncRejectToHh — он берёт rejectMessage из
-          // aiProcessSettings, а тут нужен factor-specific rejectionText.
+          // Рендерим факторный текст отказа (на момент планирования) и
+          // передаём его в scheduleRejection — cron пошлёт именно его.
           const nameParts = (resp.candidateName || "").trim().split(/\s+/)
           const greetingName = nameParts[1] || nameParts[0] || "Здравствуйте"
           const messageText = renderTemplate(stopFactorMatch.rejectionText, {
@@ -742,26 +746,22 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
             vacancy: localVac.title || "",
             company: "Company24",
           })
-          try {
-            await changeNegotiationState(
-              tokenResult.accessToken,
-              resp.hhResponseId,
-              "discard",
-              messageText,
-            )
-          } catch (hhErr) {
-            console.warn("[PQ] stop-factor hh discard failed:",
-              hhErr instanceof Error ? hhErr.message : hhErr)
-          }
+          await scheduleRejection({
+            candidateId,
+            reason:       `stop_factor:${stopFactorMatch.factor}`,
+            delayMinutes: rejectionDelayMinutes(aiSettings),
+            message:      messageText,
+          })
 
           await db.update(hhResponses)
             .set({ status: "invited", localCandidateId: candidateId })
             .where(eq(hhResponses.id, resp.id))
 
-          console.log("[PQ] stop-factor reject", JSON.stringify({
+          console.log("[PQ] stop-factor scheduled", JSON.stringify({
             tag:         "process-queue/stop-factor",
             candidateId,
             factor:      stopFactorMatch.factor,
+            delayMinutes: rejectionDelayMinutes(aiSettings),
           }))
 
           results.push({
