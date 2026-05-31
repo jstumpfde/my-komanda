@@ -13,7 +13,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
-import { Loader2, Search, Send, AlertCircle, CheckCircle2 } from "lucide-react"
+import { Loader2, Search, Send, AlertCircle, CheckCircle2, ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -21,6 +21,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { cn } from "@/lib/utils"
 
 // hh experience ids → человекочитаемо.
@@ -30,6 +31,83 @@ const EXPERIENCE_OPTIONS = [
   { value: "between1And3", label: "1–3 года" },
   { value: "between3And6", label: "3–6 лет" },
   { value: "moreThan6", label: "Более 6 лет" },
+]
+
+// ─── Справочники hh (сверены с /dictionaries и /languages) ───────────────────
+// id = значение, которое уходит в hh; label — русский лейбл из справочника hh.
+const EMPLOYMENT_OPTIONS = [
+  { id: "full", label: "Полная" },
+  { id: "part", label: "Частичная" },
+  { id: "project", label: "Проектная" },
+  { id: "probation", label: "Стажировка" },
+  { id: "volunteer", label: "Волонтёрство" },
+]
+
+const SCHEDULE_OPTIONS = [
+  { id: "fullDay", label: "Полный день" },
+  { id: "remote", label: "Удалённо" },
+  { id: "flexible", label: "Гибкий" },
+  { id: "shift", label: "Сменный" },
+  { id: "flyInFlyOut", label: "Вахта" },
+]
+
+const EDUCATION_OPTIONS = [
+  { value: "any", label: "Любое" },
+  { value: "secondary", label: "Среднее" },
+  { value: "special_secondary", label: "Среднее специальное" },
+  { value: "unfinished_higher", label: "Неоконченное высшее" },
+  { value: "higher", label: "Высшее" },
+  { value: "bachelor", label: "Бакалавр" },
+  { value: "master", label: "Магистр" },
+  { value: "candidate", label: "Кандидат наук" },
+  { value: "doctor", label: "Доктор наук" },
+]
+
+const GENDER_OPTIONS = [
+  { value: "any", label: "Не важно" },
+  { value: "male", label: "Мужской" },
+  { value: "female", label: "Женский" },
+]
+
+const RELOCATION_OPTIONS = [
+  { value: "any", label: "Не важно" },
+  { value: "living", label: "Живёт в городе" },
+  { value: "living_or_relocation", label: "Живёт или готов переехать" },
+  { value: "living_but_relocation", label: "Живёт и готов переехать" },
+  { value: "relocation", label: "Готов переехать в город" },
+]
+
+const ORDER_BY_OPTIONS = [
+  { value: "relevance", label: "По соответствию" },
+  { value: "publication_time", label: "По дате обновления" },
+  { value: "salary_asc", label: "ЗП по возрастанию" },
+  { value: "salary_desc", label: "ЗП по убыванию" },
+]
+
+const LABEL_OPTIONS = [
+  { id: "only_with_photo", label: "С фотографией" },
+  { id: "only_with_salary", label: "С указанной ЗП" },
+  { id: "only_with_age", label: "С указанным возрастом" },
+  { id: "only_with_vehicle", label: "С личным авто" },
+]
+
+// Языки (id из /languages) и уровни (language_level). Формат поля hh — "{id}.{level}".
+const LANGUAGE_OPTIONS = [
+  { id: "eng", label: "Английский" },
+  { id: "deu", label: "Немецкий" },
+  { id: "fra", label: "Французский" },
+  { id: "spa", label: "Испанский" },
+  { id: "ita", label: "Итальянский" },
+  { id: "zho", label: "Китайский" },
+]
+const LANGUAGE_LEVEL_OPTIONS = [
+  { value: "a1", label: "A1" },
+  { value: "a2", label: "A2" },
+  { value: "b1", label: "B1" },
+  { value: "b2", label: "B2" },
+  { value: "c1", label: "C1" },
+  { value: "c2", label: "C2" },
+  { value: "l1", label: "Родной" },
 ]
 
 // vacancies.required_experience → hh experience id.
@@ -104,6 +182,26 @@ export function OutboundSourcingTab({
   const [salaryFrom, setSalaryFrom] = useState(vacancySalaryMin ? String(vacancySalaryMin) : "")
   const [salaryTo, setSalaryTo] = useState(vacancySalaryMax ? String(vacancySalaryMax) : "")
 
+  // Расширенные критерии (структурированные поля hh).
+  const [employment, setEmployment] = useState<string[]>([])
+  const [schedule, setSchedule] = useState<string[]>([])
+  const [labels, setLabels] = useState<string[]>([])
+  const [educationLevel, setEducationLevel] = useState("any")
+  const [gender, setGender] = useState("any")
+  const [relocation, setRelocation] = useState("any")
+  const [orderBy, setOrderBy] = useState("relevance")
+  const [ageFrom, setAgeFrom] = useState("")
+  const [ageTo, setAgeTo] = useState("")
+  // Язык: один выбранный язык + минимальный уровень. В hh уходит как "{id}.{level}".
+  const [languageId, setLanguageId] = useState("any")
+  const [languageLevel, setLanguageLevel] = useState("b1")
+
+  const toggleInArray = useCallback(
+    (setter: React.Dispatch<React.SetStateAction<string[]>>, val: string) =>
+      setter((prev) => (prev.includes(val) ? prev.filter((v) => v !== val) : [...prev, val])),
+    [],
+  )
+
   const [items, setItems] = useState<OutboundItem[]>([])
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [status, setStatus] = useState<StatusData | null>(null)
@@ -125,6 +223,21 @@ export function OutboundSourcingTab({
     () => [...items].sort((a, b) => (b.aiScore ?? -1) - (a.aiScore ?? -1)),
     [items],
   )
+
+  // Счётчик активных расширенных фильтров для бейджа на триггере.
+  const advancedCount = useMemo(() => {
+    let n = 0
+    if (employment.length) n++
+    if (schedule.length) n++
+    if (labels.length) n++
+    if (educationLevel !== "any") n++
+    if (gender !== "any") n++
+    if (relocation !== "any") n++
+    if (orderBy !== "relevance") n++
+    if (ageFrom || ageTo) n++
+    if (languageId !== "any") n++
+    return n
+  }, [employment, schedule, labels, educationLevel, gender, relocation, orderBy, ageFrom, ageTo, languageId])
 
   // Резюме доступные для приглашения (не приглашённые/ответившие).
   const invitable = useMemo(
@@ -150,6 +263,18 @@ export function OutboundSourcingTab({
             salaryTo: salaryTo ? Number(salaryTo) : undefined,
             period: 30,
             perPage: 50,
+            // Расширенные структурированные поля.
+            employment: employment.length ? employment : undefined,
+            schedule: schedule.length ? schedule : undefined,
+            label: labels.length ? labels : undefined,
+            educationLevel: educationLevel === "any" ? undefined : educationLevel,
+            gender: gender === "any" ? undefined : gender,
+            relocation: relocation === "any" ? undefined : relocation,
+            orderBy: orderBy === "relevance" ? undefined : orderBy,
+            ageFrom: ageFrom ? Number(ageFrom) : undefined,
+            ageTo: ageTo ? Number(ageTo) : undefined,
+            // Язык — массив "{id}.{level}"; шлём один выбранный язык с уровнем.
+            language: languageId !== "any" ? [`${languageId}.${languageLevel}`] : undefined,
           },
         }),
       })
@@ -280,6 +405,142 @@ export function OutboundSourcingTab({
             </Button>
           </div>
         </div>
+
+        {/* ─── Расширенный фильтр (структурированные поля hh) — свёрнут ─── */}
+        <Collapsible>
+          <CollapsibleTrigger className="flex w-full items-center justify-between text-xs font-medium text-muted-foreground hover:text-foreground [&[data-state=open]>svg]:rotate-180">
+            <span className="flex items-center gap-2">
+              Расширенный фильтр
+              {advancedCount > 0 && (
+                <span className="text-[10px] rounded-full bg-primary/15 text-primary px-1.5 py-0.5 tabular-nums">{advancedCount}</span>
+              )}
+            </span>
+            <ChevronDown className="h-3.5 w-3.5 transition-transform" />
+          </CollapsibleTrigger>
+          <CollapsibleContent className="pt-3">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {/* Занятость */}
+              <div className="space-y-1.5">
+                <Label className="text-xs">Занятость</Label>
+                <div className="space-y-1">
+                  {EMPLOYMENT_OPTIONS.map((o) => (
+                    <label key={o.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                      <Checkbox checked={employment.includes(o.id)} onCheckedChange={() => toggleInArray(setEmployment, o.id)} />
+                      <span>{o.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+              {/* График */}
+              <div className="space-y-1.5">
+                <Label className="text-xs">График</Label>
+                <div className="space-y-1">
+                  {SCHEDULE_OPTIONS.map((o) => (
+                    <label key={o.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                      <Checkbox checked={schedule.includes(o.id)} onCheckedChange={() => toggleInArray(setSchedule, o.id)} />
+                      <span>{o.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+              {/* Только резюме (label) */}
+              <div className="space-y-1.5">
+                <Label className="text-xs">Только резюме</Label>
+                <div className="space-y-1">
+                  {LABEL_OPTIONS.map((o) => (
+                    <label key={o.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                      <Checkbox checked={labels.includes(o.id)} onCheckedChange={() => toggleInArray(setLabels, o.id)} />
+                      <span>{o.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+              {/* Селекты: образование / пол / переезд / сортировка */}
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Образование</Label>
+                  <Select value={educationLevel} onValueChange={setEducationLevel}>
+                    <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {EDUCATION_OPTIONS.map((o) => (
+                        <SelectItem key={o.value} value={o.value} className="text-sm">{o.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Пол</Label>
+                  <Select value={gender} onValueChange={setGender}>
+                    <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {GENDER_OPTIONS.map((o) => (
+                        <SelectItem key={o.value} value={o.value} className="text-sm">{o.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              {/* Переезд (требует город) */}
+              <div className="space-y-1.5">
+                <Label className="text-xs">Переезд</Label>
+                <Select value={relocation} onValueChange={setRelocation}>
+                  <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {RELOCATION_OPTIONS.map((o) => (
+                      <SelectItem key={o.value} value={o.value} className="text-sm">{o.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {relocation !== "any" && !area.trim() && (
+                  <p className="text-[11px] text-amber-600">Укажите город — фильтр переезда без города hh игнорирует.</p>
+                )}
+              </div>
+              {/* Сортировка */}
+              <div className="space-y-1.5">
+                <Label className="text-xs">Сортировка</Label>
+                <Select value={orderBy} onValueChange={setOrderBy}>
+                  <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {ORDER_BY_OPTIONS.map((o) => (
+                      <SelectItem key={o.value} value={o.value} className="text-sm">{o.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {/* Возраст */}
+              <div className="space-y-1.5">
+                <Label className="text-xs">Возраст</Label>
+                <div className="flex items-center gap-1.5">
+                  <Input value={ageFrom} onChange={(e) => setAgeFrom(e.target.value.replace(/\D/g, "").slice(0, 3))} placeholder="от" className="h-8 text-sm" inputMode="numeric" />
+                  <Input value={ageTo} onChange={(e) => setAgeTo(e.target.value.replace(/\D/g, "").slice(0, 3))} placeholder="до" className="h-8 text-sm" inputMode="numeric" />
+                </div>
+              </div>
+              {/* Язык + уровень */}
+              <div className="space-y-1.5">
+                <Label className="text-xs">Язык</Label>
+                <div className="flex items-center gap-1.5">
+                  <Select value={languageId} onValueChange={setLanguageId}>
+                    <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Язык" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="any" className="text-sm">Не важно</SelectItem>
+                      {LANGUAGE_OPTIONS.map((o) => (
+                        <SelectItem key={o.id} value={o.id} className="text-sm">{o.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select value={languageLevel} onValueChange={setLanguageLevel} disabled={languageId === "any"}>
+                    <SelectTrigger className="h-8 text-sm w-24"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {LANGUAGE_LEVEL_OPTIONS.map((o) => (
+                        <SelectItem key={o.value} value={o.value} className="text-sm">{o.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
       </div>
 
       {/* ─── Полоска статуса ─── */}

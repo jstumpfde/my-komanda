@@ -37,6 +37,20 @@ export interface OutboundCriteria {
   period?: number          // за сколько дней резюме обновлено (например 30)
   perPage?: number         // размер страницы (cap 100)
   page?: number
+
+  // ─── Расширенные структурированные фильтры (GET /resumes) ─────────────────
+  // Имена и значения сверены с живым hh API (/dictionaries, /languages) и
+  // openapi-докой поиска резюме. Все опциональны.
+  employment?: string[]      // hh dict `employment`: full|part|project|volunteer|probation. Множественный.
+  schedule?: string[]        // hh dict `schedule`: fullDay|shift|flexible|remote|flyInFlyOut. Множественный.
+  educationLevel?: string    // hh dict `education_level`: secondary|special_secondary|unfinished_higher|higher|bachelor|master|candidate|doctor. Одиночный.
+  gender?: string            // hh dict `gender`: male|female. Одиночный.
+  relocation?: string        // hh dict `resume_search_relocation`: living_or_relocation|living|living_but_relocation|relocation. Требует area.
+  orderBy?: string           // hh dict `resume_search_order`: relevance|publication_time|salary_desc|salary_asc.
+  label?: string[]           // hh dict `resume_search_label`: only_with_photo|only_with_salary|only_with_age|… Множественный.
+  language?: string[]        // формат `{languageId}.{level}`, напр. "eng.b2" (язык из /languages, уровень из `language_level`). Множественный.
+  ageFrom?: number
+  ageTo?: number
 }
 
 // ─── Сниппет резюме из поисковой выдачи ─────────────────────────────────────
@@ -181,6 +195,23 @@ export async function searchResumes(
   if (criteria.salaryFrom != null) qs.set("salary_from", String(criteria.salaryFrom))
   if (criteria.salaryTo != null) qs.set("salary_to", String(criteria.salaryTo))
   if (criteria.period != null) qs.set("period", String(criteria.period))
+
+  // Множественные параметры hh принимает повторяющимися query-полями
+  // (employment=full&employment=part), поэтому qs.append на каждый элемент.
+  for (const v of criteria.employment ?? []) if (v) qs.append("employment", v)
+  for (const v of criteria.schedule ?? []) if (v) qs.append("schedule", v)
+  for (const v of criteria.label ?? []) if (v) qs.append("label", v)
+  for (const v of criteria.language ?? []) if (v) qs.append("language", v)
+
+  if (criteria.educationLevel) qs.set("education_level", criteria.educationLevel)
+  if (criteria.gender) qs.set("gender", criteria.gender)
+  // relocation у hh имеет смысл (и допустим) ТОЛЬКО вместе с area — иначе hh
+  // вернёт 400. Проверяем фактически проставленный area (резолв мог не найти город).
+  if (criteria.relocation && qs.has("area")) qs.set("relocation", criteria.relocation)
+  if (criteria.orderBy) qs.set("order_by", criteria.orderBy)
+  if (criteria.ageFrom != null) qs.set("age_from", String(criteria.ageFrom))
+  if (criteria.ageTo != null) qs.set("age_to", String(criteria.ageTo))
+
   qs.set("per_page", String(Math.min(criteria.perPage ?? 50, 100)))
   qs.set("page", String(criteria.page ?? 0))
 

@@ -46,6 +46,53 @@ export async function POST(req: Request) {
     .limit(1)
   if (!vac) return apiError("Вакансия не найдена", 404)
 
+  // Допустимые значения hh-справочников (сверены с /dictionaries, /languages).
+  // Фильтруем вход по белым спискам — мусор/инъекции в query не попадут.
+  const EMPLOYMENT = new Set(["full", "part", "project", "volunteer", "probation"])
+  const SCHEDULE = new Set(["fullDay", "shift", "flexible", "remote", "flyInFlyOut"])
+  const EDUCATION = new Set(["secondary", "special_secondary", "unfinished_higher", "higher", "bachelor", "master", "candidate", "doctor"])
+  const GENDER = new Set(["male", "female"])
+  const RELOCATION = new Set(["living_or_relocation", "living", "living_but_relocation", "relocation"])
+  const ORDER_BY = new Set(["relevance", "publication_time", "salary_desc", "salary_asc"])
+  const LABEL = new Set([
+    "only_with_photo", "only_with_salary", "only_with_age", "only_with_gender",
+    "only_with_vehicle", "exclude_viewed_by_user_id", "exclude_viewed_by_employer_id",
+    "only_in_responses",
+  ])
+
+  // Нормализация массива строк из body + фильтр по белому списку, дедуп.
+  const pickArray = (raw: unknown, allowed: Set<string>): string[] | undefined => {
+    if (!Array.isArray(raw)) return undefined
+    const out = Array.from(new Set(raw.filter((v): v is string => typeof v === "string" && allowed.has(v))))
+    return out.length ? out : undefined
+  }
+  const pickOne = (raw: unknown, allowed: Set<string>): string | undefined =>
+    typeof raw === "string" && allowed.has(raw) ? raw : undefined
+
+  // language: формат "{id}.{level}" — id ∈ [a-z]{2,3}, level из language_level.
+  const LANG_LEVEL = new Set(["a1", "a2", "b1", "b2", "c1", "c2", "l1"])
+  const language = Array.isArray(body.criteria?.language)
+    ? Array.from(new Set(
+        (body.criteria!.language as unknown[]).filter((v): v is string => {
+          if (typeof v !== "string") return false
+          const [id, level] = v.split(".")
+          return /^[a-z]{2,3}$/.test(id ?? "") && LANG_LEVEL.has(level ?? "")
+        }),
+      ))
+    : undefined
+
+  // Возраст: клампим в разумный hh-диапазон 14..100, нормализуем порядок.
+  const clampAge = (v: unknown): number | undefined => {
+    const n = typeof v === "number" ? v : Number(v)
+    if (!Number.isFinite(n)) return undefined
+    return Math.max(14, Math.min(100, Math.round(n)))
+  }
+  let ageFrom = clampAge(body.criteria?.ageFrom)
+  let ageTo = clampAge(body.criteria?.ageTo)
+  if (ageFrom != null && ageTo != null && ageFrom > ageTo) {
+    ;[ageFrom, ageTo] = [ageTo, ageFrom]
+  }
+
   const criteria: OutboundCriteria = {
     text: body.criteria?.text?.trim() || undefined,
     area: body.criteria?.area?.trim() || undefined,
@@ -55,6 +102,16 @@ export async function POST(req: Request) {
     period: body.criteria?.period ?? 30,
     perPage: Math.min(body.criteria?.perPage ?? 50, 100),
     page: body.criteria?.page ?? 0,
+    employment: pickArray(body.criteria?.employment, EMPLOYMENT),
+    schedule: pickArray(body.criteria?.schedule, SCHEDULE),
+    label: pickArray(body.criteria?.label, LABEL),
+    language: language && language.length ? language : undefined,
+    educationLevel: pickOne(body.criteria?.educationLevel, EDUCATION),
+    gender: pickOne(body.criteria?.gender, GENDER),
+    relocation: pickOne(body.criteria?.relocation, RELOCATION),
+    orderBy: pickOne(body.criteria?.orderBy, ORDER_BY),
+    ageFrom,
+    ageTo,
   }
 
   let result
