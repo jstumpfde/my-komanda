@@ -72,6 +72,7 @@ function buildSpecText(spec: ScoringSpec): string {
   if (spec.location)   lines.push(`ЛОКАЦИЯ: ${spec.location}`)
   if (spec.workFormat) lines.push(`ФОРМАТ РАБОТЫ: ${spec.workFormat}`)
   if (spec.knockouts?.length) lines.push(`\nЖЁСТКИЕ СТОП-ФАКТОРЫ (если применимо к кандидату — knockoutHit):\n- ${spec.knockouts.join("\n- ")}`)
+  if (spec.screeningQuestions?.length) lines.push(`\nСКРИНИНГ-ВОПРОСЫ HR (НЕ отдельные критерии — учти их при оценке релевантных критериев: насколько резюме отвечает на них в пользу кандидата):\n- ${spec.screeningQuestions.join("\n- ")}`)
   lines.push(`\nКРИТЕРИИ ОЦЕНКИ (оцени каждый 0-100):`)
   for (const c of spec.criteria) {
     lines.push(`- [${c.key}] ${c.label}${c.hint ? ` — ${c.hint}` : ""} (вес: ${WEIGHT_LABELS[c.weight]})`)

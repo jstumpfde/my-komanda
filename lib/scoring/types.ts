@@ -31,6 +31,7 @@ export interface ScoringSpec {
   location?: string
   workFormat?: string
   knockouts?: string[]           // жёсткие стоп-факторы → verdict reject, балл 0
+  screeningQuestions?: string[]  // HR-вопросы для отсева — контекст для оценки, не баллы
   criteria: Criterion[]
 }
 

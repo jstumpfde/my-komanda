@@ -113,6 +113,7 @@ export function buildSpecFromAnketa(anketa: Record<string, unknown> | null | und
     location: str(a.positionCity) || undefined,
     workFormat: strArr(a.workFormats)[0] || undefined,
     knockouts: knockouts.length ? knockouts : undefined,
+    screeningQuestions: strArr(a.screeningQuestions).length ? strArr(a.screeningQuestions) : undefined,
     criteria,
   }
 }
