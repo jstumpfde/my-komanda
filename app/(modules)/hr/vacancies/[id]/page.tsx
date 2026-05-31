@@ -2521,6 +2521,14 @@ export default function VacancyPage() {
                   vacancySalaryMin={apiVacancy?.salaryMin ?? null}
                   vacancySalaryMax={apiVacancy?.salaryMax ?? null}
                   vacancyRequiredExperience={(apiVacancy as { requiredExperience?: string | null } | undefined)?.requiredExperience ?? null}
+                  anketaWorkFormats={(() => {
+                    const a = (apiVacancy?.descriptionJson as Record<string, unknown> | undefined)?.anketa as Record<string, unknown> | undefined
+                    return Array.isArray(a?.workFormats) ? (a!.workFormats as string[]) : null
+                  })()}
+                  anketaEmployment={(() => {
+                    const a = (apiVacancy?.descriptionJson as Record<string, unknown> | undefined)?.anketa as Record<string, unknown> | undefined
+                    return Array.isArray(a?.employment) ? (a!.employment as string[]) : null
+                  })()}
                 />
               </TabsContent>
 

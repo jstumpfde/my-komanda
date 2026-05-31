@@ -13,7 +13,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
-import { Loader2, Search, Send, AlertCircle, CheckCircle2, ChevronDown } from "lucide-react"
+import { Loader2, Search, Send, AlertCircle, CheckCircle2, ChevronDown, Wand2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -152,6 +152,29 @@ interface Props {
   vacancySalaryMax?: number | null
   vacancyRequiredExperience?: string | null
   vacancyKeywords?: string | null
+  // Расширенные данные анкеты для кнопки «Заполнить из анкеты».
+  // workFormats / employment — русские лейблы из анкеты
+  // (["Офис","Гибрид","Удалёнка"] / ["Полная","Частичная","Проектная"]).
+  anketaWorkFormats?: string[] | null
+  anketaEmployment?: string[] | null
+}
+
+// ─── Маппинг анкета → hh для расширенного фильтра ────────────────────────────
+// Только однозначные соответствия. Анкетный schedule (5/2, 2/2, free…) и языки/
+// образование в анкете НЕ структурированы — поэтому не маппятся (см. отчёт).
+
+// Формат работы (анкета, рус.) → hh schedule id (SCHEDULE_OPTIONS).
+const ANKETA_WORKFORMAT_TO_HH_SCHEDULE: Record<string, string> = {
+  "Офис": "fullDay",
+  "Удалёнка": "remote",
+  "Гибрид": "flexible",
+}
+
+// Занятость (анкета, рус.) → hh employment id (EMPLOYMENT_OPTIONS).
+const ANKETA_EMPLOYMENT_TO_HH: Record<string, string> = {
+  "Полная": "full",
+  "Частичная": "part",
+  "Проектная": "project",
 }
 
 // Цвет AI-score бейджа (та же шкала, что getStageColorClasses в lib/stages —
@@ -173,7 +196,7 @@ const STATUS_LABEL: Record<string, string> = {
 
 export function OutboundSourcingTab({
   vacancyId, vacancyTitle, vacancyCity, vacancySalaryMin, vacancySalaryMax,
-  vacancyRequiredExperience, vacancyKeywords,
+  vacancyRequiredExperience, vacancyKeywords, anketaWorkFormats, anketaEmployment,
 }: Props) {
   // Критерии (автозаполнены, редактируемы).
   const [text, setText] = useState(vacancyKeywords ?? vacancyTitle ?? "")
@@ -201,6 +224,39 @@ export function OutboundSourcingTab({
       setter((prev) => (prev.includes(val) ? prev.filter((v) => v !== val) : [...prev, val])),
     [],
   )
+
+  // ── «Заполнить из анкеты» ──
+  // Перезаписывает целевые РАСШИРЕННЫЕ поля (employment, schedule) значениями
+  // из анкеты. Базовые (ключевики/город/опыт/ЗП) не трогает — они и так
+  // автозаполнены. Маппит только однозначное; языки/образование/анкетный
+  // schedule пропускаются (в анкете нет структурированных данных).
+  const fillFromAnketa = useCallback(() => {
+    const hasAnketa =
+      (anketaWorkFormats && anketaWorkFormats.length > 0) ||
+      (anketaEmployment && anketaEmployment.length > 0)
+    if (!hasAnketa) {
+      toast.info("В анкете нет данных для фильтра")
+      return
+    }
+
+    // Формат работы анкеты → hh schedule.
+    const mappedSchedule = (anketaWorkFormats ?? [])
+      .map((f) => ANKETA_WORKFORMAT_TO_HH_SCHEDULE[f])
+      .filter(Boolean)
+    // Занятость анкеты → hh employment.
+    const mappedEmployment = (anketaEmployment ?? [])
+      .map((e) => ANKETA_EMPLOYMENT_TO_HH[e])
+      .filter(Boolean)
+
+    if (mappedSchedule.length === 0 && mappedEmployment.length === 0) {
+      toast.info("В анкете нет данных для фильтра")
+      return
+    }
+
+    if (mappedSchedule.length) setSchedule([...new Set(mappedSchedule)])
+    if (mappedEmployment.length) setEmployment([...new Set(mappedEmployment)])
+    toast.success("Поля заполнены из анкеты")
+  }, [anketaWorkFormats, anketaEmployment])
 
   const [items, setItems] = useState<OutboundItem[]>([])
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -418,6 +474,20 @@ export function OutboundSourcingTab({
             <ChevronDown className="h-3.5 w-3.5 transition-transform" />
           </CollapsibleTrigger>
           <CollapsibleContent className="pt-3">
+            {/* «Заполнить из анкеты» — подтягивает занятость/график из анкеты
+                вакансии. Базовые поля уже автозаполнены. Без магии: только по клику. */}
+            <div className="flex justify-end mb-3">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 gap-1.5 text-xs"
+                onClick={fillFromAnketa}
+              >
+                <Wand2 className="h-3.5 w-3.5" />
+                Заполнить из анкеты
+              </Button>
+            </div>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {/* Занятость */}
               <div className="space-y-1.5">
