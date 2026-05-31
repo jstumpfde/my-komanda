@@ -77,6 +77,28 @@ export async function POST(
         aiProcessSettings: original.aiProcessSettings,
         aiScoringEnabled: original.aiScoringEnabled,
         autoProcessingEnabled: original.autoProcessingEnabled,
+        // Серия первых сообщений (#21) + off-hours-вариант.
+        firstMessagesChain: original.firstMessagesChain,
+        firstMessageOffHoursEnabled: original.firstMessageOffHoursEnabled,
+        firstMessageOffHoursDelaySeconds: original.firstMessageOffHoursDelaySeconds,
+        firstMessageOffHoursText: original.firstMessageOffHoursText,
+        // Аварийное повторное сообщение (#46).
+        recoveryMessageEnabled: original.recoveryMessageEnabled,
+        recoveryMessageText: original.recoveryMessageText,
+        // AI чат-бот (#15): тумблер + настройки + промпт.
+        aiChatbotEnabled: original.aiChatbotEnabled,
+        aiChatbotSettings: original.aiChatbotSettings,
+        aiChatbotPrompt: original.aiChatbotPrompt,
+        // Стоп-слова (P0-22) и стоп-факторы (#61).
+        stopWordsJson: original.stopWordsJson,
+        stopFactorsJson: original.stopFactorsJson,
+        // Структурированные требования (Группа 25).
+        requirementsJson: original.requirementsJson,
+        // Конструктор воронки (Funnel Builder) + флаг.
+        funnelBuilderEnabled: original.funnelBuilderEnabled,
+        funnelConfigJson: original.funnelConfigJson,
+        // Переопределение брендинга (Группа 38).
+        brandingOverrideEnabled: original.brandingOverrideEnabled,
         scheduleEnabled: original.scheduleEnabled,
         scheduleStart: original.scheduleStart,
         scheduleEnd: original.scheduleEnd,
