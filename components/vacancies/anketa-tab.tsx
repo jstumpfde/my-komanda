@@ -61,6 +61,10 @@ interface AnketaData {
   unacceptableSkills: string[]
   experienceMin: string
   experienceIdeal: string
+  // Языки (hh language id) с уровнями (hh уровень a1..c2/l1) — для исходящего подбора
+  aiLanguages: { lang: string; level: string }[]
+  // Уровень образования (hh education_level id), "" = любое
+  educationLevel: string
   stopFactors: StopFactor[]
   desiredParams: DesiredParam[]
   // 6. Условия
@@ -283,6 +287,38 @@ const CONDITIONS_OPTIONS = [
   "Менторская программа", "Бюджет на конференции",
 ]
 
+// hh language id → русский лейбл (только точно известные id из hh /languages)
+const LANGUAGE_OPTIONS: { id: string; label: string }[] = [
+  { id: "eng", label: "Английский" },
+  { id: "deu", label: "Немецкий" },
+  { id: "fra", label: "Французский" },
+  { id: "spa", label: "Испанский" },
+  { id: "ita", label: "Итальянский" },
+  { id: "zho", label: "Китайский" },
+]
+// hh уровень владения языком
+const LANGUAGE_LEVEL_OPTIONS: { id: string; label: string }[] = [
+  { id: "a1", label: "A1 — начальный" },
+  { id: "a2", label: "A2 — элементарный" },
+  { id: "b1", label: "B1 — средний" },
+  { id: "b2", label: "B2 — средне-продвинутый" },
+  { id: "c1", label: "C1 — продвинутый" },
+  { id: "c2", label: "C2 — в совершенстве" },
+  { id: "l1", label: "Родной" },
+]
+// hh education_level id → русский лейбл
+const EDUCATION_LEVEL_OPTIONS: { id: string; label: string }[] = [
+  { id: "", label: "Любое" },
+  { id: "secondary", label: "Среднее" },
+  { id: "special_secondary", label: "Среднее специальное" },
+  { id: "unfinished_higher", label: "Неоконченное высшее" },
+  { id: "higher", label: "Высшее" },
+  { id: "bachelor", label: "Бакалавр" },
+  { id: "master", label: "Магистр" },
+  { id: "candidate", label: "Кандидат наук" },
+  { id: "doctor", label: "Доктор наук" },
+]
+
 const ANKETA_QTYPES: { type: QuestionAnswerType; icon: string; label: string; desc: string }[] = [
   { type: "short", icon: "T", label: "Короткий текст", desc: "Одна строка" },
   { type: "long", icon: "≡", label: "Развёрнутый ответ", desc: "Абзац" },
@@ -305,6 +341,7 @@ function emptyAnketa(): AnketaData {
     responsibilities: "", requirements: "",
     requiredSkills: [], desiredSkills: [], unacceptableSkills: [],
     experienceMin: "", experienceIdeal: "",
+    aiLanguages: [], educationLevel: "",
     stopFactors: DEFAULT_STOP_FACTORS.map(f => ({ ...f })),
     desiredParams: DEFAULT_DESIRED_PARAMS.map(p => ({ ...p })),
     conditions: [], conditionsCustom: [],
@@ -363,6 +400,10 @@ function migrateAnketa(saved: Record<string, unknown>): AnketaData {
     }
   }
   if (!Array.isArray(d.unacceptableSkills)) d.unacceptableSkills = []
+  // Языки / образование — старые анкеты без этих полей не должны падать
+  if (!Array.isArray(d.aiLanguages)) d.aiLanguages = []
+  else d.aiLanguages = d.aiLanguages.filter(l => l && typeof l.lang === "string").map(l => ({ lang: l.lang, level: typeof l.level === "string" ? l.level : "" }))
+  if (typeof d.educationLevel !== "string") d.educationLevel = ""
 
   // Apply parsed stop factors from file import
   const psf = (saved as Record<string, unknown>).parsedStopFactors as Record<string, string | boolean> | undefined
@@ -1717,6 +1758,94 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
         <p className="text-[11px] text-muted-foreground leading-snug">
           Основные настройки AI-оценки — в блоке «AI-профиль кандидата» ниже; эти поля используются как запасной вариант.
         </p>
+
+        {/* Образование и языки — используются в «Исходящем подборе» (hh-фильтры) */}
+        <div className="space-y-3 pt-2 border-t">
+          <div className="space-y-1.5 max-w-xs">
+            <div className="flex items-center gap-2">
+              <Label className="text-xs">Уровень образования</Label>
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-muted-foreground border-muted-foreground/30">hh.ru</Badge>
+            </div>
+            <Select
+              value={data.educationLevel || "any"}
+              onValueChange={v => set("educationLevel", v === "any" ? "" : v)}
+            >
+              <SelectTrigger className="h-9">
+                <SelectValue placeholder="Любое" />
+              </SelectTrigger>
+              <SelectContent>
+                {EDUCATION_LEVEL_OPTIONS.map(o => (
+                  <SelectItem key={o.id || "any"} value={o.id || "any"}>{o.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2">
+              <Label className="text-xs">Языки</Label>
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-muted-foreground border-muted-foreground/30">hh.ru</Badge>
+            </div>
+            {data.aiLanguages.length > 0 && (
+              <div className="space-y-1.5">
+                {data.aiLanguages.map((l, idx) => (
+                  <div key={idx} className="flex items-center gap-1.5">
+                    <Select
+                      value={l.lang || undefined}
+                      onValueChange={v => {
+                        const next = [...data.aiLanguages]
+                        next[idx] = { ...next[idx], lang: v }
+                        set("aiLanguages", next)
+                      }}
+                    >
+                      <SelectTrigger className="h-9 flex-1">
+                        <SelectValue placeholder="Язык" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {LANGUAGE_OPTIONS.map(o => (
+                          <SelectItem key={o.id} value={o.id}>{o.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Select
+                      value={l.level || undefined}
+                      onValueChange={v => {
+                        const next = [...data.aiLanguages]
+                        next[idx] = { ...next[idx], level: v }
+                        set("aiLanguages", next)
+                      }}
+                    >
+                      <SelectTrigger className="h-9 flex-1">
+                        <SelectValue placeholder="Уровень" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {LANGUAGE_LEVEL_OPTIONS.map(o => (
+                          <SelectItem key={o.id} value={o.id}>{o.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <button
+                      type="button"
+                      onClick={() => set("aiLanguages", data.aiLanguages.filter((_, i) => i !== idx))}
+                      className="text-muted-foreground hover:text-destructive shrink-0 p-1"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => set("aiLanguages", [...data.aiLanguages, { lang: "", level: "" }])}
+            >
+              <Plus className="w-3.5 h-3.5 mr-1" /> Добавить язык
+            </Button>
+          </div>
+        </div>
 
         {/* Stop factors */}
         <div className="space-y-2 pt-2 border-t">

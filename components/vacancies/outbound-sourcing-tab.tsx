@@ -157,6 +157,10 @@ interface Props {
   // (["Офис","Гибрид","Удалёнка"] / ["Полная","Частичная","Проектная"]).
   anketaWorkFormats?: string[] | null
   anketaEmployment?: string[] | null
+  // Языки анкеты — массив { lang: hh language id, level: hh уровень }.
+  anketaLanguages?: { lang: string; level: string }[] | null
+  // Уровень образования анкеты — hh education_level id ("" = любое).
+  anketaEducation?: string | null
 }
 
 // ─── Маппинг анкета → hh для расширенного фильтра ────────────────────────────
@@ -197,6 +201,7 @@ const STATUS_LABEL: Record<string, string> = {
 export function OutboundSourcingTab({
   vacancyId, vacancyTitle, vacancyCity, vacancySalaryMin, vacancySalaryMax,
   vacancyRequiredExperience, vacancyKeywords, anketaWorkFormats, anketaEmployment,
+  anketaLanguages, anketaEducation,
 }: Props) {
   // Критерии (автозаполнены, редактируемы).
   const [text, setText] = useState(vacancyKeywords ?? vacancyTitle ?? "")
@@ -218,6 +223,9 @@ export function OutboundSourcingTab({
   // Язык: один выбранный язык + минимальный уровень. В hh уходит как "{id}.{level}".
   const [languageId, setLanguageId] = useState("any")
   const [languageLevel, setLanguageLevel] = useState("b1")
+  // Доп. языки из анкеты (несколько). Уходят в hh вместе с одиночным выбором.
+  // Формат элемента — "{lang}.{level}" (например "eng.b2").
+  const [extraLanguages, setExtraLanguages] = useState<string[]>([])
 
   const toggleInArray = useCallback(
     (setter: React.Dispatch<React.SetStateAction<string[]>>, val: string) =>
@@ -231,9 +239,15 @@ export function OutboundSourcingTab({
   // автозаполнены. Маппит только однозначное; языки/образование/анкетный
   // schedule пропускаются (в анкете нет структурированных данных).
   const fillFromAnketa = useCallback(() => {
+    // Языки анкеты → hh формат "{lang}.{level}" (только полностью заданные).
+    const mappedLanguages = (anketaLanguages ?? [])
+      .filter((l) => l.lang && l.level)
+      .map((l) => `${l.lang}.${l.level}`)
     const hasAnketa =
       (anketaWorkFormats && anketaWorkFormats.length > 0) ||
-      (anketaEmployment && anketaEmployment.length > 0)
+      (anketaEmployment && anketaEmployment.length > 0) ||
+      mappedLanguages.length > 0 ||
+      !!anketaEducation
     if (!hasAnketa) {
       toast.info("В анкете нет данных для фильтра")
       return
@@ -248,15 +262,31 @@ export function OutboundSourcingTab({
       .map((e) => ANKETA_EMPLOYMENT_TO_HH[e])
       .filter(Boolean)
 
-    if (mappedSchedule.length === 0 && mappedEmployment.length === 0) {
+    if (
+      mappedSchedule.length === 0 &&
+      mappedEmployment.length === 0 &&
+      mappedLanguages.length === 0 &&
+      !anketaEducation
+    ) {
       toast.info("В анкете нет данных для фильтра")
       return
     }
 
     if (mappedSchedule.length) setSchedule([...new Set(mappedSchedule)])
     if (mappedEmployment.length) setEmployment([...new Set(mappedEmployment)])
+    // Образование — hh education_level id; "" в анкете = любое (не трогаем).
+    if (anketaEducation) setEducationLevel(anketaEducation)
+    // Языки: одиночные UI-селекты заполняем ПЕРВЫМ языком анкеты,
+    // а в поиск (criteria.language) уйдут ВСЕ языки из анкеты (extraLanguages).
+    const uniqueLanguages = [...new Set(mappedLanguages)]
+    setExtraLanguages(uniqueLanguages)
+    if (uniqueLanguages.length > 0) {
+      const [firstLang, firstLevel] = uniqueLanguages[0].split(".")
+      setLanguageId(firstLang)
+      setLanguageLevel(firstLevel || "b1")
+    }
     toast.success("Поля заполнены из анкеты")
-  }, [anketaWorkFormats, anketaEmployment])
+  }, [anketaWorkFormats, anketaEmployment, anketaLanguages, anketaEducation])
 
   const [items, setItems] = useState<OutboundItem[]>([])
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -329,8 +359,14 @@ export function OutboundSourcingTab({
             orderBy: orderBy === "relevance" ? undefined : orderBy,
             ageFrom: ageFrom ? Number(ageFrom) : undefined,
             ageTo: ageTo ? Number(ageTo) : undefined,
-            // Язык — массив "{id}.{level}"; шлём один выбранный язык с уровнем.
-            language: languageId !== "any" ? [`${languageId}.${languageLevel}`] : undefined,
+            // Язык — массив "{id}.{level}". Объединяем одиночный выбор UI и
+            // языки, подтянутые из анкеты (extraLanguages), без дублей.
+            language: (() => {
+              const langs = [...extraLanguages]
+              if (languageId !== "any") langs.push(`${languageId}.${languageLevel}`)
+              const unique = [...new Set(langs)]
+              return unique.length ? unique : undefined
+            })(),
           },
         }),
       })
@@ -589,7 +625,7 @@ export function OutboundSourcingTab({
               <div className="space-y-1.5">
                 <Label className="text-xs">Язык</Label>
                 <div className="flex items-center gap-1.5">
-                  <Select value={languageId} onValueChange={setLanguageId}>
+                  <Select value={languageId} onValueChange={(v) => { setExtraLanguages([]); setLanguageId(v) }}>
                     <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Язык" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="any" className="text-sm">Не важно</SelectItem>
@@ -607,6 +643,11 @@ export function OutboundSourcingTab({
                     </SelectContent>
                   </Select>
                 </div>
+                {extraLanguages.length > 1 && (
+                  <p className="text-[11px] text-muted-foreground">
+                    Из анкеты: {extraLanguages.join(", ")} — в поиск уйдут все.
+                  </p>
+                )}
               </div>
             </div>
           </CollapsibleContent>

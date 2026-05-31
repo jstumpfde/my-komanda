@@ -2529,6 +2529,14 @@ export default function VacancyPage() {
                     const a = (apiVacancy?.descriptionJson as Record<string, unknown> | undefined)?.anketa as Record<string, unknown> | undefined
                     return Array.isArray(a?.employment) ? (a!.employment as string[]) : null
                   })()}
+                  anketaLanguages={(() => {
+                    const a = (apiVacancy?.descriptionJson as Record<string, unknown> | undefined)?.anketa as Record<string, unknown> | undefined
+                    return Array.isArray(a?.aiLanguages) ? (a!.aiLanguages as { lang: string; level: string }[]) : null
+                  })()}
+                  anketaEducation={(() => {
+                    const a = (apiVacancy?.descriptionJson as Record<string, unknown> | undefined)?.anketa as Record<string, unknown> | undefined
+                    return typeof a?.educationLevel === "string" ? (a!.educationLevel as string) : null
+                  })()}
                 />
               </TabsContent>
 
