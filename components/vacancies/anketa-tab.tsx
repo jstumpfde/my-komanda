@@ -2481,7 +2481,21 @@ function AiProfileSection({ data, set }: {
                 placeholder="Добавить навык..."
                 customType="skill"
               />
-              <p className="text-[10px] text-muted-foreground">Кандидат без этих навыков получит рейтинг ниже 50%</p>
+              <p className="text-[10px] text-muted-foreground">
+                Кандидат без этих навыков получит рейтинг ниже 50%. Совпадение
+                считается по доле: чем больше навыков совпало, тем выше балл (не
+                нужно, чтобы совпали все).
+              </p>
+              <p className={cn(
+                "text-[10px]",
+                data.aiRequiredHardSkills.length > 8
+                  ? "text-amber-600 dark:text-amber-400"
+                  : "text-muted-foreground",
+              )}>
+                {data.aiRequiredHardSkills.length > 8
+                  ? `⚠️ Навыков: ${data.aiRequiredHardSkills.length}. Слишком много обязательных навыков размывает оценку — почти ни одно резюме не закроет весь список, и баллы перестают различать кандидатов. Оставьте 4–6 ключевых, остальное перенесите в «Желательные навыки».`
+                  : "Рекомендуем 4–6 ключевых навыков. Второстепенное — в «Желательные навыки»."}
+              </p>
             </div>
 
             {/* AI stop factors */}
