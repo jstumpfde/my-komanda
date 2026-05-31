@@ -38,7 +38,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Checkbox } from "@/components/ui/checkbox"
 import { Slider } from "@/components/ui/slider"
 import { Input } from "@/components/ui/input"
-import {Clock, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, MessageSquareText, Zap, Globe, AlertTriangle, TrendingUp, Filter, X, Link2, Copy, Save, Sparkles, Eye, Check, Loader2, Download, ExternalLink, ClipboardList, ChevronLeft, ChevronRight, ChevronDown, Users, Upload, RefreshCw, Bot, Workflow, ListChecks, FilePlus} from "lucide-react"
+import {Clock, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, MessageSquareText, Zap, Globe, AlertTriangle, TrendingUp, Filter, X, Link2, Copy, Save, Sparkles, Eye, Check, Loader2, Download, ExternalLink, ClipboardList, ChevronLeft, ChevronRight, ChevronDown, Users, Upload, RefreshCw, Bot, Workflow, ListChecks, FilePlus, UserSearch} from "lucide-react"
 import { AiChatbotSettings } from "@/components/vacancies/ai-chatbot-settings"
 import { VacancyStopFactorsSettings } from "@/components/vacancies/vacancy-stop-factors-settings"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -52,6 +52,7 @@ import { HhAutoProcess } from "@/components/hh/hh-auto-process"
 import { AutomationSettings, type AutomationSectionId } from "@/components/vacancies/automation-settings"
 import { VacancyScheduleSettings } from "@/components/vacancies/vacancy-schedule-settings"
 import { PublishTab } from "@/components/vacancies/publish-tab"
+import { OutboundSourcingTab } from "@/components/vacancies/outbound-sourcing-tab"
 import { VacancyActionsMenuItems } from "@/components/vacancies/vacancy-actions-menu"
 import { ExportCandidatesDialog } from "@/components/vacancies/export-candidates-dialog"
 import { PermanentDeleteDialog } from "@/components/vacancies/permanent-delete-dialog"
@@ -2192,10 +2193,12 @@ export default function VacancyPage() {
                     { value: "anketa", icon: ClipboardList, label: "Анкета" },
                     { value: "course", icon: BookOpen, label: "Демонстрация" },
                     { value: "test", icon: ListChecks, label: "Тест" },
+                    { value: "outbound", icon: UserSearch, label: "Исходящий подбор" },
                   ] : [
                     { value: "anketa", icon: ClipboardList, label: "Анкета" },
                     { value: "course", icon: BookOpen, label: "Демонстрация" },
                     { value: "test", icon: ListChecks, label: "Тест" },
+                    { value: "outbound", icon: UserSearch, label: "Исходящий подбор" },
                     { value: "candidates", icon: Kanban, label: "Кандидаты" },
                     { value: "analytics", icon: BarChart3, label: "Аналитика" },
                   ]).map(tab => (
@@ -2507,6 +2510,17 @@ export default function VacancyPage() {
                   editorRef={testEditorRef}
                   tabRef={testTabRef}
                   onSaveStatusChange={setTestEditorSaveStatus}
+                />
+              </TabsContent>
+
+              <TabsContent value="outbound">
+                <OutboundSourcingTab
+                  vacancyId={id}
+                  vacancyTitle={apiVacancy?.title ?? null}
+                  vacancyCity={apiVacancy?.city ?? null}
+                  vacancySalaryMin={apiVacancy?.salaryMin ?? null}
+                  vacancySalaryMax={apiVacancy?.salaryMax ?? null}
+                  vacancyRequiredExperience={(apiVacancy as { requiredExperience?: string | null } | undefined)?.requiredExperience ?? null}
                 />
               </TabsContent>
 

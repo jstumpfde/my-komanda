@@ -1952,6 +1952,58 @@ export const hhResponses = pgTable("hh_responses", {
 // Legacy alias — old code references hhTokens
 export const hhTokens = hhIntegrations
 
+// ─── Исходящий подбор (hh outbound sourcing), Фаза 1 — миграция 0159 ─────────
+// Поток: критерии → hh GET /resumes → сохранить найденные сниппеты →
+// AI-скоринг по сниппетам → HR отмечает лучших → приглашение через negotiations
+// → кандидат в воронке (source='hh_outbound'). См. ТЗ «Исходящий подбор».
+
+// Сохранённый поисковый запрос по вакансии. criteria — нормализованные критерии
+// (см. lib/hh/outbound.ts OutboundCriteria): text/area/experience/salary/period.
+export const outboundSearches = pgTable("outbound_searches", {
+  id:              uuid("id").primaryKey().defaultRandom(),
+  companyId:       uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  vacancyId:       uuid("vacancy_id").notNull().references(() => vacancies.id, { onDelete: "cascade" }),
+  criteria:        jsonb("criteria").notNull().default({}),
+  createdByUserId: uuid("created_by_user_id").references(() => users.id),
+  createdAt:       timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  lastRunAt:       timestamp("last_run_at", { withTimezone: true }),
+})
+
+// Найденное резюме из поиска hh. snippet — сырой сниппет из выдачи GET /resumes
+// (НЕ расходует лимит просмотров). ai_score/ai_reasoning заполняются скорером.
+// status: found | viewed | invited | responded | skipped.
+export const outboundCandidates = pgTable("outbound_candidates", {
+  id:           uuid("id").primaryKey().defaultRandom(),
+  searchId:     uuid("search_id").notNull().references(() => outboundSearches.id, { onDelete: "cascade" }),
+  companyId:    uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  vacancyId:    uuid("vacancy_id").notNull().references(() => vacancies.id, { onDelete: "cascade" }),
+  hhResumeId:   text("hh_resume_id").notNull(),
+  title:        text("title"),
+  snippet:      jsonb("snippet"),
+  aiScore:      integer("ai_score"),
+  aiReasoning:  text("ai_reasoning"),
+  status:       text("status").notNull().default("found"),
+  invitedAt:    timestamp("invited_at", { withTimezone: true }),
+  viewedAt:     timestamp("viewed_at", { withTimezone: true }),
+  candidateId:  uuid("candidate_id").references(() => candidates.id, { onDelete: "set null" }),
+  createdAt:    timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt:    timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  unique("uq_outbound_candidates_vacancy_resume").on(t.vacancyId, t.hhResumeId),
+])
+
+// Дневной учёт расхода лимита просмотров резюме hh по компании.
+//   viewsFromSearch — просмотры из поисковой выдачи (лимит 50/день на менеджера)
+//   totalViews      — суммарные уникальные просмотры (лимит 500/день)
+export const hhResumeViewQuota = pgTable("hh_resume_view_quota", {
+  companyId:        uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  date:             date("date").notNull(),
+  viewsFromSearch:  integer("views_from_search").notNull().default(0),
+  totalViews:       integer("total_views").notNull().default(0),
+}, (t) => [
+  primaryKey({ columns: [t.companyId, t.date] }),
+])
+
 // Async tracking разбора hh-очереди (Сессия 7).
 // POST /api/integrations/hh/process-queue создаёт строку и сразу возвращает
 // jobId; UI делает polling /status?jobId=...
