@@ -118,6 +118,54 @@ async function hhPost<T>(companyId: string, path: string, body: unknown): Promis
   return (raw ? JSON.parse(raw) : undefined) as T
 }
 
+// ─── Резолв названия города → hh area id ────────────────────────────────────
+// hh GET /resumes принимает area ТОЛЬКО как числовой id (Москва="1"), название
+// города → 400 bad_argument. UI отдаёт название (из вакансии), поэтому здесь
+// резолвим его в id по справочнику hh /areas. Справочник публичный и большой
+// (дерево стран→регионов→городов), поэтому кэшируем плоскую мапу name→id на
+// процесс. Не нашли город → возвращаем undefined (поиск без фильтра по городу,
+// чем падать с 400).
+
+interface HhArea { id: string; name: string; areas?: HhArea[] }
+
+// name(lowercase) → id. Заполняется при первом резолве и живёт до рестарта.
+let areaIndexCache: Map<string, string> | null = null
+
+function flattenAreas(nodes: HhArea[], into: Map<string, string>) {
+  for (const n of nodes) {
+    if (n.name && n.id) {
+      const key = n.name.trim().toLowerCase()
+      // Первое вхождение выигрывает (верхние уровни — Москва/СПб как регионы).
+      if (!into.has(key)) into.set(key, n.id)
+    }
+    if (n.areas?.length) flattenAreas(n.areas, into)
+  }
+}
+
+async function getAreaIndex(companyId: string): Promise<Map<string, string>> {
+  if (areaIndexCache) return areaIndexCache
+  const tree = await hhGet<HhArea[]>(companyId, "/areas")
+  const map = new Map<string, string>()
+  flattenAreas(Array.isArray(tree) ? tree : [], map)
+  areaIndexCache = map
+  return map
+}
+
+// Возвращает hh area id. Если на вход уже пришёл числовой id — отдаём как есть.
+// Если название города — резолвим по справочнику. Не нашли — undefined.
+async function resolveAreaId(companyId: string, area: string): Promise<string | undefined> {
+  const raw = area.trim()
+  if (!raw) return undefined
+  if (/^\d+$/.test(raw)) return raw // уже id
+  try {
+    const idx = await getAreaIndex(companyId)
+    return idx.get(raw.toLowerCase())
+  } catch (err) {
+    console.warn("[outbound] area resolve failed, ищем без города:", err instanceof Error ? err.message : err)
+    return undefined
+  }
+}
+
 // ─── Поиск резюме (НЕ расходует лимит просмотров) ───────────────────────────
 export async function searchResumes(
   companyId: string,
@@ -125,7 +173,10 @@ export async function searchResumes(
 ): Promise<ResumeSearchResult> {
   const qs = new URLSearchParams()
   if (criteria.text) qs.set("text", criteria.text)
-  if (criteria.area) qs.set("area", criteria.area)
+  if (criteria.area) {
+    const areaId = await resolveAreaId(companyId, criteria.area)
+    if (areaId) qs.set("area", areaId)
+  }
   if (criteria.experience) qs.set("experience", criteria.experience)
   if (criteria.salaryFrom != null) qs.set("salary_from", String(criteria.salaryFrom))
   if (criteria.salaryTo != null) qs.set("salary_to", String(criteria.salaryTo))
