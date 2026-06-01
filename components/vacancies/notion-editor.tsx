@@ -2810,11 +2810,31 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
             <MousePointerClick className="w-4 h-4" /><span>Кнопка</span>
           </div>
 
-          {/* Текст + ссылка */}
-          <div className="grid grid-cols-2 gap-2">
-            <Input placeholder="Текст кнопки" value={block.buttonText} onChange={(e) => onUpdate({ buttonText: e.target.value })} className="text-sm" />
-            <Input placeholder="https://..." value={block.buttonUrl} onChange={(e) => onUpdate({ buttonUrl: e.target.value })} className="text-sm" />
-          </div>
+          {/* Текст + (условно) ссылка. target: next = следующая страница, url = ссылка */}
+          {(() => {
+            const target = block.buttonTarget || (block.buttonUrl ? "url" : "next")
+            return (
+              <>
+                <div className={cn("grid gap-2", target === "url" ? "grid-cols-2" : "grid-cols-1")}>
+                  <Input placeholder="Текст кнопки" value={block.buttonText} onChange={(e) => onUpdate({ buttonText: e.target.value })} className="text-sm" />
+                  {target === "url" && (
+                    <Input placeholder="https://..." value={block.buttonUrl} onChange={(e) => onUpdate({ buttonUrl: e.target.value })} className="text-sm" />
+                  )}
+                </div>
+                {/* Куда ведёт */}
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1.5">Куда ведёт</p>
+                  <div className="flex items-center gap-1.5">
+                    <Button variant={target === "next" ? "default" : "outline"} size="sm" className="text-xs" onClick={() => onUpdate({ buttonTarget: "next" })}>Следующая страница</Button>
+                    <Button variant={target === "url" ? "default" : "outline"} size="sm" className="text-xs" onClick={() => onUpdate({ buttonTarget: "url" })}>Ссылка</Button>
+                  </div>
+                  {target === "next" && (
+                    <p className="text-[10px] text-muted-foreground/60 mt-1">В тесте: отправляет ответы и открывает следующую страницу (по очереди). URL не нужен.</p>
+                  )}
+                </div>
+              </>
+            )
+          })()}
 
           {/* Стиль: основная / контурная */}
           <div className="flex items-center gap-2">

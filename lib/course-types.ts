@@ -75,6 +75,10 @@ export interface Block {
   buttonIconBefore?: string
   buttonIconAfter?: string
   buttonAlign?: "left" | "center" | "right"  // расположение кнопки на странице
+  // Куда ведёт кнопка: "next" — следующая страница по очереди (для теста —
+  // отправка ответов + экран после), "url" — внешняя ссылка (показываем поле URL).
+  // undefined трактуем как "url" при заполненном buttonUrl, иначе "next".
+  buttonTarget?: "next" | "url"
   taskTitle: string        // заголовок задания (новое)
   taskDescription: string  // вступительный текст
   questions: Question[]
