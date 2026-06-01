@@ -2104,41 +2104,7 @@ function TaskEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: 
                     )}
                   </div>
 
-                  {/* ── ИИ-проверка: текстовые вопросы + выбор с «Другое…» ── */}
-                  {showAiCheck && (
-                    <div className="space-y-1.5">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[11px] text-muted-foreground font-medium">🤖 ИИ-проверка</span>
-                        <span className="text-[10px] text-muted-foreground/50">необязательно</span>
-                      </div>
-                      {/* Для выборных: зелёные ✓ автоматически уходят в AI как
-                          «подходящие варианты» — HR видит, что уже учтено. */}
-                      {hasOptions && (q.correctOptions?.length ?? 0) > 0 && (
-                        <p className="text-[10px] text-muted-foreground/70">
-                          Подходящие (✓): {(q.correctOptions ?? []).map((i) => q.options[i]).filter(Boolean).join(", ")} — учитываются ИИ. Ниже можно дописать правило.
-                        </p>
-                      )}
-                      <textarea
-                        className="w-full text-xs bg-muted/30 border border-border rounded-lg px-2.5 py-1.5 outline-none focus:border-primary/50 resize-none min-h-[52px]"
-                        value={q.aiCriteria || ""}
-                        onChange={(e) => updateQ(qi, { aiCriteria: e.target.value })}
-                        placeholder={hasOptions ? "Правило для ИИ: напр. «подходит всё, что связано с промышленным/военным строительством, кроме малоэтажного»" : "Критерий для ИИ: например «Кандидат должен упомянуть опыт продаж более 2 лет»"}
-                      />
-                      {q.aiCriteria && (
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-muted-foreground">Баллы:</span>
-                          <input type="number" min={0} max={999}
-                            className="w-16 text-xs border border-border rounded px-2 py-0.5 outline-none bg-background focus:border-primary/50 text-center"
-                            value={points}
-                            onChange={(e) => { const v = parseInt(e.target.value); updateQ(qi, { points: isNaN(v) || v < 0 ? 0 : v }) }}
-                          />
-                          <button className="text-[11px] text-primary/60 hover:text-primary underline underline-offset-2"
-                            onClick={() => onUpdate({ questions: distributePoints(block.questions) })}
-                          >÷{block.questions.length}</button>
-                        </div>
-                      )}
-                    </div>
-                  )}
+                  {/* ИИ-проверка перенесена НИЖЕ — под список вариантов (см. ниже). */}
 
                   {/* ── Варианты (single / multiple / sort) ── */}
                   {hasOptions && (
@@ -2148,6 +2114,31 @@ function TaskEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: 
                         const isCorrectMulti = q.answerType === "multiple" && (q.correctOptions?.includes(oi) ?? false)
                         return (
                           <div key={oi} className="flex items-center gap-1.5">
+                            {/* Перемещение варианта вверх/вниз (с ремапом ✓ и ✏️). */}
+                            <div className="flex flex-col shrink-0 -my-0.5">
+                              {([-1, 1] as const).map((dir) => {
+                                const j = oi + dir
+                                const disabled = j < 0 || j >= q.options.length
+                                return (
+                                  <button
+                                    key={dir}
+                                    type="button"
+                                    title={dir < 0 ? "Вверх" : "Вниз"}
+                                    disabled={disabled}
+                                    onClick={() => {
+                                      if (disabled) return
+                                      const no = [...q.options]
+                                      ;[no[oi], no[j]] = [no[j], no[oi]]
+                                      const swap = (a?: number[]) => a?.map((c) => (c === oi ? j : c === j ? oi : c))
+                                      updateQ(qi, { options: no, correctOptions: swap(q.correctOptions), otherOptions: swap(q.otherOptions) })
+                                    }}
+                                    className="text-muted-foreground/40 hover:text-foreground disabled:opacity-20 leading-none"
+                                  >
+                                    {dir < 0 ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />}
+                                  </button>
+                                )
+                              })}
+                            </div>
                             {q.answerType === "sort" && (
                               <span className="text-xs text-muted-foreground w-4 shrink-0 text-center">{oi + 1}.</span>
                             )}
@@ -2226,6 +2217,40 @@ function TaskEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: 
                       </button>
                       {q.answerType === "sort" && q.options.length > 0 && (
                         <p className="text-[11px] text-muted-foreground/50">Текущий порядок считается правильным</p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* ── ИИ-проверка (под вариантами): текстовые + выбор с «Другое…» ── */}
+                  {showAiCheck && (
+                    <div className="space-y-1.5">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] text-muted-foreground font-medium">🤖 ИИ-проверка</span>
+                        <span className="text-[10px] text-muted-foreground/50">необязательно</span>
+                      </div>
+                      {hasOptions && (q.correctOptions?.length ?? 0) > 0 && (
+                        <p className="text-[10px] text-muted-foreground/70">
+                          Подходящие (✓): {(q.correctOptions ?? []).map((i) => q.options[i]).filter(Boolean).join(", ")} — учитываются ИИ. Ниже можно дописать правило.
+                        </p>
+                      )}
+                      <textarea
+                        className="w-full text-xs bg-muted/30 border border-border rounded-lg px-2.5 py-1.5 outline-none focus:border-primary/50 resize-none min-h-[52px]"
+                        value={q.aiCriteria || ""}
+                        onChange={(e) => updateQ(qi, { aiCriteria: e.target.value })}
+                        placeholder={hasOptions ? "Правило для ИИ: напр. «подходит всё, что связано с промышленным/военным строительством, кроме малоэтажного»" : "Критерий для ИИ: например «Кандидат должен упомянуть опыт продаж более 2 лет»"}
+                      />
+                      {q.aiCriteria && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-muted-foreground">Баллы:</span>
+                          <input type="number" min={0} max={999}
+                            className="w-16 text-xs border border-border rounded px-2 py-0.5 outline-none bg-background focus:border-primary/50 text-center"
+                            value={points}
+                            onChange={(e) => { const v = parseInt(e.target.value); updateQ(qi, { points: isNaN(v) || v < 0 ? 0 : v }) }}
+                          />
+                          <button className="text-[11px] text-primary/60 hover:text-primary underline underline-offset-2"
+                            onClick={() => onUpdate({ questions: distributePoints(block.questions) })}
+                          >÷{block.questions.length}</button>
+                        </div>
                       )}
                     </div>
                   )}
