@@ -52,6 +52,8 @@ export interface FilterState {
   hideRejected: boolean
   /** Скрыть кандидатов без указанной зарплаты (server: salary NOT NULL). */
   hideNoSalary: boolean
+  /** Показать только активных сейчас (активность демо/тест за 30 мин). */
+  activeNow: boolean
   demoProgress: string[]
   dateRange: string
   dateFrom: string
@@ -98,6 +100,7 @@ const DEFAULT_FILTERS: FilterState = {
   funnelStatuses: DEFAULT_FUNNEL_STATUSES.slice(),
   hideRejected: false,
   hideNoSalary: false,
+  activeNow: false,
   demoProgress: [],
   dateRange: "", dateFrom: "", dateTo: "", ageMin: 18, ageMax: 65, education: [], languages: [], otherLanguages: [],
   skills: [], industries: [],
@@ -537,6 +540,19 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [], va
                     id="show-rejections"
                     checked={!filters.hideRejected}
                     onCheckedChange={(show) => onFiltersChange({ ...filters, hideRejected: !show })}
+                  />
+                </div>
+                {/* Активны сейчас — кандидаты, кто прямо сейчас проходит демо
+                    или тест (активность за последние 30 минут). */}
+                <div className="flex items-center justify-between gap-2 mt-2 pt-2 border-t border-border/40">
+                  <Label htmlFor="active-now" className="text-sm cursor-pointer flex items-center gap-1.5">
+                    <span className="inline-block w-2 h-2 rounded-full bg-emerald-500" />
+                    Активны сейчас
+                  </Label>
+                  <Switch
+                    id="active-now"
+                    checked={filters.activeNow}
+                    onCheckedChange={(on) => onFiltersChange({ ...filters, activeNow: on })}
                   />
                 </div>
               </div>

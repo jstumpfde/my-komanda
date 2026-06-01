@@ -465,10 +465,13 @@ export function ListView({
                 />
                 <div className="min-w-0 flex-1">
                   <p
-                    className="text-[15px] font-medium text-foreground truncate"
-                    title={candidate.name}
+                    className="text-[15px] font-medium text-foreground flex items-center gap-1.5 min-w-0"
+                    title={candidate.isActive ? `${candidate.name} · активен сейчас` : candidate.name}
                   >
-                    {candidate.name}
+                    {candidate.isActive && (
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" aria-label="Активен сейчас" />
+                    )}
+                    <span className="truncate">{candidate.name}</span>
                   </p>
                   {settings.showExperience && (
                     <p

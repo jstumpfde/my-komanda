@@ -113,6 +113,9 @@ export async function POST(
       })
     }
 
+    // Активность кандидата — для фильтра «активны сейчас» (Статус не трогаем).
+    await db.update(candidates).set({ lastActivityAt: new Date() }).where(eq(candidates.id, candidate.id))
+
     return apiSuccess({ ok: true, score: draftScore })
   } catch (err) {
     console.error("[public/test answer]", err)

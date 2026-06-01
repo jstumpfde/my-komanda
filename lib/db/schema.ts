@@ -841,6 +841,9 @@ export const candidates = pgTable("candidates", {
   // Момент первого открытия страницы /demo/<shortId> владельцем-кандидатом.
   // NULL = ещё не открывал (стейдж = primary_contact).
   demoOpenedAt: timestamp("demo_opened_at"),
+  // Последняя активность кандидата (ответ в демо / автосохранение теста /
+  // открытие теста) — для фильтра «активны сейчас» (isActive ≤ 30 мин).
+  lastActivityAt: timestamp("last_activity_at"),
   autoProcessingStopped: boolean("auto_processing_stopped").notNull().default(false),
   autoProcessingStoppedReason: text("auto_processing_stopped_reason"),
   autoProcessingStoppedAt: timestamp("auto_processing_stopped_at", { withTimezone: true }),

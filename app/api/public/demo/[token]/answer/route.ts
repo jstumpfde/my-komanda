@@ -263,6 +263,8 @@ export async function POST(
         anketaAnswers: existingAnswers,
         demoProgressJson: progress,
         updatedAt: new Date(),
+        // Активность кандидата — для фильтра «активны сейчас».
+        lastActivityAt: new Date(),
       }
       if (newStage && newStage !== currentStage) {
         updates.stage = newStage

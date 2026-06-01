@@ -185,6 +185,7 @@ function apiCandidateToCard(c: ApiCandidate, columnId: string): Candidate {
     rubricScore: c.rubricScore ?? null,
     testScore: c.testScore ?? null,
     testStatus: c.testStatus ?? null,
+    isActive: (c as { isActive?: boolean }).isActive ?? false,
     demoProgressJson: c.demoProgressJson as Candidate["demoProgressJson"],
     demoTotalBlocks: (c as { demoTotalBlocks?: number }).demoTotalBlocks,
     demoCompletedBlocks: (c as { demoCompletedBlocks?: number }).demoCompletedBlocks,
@@ -436,7 +437,7 @@ export default function VacancyPage() {
     router.replace(`${window.location.pathname}${qs ? "?" + qs : ""}`, { scroll: false })
   }, [router])
 
-  const [filters, setFilters] = useState<FilterState>({ searchText: "", cities: [], salaryMin: 0, salaryMax: 250000, scoreMin: 0, scoreMinResume: 0, scoreMinAnketa: 0, sources: [], workFormats: [], relocation: "any", businessTrips: "any", experienceMin: 0, experienceMax: 20, funnelStatuses: DEFAULT_FUNNEL_STATUSES.slice(), hideRejected: false, hideNoSalary: false, demoProgress: [], dateRange: "", dateFrom: "", dateTo: "", ageMin: 18, ageMax: 65, education: [], languages: [], otherLanguages: [], skills: [], industries: [] })
+  const [filters, setFilters] = useState<FilterState>({ searchText: "", cities: [], salaryMin: 0, salaryMax: 250000, scoreMin: 0, scoreMinResume: 0, scoreMinAnketa: 0, sources: [], workFormats: [], relocation: "any", businessTrips: "any", experienceMin: 0, experienceMax: 20, funnelStatuses: DEFAULT_FUNNEL_STATUSES.slice(), hideRejected: false, hideNoSalary: false, activeNow: false, demoProgress: [], dateRange: "", dateFrom: "", dateTo: "", ageMin: 18, ageMax: 65, education: [], languages: [], otherLanguages: [], skills: [], industries: [] })
 
   // Маппинг русских лейблов фильтра прогресса демо → API-идентификаторы.
   // UI: candidate-filters.tsx:70 ["Не начал", "В процессе", "Завершил (≥85%)",
@@ -477,6 +478,7 @@ export default function VacancyPage() {
     scoreMinAnketa: filters.scoreMinAnketa,
     hideRejected: filters.hideRejected,
     hideNoSalary: filters.hideNoSalary,
+    activeNow: filters.activeNow,
   }), [filters]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // viewMode поднят сюда (выше хуков), чтобы useCandidates умел пропускать

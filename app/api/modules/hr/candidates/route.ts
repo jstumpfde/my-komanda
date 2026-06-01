@@ -637,6 +637,13 @@ export async function GET(req: NextRequest) {
       filterConds.push(sql`(${candidates.stage} IS DISTINCT FROM 'rejected')`)
     }
 
+    // «Активны сейчас» — кандидаты с активностью (демо/тест) за последние 30 мин.
+    // last_activity_at дёргают demo/answer и test/answer|open (now()::timestamp —
+    // сравниваем в той же зоне, что и defaultNow()).
+    if (url.searchParams.get("activeNow") === "true") {
+      filterConds.push(sql`(${candidates.lastActivityAt} IS NOT NULL AND ${candidates.lastActivityAt} > (now()::timestamp - interval '30 minutes'))`)
+    }
+
     // Поиск по имени/email/телефону (ILIKE). %/_/\ экранируем, чтобы юзер
     // не получил расширенный паттерн при вводе этих символов.
     const searchParam = url.searchParams.get("search")?.trim()
@@ -850,6 +857,10 @@ export async function GET(req: NextRequest) {
         testStatus = null
       }
 
+      // «Активен сейчас» — активность (демо/тест) за последние 30 минут.
+      const isActive = r.lastActivityAt != null
+        && (Date.now() - new Date(r.lastActivityAt).getTime()) <= ACTIVE_THRESHOLD_MS
+
       return {
         ...r,
         birthDate: effectiveBirthDate,
@@ -859,6 +870,7 @@ export async function GET(req: NextRequest) {
         progressPercent,
         testScore: test?.score ?? null,
         testStatus,
+        isActive,
       }
     })
 

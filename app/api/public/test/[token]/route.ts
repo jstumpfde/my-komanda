@@ -56,16 +56,19 @@ export async function GET(
       .orderBy(desc(testSubmissions.submittedAt))
       .limit(1)
 
-    // Отметка «перешёл»: при открытии теста реальным кандидатом (не превью HR)
-    // заводим пустой черновик, если записи ещё нет — чтобы в колонке «Тест»
-    // появилось «пер.» ещё до первого ответа.
-    if (!existing && candidate.source !== "preview") {
-      await db.insert(testSubmissions).values({
-        candidateId: candidate.id,
-        demoId:      demo.id,
-        answersJson: { answers: [], objective: null },
-        submittedAt: null,
-      }).onConflictDoNothing()
+    // Открытие теста реальным кандидатом (не превью HR): отмечаем активность
+    // (фильтр «активны сейчас») и заводим пустой черновик, если записи ещё нет —
+    // чтобы в колонке «Тест» появилось «пер.» ещё до первого ответа.
+    if (candidate.source !== "preview") {
+      await db.update(candidates).set({ lastActivityAt: new Date() }).where(eq(candidates.id, candidate.id))
+      if (!existing) {
+        await db.insert(testSubmissions).values({
+          candidateId: candidate.id,
+          demoId:      demo.id,
+          answersJson: { answers: [], objective: null },
+          submittedAt: null,
+        }).onConflictDoNothing()
+      }
     }
 
     const pds = (demo.postDemoSettings && typeof demo.postDemoSettings === "object")

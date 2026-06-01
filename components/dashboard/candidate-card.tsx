@@ -67,6 +67,8 @@ export interface Candidate {
   // (submitted/in_progress/opened/sent).
   testScore?: number | null
   testStatus?: "submitted" | "in_progress" | "opened" | "sent" | null
+  // «Активен сейчас» — проходит демо/тест в последние 30 минут.
+  isActive?: boolean
 }
 
 interface CandidateCardProps {

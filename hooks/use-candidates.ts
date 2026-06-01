@@ -73,6 +73,8 @@ export interface ApiCandidate {
   // sent (отправлен) / null.
   testScore?: number | null
   testStatus?: "submitted" | "in_progress" | "opened" | "sent" | null
+  // «Активен сейчас» — активность (демо/тест) за последние 30 минут.
+  isActive?: boolean
 }
 
 // ─── useCandidates ────────────────────────────────────────────────────────────
@@ -105,6 +107,7 @@ export interface CandidatesFilters {
   scoreMinAnketa?: number             // фильтр по candidates.aiScore (после анкеты)
   hideRejected?: boolean              // сервер: stage != 'rejected'
   hideNoSalary?: boolean              // сервер: исключить кандидатов без указанной ЗП
+  activeNow?: boolean                 // сервер: активность за последние 30 мин (демо/тест)
 }
 
 export interface CandidatesSortParams {
@@ -200,6 +203,7 @@ export function useCandidates(
         }
         if (filters.hideRejected) params.set("excludeRejected", "true")
         if (filters.hideNoSalary) params.set("hideNoSalary", "true")
+        if (filters.activeNow) params.set("activeNow", "true")
         if (filters.search && filters.search.trim()) {
           params.set("search", filters.search.trim())
         }
@@ -422,6 +426,7 @@ export function usePaginatedCandidates({
         if (typeof filters.scoreMinAnketa === "number" && filters.scoreMinAnketa > 0) params.set("scoreMinAnketa", String(filters.scoreMinAnketa))
         if (filters.hideRejected) params.set("excludeRejected", "true")
         if (filters.hideNoSalary) params.set("hideNoSalary", "true")
+        if (filters.activeNow) params.set("activeNow", "true")
         if (filters.search && filters.search.trim()) params.set("search", filters.search.trim())
         // demoProgress в paginated режиме теперь применяется на сервере через
         // SQL (см. route.ts: pre-fetch demoTotalBlocks → SQL WHERE с COUNT
