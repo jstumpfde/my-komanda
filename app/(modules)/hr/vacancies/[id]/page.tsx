@@ -1402,6 +1402,31 @@ export default function VacancyPage() {
       const ids = Array.from(selectedCandidateIds)
       setBulkBusy(true)
       try {
+        // «Отправить тест» идёт отдельным эндпоинтом: ставит приглашения в
+        // очередь follow_up (branch=test_invite), cron шлёт по одному с паузой.
+        if (action === "send_test") {
+          const res = await fetch(`/api/modules/hr/vacancies/${id}/send-test`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ candidateIds: ids }),
+          })
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({})) as { error?: string }
+            toast.error(err.error || "Не удалось поставить тест в очередь")
+            return
+          }
+          const d = (await res.json()) as { scheduled?: number; alreadyQueued?: number }
+          const queued = d.scheduled ?? 0
+          const dup = d.alreadyQueued ?? 0
+          toast.success(
+            `Тест в очереди: ${queued}` + (dup > 0 ? ` (уже стояло: ${dup})` : "") +
+            ". Отправка по очереди, с паузой между сообщениями.",
+          )
+          setSelectedCandidateIds(new Set())
+          await (useListPaginated ? paginated.refetch() : refetchCandidates())
+          return
+        }
+
         const res = await fetch("/api/modules/hr/candidates/bulk", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -1444,7 +1469,7 @@ export default function VacancyPage() {
         setBulkBusy(false)
       }
     },
-    [selectedCandidateIds, bulkBusy, refetchCandidates, useListPaginated, paginated],
+    [selectedCandidateIds, bulkBusy, refetchCandidates, useListPaginated, paginated, id],
   )
 
   const filteredColumns = applyCandidateFilters(columns, filters)

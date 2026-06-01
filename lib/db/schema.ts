@@ -735,6 +735,11 @@ export interface PostDemoSettings {
   testAiPrompt?:    string
   testPassingScore?: number
   testAfterMessage?: string   // плейсхолдеры {{name}}, {{vacancy}}
+  // Мини-фича рассылки теста (01.06.2026): текст приглашения, которое HR шлёт
+  // выбранным кандидатам (branch=test_invite). Плейсхолдеры {{name}},
+  // {{vacancy}}, {{test_link}} (персональная ссылка /test/{token}).
+  // undefined/'' → дефолтный текст из lib/messaging/test-invite.ts.
+  testInviteMessage?: string
 }
 
 export interface AnketaAutoReplySettings {

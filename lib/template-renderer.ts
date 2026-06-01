@@ -41,6 +41,10 @@ const ALIASES: Record<string, string> = {
   "ссылка_на_демо":            "demo_link",
   "demo_link":                 "demo_link",
   "link":                      "demo_link",
+  // ─── ссылка на тест ───────
+  "ссылка_на_тест":            "test_link",
+  "тест_ссылка":               "test_link",
+  "test_link":                 "test_link",
   // ─── ЗП и интервью ────────
   "зп_от":                     "salary_from",
   "зп_до":                     "salary_to",

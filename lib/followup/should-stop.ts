@@ -72,6 +72,10 @@ export async function shouldStopFollowUp(
   // decision, anketa_filled, ai_screening, interview, final_decision, scheduled, interviewed, hired.
   const ADVANCED_STAGES = new Set([
     "decision", "anketa_filled", "ai_screening",
+    // Тест-стадии: кандидату отправлен/пройден тест — он продвинулся дальше
+    // демо, дожим больше не нужен (иначе кандидат с тестом получает дожим —
+    // баг C1, закрыт 01.06.2026 вместе с мини-фичей рассылки теста).
+    "test_task_sent", "test_task_done", "test_passed", "test_failed",
     "interview", "final_decision",
     "scheduled", "interviewed", "hired",
   ])

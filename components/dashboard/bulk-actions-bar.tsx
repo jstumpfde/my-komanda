@@ -30,6 +30,7 @@ import {
   X,
   Loader2,
   RotateCcw,
+  ClipboardList,
 } from "lucide-react"
 
 export type BulkAction =
@@ -39,6 +40,7 @@ export type BulkAction =
   | "set_stage"
   | "toggle_favorite"
   | "restore"
+  | "send_test"
 
 interface StageOption {
   id: string
@@ -147,6 +149,18 @@ export function BulkActionsBar({ count, stages, onClear, onAction, allRejected =
           >
             {busy === "invite" ? <Loader2 className="size-4 animate-spin" /> : <Calendar className="size-4" />}
             <span className="hidden md:inline">Пригласить</span>
+          </Button>
+
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-8 px-2.5 gap-1.5 text-sm text-teal-600 border-teal-300 hover:bg-teal-500/10 hover:text-teal-700 dark:text-teal-300 dark:border-teal-700"
+            disabled={!!busy}
+            onClick={() => run("send_test")}
+          >
+            {busy === "send_test" ? <Loader2 className="size-4 animate-spin" /> : <ClipboardList className="size-4" />}
+            <span className="hidden md:inline">Отправить тест</span>
           </Button>
 
           <Button

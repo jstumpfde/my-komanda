@@ -195,9 +195,13 @@ async function processOneTouch(
   // (auto: при проверке; assisted: по кнопке «Принять»). Как и anketa_auto_reply,
   // это не дожим: пропускаем стоп-триггеры и дневной rate-limit.
   const isTestAfterMessage = msg.branch === "test_after_message"
+  // branch='test_invite' — приглашение пройти тест (явное действие HR / воронка),
+  // содержит {{test_link}}. Это не дожим: пропускаем стоп-триггеры и rate-limit,
+  // шлём именно выбранным кандидатам. Стадию test_task_sent ставит scheduleTestInvite.
+  const isTestInvite = msg.branch === "test_invite"
   const isOneOffPostAnketa =
     msg.branch === "anketa_confirmation" || msg.branch === "anketa_auto_reply"
-    || isChainStep || isOffHoursFirst || isTestAfterMessage
+    || isChainStep || isOffHoursFirst || isTestAfterMessage || isTestInvite
   if (!isOneOffPostAnketa) {
     // Стоп-триггеры (вакансия закрыта / демо пройдено / отказ /
     // автоматизация остановлена) — только для обычной цепочки дожима.
@@ -353,11 +357,13 @@ async function processOneTouch(
   const { firstName } = await getCandidateFirstName(msg.candidateId)
   const tokenForUrl = cand?.shortId ?? cand?.token ?? msg.candidateId
   const demoUrl = `https://company24.pro/demo/${tokenForUrl}`
+  const testUrl = `https://company24.pro/test/${tokenForUrl}`
   const finalText = renderTemplate(msg.messageText, {
     name:      firstName,
     vacancy:   vacancy.title || "",
     company:   "Company24",
     demo_link: demoUrl,
+    test_link: testUrl,
   })
 
   // Реально отправляем в hh → выдержать per-company задержку перед следующей
