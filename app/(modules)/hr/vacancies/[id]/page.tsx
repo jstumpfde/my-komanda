@@ -2024,28 +2024,6 @@ export default function VacancyPage() {
                   )}
                   <VacancyStatusBadge status={status} />
                   {status === "active" && apiVacancy?.createdAt && <span className="flex items-center gap-1.5 text-xs text-muted-foreground"><Clock className="size-3.5" />{Math.floor((Date.now() - new Date(apiVacancy.createdAt).getTime()) / 86400000)} дн.</span>}
-                  <UITooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          try {
-                            const res = await fetch(`/api/modules/hr/vacancies/${id}/preview-candidate`, { method: "POST" })
-                            const json = await res.json()
-                            if (!json?.token) { toast.error("Не удалось открыть превью"); return }
-                            window.open(`${window.location.origin}/demo/${json.token}?as=hr`, "_blank", "noopener,noreferrer")
-                          } catch {
-                            toast.error("Не удалось открыть превью")
-                          }
-                        }}
-                        aria-label="Открыть как директор"
-                        className="inline-flex items-center justify-center w-6 h-6 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-                      >
-                        <Eye className="size-3.5" />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent>Открыть как директор (ответы не сохраняются)</TooltipContent>
-                  </UITooltip>
                 </div>
                 <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-muted-foreground">
                   {activeTab === "candidates" && <>
@@ -2329,6 +2307,23 @@ export default function VacancyPage() {
                         ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
                         : <Check className="w-3.5 h-3.5" />}
                       Сохранить
+                    </Button>
+                    {/* Предпросмотр анкеты глазами кандидата (/demo). Заменил
+                        глаз «Открыть как директор» у названия — теперь предпросмотр
+                        per-tab, как у Демонстрации и Теста. */}
+                    <Button
+                      variant="outline" size="sm" className="gap-1.5 text-xs h-8"
+                      onClick={async () => {
+                        try {
+                          await anketaHandle?.save()
+                          const res = await fetch(`/api/modules/hr/vacancies/${id}/preview-candidate`, { method: "POST" })
+                          const json = await res.json().catch(() => null)
+                          if (!res.ok || !json?.token) { toast.error("Не удалось открыть предпросмотр"); return }
+                          window.open(`${window.location.origin}/demo/${json.token}?as=hr`, "_blank", "noopener,noreferrer")
+                        } catch { toast.error("Ошибка сети") }
+                      }}
+                    >
+                      <Eye className="w-3.5 h-3.5" />Предпросмотр
                     </Button>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
