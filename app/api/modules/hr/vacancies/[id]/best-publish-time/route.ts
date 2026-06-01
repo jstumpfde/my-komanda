@@ -31,7 +31,14 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
       LIMIT 100
     `)
 
-    const data = rows.rows as { dow: number; hour: number; cnt: number }[]
+    // db.execute() в зависимости от драйвера возвращает либо { rows: [...] }
+    // (node-postgres), либо сам массив строк (postgres.js). Поддерживаем оба,
+    // иначе на проде rows.rows = undefined → .reduce падал (500).
+    const raw = rows as unknown as { rows?: unknown[] } | unknown[]
+    const rawRows = (Array.isArray(raw) ? raw : raw.rows ?? []) as Array<{ dow: unknown; hour: unknown; cnt: unknown }>
+    // postgres.js может вернуть числа строками — приводим явно, иначе reduce
+    // сконкатенирует, а DAY_NAMES[dow] промахнётся.
+    const data = rawRows.map(r => ({ dow: Number(r.dow), hour: Number(r.hour), cnt: Number(r.cnt) }))
     const total = data.reduce((s, r) => s + r.cnt, 0)
     
     if (total < 5) {
