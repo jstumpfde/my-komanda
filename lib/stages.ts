@@ -135,7 +135,7 @@ export const PLATFORM_STAGES: Record<StageSlug, StageDefinition> = {
   },
   test_task_sent: {
     slug: "test_task_sent",
-    defaultLabel: "Задание отпр.",
+    defaultLabel: "Тест отправлен",
     defaultColor: "yellow",
     defaultHhAction: null,
     isSystem: false,
