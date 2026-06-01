@@ -47,6 +47,7 @@ export async function GET(
         anketaAnswers: candidates.anketaAnswers,
         demoProgressJson: candidates.demoProgressJson,
         aiScore: candidates.aiScore,
+        source: candidates.source,
       })
       .from(candidates)
       .where(isShortId(token) ? eq(candidates.shortId, token) : eq(candidates.token, token))
@@ -79,10 +80,12 @@ export async function GET(
       .from(vacancies)
       .innerJoin(companies, eq(vacancies.companyId, companies.id))
       .where(
-        and(
-          eq(vacancies.id, candidate.vacancyId),
-          isNull(vacancies.deletedAt),
-        ),
+        // Превью HR (source='preview') показываем даже для черновика/удалённой
+        // вакансии — это внутренний предпросмотр. Реальным кандидатам — только
+        // не удалённые (deleted_at IS NULL).
+        candidate.source === "preview"
+          ? eq(vacancies.id, candidate.vacancyId)
+          : and(eq(vacancies.id, candidate.vacancyId), isNull(vacancies.deletedAt)),
       )
       .limit(1)
 

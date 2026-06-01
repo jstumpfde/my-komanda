@@ -34,7 +34,11 @@ export async function GET(
       })
       .from(vacancies)
       .innerJoin(companies, eq(vacancies.companyId, companies.id))
-      .where(and(eq(vacancies.id, candidate.vacancyId), isNull(vacancies.deletedAt)))
+      // Превью HR (source='preview') — показываем даже для черновика/удалённой
+      // вакансии. Реальным кандидатам — только не удалённые.
+      .where(candidate.source === "preview"
+        ? eq(vacancies.id, candidate.vacancyId)
+        : and(eq(vacancies.id, candidate.vacancyId), isNull(vacancies.deletedAt)))
       .limit(1)
     if (!vacancy) return apiError("Вакансия не найдена", 404)
 
