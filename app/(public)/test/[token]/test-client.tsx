@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { Loader2, CheckCircle2, Send, ChevronUp, ChevronDown } from "lucide-react"
 import type { Block, Lesson, Question } from "@/lib/course-types"
+import { renderTemplate } from "@/lib/template-renderer"
 
 // Прохождение тестового задания кандидатом.
 // Рендерит структурированные вопросы task-блоков (single/multiple/yesno/sort/
@@ -263,32 +264,37 @@ export function TestClient({ token }: { token: string }) {
     )
   }
 
+  // Подстановка плейсхолдеров в тексты, заданные HR ({{Имя}}/{{name}},
+  // {{вакансия}}, {{компания}}). Без неё кандидат видел бы буквально «{{Имя}}».
+  const tplVars: Record<string, string> = {
+    name:    data?.candidateName || "",
+    vacancy: data?.vacancyTitle || "",
+    company: data?.companyName || "",
+  }
+  const tpl = (s: string | undefined | null) => renderTemplate(s ?? "", tplVars)
+
   return (
     <div className="min-h-screen" style={{ backgroundColor: bg, color: text }}>
       <div className="max-w-2xl mx-auto px-4 py-8 space-y-6">
-        <header className="space-y-1">
-          {data?.companyName && <p className="text-xs uppercase tracking-wider opacity-60">{data.companyName}</p>}
-          <h1 className="text-2xl font-bold">Тестовое задание{data?.vacancyTitle ? ` — ${data.vacancyTitle}` : ""}</h1>
-          {data?.settings.deadlineDays != null && (
-            <p className="text-xs opacity-70">Срок выполнения: {data.settings.deadlineDays} дн.</p>
-          )}
-        </header>
-
-        {data?.settings.instructions && (
-          <div className="rounded-lg border border-black/10 bg-white/60 p-4 text-sm whitespace-pre-wrap text-slate-900">{data.settings.instructions}</div>
+        {/* Только контент из конструктора: заголовки и тексты задаёт HR сам.
+            Системную «обёртку» (авто-заголовок «Тестовое задание — вакансия»,
+            срок, отдельный блок инструкций) не показываем — её просили убрать.
+            Оставляем лишь брендовую строку с названием компании. */}
+        {data?.companyName && (
+          <p className="text-xs uppercase tracking-wider opacity-60">{data.companyName}</p>
         )}
 
         {/* Уроки теста: текст/HTML контент + интерактивные task-блоки */}
         {data?.lessons.map((lesson, li) => (
           <section key={lesson.id ?? li} className="space-y-3">
-            {lesson.title && <h2 className="text-lg font-semibold">{lesson.emoji ? `${lesson.emoji} ` : ""}{lesson.title}</h2>}
+            {lesson.title && <h2 className="text-lg font-semibold">{lesson.emoji ? `${lesson.emoji} ` : ""}{tpl(lesson.title)}</h2>}
             {((lesson.blocks ?? []) as Block[]).map((b, bi) => {
               if (b.type === "task" && Array.isArray(b.questions) && b.questions.length > 0) {
                 return (
                   <div key={b.id ?? bi} className="space-y-4 rounded-lg border border-black/10 bg-white/60 p-4">
-                    {b.taskTitle?.trim() && <h3 className="font-semibold">{b.taskTitle}</h3>}
+                    {b.taskTitle?.trim() && <h3 className="font-semibold">{tpl(b.taskTitle)}</h3>}
                     {b.taskDescription?.trim() && (
-                      <p className="text-sm opacity-80 whitespace-pre-wrap">{b.taskDescription}</p>
+                      <p className="text-sm opacity-80 whitespace-pre-wrap">{tpl(b.taskDescription)}</p>
                     )}
                     {b.questions.map((q) => (
                       <div key={q.id} className="space-y-1.5">
@@ -336,9 +342,9 @@ export function TestClient({ token }: { token: string }) {
               if (!html && !taskTitle && !taskDesc) return null
               return (
                 <div key={b.id ?? bi} className="space-y-2">
-                  {html && <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: html }} />}
-                  {taskTitle && <p className="font-medium">{taskTitle}</p>}
-                  {taskDesc && <p className="text-sm opacity-80 whitespace-pre-wrap">{taskDesc}</p>}
+                  {html && <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: tpl(html) }} />}
+                  {taskTitle && <p className="font-medium">{tpl(taskTitle)}</p>}
+                  {taskDesc && <p className="text-sm opacity-80 whitespace-pre-wrap">{tpl(taskDesc)}</p>}
                 </div>
               )
             })}
