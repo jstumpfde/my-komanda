@@ -1415,13 +1415,19 @@ export default function VacancyPage() {
             toast.error(err.error || "Не удалось поставить тест в очередь")
             return
           }
-          const d = (await res.json()) as { scheduled?: number; alreadyQueued?: number }
+          const d = (await res.json()) as { scheduled?: number; alreadyQueued?: number; noHhLink?: number }
           const queued = d.scheduled ?? 0
           const dup = d.alreadyQueued ?? 0
-          toast.success(
-            `Тест в очереди: ${queued}` + (dup > 0 ? ` (уже стояло: ${dup})` : "") +
-            ". Отправка по очереди, с паузой между сообщениями.",
-          )
+          const noHh = d.noHhLink ?? 0
+          if (queued === 0 && noHh > 0) {
+            toast.error(`Не отправлено: ${noHh} кандидат(ов) без hh-чата (нет отклика для отправки).`)
+          } else {
+            toast.success(
+              `Тест в очереди: ${queued}` + (dup > 0 ? ` (уже стояло: ${dup})` : "") +
+              (noHh > 0 ? ` · ${noHh} без hh-чата пропущено` : "") +
+              ". Отправка по очереди, с паузой между сообщениями.",
+            )
+          }
           setSelectedCandidateIds(new Set())
           await (useListPaginated ? paginated.refetch() : refetchCandidates())
           return

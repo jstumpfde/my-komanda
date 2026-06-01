@@ -53,6 +53,7 @@ export async function POST(
       scheduled:     res.scheduled,
       alreadyQueued: res.alreadyQueued,
       skipped:       res.skipped,
+      noHhLink:      res.noHhLink,
       scheduledAt:   res.scheduledAt,
     })
   } catch (err) {

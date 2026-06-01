@@ -24,6 +24,7 @@ import {
   candidates,
   followUpCampaigns,
   followUpMessages,
+  hhResponses,
   vacancies,
   type PostDemoSettings,
 } from "@/lib/db/schema"
@@ -67,6 +68,7 @@ export interface SendTestResult {
   scheduled: number
   alreadyQueued: number
   skipped: number
+  noHhLink: number   // выбраны, но без hh-чата — отправить в hh некуда
   scheduledAt?: string
 }
 
@@ -78,7 +80,7 @@ export async function scheduleTestInvitesForCandidates(args: {
   vacancyId: string
   candidateIds: string[]
 }): Promise<SendTestResult> {
-  const result: SendTestResult = { ok: false, scheduled: 0, alreadyQueued: 0, skipped: 0 }
+  const result: SendTestResult = { ok: false, scheduled: 0, alreadyQueued: 0, skipped: 0, noHhLink: 0 }
   if (!args.candidateIds.length) return { ...result, error: "no_candidates" }
 
   // 1. Тест вакансии — запись demos kind='test'. Без неё слать нечего.
@@ -139,6 +141,15 @@ export async function scheduleTestInvitesForCandidates(args: {
     ))
   const alreadyQueued = new Set(existing.map(e => e.candidateId))
 
+  // 5b. hh-связка: тест шлётся в hh-чат конкретного отклика. Кандидаты без
+  // привязанного hh_response отправить нельзя (no_hh_response_link) — отсеиваем
+  // заранее, чтобы не плодить молча упавшие сообщения, и сообщаем HR счётчиком.
+  const linkedRows = await db
+    .select({ cid: hhResponses.localCandidateId })
+    .from(hhResponses)
+    .where(inArray(hhResponses.localCandidateId, validIds))
+  const linkedSet = new Set(linkedRows.map(r => r.cid).filter((x): x is string => !!x))
+
   // 6. scheduled_at — один раз: now, сдвинутый в рабочее окно вакансии.
   const { adjusted: scheduledAt } = adjustToWorkingWindow(new Date(), {
     scheduleEnabled:            vac.scheduleEnabled,
@@ -152,6 +163,7 @@ export async function scheduleTestInvitesForCandidates(args: {
 
   for (const id of validIds) {
     if (alreadyQueued.has(id)) { result.alreadyQueued++; continue }
+    if (!linkedSet.has(id)) { result.noHhLink++; continue }
     try {
       await db.insert(followUpMessages).values({
         campaignId,
