@@ -2226,7 +2226,6 @@ export default function VacancyPage() {
                       candidates={useListPaginated ? (paginatedColumns?.[0]?.candidates ?? []) : columns.flatMap((c) => c.candidates)}
                     />
                     {false && <SortMenu sortMode={sortMode} onSortChange={setSortMode} />}
-                    {false && (
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs">
@@ -2245,7 +2244,6 @@ export default function VacancyPage() {
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
-                    )}
                     <ViewSettings
                       settings={cardSettings}
                       onSettingsChange={setCardSettings}
