@@ -142,6 +142,17 @@ export async function POST(req: NextRequest) {
             mode: "new",
           })
           imported += r.imported
+          // Отмечаем реальное время cron-синхронизации этой вакансии. Поле
+          // «Синк» в UI раньше показывало max(последний отклик, updatedAt) —
+          // обманчиво (выглядело «не синкалось» при работающем cron'е). Теперь
+          // пишем фактическую метку успешного импорта в hh_vacancies.syncedAt.
+          await db.update(hhVacancies)
+            .set({ syncedAt: new Date() })
+            .where(and(
+              eq(hhVacancies.companyId, companyId),
+              eq(hhVacancies.hhVacancyId, hhVacancyId),
+            ))
+            .catch(() => {})
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err)
           console.error(`[hh-import] vacancy ${localVacancyId} failed:`, msg)
