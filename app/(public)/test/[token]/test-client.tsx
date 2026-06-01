@@ -184,6 +184,18 @@ export function TestClient({ token }: { token: string }) {
     return out
   }, [data])
 
+  // Кастомная кнопка отправки: если HR добавил в конструктор блок «Кнопка»,
+  // используем ЕГО как кнопку отправки (текст/цвет/стиль редактируются), а
+  // встроенную дефолтную прячем. Так HR управляет видом кнопки.
+  const hasCustomSubmitButton = useMemo(() => {
+    for (const lesson of data?.lessons ?? []) {
+      for (const b of (lesson.blocks ?? []) as Block[]) {
+        if (b.type === "button") return true
+      }
+    }
+    return false
+  }, [data])
+
   const hasStructured = questions.length > 0
 
   const setQ = (id: string, val: string) => setAnswers((prev) => ({ ...prev, [id]: val }))
@@ -294,6 +306,29 @@ export function TestClient({ token }: { token: string }) {
                   </div>
                 )
               }
+              // Блок «Кнопка» → кнопка отправки ответов (текст/цвет из конструктора).
+              // URL блока игнорируем: это сабмит теста, а не ссылка.
+              if (b.type === "button") {
+                const label = b.buttonText?.trim() || "Отправить"
+                const isOutline = b.buttonVariant === "outline"
+                const color = b.buttonColor || primary
+                return (
+                  <div key={b.id ?? bi} className="pt-2 space-y-1">
+                    <button
+                      onClick={submit}
+                      disabled={submitting || !canSubmit}
+                      className="inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
+                      style={isOutline ? { border: `1px solid ${color}`, color } : { backgroundColor: color, color: "#fff" }}
+                    >
+                      {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                      {label}
+                    </button>
+                    {hasStructured && requiredMissing && (
+                      <p className="text-xs opacity-60">Ответьте на обязательные вопросы (*)</p>
+                    )}
+                  </div>
+                )
+              }
               // Не-task блок: показываем текст/HTML контент (read-only).
               const html = typeof b.content === "string" ? b.content : ""
               const taskTitle = b.taskTitle?.trim()
@@ -325,7 +360,8 @@ export function TestClient({ token }: { token: string }) {
           </div>
         )}
 
-        {/* Кнопка отправки */}
+        {/* Встроенная кнопка отправки — только если HR не добавил свою (блок «Кнопка»). */}
+        {!hasCustomSubmitButton && (
         <div className="border-t border-black/10 pt-5 flex items-center justify-between">
           <span className="text-xs opacity-60">
             {hasStructured && requiredMissing ? "Ответьте на обязательные вопросы (*)" : " "}
@@ -340,6 +376,7 @@ export function TestClient({ token }: { token: string }) {
             Отправить
           </button>
         </div>
+        )}
 
         {errorMsg && <p className="text-sm text-red-600">{errorMsg}</p>}
       </div>
