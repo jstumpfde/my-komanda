@@ -32,7 +32,7 @@ import { getVacancyState, getTrashDaysRemaining, formatTrashCountdown } from "@/
 import {
   Plus, Briefcase, MapPin, List, LayoutGrid, Table2, Calendar, Banknote,
   Search, MoreHorizontal, Pencil, Copy, Archive, Trash2,
-  Loader2, ExternalLink,
+  Loader2, ExternalLink, Pause, RotateCcw, X,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
@@ -469,6 +469,83 @@ export default function VacanciesPage() {
     onPermanentDelete: setPermanentDeleteTarget,  // открывает диалог «удалить навсегда»
   }
 
+  // ── Массовые действия над выделенными ────────────────────────
+  // Прогоняем те же одиночные операции по списку выбранных id. Набор кнопок
+  // зависит от вкладки (scope): активные → архив/корзина/пауза; архив →
+  // восстановить/корзина; корзина → восстановить/удалить навсегда.
+  const [bulkBusy, setBulkBusy] = useState(false)
+  const [bulkTrashOpen, setBulkTrashOpen] = useState(false)
+  const [bulkPurgeOpen, setBulkPurgeOpen] = useState(false)
+
+  // Выполнить операцию по каждому выбранному id последовательно (anti-rate-limit),
+  // показать единый тост, снять выделение и обновить список.
+  const runBulk = useCallback(async (
+    ids: string[],
+    op: (id: string) => Promise<Response>,
+    okMsg: (n: number) => string,
+  ) => {
+    if (ids.length === 0) return
+    setBulkBusy(true)
+    let done = 0
+    for (const id of ids) {
+      try { const res = await op(id); if (res.ok) done++ } catch { /* счётчик ниже */ }
+    }
+    setBulkBusy(false)
+    setSelected(new Set())
+    if (done === ids.length) toast.success(okMsg(done))
+    else if (done > 0) toast.warning(`${okMsg(done)} (не удалось: ${ids.length - done})`)
+    else toast.error("Не удалось выполнить действие")
+    refetch()
+  }, [refetch])
+
+  const bulkArchive = useCallback(() => runBulk(
+    [...selected],
+    (id) => fetch(`/api/modules/hr/vacancies/${id}`, {
+      method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "archived" }),
+    }),
+    (n) => `В архив перемещено: ${n}`,
+  ), [runBulk, selected])
+
+  const bulkPause = useCallback(() => runBulk(
+    [...selected],
+    (id) => fetch(`/api/modules/hr/vacancies/${id}`, {
+      method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "paused" }),
+    }),
+    (n) => `Приостановлено: ${n}`,
+  ), [runBulk, selected])
+
+  const bulkTrash = useCallback(() => runBulk(
+    [...selected],
+    (id) => fetch(`/api/modules/hr/vacancies/${id}`, { method: "DELETE" }),
+    (n) => `В корзину перемещено: ${n}`,
+  ), [runBulk, selected])
+
+  // Восстановление: из корзины — PATCH (очистка deleted_at), из архива — status active.
+  const bulkRestore = useCallback(() => runBulk(
+    [...selected],
+    (id) => scope === "trash"
+      ? fetch(`/api/modules/hr/vacancies/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: "{}" })
+      : fetch(`/api/modules/hr/vacancies/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "active" }) }),
+    (n) => `Восстановлено: ${n}`,
+  ), [runBulk, selected, scope])
+
+  // Удалить навсегда — один запрос на пачку через bulk-permanent.
+  const bulkPurge = useCallback(async () => {
+    const ids = [...selected]
+    if (ids.length === 0) return
+    setBulkBusy(true)
+    try {
+      const res = await fetch("/api/modules/hr/vacancies/trash/bulk-permanent", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids }),
+      })
+      if (!res.ok) throw new Error()
+      toast.success(`Удалено навсегда: ${ids.length}`)
+      setSelected(new Set())
+      refetch()
+    } catch { toast.error("Не удалось удалить навсегда") }
+    finally { setBulkBusy(false); setBulkPurgeOpen(false) }
+  }, [selected, refetch])
+
   // ── Filter & sort ────────────────────────────────────────────
   const filtered = useMemo(() => {
     let result = vacancies
@@ -577,7 +654,50 @@ export default function VacanciesPage() {
                   </SelectContent>
                 </Select>
               </div>
-              {selected.size > 0 && <div className="text-xs text-muted-foreground mb-2">Выбрано: {selected.size}</div>}
+              {selected.size > 0 && (
+                <div className="flex flex-wrap items-center gap-2 mb-3 rounded-lg border bg-muted/40 px-3 py-2">
+                  <span className="text-xs font-medium tabular-nums">Выбрано: {selected.size}</span>
+                  <div className="h-4 w-px bg-border mx-1" />
+                  {bulkBusy && <Loader2 className="size-3.5 animate-spin text-muted-foreground" />}
+
+                  {/* Активные/Приостановленные → пауза / архив / корзина */}
+                  {scope === "active" && (<>
+                    <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" disabled={bulkBusy} onClick={bulkPause}>
+                      <Pause className="size-3.5" />Приостановить
+                    </Button>
+                    <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" disabled={bulkBusy} onClick={bulkArchive}>
+                      <Archive className="size-3.5" />В архив
+                    </Button>
+                    <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs text-destructive hover:text-destructive" disabled={bulkBusy} onClick={() => setBulkTrashOpen(true)}>
+                      <Trash2 className="size-3.5" />В корзину
+                    </Button>
+                  </>)}
+
+                  {/* Архив → восстановить / корзина */}
+                  {scope === "archive" && (<>
+                    <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" disabled={bulkBusy} onClick={bulkRestore}>
+                      <RotateCcw className="size-3.5" />Восстановить
+                    </Button>
+                    <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs text-destructive hover:text-destructive" disabled={bulkBusy} onClick={() => setBulkTrashOpen(true)}>
+                      <Trash2 className="size-3.5" />В корзину
+                    </Button>
+                  </>)}
+
+                  {/* Корзина → восстановить / удалить навсегда */}
+                  {scope === "trash" && (<>
+                    <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" disabled={bulkBusy} onClick={bulkRestore}>
+                      <RotateCcw className="size-3.5" />Восстановить
+                    </Button>
+                    <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs text-destructive hover:text-destructive" disabled={bulkBusy} onClick={() => setBulkPurgeOpen(true)}>
+                      <Trash2 className="size-3.5" />Удалить навсегда
+                    </Button>
+                  </>)}
+
+                  <Button variant="ghost" size="sm" className="h-7 gap-1.5 text-xs ml-auto" disabled={bulkBusy} onClick={() => setSelected(new Set())}>
+                    <X className="size-3.5" />Снять выделение
+                  </Button>
+                </div>
+              )}
             </>)}
 
             {/* Loading */}
@@ -701,6 +821,43 @@ export default function VacanciesPage() {
             <AlertDialogCancel>Отмена</AlertDialogCancel>
             <AlertDialogAction onClick={handleDeleteConfirm} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
               В корзину
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Массовое «в корзину» — подтверждение. */}
+      <AlertDialog open={bulkTrashOpen} onOpenChange={setBulkTrashOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Переместить в корзину?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Выбранные вакансии ({selected.size}) будут перемещены в корзину. Вы сможете восстановить их позже.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Отмена</AlertDialogCancel>
+            <AlertDialogAction onClick={() => { setBulkTrashOpen(false); bulkTrash() }} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              В корзину ({selected.size})
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Массовое «удалить навсегда» — подтверждение (необратимо). */}
+      <AlertDialog open={bulkPurgeOpen} onOpenChange={setBulkPurgeOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Удалить навсегда?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Выбранные вакансии ({selected.size}) и все связанные с ними данные (кандидаты, демо, отклики) будут удалены
+              безвозвратно. Это действие нельзя отменить.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Отмена</AlertDialogCancel>
+            <AlertDialogAction onClick={bulkPurge} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Удалить навсегда ({selected.size})
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
