@@ -37,22 +37,43 @@ function QuestionInput({
   primary: string
 }) {
   const type = question.answerType
+  // Вариант «Другое» — при выборе показываем поле для свободного ответа.
+  // Кастомный текст храним как «другое: <текст>» (читаемо для AI и карточки).
+  const isOther = (o: string) => /^друго/i.test(o.trim())
+  const otherInputCls = "ml-6 w-[calc(100%-1.5rem)] rounded-lg border border-black/15 bg-white p-2 text-sm outline-none focus:border-black/30 text-slate-900"
 
   if (type === "single") {
+    const sel = (opt: string) => value === opt || value.startsWith(opt + ":")
+    const otherTxt = (opt: string) => {
+      if (!value.startsWith(opt)) return ""
+      const idx = value.indexOf(":")
+      return idx >= 0 ? value.slice(idx + 1).trim() : ""
+    }
     return (
       <div className="space-y-1.5">
         {question.options.map((opt, i) => (
-          <label key={i} className="flex items-center gap-2 cursor-pointer text-sm">
-            <input
-              type="radio"
-              name={question.id}
-              checked={value === opt}
-              onChange={() => onChange(opt)}
-              className="w-4 h-4"
-              style={{ accentColor: primary }}
-            />
-            <span>{opt}</span>
-          </label>
+          <div key={i} className="space-y-1.5">
+            <label className="flex items-center gap-2 cursor-pointer text-sm">
+              <input
+                type="radio"
+                name={question.id}
+                checked={sel(opt)}
+                onChange={() => onChange(opt)}
+                className="w-4 h-4"
+                style={{ accentColor: primary }}
+              />
+              <span>{opt}</span>
+            </label>
+            {isOther(opt) && sel(opt) && (
+              <input
+                type="text"
+                value={otherTxt(opt)}
+                onChange={(e) => onChange(e.target.value.trim() ? `${opt}: ${e.target.value}` : opt)}
+                placeholder="Уточните…"
+                className={otherInputCls}
+              />
+            )}
+          </div>
         ))}
       </div>
     )
@@ -60,25 +81,50 @@ function QuestionInput({
 
   if (type === "multiple") {
     const selected = value ? value.split(SEP) : []
+    const segFor = (opt: string) => selected.find((s) => s === opt || s.startsWith(opt + ":"))
+    const isChecked = (opt: string) => segFor(opt) !== undefined
+    const commit = (next: string[]) => onChange(next.filter(Boolean).join(SEP))
     const toggle = (opt: string) => {
-      const next = selected.includes(opt)
-        ? selected.filter((s) => s !== opt)
-        : [...selected, opt]
-      onChange(next.join(SEP))
+      if (isChecked(opt)) {
+        commit(selected.filter((s) => !(s === opt || s.startsWith(opt + ":"))))
+      } else {
+        commit([...selected, opt])
+      }
+    }
+    const otherTxt = (opt: string) => {
+      const seg = segFor(opt)
+      if (!seg) return ""
+      const idx = seg.indexOf(":")
+      return idx >= 0 ? seg.slice(idx + 1).trim() : ""
+    }
+    const setOtherTxt = (opt: string, txt: string) => {
+      const without = selected.filter((s) => !(s === opt || s.startsWith(opt + ":")))
+      commit([...without, txt.trim() ? `${opt}: ${txt}` : opt])
     }
     return (
       <div className="space-y-1.5">
         {question.options.map((opt, i) => (
-          <label key={i} className="flex items-center gap-2 cursor-pointer text-sm">
-            <input
-              type="checkbox"
-              checked={selected.includes(opt)}
-              onChange={() => toggle(opt)}
-              className="w-4 h-4"
-              style={{ accentColor: primary }}
-            />
-            <span>{opt}</span>
-          </label>
+          <div key={i} className="space-y-1.5">
+            <label className="flex items-center gap-2 cursor-pointer text-sm">
+              <input
+                type="checkbox"
+                checked={isChecked(opt)}
+                onChange={() => toggle(opt)}
+                className="w-4 h-4"
+                style={{ accentColor: primary }}
+              />
+              <span>{opt}</span>
+            </label>
+            {isOther(opt) && isChecked(opt) && (
+              <input
+                type="text"
+                value={otherTxt(opt)}
+                onChange={(e) => setOtherTxt(opt, e.target.value)}
+                placeholder="Уточните…"
+                className={otherInputCls}
+              />
+            )}
+          </div>
         ))}
       </div>
     )
