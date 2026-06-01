@@ -665,6 +665,11 @@ export default function VacancyPage() {
   // Bulk-selection state (только список — выделение между кандидатами)
   const [selectedCandidateIds, setSelectedCandidateIds] = useState<Set<string>>(new Set())
   const [bulkBusy, setBulkBusy] = useState(false)
+  // Окно «Отправить тест»: показывает/редактирует текст приглашения перед отправкой.
+  const [testInviteOpen, setTestInviteOpen] = useState(false)
+  const [testInviteText, setTestInviteText] = useState("")
+  const [testInviteIds, setTestInviteIds] = useState<string[]>([])
+  const [testInviteSending, setTestInviteSending] = useState(false)
   const [internalName, setInternalName] = useState("")
   const [isEditingName, setIsEditingName] = useState(false)
   const [savingName, setSavingName] = useState(false)
@@ -1400,39 +1405,23 @@ export default function VacancyPage() {
     async (action: BulkAction, payload?: { stage?: string }) => {
       if (selectedCandidateIds.size === 0 || bulkBusy) return
       const ids = Array.from(selectedCandidateIds)
+      // «Отправить тест» → открываем окно с текстом приглашения (предзаполнено
+      // шаблоном вакансии). Отправка — по кнопке окна (confirmSendTest).
+      // Выделение пока не сбрасываем.
+      if (action === "send_test") {
+        let msg = ""
+        try {
+          const r = await fetch(`/api/modules/hr/vacancies/${id}/send-test`)
+          const j = await r.json().catch(() => null)
+          msg = (j?.message ?? "") as string
+        } catch { /* откроем с пустым — дефолт подставит бэкенд */ }
+        setTestInviteText(msg)
+        setTestInviteIds(ids)
+        setTestInviteOpen(true)
+        return
+      }
       setBulkBusy(true)
       try {
-        // «Отправить тест» идёт отдельным эндпоинтом: ставит приглашения в
-        // очередь follow_up (branch=test_invite), cron шлёт по одному с паузой.
-        if (action === "send_test") {
-          const res = await fetch(`/api/modules/hr/vacancies/${id}/send-test`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ candidateIds: ids }),
-          })
-          if (!res.ok) {
-            const err = await res.json().catch(() => ({})) as { error?: string }
-            toast.error(err.error || "Не удалось поставить тест в очередь")
-            return
-          }
-          const d = (await res.json()) as { scheduled?: number; alreadyQueued?: number; noHhLink?: number }
-          const queued = d.scheduled ?? 0
-          const dup = d.alreadyQueued ?? 0
-          const noHh = d.noHhLink ?? 0
-          if (queued === 0 && noHh > 0) {
-            toast.error(`Не отправлено: ${noHh} кандидат(ов) без hh-чата (нет отклика для отправки).`)
-          } else {
-            toast.success(
-              `Тест в очереди: ${queued}` + (dup > 0 ? ` (уже стояло: ${dup})` : "") +
-              (noHh > 0 ? ` · ${noHh} без hh-чата пропущено` : "") +
-              ". Отправка по очереди, с паузой между сообщениями.",
-            )
-          }
-          setSelectedCandidateIds(new Set())
-          await (useListPaginated ? paginated.refetch() : refetchCandidates())
-          return
-        }
-
         const res = await fetch("/api/modules/hr/candidates/bulk", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -1477,6 +1466,43 @@ export default function VacancyPage() {
     },
     [selectedCandidateIds, bulkBusy, refetchCandidates, useListPaginated, paginated, id],
   )
+
+  // Подтверждение из окна «Отправить тест»: шлёт выбранным + сохраняет текст
+  // как шаблон вакансии (если отредактирован).
+  const confirmSendTest = useCallback(async () => {
+    if (testInviteSending || testInviteIds.length === 0) return
+    setTestInviteSending(true)
+    try {
+      const res = await fetch(`/api/modules/hr/vacancies/${id}/send-test`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ candidateIds: testInviteIds, message: testInviteText }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({})) as { error?: string }
+        toast.error(err.error || "Не удалось поставить тест в очередь")
+        return
+      }
+      const d = (await res.json()) as { scheduled?: number; alreadyQueued?: number; noHhLink?: number }
+      const queued = d.scheduled ?? 0, dup = d.alreadyQueued ?? 0, noHh = d.noHhLink ?? 0
+      if (queued === 0 && noHh > 0) {
+        toast.error(`Не отправлено: ${noHh} без hh-чата (нет отклика для отправки).`)
+      } else {
+        toast.success(
+          `Тест в очереди: ${queued}` + (dup > 0 ? ` (уже стояло: ${dup})` : "") +
+          (noHh > 0 ? ` · ${noHh} без hh-чата пропущено` : "") +
+          ". Отправка по очереди, с паузой между сообщениями.",
+        )
+      }
+      setTestInviteOpen(false)
+      setSelectedCandidateIds(new Set())
+      await (useListPaginated ? paginated.refetch() : refetchCandidates())
+    } catch {
+      toast.error("Ошибка сети")
+    } finally {
+      setTestInviteSending(false)
+    }
+  }, [id, testInviteIds, testInviteText, testInviteSending, useListPaginated, paginated, refetchCandidates])
 
   const filteredColumns = applyCandidateFilters(columns, filters)
 
@@ -3980,6 +4006,39 @@ export default function VacancyPage() {
         onClear={() => setSelectedCandidateIds(new Set())}
         onAction={handleBulkAction}
       />
+
+      {/* Окно «Отправить тест»: текст приглашения (предзаполнен), можно
+          отредактировать — правка сохраняется как шаблон вакансии. */}
+      <Dialog open={testInviteOpen} onOpenChange={(o) => { if (!testInviteSending) setTestInviteOpen(o) }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Отправить тест · {testInviteIds.length} кандидат(ов)</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground">
+              Это сообщение уйдёт кандидату в hh-чат со ссылкой на тест. Плейсхолдеры:
+              {" "}<code>{"{{name}}"}</code>, <code>{"{{vacancy}}"}</code>, <code>{"{{test_link}}"}</code>.
+            </p>
+            <Textarea
+              value={testInviteText}
+              onChange={(e) => setTestInviteText(e.target.value)}
+              rows={6}
+              placeholder="Текст приглашения к тесту…"
+              className="text-sm"
+            />
+            <p className="text-[11px] text-muted-foreground/70">
+              Отправка по очереди, с паузой между сообщениями. Кандидаты без hh-чата будут пропущены.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTestInviteOpen(false)} disabled={testInviteSending}>Отмена</Button>
+            <Button onClick={confirmSendTest} disabled={testInviteSending || !testInviteText.trim()}>
+              {testInviteSending ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <ClipboardList className="w-4 h-4 mr-1.5" />}
+              Отправить тест
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
     </SidebarProvider>
   )

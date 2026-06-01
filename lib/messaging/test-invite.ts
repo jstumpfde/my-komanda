@@ -30,8 +30,9 @@ import {
 } from "@/lib/db/schema"
 import { adjustToWorkingWindow } from "@/lib/schedule/can-send-now"
 
-const DEFAULT_TEXT =
+export const DEFAULT_TEST_INVITE_TEXT =
   "{{name}}, спасибо за интерес к вакансии «{{vacancy}}»! Предлагаем пройти короткий тест — пройдите по ссылке:\n\n{{test_link}}"
+const DEFAULT_TEXT = DEFAULT_TEST_INVITE_TEXT
 
 // Стадии, с которых НЕ откатываем назад в test_task_sent: кандидат уже сдал
 // тест / прошёл дальше / терминальный. Приглашение всё равно поставим (HR мог
