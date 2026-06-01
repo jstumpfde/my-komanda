@@ -2006,7 +2006,7 @@ function TaskEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: 
           // Вопрос с выбором, где есть вариант «Другое…» — он даёт свободный
           // текст, поэтому тоже показываем поле «ИИ-проверка» (как у текстовых).
           const hasOtherOption = (q.answerType === "single" || q.answerType === "multiple")
-            && (q.options ?? []).some((o) => /^друго/i.test((o ?? "").trim()))
+            && ((q.otherOptions?.length ?? 0) > 0 || (q.options ?? []).some((o) => /^друго/i.test((o ?? "").trim())))
           const showAiCheck = isText || hasOtherOption
           const points = q.points ?? 0
           const typeInfo = qTypeInfo(q.answerType)
@@ -2176,16 +2176,42 @@ function TaskEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: 
                                 )}
                               >✓</button>
                             )}
+                            {(q.answerType === "single" || q.answerType === "multiple") && (() => {
+                              const isOther = q.otherOptions?.includes(oi) ?? false
+                              return (
+                                <button
+                                  title={isOther ? "Свой ответ (поле ввода) — снять" : "Сделать вариантом «Другое» (поле ввода)"}
+                                  onClick={() => {
+                                    const cur = q.otherOptions || []
+                                    updateQ(qi, { otherOptions: cur.includes(oi) ? cur.filter((x) => x !== oi) : [...cur, oi] })
+                                  }}
+                                  className={cn(
+                                    "shrink-0 px-2 py-1 rounded text-[11px] font-medium border transition-all",
+                                    isOther ? "bg-blue-500 border-blue-500 text-white" : "border-border text-muted-foreground/40 hover:border-blue-400 hover:text-blue-600"
+                                  )}
+                                >✏️</button>
+                              )
+                            })()}
                             <button className="text-muted-foreground/40 hover:text-destructive shrink-0"
                               onClick={() => {
                                 const newOpts = q.options.filter((_, j) => j !== oi)
                                 const newCorrect = q.correctOptions?.filter((c) => c !== oi).map((c) => c > oi ? c - 1 : c)
-                                updateQ(qi, { options: newOpts, correctOptions: newCorrect })
+                                const newOther = q.otherOptions?.filter((c) => c !== oi).map((c) => c > oi ? c - 1 : c)
+                                updateQ(qi, { options: newOpts, correctOptions: newCorrect, otherOptions: newOther })
                               }}
                             ><X className="w-3 h-3" /></button>
                           </div>
                         )
                       })}
+                      {/* Подсказка для поля «Другое» (когда есть хотя бы один такой вариант) */}
+                      {(q.answerType === "single" || q.answerType === "multiple") && (q.otherOptions?.length ?? 0) > 0 && (
+                        <input
+                          className="w-full text-xs bg-blue-500/5 border border-blue-400/40 rounded px-2 py-1.5 outline-none focus:border-blue-400"
+                          value={q.otherPlaceholder || ""}
+                          onChange={(e) => updateQ(qi, { otherPlaceholder: e.target.value })}
+                          placeholder="Текст-подсказка для своего ответа: напр. «Укажите что»"
+                        />
+                      )}
                       <button className="text-xs text-primary/70 hover:text-primary flex items-center gap-1"
                         onClick={() => updateQ(qi, { options: [...q.options, ""] })}
                       >

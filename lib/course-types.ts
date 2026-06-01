@@ -26,6 +26,12 @@ export interface Question {
   correctYesNo?: "yes" | "no" // правильный ответ для yesno
   correctSort?: number[]     // правильный порядок для sort (индексы)
   points?: number            // баллы за правильный ответ (0 = не учитывать)
+  // «Другое (с полем ввода)»: индексы вариантов, при выборе которых кандидату
+  // показывается текстовое поле для своего ответа. otherPlaceholder — подсказка
+  // в этом поле (напр. «Укажите что»). Хранение по индексам (как correctOptions),
+  // правится на удалении варианта.
+  otherOptions?: number[]
+  otherPlaceholder?: string
   // legacy fields
   textMatchMode?: "exact" | "ai"
   correctText?: string

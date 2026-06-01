@@ -37,9 +37,12 @@ function QuestionInput({
   primary: string
 }) {
   const type = question.answerType
-  // Вариант «Другое» — при выборе показываем поле для свободного ответа.
-  // Кастомный текст храним как «другое: <текст>» (читаемо для AI и карточки).
-  const isOther = (o: string) => /^друго/i.test(o.trim())
+  // Вариант «Другое (с полем ввода)» — при выборе показываем поле для свободного
+  // ответа. Явная пометка — question.otherOptions (индексы), заданная в
+  // конструкторе; fallback — старая эвристика по слову «друго». Кастомный текст
+  // храним как «<вариант>: <текст>» (читаемо для AI и карточки).
+  const otherIdx = (i: number, o: string) => (question.otherOptions?.includes(i) ?? false) || /^друго/i.test((o ?? "").trim())
+  const otherPh = question.otherPlaceholder?.trim() || "Уточните…"
   const otherInputCls = "ml-6 w-[calc(100%-1.5rem)] rounded-lg border border-black/15 bg-white p-2 text-sm outline-none focus:border-black/30 text-slate-900"
 
   if (type === "single") {
@@ -64,12 +67,12 @@ function QuestionInput({
               />
               <span>{opt}</span>
             </label>
-            {isOther(opt) && sel(opt) && (
+            {otherIdx(i, opt) && sel(opt) && (
               <input
                 type="text"
                 value={otherTxt(opt)}
                 onChange={(e) => onChange(e.target.value.trim() ? `${opt}: ${e.target.value}` : opt)}
-                placeholder="Уточните…"
+                placeholder={otherPh}
                 className={otherInputCls}
               />
             )}
@@ -115,12 +118,12 @@ function QuestionInput({
               />
               <span>{opt}</span>
             </label>
-            {isOther(opt) && isChecked(opt) && (
+            {otherIdx(i, opt) && isChecked(opt) && (
               <input
                 type="text"
                 value={otherTxt(opt)}
                 onChange={(e) => setOtherTxt(opt, e.target.value)}
-                placeholder="Уточните…"
+                placeholder={otherPh}
                 className={otherInputCls}
               />
             )}
