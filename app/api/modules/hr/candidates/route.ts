@@ -206,7 +206,7 @@ interface LessonShape {
   blocks?: { id?: string }[]
 }
 
-const ACTIVE_THRESHOLD_MS = 30 * 60 * 1000
+const ACTIVE_THRESHOLD_MS = 15 * 60 * 1000  // «активен сейчас» — активность за 15 мин
 
 // Стадии, в которых тест уже отправлен кандидату (см. lib/stages.ts).
 // Используется для колонки «Тест»: если submission ещё нет, но кандидат
@@ -637,11 +637,11 @@ export async function GET(req: NextRequest) {
       filterConds.push(sql`(${candidates.stage} IS DISTINCT FROM 'rejected')`)
     }
 
-    // «Активны сейчас» — кандидаты с активностью (демо/тест) за последние 30 мин.
+    // «Активны сейчас» — кандидаты с активностью (демо/тест) за последние 15 мин.
     // last_activity_at дёргают demo/answer и test/answer|open (now()::timestamp —
     // сравниваем в той же зоне, что и defaultNow()).
     if (url.searchParams.get("activeNow") === "true") {
-      filterConds.push(sql`(${candidates.lastActivityAt} IS NOT NULL AND ${candidates.lastActivityAt} > (now()::timestamp - interval '30 minutes'))`)
+      filterConds.push(sql`(${candidates.lastActivityAt} IS NOT NULL AND ${candidates.lastActivityAt} > (now()::timestamp - interval '15 minutes'))`)
     }
 
     // Поиск по имени/email/телефону (ILIKE). %/_/\ экранируем, чтобы юзер
