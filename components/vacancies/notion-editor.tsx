@@ -2111,11 +2111,18 @@ function TaskEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: 
                         <span className="text-[11px] text-muted-foreground font-medium">🤖 ИИ-проверка</span>
                         <span className="text-[10px] text-muted-foreground/50">необязательно</span>
                       </div>
+                      {/* Для выборных: зелёные ✓ автоматически уходят в AI как
+                          «подходящие варианты» — HR видит, что уже учтено. */}
+                      {hasOptions && (q.correctOptions?.length ?? 0) > 0 && (
+                        <p className="text-[10px] text-muted-foreground/70">
+                          Подходящие (✓): {(q.correctOptions ?? []).map((i) => q.options[i]).filter(Boolean).join(", ")} — учитываются ИИ. Ниже можно дописать правило.
+                        </p>
+                      )}
                       <textarea
                         className="w-full text-xs bg-muted/30 border border-border rounded-lg px-2.5 py-1.5 outline-none focus:border-primary/50 resize-none min-h-[52px]"
                         value={q.aiCriteria || ""}
                         onChange={(e) => updateQ(qi, { aiCriteria: e.target.value })}
-                        placeholder="Критерий для ИИ: например «Кандидат должен упомянуть опыт продаж более 2 лет»"
+                        placeholder={hasOptions ? "Правило для ИИ: напр. «подходит всё, что связано с промышленным/военным строительством, кроме малоэтажного»" : "Критерий для ИИ: например «Кандидат должен упомянуть опыт продаж более 2 лет»"}
                       />
                       {q.aiCriteria && (
                         <div className="flex items-center gap-2">

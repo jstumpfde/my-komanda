@@ -136,6 +136,14 @@ export async function POST(
         const q = qById.get(a.questionId)
         const readable = val.split("|||").map((s) => s.trim()).filter(Boolean).join(", ")
         let line = `${q?.text || "Вопрос"}: ${readable}`
+        // Для выборных вопросов даём AI «подходящие варианты» — отмеченные HR
+        // зелёным ✓ (correctOptions). Так AI судит «подходит/не подходит», в т.ч.
+        // ответ «Другое», который баллами не оценить.
+        const opts = q?.options ?? []
+        const correct = (q?.correctOptions ?? [])
+          .map((idx) => opts[idx])
+          .filter((s): s is string => typeof s === "string" && s.trim().length > 0)
+        if (correct.length) line += `\n  (подходящие варианты: ${correct.join(", ")})`
         const crit = (q?.aiCriteria || "").trim()
         if (crit) line += `\n  (критерий оценки: ${crit})`
         parts.push(line)
