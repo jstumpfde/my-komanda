@@ -287,11 +287,11 @@ const PAGINATED_PAGE_SIZES = [20, 50, 100] as const
 type PageSize = (typeof PAGINATED_PAGE_SIZES)[number]
 
 export type PaginatedSortKey =
-  | "createdAt" | "name" | "aiScore" | "resumeScore" | "salary" | "stage" | "progress"
+  | "createdAt" | "name" | "aiScore" | "resumeScore" | "testScore" | "salary" | "stage" | "progress"
   | "city" | "source" | "favorite" | "hrQueue"
 
 const PAGINATED_SORT_KEYS: readonly PaginatedSortKey[] = [
-  "createdAt", "name", "aiScore", "resumeScore", "salary", "stage", "progress",
+  "createdAt", "name", "aiScore", "resumeScore", "testScore", "salary", "stage", "progress",
   "city", "source", "favorite", "hrQueue",
 ]
 

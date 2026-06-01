@@ -12,6 +12,7 @@ type SortKey =
   | "aiScore"
   | "resumeScore"
   | "rubricScore"
+  | "testScore"
   | "salary"
   | "responseDate"
   | "status"
@@ -24,7 +25,7 @@ type SortKey =
   | "hrQueue"
 
 const ALLOWED_SORT_KEYS: ReadonlySet<SortKey> = new Set<SortKey>([
-  "favorite", "aiScore", "resumeScore", "rubricScore", "salary", "responseDate", "status", "progress",
+  "favorite", "aiScore", "resumeScore", "rubricScore", "testScore", "salary", "responseDate", "status", "progress",
   "createdAt", "name", "stage", "city", "source", "hrQueue",
 ])
 
@@ -98,6 +99,20 @@ const DEMO_PROGRESS_COUNT_SQL = sql`(
     AND b->>'blockId' <> '__complete__'
 )`
 
+// Балл последнего теста кандидата для сортировки по колонке «Тест».
+// COALESCE(ai_score, objective.score) — как в testScoreOf (см. ниже).
+const TEST_SCORE_SQL = sql`(
+  SELECT COALESCE(
+    ts.ai_score,
+    CASE WHEN (ts.answers_json->'objective'->>'maxPoints')::int > 0
+         THEN (ts.answers_json->'objective'->>'score')::int END
+  )
+  FROM test_submissions ts
+  WHERE ts.candidate_id = ${candidates.id}
+  ORDER BY ts.submitted_at DESC
+  LIMIT 1
+)`
+
 function buildOrderBy(key: SortKey | null, dir: "asc" | "desc"): SQL[] {
   const wrap = (col: Parameters<typeof asc>[0]) => (dir === "asc" ? asc(col) : desc(col))
   // id DESC — secondary tiebreaker для стабильной пагинации при равных значениях
@@ -126,6 +141,14 @@ function buildOrderBy(key: SortKey | null, dir: "asc" | "desc"): SQL[] {
       dir === "asc"
         ? sql`${candidates.rubricScore} ASC NULLS LAST`
         : sql`${candidates.rubricScore} DESC NULLS LAST`,
+      desc(candidates.createdAt),
+      tiebreak,
+    ]
+    case "testScore": return [
+      // Балл теста из подзапроса; NULL (теста нет) — всегда в конец.
+      dir === "asc"
+        ? sql`${TEST_SCORE_SQL} ASC NULLS LAST`
+        : sql`${TEST_SCORE_SQL} DESC NULLS LAST`,
       desc(candidates.createdAt),
       tiebreak,
     ]

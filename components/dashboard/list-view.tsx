@@ -14,7 +14,7 @@ import { MapPin, CheckCircle2, XCircle, ArrowRight, ThumbsUp, Clock, ArrowUp, Ar
 import { DemoProgressBar, calcDemoPercent, calcDemoFraction } from "@/components/hr/demo-progress-bar"
 import { getStageLabel, getStageColorClasses } from "@/lib/stages"
 
-export type ListSortKey = "favorite" | "name" | "aiScore" | "resumeScore" | "rubricScore" | "progress" | "salary" | "responseDate" | "status" | "city" | "source"
+export type ListSortKey = "favorite" | "name" | "aiScore" | "resumeScore" | "rubricScore" | "testScore" | "progress" | "salary" | "responseDate" | "status" | "city" | "source"
 export type ListSortDir = "asc" | "desc"
 export interface ListSortState {
   key: ListSortKey
@@ -60,6 +60,7 @@ const DEFAULT_DIR: Record<ListSortKey, ListSortDir> = {
   aiScore:      "desc",
   resumeScore:  "desc",
   rubricScore:  "desc",
+  testScore:    "desc",
   progress:     "desc",
   salary:       "desc",
   responseDate: "desc",
@@ -190,6 +191,9 @@ export function ListView({
         }
         case "rubricScore": {
           return mul * ((a.rubricScore ?? -1) - (b.rubricScore ?? -1))
+        }
+        case "testScore": {
+          return mul * ((a.testScore ?? -1) - (b.testScore ?? -1))
         }
         case "progress": {
           return mul * ((progressPercentOf(a) ?? -1) - (progressPercentOf(b) ?? -1))
@@ -387,7 +391,7 @@ export function ListView({
         {showResumeScore && <SortHeader label="AI-резм." sortKey="resumeScore" sort={sort} onToggle={handleSort} align="center" />}
         {showScore && <SortHeader label="AI-оцен." sortKey="aiScore" sort={sort} onToggle={handleSort} align="center" />}
         {showRubricScore && <SortHeader label="Рубрика" sortKey="rubricScore" sort={sort} onToggle={handleSort} align="center" />}
-        {showTestScore && <div className="text-center">Тест</div>}
+        {showTestScore && <SortHeader label="Тест" sortKey="testScore" sort={sort} onToggle={handleSort} align="center" />}
         {showSalary && <SortHeader label="Зарплата" sortKey="salary" sort={sort} onToggle={handleSort} align="center" />}
         {showCity && <SortHeader label="Город" sortKey="city" sort={sort} onToggle={handleSort} align="left" />}
         {showResponseDate && <SortHeader label="Дата" sortKey="responseDate" sort={sort} onToggle={handleSort} align="center" />}
