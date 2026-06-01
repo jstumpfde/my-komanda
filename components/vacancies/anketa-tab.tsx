@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { cn } from "@/lib/utils"
+import { hasSkill, dedupeSkills } from "@/lib/skills/normalize"
 import { Progress } from "@/components/ui/progress"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -475,7 +476,8 @@ function TagInput({ tags, onChange, placeholder, customType }: {
   const [input, setInput] = useState("")
   const add = () => {
     const v = input.trim()
-    if (v && !tags.includes(v)) {
+    // Дедуп по канону (см. lib/skills/normalize) — не плодим «B2B»/«B2B-».
+    if (v && !hasSkill(tags, v)) {
       onChange([...tags, v])
       if (customType) {
         fetch("/api/custom-items", {
@@ -543,7 +545,8 @@ function TagInputWithSuggestions({ tags, onChange, placeholder, suggestions, cus
 
   const addCustom = () => {
     const v = input.trim()
-    if (v && !tags.includes(v)) {
+    // Дедуп по канону: «B2B маркетинг» = «B2B-маркетинг» = «b2b  маркетинг».
+    if (v && !hasSkill(tags, v)) {
       onChange([...tags, v])
       if (customType && !suggestions.includes(v)) {
         fetch("/api/custom-items", {
@@ -598,7 +601,7 @@ function TagInputWithSuggestions({ tags, onChange, placeholder, suggestions, cus
                   <button
                     key={s}
                     type="button"
-                    onMouseDown={e => { e.preventDefault(); onChange([...tags, s]); setInput("") }}
+                    onMouseDown={e => { e.preventDefault(); if (!hasSkill(tags, s)) onChange([...tags, s]); setInput("") }}
                     className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted transition-colors"
                   >
                     + {s}
@@ -2568,8 +2571,11 @@ function AiProfileSection({ data, set }: {
                   : ""
 
                 set("aiMinExperience", minExp)
-                set("aiRequiredHardSkills", [...data.requiredSkills])
-                set("aiStopFactors", [...data.unacceptableSkills])
+                // Дедуп при копировании: «B2B маркетинг»/«B2B-маркетинг» не
+                // должны попадать в AI-профиль как два разных навыка (иначе
+                // баллы скоринга размываются).
+                set("aiRequiredHardSkills", dedupeSkills(data.requiredSkills))
+                set("aiStopFactors", dedupeSkills(data.unacceptableSkills))
                 if (profile) set("aiIdealProfile", profile)
                 toast.success("AI-профиль заполнен из данных анкеты")
               }}

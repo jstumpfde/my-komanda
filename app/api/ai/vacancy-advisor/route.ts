@@ -161,10 +161,13 @@ function staticAnalysis(body: Record<string, unknown>): AdvisorResponse {
     filled++
   }
 
-  // 8. Company description
-  const companyDesc = (body.companyDescription as string) || ""
+  // 8. Company description — заполнено, если есть либо в самой вакансии
+  // (блок «О компании» = d.companyDescription), либо в настройках компании
+  // (body.companyDescription). Раньше проверяли только настройки — и вакансия
+  // с заполненным описанием всё равно помечалась «не заполнено».
+  const companyDesc = ((d.companyDescription as string) || (body.companyDescription as string) || "")
   if (!companyDesc.trim()) {
-    sections.push({ id: "company", status: "warning", title: "О компании", message: "Заполните описание компании в Настройках → Компания. Вакансии с описанием получают на 30% больше откликов", priority: 7 })
+    sections.push({ id: "company", status: "warning", title: "О компании", message: "Заполните описание компании в блоке «О компании» или в Настройках → Компания. Вакансии с описанием получают на 30% больше откликов", priority: 7 })
   } else {
     sections.push({ id: "company", status: "ok", title: "О компании", message: "Заполнено", priority: 10 })
     filled++
@@ -437,7 +440,8 @@ function buildPrompt(d: Record<string, unknown>, body: Record<string, unknown>, 
   parts.push(`Мин. опыт: ${d.experienceMin || "(пусто)"}`)
   parts.push(`Идеальный опыт: ${d.experienceIdeal || "(пусто)"}`)
 
-  const companyDesc = (body.companyDescription as string) || ""
+  // Описание из самой вакансии приоритетно, иначе — из настроек компании.
+  const companyDesc = ((d.companyDescription as string) || (body.companyDescription as string) || "")
   parts.push(`\n═══ О КОМПАНИИ ═══`)
   parts.push(companyDesc || "(описание не заполнено)")
 

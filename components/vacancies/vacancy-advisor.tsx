@@ -348,6 +348,9 @@ export function VacancyAdvisor({ vacancyId, vacancyData, companyDescription, foc
         {/* 6. Рынок Q1 2025→2026 */}
         <MarketContextCard />
 
+        {/* 6b. Лучшее время публикации — по откликам компании */}
+        <BestPublishTimeCard vacancyId={vacancyId} city={(vacancyData.positionCity as string) || (vacancyData.companyCity as string) || ""} />
+
         {/* 7. Анализ мотивации */}
         <MotivationAnalysisCard
           salaryMin={parseInt(String(vacancyData.salaryFrom || "0").replace(/\s/g, "")) || 0}
@@ -434,9 +437,11 @@ export function VacancyAdvisor({ vacancyId, vacancyData, companyDescription, foc
   // ── Desktop panel ──
   return (
     <>
-      {/* Desktop sidebar */}
-      <div className="hidden lg:block flex-[1] min-w-[340px]">
-        <div className="space-y-3 border-l pl-4">
+      {/* Desktop sidebar. self-stretch + h-full: колонка тянется на всю высоту
+          строки (родитель — flex items-start), чтобы левый разделитель border-l
+          шёл во всю высоту анкеты, а не обрывался на футере «Переанализировать». */}
+      <div className="hidden lg:block flex-[1] min-w-[340px] self-stretch">
+        <div className="space-y-3 border-l pl-4 h-full">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Bot className="w-4 h-4 text-primary" />
@@ -846,6 +851,67 @@ function MarketContextCard() {
         Зарплаты <span className="font-semibold text-emerald-600 dark:text-emerald-400">+{marketStats.overallMedianGrowth}%</span>, резюме <span className="font-semibold text-emerald-600 dark:text-emerald-400">+{marketStats.resumeGrowth}%</span>, конкуренция растёт. Junior <span className="font-semibold text-red-600 dark:text-red-400">−{marketStats.juniorVacancyDecline}%</span>.
       </p>
       <p className="text-xs text-muted-foreground">{marketStats.source}</p>
+    </div>
+  )
+}
+
+// ── Best Publish Time Card ──────────────────────────────────────────────────
+// Лучшее время публикации по откликам компании (GET /best-publish-time).
+// Эндпоинт агрегирует hh_responses по дню недели и часу (МСК). Честно помечаем,
+// что это статистика откликов компании, а не рыночный бенчмарк hh.
+interface PublishTimeData {
+  enough: boolean
+  total: number
+  topDays?: { name: string; pct: number }[]
+  topHours?: { range: string; pct: number }[]
+}
+
+function BestPublishTimeCard({ vacancyId, city }: { vacancyId?: string; city?: string }) {
+  const [data, setData] = useState<PublishTimeData | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (!vacancyId) { setLoading(false); return }
+    let alive = true
+    fetch(`/api/modules/hr/vacancies/${vacancyId}/best-publish-time`)
+      .then(r => r.ok ? r.json() : null)
+      .then((d: PublishTimeData | null) => { if (alive) setData(d) })
+      .catch(() => {})
+      .finally(() => { if (alive) setLoading(false) })
+    return () => { alive = false }
+  }, [vacancyId])
+
+  if (loading || !data) return null
+  const cityLabel = city?.trim() ? `, ${city.trim()}` : ""
+
+  return (
+    <div className="rounded-lg border p-3 space-y-2">
+      <p className="text-sm font-semibold">🕐 Лучшее время публикации</p>
+      {!data.enough ? (
+        <p className="text-xs text-muted-foreground">
+          Пока мало данных для рекомендации ({data.total} откликов). Накопится статистика — покажем, в какие дни и часы кандидаты откликаются активнее.
+        </p>
+      ) : (
+        <>
+          <div className="space-y-1">
+            {data.topDays && data.topDays.length > 0 && (
+              <div className="flex items-baseline gap-1.5 text-sm">
+                <span className="text-muted-foreground text-xs">Дни:</span>
+                <span className="font-medium">{data.topDays.map(d => `${d.name} (${d.pct}%)`).join(", ")}</span>
+              </div>
+            )}
+            {data.topHours && data.topHours.length > 0 && (
+              <div className="flex items-baseline gap-1.5 text-sm">
+                <span className="text-muted-foreground text-xs">Часы:</span>
+                <span className="font-medium">{data.topHours.map(h => `${h.range} (${h.pct}%)`).join(", ")}</span>
+              </div>
+            )}
+          </div>
+          <p className="text-[10px] text-muted-foreground">
+            По откликам вашей компании (время МСК{cityLabel ? ` · вакансия${cityLabel}` : ""}). Опирается на {data.total} откликов.
+          </p>
+        </>
+      )}
     </div>
   )
 }
