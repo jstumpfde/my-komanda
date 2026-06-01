@@ -568,7 +568,7 @@ export function ListView({
                   ) : candidate.testStatus === "submitted" ? (
                     <span className="text-success text-[11px] font-medium">сдан</span>
                   ) : candidate.testStatus === "in_progress" ? (
-                    <span className="text-blue-600 dark:text-blue-500 text-[11px] font-medium">пишет</span>
+                    <span className="text-blue-600 dark:text-blue-500 text-[11px] font-medium">заб</span>
                   ) : candidate.testStatus === "opened" ? (
                     <span className="text-muted-foreground text-[11px]">пер.</span>
                   ) : candidate.testStatus === "sent" ? (

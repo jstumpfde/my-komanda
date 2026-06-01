@@ -34,15 +34,6 @@ export const DEFAULT_TEST_INVITE_TEXT =
   "{{name}}, спасибо за интерес к вакансии «{{vacancy}}»! Предлагаем пройти короткий тест — пройдите по ссылке:\n\n{{test_link}}"
 const DEFAULT_TEXT = DEFAULT_TEST_INVITE_TEXT
 
-// Стадии, с которых НЕ откатываем назад в test_task_sent: кандидат уже сдал
-// тест / прошёл дальше / терминальный. Приглашение всё равно поставим (HR мог
-// осознанно переслать), но стадию не трогаем, чтобы не сбить воронку.
-const NO_DOWNGRADE = new Set<string>([
-  "test_task_done", "test_passed", "test_failed",
-  "scheduled", "interview", "interviewed", "reference_check",
-  "decision", "final_decision", "offer_sent", "offer", "hired", "rejected",
-])
-
 async function ensureCampaign(vacancyId: string): Promise<string | null> {
   const [existing] = await db
     .select({ id: followUpCampaigns.id })
@@ -128,7 +119,6 @@ export async function scheduleTestInvitesForCandidates(args: {
       inArray(candidates.id, args.candidateIds),
     ))
   if (!cands.length) return { ...result, error: "no_candidates" }
-  const stageById = new Map(cands.map(c => [c.id, c.stage ?? "new"]))
   const validIds = cands.map(c => c.id)
 
   // 5. Дедуп: уже есть pending|sent приглашение.
@@ -176,12 +166,9 @@ export async function scheduleTestInvitesForCandidates(args: {
         status:      "pending",
         branch:      "test_invite",
       })
-      // Стадию двигаем только вперёд.
-      if (!NO_DOWNGRADE.has(stageById.get(id) ?? "new")) {
-        await db.update(candidates)
-          .set({ stage: "test_task_sent", updatedAt: new Date() })
-          .where(eq(candidates.id, id))
-      }
+      // Стадию (Статус кандидата) НЕ трогаем: вся тест-жизнь живёт в колонке
+      // «Тест» (отп./пер./заб/баллы/сдан), а воронка-Статус остаётся прежней.
+      // «Отправлен» в колонке определяется по follow_up branch='test_invite'.
       result.scheduled++
     } catch (err) {
       console.error("[test-invite] insert failed:", id, err instanceof Error ? err.message : err)
