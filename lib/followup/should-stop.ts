@@ -5,6 +5,7 @@ import { STOP_WORDS, matchStopWord, matchStopWordList } from "@/lib/followup/sto
 
 export type StopReason =
   | "vacancy_closed"
+  | "vacancy_paused"
   | "demo_completed"
   | "candidate_refused"
   | "campaign_disabled"
@@ -45,12 +46,20 @@ export async function shouldStopFollowUp(
     return { stop: true, reason: "auto_processing_stopped" }
   }
 
+  // Статус вакансии. paused («Приостановлена») останавливает дожим ВСЕГДА —
+  // это явная команда HR притормозить всю работу по вакансии (в т.ч. дожимы
+  // уже откликнувшихся). Закрытие/архив/корзина — стоп при stopOnVacancyClosed.
+  // ВАЖНО: архив на hh.ru сюда НЕ относится — он не меняет локальный status,
+  // и дожим уже откликнувшихся продолжается (объявление истекло ≠ найм закрыт).
+  const [vacancy] = await db
+    .select({ status: vacancies.status, deletedAt: vacancies.deletedAt })
+    .from(vacancies)
+    .where(eq(vacancies.id, candidate.vacancyId))
+    .limit(1)
+  if (vacancy?.status === "paused") {
+    return { stop: true, reason: "vacancy_paused" }
+  }
   if (campaign.stopOnVacancyClosed) {
-    const [vacancy] = await db
-      .select({ status: vacancies.status, deletedAt: vacancies.deletedAt })
-      .from(vacancies)
-      .where(eq(vacancies.id, candidate.vacancyId))
-      .limit(1)
     if (!vacancy || vacancy.status === "closed" || vacancy.status === "archived" || vacancy.deletedAt) {
       return { stop: true, reason: "vacancy_closed" }
     }
