@@ -2376,7 +2376,8 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
 
       {/* Preview modal */}
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-        <DialogContent className="sm:max-w-2xl max-h-[80vh] overflow-y-auto bg-white dark:bg-gray-950 p-6">
+        <DialogContent className="max-w-none w-screen h-screen sm:max-w-none rounded-none overflow-y-auto bg-white dark:bg-gray-950 p-6 sm:p-10">
+          <div className="mx-auto w-full max-w-3xl">
           <DialogHeader>
             <div className="flex items-center justify-between gap-3">
               <DialogTitle className="text-lg">{data.vacancyTitle || "Без названия"}</DialogTitle>
@@ -2484,6 +2485,7 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
                 </div>
               </div>
             )}
+          </div>
           </div>
         </DialogContent>
       </Dialog>
