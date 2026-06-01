@@ -366,7 +366,7 @@ export function VacancyAdvisor({ vacancyId, vacancyData, companyDescription, foc
         />
 
         {/* 8. О компании */}
-        <CompanyDescriptionCard description={companyDescription || ""} />
+        <CompanyDescriptionCard description={companyDescription || (vacancyData.companyDescription as string) || ""} />
 
         {/* Sections: критичные и рекомендации — соответствуют секциям 4-5 (обязанности, требования, навыки, стоп-факторы) */}
         {errors.length > 0 && (
@@ -956,7 +956,7 @@ function CompanyDescriptionCard({ description }: { description: string }) {
       <p className="text-sm text-foreground leading-relaxed">{preview}</p>
       <div className="flex items-center gap-1.5">
         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-        <span className="text-xs text-emerald-700 dark:text-emerald-400">Описание подтянуто из настроек</span>
+        <span className="text-xs text-emerald-700 dark:text-emerald-400">Описание заполнено</span>
       </div>
       <a
         href="/settings/company"
