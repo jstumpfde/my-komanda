@@ -18,7 +18,7 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
-import { Loader2, Save } from "lucide-react"
+import { Loader2, Save, Plus, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 
 type ResponseFormat = "text" | "file" | "both"
@@ -35,6 +35,14 @@ const CHECK_MODE_HINT: Record<CheckMode, string> = {
   manual:   "AI не оценивает. HR проверяет ответ полностью вручную.",
 }
 
+// Дефолты тест-дожима (дублируют lib/messaging/test-invite.ts — тот server-only,
+// импортировать в клиент нельзя). Используются для нового пустого состояния.
+const DEFAULT_REMINDER_ITEMS: { day: number; text: string }[] = [
+  { day: 1, text: "{{name}}, напоминаем про тест по вакансии «{{vacancy}}» — пройдите, пожалуйста, по ссылке:\n\n{{test_link}}\n\nЭто займёт немного времени." },
+  { day: 3, text: "{{name}}, тест по «{{vacancy}}» ещё ждёт вас 🙂 Ссылка та же:\n\n{{test_link}}\n\nЕсли возникли вопросы — напишите здесь, помогу." },
+  { day: 6, text: "{{name}}, последнее напоминание про тест по «{{vacancy}}». Если позиция интересна — пройдите, пожалуйста:\n\n{{test_link}}" },
+]
+
 export function TestTaskSettings({ vacancyId, onSaved }: Props) {
   const [taskText, setTaskText] = useState("")
   const [deadlineDays, setDeadlineDays] = useState(3)
@@ -45,6 +53,9 @@ export function TestTaskSettings({ vacancyId, onSaved }: Props) {
   const [passingScore, setPassingScore] = useState(70)
   const [afterMessage, setAfterMessage] = useState("")
   const [reminderEnabled, setReminderEnabled] = useState(false)
+  const [reminderItems, setReminderItems] = useState<{ day: number; text: string }[]>(
+    DEFAULT_REMINDER_ITEMS.map((it) => ({ ...it })),
+  )
   const [demoId, setDemoId] = useState<string | null>(null)
   const [loaded, setLoaded] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -80,6 +91,14 @@ export function TestTaskSettings({ vacancyId, onSaved }: Props) {
             if (typeof pds.testPassingScore === "number") { setPassingScore(pds.testPassingScore); applied = true }
             if (typeof pds.testAfterMessage === "string") { setAfterMessage(pds.testAfterMessage); applied = true }
             if (typeof pds.testReminderEnabled === "boolean") { setReminderEnabled(pds.testReminderEnabled); applied = true }
+            if (Array.isArray(pds.testReminderDays) && pds.testReminderDays.length > 0) {
+              const msgs = Array.isArray(pds.testReminderMessages) ? pds.testReminderMessages : []
+              setReminderItems(pds.testReminderDays.map((d: unknown, i: number) => ({
+                day:  Math.max(1, Math.min(365, Number(d) || 1)),
+                text: typeof msgs[i] === "string" ? msgs[i] : (DEFAULT_REMINDER_ITEMS[i]?.text ?? ""),
+              })))
+              applied = true
+            }
           }
         }
         // 2. Fallback на legacy descriptionJson.testTask (старые вакансии).
@@ -130,6 +149,8 @@ export function TestTaskSettings({ vacancyId, onSaved }: Props) {
           testPassingScore:     passingScore,
           testAfterMessage:     afterMessage,
           testReminderEnabled:  reminderEnabled,
+          testReminderDays:     [...reminderItems].sort((a, b) => a.day - b.day).map((it) => it.day),
+          testReminderMessages: [...reminderItems].sort((a, b) => a.day - b.day).map((it) => it.text),
           // backward-compat: старый флаг держим в синхроне (manual = AI выкл).
           testAiCheck:          checkMode !== "manual",
         } }),
@@ -264,10 +285,62 @@ export function TestTaskSettings({ vacancyId, onSaved }: Props) {
             <Switch id="test-reminder" checked={reminderEnabled} onCheckedChange={setReminderEnabled} />
           </div>
           <p className="text-xs text-muted-foreground">
-            Если кандидат получил тест, но не прошёл — напомним в hh-чат через 1, 3 и 6 дней.
-            Напоминания идут в рабочее время вакансии и прекращаются, как только кандидат сдал тест
-            (или ушёл в отказ/найм).
+            Если кандидат получил тест, но не прошёл — напомним в hh-чат. Напоминания идут в рабочее
+            время вакансии и прекращаются, как только кандидат сдал тест (или ушёл в отказ/найм).
+            Плейсхолдеры: {"{{name}}"}, {"{{vacancy}}"}, {"{{test_link}}"}.
           </p>
+
+          {reminderEnabled && (
+            <div className="space-y-2 rounded-md border bg-muted/30 p-3">
+              {reminderItems.map((it, idx) => (
+                <div key={idx} className="space-y-1.5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">Напоминание {idx + 1} — через</span>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={365}
+                      value={it.day}
+                      onChange={(e) => {
+                        const day = Math.max(1, Math.min(365, Number(e.target.value) || 1))
+                        setReminderItems((prev) => prev.map((p, i) => i === idx ? { ...p, day } : p))
+                      }}
+                      className="h-7 w-16 text-sm"
+                    />
+                    <span className="text-xs text-muted-foreground">дн. после отправки</span>
+                    <button
+                      type="button"
+                      onClick={() => setReminderItems((prev) => prev.filter((_, i) => i !== idx))}
+                      className="ml-auto text-muted-foreground hover:text-destructive transition-colors"
+                      aria-label="Удалить напоминание"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  <Textarea
+                    value={it.text}
+                    onChange={(e) => setReminderItems((prev) => prev.map((p, i) => i === idx ? { ...p, text: e.target.value } : p))}
+                    rows={3}
+                    className="text-sm"
+                    placeholder="Текст напоминания…"
+                  />
+                </div>
+              ))}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 gap-1.5 text-xs"
+                onClick={() => setReminderItems((prev) => [
+                  ...prev,
+                  { day: (prev[prev.length - 1]?.day ?? 0) + 3, text: "" },
+                ])}
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Добавить напоминание
+              </Button>
+            </div>
+          )}
         </div>
 
         <div className="flex justify-end pt-2">
