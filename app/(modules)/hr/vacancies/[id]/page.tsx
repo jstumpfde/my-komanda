@@ -183,6 +183,8 @@ function apiCandidateToCard(c: ApiCandidate, columnId: string): Candidate {
     aiVerdict: c.aiScore != null ? (c.aiScore >= 70 ? "подходит" : c.aiScore >= 40 ? "возможно" : "не подходит") : undefined,
     resumeScore: c.resumeScore ?? null,
     rubricScore: c.rubricScore ?? null,
+    testScore: c.testScore ?? null,
+    testStatus: c.testStatus ?? null,
     demoProgressJson: c.demoProgressJson as Candidate["demoProgressJson"],
     demoTotalBlocks: (c as { demoTotalBlocks?: number }).demoTotalBlocks,
     demoCompletedBlocks: (c as { demoCompletedBlocks?: number }).demoCompletedBlocks,

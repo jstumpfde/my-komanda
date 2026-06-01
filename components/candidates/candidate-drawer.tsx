@@ -57,6 +57,7 @@ import { toast } from "sonner"
 import type { ApiCandidate } from "@/hooks/use-candidates"
 import type { Lesson, Block } from "@/lib/course-types"
 import { AnswersTab } from "./answers-tab"
+import { TestTab } from "./test-tab"
 import { HhResumeInfo } from "./hh-resume-info"
 import { AiMatchCardV2 } from "./ai-match-card-v2"
 
@@ -969,9 +970,10 @@ export function CandidateDrawer({
           </ScrollArea>
         ) : candidate && derived ? (
           <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
-            <TabsList className="grid grid-cols-6 mx-3 mt-3 shrink-0 h-auto">
+            <TabsList className="grid grid-cols-4 mx-3 mt-3 shrink-0 h-auto">
               <TabsTrigger value="contacts" className="text-[10px] px-1 py-1.5">Контакты</TabsTrigger>
               <TabsTrigger value="answers" className="text-[10px] px-1 py-1.5">Ответы</TabsTrigger>
+              <TabsTrigger value="test" className="text-[10px] px-1 py-1.5">Тест</TabsTrigger>
               <TabsTrigger value="chat" className="text-[10px] px-1 py-1.5">Чат hh</TabsTrigger>
               <TabsTrigger value="ai" className="text-[10px] px-1 py-1.5">AI-оценка</TabsTrigger>
               <TabsTrigger value="rubric" className="text-[10px] px-1 py-1.5">Рубрика</TabsTrigger>
@@ -1148,6 +1150,11 @@ export function CandidateDrawer({
                   <SurveyContactsBlock contacts={derived.surveyContacts} />
                 ) : null}
                 <AnswersTab answers={candidate.anketaAnswers} demoLessons={candidate.demoLessons} candidateId={candidate.id} />
+              </TabsContent>
+
+              {/* ── Тест ─────────────────────────────────────────── */}
+              <TabsContent value="test" className="px-6 py-4 pb-40 mt-0 space-y-4">
+                <TestTab candidateId={candidate.id} />
               </TabsContent>
 
               {/* ── Чат (только hh) ──────────────────────────────── */}

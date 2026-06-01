@@ -35,6 +35,7 @@ const DISPLAY_TOGGLES: Array<{ key: keyof CardDisplaySettings; label: string }> 
   { key: "showProgress",      label: "Прогресс демо" },
   { key: "showResumeScore",   label: "AI резюме" },
   { key: "showScore",         label: "AI оценка" },
+  { key: "showTestScore",     label: "Тест" },
   { key: "showSalaryFull",    label: "Зарплата" },
   { key: "showCity",          label: "Город" },
   { key: "showResponseDate",  label: "Дата отклика" },

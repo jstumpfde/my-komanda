@@ -63,6 +63,9 @@ export interface Candidate {
   demoTotalBlocks?: number
   demoCompletedBlocks?: number
   progressPercent?: number | null
+  // Колонка «Тест»: балл последнего теста и статус отправки/сдачи.
+  testScore?: number | null
+  testStatus?: "done" | "sent" | null
 }
 
 interface CandidateCardProps {

@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server"
 import { eq, ne, and, inArray, asc, desc, or, isNull, sql, type SQL } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { candidates, vacancies, demos, hhResponses } from "@/lib/db/schema"
+import { candidates, vacancies, demos, hhResponses, testSubmissions } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { generateCandidateToken } from "@/lib/candidate-tokens"
 import { generateCandidateShortId } from "@/lib/short-id"
@@ -184,6 +184,23 @@ interface LessonShape {
 }
 
 const ACTIVE_THRESHOLD_MS = 30 * 60 * 1000
+
+// Стадии, в которых тест уже отправлен кандидату (см. lib/stages.ts).
+// Используется для колонки «Тест»: если submission ещё нет, но кандидат
+// на тест-стадии — показываем «отп.» (отправлен).
+const TEST_SENT_STAGES = new Set<string>([
+  "test_task_sent", "test_task_done", "test_passed", "test_failed",
+])
+
+// Достаёт отображаемый балл теста из submission: приоритет — AI-оценка
+// (aiScore, 0–100), фолбэк — объективная автопроверка (objective.score),
+// если в тесте были закрытые вопросы (maxPoints > 0). Иначе null.
+function testScoreOf(aiScore: number | null, answersJson: unknown): number | null {
+  if (typeof aiScore === "number") return aiScore
+  const obj = (answersJson as { objective?: { score?: number; maxPoints?: number } } | null)?.objective
+  if (obj && typeof obj.score === "number" && (obj.maxPoints ?? 0) > 0) return obj.score
+  return null
+}
 
 // GET /api/modules/hr/candidates?vacancy_id=...&stage=new,demo,...
 export async function GET(req: NextRequest) {
@@ -698,6 +715,29 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // Балл теста для колонки «Тест»: последний (по submittedAt) test_submission
+    // на кандидата. testScore — число (AI-оценка / автопроверка) либо null;
+    // hasSubmission=true означает «тест сдан» (даже если ещё не оценён).
+    const testByCandidateId = new Map<string, { score: number | null; hasSubmission: boolean }>()
+    if (candidateIds.length > 0) {
+      const subRows = await db
+        .select({
+          candidateId: testSubmissions.candidateId,
+          aiScore: testSubmissions.aiScore,
+          answersJson: testSubmissions.answersJson,
+        })
+        .from(testSubmissions)
+        .where(inArray(testSubmissions.candidateId, candidateIds))
+        .orderBy(desc(testSubmissions.submittedAt))
+      for (const s of subRows) {
+        if (!s.candidateId || testByCandidateId.has(s.candidateId)) continue
+        testByCandidateId.set(s.candidateId, {
+          score: testScoreOf(s.aiScore, s.answersJson),
+          hasSubmission: true,
+        })
+      }
+    }
+
     // Подгружаем структуру курса для расчёта прогресса по СТРАНИЦАМ
     // (см. ту же логику в ветке без vacancyId выше).
     let demoTotalBlocks = 0
@@ -749,6 +789,13 @@ export async function GET(req: NextRequest) {
       // Нужно для клиентского фильтра по возрасту, который читает c.birthDate.
       const effectiveBirthDate = r.birthDate ?? extractBirthDateFromAnketa(r.anketaAnswers)
 
+      // Колонка «Тест»: 'done' (есть submission → балл или «сдан»),
+      // 'sent' (тест отправлен, ответа ещё нет) либо null.
+      const test = testByCandidateId.get(r.id)
+      const testStatus: "done" | "sent" | null = test
+        ? "done"
+        : TEST_SENT_STAGES.has(r.stage ?? "") ? "sent" : null
+
       return {
         ...r,
         birthDate: effectiveBirthDate,
@@ -756,6 +803,8 @@ export async function GET(req: NextRequest) {
         demoTotalBlocks,
         demoCompletedBlocks,
         progressPercent,
+        testScore: test?.score ?? null,
+        testStatus,
       }
     })
 

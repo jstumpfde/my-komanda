@@ -152,6 +152,7 @@ export function ListView({
   const showScore        = settings.showScore          // AI-оцен. (оценка анкеты)
   const showResumeScore  = settings.showResumeScore !== false  // AI-резм. (undefined = вкл)
   const showRubricScore  = settings.showRubricScore !== false  // Рубрика (по умолчанию вкл, как AI-резм)
+  const showTestScore    = settings.showTestScore !== false    // Тест (балл/статус; по умолчанию вкл)
   const showSalary       = settings.showSalary || settings.showSalaryFull
   const showSource       = settings.showSource
   const showActions      = settings.showActions
@@ -268,18 +269,22 @@ export function ListView({
   // Балансировка после расширения воронки (drizzle/0083): новые badge'и
   // длиннее («Первичный контакт» ~17 симв, «Анкета заполнена» ~16 симв),
   // поэтому Статус получает больше места (min 140 / 1.8fr), а Кандидат —
-  // меньше избыточного простора (с 6fr → 3fr, max-w на имя 240px).
+  // меньше избыточного простора. Кандидат: min 255px + 2.2fr — полное ФИО
+  // («Савватеев Дмитрий Викторович» ~28 симв + запас) помещается, длиннее —
+  // обрезается «…» (truncate на <p>); fr снижен с 3.45 → 2.2, чтобы колонка
+  // не забирала лишнее свободное место и пробел справа не был огромным.
   const cols: string[] = []
   // ☐ — 28px, justify-end. ★ — 32px (w-8), justify-center, чтобы звёздочка
   // визуально была по центру ячейки с равным воздухом слева/справа.
   // -ml-3 на ★ и Кандидате схлопывает gap-4 до 4px edge-to-edge.
   if (selectionEnabled) cols.push("24px")               // ☐ — фикс (компактнее)
   cols.push("28px")                                     // ★ — фикс (w-7, ужато)
-  cols.push("minmax(207px, 3.45fr)")                    // Кандидат — расширен ~15% за счёт Демо/AI
-  if (showProgress) cols.push("minmax(95px, 1.2fr)")    // Демо
+  cols.push("minmax(255px, 2.2fr)")                     // Кандидат — вмещает полное ФИО, длиннее → «…»
+  if (showProgress) cols.push("minmax(80px, 1fr)")      // Демо — сегменты-«шаги», сужено ~15%
   if (showResumeScore) cols.push("60px")                // AI-резм. — AI-скор резюме (фикс, w-8 badge + место под header)
   if (showScore) cols.push("minmax(60px, 0.85fr)")      // AI-оцен.
   if (showRubricScore) cols.push("64px")                // Рубрика — новый shadow-движок
+  if (showTestScore) cols.push("60px")                  // Тест — балл/«отп.»/«сдан» (фикс, как AI-резм)
   if (showSalary) cols.push("minmax(95px, 1.1fr)")      // Зарплата — ужата (длинных чисел редко > 7 симв)
   if (showCity) cols.push("minmax(120px, 2fr)")         // Город
   if (showResponseDate) cols.push("minmax(70px, 0.7fr)") // Дата — "DD.MM.YY" укладывается в 70px
@@ -382,6 +387,7 @@ export function ListView({
         {showResumeScore && <SortHeader label="AI-резм." sortKey="resumeScore" sort={sort} onToggle={handleSort} align="center" />}
         {showScore && <SortHeader label="AI-оцен." sortKey="aiScore" sort={sort} onToggle={handleSort} align="center" />}
         {showRubricScore && <SortHeader label="Рубрика" sortKey="rubricScore" sort={sort} onToggle={handleSort} align="center" />}
+        {showTestScore && <div className="text-center">Тест</div>}
         {showSalary && <SortHeader label="Зарплата" sortKey="salary" sort={sort} onToggle={handleSort} align="center" />}
         {showCity && <SortHeader label="Город" sortKey="city" sort={sort} onToggle={handleSort} align="left" />}
         {showResponseDate && <SortHeader label="Дата" sortKey="responseDate" sort={sort} onToggle={handleSort} align="center" />}
@@ -534,6 +540,30 @@ export function ListView({
                     >
                       {candidate.rubricScore}
                     </Badge>
+                  ) : (
+                    <span className="text-muted-foreground/40 text-xs">—</span>
+                  )}
+                </div>
+              )}
+
+              {/* Тест — балл последнего теста (бейдж), либо «сдан» (ответ есть,
+                  ещё не оценён), либо «отп.» (тест отправлен, ответа нет). */}
+              {showTestScore && (
+                <div className="flex items-center justify-center" title="Результат теста">
+                  {candidate.testScore != null ? (
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "text-[11px] font-semibold border px-1.5 py-0 h-5 w-8 justify-center",
+                        getScoreColor(candidate.testScore),
+                      )}
+                    >
+                      {candidate.testScore}
+                    </Badge>
+                  ) : candidate.testStatus === "done" ? (
+                    <span className="text-success text-[11px] font-medium">сдан</span>
+                  ) : candidate.testStatus === "sent" ? (
+                    <span className="text-muted-foreground text-[11px]">отп.</span>
                   ) : (
                     <span className="text-muted-foreground/40 text-xs">—</span>
                   )}

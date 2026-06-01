@@ -4,6 +4,8 @@ import { db } from "@/lib/db"
 import { candidates, vacancies, demos, testSubmissions, type PostDemoSettings } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { scheduleTestAfterMessage } from "@/lib/messaging/test-after-message"
+import { collectTaskQuestions } from "@/lib/score-test-objective"
+import type { Question } from "@/lib/course-types"
 
 // Ответ кандидата на тестовое задание — для карточки кандидата у HR.
 // Tenant-scoped: кандидат должен принадлежать компании пользователя.
@@ -35,6 +37,33 @@ async function loadTestSettings(vacancyId: string): Promise<PostDemoSettings> {
   return (demo?.postDemoSettings as PostDemoSettings | null) ?? {}
 }
 
+// Текст и тип вопросов теста — для карточки кандидата (таб «Тест»),
+// чтобы рядом с ответом показывать сам вопрос, а не технический questionId.
+interface TestQuestionMeta {
+  id:         string
+  text:       string
+  answerType: string
+  points:     number | null
+}
+
+async function loadTestQuestions(vacancyId: string): Promise<TestQuestionMeta[]> {
+  const [demo] = await db
+    .select({ lessonsJson: demos.lessonsJson })
+    .from(demos)
+    .where(and(eq(demos.vacancyId, vacancyId), eq(demos.kind, "test")))
+    .orderBy(desc(demos.updatedAt))
+    .limit(1)
+  const lessons = Array.isArray(demo?.lessonsJson)
+    ? (demo!.lessonsJson as { blocks?: { type?: string; questions?: Question[] }[] }[])
+    : []
+  return collectTaskQuestions(lessons).map((q) => ({
+    id:         q.id,
+    text:       q.text ?? "",
+    answerType: q.answerType,
+    points:     typeof q.points === "number" ? q.points : null,
+  }))
+}
+
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -59,10 +88,14 @@ export async function GET(
       ? settings.testCheckMode
       : "assisted"
 
+    // Вопросы грузим только если есть submission — для карточки (таб «Тест»).
+    const questions = submission ? await loadTestQuestions(owned.vacancyId) : []
+
     return apiSuccess({
       submission: submission ?? null,
       checkMode,
       stage: owned.stage,
+      questions,
     })
   } catch (err) {
     if (err instanceof Response) return err

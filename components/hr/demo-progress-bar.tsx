@@ -203,15 +203,32 @@ export function DemoProgressBar({
           <Video className="inline w-3 h-3 ml-1 text-muted-foreground" aria-label="Есть видео-визитка" />
         )}
       </span>
-      <div
-        className="w-full h-1.5 rounded-full overflow-hidden bg-gray-100 dark:bg-gray-800/50"
-        aria-label={`Прогресс демо: ${label}`}
-      >
+      {hasFraction && tot > 0 ? (
+        // Сегменты-«шаги»: tot делений, первые cur — залиты цветом стадии,
+        // остальные серые. Наглядно показывает «N из M страниц пройдено».
+        <div className="flex w-full gap-[2px]" aria-label={`Прогресс демо: ${label}`}>
+          {Array.from({ length: tot }).map((_, i) => (
+            <div
+              key={i}
+              className={cn(
+                "h-2 flex-1 rounded-[2px] transition-colors",
+                i < cur ? fillColor : "bg-gray-200 dark:bg-gray-700/50",
+              )}
+            />
+          ))}
+        </div>
+      ) : (
+        // Fallback для legacy-записей без известного числа шагов — сплошная шкала.
         <div
-          className={cn("h-full rounded-full transition-all", fillColor)}
-          style={{ width: fillWidth }}
-        />
-      </div>
+          className="w-full h-1.5 rounded-full overflow-hidden bg-gray-100 dark:bg-gray-800/50"
+          aria-label={`Прогресс демо: ${label}`}
+        >
+          <div
+            className={cn("h-full rounded-full transition-all", fillColor)}
+            style={{ width: fillWidth }}
+          />
+        </div>
+      )}
     </div>
   )
 }
