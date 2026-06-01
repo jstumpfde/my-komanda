@@ -740,6 +740,13 @@ export interface PostDemoSettings {
   // {{vacancy}}, {{test_link}} (персональная ссылка /test/{token}).
   // undefined/'' → дефолтный текст из lib/messaging/test-invite.ts.
   testInviteMessage?: string
+  // Тест-дожим: напоминания тем, кто получил тест, но не сдал. undefined →
+  // выключено. testReminderDays — смещения от отправки теста (Д+N); undefined →
+  // дефолт [1,3,6]. testReminderMessages — тексты по порядку (плейсхолдеры
+  // {{name}}/{{vacancy}}/{{test_link}}); undefined → дефолтные.
+  testReminderEnabled?:  boolean
+  testReminderDays?:     number[]
+  testReminderMessages?: string[]
 }
 
 export interface AnketaAutoReplySettings {

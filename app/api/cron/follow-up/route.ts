@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
-import { eq, and, lte, gte, ne, sql } from "drizzle-orm"
+import { eq, and, lte, gte, ne, isNotNull, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { vacancies, candidates, followUpMessages, followUpCampaigns, hhResponses, companies } from "@/lib/db/schema"
+import { vacancies, candidates, followUpMessages, followUpCampaigns, hhResponses, companies, testSubmissions } from "@/lib/db/schema"
 import { getValidToken } from "@/lib/hh-helpers"
 import { shouldStopFollowUp } from "@/lib/followup/should-stop"
 import { canSendNow } from "@/lib/schedule/can-send-now"
@@ -199,9 +199,14 @@ async function processOneTouch(
   // содержит {{test_link}}. Это не дожим: пропускаем стоп-триггеры и rate-limit,
   // шлём именно выбранным кандидатам. Стадию test_task_sent ставит scheduleTestInvite.
   const isTestInvite = msg.branch === "test_invite"
+  // branch='test_reminder' — тест-дожим (напоминания о незаконченном тесте).
+  // Не обычный дожим: стандартные стоп-триггеры (demo_completed и т.п.) пропускаем,
+  // вместо них — собственная отмена при сдаче теста / отказе (ниже). Рабочее окно
+  // (canSendNow) при этом соблюдаем — напоминания шлём в часы вакансии.
+  const isTestReminder = msg.branch === "test_reminder"
   const isOneOffPostAnketa =
     msg.branch === "anketa_confirmation" || msg.branch === "anketa_auto_reply"
-    || isChainStep || isOffHoursFirst || isTestAfterMessage || isTestInvite
+    || isChainStep || isOffHoursFirst || isTestAfterMessage || isTestInvite || isTestReminder
   if (!isOneOffPostAnketa) {
     // Стоп-триггеры (вакансия закрыта / демо пройдено / отказ /
     // автоматизация остановлена) — только для обычной цепочки дожима.
@@ -252,6 +257,33 @@ async function processOneTouch(
     if (cand.demoOpenedAt) {
       await db.update(followUpMessages).set({ status: "cancelled", errorMessage: "demo_opened" }).where(eq(followUpMessages.id, msg.id))
       return { outcome: "cancelled", reason: "demo_opened" }
+    }
+    if (cand.stage === "rejected" || cand.stage === "hired" || cand.autoStopped) {
+      await db.update(followUpMessages).set({ status: "cancelled", errorMessage: "stage_terminal" }).where(eq(followUpMessages.id, msg.id))
+      return { outcome: "cancelled", reason: "stage_terminal" }
+    }
+  }
+
+  // Тест-дожим: отменяем напоминание, если кандидат уже СДАЛ тест
+  // (test_submissions.submitted_at задан) или ушёл в отказ/найм/авто-стоп.
+  if (isTestReminder) {
+    const [cand] = await db
+      .select({ stage: candidates.stage, autoStopped: candidates.autoProcessingStopped })
+      .from(candidates)
+      .where(eq(candidates.id, msg.candidateId))
+      .limit(1)
+    if (!cand) {
+      await db.update(followUpMessages).set({ status: "cancelled", errorMessage: "candidate_missing" }).where(eq(followUpMessages.id, msg.id))
+      return { outcome: "cancelled", reason: "candidate_missing" }
+    }
+    const [submitted] = await db
+      .select({ id: testSubmissions.id })
+      .from(testSubmissions)
+      .where(and(eq(testSubmissions.candidateId, msg.candidateId), isNotNull(testSubmissions.submittedAt)))
+      .limit(1)
+    if (submitted) {
+      await db.update(followUpMessages).set({ status: "cancelled", errorMessage: "test_submitted" }).where(eq(followUpMessages.id, msg.id))
+      return { outcome: "cancelled", reason: "test_submitted" }
     }
     if (cand.stage === "rejected" || cand.stage === "hired" || cand.autoStopped) {
       await db.update(followUpMessages).set({ status: "cancelled", errorMessage: "stage_terminal" }).where(eq(followUpMessages.id, msg.id))

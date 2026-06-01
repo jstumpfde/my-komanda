@@ -34,6 +34,15 @@ export const DEFAULT_TEST_INVITE_TEXT =
   "{{name}}, спасибо за интерес к вакансии «{{vacancy}}»! Предлагаем пройти короткий тест — пройдите по ссылке:\n\n{{test_link}}"
 const DEFAULT_TEXT = DEFAULT_TEST_INVITE_TEXT
 
+// Тест-дожим: дефолтное расписание (Д+N от отправки теста) и тексты напоминаний.
+// Плейсхолдеры рендерит cron (follow-up): {{name}}/{{vacancy}}/{{test_link}}.
+export const DEFAULT_TEST_REMINDER_DAYS: number[] = [1, 3, 6]
+export const DEFAULT_TEST_REMINDER_MESSAGES: string[] = [
+  "{{name}}, напоминаем про тест по вакансии «{{vacancy}}» — пройдите, пожалуйста, по ссылке:\n\n{{test_link}}\n\nЭто займёт немного времени.",
+  "{{name}}, тест по «{{vacancy}}» ещё ждёт вас 🙂 Ссылка та же:\n\n{{test_link}}\n\nЕсли возникли вопросы — напишите здесь, помогу.",
+  "{{name}}, последнее напоминание про тест по «{{vacancy}}». Если позиция интересна — пройдите, пожалуйста:\n\n{{test_link}}",
+]
+
 // Стадии, с которых НЕ откатываем назад в test_task_sent: кандидат уже сдал
 // тест / прошёл дальше / терминальный. Приглашение всё равно поставим (HR мог
 // осознанно переслать), но стадию не трогаем, чтобы не сбить воронку.
@@ -152,7 +161,8 @@ export async function scheduleTestInvitesForCandidates(args: {
   const linkedSet = new Set(linkedRows.map(r => r.cid).filter((x): x is string => !!x))
 
   // 6. scheduled_at — один раз: now, сдвинутый в рабочее окно вакансии.
-  const { adjusted: scheduledAt } = adjustToWorkingWindow(new Date(), {
+  const nowDate = new Date()
+  const vacSchedule = {
     scheduleEnabled:            vac.scheduleEnabled,
     scheduleStart:              vac.scheduleStart,
     scheduleEnd:                vac.scheduleEnd,
@@ -160,7 +170,17 @@ export async function scheduleTestInvitesForCandidates(args: {
     scheduleWorkingDays:        vac.scheduleWorkingDays,
     scheduleExcludedHolidayIds: vac.scheduleExcludedHolidayIds,
     scheduleCustomHolidays:     vac.scheduleCustomHolidays as { from: string; to: string; label: string }[] | null,
-  })
+  }
+  const { adjusted: scheduledAt } = adjustToWorkingWindow(nowDate, vacSchedule)
+
+  // Тест-дожим: напоминания Д+N после отправки теста, пока кандидат не сдал.
+  const reminderEnabled = settings.testReminderEnabled === true
+  const reminderDays = (Array.isArray(settings.testReminderDays) && settings.testReminderDays.length > 0)
+    ? settings.testReminderDays.filter((d) => Number.isFinite(d) && d >= 1 && d <= 365).sort((a, b) => a - b)
+    : DEFAULT_TEST_REMINDER_DAYS
+  const reminderMessages = (Array.isArray(settings.testReminderMessages) && settings.testReminderMessages.length > 0)
+    ? settings.testReminderMessages
+    : DEFAULT_TEST_REMINDER_MESSAGES
 
   for (const id of validIds) {
     if (alreadyQueued.has(id)) { result.alreadyQueued++; continue }
@@ -176,6 +196,27 @@ export async function scheduleTestInvitesForCandidates(args: {
         status:      "pending",
         branch:      "test_invite",
       })
+      // Тест-дожим: ставим напоминания Д+N (branch='test_reminder'). Cron
+      // отправит их в рабочее окно и отменит, как только кандидат сдаст тест
+      // (или уйдёт в отказ/найм). Тексты с плейсхолдерами рендерит cron.
+      if (reminderEnabled) {
+        const reminderTouches = reminderDays.map((dayOffset, idx) => {
+          const base = new Date(nowDate.getTime() + dayOffset * 86_400_000)
+          const { adjusted } = adjustToWorkingWindow(base, vacSchedule)
+          return {
+            campaignId,
+            candidateId: id,
+            scheduledAt: adjusted,
+            touchNumber: idx + 1,
+            channel:     "hh" as const,
+            messageText: reminderMessages[idx] ?? reminderMessages[reminderMessages.length - 1] ?? "",
+            status:      "pending" as const,
+            branch:      "test_reminder",
+          }
+        }).filter((t) => t.messageText.trim().length > 0)
+        if (reminderTouches.length > 0) await db.insert(followUpMessages).values(reminderTouches)
+      }
+
       // Стадию двигаем только вперёд → «Тест отправлен» в колонке «Статус».
       if (!NO_DOWNGRADE.has(stageById.get(id) ?? "new")) {
         await db.update(candidates)

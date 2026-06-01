@@ -17,6 +17,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Switch } from "@/components/ui/switch"
 import { Loader2, Save } from "lucide-react"
 import { toast } from "sonner"
 
@@ -43,6 +44,7 @@ export function TestTaskSettings({ vacancyId, onSaved }: Props) {
   const [aiPrompt, setAiPrompt] = useState("")
   const [passingScore, setPassingScore] = useState(70)
   const [afterMessage, setAfterMessage] = useState("")
+  const [reminderEnabled, setReminderEnabled] = useState(false)
   const [demoId, setDemoId] = useState<string | null>(null)
   const [loaded, setLoaded] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -77,6 +79,7 @@ export function TestTaskSettings({ vacancyId, onSaved }: Props) {
             if (typeof pds.testAiPrompt === "string") { setAiPrompt(pds.testAiPrompt); applied = true }
             if (typeof pds.testPassingScore === "number") { setPassingScore(pds.testPassingScore); applied = true }
             if (typeof pds.testAfterMessage === "string") { setAfterMessage(pds.testAfterMessage); applied = true }
+            if (typeof pds.testReminderEnabled === "boolean") { setReminderEnabled(pds.testReminderEnabled); applied = true }
           }
         }
         // 2. Fallback на legacy descriptionJson.testTask (старые вакансии).
@@ -126,6 +129,7 @@ export function TestTaskSettings({ vacancyId, onSaved }: Props) {
           testAiPrompt:         aiPrompt,
           testPassingScore:     passingScore,
           testAfterMessage:     afterMessage,
+          testReminderEnabled:  reminderEnabled,
           // backward-compat: старый флаг держим в синхроне (manual = AI выкл).
           testAiCheck:          checkMode !== "manual",
         } }),
@@ -251,6 +255,18 @@ export function TestTaskSettings({ vacancyId, onSaved }: Props) {
           <p className="text-xs text-muted-foreground">
             Отправляется в hh-чат при прохождении теста. Плейсхолдеры: {"{{name}}"}, {"{{vacancy}}"}.
             В режиме «AI оценивает, HR решает» уходит после нажатия «Принять».
+          </p>
+        </div>
+
+        <div className="space-y-1.5 border-t pt-3">
+          <div className="flex items-center justify-between gap-3">
+            <Label htmlFor="test-reminder" className="text-sm cursor-pointer">Дожим по тесту (напоминания)</Label>
+            <Switch id="test-reminder" checked={reminderEnabled} onCheckedChange={setReminderEnabled} />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Если кандидат получил тест, но не прошёл — напомним в hh-чат через 1, 3 и 6 дней.
+            Напоминания идут в рабочее время вакансии и прекращаются, как только кандидат сдал тест
+            (или ушёл в отказ/найм).
           </p>
         </div>
 
