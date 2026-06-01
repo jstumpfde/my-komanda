@@ -123,6 +123,26 @@ export async function POST(
       freeText = parts.join("\n\n")
     }
 
+    // Текст для AI = ответы + per-question критерий «ИИ-проверка» (если задан).
+    // В карточку HR пишем чистый freeText, а в AI-оценку — обогащённый, чтобы
+    // критерий конкретного вопроса реально влиял на балл.
+    let aiText = freeText
+    if (hasStructured) {
+      const qById = new Map(taskQuestions.map((q) => [q.id, q]))
+      const parts: string[] = []
+      for (const a of structured) {
+        const val = a.value.trim()
+        if (!val) continue
+        const q = qById.get(a.questionId)
+        const readable = val.split("|||").map((s) => s.trim()).filter(Boolean).join(", ")
+        let line = `${q?.text || "Вопрос"}: ${readable}`
+        const crit = (q?.aiCriteria || "").trim()
+        if (crit) line += `\n  (критерий оценки: ${crit})`
+        parts.push(line)
+      }
+      aiText = parts.join("\n\n")
+    }
+
     const [inserted] = await db.insert(testSubmissions).values({
       candidateId: candidate.id,
       demoId:      demo?.id ?? null,
@@ -146,7 +166,7 @@ export async function POST(
         submissionId: inserted.id,
         candidateId:  candidate.id,
         vacancyId:    candidate.vacancyId,
-        freeText,
+        freeText:     aiText,
         objective,
         settings:     (demo?.postDemoSettings as PostDemoSettings | null) ?? {},
       })

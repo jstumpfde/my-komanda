@@ -2003,6 +2003,11 @@ function TaskEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: 
           const isExpanded = expandedIdx === qi
           const hasOptions = q.answerType === "single" || q.answerType === "multiple" || q.answerType === "sort"
           const isText = q.answerType === "short" || q.answerType === "long" || q.answerType === "text"
+          // Вопрос с выбором, где есть вариант «Другое…» — он даёт свободный
+          // текст, поэтому тоже показываем поле «ИИ-проверка» (как у текстовых).
+          const hasOtherOption = (q.answerType === "single" || q.answerType === "multiple")
+            && (q.options ?? []).some((o) => /^друго/i.test((o ?? "").trim()))
+          const showAiCheck = isText || hasOtherOption
           const points = q.points ?? 0
           const typeInfo = qTypeInfo(q.answerType)
           return (
@@ -2079,7 +2084,7 @@ function TaskEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: 
                               updateQ(qi, {
                                 answerType: type,
                                 options: (type === "single" || type === "multiple" || type === "sort") && q.options.length === 0 ? ["", ""] : q.options,
-                                aiCriteria: type === "short" || type === "long" ? q.aiCriteria : undefined,
+                                aiCriteria: (type === "short" || type === "long" || type === "single" || type === "multiple") ? q.aiCriteria : undefined,
                               })
                               setTypePicker(null)
                             }}
@@ -2099,8 +2104,8 @@ function TaskEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: 
                     )}
                   </div>
 
-                  {/* ── Короткий/длинный текст → ИИ-проверка ── */}
-                  {isText && (
+                  {/* ── ИИ-проверка: текстовые вопросы + выбор с «Другое…» ── */}
+                  {showAiCheck && (
                     <div className="space-y-1.5">
                       <div className="flex items-center gap-2">
                         <span className="text-[11px] text-muted-foreground font-medium">🤖 ИИ-проверка</span>
