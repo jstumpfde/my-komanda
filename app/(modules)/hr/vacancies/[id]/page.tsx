@@ -2400,6 +2400,23 @@ export default function VacancyPage() {
                         {testEditorSaveStatus === "saving" ? "Сохранение..." : "✓ Сохранено"}
                       </span>
                     </div>
+                    {/* Предпросмотр теста глазами кандидата: превью-кандидат + /test/{token}.
+                        Открывает реальную страницу /test со встроенной отправкой и экраном
+                        «Спасибо» (отдельная кнопка/URL не нужны — отправка встроена). */}
+                    <Button
+                      variant="outline" size="sm" className="gap-1.5 text-xs h-8"
+                      onClick={async () => {
+                        try {
+                          await testEditorRef.current?.save()
+                          const res = await fetch(`/api/modules/hr/vacancies/${id}/preview-candidate`, { method: "POST" })
+                          const json = await res.json().catch(() => null)
+                          if (!res.ok || !json?.token) { toast.error("Не удалось открыть предпросмотр"); return }
+                          window.open(`${window.location.origin}/test/${json.token}?as=hr`, "_blank", "noopener,noreferrer")
+                        } catch { toast.error("Ошибка сети") }
+                      }}
+                    >
+                      <Eye className="w-3.5 h-3.5" />Предпросмотр
+                    </Button>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8">
