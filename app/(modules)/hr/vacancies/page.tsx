@@ -407,19 +407,11 @@ export default function VacanciesPage() {
   // ── Actions ──────────────────────────────────────────────────
   const handleDuplicate = useCallback(async (v: ApiVacancy) => {
     try {
-      const res = await fetch("/api/modules/hr/vacancies", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: `${v.title} (копия)`,
-          city: v.city,
-          format: v.format,
-          employment: v.employment,
-          category: v.category,
-          salary_min: v.salaryMin,
-          salary_max: v.salaryMax,
-        }),
-      })
+      // Тот же эндпоинт, что и на странице вакансии (page.tsx:1160) — копирует
+      // ВСЕ настройки (AI-бот, воронка, стоп-факторы, описание, анкета, демо).
+      // Раньше список слал POST /api/modules/hr/vacancies лишь с 6 базовыми
+      // полями → создавалась почти пустая копия (баг B1, 01.06.2026).
+      const res = await fetch(`/api/modules/hr/vacancies/${v.id}/duplicate`, { method: "POST" })
       if (!res.ok) throw new Error()
       toast.success("Вакансия дублирована")
       refetch()
