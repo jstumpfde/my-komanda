@@ -167,7 +167,11 @@ export function TestClient({ token }: { token: string }) {
         if (!r.ok) { setErrorMsg(json?.error || "Тест недоступен"); setStatus("error"); return }
         const d = (json?.data ?? json) as TestData
         setData(d)
-        setStatus(d.alreadySubmitted ? "done" : "ready")
+        // В предпросмотре (?as=hr) всегда показываем форму, даже если превью-
+        // кандидат уже «отправлял» — иначе HR не сможет повторно посмотреть
+        // страницу с вопросами (видел бы только экран «Спасибо»).
+        const isPreview = new URLSearchParams(window.location.search).get("as") === "hr"
+        setStatus(d.alreadySubmitted && !isPreview ? "done" : "ready")
       })
       .catch(() => { setErrorMsg("Ошибка сети"); setStatus("error") })
   }, [token])
@@ -283,7 +287,8 @@ export function TestClient({ token }: { token: string }) {
         <div className="min-h-screen" style={{ backgroundColor: bg, color: text }}>
           <div className="max-w-2xl mx-auto px-4 py-10 space-y-3">
             {data?.companyName && <p className="text-xs uppercase tracking-wider opacity-60">{data.companyName}</p>}
-            {thankYouLesson.title && <h1 className="text-2xl font-bold">{thankYouLesson.emoji ? `${thankYouLesson.emoji} ` : ""}{tpl(thankYouLesson.title)}</h1>}
+            {/* Заголовок-название урока НЕ показываем: это внутреннее имя
+                («Благодарю»), а текст благодарности HR пишет в блоке ниже. */}
             {((thankYouLesson.blocks ?? []) as Block[]).map((b, bi) => {
               const html = typeof b.content === "string" ? b.content : ""
               const tTitle = b.taskTitle?.trim()
@@ -324,7 +329,7 @@ export function TestClient({ token }: { token: string }) {
         {/* Уроки теста: текст/HTML контент + интерактивные task-блоки */}
         {formLessons.map((lesson, li) => (
           <section key={lesson.id ?? li} className="space-y-3">
-            {lesson.title && <h2 className="text-lg font-semibold">{lesson.emoji ? `${lesson.emoji} ` : ""}{tpl(lesson.title)}</h2>}
+            {lesson.title && <h2 className="text-lg font-semibold">{tpl(lesson.title)}</h2>}
             {((lesson.blocks ?? []) as Block[]).map((b, bi) => {
               if (b.type === "task" && Array.isArray(b.questions) && b.questions.length > 0) {
                 return (
