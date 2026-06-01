@@ -283,14 +283,14 @@ export function ListView({
   // -ml-3 на ★ и Кандидате схлопывает gap-4 до 4px edge-to-edge.
   if (selectionEnabled) cols.push("24px")               // ☐ — фикс (компактнее)
   cols.push("28px")                                     // ★ — фикс (w-7, ужато)
-  cols.push("minmax(255px, 2.2fr)")                     // Кандидат — вмещает полное ФИО, длиннее → «…»
+  cols.push("minmax(280px, 2.4fr)")                     // Кандидат — +~10% (вмещает полное ФИО, длиннее → «…»)
   if (showProgress) cols.push("minmax(80px, 1fr)")      // Демо — сегменты-«шаги», сужено ~15%
   if (showResumeScore) cols.push("60px")                // AI-резм. — AI-скор резюме (фикс, w-8 badge + место под header)
   if (showScore) cols.push("minmax(60px, 0.85fr)")      // AI-оцен.
   if (showRubricScore) cols.push("64px")                // Рубрика — новый shadow-движок
   if (showTestScore) cols.push("60px")                  // Тест — балл/«отп.»/«сдан» (фикс, как AI-резм)
   if (showSalary) cols.push("minmax(95px, 1.1fr)")      // Зарплата — ужата (длинных чисел редко > 7 симв)
-  if (showCity) cols.push("minmax(120px, 2fr)")         // Город
+  if (showCity) cols.push("minmax(102px, 1.7fr)")       // Город — −~15%
   if (showResponseDate) cols.push("minmax(70px, 0.7fr)") // Дата — "DD.MM.YY" укладывается в 70px
   cols.push("minmax(130px, 1.3fr)")                     // Статус — ужат с 140/1.8fr до 130/1.3fr
   if (showSource) cols.push("48px")                     // Источник — фикс (значки "hh"/"av" короткие)
