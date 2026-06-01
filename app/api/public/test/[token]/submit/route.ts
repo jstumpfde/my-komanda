@@ -103,18 +103,22 @@ export async function POST(
       ? scoreObjective(taskQuestions, answersByQuestion)
       : null
 
-    // Свободный текст для AI: legacy answerText ИЛИ конкатенация субъективных
-    // ответов (short/long/text) с текстами вопросов.
+    // Текст для AI: ВСЕ отвеченные вопросы (текстовые И выборные) с
+    // формулировками. Раньше в AI уходили только short/long/text — выборные
+    // (single/multiple/yesno/sort) AI не видел, и сигналы из вариантов (каналы
+    // продаж, типы заказчиков, ниша, РОП-потенциал и т.п.) не учитывались в
+    // оценке. Теперь включаем все ответы; множественный выбор хранится через
+    // "|||" (SEP в test-client) — нормализуем в ", " для читаемости промпта.
     let freeText = answerText
     if (hasStructured) {
       const qById = new Map(taskQuestions.map((q) => [q.id, q]))
       const parts: string[] = []
       for (const a of structured) {
+        const val = a.value.trim()
+        if (!val) continue
         const q = qById.get(a.questionId)
-        const t = q?.answerType ?? a.answerType
-        if ((t === "short" || t === "long" || t === "text") && a.value.trim()) {
-          parts.push(`${q?.text || "Вопрос"}: ${a.value.trim()}`)
-        }
+        const readable = val.split("|||").map((s) => s.trim()).filter(Boolean).join(", ")
+        parts.push(`${q?.text || "Вопрос"}: ${readable}`)
       }
       freeText = parts.join("\n\n")
     }
