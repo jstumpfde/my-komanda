@@ -1046,7 +1046,10 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
   // Fetch company description for advisor
   useEffect(() => {
     fetch("/api/companies").then(r => r.ok ? r.json() : null).then(json => {
-      const desc = json?.companyDescription || json?.description
+      // Строго один источник — только описание из «Настроек найма»
+      // (companies.company_description). Без фолбэка на общий description
+      // (авто-текст DaData), чтобы в вакансию не подтягивались левые тексты.
+      const desc = json?.companyDescription
       if (desc) {
         setCompanyDescription(desc)
         setData(prev => prev.companyDescription ? prev : { ...prev, companyDescription: desc })
