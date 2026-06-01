@@ -172,10 +172,22 @@ export function TestClient({ token }: { token: string }) {
       .catch(() => { setErrorMsg("Ошибка сети"); setStatus("error") })
   }, [token])
 
-  // Все вопросы task-блоков (с привязкой к blockId).
+  // Последний урок теста = экран «Спасибо», который показывается ПОСЛЕ отправки
+  // (если уроков больше одного). HR редактирует его как обычный урок. Форма
+  // (вопросы + кнопка отправки) — все уроки, КРОМЕ последнего. Если урок один —
+  // отдельного «спасибо»-экрана нет, показываем встроенный.
+  const { formLessons, thankYouLesson } = useMemo(() => {
+    const all = data?.lessons ?? []
+    if (all.length > 1) {
+      return { formLessons: all.slice(0, -1), thankYouLesson: all[all.length - 1] as Lesson }
+    }
+    return { formLessons: all, thankYouLesson: null as Lesson | null }
+  }, [data])
+
+  // Все вопросы task-блоков формы (с привязкой к blockId).
   const questions = useMemo(() => {
     const out: { blockId: string; q: Question }[] = []
-    for (const lesson of data?.lessons ?? []) {
+    for (const lesson of formLessons) {
       for (const b of (lesson.blocks ?? []) as Block[]) {
         if (b.type === "task" && Array.isArray(b.questions)) {
           for (const q of b.questions) out.push({ blockId: b.id, q })
@@ -183,19 +195,19 @@ export function TestClient({ token }: { token: string }) {
       }
     }
     return out
-  }, [data])
+  }, [formLessons])
 
   // Кастомная кнопка отправки: если HR добавил в конструктор блок «Кнопка»,
   // используем ЕГО как кнопку отправки (текст/цвет/стиль редактируются), а
   // встроенную дефолтную прячем. Так HR управляет видом кнопки.
   const hasCustomSubmitButton = useMemo(() => {
-    for (const lesson of data?.lessons ?? []) {
+    for (const lesson of formLessons) {
       for (const b of (lesson.blocks ?? []) as Block[]) {
         if (b.type === "button") return true
       }
     }
     return false
-  }, [data])
+  }, [formLessons])
 
   const hasStructured = questions.length > 0
 
@@ -242,6 +254,15 @@ export function TestClient({ token }: { token: string }) {
   const text = data?.brand?.text || "#0f172a"
   const primary = data?.brand?.primary || "#2563eb"
 
+  // Подстановка плейсхолдеров в тексты, заданные HR ({{Имя}}/{{name}},
+  // {{вакансия}}, {{компания}}). Без неё кандидат видел бы буквально «{{Имя}}».
+  const tplVars: Record<string, string> = {
+    name:    data?.candidateName || "",
+    vacancy: data?.vacancyTitle || "",
+    company: data?.companyName || "",
+  }
+  const tpl = (s: string | undefined | null) => renderTemplate(s ?? "", tplVars)
+
   if (status === "loading") {
     return <div className="min-h-screen flex items-center justify-center"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
   }
@@ -255,6 +276,31 @@ export function TestClient({ token }: { token: string }) {
   }
 
   if (status === "done") {
+    // Если HR задал финальный урок «Спасибо» — показываем ЕГО (контент из
+    // конструктора, с подстановкой имени). Иначе — встроенный экран.
+    if (thankYouLesson) {
+      return (
+        <div className="min-h-screen" style={{ backgroundColor: bg, color: text }}>
+          <div className="max-w-2xl mx-auto px-4 py-10 space-y-3">
+            {data?.companyName && <p className="text-xs uppercase tracking-wider opacity-60">{data.companyName}</p>}
+            {thankYouLesson.title && <h1 className="text-2xl font-bold">{thankYouLesson.emoji ? `${thankYouLesson.emoji} ` : ""}{tpl(thankYouLesson.title)}</h1>}
+            {((thankYouLesson.blocks ?? []) as Block[]).map((b, bi) => {
+              const html = typeof b.content === "string" ? b.content : ""
+              const tTitle = b.taskTitle?.trim()
+              const tDesc = b.taskDescription?.trim()
+              if (!html && !tTitle && !tDesc) return null
+              return (
+                <div key={b.id ?? bi} className="space-y-2">
+                  {html && <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: tpl(html) }} />}
+                  {tTitle && <p className="font-medium">{tpl(tTitle)}</p>}
+                  {tDesc && <p className="text-sm opacity-80 whitespace-pre-wrap">{tpl(tDesc)}</p>}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )
+    }
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center gap-3" style={{ backgroundColor: bg, color: text }}>
         <CheckCircle2 className="w-12 h-12" style={{ color: primary }} />
@@ -263,15 +309,6 @@ export function TestClient({ token }: { token: string }) {
       </div>
     )
   }
-
-  // Подстановка плейсхолдеров в тексты, заданные HR ({{Имя}}/{{name}},
-  // {{вакансия}}, {{компания}}). Без неё кандидат видел бы буквально «{{Имя}}».
-  const tplVars: Record<string, string> = {
-    name:    data?.candidateName || "",
-    vacancy: data?.vacancyTitle || "",
-    company: data?.companyName || "",
-  }
-  const tpl = (s: string | undefined | null) => renderTemplate(s ?? "", tplVars)
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: bg, color: text }}>
@@ -285,7 +322,7 @@ export function TestClient({ token }: { token: string }) {
         )}
 
         {/* Уроки теста: текст/HTML контент + интерактивные task-блоки */}
-        {data?.lessons.map((lesson, li) => (
+        {formLessons.map((lesson, li) => (
           <section key={lesson.id ?? li} className="space-y-3">
             {lesson.title && <h2 className="text-lg font-semibold">{lesson.emoji ? `${lesson.emoji} ` : ""}{tpl(lesson.title)}</h2>}
             {((lesson.blocks ?? []) as Block[]).map((b, bi) => {
@@ -318,19 +355,23 @@ export function TestClient({ token }: { token: string }) {
                 const label = b.buttonText?.trim() || "Отправить"
                 const isOutline = b.buttonVariant === "outline"
                 const color = b.buttonColor || primary
+                const align = b.buttonAlign || "left"
+                const justify = align === "center" ? "justify-center" : align === "right" ? "justify-end" : "justify-start"
                 return (
                   <div key={b.id ?? bi} className="pt-2 space-y-1">
-                    <button
-                      onClick={submit}
-                      disabled={submitting || !canSubmit}
-                      className="inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
-                      style={isOutline ? { border: `1px solid ${color}`, color } : { backgroundColor: color, color: "#fff" }}
-                    >
-                      {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                      {label}
-                    </button>
+                    <div className={`flex ${justify}`}>
+                      <button
+                        onClick={submit}
+                        disabled={submitting || !canSubmit}
+                        className="inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
+                        style={isOutline ? { border: `1px solid ${color}`, color } : { backgroundColor: color, color: "#fff" }}
+                      >
+                        {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                        {label}
+                      </button>
+                    </div>
                     {hasStructured && requiredMissing && (
-                      <p className="text-xs opacity-60">Ответьте на обязательные вопросы (*)</p>
+                      <p className={`text-xs opacity-60 flex ${justify}`}>Ответьте на обязательные вопросы (*)</p>
                     )}
                   </div>
                 )

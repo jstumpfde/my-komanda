@@ -68,6 +68,7 @@ export interface Block {
   buttonColor?: string
   buttonIconBefore?: string
   buttonIconAfter?: string
+  buttonAlign?: "left" | "center" | "right"  // расположение кнопки на странице
   taskTitle: string        // заголовок задания (новое)
   taskDescription: string  // вступительный текст
   questions: Question[]

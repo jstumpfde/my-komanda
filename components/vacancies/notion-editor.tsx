@@ -2757,6 +2757,25 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
             <Button variant={!isPrimary ? "default" : "outline"} size="sm" className="text-xs" onClick={() => onUpdate({ buttonVariant: "outline" })}>Контурная</Button>
           </div>
 
+          {/* Расположение кнопки на странице */}
+          <div>
+            <p className="text-xs text-muted-foreground mb-1.5">Расположение</p>
+            <div className="flex items-center gap-1.5">
+              {([
+                { v: "left",   l: "Слева" },
+                { v: "center", l: "По центру" },
+                { v: "right",  l: "Справа" },
+              ] as const).map(({ v, l }) => (
+                <Button
+                  key={v}
+                  variant={(block.buttonAlign || "left") === v ? "default" : "outline"}
+                  size="sm" className="text-xs"
+                  onClick={() => onUpdate({ buttonAlign: v })}
+                >{l}</Button>
+              ))}
+            </div>
+          </div>
+
           {/* Иконка ДО текста */}
           <div>
             <p className="text-xs text-muted-foreground mb-1.5">Иконка слева</p>
