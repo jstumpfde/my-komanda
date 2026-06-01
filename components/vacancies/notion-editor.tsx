@@ -2239,7 +2239,9 @@ function TaskEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: 
                         onChange={(e) => updateQ(qi, { aiCriteria: e.target.value })}
                         placeholder={hasOptions ? "Правило для ИИ: напр. «подходит всё, что связано с промышленным/военным строительством, кроме малоэтажного»" : "Критерий для ИИ: например «Кандидат должен упомянуть опыт продаж более 2 лет»"}
                       />
-                      {q.aiCriteria && (
+                      {/* Баллы здесь — только для ТЕКСТОВЫХ вопросов. У выборных
+                          свой блок баллов ниже (!isText), иначе дублировалось. */}
+                      {isText && q.aiCriteria && (
                         <div className="flex items-center gap-2">
                           <span className="text-xs text-muted-foreground">Баллы:</span>
                           <input type="number" min={0} max={999}
