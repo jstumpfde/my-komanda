@@ -16,7 +16,7 @@ export async function GET(
     const { token } = await params
 
     const [candidate] = await db
-      .select({ id: candidates.id, name: candidates.name, vacancyId: candidates.vacancyId })
+      .select({ id: candidates.id, name: candidates.name, vacancyId: candidates.vacancyId, source: candidates.source })
       .from(candidates)
       .where(isShortId(token) ? eq(candidates.shortId, token) : eq(candidates.token, token))
       .limit(1)
@@ -47,13 +47,26 @@ export async function GET(
       .limit(1)
     if (!demo) return apiError("Тест не найден", 404)
 
-    // Уже отправлял? — клиент покажет экран «Спасибо».
+    // Уже отправлял? — клиент покажет экран «Спасибо» (только при submitted_at;
+    // черновик-автосохранение НЕ считается отправкой).
     const [existing] = await db
       .select({ id: testSubmissions.id, submittedAt: testSubmissions.submittedAt })
       .from(testSubmissions)
       .where(eq(testSubmissions.candidateId, candidate.id))
       .orderBy(desc(testSubmissions.submittedAt))
       .limit(1)
+
+    // Отметка «перешёл»: при открытии теста реальным кандидатом (не превью HR)
+    // заводим пустой черновик, если записи ещё нет — чтобы в колонке «Тест»
+    // появилось «пер.» ещё до первого ответа.
+    if (!existing && candidate.source !== "preview") {
+      await db.insert(testSubmissions).values({
+        candidateId: candidate.id,
+        demoId:      demo.id,
+        answersJson: { answers: [], objective: null },
+        submittedAt: null,
+      }).onConflictDoNothing()
+    }
 
     const pds = (demo.postDemoSettings && typeof demo.postDemoSettings === "object")
       ? demo.postDemoSettings as Record<string, unknown> : {}
@@ -73,7 +86,7 @@ export async function GET(
         deadlineDays: typeof pds.testDeadlineDays === "number" ? pds.testDeadlineDays : null,
         responseFormat: pds.testResponseFormat === "file" || pds.testResponseFormat === "both" ? pds.testResponseFormat : "text",
       },
-      alreadySubmitted: Boolean(existing),
+      alreadySubmitted: Boolean(existing?.submittedAt),
     })
   } catch (err) {
     console.error("[public/test GET]", err)

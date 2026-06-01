@@ -303,6 +303,33 @@ export function TestClient({ token }: { token: string }) {
     }
   }
 
+  // Автосохранение черновика: фиксируем ответы у себя по ходу заполнения,
+  // даже если кандидат не нажал «Отправить». Дебаунс ~0.9с — пишем после
+  // паузы в наборе. Превью HR (?as=hr) не сохраняем. Срабатывает только когда
+  // есть хотя бы один ответ (отметку «перешёл» ставит GET при открытии).
+  useEffect(() => {
+    if (status !== "ready" || !anyAnswered) return
+    if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("as") === "hr") return
+    const payload = hasStructured
+      ? {
+          structuredAnswers: questions.map(({ blockId, q }) => ({
+            blockId,
+            questionId: q.id,
+            answerType: q.answerType,
+            value: answers[q.id] ?? "",
+          })),
+        }
+      : { answerText: answer }
+    const t = setTimeout(() => {
+      fetch(`/api/public/test/${token}/answer`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      }).catch(() => { /* черновик не критичен — тихо игнорируем сбой сети */ })
+    }, 900)
+    return () => clearTimeout(t)
+  }, [answers, answer, status, anyAnswered, hasStructured, questions, token])
+
   const bg = data?.brand?.bg || "#f8fafc"
   const text = data?.brand?.text || "#0f172a"
   const primary = data?.brand?.primary || "#2563eb"

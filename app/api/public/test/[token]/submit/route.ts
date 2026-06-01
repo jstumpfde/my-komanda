@@ -84,13 +84,15 @@ export async function POST(
       .orderBy(desc(demos.updatedAt))
       .limit(1)
 
-    // Дедуп: если уже отправлял — не плодим записи.
+    // Дедуп: если уже ОТПРАВЛЯЛ (submitted_at задан) — не плодим записи.
+    // Черновик (submitted_at = null, автосохранение по ходу) — дозаполняем ниже.
     const [existing] = await db
-      .select({ id: testSubmissions.id })
+      .select({ id: testSubmissions.id, submittedAt: testSubmissions.submittedAt })
       .from(testSubmissions)
       .where(eq(testSubmissions.candidateId, candidate.id))
+      .orderBy(desc(testSubmissions.submittedAt))
       .limit(1)
-    if (existing) return apiSuccess({ ok: true, alreadySubmitted: true })
+    if (existing?.submittedAt) return apiSuccess({ ok: true, alreadySubmitted: true })
 
     // ─── Объективный скоринг в КОДЕ (синхронно, дёшево) ────────────────────
     const lessons = Array.isArray(demo?.lessonsJson) ? (demo.lessonsJson as any[]) : []
@@ -151,9 +153,7 @@ export async function POST(
       aiText = parts.join("\n\n")
     }
 
-    const [inserted] = await db.insert(testSubmissions).values({
-      candidateId: candidate.id,
-      demoId:      demo?.id ?? null,
+    const finalValues = {
       // answerText сохраняем для обратной совместимости с карточкой HR
       // (показывает консолидированный текст). Если структурированный тест без
       // текстовых ответов — null.
@@ -161,7 +161,22 @@ export async function POST(
       answersJson: hasStructured ? { answers: structured, objective } : null,
       // Объективный балл проставляем сразу (если он есть). AI может дополнить.
       aiScore:     objective && objective.maxPoints > 0 ? objective.score : null,
-    }).returning({ id: testSubmissions.id })
+      // Фиксируем факт отправки — отличает финал от черновика-автосохранения.
+      submittedAt: new Date(),
+    }
+    // Дозаполняем черновик (автосохранение по ходу) ИЛИ создаём новую запись.
+    let submissionId: string | undefined
+    if (existing) {
+      await db.update(testSubmissions).set(finalValues).where(eq(testSubmissions.id, existing.id))
+      submissionId = existing.id
+    } else {
+      const [inserted] = await db.insert(testSubmissions).values({
+        candidateId: candidate.id,
+        demoId:      demo?.id ?? null,
+        ...finalValues,
+      }).returning({ id: testSubmissions.id })
+      submissionId = inserted?.id
+    }
 
     // Базовая стадия — test_task_done. В auto-режиме скоринг переписывает её.
     await db.update(candidates)
@@ -169,9 +184,9 @@ export async function POST(
       .where(eq(candidates.id, candidate.id))
 
     // Fire-and-forget скоринг (стадия/AI-балл дозаполняются фоном).
-    if (inserted?.id) {
+    if (submissionId) {
       void processTestScoring({
-        submissionId: inserted.id,
+        submissionId: submissionId,
         candidateId:  candidate.id,
         vacancyId:    candidate.vacancyId,
         freeText:     aiText,

@@ -738,25 +738,32 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Балл теста для колонки «Тест»: последний (по submittedAt) test_submission
-    // на кандидата. testScore — число (AI-оценка / автопроверка) либо null;
-    // hasSubmission=true означает «тест сдан» (даже если ещё не оценён).
-    const testByCandidateId = new Map<string, { score: number | null; hasSubmission: boolean }>()
+    // Состояние теста для колонки «Тест»: последняя запись test_submission на
+    // кандидата. score — число (AI/автопроверка) либо null; answersCount —
+    // сколько вопросов реально отвечено (черновик = автосохранение по ходу);
+    // submitted — нажал ли «Отправить» (submitted_at задан).
+    const testByCandidateId = new Map<string, { score: number | null; answersCount: number; submitted: boolean }>()
     if (candidateIds.length > 0) {
       const subRows = await db
         .select({
           candidateId: testSubmissions.candidateId,
           aiScore: testSubmissions.aiScore,
           answersJson: testSubmissions.answersJson,
+          submittedAt: testSubmissions.submittedAt,
         })
         .from(testSubmissions)
         .where(inArray(testSubmissions.candidateId, candidateIds))
         .orderBy(desc(testSubmissions.submittedAt))
       for (const s of subRows) {
         if (!s.candidateId || testByCandidateId.has(s.candidateId)) continue
+        const answers = (s.answersJson as { answers?: { value?: string }[] } | null)?.answers
+        const answersCount = Array.isArray(answers)
+          ? answers.filter((a) => (a?.value ?? "").trim().length > 0).length
+          : 0
         testByCandidateId.set(s.candidateId, {
           score: testScoreOf(s.aiScore, s.answersJson),
-          hasSubmission: true,
+          answersCount,
+          submitted: s.submittedAt != null,
         })
       }
     }
@@ -827,13 +834,21 @@ export async function GET(req: NextRequest) {
       // Нужно для клиентского фильтра по возрасту, который читает c.birthDate.
       const effectiveBirthDate = r.birthDate ?? extractBirthDateFromAnketa(r.anketaAnswers)
 
-      // Колонка «Тест»: 'done' (есть submission → балл или «сдан»),
-      // 'sent' (тест отправлен/поставлен в очередь, ответа ещё нет) либо null.
-      // «отп.» — если тест в очереди (follow_up branch=test_invite) ИЛИ стадия test_task_*.
+      // Колонка «Тест» — лесенка состояний (балл показывается всегда, когда есть):
+      //   submitted   — нажал «Отправить» → «сдан» (если балла ещё нет)
+      //   in_progress — заполняет (черновик с ответами) → «пишет»
+      //   opened      — открыл тест, ещё не отвечал → «пер.»
+      //   sent        — тест отправлен/в очереди → «отп.»
+      //   null        — теста не было
       const test = testByCandidateId.get(r.id)
-      const testStatus: "done" | "sent" | null = test
-        ? "done"
-        : (testInvitedCandidateIds.has(r.id) || TEST_SENT_STAGES.has(r.stage ?? "")) ? "sent" : null
+      let testStatus: "submitted" | "in_progress" | "opened" | "sent" | null
+      if (test) {
+        testStatus = test.submitted ? "submitted" : test.answersCount > 0 ? "in_progress" : "opened"
+      } else if (testInvitedCandidateIds.has(r.id) || TEST_SENT_STAGES.has(r.stage ?? "")) {
+        testStatus = "sent"
+      } else {
+        testStatus = null
+      }
 
       return {
         ...r,

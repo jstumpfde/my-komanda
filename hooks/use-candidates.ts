@@ -69,9 +69,10 @@ export interface ApiCandidate {
   demoCompletedBlocks?: number
   progressPercent?: number | null
   // Колонка «Тест»: балл последнего test_submission (AI-оценка / автопроверка)
-  // и статус — 'done' (сдан), 'sent' (тест отправлен, ответа нет), null.
+  // и статус-лесенка: submitted (сдан) / in_progress (пишет) / opened (перешёл) /
+  // sent (отправлен) / null.
   testScore?: number | null
-  testStatus?: "done" | "sent" | null
+  testStatus?: "submitted" | "in_progress" | "opened" | "sent" | null
 }
 
 // ─── useCandidates ────────────────────────────────────────────────────────────
