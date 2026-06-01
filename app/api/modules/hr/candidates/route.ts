@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server"
 import { eq, ne, and, inArray, asc, desc, or, isNull, sql, type SQL } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { candidates, vacancies, demos, hhResponses, testSubmissions } from "@/lib/db/schema"
+import { candidates, vacancies, demos, hhResponses, testSubmissions, followUpMessages } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { generateCandidateToken } from "@/lib/candidate-tokens"
 import { generateCandidateShortId } from "@/lib/short-id"
@@ -761,6 +761,21 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // Кому тест отправлен/поставлен в очередь — для статуса «отп.» в колонке.
+    // Сигнал надёжнее, чем только стадия: рассылка идёт через follow_up_messages
+    // (branch='test_invite'), а стадия test_task_sent ставится не во всех путях.
+    const testInvitedCandidateIds = new Set<string>()
+    if (candidateIds.length > 0) {
+      const invRows = await db
+        .select({ candidateId: followUpMessages.candidateId })
+        .from(followUpMessages)
+        .where(and(
+          inArray(followUpMessages.candidateId, candidateIds),
+          eq(followUpMessages.branch, "test_invite"),
+        ))
+      for (const r of invRows) if (r.candidateId) testInvitedCandidateIds.add(r.candidateId)
+    }
+
     // Подгружаем структуру курса для расчёта прогресса по СТРАНИЦАМ
     // (см. ту же логику в ветке без vacancyId выше).
     let demoTotalBlocks = 0
@@ -813,11 +828,12 @@ export async function GET(req: NextRequest) {
       const effectiveBirthDate = r.birthDate ?? extractBirthDateFromAnketa(r.anketaAnswers)
 
       // Колонка «Тест»: 'done' (есть submission → балл или «сдан»),
-      // 'sent' (тест отправлен, ответа ещё нет) либо null.
+      // 'sent' (тест отправлен/поставлен в очередь, ответа ещё нет) либо null.
+      // «отп.» — если тест в очереди (follow_up branch=test_invite) ИЛИ стадия test_task_*.
       const test = testByCandidateId.get(r.id)
       const testStatus: "done" | "sent" | null = test
         ? "done"
-        : TEST_SENT_STAGES.has(r.stage ?? "") ? "sent" : null
+        : (testInvitedCandidateIds.has(r.id) || TEST_SENT_STAGES.has(r.stage ?? "")) ? "sent" : null
 
       return {
         ...r,
