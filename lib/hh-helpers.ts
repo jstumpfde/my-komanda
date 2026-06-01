@@ -53,6 +53,29 @@ export async function getValidToken(companyId: string): Promise<{ accessToken: s
     // компании вставал до ручного переподключения.
     const isInvalidGrant = /\b400\b/.test(msg) && /invalid_grant/i.test(msg)
     if (isInvalidGrant) {
+      // ГОНКА РЕФРЕША: hh ротирует refresh_token — после первого использования
+      // старый становится невалидным. Если cron обрабатывает компании
+      // параллельно (Promise.all) и два потока почти одновременно дёрнули
+      // рефреш одним и тем же refresh_token — ПЕРВЫЙ успешно обновит токен
+      // (новый срок в БД), ВТОРОЙ получит invalid_grant на уже отозванном
+      // токене. Это НЕ повод деактивировать: токен в БД уже свежий.
+      // Перечитываем интеграцию: если её токен обновился (срок ушёл в будущее
+      // или accessToken сменился) — это гонка, отдаём свежий токен.
+      const [fresh] = await db
+        .select()
+        .from(hhIntegrations)
+        .where(eq(hhIntegrations.id, integration.id))
+        .limit(1)
+      if (fresh && fresh.isActive) {
+        const freshExpires = new Date(fresh.tokenExpiresAt).getTime()
+        const refreshedByOther =
+          freshExpires - bufferMs > Date.now() || fresh.accessToken !== integration.accessToken
+        if (refreshedByOther) {
+          console.warn(`[hh-helpers] integration ${integration.id}: invalid_grant из-за гонки рефреша, токен уже обновлён другим потоком — НЕ деактивируем`)
+          return { accessToken: fresh.accessToken, integration: fresh }
+        }
+      }
+      // Реально мёртвый refresh_token — нужна ручная переподключка.
       await db
         .update(hhIntegrations)
         .set({ isActive: false, updatedAt: new Date() })
