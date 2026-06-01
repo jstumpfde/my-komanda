@@ -5,7 +5,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
@@ -537,11 +536,6 @@ export default function CompanyProfilePage() {
               <div className="space-y-1"><Label className="text-sm flex items-center gap-1.5"><Mail className="w-3.5 h-3.5 text-muted-foreground" /> Email</Label><Input type="email" value={email} {...field("email", setEmail)} placeholder="info@company.ru" className={cn(ph, errors.email && "border-red-400 focus-visible:ring-red-400")} /><FieldError error={errors.email} /></div>
               <div className="space-y-1"><Label className="text-sm flex items-center gap-1.5"><Phone className="w-3.5 h-3.5 text-muted-foreground" /> Телефон</Label><Input value={phone} {...field("phone", setPhone)} placeholder="+7 (999) 123-45-67" className={cn(ph, errors.phone && "border-red-400 focus-visible:ring-red-400")} /><FieldError error={errors.phone} /></div>
               <div className="space-y-1"><Label className="text-sm flex items-center gap-1.5"><Globe className="w-3.5 h-3.5 text-muted-foreground" /> Сайт</Label><Input value={website} onChange={e => { setWebsite(e.target.value); autoSave("website", e.target.value) }} onBlur={() => { const normalized = normalizeWebsite(website); setWebsite(normalized); saveNow("website", normalized) }} placeholder="company24.pro" className={cn(ph, errors.website && "border-red-400 focus-visible:ring-red-400")} /><FieldError error={errors.website} /></div>
-              <div className="space-y-1 sm:col-span-2">
-                <Label className="text-sm">Описание компании</Label>
-                <Textarea value={companyDescription} {...field("company_description", setCompanyDescription)} placeholder="Кратко о компании для кандидатов: чем занимаетесь, чем интересны соискателю…" rows={5} className={ph} />
-                <p className="text-xs text-muted-foreground">Показывается кандидатам в вакансии (блок «О компании»). В вакансии кнопка «Подтянуть из настроек» берёт текст отсюда.</p>
-              </div>
             </div>
           </CardContent>
         </Card>

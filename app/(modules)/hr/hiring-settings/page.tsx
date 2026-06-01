@@ -150,6 +150,34 @@ export default function HiringSettingsPage() {
   const [timezone, setTimezone] = useState("Europe/Moscow")
   const [savingSchedule, setSavingSchedule] = useState(false)
 
+  // ── Описание компании (companies.company_description) ──
+  // Показывается кандидатам в вакансии (блок «О компании»). Кнопка «Подтянуть
+  // из настроек» в анкете вакансии берёт текст отсюда (GET /api/companies).
+  const [companyDescription, setCompanyDescription] = useState("")
+  const [savingCompanyDesc, setSavingCompanyDesc] = useState(false)
+  useEffect(() => {
+    fetch("/api/companies")
+      .then(r => r.ok ? r.json() : null)
+      .then(j => { if (j && typeof j.companyDescription === "string") setCompanyDescription(j.companyDescription) })
+      .catch(() => {})
+  }, [])
+  const saveCompanyDescription = async () => {
+    setSavingCompanyDesc(true)
+    try {
+      const res = await fetch("/api/companies", {
+        method:  "PUT",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ company_description: companyDescription }),
+      })
+      if (!res.ok) throw new Error("save_failed")
+      toast.success("Описание компании сохранено")
+    } catch {
+      toast.error("Не удалось сохранить")
+    } finally {
+      setSavingCompanyDesc(false)
+    }
+  }
+
   // ── General: company selector toggle ──
   const [showCompanySelector, setShowCompanySelector] = useState(false)
   useEffect(() => {
@@ -603,6 +631,31 @@ export default function HiringSettingsPage() {
                     <p className="text-xs text-muted-foreground mt-0.5">Показывать секцию «Компания» для найма под клиентов (аутсорсинг/рекрутинг)</p>
                   </div>
                   <Switch checked={showCompanySelector} onCheckedChange={toggleCompanySelector} />
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Описание компании — показывается кандидатам в вакансии. */}
+            <Card className="mb-5 max-w-3xl">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-medium">Описание компании</CardTitle>
+                <CardDescription>
+                  Показывается кандидатам в вакансии (блок «О компании»). В анкете вакансии
+                  кнопка «Подтянуть из настроек» берёт текст отсюда.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <Textarea
+                  value={companyDescription}
+                  onChange={e => setCompanyDescription(e.target.value)}
+                  placeholder="Кратко о компании для кандидатов: чем занимаетесь, чем интересны соискателю…"
+                  rows={5}
+                  className="text-sm bg-[var(--input-bg)]"
+                />
+                <div className="flex justify-end">
+                  <Button size="sm" className="h-8 text-xs gap-1.5" onClick={saveCompanyDescription} disabled={savingCompanyDesc}>
+                    <Save className="size-3.5" />Сохранить
+                  </Button>
                 </div>
               </CardContent>
             </Card>
