@@ -178,9 +178,13 @@ export async function POST(
       submissionId = inserted?.id
     }
 
-    // Статус (стадию) кандидата НЕ трогаем — факт сдачи фиксируется в
-    // test_submissions.submitted_at, а в списке HR это колонка «Тест» (сдан/балл).
-    // Fire-and-forget скоринг (AI-балл дозаполняется фоном).
+    // Базовая стадия — test_task_done (колонка «Статус» → «Задание сдано»).
+    // В auto-режиме скоринг переписывает её на test_passed/test_failed.
+    await db.update(candidates)
+      .set({ stage: "test_task_done", updatedAt: new Date() })
+      .where(eq(candidates.id, candidate.id))
+
+    // Fire-and-forget скоринг (стадия/AI-балл дозаполняются фоном).
     if (submissionId) {
       void processTestScoring({
         submissionId: submissionId,
@@ -263,10 +267,14 @@ async function processTestScoring(args: {
 
   if (finalScore == null) return // нечего оценивать автоматически
 
-  // auto: Статус (стадию) НЕ меняем — результат теста виден в колонке «Тест»
-  // (балл). Сообщение после теста при прохождении — оставляем.
+  // auto: стадия по порогу (колонка «Статус» → прошёл/не прошёл) + сообщение
+  // после теста только при прохождении.
   if (checkMode === "auto") {
     const passed = finalScore >= passingScore
+    await db.update(candidates)
+      .set({ stage: passed ? "test_passed" : "test_failed", updatedAt: new Date() })
+      .where(eq(candidates.id, candidateId))
+
     if (passed && settings.testAfterMessage && settings.testAfterMessage.trim().length > 0) {
       await scheduleTestAfterMessage({
         candidateId,
