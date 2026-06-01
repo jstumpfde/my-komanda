@@ -1012,6 +1012,8 @@ function CategoryField({ value, onChange }: { value: string; onChange: (v: strin
 // своего хедера — без дублирования логики save() внутри AnketaTab).
 export interface AnketaTabHandle {
   save: () => Promise<void>
+  /** Открыть предпросмотр описания вакансии на весь экран (верхняя кнопка тулбара). */
+  openPreview: () => void
 }
 
 interface AnketaTabProps {
@@ -1035,6 +1037,9 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
   })
   const [saving, setSaving] = useState(false)
   const [previewOpen, setPreviewOpen] = useState(false)
+  // Полноэкранный режим предпросмотра (верхняя кнопка тулбара). Нижняя кнопка
+  // «Предпросмотр вакансии» открывает то же, но обычным окошком.
+  const [previewFullscreen, setPreviewFullscreen] = useState(false)
   const [advisorFocusedField, setAdvisorFocusedField] = useState("")
   const [aiLoading, setAiLoading] = useState(false)
   const [aiLoadingStep, setAiLoadingStep] = useState(0)
@@ -1202,7 +1207,10 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
   // registerHandle — стабильная ссылка из useCallback в page.tsx; не вызовет
   // лишних re-register'ов.
   useEffect(() => {
-    registerHandle?.({ save })
+    registerHandle?.({
+      save,
+      openPreview: () => { setPreviewFullscreen(true); setPreviewOpen(true) },
+    })
   }, [registerHandle, save])
 
   // ── AI Refill ──
@@ -2359,7 +2367,7 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
           {aiLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
           Перезаполнить через AI
         </Button>
-        <Button variant="outline" size="sm" className="gap-1.5 h-9 text-xs" onClick={() => setPreviewOpen(true)}>
+        <Button variant="outline" size="sm" className="gap-1.5 h-9 text-xs" onClick={() => { setPreviewFullscreen(false); setPreviewOpen(true) }}>
           <Eye className="w-3.5 h-3.5" />
           Предпросмотр вакансии
         </Button>
@@ -2376,8 +2384,10 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
 
       {/* Preview modal */}
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-        <DialogContent className="max-w-none w-screen h-screen sm:max-w-none rounded-none overflow-y-auto bg-white dark:bg-gray-950 p-6 sm:p-10">
-          <div className="mx-auto w-full max-w-3xl">
+        <DialogContent className={previewFullscreen
+          ? "max-w-none w-screen h-screen sm:max-w-none rounded-none overflow-y-auto bg-white dark:bg-gray-950 p-6 sm:p-10"
+          : "sm:max-w-2xl max-h-[80vh] overflow-y-auto bg-white dark:bg-gray-950 p-6"}>
+          <div className={previewFullscreen ? "mx-auto w-full max-w-3xl" : "w-full"}>
           <DialogHeader>
             <div className="flex items-center justify-between gap-3">
               <DialogTitle className="text-lg">{data.vacancyTitle || "Без названия"}</DialogTitle>

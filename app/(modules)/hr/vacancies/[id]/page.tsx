@@ -2308,20 +2308,13 @@ export default function VacancyPage() {
                         : <Check className="w-3.5 h-3.5" />}
                       Сохранить
                     </Button>
-                    {/* Предпросмотр анкеты глазами кандидата (/demo). Заменил
-                        глаз «Открыть как директор» у названия — теперь предпросмотр
-                        per-tab, как у Демонстрации и Теста. */}
+                    {/* Предпросмотр описания вакансии на весь экран (тот же
+                        контент, что в нижней кнопке «Предпросмотр вакансии», но
+                        полноэкранно). Открывает диалог внутри AnketaTab. */}
                     <Button
                       variant="outline" size="sm" className="gap-1.5 text-xs h-8"
-                      onClick={async () => {
-                        try {
-                          await anketaHandle?.save()
-                          const res = await fetch(`/api/modules/hr/vacancies/${id}/preview-candidate`, { method: "POST" })
-                          const json = await res.json().catch(() => null)
-                          if (!res.ok || !json?.token) { toast.error("Не удалось открыть предпросмотр"); return }
-                          window.open(`${window.location.origin}/demo/${json.token}?as=hr`, "_blank", "noopener,noreferrer")
-                        } catch { toast.error("Ошибка сети") }
-                      }}
+                      onClick={() => anketaHandle?.openPreview()}
+                      disabled={!anketaHandle}
                     >
                       <Eye className="w-3.5 h-3.5" />Предпросмотр
                     </Button>
