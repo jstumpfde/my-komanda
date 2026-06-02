@@ -8,7 +8,7 @@ import { vacancies } from "@/lib/db/schema"
 import { requireCompany, apiError } from "@/lib/api-helpers"
 import { buildComparison, type CompareAns } from "@/lib/compare/build-comparison"
 
-const MAX_COMPARE = 12
+const MAX_COMPARE = 50
 
 function cell(a?: CompareAns): string {
   if (!a) return ""

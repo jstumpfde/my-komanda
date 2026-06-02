@@ -8,7 +8,7 @@ import { vacancies } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { buildComparison } from "@/lib/compare/build-comparison"
 
-const MAX_COMPARE = 12
+const MAX_COMPARE = 50
 
 export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {

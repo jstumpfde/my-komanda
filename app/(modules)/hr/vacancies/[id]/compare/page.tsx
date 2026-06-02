@@ -321,14 +321,17 @@ function CompareInner() {
                           Вопрос
                         </th>
                         {candidates.map((c) => (
-                          <th key={c.id} className="text-left font-medium p-2.5 align-bottom w-[260px] min-w-[260px] border-l">
-                            <div className="flex items-center gap-1.5">
-                              <div className="truncate max-w-[200px]" title={nameOf(c)}>{nameOf(c)}</div>
-                              {c.stage === "rejected" && <Badge variant="outline" className="text-[10px] h-4 px-1 text-destructive border-destructive/40">отказ</Badge>}
-                              {c.stage === "interview" && <Badge variant="outline" className="text-[10px] h-4 px-1 text-emerald-600 border-emerald-300">интервью</Badge>}
+                          <th key={c.id} className="text-left font-medium p-2.5 align-top w-[260px] min-w-[260px] border-l h-full">
+                            <div className="flex flex-col h-full">
+                              <div className="flex items-center gap-1.5">
+                                <div className="truncate max-w-[200px]" title={nameOf(c)}>{nameOf(c)}</div>
+                                {c.stage === "rejected" && <Badge variant="outline" className="text-[10px] h-4 px-1 text-destructive border-destructive/40">отказ</Badge>}
+                                {c.stage === "interview" && <Badge variant="outline" className="text-[10px] h-4 px-1 text-emerald-600 border-emerald-300">интервью</Badge>}
+                              </div>
+                              <ScoreLine c={c} />
+                              {/* Иконки прижаты к низу — ряд действий ровный во всех колонках */}
+                              <div className="mt-auto"><CandidateActions c={c} /></div>
                             </div>
-                            <ScoreLine c={c} />
-                            <CandidateActions c={c} />
                           </th>
                         ))}
                       </tr>

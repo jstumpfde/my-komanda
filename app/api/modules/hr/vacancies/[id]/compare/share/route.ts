@@ -6,7 +6,7 @@ import { db } from "@/lib/db"
 import { vacancies, compareShares } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 
-const MAX_COMPARE = 12
+const MAX_COMPARE = 50
 const TTL_MS = 7 * 24 * 60 * 60 * 1000
 
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
