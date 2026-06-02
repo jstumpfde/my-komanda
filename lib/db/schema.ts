@@ -896,6 +896,10 @@ export const candidates = pgTable("candidates", {
   // drizzle/0158 — для будущего Telegram-канала чат-бота (связка с чатом кандидата)
   telegramChatId:   text("telegram_chat_id"),
   telegramUsername: text("telegram_username"),
+  // drizzle/0162 — мягкое удаление («Корзина»). NOT NULL = в корзине, скрыт из
+  // списков/счётчиков; восстановление или удаление навсегда; авто-очистка по
+  // companies.trash_retention_days.
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 })

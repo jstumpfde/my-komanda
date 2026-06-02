@@ -17,7 +17,7 @@ import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { db } from "@/lib/db"
 import { candidates, vacancies, hhResponses, userVacancyViews } from "@/lib/db/schema"
-import { and, count, eq, inArray, isNotNull, gt, sql } from "drizzle-orm"
+import { and, count, eq, inArray, isNotNull, isNull, gt, sql } from "drizzle-orm"
 
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   const session = await auth()
@@ -71,13 +71,18 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     [pendingRow],
     [freshRow],
   ] = await Promise.all([
-    db.select({ c: count() }).from(candidates).where(eq(candidates.vacancyId, vacancyId)),
     db.select({ c: count() }).from(candidates).where(and(
       eq(candidates.vacancyId, vacancyId),
+      isNull(candidates.deletedAt),
+    )),
+    db.select({ c: count() }).from(candidates).where(and(
+      eq(candidates.vacancyId, vacancyId),
+      isNull(candidates.deletedAt),
       isNotNull(candidates.demoProgressJson),
     )),
     db.select({ c: count() }).from(candidates).where(and(
       eq(candidates.vacancyId, vacancyId),
+      isNull(candidates.deletedAt),
       eq(candidates.stage, "rejected"),
     )),
     // #45: pending = response + claimed. 'claimed' — промежуточный
@@ -91,6 +96,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     lastSeenSql
       ? db.select({ c: count() }).from(candidates).where(and(
           eq(candidates.vacancyId, vacancyId),
+          isNull(candidates.deletedAt),
           eq(candidates.stage, "anketa_filled"),
           gt(candidates.createdAt, sql`COALESCE(${lastSeenSql}, '1970-01-01'::timestamptz)`),
         ))

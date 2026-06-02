@@ -1457,6 +1457,15 @@ export default function VacancyPage() {
           case "restore":
             toast.success(`Возвращено в воронку: ${n}`)
             break
+          case "trash":
+            toast.success(`Удалено в корзину: ${n}`)
+            break
+          case "untrash":
+            toast.success(`Восстановлено из корзины: ${n}`)
+            break
+          case "hard_delete":
+            toast.success(`Удалено навсегда: ${n}`)
+            break
         }
         setSelectedCandidateIds(new Set())
         // В режиме списка видимые строки из paginated.* — рефетчим его,

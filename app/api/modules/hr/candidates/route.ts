@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server"
-import { eq, ne, and, inArray, asc, desc, or, isNull, sql, type SQL } from "drizzle-orm"
+import { eq, ne, and, inArray, asc, desc, or, isNull, isNotNull, sql, type SQL } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { candidates, vacancies, demos, hhResponses, testSubmissions, followUpMessages } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
@@ -236,6 +236,10 @@ export async function GET(req: NextRequest) {
     // и получал total по всей компании через innerJoin(vacancies).
     const vacancyId = url.searchParams.get("vacancyId") ?? url.searchParams.get("vacancy_id")
     const stageParam = url.searchParams.get("stage")
+    // «Корзина»: ?trashed=true показывает удалённых (deleted_at IS NOT NULL),
+    // обычный режим — только активных (deleted_at IS NULL).
+    const trashedView = url.searchParams.get("trashed") === "true"
+    const deletedFilter = trashedView ? isNotNull(candidates.deletedAt) : isNull(candidates.deletedAt)
 
     // If no vacancy_id — return candidates for this company with vacancy title.
     // Опциональная пагинация по ?page=N&pageSize=M (default 50, max 100):
@@ -253,6 +257,7 @@ export async function GET(req: NextRequest) {
       const whereExpr = and(
         eq(vacancies.companyId, user.companyId),
         or(isNull(candidates.source), ne(candidates.source, "preview")),
+        deletedFilter,
       )
 
       let total = 0
@@ -706,6 +711,7 @@ export async function GET(req: NextRequest) {
     const baseConds: SQL[] = [
       eq(candidates.vacancyId, vacancyId) as SQL,
       notPreview as SQL,
+      deletedFilter as SQL,
     ]
     if (stages.length > 0) baseConds.push(inArray(candidates.stage, stages) as SQL)
     const where = and(...baseConds, ...filterConds)

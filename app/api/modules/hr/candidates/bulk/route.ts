@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server"
 import { eq, and, inArray } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { candidates, vacancies } from "@/lib/db/schema"
+import { candidates, vacancies, hhCandidates, hhResponses } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { trySyncRejectToHh } from "@/lib/hh/sync-stage"
 
@@ -21,6 +21,9 @@ type BulkAction =
   | "set_stage"
   | "toggle_favorite"
   | "restore"
+  | "trash"         // мягкое удаление → в «Корзину» (deleted_at = now)
+  | "untrash"       // восстановление из корзины (deleted_at = null)
+  | "hard_delete"   // удалить навсегда (физически, с зависимыми строками)
 
 interface StageHistoryEntry {
   from?: string | null
@@ -238,6 +241,78 @@ export async function POST(req: NextRequest) {
         })
         affected = result
         return apiSuccess({ success: true, affected, isFavorite: nextValue })
+      }
+
+      case "trash": {
+        // Мягкое удаление: помечаем deleted_at и глушим автоматику (на случай
+        // кронов, которые ещё не фильтруют deleted_at — они уважают
+        // autoProcessingStopped). Карточка пропадает из списков/счётчиков,
+        // восстанавливается из «Корзины».
+        const result = await db.transaction(async (tx) => {
+          const upd = await tx
+            .update(candidates)
+            .set({
+              deletedAt: now,
+              autoProcessingStopped: true,
+              autoProcessingStoppedReason: "trashed",
+              autoProcessingStoppedAt: now,
+              updatedAt: now,
+            })
+            .where(inArray(candidates.id, ownedIds))
+            .returning({ id: candidates.id })
+          return upd.length
+        })
+        affected = result
+        break
+      }
+
+      case "untrash": {
+        // Восстановление из корзины. Снимаем deleted_at; если автоматику
+        // глушили именно при удалении (reason='trashed') — возвращаем её.
+        const result = await db.transaction(async (tx) => {
+          const upd = await tx
+            .update(candidates)
+            .set({ deletedAt: null, updatedAt: now })
+            .where(inArray(candidates.id, ownedIds))
+            .returning({ id: candidates.id })
+          await tx
+            .update(candidates)
+            .set({
+              autoProcessingStopped: false,
+              autoProcessingStoppedReason: null,
+              autoProcessingStoppedAt: null,
+            })
+            .where(and(
+              inArray(candidates.id, ownedIds),
+              eq(candidates.autoProcessingStoppedReason, "trashed"),
+            ))
+          return upd.length
+        })
+        affected = result
+        break
+      }
+
+      case "hard_delete": {
+        // Удалить навсегда. Порядок важен из-за FK:
+        //   1) обнуляем hh_responses.local_candidate_id (без FK, но чтобы не
+        //      оставлять висячую ссылку и не путать дедуп);
+        //   2) удаляем hh_candidates (FK без каскада — иначе delete упрётся);
+        //   3) удаляем candidates (cascade добьёт test_submissions /
+        //      qualification_answers / follow_up_messages; outbound → set null).
+        const result = await db.transaction(async (tx) => {
+          await tx
+            .update(hhResponses)
+            .set({ localCandidateId: null })
+            .where(inArray(hhResponses.localCandidateId, ownedIds))
+          await tx.delete(hhCandidates).where(inArray(hhCandidates.candidateId, ownedIds))
+          const del = await tx
+            .delete(candidates)
+            .where(inArray(candidates.id, ownedIds))
+            .returning({ id: candidates.id })
+          return del.length
+        })
+        affected = result
+        break
       }
 
       default:

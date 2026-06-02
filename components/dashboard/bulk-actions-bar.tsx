@@ -31,6 +31,7 @@ import {
   Loader2,
   RotateCcw,
   ClipboardList,
+  Trash2,
 } from "lucide-react"
 
 export type BulkAction =
@@ -41,6 +42,9 @@ export type BulkAction =
   | "toggle_favorite"
   | "restore"
   | "send_test"
+  | "trash"         // в «Корзину» (мягкое удаление)
+  | "untrash"       // вернуть из «Корзины»
+  | "hard_delete"   // удалить навсегда
 
 interface StageOption {
   id: string
@@ -59,11 +63,18 @@ interface BulkActionsBarProps {
    * валидирует и вернёт 400 если хоть один не в rejected.
    */
   allRejected?: boolean
+  /**
+   * Режим «Корзина»: выделены удалённые карточки. Показываем «Восстановить»
+   * и «Удалить навсегда» вместо обычных действий.
+   */
+  trashedView?: boolean
 }
 
-export function BulkActionsBar({ count, stages, onClear, onAction, allRejected = false }: BulkActionsBarProps) {
+export function BulkActionsBar({ count, stages, onClear, onAction, allRejected = false, trashedView = false }: BulkActionsBarProps) {
   const [confirmRejectOpen, setConfirmRejectOpen] = useState(false)
   const [confirmRestoreOpen, setConfirmRestoreOpen] = useState(false)
+  const [confirmTrashOpen, setConfirmTrashOpen] = useState(false)
+  const [confirmHardDeleteOpen, setConfirmHardDeleteOpen] = useState(false)
   const [busy, setBusy] = useState<BulkAction | null>(null)
 
   if (count === 0) return null
@@ -114,7 +125,32 @@ export function BulkActionsBar({ count, stages, onClear, onAction, allRejected =
             обычный набор действий скрываем (отказать/пригласить/... нет
             смысла на уже отказанных). */}
         <div className="flex items-center gap-1.5 flex-nowrap justify-end">
-          {allRejected ? (
+          {trashedView ? (
+            <>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-8 px-2.5 gap-1.5 text-sm text-emerald-700 border-emerald-300 hover:bg-emerald-500/10 hover:text-emerald-800 dark:text-emerald-300 dark:border-emerald-700"
+                disabled={!!busy}
+                onClick={() => run("untrash")}
+              >
+                {busy === "untrash" ? <Loader2 className="size-4 animate-spin" /> : <RotateCcw className="size-4" />}
+                <span className="hidden md:inline">Восстановить</span>
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-8 px-2.5 gap-1.5 text-sm text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+                disabled={!!busy}
+                onClick={() => setConfirmHardDeleteOpen(true)}
+              >
+                {busy === "hard_delete" ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+                <span className="hidden md:inline">Удалить навсегда</span>
+              </Button>
+            </>
+          ) : allRejected ? (
             <Button
               type="button"
               size="sm"
@@ -213,6 +249,18 @@ export function BulkActionsBar({ count, stages, onClear, onAction, allRejected =
             {busy === "toggle_favorite" ? <Loader2 className="size-4 animate-spin" /> : <Star className="size-4" />}
             <span className="hidden md:inline">В избранное</span>
           </Button>
+
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-8 px-2.5 gap-1.5 text-sm text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+            disabled={!!busy}
+            onClick={() => setConfirmTrashOpen(true)}
+          >
+            {busy === "trash" ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+            <span className="hidden md:inline">Удалить</span>
+          </Button>
           </>}
         </div>
       </div>
@@ -234,6 +282,48 @@ export function BulkActionsBar({ count, stages, onClear, onAction, allRejected =
               onClick={() => { setConfirmRestoreOpen(false); void run("restore") }}
             >
               Вернуть
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={confirmTrashOpen} onOpenChange={setConfirmTrashOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Удалить {count} {pluralize(count, "карточку", "карточки", "карточек")}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Карточки переедут в «Корзину»: пропадут из списков и счётчиков, автоматика по ним остановится.
+              Их можно вернуть из «Корзины». Окончательное удаление — оттуда же.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Отмена</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => { setConfirmTrashOpen(false); void run("trash") }}
+            >
+              Удалить
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={confirmHardDeleteOpen} onOpenChange={setConfirmHardDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Удалить навсегда {count} {pluralize(count, "карточку", "карточки", "карточек")}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Карточки и все связанные данные (тесты, ответы, касания дожима) будут удалены безвозвратно.
+              Это действие нельзя отменить.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Отмена</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => { setConfirmHardDeleteOpen(false); void run("hard_delete") }}
+            >
+              Удалить навсегда
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
