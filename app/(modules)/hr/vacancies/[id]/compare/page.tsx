@@ -75,7 +75,7 @@ function CompareInner() {
   const nameOf = (c: CandidateHead) => c.name?.trim() || "Без имени"
 
   return (
-    <div className="p-4 md:p-6 max-w-[1600px] mx-auto">
+    <div className="p-4 md:p-6 w-full">
       <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => router.push(`/hr/vacancies/${vacancyId}`)}>
@@ -130,13 +130,13 @@ function CompareInner() {
                 <div className="overflow-x-auto rounded-lg border">
                   <table className="w-full border-collapse text-sm">
                     <thead>
-                      <tr className="bg-muted/40">
-                        <th className="text-left font-medium p-2.5 align-bottom sticky left-0 bg-muted/40 min-w-[220px] max-w-[320px]">
+                      <tr className="bg-muted">
+                        <th className="text-left font-medium p-2.5 align-bottom sticky left-0 z-20 bg-muted border-r shadow-[2px_0_4px_rgba(0,0,0,0.04)] w-[300px] min-w-[300px] max-w-[300px]">
                           Вопрос
                         </th>
                         {candidates.map((c) => (
-                          <th key={c.id} className="text-left font-medium p-2.5 align-bottom min-w-[200px] border-l">
-                            <div className="truncate max-w-[220px]" title={nameOf(c)}>{nameOf(c)}</div>
+                          <th key={c.id} className="text-left font-medium p-2.5 align-bottom w-[260px] min-w-[260px] border-l">
+                            <div className="truncate max-w-[240px]" title={nameOf(c)}>{nameOf(c)}</div>
                             <div className="flex gap-1 mt-0.5">
                               {c.resumeScore != null && <Badge variant="outline" className="text-[10px] h-4 px-1">резюме {c.resumeScore}</Badge>}
                               {c.aiScore != null && <Badge variant="outline" className="text-[10px] h-4 px-1">AI {c.aiScore}</Badge>}
@@ -147,15 +147,18 @@ function CompareInner() {
                     </thead>
                     <tbody>
                       {section.questions.map((q, qi) => (
-                        <tr key={q.id} className={cn("border-t align-top", qi % 2 && "bg-muted/15")}>
-                          <td className="p-2.5 sticky left-0 bg-inherit min-w-[220px] max-w-[320px]">
+                        <tr key={q.id} className="border-t align-top">
+                          <td className={cn(
+                            "p-2.5 sticky left-0 z-10 border-r shadow-[2px_0_4px_rgba(0,0,0,0.04)] w-[300px] min-w-[300px] max-w-[300px]",
+                            qi % 2 ? "bg-muted" : "bg-card",
+                          )}>
                             <div className="font-medium text-[13px]">{q.text}</div>
                             {typeof q.points === "number" && q.points > 0 && (
                               <div className="text-[11px] text-muted-foreground">макс. {q.points} б</div>
                             )}
                           </td>
                           {candidates.map((c) => (
-                            <td key={c.id} className="p-2.5 border-l align-top">
+                            <td key={c.id} className={cn("p-2.5 border-l align-top w-[260px] min-w-[260px]", qi % 2 && "bg-muted/30")}>
                               <AnswerCell a={section.answers[c.id]?.[q.id]} />
                             </td>
                           ))}
