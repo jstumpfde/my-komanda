@@ -140,14 +140,17 @@ function staticAnalysis(body: Record<string, unknown>): AdvisorResponse {
     filled++
   }
 
-  // 6. Stop factors
+  // 6. Stop factors. «Неприемлемо» (unacceptableSkills) и aiStopFactors кормят
+  // AI-нокауты — любой из них достаточен, чтобы скрининг отсеивал. Структурные
+  // stopFactors (город/возраст/…) — отдельный необязательный пред-фильтр.
   const unacceptable = (d.unacceptableSkills as string[]) || []
+  const aiStops = (d.aiStopFactors as string[]) || []
   const stopFactors = (d.stopFactors as Array<{ enabled: boolean }>) || []
   const enabledStops = stopFactors.filter(f => f.enabled).length
-  if (unacceptable.length === 0 && enabledStops === 0) {
+  if (unacceptable.length === 0 && aiStops.length === 0 && enabledStops === 0) {
     sections.push({ id: "stopFactors", status: "error", title: "Стоп-факторы", message: "Добавьте стоп-факторы — без них AI-скрининг не сможет отсеивать неподходящих кандидатов", priority: 2 })
   } else {
-    sections.push({ id: "stopFactors", status: "ok", title: "Стоп-факторы", message: `${unacceptable.length + enabledStops} стоп-факторов`, priority: 10 })
+    sections.push({ id: "stopFactors", status: "ok", title: "Стоп-факторы", message: `${unacceptable.length + aiStops.length + enabledStops} стоп-факторов`, priority: 10 })
     filled++
   }
 
@@ -364,6 +367,24 @@ ${AI_SAFETY_PROMPT}`,
     }
     if (!Array.isArray(parsed.sections)) {
       parsed.sections = fallback.sections
+    }
+
+    // Пост-обработка: «Неприемлемо» (unacceptableSkills) и aiStopFactors кормят
+    // AI-нокауты (lib/scoring/vacancy-spec). Если они заполнены — AI-скрининг
+    // отсеивает по этим пунктам, поэтому НЕ показываем КРИТИЧНО «Стоп-факторы
+    // пустое». Структурные стоп-факторы (город/возраст/опыт) — отдельный
+    // необязательный пред-фильтр, не повод для ошибки.
+    {
+      const unFilled = Array.isArray(vacancyData.unacceptableSkills) && (vacancyData.unacceptableSkills as unknown[]).length > 0
+      const aiFilled = Array.isArray(vacancyData.aiStopFactors) && (vacancyData.aiStopFactors as unknown[]).length > 0
+      if ((unFilled || aiFilled) && Array.isArray(parsed.sections)) {
+        for (const s of parsed.sections) {
+          if (s && (s.id === "stopFactors" || /стоп-фактор/i.test(s.title || "")) && s.status === "error") {
+            s.status = "ok"
+            s.message = "Заполнено («Неприемлемо»)"
+          }
+        }
+      }
     }
 
     // Merge static salary analysis if AI didn't return one

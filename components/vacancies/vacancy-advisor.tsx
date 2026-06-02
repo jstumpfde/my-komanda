@@ -11,6 +11,7 @@ import {
   CheckCircle2, AlertTriangle, XCircle, Sparkles, ChevronDown, ChevronUp,
   Loader2, RefreshCw, Bot, X, Plus, TrendingUp, Lightbulb,
 } from "lucide-react"
+import { mergeSkills, hasSkill } from "@/lib/skills/normalize"
 import { formatSalary, marketStats } from "@/lib/salary-benchmarks"
 import { scoreVacancyTitle } from "@/lib/vacancy-title-scorer"
 import { analyzeMotivation } from "@/lib/motivation-analyzer"
@@ -1005,8 +1006,8 @@ function SuggestionsPanel({ suggestions, onApply, vacancyData }: {
             <button
               onClick={() => {
                 const current = (vacancyData.requiredSkills as string[]) || []
-                const newSkills = suggestions.skills.filter(s => !current.includes(s))
-                onApply("requiredSkills", [...current, ...newSkills])
+                // mergeSkills дедупит по канону (регистр/пробелы/дефисы) — без дублей.
+                onApply("requiredSkills", mergeSkills(current, suggestions.skills))
               }}
               className="text-[10px] text-primary hover:underline flex items-center gap-0.5"
             >
@@ -1015,15 +1016,15 @@ function SuggestionsPanel({ suggestions, onApply, vacancyData }: {
           </div>
           <div className="flex flex-wrap gap-1">
             {suggestions.skills.map(skill => {
-              const alreadyHas = ((vacancyData.requiredSkills as string[]) || []).includes(skill)
-                || ((vacancyData.desiredSkills as string[]) || []).includes(skill)
+              const alreadyHas = hasSkill((vacancyData.requiredSkills as string[]) || [], skill)
+                || hasSkill((vacancyData.desiredSkills as string[]) || [], skill)
               return (
                 <button
                   key={skill}
                   disabled={alreadyHas}
                   onClick={() => {
                     const current = (vacancyData.requiredSkills as string[]) || []
-                    onApply("requiredSkills", [...current, skill])
+                    onApply("requiredSkills", mergeSkills(current, [skill]))
                   }}
                   className={cn(
                     "text-[11px] px-1.5 py-0.5 rounded border transition-colors",
@@ -1044,12 +1045,11 @@ function SuggestionsPanel({ suggestions, onApply, vacancyData }: {
       {hasStopFactors && (
         <div className="rounded-lg border p-2.5 space-y-1.5">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium">Стоп-факторы</span>
+            <span className="text-xs font-medium">Неприемлемо</span>
             <button
               onClick={() => {
                 const current = (vacancyData.unacceptableSkills as string[]) || []
-                const newFactors = suggestions.stopFactors.filter(s => !current.includes(s))
-                onApply("unacceptableSkills", [...current, ...newFactors])
+                onApply("unacceptableSkills", mergeSkills(current, suggestions.stopFactors))
               }}
               className="text-[10px] text-primary hover:underline flex items-center gap-0.5"
             >
@@ -1058,14 +1058,14 @@ function SuggestionsPanel({ suggestions, onApply, vacancyData }: {
           </div>
           <div className="flex flex-wrap gap-1">
             {suggestions.stopFactors.map(factor => {
-              const alreadyHas = ((vacancyData.unacceptableSkills as string[]) || []).includes(factor)
+              const alreadyHas = hasSkill((vacancyData.unacceptableSkills as string[]) || [], factor)
               return (
                 <button
                   key={factor}
                   disabled={alreadyHas}
                   onClick={() => {
                     const current = (vacancyData.unacceptableSkills as string[]) || []
-                    onApply("unacceptableSkills", [...current, factor])
+                    onApply("unacceptableSkills", mergeSkills(current, [factor]))
                   }}
                   className={cn(
                     "text-[11px] px-1.5 py-0.5 rounded border transition-colors",
