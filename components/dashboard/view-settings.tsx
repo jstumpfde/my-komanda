@@ -19,6 +19,8 @@ interface ViewSettingsProps {
   onSettingsChange: (settings: CardDisplaySettings) => void
   viewMode: ViewMode
   onViewModeChange: (mode: ViewMode) => void
+  /** Если задан — в меню появляется пункт «Тест» (таблица ответов на отдельной странице). */
+  testTableHref?: string
 }
 
 const VIEW_MODES: Array<{ value: ViewMode; label: string }> = [
@@ -43,7 +45,7 @@ const DISPLAY_TOGGLES: Array<{ key: keyof CardDisplaySettings; label: string }> 
   { key: "showActions",       label: "Кнопки действий" },
 ]
 
-export function ViewSettings({ settings, onSettingsChange, viewMode, onViewModeChange }: ViewSettingsProps) {
+export function ViewSettings({ settings, onSettingsChange, viewMode, onViewModeChange, testTableHref }: ViewSettingsProps) {
   const { role } = useAuth()
   // Все режимы (Воронка/Канбан/Плитки) — только у администратора платформы.
   // Все остальные (менеджер платформы + клиентские роли) видят только «Список».
@@ -95,6 +97,18 @@ export function ViewSettings({ settings, onSettingsChange, viewMode, onViewModeC
                   <span className="flex-1">{label}</span>
                 </label>
               ))}
+              {testTableHref && (
+                <>
+                  <div className="my-1 border-t" />
+                  <a
+                    href={testTableHref}
+                    className="flex items-center gap-2 rounded-md px-2 py-1.5 cursor-pointer text-sm hover:bg-muted/60"
+                  >
+                    <span className="flex-1">Тест — ответы кандидатов</span>
+                    <span className="text-[10px] text-muted-foreground">таблица →</span>
+                  </a>
+                </>
+              )}
             </div>
           </div>
           <div className="border-t pt-3 space-y-3">

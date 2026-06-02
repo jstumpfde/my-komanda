@@ -2310,6 +2310,7 @@ export default function VacancyPage() {
                       onSettingsChange={setCardSettings}
                       viewMode={viewMode}
                       onViewModeChange={setViewMode}
+                      testTableHref={`/hr/vacancies/${id}/test-table`}
                     />
                   </div>
                 )}
