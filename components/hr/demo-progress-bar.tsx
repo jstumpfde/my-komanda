@@ -196,7 +196,7 @@ export function DemoProgressBar({
   const fillWidth = noProgress ? "0%" : `${fillPct}%`
 
   return (
-    <div className={cn("flex flex-col items-center gap-1 w-full max-w-[140px] mx-auto", className)}>
+    <div className={cn("flex flex-col items-center gap-1 w-full max-w-[105px] mx-auto", className)}>
       <span className={cn("text-sm tabular-nums whitespace-nowrap font-medium inline-flex items-center", labelClass)}>
         {label}
         {hasVideoVizitka && (
@@ -211,7 +211,7 @@ export function DemoProgressBar({
             <div
               key={i}
               className={cn(
-                "h-2 flex-1 rounded-[2px] transition-colors",
+                "aspect-square flex-1 rounded-[2px] transition-colors",
                 i < cur ? fillColor : "bg-gray-200 dark:bg-gray-700/50",
               )}
             />
