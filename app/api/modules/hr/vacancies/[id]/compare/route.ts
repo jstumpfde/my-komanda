@@ -102,6 +102,8 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
         surveyResponses: candidates.surveyResponses,
         aiScore: candidates.aiScore,
         resumeScore: candidates.resumeScore,
+        isFavorite: candidates.isFavorite,
+        stage: candidates.stage,
       })
       .from(candidates)
       .where(and(
@@ -225,7 +227,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     const orderedCandidates = ids
       .map((cid) => byId.get(cid))
       .filter((c): c is NonNullable<typeof c> => !!c)
-      .map((c) => ({ id: c.id, name: c.name, aiScore: c.aiScore, resumeScore: c.resumeScore }))
+      .map((c) => ({ id: c.id, name: c.name, aiScore: c.aiScore, resumeScore: c.resumeScore, isFavorite: c.isFavorite ?? false, stage: c.stage ?? null }))
 
     return apiSuccess({ candidates: orderedCandidates, sections })
   } catch (err) {

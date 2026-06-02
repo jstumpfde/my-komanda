@@ -8,7 +8,9 @@ import { useParams, useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
-import { ArrowLeft, Columns3, Rows3, Loader2 } from "lucide-react"
+import { toast } from "sonner"
+import { useAuth } from "@/lib/auth"
+import { ArrowLeft, Columns3, Rows3, Loader2, Star, Check, X, Trash2, ExternalLink, Ban } from "lucide-react"
 
 interface QItem { id: string; text: string; points?: number }
 interface Ans { value: string | null; awarded?: number | null; correct?: boolean | null }
@@ -19,7 +21,10 @@ interface Section {
   questions: QItem[]
   answers: Record<string, Record<string, Ans>>
 }
-interface CandidateHead { id: string; name: string | null; aiScore: number | null; resumeScore: number | null }
+interface CandidateHead {
+  id: string; name: string | null; aiScore: number | null; resumeScore: number | null
+  isFavorite?: boolean; stage?: string | null
+}
 interface CompareData { candidates: CandidateHead[]; sections: Section[] }
 
 function AnswerCell({ a }: { a: Ans | undefined }) {
@@ -51,7 +56,12 @@ function CompareInner() {
   const vacancyId = params.id
   const ids = useMemo(() => (search.get("ids") ?? "").split(",").filter(Boolean), [search])
 
+  const { role } = useAuth()
+  const canDelete = (["platform_admin", "platform_manager", "director"] as string[]).includes(role)
+
   const [data, setData] = useState<CompareData | null>(null)
+  const [heads, setHeads] = useState<CandidateHead[]>([])
+  const [busyId, setBusyId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [mode, setMode] = useState<"matrix" | "byQuestion">("matrix")
@@ -65,14 +75,99 @@ function CompareInner() {
         if (!r.ok) throw new Error((await r.json().catch(() => ({})))?.error || "Ошибка загрузки")
         return r.json() as Promise<CompareData>
       })
-      .then((d) => { if (alive) { setData(d); setError(null) } })
+      .then((d) => { if (alive) { setData(d); setHeads(d.candidates); setError(null) } })
       .catch((e) => { if (alive) setError(e instanceof Error ? e.message : "Ошибка") })
       .finally(() => { if (alive) setLoading(false) })
     return () => { alive = false }
   }, [vacancyId, ids])
 
-  const candidates = data?.candidates ?? []
+  const candidates = heads
   const nameOf = (c: CandidateHead) => c.name?.trim() || "Без имени"
+
+  const patchHead = (id: string, patch: Partial<CandidateHead>) =>
+    setHeads((hs) => hs.map((h) => (h.id === id ? { ...h, ...patch } : h)))
+
+  const toggleFavorite = async (c: CandidateHead) => {
+    const next = !c.isFavorite
+    patchHead(c.id, { isFavorite: next })
+    setBusyId(c.id)
+    try {
+      const r = await fetch(`/api/modules/hr/candidates/${c.id}/favorite`, {
+        method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ isFavorite: next }),
+      })
+      if (!r.ok) throw new Error()
+      toast.success(next ? "В избранном" : "Убрано из избранного")
+    } catch { patchHead(c.id, { isFavorite: !next }); toast.error("Не удалось") } finally { setBusyId(null) }
+  }
+
+  const changeStage = async (c: CandidateHead, stage: string, okMsg: string) => {
+    setBusyId(c.id)
+    try {
+      const r = await fetch(`/api/modules/hr/candidates/${c.id}/stage`, {
+        method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ stage }),
+      })
+      if (!r.ok) throw new Error()
+      patchHead(c.id, { stage })
+      toast.success(okMsg)
+    } catch { toast.error("Не удалось") } finally { setBusyId(null) }
+  }
+
+  const trashCandidate = async (c: CandidateHead) => {
+    if (typeof window !== "undefined" && !window.confirm(`Удалить «${nameOf(c)}» в корзину?`)) return
+    setBusyId(c.id)
+    try {
+      const r = await fetch(`/api/modules/hr/candidates/bulk`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ candidateIds: [c.id], action: "trash" }),
+      })
+      if (!r.ok) throw new Error((await r.json().catch(() => ({})))?.error || "")
+      setHeads((hs) => hs.filter((h) => h.id !== c.id))
+      toast.success("Удалено в корзину")
+    } catch (e) { toast.error(e instanceof Error && e.message ? e.message : "Не удалось удалить") } finally { setBusyId(null) }
+  }
+
+  const removeFromView = (id: string) => setHeads((hs) => hs.filter((h) => h.id !== id))
+
+  // Иконочная панель действий под именем кандидата (режим «Матрица»).
+  function CandidateActions({ c }: { c: CandidateHead }) {
+    const busy = busyId === c.id
+    const rejected = c.stage === "rejected"
+    return (
+      <div className="flex items-center gap-0.5 mt-1.5">
+        <button type="button" title="В избранное" disabled={busy}
+          onClick={() => toggleFavorite(c)}
+          className={cn("p-1 rounded hover:bg-muted disabled:opacity-40", c.isFavorite ? "text-amber-500" : "text-muted-foreground")}>
+          <Star className={cn("size-3.5", c.isFavorite && "fill-amber-400")} />
+        </button>
+        <button type="button" title="Пригласить на интервью" disabled={busy}
+          onClick={() => changeStage(c, "interview", `Приглашён: ${nameOf(c)}`)}
+          className="p-1 rounded text-emerald-600 hover:bg-emerald-500/10 disabled:opacity-40">
+          <Check className="size-3.5" />
+        </button>
+        <button type="button" title={rejected ? "Уже отказан" : "Отказать"} disabled={busy || rejected}
+          onClick={() => changeStage(c, "rejected", `Отказано: ${nameOf(c)}`)}
+          className="p-1 rounded text-destructive hover:bg-destructive/10 disabled:opacity-40">
+          <Ban className="size-3.5" />
+        </button>
+        <a href={`/hr/candidates/${c.id}`} target="_blank" rel="noopener noreferrer" title="Открыть карточку"
+          className="p-1 rounded text-muted-foreground hover:bg-muted">
+          <ExternalLink className="size-3.5" />
+        </a>
+        {canDelete && (
+          <button type="button" title="Удалить в корзину" disabled={busy}
+            onClick={() => trashCandidate(c)}
+            className="p-1 rounded text-destructive hover:bg-destructive/10 disabled:opacity-40">
+            <Trash2 className="size-3.5" />
+          </button>
+        )}
+        <button type="button" title="Убрать из сравнения" disabled={busy}
+          onClick={() => removeFromView(c.id)}
+          className="p-1 rounded text-muted-foreground hover:bg-muted ml-auto">
+          <X className="size-3.5" />
+        </button>
+      </div>
+    )
+  }
 
   return (
     <div className="p-4 md:p-6 w-full">
@@ -136,11 +231,16 @@ function CompareInner() {
                         </th>
                         {candidates.map((c) => (
                           <th key={c.id} className="text-left font-medium p-2.5 align-bottom w-[260px] min-w-[260px] border-l">
-                            <div className="truncate max-w-[240px]" title={nameOf(c)}>{nameOf(c)}</div>
+                            <div className="flex items-center gap-1.5">
+                              <div className="truncate max-w-[200px]" title={nameOf(c)}>{nameOf(c)}</div>
+                              {c.stage === "rejected" && <Badge variant="outline" className="text-[10px] h-4 px-1 text-destructive border-destructive/40">отказ</Badge>}
+                              {c.stage === "interview" && <Badge variant="outline" className="text-[10px] h-4 px-1 text-emerald-600 border-emerald-300">интервью</Badge>}
+                            </div>
                             <div className="flex gap-1 mt-0.5">
                               {c.resumeScore != null && <Badge variant="outline" className="text-[10px] h-4 px-1">резюме {c.resumeScore}</Badge>}
                               {c.aiScore != null && <Badge variant="outline" className="text-[10px] h-4 px-1">AI {c.aiScore}</Badge>}
                             </div>
+                            <CandidateActions c={c} />
                           </th>
                         ))}
                       </tr>
