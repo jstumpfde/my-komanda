@@ -22,7 +22,7 @@ function ScoreLine({ c }: { c: Head }) {
       <span className="text-muted-foreground/40">|</span>
       <span>демо <b className="text-foreground">{c.demoPercent != null ? `${c.demoPercent}%` : "—"}</b></span>
       <span className="text-muted-foreground/40">|</span>
-      <span>тест <b className={cn("font-semibold", testColor || "text-foreground")}>{c.testScore != null ? c.testScore : "—"}</b>{c.testPoints ? ` (${c.testPoints.got}/${c.testPoints.max})` : ""}</span>
+      <span>тест <b className={cn("font-semibold", testColor || "text-foreground")}>{c.testScore != null ? c.testScore : "—"}</b></span>
       {c.aiScore != null && <><span className="text-muted-foreground/40">|</span><span>AI <b className="text-foreground">{c.aiScore}</b></span></>}
     </div>
   )

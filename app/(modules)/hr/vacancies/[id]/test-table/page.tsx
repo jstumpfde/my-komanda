@@ -202,7 +202,7 @@ export default function TestTablePage() {
                         )
                       })()}
                       <div className="mt-0.5 text-[11px] text-muted-foreground flex flex-wrap gap-x-1.5">
-                        <span>тест <b className={cn("font-semibold", scoreColor(c.testScore) || "text-foreground")}>{c.testScore != null ? c.testScore : "—"}</b>{c.testPoints ? ` (${c.testPoints.got}/${c.testPoints.max})` : ""}</span>
+                        <span>тест <b className={cn("font-semibold", scoreColor(c.testScore) || "text-foreground")}>{c.testScore != null ? c.testScore : "—"}</b></span>
                         {c.resumeScore != null && <span>· резюме <b className="text-foreground">{c.resumeScore}</b></span>}
                       </div>
                       <Actions c={c} />
