@@ -215,7 +215,7 @@ function CompareInner() {
     const busy = busyId === c.id
     const rejected = c.stage === "rejected"
     return (
-      <div className="flex items-center gap-1.5 mt-2">
+      <div className="flex items-center gap-1.5 mt-1">
         <button type="button" title="В избранное" disabled={busy}
           onClick={() => toggleFavorite(c)}
           className={cn("p-1.5 rounded hover:bg-muted disabled:opacity-40", c.isFavorite ? "text-amber-500" : "text-muted-foreground")}>
@@ -334,9 +334,10 @@ function CompareInner() {
                         {candidates.map((c) => (
                           <th key={c.id} className="text-left font-medium p-2.5 align-top w-[260px] min-w-[260px] border-l h-full">
                             <div className="flex flex-col h-full">
-                              {/* Имя + скоры в блоке фикс. высоты — чтобы ряд иконок был
-                                  на одной линии во всех колонках (даже где есть строка AI). */}
-                              <div className="min-h-24">
+                              {/* Имя + скоры. Высоту не фиксируем — отступ до иконок
+                                  минимальный; выравнивание ряда иконок между колонками
+                                  даёт mt-auto (сработает, если колонки разной высоты). */}
+                              <div>
                                 <div className="flex items-center gap-1.5">
                                   <div className="truncate max-w-[200px]" title={nameOf(c)}>{nameOf(c)}</div>
                                   {c.stage === "rejected" && <Badge variant="outline" className="text-[10px] h-4 px-1 text-destructive border-destructive/40">отказ</Badge>}
