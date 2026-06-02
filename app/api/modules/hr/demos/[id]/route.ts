@@ -99,6 +99,12 @@ export async function PUT(
   }
 }
 
+// POST = алиас PUT. navigator.sendBeacon (flush черновика демо/теста при
+// уходе со страницы, hooks/use-demo.ts) умеет слать ТОЛЬКО POST — без этого
+// алиаса последний правок (например ИИ-проверка) терялся при перезагрузке,
+// если не успел сработать debounce.
+export const POST = PUT
+
 // DELETE /api/demos/[id]
 export async function DELETE(
   _req: NextRequest,
