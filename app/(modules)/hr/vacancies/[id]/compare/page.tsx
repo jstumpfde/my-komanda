@@ -165,33 +165,12 @@ function CompareInner() {
 
   const removeFromView = (id: string) => setHeads((hs) => hs.filter((h) => h.id !== id))
 
-  // Выгрузка сравнения в CSV (открывается в Excel; BOM для кириллицы).
+  // Выгрузка в настоящий .xlsx через сервер (Excel открывает нативно, без
+  // проблем с разделителем/кодировкой, в отличие от CSV).
   const exportCsv = () => {
-    if (!data) return
-    const esc = (v: string) => `"${(v ?? "").replace(/"/g, '""')}"`
-    const cell = (a?: Ans): string => {
-      if (!a) return ""
-      const parts: string[] = []
-      if (typeof a.awarded === "number") parts.push(`[${a.awarded} б${a.correct === false ? ", неверно" : a.correct ? ", верно" : ""}]`)
-      if (a.value) parts.push(a.value.split("|||").map((s) => s.trim()).filter(Boolean).join("; "))
-      return parts.join(" ")
-    }
-    const rows: string[] = []
-    rows.push(["Вопрос", ...candidates.map(nameOf)].map(esc).join(","))
-    for (const section of data.sections) {
-      rows.push(esc(section.title.toUpperCase()))
-      for (const q of section.questions) {
-        rows.push([q.text, ...candidates.map((c) => cell(section.answers[c.id]?.[q.id]))].map(esc).join(","))
-      }
-    }
-    const csv = "﻿" + rows.join("\r\n")
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = "Сравнение_кандидатов.csv"
-    a.click()
-    URL.revokeObjectURL(url)
+    if (candidates.length === 0) return
+    const idsParam = candidates.map((c) => c.id).join(",")
+    window.location.href = `/api/modules/hr/vacancies/${vacancyId}/compare/export?ids=${idsParam}`
   }
 
   // Создать публичную ссылку (без логина, 7 дней) и скопировать в буфер.
