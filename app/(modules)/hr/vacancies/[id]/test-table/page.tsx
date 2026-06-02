@@ -16,7 +16,28 @@ interface Row {
   id: string; name: string | null; testScore: number | null
   testPoints: { got: number; max: number } | null; resumeScore: number | null
   isFavorite?: boolean; stage?: string | null
+  city?: string | null; birthDate?: string | null
   answers: Record<string, Ans>
+}
+
+// Возраст + ДР из birth_date (pg date → "YYYY-MM-DD").
+function yearsWord(n: number): string {
+  const a = Math.abs(n) % 100, b = a % 10
+  if (a > 10 && a < 20) return "лет"
+  if (b === 1) return "год"
+  if (b >= 2 && b <= 4) return "года"
+  return "лет"
+}
+function birthInfo(b?: string | null): { age: number | null; date: string | null } {
+  if (!b) return { age: null, date: null }
+  const d = new Date(b)
+  if (isNaN(d.getTime())) return { age: null, date: null }
+  const now = new Date()
+  let age = now.getFullYear() - d.getFullYear()
+  const m = now.getMonth() - d.getMonth()
+  if (m < 0 || (m === 0 && now.getDate() < d.getDate())) age--
+  const date = `${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")}.${d.getFullYear()}`
+  return { age: age >= 0 && age < 120 ? age : null, date }
 }
 interface Data { vacancyTitle: string | null; questions: QItem[]; candidates: Row[] }
 
@@ -170,6 +191,16 @@ export default function TestTablePage() {
                         {c.stage === "rejected" && <Badge variant="outline" className="text-[10px] h-4 px-1 text-destructive border-destructive/40">отказ</Badge>}
                         {c.stage === "interview" && <Badge variant="outline" className="text-[10px] h-4 px-1 text-emerald-600 border-emerald-300">интервью</Badge>}
                       </div>
+                      {c.city?.trim() && <div className="mt-0.5 text-[11px] text-muted-foreground truncate" title={c.city}>{c.city}</div>}
+                      {(() => {
+                        const { age, date } = birthInfo(c.birthDate)
+                        if (age == null && !date) return null
+                        return (
+                          <div className="mt-0.5 text-[11px] text-muted-foreground">
+                            {age != null && `${age} ${yearsWord(age)}`}{age != null && date && " · "}{date}
+                          </div>
+                        )
+                      })()}
                       <div className="mt-0.5 text-[11px] text-muted-foreground flex flex-wrap gap-x-1.5">
                         <span>тест <b className={cn("font-semibold", scoreColor(c.testScore) || "text-foreground")}>{c.testScore != null ? c.testScore : "—"}</b>{c.testPoints ? ` (${c.testPoints.got}/${c.testPoints.max})` : ""}</span>
                         {c.resumeScore != null && <span>· резюме <b className="text-foreground">{c.resumeScore}</b></span>}

@@ -21,13 +21,14 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     if (vac.companyId !== user.companyId) return apiError("Forbidden", 403)
 
     const rows = await db
-      .select({ id: candidates.id })
+      .select({ id: candidates.id, city: candidates.city, birthDate: candidates.birthDate })
       .from(candidates)
       .where(and(eq(candidates.vacancyId, vacancyId), isNull(candidates.deletedAt)))
       .orderBy(desc(candidates.createdAt))
       .limit(MAX_ROWS)
     const ids = rows.map((r) => r.id)
     if (ids.length === 0) return apiSuccess({ vacancyTitle: vac.title, questions: [], candidates: [] })
+    const infoById = new Map(rows.map((r) => [r.id, { city: r.city, birthDate: r.birthDate }]))
 
     const comp = await buildComparison(vacancyId, ids)
     // Только секция теста — она и нужна для этого режима.
@@ -45,6 +46,8 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
         resumeScore: c.resumeScore,
         isFavorite: c.isFavorite,
         stage: c.stage,
+        city: infoById.get(c.id)?.city ?? null,
+        birthDate: infoById.get(c.id)?.birthDate ?? null,
         answers: answersBySection[c.id] ?? {},
       }))
       .sort((a, b) => (b.testScore ?? -1) - (a.testScore ?? -1))
