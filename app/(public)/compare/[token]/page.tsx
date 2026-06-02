@@ -37,9 +37,9 @@ function AnswerCell({ a }: { a?: Ans }) {
   return (
     <div className="space-y-1">
       {typeof a.awarded === "number" && (
-        <Badge variant="outline" className={cn("text-[10px] h-4 px-1.5",
+        <Badge variant="outline" className={cn("text-[12px] h-5 px-1.5 font-semibold",
           full ? "text-success border-success/40" : zero ? "text-destructive border-destructive/40" : "text-amber-600 border-amber-300")}>
-          {hasMax ? `${a.awarded}/${a.max} б` : `${a.awarded} б`}{full ? " · верно" : zero ? " · неверно" : " · частично"}
+          {hasMax ? `${a.awarded}/${a.max} б` : `${a.awarded} б`}
         </Badge>
       )}
       {a.value != null && (() => {

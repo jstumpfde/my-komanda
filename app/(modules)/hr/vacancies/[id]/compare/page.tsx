@@ -9,8 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
-import { useAuth } from "@/lib/auth"
-import { ArrowLeft, Columns3, Rows3, Loader2, Star, Check, X, Trash2, ExternalLink, Ban, ChevronDown, Download, Share2 } from "lucide-react"
+import { ArrowLeft, Columns3, Rows3, Loader2, Star, Check, X, ExternalLink, Ban, ChevronDown, Download, Share2 } from "lucide-react"
 
 interface QItem { id: string; text: string; points?: number }
 interface Ans { value: string | null; awarded?: number | null; max?: number | null; correct?: boolean | null }
@@ -57,11 +56,11 @@ function AnswerCell({ a }: { a: Ans | undefined }) {
         <Badge
           variant="outline"
           className={cn(
-            "text-[10px] h-4 px-1.5",
+            "text-[12px] h-5 px-1.5 font-semibold",
             full ? "text-success border-success/40" : zero ? "text-destructive border-destructive/40" : "text-amber-600 border-amber-300",
           )}
         >
-          {hasMax ? `${a.awarded}/${a.max} б` : `${a.awarded} б`}{full ? " · верно" : zero ? " · неверно" : " · частично"}
+          {hasMax ? `${a.awarded}/${a.max} б` : `${a.awarded} б`}
         </Badge>
       )}
       {a.value != null && (() => {
@@ -93,8 +92,6 @@ function CompareInner() {
   const vacancyId = params.id
   const ids = useMemo(() => (search.get("ids") ?? "").split(",").filter(Boolean), [search])
 
-  const { role } = useAuth()
-  const canDelete = (["platform_admin", "platform_manager", "director"] as string[]).includes(role)
 
   const [data, setData] = useState<CompareData | null>(null)
   const [heads, setHeads] = useState<CandidateHead[]>([])
@@ -152,19 +149,6 @@ function CompareInner() {
     } catch { toast.error("Не удалось") } finally { setBusyId(null) }
   }
 
-  const trashCandidate = async (c: CandidateHead) => {
-    if (typeof window !== "undefined" && !window.confirm(`Удалить «${nameOf(c)}» в корзину?`)) return
-    setBusyId(c.id)
-    try {
-      const r = await fetch(`/api/modules/hr/candidates/bulk`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ candidateIds: [c.id], action: "trash" }),
-      })
-      if (!r.ok) throw new Error((await r.json().catch(() => ({})))?.error || "")
-      setHeads((hs) => hs.filter((h) => h.id !== c.id))
-      toast.success("Удалено в корзину")
-    } catch (e) { toast.error(e instanceof Error && e.message ? e.message : "Не удалось удалить") } finally { setBusyId(null) }
-  }
 
   const removeFromView = (id: string) => setHeads((hs) => hs.filter((h) => h.id !== id))
 
@@ -221,16 +205,9 @@ function CompareInner() {
           className="p-1.5 rounded text-muted-foreground hover:bg-muted">
           <ExternalLink className="size-[18px]" />
         </a>
-        {canDelete && (
-          <button type="button" title="Удалить в корзину" disabled={busy}
-            onClick={() => trashCandidate(c)}
-            className="p-1.5 rounded text-destructive hover:bg-destructive/10 disabled:opacity-40">
-            <Trash2 className="size-[18px]" />
-          </button>
-        )}
         <button type="button" title="Убрать из сравнения" disabled={busy}
           onClick={() => removeFromView(c.id)}
-          className="p-1.5 rounded text-muted-foreground hover:bg-muted ml-auto">
+          className="p-1.5 rounded text-muted-foreground hover:bg-muted">
           <X className="size-[18px]" />
         </button>
       </div>
@@ -326,12 +303,16 @@ function CompareInner() {
                         {candidates.map((c) => (
                           <th key={c.id} className="text-left font-medium p-2.5 align-top w-[260px] min-w-[260px] border-l h-full">
                             <div className="flex flex-col h-full">
-                              <div className="flex items-center gap-1.5">
-                                <div className="truncate max-w-[200px]" title={nameOf(c)}>{nameOf(c)}</div>
-                                {c.stage === "rejected" && <Badge variant="outline" className="text-[10px] h-4 px-1 text-destructive border-destructive/40">отказ</Badge>}
-                                {c.stage === "interview" && <Badge variant="outline" className="text-[10px] h-4 px-1 text-emerald-600 border-emerald-300">интервью</Badge>}
+                              {/* Имя + скоры в блоке фикс. высоты — чтобы ряд иконок был
+                                  на одной линии во всех колонках (даже где есть строка AI). */}
+                              <div className="min-h-[3.5rem]">
+                                <div className="flex items-center gap-1.5">
+                                  <div className="truncate max-w-[200px]" title={nameOf(c)}>{nameOf(c)}</div>
+                                  {c.stage === "rejected" && <Badge variant="outline" className="text-[10px] h-4 px-1 text-destructive border-destructive/40">отказ</Badge>}
+                                  {c.stage === "interview" && <Badge variant="outline" className="text-[10px] h-4 px-1 text-emerald-600 border-emerald-300">интервью</Badge>}
+                                </div>
+                                <ScoreLine c={c} />
                               </div>
-                              <ScoreLine c={c} />
                               {/* Иконки прижаты к низу — ряд действий ровный во всех колонках */}
                               <div className="mt-auto"><CandidateActions c={c} /></div>
                             </div>

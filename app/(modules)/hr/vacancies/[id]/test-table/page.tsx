@@ -26,13 +26,12 @@ function Cell({ a }: { a?: Ans }) {
   const full = a.correct === true || (hasMax && (a.awarded ?? 0) >= (a.max as number))
   const zero = (a.awarded ?? 0) <= 0
   const label = hasMax ? `${a.awarded}/${a.max} б` : `${a.awarded} б`
-  const word = full ? " · верно" : zero ? " · неверно" : " · частично"
   return (
     <div className="space-y-1">
       {typeof a.awarded === "number" && (
-        <Badge variant="outline" className={cn("text-[10px] h-4 px-1.5",
+        <Badge variant="outline" className={cn("text-[12px] h-5 px-1.5 font-semibold",
           full ? "text-success border-success/40" : zero ? "text-destructive border-destructive/40" : "text-amber-600 border-amber-300")}>
-          {label}{word}
+          {label}
         </Badge>
       )}
       {a.value != null && (() => {
