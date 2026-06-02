@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { ArrowLeft, Columns3, Rows3, Loader2, Star, Check, X, ExternalLink, Ban, ChevronDown, Download, Share2 } from "lucide-react"
+import { CandidateDrawer } from "@/components/candidates/candidate-drawer"
 
 interface QItem { id: string; text: string; points?: number }
 interface Ans { value: string | null; awarded?: number | null; max?: number | null; correct?: boolean | null }
@@ -125,6 +126,10 @@ function CompareInner() {
   const [error, setError] = useState<string | null>(null)
   const [mode, setMode] = useState<"matrix" | "byQuestion">("matrix")
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+  // Боковая карточка кандидата (drawer) поверх сравнения.
+  const [drawerId, setDrawerId] = useState<string | null>(null)
+  const [drawerOpen, setDrawerOpen] = useState(false)
+  const openCard = (id: string) => { setDrawerId(id); setDrawerOpen(true) }
   const toggleSection = (key: string) =>
     setCollapsed((s) => { const n = new Set(s); n.has(key) ? n.delete(key) : n.add(key); return n })
 
@@ -226,10 +231,11 @@ function CompareInner() {
           className="p-1.5 rounded text-destructive hover:bg-destructive/10 disabled:opacity-40">
           <Ban className="size-[18px]" />
         </button>
-        <a href={`/hr/candidates/${c.id}`} target="_blank" rel="noopener noreferrer" title="Открыть карточку"
-          className="p-1.5 rounded text-muted-foreground hover:bg-muted">
+        <button type="button" title="Открыть карточку" disabled={busy}
+          onClick={() => openCard(c.id)}
+          className="p-1.5 rounded text-muted-foreground hover:bg-muted disabled:opacity-40">
           <ExternalLink className="size-[18px]" />
-        </a>
+        </button>
         <button type="button" title="Убрать из сравнения" disabled={busy}
           onClick={() => removeFromView(c.id)}
           className="p-1.5 rounded text-muted-foreground hover:bg-muted">
@@ -405,6 +411,15 @@ function CompareInner() {
           ))}
         </div>
       )}
+
+      {/* Боковая карточка кандидата поверх сравнения (вместо ухода на /hr/candidates/[id]). */}
+      <CandidateDrawer
+        candidateId={drawerId}
+        open={drawerOpen}
+        onOpenChange={setDrawerOpen}
+        onStageChange={(id, stage) => patchHead(id, { stage })}
+        onToggleFavorite={(id, isFavorite) => patchHead(id, { isFavorite })}
+      />
     </div>
   )
 }
