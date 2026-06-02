@@ -13,7 +13,7 @@ import { useAuth } from "@/lib/auth"
 import { ArrowLeft, Columns3, Rows3, Loader2, Star, Check, X, Trash2, ExternalLink, Ban, ChevronDown, Download, Share2 } from "lucide-react"
 
 interface QItem { id: string; text: string; points?: number }
-interface Ans { value: string | null; awarded?: number | null; correct?: boolean | null }
+interface Ans { value: string | null; awarded?: number | null; max?: number | null; correct?: boolean | null }
 interface Section {
   key: "test" | "demo" | "anketa"
   title: string
@@ -48,6 +48,9 @@ function AnswerCell({ a }: { a: Ans | undefined }) {
   if (!a || (a.value == null && a.awarded == null)) {
     return <span className="text-muted-foreground/40 text-xs italic">—</span>
   }
+  const hasMax = typeof a.max === "number" && a.max > 0
+  const full = a.correct === true || (hasMax && (a.awarded ?? 0) >= (a.max as number))
+  const zero = (a.awarded ?? 0) <= 0
   return (
     <div className="space-y-1">
       {typeof a.awarded === "number" && (
@@ -55,10 +58,10 @@ function AnswerCell({ a }: { a: Ans | undefined }) {
           variant="outline"
           className={cn(
             "text-[10px] h-4 px-1.5",
-            a.correct ? "text-success border-success/40" : "text-amber-600 border-amber-300",
+            full ? "text-success border-success/40" : zero ? "text-destructive border-destructive/40" : "text-amber-600 border-amber-300",
           )}
         >
-          {a.awarded} б{a.correct === false ? " · неверно" : a.correct ? " · верно" : ""}
+          {hasMax ? `${a.awarded}/${a.max} б` : `${a.awarded} б`}{full ? " · верно" : zero ? " · неверно" : " · частично"}
         </Badge>
       )}
       {a.value != null && (() => {

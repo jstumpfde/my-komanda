@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils"
 import { Columns3, Rows3, Loader2, ChevronDown } from "lucide-react"
 
 interface QItem { id: string; text: string; points?: number }
-interface Ans { value: string | null; awarded?: number | null; correct?: boolean | null }
+interface Ans { value: string | null; awarded?: number | null; max?: number | null; correct?: boolean | null }
 interface Section { key: string; title: string; scored: boolean; questions: QItem[]; answers: Record<string, Record<string, Ans>> }
 interface Head { id: string; name: string | null; aiScore: number | null; resumeScore: number | null; testScore?: number | null; testPoints?: { got: number; max: number } | null; demoPercent?: number | null }
 
@@ -31,11 +31,15 @@ interface Data { candidates: Head[]; sections: Section[]; vacancyTitle?: string 
 
 function AnswerCell({ a }: { a?: Ans }) {
   if (!a || (a.value == null && a.awarded == null)) return <span className="text-muted-foreground/40 text-xs italic">—</span>
+  const hasMax = typeof a.max === "number" && a.max > 0
+  const full = a.correct === true || (hasMax && (a.awarded ?? 0) >= (a.max as number))
+  const zero = (a.awarded ?? 0) <= 0
   return (
     <div className="space-y-1">
       {typeof a.awarded === "number" && (
-        <Badge variant="outline" className={cn("text-[10px] h-4 px-1.5", a.correct ? "text-success border-success/40" : "text-amber-600 border-amber-300")}>
-          {a.awarded} б{a.correct === false ? " · неверно" : a.correct ? " · верно" : ""}
+        <Badge variant="outline" className={cn("text-[10px] h-4 px-1.5",
+          full ? "text-success border-success/40" : zero ? "text-destructive border-destructive/40" : "text-amber-600 border-amber-300")}>
+          {hasMax ? `${a.awarded}/${a.max} б` : `${a.awarded} б`}{full ? " · верно" : zero ? " · неверно" : " · частично"}
         </Badge>
       )}
       {a.value != null && (() => {

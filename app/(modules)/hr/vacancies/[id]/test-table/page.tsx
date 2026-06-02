@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils"
 import { ArrowLeft, Loader2 } from "lucide-react"
 
 interface QItem { id: string; text: string; points?: number }
-interface Ans { value: string | null; awarded?: number | null; correct?: boolean | null }
+interface Ans { value: string | null; awarded?: number | null; max?: number | null; correct?: boolean | null }
 interface Row {
   id: string; name: string | null; testScore: number | null
   testPoints: { got: number; max: number } | null; resumeScore: number | null
@@ -20,11 +20,19 @@ interface Data { vacancyTitle: string | null; questions: QItem[]; candidates: Ro
 
 function Cell({ a }: { a?: Ans }) {
   if (!a || (a.value == null && a.awarded == null)) return <span className="text-muted-foreground/40 text-xs italic">—</span>
+  // Бейдж балла: полный = «верно» (зелёный), 0 = «неверно» (красный),
+  // между — «частично» (янтарный), с дробью awarded/max.
+  const hasMax = typeof a.max === "number" && a.max > 0
+  const full = a.correct === true || (hasMax && (a.awarded ?? 0) >= (a.max as number))
+  const zero = (a.awarded ?? 0) <= 0
+  const label = hasMax ? `${a.awarded}/${a.max} б` : `${a.awarded} б`
+  const word = full ? " · верно" : zero ? " · неверно" : " · частично"
   return (
     <div className="space-y-1">
       {typeof a.awarded === "number" && (
-        <Badge variant="outline" className={cn("text-[10px] h-4 px-1.5", a.correct ? "text-success border-success/40" : "text-amber-600 border-amber-300")}>
-          {a.awarded} б{a.correct === false ? " · неверно" : a.correct ? " · верно" : ""}
+        <Badge variant="outline" className={cn("text-[10px] h-4 px-1.5",
+          full ? "text-success border-success/40" : zero ? "text-destructive border-destructive/40" : "text-amber-600 border-amber-300")}>
+          {label}{word}
         </Badge>
       )}
       {a.value != null && (() => {

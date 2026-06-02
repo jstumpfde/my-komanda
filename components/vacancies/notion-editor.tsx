@@ -30,6 +30,7 @@ import {
 import { toast } from "sonner"
 import type { Demo, Block, BlockType, Lesson } from "@/lib/course-types"
 import {BLOCK_TYPE_META, createBlock} from "@/lib/course-types"
+import { resolveOptionPoints } from "@/lib/score-test-objective"
 import { TEMPLATE_VARIABLES } from "@/lib/templates/demo-templates"
 import { LibraryDialog } from "./library-dialog"
 
@@ -2009,6 +2010,10 @@ function TaskEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: 
             && ((q.otherOptions?.length ?? 0) > 0 || (q.options ?? []).some((o) => /^друго/i.test((o ?? "").trim())))
           const showAiCheck = isText || hasOtherOption
           const points = q.points ?? 0
+          // Per-option режим (single/multiple): баллы заданы на каждый вариант,
+          // общий «Баллы» внизу не используется — скрываем, чтобы не путать.
+          const perOptionMode = (q.answerType === "single" || q.answerType === "multiple")
+            && Array.isArray(q.optionPoints) && q.optionPoints.length === q.options.length
           const typeInfo = qTypeInfo(q.answerType)
           return (
             <div
@@ -2107,14 +2112,33 @@ function TaskEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: 
                   {/* ИИ-проверка перенесена НИЖЕ — под список вариантов (см. ниже). */}
 
                   {/* ── Варианты (single / multiple / sort) ── */}
-                  {hasOptions && (
+                  {hasOptions && (() => {
+                    const isSelect = q.answerType === "single" || q.answerType === "multiple"
+                    // Режим «баллы по вариантам» — признак: массив optionPoints нужной длины.
+                    const perOption = isSelect && Array.isArray(q.optionPoints) && q.optionPoints.length === q.options.length
+                    const eff = isSelect ? resolveOptionPoints(q) : []
+                    const qMax = q.answerType === "single"
+                      ? Math.max(0, ...eff, 0)
+                      : q.answerType === "multiple"
+                        ? eff.reduce((s, p) => s + (p > 0 ? p : 0), 0)
+                        : 0
+                    // Записать балл варианта (материализует optionPoints при первом вводе).
+                    const setOptPoint = (oi: number, raw: string) => {
+                      const v = raw.trim() === "" || raw.trim() === "-" ? 0 : parseInt(raw, 10)
+                      const arr = perOption ? [...q.optionPoints!] : resolveOptionPoints(q)
+                      arr[oi] = Number.isFinite(v) ? v : 0
+                      updateQ(qi, { optionPoints: arr })
+                    }
+                    return (
                     <div className="space-y-1.5">
                       {q.options.map((opt, oi) => {
                         const isCorrectSingle = q.answerType === "single" && q.correctOptions?.[0] === oi
                         const isCorrectMulti = q.answerType === "multiple" && (q.correctOptions?.includes(oi) ?? false)
+                        const positive = perOption && (eff[oi] ?? 0) > 0
+                        const negative = perOption && (eff[oi] ?? 0) < 0
                         return (
                           <div key={oi} className="flex items-center gap-1.5">
-                            {/* Перемещение варианта вверх/вниз (с ремапом ✓ и ✏️). */}
+                            {/* Перемещение варианта вверх/вниз (с ремапом ✓/✏️ и перестановкой баллов). */}
                             <div className="flex flex-col shrink-0 -my-0.5">
                               {([-1, 1] as const).map((dir) => {
                                 const j = oi + dir
@@ -2129,8 +2153,9 @@ function TaskEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: 
                                       if (disabled) return
                                       const no = [...q.options]
                                       ;[no[oi], no[j]] = [no[j], no[oi]]
-                                      const swap = (a?: number[]) => a?.map((c) => (c === oi ? j : c === j ? oi : c))
-                                      updateQ(qi, { options: no, correctOptions: swap(q.correctOptions), otherOptions: swap(q.otherOptions) })
+                                      const remap = (a?: number[]) => a?.map((c) => (c === oi ? j : c === j ? oi : c))
+                                      const swapVals = (a?: number[]) => { if (!a) return a; const c = [...a]; [c[oi], c[j]] = [c[j], c[oi]]; return c }
+                                      updateQ(qi, { options: no, correctOptions: remap(q.correctOptions), otherOptions: remap(q.otherOptions), optionPoints: swapVals(q.optionPoints) })
                                     }}
                                     className="text-muted-foreground/40 hover:text-foreground disabled:opacity-20 leading-none"
                                   >
@@ -2145,13 +2170,27 @@ function TaskEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: 
                             <input
                               className={cn(
                                 "flex-1 text-xs border rounded px-2 py-1.5 outline-none focus:border-primary/50",
-                                (isCorrectSingle || isCorrectMulti) ? "bg-green-500/5 border-green-400/50" : "bg-muted/30 border-border"
+                                (isCorrectSingle || isCorrectMulti || positive) ? "bg-green-500/5 border-green-400/50"
+                                  : negative ? "bg-destructive/5 border-destructive/40" : "bg-muted/30 border-border"
                               )}
                               value={opt}
                               onChange={(e) => { const no = [...q.options]; no[oi] = e.target.value; updateQ(qi, { options: no }) }}
                               placeholder={`Вариант ${oi + 1}...`}
                             />
-                            {q.answerType === "single" && (
+                            {/* Per-option режим: поле балла вместо ✓ */}
+                            {perOption && (
+                              <input
+                                type="number"
+                                title="Балл за этот вариант (можно отрицательный — штраф)"
+                                className={cn(
+                                  "shrink-0 w-14 text-xs border rounded px-1.5 py-1 outline-none text-center focus:border-primary/50 bg-background",
+                                  positive ? "border-green-400/50 text-green-700" : negative ? "border-destructive/40 text-destructive" : "border-border"
+                                )}
+                                value={q.optionPoints![oi] ?? 0}
+                                onChange={(e) => setOptPoint(oi, e.target.value)}
+                              />
+                            )}
+                            {!perOption && q.answerType === "single" && (
                               <button
                                 title={isCorrectSingle ? "Правильный ответ" : "Отметить как правильный"}
                                 onClick={() => updateQ(qi, { correctOptions: isCorrectSingle ? [] : [oi] })}
@@ -2161,7 +2200,7 @@ function TaskEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: 
                                 )}
                               >✓</button>
                             )}
-                            {q.answerType === "multiple" && (
+                            {!perOption && q.answerType === "multiple" && (
                               <button
                                 title={isCorrectMulti ? "Правильный (снять)" : "Отметить как правильный"}
                                 onClick={() => {
@@ -2195,7 +2234,8 @@ function TaskEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: 
                                 const newOpts = q.options.filter((_, j) => j !== oi)
                                 const newCorrect = q.correctOptions?.filter((c) => c !== oi).map((c) => c > oi ? c - 1 : c)
                                 const newOther = q.otherOptions?.filter((c) => c !== oi).map((c) => c > oi ? c - 1 : c)
-                                updateQ(qi, { options: newOpts, correctOptions: newCorrect, otherOptions: newOther })
+                                const newOptPts = q.optionPoints?.filter((_, j) => j !== oi)
+                                updateQ(qi, { options: newOpts, correctOptions: newCorrect, otherOptions: newOther, optionPoints: newOptPts })
                               }}
                             ><X className="w-3 h-3" /></button>
                           </div>
@@ -2211,15 +2251,44 @@ function TaskEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: 
                         />
                       )}
                       <button className="text-xs text-primary/70 hover:text-primary flex items-center gap-1"
-                        onClick={() => updateQ(qi, { options: [...q.options, ""] })}
+                        onClick={() => updateQ(qi, { options: [...q.options, ""], optionPoints: q.optionPoints ? [...q.optionPoints, 0] : undefined })}
                       >
                         <Plus className="w-3 h-3" />{q.answerType === "sort" ? "Добавить пункт" : "Добавить вариант"}
                       </button>
                       {q.answerType === "sort" && q.options.length > 0 && (
                         <p className="text-[11px] text-muted-foreground/50">Текущий порядок считается правильным</p>
                       )}
+                      {/* ── Режим баллов: переключатель + максимум ── */}
+                      {isSelect && (
+                        <div className="flex items-center gap-2 flex-wrap pt-0.5">
+                          {!perOption ? (
+                            <button
+                              className="text-[11px] text-primary/70 hover:text-primary underline underline-offset-2"
+                              onClick={() => updateQ(qi, { optionPoints: resolveOptionPoints(q) })}
+                            >Разные баллы по вариантам…</button>
+                          ) : (
+                            <>
+                              <span className="text-[11px] text-muted-foreground">Баллы по вариантам:</span>
+                              <button
+                                className="text-[11px] text-muted-foreground hover:text-foreground underline underline-offset-2"
+                                onClick={() => updateQ(qi, { optionPoints: undefined })}
+                                title="Вернуться к простому режиму: отметка ✓ + равные баллы"
+                              >↺ к простому (✓)</button>
+                            </>
+                          )}
+                          {qMax > 0 && (
+                            <span className="text-[11px] text-amber-600 ml-auto">Максимум: {qMax} б</span>
+                          )}
+                        </div>
+                      )}
+                      {perOption && q.answerType === "multiple" && (
+                        <p className="text-[10px] text-muted-foreground/70">
+                          Балл вопроса = сумма выбранных (обрезается в 0…{qMax}). Отрицательные баллы — штраф за лишний выбор.
+                        </p>
+                      )}
                     </div>
-                  )}
+                    )
+                  })()}
 
                   {/* ── ИИ-проверка (под вариантами): текстовые + выбор с «Другое…» ── */}
                   {showAiCheck && (
@@ -2275,8 +2344,8 @@ function TaskEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: 
                     </div>
                   )}
 
-                  {/* ── Баллы (не для текстовых без aiCriteria) ── */}
-                  {!isText && (
+                  {/* ── Баллы (не для текстовых без aiCriteria; не в per-option режиме) ── */}
+                  {!isText && !perOptionMode && (
                     <div className="flex items-center gap-2 pt-0.5 border-t border-border/40">
                       <span className="text-xs text-muted-foreground">Баллы:</span>
                       <input type="number" min={0} max={999}

@@ -4,11 +4,24 @@
 import { and, eq, inArray, isNull, desc } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { candidates, demos, testSubmissions } from "@/lib/db/schema"
-import { collectTaskQuestions } from "@/lib/score-test-objective"
+import { collectTaskQuestions, resolveOptionPoints } from "@/lib/score-test-objective"
 import type { Question } from "@/lib/course-types"
 
+// Максимум баллов за вопрос (для шапки таблицы). single/multiple — из баллов
+// по вариантам (per-option или деривированных), остальные — points.
+function questionMaxPoints(q: Question): number | undefined {
+  if (q.answerType === "single" || q.answerType === "multiple") {
+    const op = resolveOptionPoints(q)
+    const max = q.answerType === "single"
+      ? Math.max(0, ...op, 0)
+      : op.reduce((s, p) => s + (p > 0 ? p : 0), 0)
+    return max > 0 ? max : undefined
+  }
+  return typeof q.points === "number" && q.points > 0 ? q.points : undefined
+}
+
 export interface CompareQItem { id: string; text: string; points?: number }
-export interface CompareAns { value: string | null; awarded?: number | null; correct?: boolean | null }
+export interface CompareAns { value: string | null; awarded?: number | null; max?: number | null; correct?: boolean | null }
 export interface CompareSection {
   key: "test" | "demo" | "anketa"
   title: string
@@ -133,12 +146,12 @@ export async function buildComparison(vacancyId: string, ids: string[]): Promise
 
   const testSection: CompareSection = {
     key: "test", title: "Тест", scored: true,
-    questions: testQuestions.map((q) => ({ id: q.id, text: q.text, points: q.points })),
+    questions: testQuestions.map((q) => ({ id: q.id, text: q.text, points: questionMaxPoints(q) })),
     answers: {},
   }
   for (const c of cands) {
     const aj = subByCandidate.get(c.id) as
-      | { answers?: { questionId?: string; value?: unknown }[]; objective?: { perQuestion?: { questionId?: string; awarded?: number; correct?: boolean }[] } }
+      | { answers?: { questionId?: string; value?: unknown }[]; objective?: { perQuestion?: { questionId?: string; awarded?: number; max?: number; correct?: boolean }[] } }
       | undefined
     const byQ: Record<string, CompareAns> = {}
     const answersArr = Array.isArray(aj?.answers) ? aj!.answers : []
@@ -146,7 +159,7 @@ export async function buildComparison(vacancyId: string, ids: string[]): Promise
     for (const q of testQuestions) {
       const a = answersArr.find((x) => x.questionId === q.id)
       const pq = perQ.find((x) => x.questionId === q.id)
-      if (a || pq) byQ[q.id] = { value: a ? stringifyAnswer(a.value) : null, awarded: pq?.awarded ?? null, correct: pq?.correct ?? null }
+      if (a || pq) byQ[q.id] = { value: a ? stringifyAnswer(a.value) : null, awarded: pq?.awarded ?? null, max: pq?.max ?? null, correct: pq?.correct ?? null }
     }
     testSection.answers[c.id] = byQ
   }

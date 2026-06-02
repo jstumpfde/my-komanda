@@ -23,6 +23,7 @@ interface ObjectivePerQuestion {
   questionId: string
   answerType: string
   points:     number
+  max?:       number
   awarded:    number
   correct:    boolean
 }
@@ -268,17 +269,26 @@ export function TestTab({ candidateId }: { candidateId?: string }) {
                     <span className="text-muted-foreground">{i + 1}. </span>{label}
                   </p>
                   <div className="flex items-center gap-1.5 shrink-0">
-                    {graded && (
-                      graded.correct ? (
+                    {graded && (() => {
+                      const denom = (graded as { max?: number }).max ?? graded.points
+                      const full = graded.correct || (denom > 0 && graded.awarded >= denom)
+                      const zero = graded.awarded <= 0
+                      if (full) return (
                         <span className="inline-flex items-center gap-0.5 text-[10px] text-emerald-700 bg-emerald-100 dark:bg-emerald-950 dark:text-emerald-400 rounded px-1.5 py-0.5">
-                          <Check className="w-3 h-3" /> {graded.awarded}/{graded.points}
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-0.5 text-[10px] text-red-600 bg-red-100 dark:bg-red-950 dark:text-red-400 rounded px-1.5 py-0.5">
-                          <X className="w-3 h-3" /> 0/{graded.points}
+                          <Check className="w-3 h-3" /> {graded.awarded}/{denom}
                         </span>
                       )
-                    )}
+                      if (zero) return (
+                        <span className="inline-flex items-center gap-0.5 text-[10px] text-red-600 bg-red-100 dark:bg-red-950 dark:text-red-400 rounded px-1.5 py-0.5">
+                          <X className="w-3 h-3" /> 0/{denom}
+                        </span>
+                      )
+                      return (
+                        <span className="inline-flex items-center gap-0.5 text-[10px] text-amber-700 bg-amber-100 dark:bg-amber-950 dark:text-amber-400 rounded px-1.5 py-0.5">
+                          {graded.awarded}/{denom}
+                        </span>
+                      )
+                    })()}
                     <span className="text-[10px] text-muted-foreground">{ANSWER_TYPE_LABEL[q.answerType] || q.answerType}</span>
                   </div>
                 </div>

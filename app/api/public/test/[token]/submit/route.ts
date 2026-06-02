@@ -9,6 +9,7 @@ import { scheduleTestAfterMessage } from "@/lib/messaging/test-after-message"
 import {
   scoreObjective,
   collectTaskQuestions,
+  resolveOptionPoints,
   type StructuredAnswer,
   type ObjectiveResult,
 } from "@/lib/score-test-objective"
@@ -142,7 +143,13 @@ export async function POST(
         // зелёным ✓ (correctOptions). Так AI судит «подходит/не подходит», в т.ч.
         // ответ «Другое», который баллами не оценить.
         const opts = q?.options ?? []
-        const correct = (q?.correctOptions ?? [])
+        // «Подходящие» = отмеченные ✓ ИЛИ варианты с положительным баллом
+        // (per-option режим). Объединяем по индексам.
+        const correctIdx = new Set<number>(q?.correctOptions ?? [])
+        if (q && (q.answerType === "single" || q.answerType === "multiple")) {
+          resolveOptionPoints(q).forEach((p, i) => { if (p > 0) correctIdx.add(i) })
+        }
+        const correct = [...correctIdx]
           .map((idx) => opts[idx])
           .filter((s): s is string => typeof s === "string" && s.trim().length > 0)
         if (correct.length) line += `\n  (подходящие варианты: ${correct.join(", ")})`
