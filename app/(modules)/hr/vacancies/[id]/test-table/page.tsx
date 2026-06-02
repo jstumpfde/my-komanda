@@ -7,13 +7,15 @@ import { useParams, useRouter } from "next/navigation"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { ArrowLeft, Loader2 } from "lucide-react"
+import { ArrowLeft, Loader2, Star, Check, Ban, ExternalLink, X } from "lucide-react"
+import { toast } from "sonner"
 
 interface QItem { id: string; text: string; points?: number }
 interface Ans { value: string | null; awarded?: number | null; max?: number | null; correct?: boolean | null }
 interface Row {
   id: string; name: string | null; testScore: number | null
   testPoints: { got: number; max: number } | null; resumeScore: number | null
+  isFavorite?: boolean; stage?: string | null
   answers: Record<string, Ans>
 }
 interface Data { vacancyTitle: string | null; questions: QItem[]; candidates: Row[] }
@@ -65,6 +67,65 @@ export default function TestTablePage() {
   const nameOf = (c: Row) => c.name?.trim() || "Без имени"
   const scoreColor = (s: number | null) => s == null ? "" : s >= 70 ? "text-success" : s >= 40 ? "text-amber-600" : "text-destructive"
 
+  // ── Действия по кандидату (как в сравнении) ──
+  const [busyId, setBusyId] = useState<string | null>(null)
+  const patchRow = (id: string, patch: Partial<Row>) =>
+    setData((d) => d ? { ...d, candidates: d.candidates.map((c) => c.id === id ? { ...c, ...patch } : c) } : d)
+
+  const toggleFavorite = async (c: Row) => {
+    const next = !c.isFavorite
+    setBusyId(c.id)
+    try {
+      const r = await fetch(`/api/modules/hr/candidates/${c.id}/favorite`, {
+        method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ isFavorite: next }),
+      })
+      if (!r.ok) throw new Error()
+      patchRow(c.id, { isFavorite: next })
+    } catch { toast.error("Не удалось") } finally { setBusyId(null) }
+  }
+  const changeStage = async (c: Row, stage: string, okMsg: string) => {
+    setBusyId(c.id)
+    try {
+      const r = await fetch(`/api/modules/hr/candidates/${c.id}/stage`, {
+        method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ stage }),
+      })
+      if (!r.ok) throw new Error()
+      patchRow(c.id, { stage })
+      toast.success(okMsg)
+    } catch { toast.error("Не удалось") } finally { setBusyId(null) }
+  }
+  const removeFromView = (id: string) =>
+    setData((d) => d ? { ...d, candidates: d.candidates.filter((c) => c.id !== id) } : d)
+
+  function Actions({ c }: { c: Row }) {
+    const busy = busyId === c.id
+    const rejected = c.stage === "rejected"
+    return (
+      <div className="flex items-center gap-0.5 mt-1.5">
+        <button type="button" title="В избранное" disabled={busy} onClick={() => toggleFavorite(c)}
+          className={cn("p-1 rounded hover:bg-muted disabled:opacity-40", c.isFavorite ? "text-amber-500" : "text-muted-foreground")}>
+          <Star className={cn("size-4", c.isFavorite && "fill-amber-400")} />
+        </button>
+        <button type="button" title="Пригласить на интервью" disabled={busy} onClick={() => changeStage(c, "interview", `Приглашён: ${nameOf(c)}`)}
+          className="p-1 rounded text-emerald-600 hover:bg-emerald-500/10 disabled:opacity-40">
+          <Check className="size-4" />
+        </button>
+        <button type="button" title={rejected ? "Уже отказан" : "Отказать"} disabled={busy || rejected} onClick={() => changeStage(c, "rejected", `Отказано: ${nameOf(c)}`)}
+          className="p-1 rounded text-destructive hover:bg-destructive/10 disabled:opacity-40">
+          <Ban className="size-4" />
+        </button>
+        <a href={`/hr/candidates/${c.id}`} target="_blank" rel="noopener noreferrer" title="Открыть карточку"
+          className="p-1 rounded text-muted-foreground hover:bg-muted">
+          <ExternalLink className="size-4" />
+        </a>
+        <button type="button" title="Убрать из таблицы" disabled={busy} onClick={() => removeFromView(c.id)}
+          className="p-1 rounded text-muted-foreground hover:bg-muted">
+          <X className="size-4" />
+        </button>
+      </div>
+    )
+  }
+
   return (
     <div className="p-4 md:p-6 w-full">
       <div className="flex items-center gap-2 mb-4 flex-wrap">
@@ -90,9 +151,12 @@ export default function TestTablePage() {
                     Кандидат
                   </th>
                   {data.questions.map((q) => (
-                    <th key={q.id} className="text-left font-medium p-2.5 align-bottom w-[260px] min-w-[260px] border-l">
-                      <div className="text-[13px]">{q.text}</div>
-                      {typeof q.points === "number" && q.points > 0 && <div className="text-[11px] text-muted-foreground font-normal">макс. {q.points} б</div>}
+                    <th key={q.id} className="text-left font-medium p-2.5 align-top w-[260px] min-w-[260px] border-l h-full">
+                      {/* Название вопроса — вверху-слева; «макс. N б» прижато к низу-слева. */}
+                      <div className="flex flex-col h-full">
+                        <div className="text-[13px]">{q.text}</div>
+                        {typeof q.points === "number" && q.points > 0 && <div className="mt-auto pt-1 text-[11px] text-muted-foreground font-normal">макс. {q.points} б</div>}
+                      </div>
                     </th>
                   ))}
                 </tr>
@@ -101,11 +165,16 @@ export default function TestTablePage() {
                 {data.candidates.map((c, ri) => (
                   <tr key={c.id} className="border-t align-top">
                     <td className={cn("p-2.5 sticky left-0 z-10 border-r shadow-[2px_0_4px_rgba(0,0,0,0.04)] w-[240px] min-w-[240px] max-w-[240px]", ri % 2 ? "bg-muted" : "bg-card")}>
-                      <div className="font-medium text-[13px] truncate" title={nameOf(c)}>{nameOf(c)}</div>
+                      <div className="flex items-center gap-1.5">
+                        <div className="font-medium text-[13px] truncate" title={nameOf(c)}>{nameOf(c)}</div>
+                        {c.stage === "rejected" && <Badge variant="outline" className="text-[10px] h-4 px-1 text-destructive border-destructive/40">отказ</Badge>}
+                        {c.stage === "interview" && <Badge variant="outline" className="text-[10px] h-4 px-1 text-emerald-600 border-emerald-300">интервью</Badge>}
+                      </div>
                       <div className="mt-0.5 text-[11px] text-muted-foreground flex flex-wrap gap-x-1.5">
                         <span>тест <b className={cn("font-semibold", scoreColor(c.testScore) || "text-foreground")}>{c.testScore != null ? c.testScore : "—"}</b>{c.testPoints ? ` (${c.testPoints.got}/${c.testPoints.max})` : ""}</span>
                         {c.resumeScore != null && <span>· резюме <b className="text-foreground">{c.resumeScore}</b></span>}
                       </div>
+                      <Actions c={c} />
                     </td>
                     {data.questions.map((q) => (
                       <td key={q.id} className={cn("p-2.5 border-l align-top w-[260px] min-w-[260px]", ri % 2 && "bg-muted/30")}>

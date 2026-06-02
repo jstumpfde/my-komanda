@@ -43,6 +43,8 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
         testScore: c.testScore,
         testPoints: c.testPoints,
         resumeScore: c.resumeScore,
+        isFavorite: c.isFavorite,
+        stage: c.stage,
         answers: answersBySection[c.id] ?? {},
       }))
       .sort((a, b) => (b.testScore ?? -1) - (a.testScore ?? -1))
