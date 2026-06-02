@@ -206,7 +206,7 @@ export function DemoProgressBar({
       {hasFraction && tot > 0 ? (
         // Сегменты-«шаги»: tot делений, первые cur — залиты цветом стадии,
         // остальные серые. Наглядно показывает «N из M страниц пройдено».
-        <div className="flex w-full gap-[2px]" aria-label={`Прогресс демо: ${label}`}>
+        <div className="flex w-full gap-[1px]" aria-label={`Прогресс демо: ${label}`}>
           {Array.from({ length: tot }).map((_, i) => (
             <div
               key={i}
