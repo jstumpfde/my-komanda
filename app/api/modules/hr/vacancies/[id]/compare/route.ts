@@ -2,9 +2,9 @@
 // Единая выборка ответов нескольких кандидатов для страницы сравнения.
 // Данные собирает lib/compare/build-comparison.ts (общий хелпер с публичным
 // роутом по share-токену).
-import { eq } from "drizzle-orm"
+import { eq, inArray } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { vacancies } from "@/lib/db/schema"
+import { vacancies, candidates } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { buildComparison } from "@/lib/compare/build-comparison"
 
@@ -29,7 +29,20 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
 
     const result = await buildComparison(vacancyId, ids)
     if (result.candidates.length === 0) return apiError("No candidates", 404)
-    return apiSuccess(result)
+
+    // Город + дата рождения — только в HR-роуте (в публичную ссылку не отдаём).
+    const info = await db
+      .select({ id: candidates.id, city: candidates.city, birthDate: candidates.birthDate })
+      .from(candidates)
+      .where(inArray(candidates.id, ids))
+    const infoById = new Map(info.map((r) => [r.id, r]))
+    const candidatesWithInfo = result.candidates.map((c) => ({
+      ...c,
+      city: infoById.get(c.id)?.city ?? null,
+      birthDate: infoById.get(c.id)?.birthDate ?? null,
+    }))
+
+    return apiSuccess({ ...result, candidates: candidatesWithInfo })
   } catch (err) {
     if (err instanceof Response) return err
     return apiError("Internal server error", 500)

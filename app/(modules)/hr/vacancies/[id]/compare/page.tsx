@@ -25,6 +25,27 @@ interface CandidateHead {
   isFavorite?: boolean; stage?: string | null
   testScore?: number | null; testPoints?: { got: number; max: number } | null
   demoPercent?: number | null
+  city?: string | null; birthDate?: string | null
+}
+
+// Возраст + ДР из birth_date (pg date → "YYYY-MM-DD").
+function yearsWord(n: number): string {
+  const a = Math.abs(n) % 100, b = a % 10
+  if (a > 10 && a < 20) return "лет"
+  if (b === 1) return "год"
+  if (b >= 2 && b <= 4) return "года"
+  return "лет"
+}
+function birthInfo(b?: string | null): { age: number | null; date: string | null } {
+  if (!b) return { age: null, date: null }
+  const d = new Date(b)
+  if (isNaN(d.getTime())) return { age: null, date: null }
+  const now = new Date()
+  let age = now.getFullYear() - d.getFullYear()
+  const m = now.getMonth() - d.getMonth()
+  if (m < 0 || (m === 0 && now.getDate() < d.getDate())) age--
+  const date = `${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")}.${d.getFullYear()}`
+  return { age: age >= 0 && age < 120 ? age : null, date }
 }
 
 // Единая строка скоров под именем: резюме | демо | тест (| AI).
@@ -305,12 +326,22 @@ function CompareInner() {
                             <div className="flex flex-col h-full">
                               {/* Имя + скоры в блоке фикс. высоты — чтобы ряд иконок был
                                   на одной линии во всех колонках (даже где есть строка AI). */}
-                              <div className="min-h-[3.5rem]">
+                              <div className="min-h-24">
                                 <div className="flex items-center gap-1.5">
                                   <div className="truncate max-w-[200px]" title={nameOf(c)}>{nameOf(c)}</div>
                                   {c.stage === "rejected" && <Badge variant="outline" className="text-[10px] h-4 px-1 text-destructive border-destructive/40">отказ</Badge>}
                                   {c.stage === "interview" && <Badge variant="outline" className="text-[10px] h-4 px-1 text-emerald-600 border-emerald-300">интервью</Badge>}
                                 </div>
+                                {c.city?.trim() && <div className="mt-0.5 text-[11px] font-normal text-muted-foreground truncate" title={c.city}>{c.city}</div>}
+                                {(() => {
+                                  const { age, date } = birthInfo(c.birthDate)
+                                  if (age == null && !date) return null
+                                  return (
+                                    <div className="mt-0.5 text-[11px] font-normal text-muted-foreground">
+                                      {age != null && `${age} ${yearsWord(age)}`}{age != null && date && " · "}{date}
+                                    </div>
+                                  )
+                                })()}
                                 <ScoreLine c={c} />
                               </div>
                               {/* Иконки прижаты к низу — ряд действий ровный во всех колонках */}
