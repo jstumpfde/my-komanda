@@ -212,8 +212,47 @@ export default function TeamPage() {
   const [editPermissions, setEditPermissions] = useState<Record<string, boolean>>({})
 
   // Join link state
-  const [joinCode] = useState("demo-abc123")
+  // Постоянная ссылка-приглашение = уникальный join_code компании (например
+  // orlink). Грузим реальный из /api/companies, редактируем и сохраняем.
+  const [joinCode, setJoinCode] = useState("")
+  const [joinCodeSaved, setJoinCodeSaved] = useState("")
   const [joinEnabled, setJoinEnabled] = useState(true)
+  const [joinSaving, setJoinSaving] = useState(false)
+  const [joinOrigin, setJoinOrigin] = useState("company24.pro")
+
+  useEffect(() => {
+    if (typeof window !== "undefined") setJoinOrigin(window.location.host)
+    fetch("/api/companies")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((c: { joinCode?: string | null; joinEnabled?: boolean } | null) => {
+        if (!c) return
+        const code = c.joinCode || ""
+        setJoinCode(code); setJoinCodeSaved(code)
+        setJoinEnabled(c.joinEnabled !== false)
+      })
+      .catch(() => {})
+  }, [])
+
+  const saveJoin = async (patch: { join_code?: string; join_enabled?: boolean }) => {
+    setJoinSaving(true)
+    try {
+      const res = await fetch("/api/companies", {
+        method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch),
+      })
+      const data = await res.json().catch(() => null) as { joinCode?: string | null; joinEnabled?: boolean; error?: string } | null
+      if (!res.ok) throw new Error(data?.error || "Не удалось сохранить")
+      if (patch.join_code !== undefined) {
+        const code = data?.joinCode || ""
+        setJoinCode(code); setJoinCodeSaved(code)
+      }
+      if (patch.join_enabled !== undefined) setJoinEnabled(data?.joinEnabled !== false)
+      toast.success("Сохранено")
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Ошибка")
+      // откатываем тумблер при ошибке
+      if (patch.join_enabled !== undefined) setJoinEnabled((v) => !v)
+    } finally { setJoinSaving(false) }
+  }
 
   // Invite by email form
   const [inviteEmail, setInviteEmail] = useState("")
@@ -398,26 +437,47 @@ export default function TeamPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            Любой сотрудник может присоединиться по этой ссылке. После регистрации он попадёт в компанию с ролью &laquo;Сотрудник&raquo; — настройте права в карточке.
+            Постоянная ссылка-приглашение компании (без срока). Любой сотрудник
+            присоединится по ней с ролью &laquo;Сотрудник&raquo; — настройте права в карточке.
+            Адрес можно менять; он уникален для всего портала.
           </p>
-          <div className="flex items-center gap-2">
-            <div className="bg-muted px-3 py-2 rounded-lg font-mono text-sm flex-1 truncate">
-              company24.pro/join/{joinCode}
+          {/* Редактируемый код: префикс + поле + сохранить (когда изменён) */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center flex-1 min-w-[260px] rounded-lg border bg-muted/40 overflow-hidden">
+              <span className="px-3 py-2 font-mono text-sm text-muted-foreground select-none">{joinOrigin}/join/</span>
+              <Input
+                value={joinCode}
+                onChange={(e) => setJoinCode(e.target.value)}
+                placeholder="orlink"
+                className="h-9 border-0 bg-transparent font-mono text-sm focus-visible:ring-0 px-1"
+              />
             </div>
-            <Button
-              variant="outline"
-              size="icon"
-              className="shrink-0"
-              onClick={() => {
-                navigator.clipboard.writeText(`company24.pro/join/${joinCode}`)
-                toast.success("Ссылка скопирована")
-              }}
-            >
-              <Copy className="w-4 h-4" />
-            </Button>
+            {joinCode !== joinCodeSaved ? (
+              <Button size="sm" disabled={joinSaving || !joinCode.trim()} onClick={() => saveJoin({ join_code: joinCode.trim() })}>
+                Сохранить
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                size="icon"
+                className="shrink-0"
+                disabled={!joinCodeSaved}
+                onClick={() => {
+                  navigator.clipboard.writeText(`${window.location.origin}/join/${joinCodeSaved}`)
+                  toast.success("Ссылка скопирована")
+                }}
+              >
+                <Copy className="w-4 h-4" />
+              </Button>
+            )}
           </div>
+          {!joinCodeSaved && (
+            <p className="text-xs text-amber-600">
+              Ссылка ещё не задана — впишите уникальный адрес (например <b>orlink</b>) и нажмите «Сохранить».
+            </p>
+          )}
           <div className="flex items-center gap-2">
-            <Switch checked={joinEnabled} onCheckedChange={setJoinEnabled} />
+            <Switch checked={joinEnabled} onCheckedChange={(v) => { setJoinEnabled(v); void saveJoin({ join_enabled: v }) }} disabled={joinSaving} />
             <span className="text-sm text-foreground">Ссылка активна</span>
           </div>
         </CardContent>

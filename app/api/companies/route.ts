@@ -120,6 +120,8 @@ export async function PUT(req: NextRequest) {
       postal_address?: string
       custom_theme?: Record<string, unknown>
       subdomain?: string
+      join_code?: string
+      join_enabled?: boolean
     }
 
     const fieldMap: Record<string, unknown> = {}
@@ -162,6 +164,13 @@ export async function PUT(req: NextRequest) {
     if (body.postal_address !== undefined) fieldMap.postalAddress = body.postal_address
     if (body.custom_theme !== undefined) fieldMap.customTheme = body.custom_theme
     if (body.subdomain !== undefined) fieldMap.subdomain = body.subdomain
+    // Постоянная ссылка-приглашение: уникальный код компании (например orlink).
+    // Пустая строка → null (сброс). Нормализуем к slug-формату.
+    if (body.join_code !== undefined) {
+      const raw = (body.join_code ?? "").trim().toLowerCase().replace(/[^a-z0-9а-я_-]+/gi, "-").replace(/^-+|-+$/g, "")
+      fieldMap.joinCode = raw === "" ? null : raw
+    }
+    if (body.join_enabled !== undefined) fieldMap.joinEnabled = body.join_enabled === true
 
     // Auto-create company if user has no companyId
     if (!user.companyId) {
@@ -205,6 +214,7 @@ export async function PUT(req: NextRequest) {
     console.error("[companies PUT]", err instanceof Error ? err.message : err, err instanceof Error ? err.stack : "")
     const msg = err instanceof Error ? err.message : String(err)
     if (msg.includes("subdomain") && msg.includes("unique")) return apiError("Этот поддомен уже занят", 409)
+    if (msg.includes("join_code") && msg.includes("unique")) return apiError("Эта ссылка-приглашение уже занята — выберите другую", 409)
     return apiError("Internal server error", 500)
   }
 }
