@@ -21,6 +21,7 @@ import { SortMenu } from "@/components/dashboard/sort-menu"
 import { Tooltip as UITooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip"
 import type { CandidateSortMode } from "@/lib/candidate-sort"
 import { CandidateDrawer } from "@/components/candidates/candidate-drawer"
+import { CandidateTrashSheet } from "@/components/candidates/candidate-trash-sheet"
 import { RubricRankPanel } from "@/components/candidates/rubric-rank-panel"
 import { BulkActionsBar, type BulkAction } from "@/components/dashboard/bulk-actions-bar"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
@@ -38,7 +39,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Checkbox } from "@/components/ui/checkbox"
 import { Slider } from "@/components/ui/slider"
 import { Input } from "@/components/ui/input"
-import {Clock, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, MessageSquareText, Zap, Globe, AlertTriangle, TrendingUp, Filter, X, Link2, Copy, Save, Sparkles, Eye, Check, Loader2, Download, ExternalLink, ClipboardList, ChevronLeft, ChevronRight, ChevronDown, Users, Upload, RefreshCw, Bot, Workflow, ListChecks, FilePlus, UserSearch} from "lucide-react"
+import {Clock, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, MessageSquareText, Zap, Globe, AlertTriangle, TrendingUp, Filter, X, Link2, Copy, Save, Sparkles, Eye, Check, Loader2, Download, ExternalLink, ClipboardList, ChevronLeft, ChevronRight, ChevronDown, Users, Upload, RefreshCw, Bot, Workflow, ListChecks, FilePlus, UserSearch, Trash2} from "lucide-react"
 import { AiChatbotSettings } from "@/components/vacancies/ai-chatbot-settings"
 import { VacancyStopFactorsSettings } from "@/components/vacancies/vacancy-stop-factors-settings"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -438,6 +439,7 @@ export default function VacancyPage() {
   }, [router])
 
   const [filters, setFilters] = useState<FilterState>({ searchText: "", cities: [], salaryMin: 0, salaryMax: 250000, scoreMin: 0, scoreMinResume: 0, scoreMinAnketa: 0, sources: [], workFormats: [], relocation: "any", businessTrips: "any", experienceMin: 0, experienceMax: 20, funnelStatuses: DEFAULT_FUNNEL_STATUSES.slice(), hideRejected: false, hideNoSalary: false, activeNow: false, demoProgress: [], dateRange: "", dateFrom: "", dateTo: "", ageMin: 18, ageMax: 65, education: [], languages: [], otherLanguages: [], skills: [], industries: [] })
+  const [trashOpen, setTrashOpen] = useState(false) // Корзина кандидатов (Sheet)
 
   // Маппинг русских лейблов фильтра прогресса демо → API-идентификаторы.
   // UI: candidate-filters.tsx:70 ["Не начал", "В процессе", "Завершил (≥85%)",
@@ -2317,6 +2319,10 @@ export default function VacancyPage() {
                           <BarChart3 className="w-3.5 h-3.5 mr-2" />
                           Сравнить топ
                         </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setTrashOpen(true)}>
+                          <Trash2 className="w-3.5 h-3.5 mr-2" />
+                          Корзина
+                        </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                     <ViewSettings
@@ -4009,6 +4015,14 @@ export default function VacancyPage() {
             })
           })
         }}
+      />
+
+      {/* Корзина кандидатов вакансии — восстановление / удаление навсегда. */}
+      <CandidateTrashSheet
+        vacancyId={id}
+        open={trashOpen}
+        onOpenChange={setTrashOpen}
+        onChanged={() => { (useListPaginated ? paginated.refetch() : refetchCandidates()) }}
       />
 
       {/* Bulk actions floating bar — visible only when кандидаты выделены.
