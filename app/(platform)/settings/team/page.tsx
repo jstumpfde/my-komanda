@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -21,7 +21,6 @@ import {
   Loader2, ExternalLink, Camera, KeyRound, Ban, ChevronDown,
 } from "lucide-react"
 import { getVacancyCategories } from "@/lib/vacancy-storage"
-import { useLocalStorage } from "@/hooks/use-local-storage"
 
 // ─── Типы ────────────────────────────────────────────────────
 
@@ -108,19 +107,33 @@ const PERMISSIONS_CONFIG = [
   { key: "view_analytics", label: "Аналитика" },
 ] as const
 
-// ─── Тестовые данные ────────────────────────────────────────
-
-const INITIAL_MEMBERS: TeamMember[] = [
-  { id: "m1", name: "Анна Иванова",   email: "anna@romashka.ru",    role: "hr_lead",         status: "active",  avatar: "АИ", avatarUrl: undefined, vacancyIds: [], categories: [], candidateVisibility: "all" },
-  { id: "m2", name: "Дмитрий Козлов", email: "dmitry@romashka.ru",  role: "hr_manager",      status: "active",  avatar: "ДК", avatarUrl: undefined, vacancyIds: [], categories: [], candidateVisibility: "own" },
-  { id: "m3", name: "Михаил Романов", email: "mikhail@romashka.ru", role: "department_head", status: "active",  avatar: "МР", avatarUrl: undefined, vacancyIds: [], categories: [], candidateVisibility: "categories" },
-  { id: "m4", name: "Ольга Тихонова", email: "olga@romashka.ru",    role: "observer",        status: "invited", avatar: "ОТ", avatarUrl: undefined, vacancyIds: [], categories: [], candidateVisibility: "all" },
-]
-
 // ─── Компонент ──────────────────────────────────────────────
 
 export default function TeamPage() {
-  const [members, setMembers] = useLocalStorage<TeamMember[]>("team-members", INITIAL_MEMBERS)
+  const [members, setMembers] = useState<TeamMember[]>([])
+
+  // Реальные участники компании из БД (GET /api/team), а не демо-данные.
+  useEffect(() => {
+    let alive = true
+    fetch("/api/team")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((rows: { id: string; name: string; email: string; role: string; avatarUrl?: string | null }[]) => {
+        if (!alive || !Array.isArray(rows)) return
+        const VALID: TeamRole[] = ["director", "hr_lead", "hr_manager", "department_head", "observer", "employee"]
+        setMembers(rows.map((u) => ({
+          id: u.id,
+          name: u.name || u.email,
+          email: u.email,
+          role: (VALID.includes(u.role as TeamRole) ? u.role : "employee") as TeamRole,
+          status: "active" as MemberStatus,
+          avatar: (u.name || u.email).split(/\s+/).map((s) => s[0]).filter(Boolean).slice(0, 2).join("").toUpperCase(),
+          avatarUrl: u.avatarUrl || undefined,
+          vacancyIds: [], categories: [], candidateVisibility: "all",
+        })))
+      })
+      .catch(() => { /* оставляем пустой список */ })
+    return () => { alive = false }
+  }, [])
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [inviteOpen, setInviteOpen] = useState(false)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
