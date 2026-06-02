@@ -2281,6 +2281,30 @@ function TaskEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: 
                           )}
                         </div>
                       )}
+                      {/* ── Штраф за лишний выбор (простой режим multiple) ── */}
+                      {q.answerType === "multiple" && !perOption && (q.correctOptions?.length ?? 0) > 0 && (
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-[11px] text-muted-foreground">Штраф за лишний:</span>
+                          {([
+                            { v: "none", label: "нет" },
+                            { v: "half", label: "½" },
+                            { v: "full", label: "полный" },
+                          ] as const).map(({ v, label }) => {
+                            const active = (q.overselectPenalty ?? "half") === v
+                            return (
+                              <button
+                                key={v}
+                                onClick={() => updateQ(qi, { overselectPenalty: v })}
+                                className={cn(
+                                  "px-2 py-0.5 rounded text-[11px] font-medium border transition-all",
+                                  active ? "bg-primary/10 border-primary text-primary" : "border-border text-muted-foreground/60 hover:border-primary/40"
+                                )}
+                              >{label}</button>
+                            )
+                          })}
+                          <span className="text-[10px] text-muted-foreground/50">за неверный пункт списывается балл</span>
+                        </div>
+                      )}
                       {perOption && q.answerType === "multiple" && (
                         <p className="text-[10px] text-muted-foreground/70">
                           Балл вопроса = сумма выбранных (обрезается в 0…{qMax}). Отрицательные баллы — штраф за лишний выбор.

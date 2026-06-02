@@ -89,14 +89,17 @@ export function resolveOptionPoints(q: Question): number[] {
   if (correct.size === 0 || total === 0) return options.map(() => 0)
   const base = Math.floor(total / correct.size)
   let rem = total - base * correct.size
+  // Штраф за лишний выбор (multiple): none → 0, half → −½ base, full → −base.
+  const mode = q.overselectPenalty ?? "half"
+  const penalty = mode === "none" ? 0 : mode === "half" ? Math.round(base / 2) : base
   return options.map((_, i) => {
     if (correct.has(i)) {
       // Остаток раскидываем по +1 на первые верные варианты (целые баллы).
       const extra = rem > 0 ? (rem--, 1) : 0
       return base + extra
     }
-    // Неверный: multiple — штраф (−base), single — нейтрально (0).
-    return q.answerType === "multiple" ? -base : 0
+    // Неверный: multiple — штраф по режиму, single — нейтрально (0).
+    return q.answerType === "multiple" ? -penalty : 0
   })
 }
 
