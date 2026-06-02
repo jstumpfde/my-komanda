@@ -778,16 +778,25 @@ export async function GET(req: NextRequest) {
     // Кому тест отправлен/поставлен в очередь — для статуса «отп.» в колонке.
     // Сигнал надёжнее, чем только стадия: рассылка идёт через follow_up_messages
     // (branch='test_invite'), а стадия test_task_sent ставится не во всех путях.
-    const testInvitedCandidateIds = new Set<string>()
+    // Различаем «живые» (sent|pending → «отп.») и «упавшие» (failed): если у
+    // кандидата только провалившиеся попытки (нет hh-чата / hh-403 / нет токена),
+    // стадия осталась test_task_sent, но тест НЕ ушёл — показываем «ошибка», а не
+    // ложное «отп.».
+    const testLiveInvitedIds = new Set<string>()
+    const testFailedInvitedIds = new Set<string>()
     if (candidateIds.length > 0) {
       const invRows = await db
-        .select({ candidateId: followUpMessages.candidateId })
+        .select({ candidateId: followUpMessages.candidateId, status: followUpMessages.status })
         .from(followUpMessages)
         .where(and(
           inArray(followUpMessages.candidateId, candidateIds),
           eq(followUpMessages.branch, "test_invite"),
         ))
-      for (const r of invRows) if (r.candidateId) testInvitedCandidateIds.add(r.candidateId)
+      for (const r of invRows) {
+        if (!r.candidateId) continue
+        if (r.status === "sent" || r.status === "pending") testLiveInvitedIds.add(r.candidateId)
+        else if (r.status === "failed") testFailedInvitedIds.add(r.candidateId)
+      }
     }
 
     // Подгружаем структуру курса для расчёта прогресса по СТРАНИЦАМ
@@ -846,12 +855,19 @@ export async function GET(req: NextRequest) {
       //   in_progress — заполняет (черновик с ответами) → «пишет»
       //   opened      — открыл тест, ещё не отвечал → «пер.»
       //   sent        — тест отправлен/в очереди → «отп.»
+      //   failed      — отправка упала (нет hh-чата / hh-403 / нет токена) → «ошибка»
       //   null        — теста не было
       const test = testByCandidateId.get(r.id)
-      let testStatus: "submitted" | "in_progress" | "opened" | "sent" | null
+      let testStatus: "submitted" | "in_progress" | "opened" | "sent" | "failed" | null
       if (test) {
         testStatus = test.submitted ? "submitted" : test.answersCount > 0 ? "in_progress" : "opened"
-      } else if (testInvitedCandidateIds.has(r.id) || TEST_SENT_STAGES.has(r.stage ?? "")) {
+      } else if (testLiveInvitedIds.has(r.id)) {
+        testStatus = "sent"
+      } else if (testFailedInvitedIds.has(r.id)) {
+        // Только провалившиеся попытки — ничего не ушло, стадия осталась
+        // test_task_sent ложно. Показываем «ошибка», чтобы HR это видел.
+        testStatus = "failed"
+      } else if (TEST_SENT_STAGES.has(r.stage ?? "")) {
         testStatus = "sent"
       } else {
         testStatus = null

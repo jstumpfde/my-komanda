@@ -70,9 +70,9 @@ export interface ApiCandidate {
   progressPercent?: number | null
   // Колонка «Тест»: балл последнего test_submission (AI-оценка / автопроверка)
   // и статус-лесенка: submitted (сдан) / in_progress (пишет) / opened (перешёл) /
-  // sent (отправлен) / null.
+  // sent (отправлен) / failed (отправка упала) / null.
   testScore?: number | null
-  testStatus?: "submitted" | "in_progress" | "opened" | "sent" | null
+  testStatus?: "submitted" | "in_progress" | "opened" | "sent" | "failed" | null
   // «Активен сейчас» — активность (демо/тест) за последние 30 минут.
   isActive?: boolean
 }

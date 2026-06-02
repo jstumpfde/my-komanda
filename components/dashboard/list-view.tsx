@@ -576,6 +576,8 @@ export function ListView({
                     <span className="text-muted-foreground text-[11px]">пер.</span>
                   ) : candidate.testStatus === "sent" ? (
                     <span className="text-muted-foreground text-[11px]">отп.</span>
+                  ) : candidate.testStatus === "failed" ? (
+                    <span className="text-destructive text-[11px] font-medium" title="Отправка теста не прошла (нет hh-чата / hh отклонил)">ошибка</span>
                   ) : (
                     <span className="text-muted-foreground/40 text-xs">—</span>
                   )}
