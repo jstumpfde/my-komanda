@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { useAuth } from "@/lib/auth"
-import { ArrowLeft, Columns3, Rows3, Loader2, Star, Check, X, Trash2, ExternalLink, Ban } from "lucide-react"
+import { ArrowLeft, Columns3, Rows3, Loader2, Star, Check, X, Trash2, ExternalLink, Ban, ChevronDown } from "lucide-react"
 
 interface QItem { id: string; text: string; points?: number }
 interface Ans { value: string | null; awarded?: number | null; correct?: boolean | null }
@@ -65,6 +65,9 @@ function CompareInner() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [mode, setMode] = useState<"matrix" | "byQuestion">("matrix")
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+  const toggleSection = (key: string) =>
+    setCollapsed((s) => { const n = new Set(s); n.has(key) ? n.delete(key) : n.add(key); return n })
 
   useEffect(() => {
     if (!vacancyId || ids.length === 0) { setLoading(false); setError("Не выбраны кандидаты"); return }
@@ -215,11 +218,17 @@ function CompareInner() {
 
           {data.sections.map((section) => (
             <section key={section.key}>
-              <h2 className="text-base font-semibold mb-3 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => toggleSection(section.key)}
+                className="flex items-center gap-2 mb-3 text-base font-semibold hover:opacity-80"
+              >
+                <ChevronDown className={cn("size-4 transition-transform text-muted-foreground", collapsed.has(section.key) && "-rotate-90")} />
                 {section.title}
                 <Badge variant="secondary" className="text-[10px] h-4 px-1.5">{section.questions.length}</Badge>
-              </h2>
+              </button>
 
+              {!collapsed.has(section.key) && (<>
               {/* ─── Матрица: вопросы × кандидаты ─── */}
               {mode === "matrix" ? (
                 <div className="overflow-x-auto rounded-lg border">
@@ -290,6 +299,7 @@ function CompareInner() {
                   ))}
                 </div>
               )}
+              </>)}
             </section>
           ))}
         </div>
