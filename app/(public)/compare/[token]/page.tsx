@@ -12,7 +12,21 @@ import { Columns3, Rows3, Loader2, ChevronDown } from "lucide-react"
 interface QItem { id: string; text: string; points?: number }
 interface Ans { value: string | null; awarded?: number | null; correct?: boolean | null }
 interface Section { key: string; title: string; scored: boolean; questions: QItem[]; answers: Record<string, Record<string, Ans>> }
-interface Head { id: string; name: string | null; aiScore: number | null; resumeScore: number | null; testScore?: number | null; testPoints?: { got: number; max: number } | null }
+interface Head { id: string; name: string | null; aiScore: number | null; resumeScore: number | null; testScore?: number | null; testPoints?: { got: number; max: number } | null; demoPercent?: number | null }
+
+function ScoreLine({ c }: { c: Head }) {
+  const testColor = c.testScore == null ? "" : c.testScore >= 70 ? "text-success" : c.testScore >= 40 ? "text-amber-600" : "text-destructive"
+  return (
+    <div className="mt-1 text-[11px] text-muted-foreground flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+      <span>резюме <b className="text-foreground">{c.resumeScore ?? "—"}</b></span>
+      <span className="text-muted-foreground/40">|</span>
+      <span>демо <b className="text-foreground">{c.demoPercent != null ? `${c.demoPercent}%` : "—"}</b></span>
+      <span className="text-muted-foreground/40">|</span>
+      <span>тест <b className={cn("font-semibold", testColor || "text-foreground")}>{c.testScore != null ? c.testScore : "—"}</b>{c.testPoints ? ` (${c.testPoints.got}/${c.testPoints.max})` : ""}</span>
+      {c.aiScore != null && <><span className="text-muted-foreground/40">|</span><span>AI <b className="text-foreground">{c.aiScore}</b></span></>}
+    </div>
+  )
+}
 interface Data { candidates: Head[]; sections: Section[]; vacancyTitle?: string | null }
 
 function AnswerCell({ a }: { a?: Ans }) {
@@ -95,15 +109,7 @@ export default function PublicComparePage() {
                         {candidates.map((c) => (
                           <th key={c.id} className="text-left font-medium p-2.5 align-bottom w-[260px] min-w-[260px] border-l">
                             <div className="truncate max-w-[240px]" title={nameOf(c)}>{nameOf(c)}</div>
-                            <div className="flex flex-wrap gap-1 mt-0.5 items-center">
-                              {c.testScore != null && (
-                                <Badge className={cn("text-[11px] h-5 px-1.5 font-semibold border", c.testScore >= 70 ? "bg-success/10 text-success border-success/30" : c.testScore >= 40 ? "bg-amber-500/10 text-amber-600 border-amber-300" : "bg-destructive/10 text-destructive border-destructive/30")}>
-                                  Балл {c.testScore}{c.testPoints ? ` (${c.testPoints.got}/${c.testPoints.max})` : ""}
-                                </Badge>
-                              )}
-                              {c.resumeScore != null && <Badge variant="outline" className="text-[10px] h-4 px-1">резюме {c.resumeScore}</Badge>}
-                              {c.aiScore != null && <Badge variant="outline" className="text-[10px] h-4 px-1">AI {c.aiScore}</Badge>}
-                            </div>
+                            <ScoreLine c={c} />
                           </th>
                         ))}
                       </tr>

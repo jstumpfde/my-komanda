@@ -21,20 +21,27 @@ export interface CompareResult {
     id: string; name: string | null; aiScore: number | null; resumeScore: number | null
     isFavorite: boolean; stage: string | null
     testScore: number | null; testPoints: { got: number; max: number } | null
+    demoPercent: number | null
   }>
   sections: CompareSection[]
 }
 
 function stringifyAnswer(v: unknown): string | null {
   if (v == null) return null
-  if (typeof v === "string") return v
+  if (typeof v === "string") return v.trim() || null
   if (typeof v === "number" || typeof v === "boolean") return String(v)
-  if (Array.isArray(v)) return v.map((x) => stringifyAnswer(x) ?? "").filter(Boolean).join(", ")
+  if (Array.isArray(v)) {
+    const s = v.map((x) => stringifyAnswer(x) ?? "").filter(Boolean).join(", ")
+    return s || null
+  }
   if (typeof v === "object") {
     const o = v as Record<string, unknown>
-    if (typeof o.text === "string") return o.text
-    if (typeof o.value === "string") return o.value
-    try { return JSON.stringify(o) } catch { return null }
+    if (typeof o.text === "string") return o.text.trim() || null
+    if (typeof o.value === "string") return o.value.trim() || null
+    // Демо-ответ часто приходит как { "q-<id>": "текст ответа" } или {} —
+    // показываем только сами тексты, без сырого JSON и фигурных скобок.
+    const vals = Object.values(o).map((x) => stringifyAnswer(x) ?? "").filter(Boolean)
+    return vals.length > 0 ? vals.join("; ") : null
   }
   return null
 }
@@ -67,6 +74,7 @@ export async function buildComparison(vacancyId: string, ids: string[]): Promise
       name: candidates.name,
       anketaAnswers: candidates.anketaAnswers,
       surveyResponses: candidates.surveyResponses,
+      demoProgressJson: candidates.demoProgressJson,
       aiScore: candidates.aiScore,
       resumeScore: candidates.resumeScore,
       isFavorite: candidates.isFavorite,
@@ -185,9 +193,17 @@ export async function buildComparison(vacancyId: string, ids: string[]): Promise
       const testScore = typeof obj?.score === "number" ? obj.score : null
       const testPoints = (typeof obj?.gotPoints === "number" && typeof obj?.maxPoints === "number")
         ? { got: obj.gotPoints, max: obj.maxPoints } : null
+      // Демо-«скор» = процент пройденного демо (своей оценки у демо нет).
+      let demoPercent: number | null = null
+      const dp = c.demoProgressJson as { blocks?: { status?: string }[]; totalBlocks?: number } | null
+      if (dp && Array.isArray(dp.blocks)) {
+        const done = dp.blocks.filter((b) => b?.status === "completed").length
+        const total = typeof dp.totalBlocks === "number" && dp.totalBlocks > 0 ? dp.totalBlocks : dp.blocks.length
+        if (total > 0) demoPercent = Math.min(100, Math.round((done / total) * 100))
+      }
       return {
         id: c.id, name: c.name, aiScore: c.aiScore, resumeScore: c.resumeScore,
-        isFavorite: c.isFavorite ?? false, stage: c.stage ?? null, testScore, testPoints,
+        isFavorite: c.isFavorite ?? false, stage: c.stage ?? null, testScore, testPoints, demoPercent,
       }
     })
 

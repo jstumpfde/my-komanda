@@ -25,6 +25,22 @@ interface CandidateHead {
   id: string; name: string | null; aiScore: number | null; resumeScore: number | null
   isFavorite?: boolean; stage?: string | null
   testScore?: number | null; testPoints?: { got: number; max: number } | null
+  demoPercent?: number | null
+}
+
+// Единая строка скоров под именем: резюме | демо | тест (| AI).
+function ScoreLine({ c }: { c: CandidateHead }) {
+  const testColor = c.testScore == null ? "" : c.testScore >= 70 ? "text-success" : c.testScore >= 40 ? "text-amber-600" : "text-destructive"
+  return (
+    <div className="mt-1 text-[11px] text-muted-foreground flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+      <span>резюме <b className="text-foreground">{c.resumeScore ?? "—"}</b></span>
+      <span className="text-muted-foreground/40">|</span>
+      <span>демо <b className="text-foreground">{c.demoPercent != null ? `${c.demoPercent}%` : "—"}</b></span>
+      <span className="text-muted-foreground/40">|</span>
+      <span>тест <b className={cn("font-semibold", testColor || "text-foreground")}>{c.testScore != null ? c.testScore : "—"}</b>{c.testPoints ? ` (${c.testPoints.got}/${c.testPoints.max})` : ""}</span>
+      {c.aiScore != null && <><span className="text-muted-foreground/40">|</span><span>AI <b className="text-foreground">{c.aiScore}</b></span></>}
+    </div>
+  )
 }
 interface CompareData { candidates: CandidateHead[]; sections: Section[] }
 
@@ -203,37 +219,37 @@ function CompareInner() {
     const busy = busyId === c.id
     const rejected = c.stage === "rejected"
     return (
-      <div className="flex items-center gap-0.5 mt-1.5">
+      <div className="flex items-center gap-1.5 mt-2">
         <button type="button" title="В избранное" disabled={busy}
           onClick={() => toggleFavorite(c)}
-          className={cn("p-1 rounded hover:bg-muted disabled:opacity-40", c.isFavorite ? "text-amber-500" : "text-muted-foreground")}>
-          <Star className={cn("size-3.5", c.isFavorite && "fill-amber-400")} />
+          className={cn("p-1.5 rounded hover:bg-muted disabled:opacity-40", c.isFavorite ? "text-amber-500" : "text-muted-foreground")}>
+          <Star className={cn("size-[18px]", c.isFavorite && "fill-amber-400")} />
         </button>
         <button type="button" title="Пригласить на интервью" disabled={busy}
           onClick={() => changeStage(c, "interview", `Приглашён: ${nameOf(c)}`)}
-          className="p-1 rounded text-emerald-600 hover:bg-emerald-500/10 disabled:opacity-40">
-          <Check className="size-3.5" />
+          className="p-1.5 rounded text-emerald-600 hover:bg-emerald-500/10 disabled:opacity-40">
+          <Check className="size-[18px]" />
         </button>
         <button type="button" title={rejected ? "Уже отказан" : "Отказать"} disabled={busy || rejected}
           onClick={() => changeStage(c, "rejected", `Отказано: ${nameOf(c)}`)}
-          className="p-1 rounded text-destructive hover:bg-destructive/10 disabled:opacity-40">
-          <Ban className="size-3.5" />
+          className="p-1.5 rounded text-destructive hover:bg-destructive/10 disabled:opacity-40">
+          <Ban className="size-[18px]" />
         </button>
         <a href={`/hr/candidates/${c.id}`} target="_blank" rel="noopener noreferrer" title="Открыть карточку"
-          className="p-1 rounded text-muted-foreground hover:bg-muted">
-          <ExternalLink className="size-3.5" />
+          className="p-1.5 rounded text-muted-foreground hover:bg-muted">
+          <ExternalLink className="size-[18px]" />
         </a>
         {canDelete && (
           <button type="button" title="Удалить в корзину" disabled={busy}
             onClick={() => trashCandidate(c)}
-            className="p-1 rounded text-destructive hover:bg-destructive/10 disabled:opacity-40">
-            <Trash2 className="size-3.5" />
+            className="p-1.5 rounded text-destructive hover:bg-destructive/10 disabled:opacity-40">
+            <Trash2 className="size-[18px]" />
           </button>
         )}
         <button type="button" title="Убрать из сравнения" disabled={busy}
           onClick={() => removeFromView(c.id)}
-          className="p-1 rounded text-muted-foreground hover:bg-muted ml-auto">
-          <X className="size-3.5" />
+          className="p-1.5 rounded text-muted-foreground hover:bg-muted ml-auto">
+          <X className="size-[18px]" />
         </button>
       </div>
     )
@@ -332,20 +348,7 @@ function CompareInner() {
                               {c.stage === "rejected" && <Badge variant="outline" className="text-[10px] h-4 px-1 text-destructive border-destructive/40">отказ</Badge>}
                               {c.stage === "interview" && <Badge variant="outline" className="text-[10px] h-4 px-1 text-emerald-600 border-emerald-300">интервью</Badge>}
                             </div>
-                            <div className="flex flex-wrap gap-1 mt-0.5 items-center">
-                              {c.testScore != null && (
-                                <Badge className={cn(
-                                  "text-[11px] h-5 px-1.5 font-semibold border",
-                                  c.testScore >= 70 ? "bg-success/10 text-success border-success/30"
-                                    : c.testScore >= 40 ? "bg-amber-500/10 text-amber-600 border-amber-300"
-                                    : "bg-destructive/10 text-destructive border-destructive/30",
-                                )}>
-                                  Балл {c.testScore}{c.testPoints ? ` (${c.testPoints.got}/${c.testPoints.max})` : ""}
-                                </Badge>
-                              )}
-                              {c.resumeScore != null && <Badge variant="outline" className="text-[10px] h-4 px-1">резюме {c.resumeScore}</Badge>}
-                              {c.aiScore != null && <Badge variant="outline" className="text-[10px] h-4 px-1">AI {c.aiScore}</Badge>}
-                            </div>
+                            <ScoreLine c={c} />
                             <CandidateActions c={c} />
                           </th>
                         ))}
