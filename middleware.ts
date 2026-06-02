@@ -31,6 +31,7 @@ const PUBLIC_PREFIXES = [
   "/vacancy-view/",
   "/demo/",
   "/test/",             // публичная страница прохождения теста по токен-ссылке
+  "/compare/",          // публичная ссылка на сравнение кандидатов (share-токен)
   "/politicahr2026",
   "/ask/",
   "/uploads/",

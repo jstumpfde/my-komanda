@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { useAuth } from "@/lib/auth"
-import { ArrowLeft, Columns3, Rows3, Loader2, Star, Check, X, Trash2, ExternalLink, Ban, ChevronDown, Download } from "lucide-react"
+import { ArrowLeft, Columns3, Rows3, Loader2, Star, Check, X, Trash2, ExternalLink, Ban, ChevronDown, Download, Share2 } from "lucide-react"
 
 interface QItem { id: string; text: string; points?: number }
 interface Ans { value: string | null; awarded?: number | null; correct?: boolean | null }
@@ -178,6 +178,26 @@ function CompareInner() {
     URL.revokeObjectURL(url)
   }
 
+  // Создать публичную ссылку (без логина, 7 дней) и скопировать в буфер.
+  const [sharing, setSharing] = useState(false)
+  const shareLink = async () => {
+    if (candidates.length === 0) return
+    setSharing(true)
+    try {
+      const r = await fetch(`/api/modules/hr/vacancies/${vacancyId}/compare/share`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: candidates.map((c) => c.id) }),
+      })
+      const j = await r.json().catch(() => null) as { token?: string; error?: string } | null
+      if (!r.ok || !j?.token) throw new Error(j?.error || "Не удалось создать ссылку")
+      const link = `${window.location.origin}/compare/${j.token}`
+      try { await navigator.clipboard.writeText(link) } catch { /* clipboard может быть недоступен */ }
+      toast.success("Ссылка скопирована (действует 7 дней)", { description: link, duration: 8000 })
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Ошибка")
+    } finally { setSharing(false) }
+  }
+
   // Иконочная панель действий под именем кандидата (режим «Матрица»).
   function CandidateActions({ c }: { c: CandidateHead }) {
     const busy = busyId === c.id
@@ -237,6 +257,15 @@ function CompareInner() {
             disabled={!data}
           >
             <Download className="size-3.5" /> Скачать Excel
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 gap-1.5 text-xs"
+            onClick={shareLink}
+            disabled={!data || sharing}
+          >
+            {sharing ? <Loader2 className="size-3.5 animate-spin" /> : <Share2 className="size-3.5" />} Поделиться
           </Button>
           <div className="flex items-center gap-1 rounded-lg border p-0.5">
             <Button

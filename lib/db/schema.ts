@@ -2521,3 +2521,16 @@ export const yuliaMessages = pgTable("yulia_messages", {
 }, (t) => [
   index("idx_yulia_msg_conv").on(t.conversationId, t.createdAt),
 ])
+
+// drizzle/0163 — публичные ссылки на сравнение кандидатов (без логина).
+export const compareShares = pgTable("compare_shares", {
+  id:           uuid("id").primaryKey().defaultRandom(),
+  token:        text("token").notNull().unique(),
+  companyId:    uuid("company_id").notNull(),
+  vacancyId:    uuid("vacancy_id").notNull(),
+  candidateIds: jsonb("candidate_ids").notNull(),
+  createdBy:    uuid("created_by"),
+  createdAt:    timestamp("created_at", { withTimezone: true }).defaultNow(),
+  expiresAt:    timestamp("expires_at", { withTimezone: true }).notNull(),
+  revokedAt:    timestamp("revoked_at", { withTimezone: true }),
+})
