@@ -12,6 +12,7 @@ const PUBLIC_PREFIXES = [
   "/landing",
   "/vacancy/",
   "/candidate/",
+  "/candidate-update/", // публичная страница самообновления данных кандидата (токен-ссылка)
   "/schedule/",
   "/ref/",
   "/v/",
@@ -29,6 +30,7 @@ const PUBLIC_PREFIXES = [
   "/intake/",
   "/vacancy-view/",
   "/demo/",
+  "/test/",             // публичная страница прохождения теста по токен-ссылке
   "/politicahr2026",
   "/ask/",
   "/uploads/",
