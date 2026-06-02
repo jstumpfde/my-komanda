@@ -46,6 +46,32 @@ export function VacancyStopWordsSettings({
 
   const dirty = JSON.stringify(stopWords) !== JSON.stringify(savedStopWords)
 
+  // Авто-сохранение: добавил/удалил слово → сразу пишем в БД, без отдельной
+  // кнопки (раньше слова терялись, если не нажать «Сохранить» перед перезагрузкой).
+  const persist = async (list: string[]) => {
+    setSaving(true)
+    try {
+      const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}/stop-words`, {
+        method:  "PUT",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ stopWords: list }),
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => null) as { error?: string } | null
+        throw new Error(body?.error || "save failed")
+      }
+      const json = await res.json() as { stopWords?: string[] }
+      const saved = json.stopWords ?? list
+      setStopWords(saved)
+      setSavedStopWords(saved)
+      onSaved?.(saved)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Не удалось сохранить")
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const addWord = () => {
     const t = input.trim()
     if (!t) return
@@ -53,37 +79,18 @@ export function VacancyStopWordsSettings({
       toast.error("Это слово уже есть")
       return
     }
-    setStopWords([...stopWords, t])
+    const next = [...stopWords, t]
+    setStopWords(next)
     setInput("")
+    void persist(next)
   }
   const removeWord = (idx: number) => {
-    setStopWords(stopWords.filter((_, i) => i !== idx))
+    const next = stopWords.filter((_, i) => i !== idx)
+    setStopWords(next)
+    void persist(next)
   }
 
-  const handleSave = async () => {
-    setSaving(true)
-    try {
-      const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}/stop-words`, {
-        method:  "PUT",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ stopWords }),
-      })
-      if (!res.ok) {
-        const body = await res.json().catch(() => null) as { error?: string } | null
-        throw new Error(body?.error || "save failed")
-      }
-      const json = await res.json() as { stopWords?: string[] }
-      const saved = json.stopWords ?? stopWords
-      setStopWords(saved)
-      setSavedStopWords(saved)
-      onSaved?.(saved)
-      toast.success("Стоп-слова сохранены")
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Не удалось сохранить")
-    } finally {
-      setSaving(false)
-    }
-  }
+  const handleSave = () => persist(stopWords)
 
   return (
     <Card>

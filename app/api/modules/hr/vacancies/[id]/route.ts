@@ -125,6 +125,17 @@ export interface VacancyAutomationSettings {
   autoInvite?: boolean
   autoReject?: boolean
   notifyManager?: boolean
+  /**
+   * Блок «Если кандидат хочет созвониться». Авто-сохраняется по добавлению/
+   * удалению ключевого слова и переключению тумблера (см. automation-settings.tsx),
+   * поэтому PATCH должен принимать его частично и мёржить в automation.
+   */
+  callIntent?: {
+    enabled?: boolean
+    mode?: string
+    keywords?: string[]
+    insistDemoMessages?: string[]
+  }
   /** @deprecated используйте messageTemplates.soft_reject */
   rejectTemplate?: string
   /** @deprecated используйте messageTemplates.demo_invite */
@@ -229,6 +240,30 @@ export async function PATCH(
       if (typeof incoming.autoInvite === "boolean") sanitized.autoInvite = incoming.autoInvite
       if (typeof incoming.autoReject === "boolean") sanitized.autoReject = incoming.autoReject
       if (typeof incoming.notifyManager === "boolean") sanitized.notifyManager = incoming.notifyManager
+      // callIntent — частичный merge: сохраняем поверх существующего, чтобы
+      // авто-сохранение ключевых слов/тумблера не теряло уже записанные поля.
+      if (incoming.callIntent && typeof incoming.callIntent === "object") {
+        const currentCI = (sanitized.callIntent && typeof sanitized.callIntent === "object")
+          ? sanitized.callIntent as Record<string, unknown>
+          : {}
+        const ci = incoming.callIntent
+        const nextCI: Record<string, unknown> = { ...currentCI }
+        if (typeof ci.enabled === "boolean") nextCI.enabled = ci.enabled
+        if (typeof ci.mode === "string") nextCI.mode = ci.mode
+        if (Array.isArray(ci.keywords)) {
+          nextCI.keywords = ci.keywords
+            .filter((k): k is string => typeof k === "string")
+            .map(k => k.trim())
+            .filter(Boolean)
+            .slice(0, 50)
+        }
+        if (Array.isArray(ci.insistDemoMessages)) {
+          nextCI.insistDemoMessages = ci.insistDemoMessages
+            .filter((m): m is string => typeof m === "string")
+            .slice(0, 3)
+        }
+        sanitized.callIntent = nextCI
+      }
       // rejectTemplate / inviteTemplate больше не сохраняются — UI убрал поля,
       // данные живут в messageTemplates.soft_reject / messageTemplates.demo_invite.
       // Если кто-то всё-таки пришлёт старые ключи — игнорируем (не перезатираем merge).

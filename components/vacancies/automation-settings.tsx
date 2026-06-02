@@ -264,6 +264,29 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
   // (заменён на callIntent.mode выше).
   const responseReaction = (initialAutomation.responseReaction as ResponseReaction) || "slot-and-demo"
 
+  // Авто-сохранение блока callIntent: добавил/удалил слово или переключил
+  // тумблер → сразу пишем в БД через PATCH (сервер мёржит automation.callIntent),
+  // чтобы ключевые слова не терялись, если HR не нажал общий «Сохранить».
+  // Передаём явные новые значения, чтобы не зависеть от асинхронного setState.
+  const [callIntentSaving, setCallIntentSaving] = useState(false)
+  const persistCallIntent = useCallback(async (next: {
+    enabled: boolean; mode: ResponseReaction; keywords: string[]; insistDemoMessages: string[]
+  }) => {
+    setCallIntentSaving(true)
+    try {
+      const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ automation: { callIntent: next } }),
+      })
+      if (!res.ok) throw new Error("save failed")
+    } catch {
+      toast.error("Не удалось сохранить ключевые слова")
+    } finally {
+      setCallIntentSaving(false)
+    }
+  }, [vacancyId])
+
   const addKeyword = () => {
     const k = keywordInput.trim().toLowerCase()
     if (!k) return
@@ -271,12 +294,52 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
       toast.error("Это слово уже есть")
       return
     }
-    setCallIntentKeywords([...callIntentKeywords, k])
+    const next = [...callIntentKeywords, k]
+    setCallIntentKeywords(next)
     setKeywordInput("")
+    void persistCallIntent({ enabled: callIntentEnabled, mode: callIntentMode, keywords: next, insistDemoMessages: insistMessages })
   }
   const removeKeyword = (idx: number) => {
-    setCallIntentKeywords(callIntentKeywords.filter((_, i) => i !== idx))
+    const next = callIntentKeywords.filter((_, i) => i !== idx)
+    setCallIntentKeywords(next)
+    void persistCallIntent({ enabled: callIntentEnabled, mode: callIntentMode, keywords: next, insistDemoMessages: insistMessages })
   }
+  const toggleCallIntent = (v: boolean) => {
+    setCallIntentEnabled(v)
+    void persistCallIntent({ enabled: v, mode: callIntentMode, keywords: callIntentKeywords, insistDemoMessages: insistMessages })
+  }
+  const changeCallIntentMode = (m: ResponseReaction) => {
+    setCallIntentMode(m)
+    void persistCallIntent({ enabled: callIntentEnabled, mode: m, keywords: callIntentKeywords, insistDemoMessages: insistMessages })
+  }
+  // Первичная загрузка callIntent, если descriptionJson пришёл ПОСЛЕ mount
+  // (родитель сначала отдаёт undefined, затем подтягивает вакансию). Без
+  // этого useState-инициализаторы зафиксировали бы дефолты, и сохранённые
+  // ключевые слова «исчезали» после перезагрузки. Срабатывает один раз.
+  const callIntentInitedRef = useRef(descriptionJson !== undefined)
+  useEffect(() => {
+    if (callIntentInitedRef.current) return
+    if (descriptionJson === undefined || descriptionJson === null) return
+    callIntentInitedRef.current = true
+    const dj = descriptionJson as Record<string, unknown>
+    const auto = (dj.automation as Record<string, unknown>) || {}
+    const ci = (auto.callIntent as {
+      enabled?: boolean; mode?: ResponseReaction; keywords?: string[]; insistDemoMessages?: string[]
+    }) || {}
+    setCallIntentEnabled(ci.enabled ?? false)
+    setCallIntentMode(ci.mode ?? "insist-demo")
+    setCallIntentKeywords(
+      Array.isArray(ci.keywords) && ci.keywords.length > 0 ? ci.keywords : DEFAULT_CALL_INTENT_KEYWORDS,
+    )
+    if (Array.isArray(ci.insistDemoMessages)) {
+      setInsistMessages([
+        ci.insistDemoMessages[0] ?? DEFAULT_INSIST_DEMO_MESSAGES[0],
+        ci.insistDemoMessages[1] ?? DEFAULT_INSIST_DEMO_MESSAGES[1],
+        ci.insistDemoMessages[2] ?? DEFAULT_INSIST_DEMO_MESSAGES[2],
+      ])
+    }
+  }, [descriptionJson])
+
   const updateInsistMessage = (idx: 0 | 1 | 2, text: string) => {
     const next: [string, string, string] = [...insistMessages] as [string, string, string]
     next[idx] = text
@@ -502,8 +565,11 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
     loaded: loadedReady && (
       (sections?.includes("callIntent") ?? true) || (sections?.includes("templates") ?? true)
     ),
+    // callIntentEnabled/Mode/Keywords авто-сохраняются по клику (см.
+    // persistCallIntent), поэтому в sticky-bar их НЕ отслеживаем — иначе он
+    // показывал бы «есть несохранённые изменения» после авто-сохранения.
     watchedValues: {
-      callIntentEnabled, callIntentMode, callIntentKeywords, insistMessages, faq,
+      insistMessages, faq,
     },
     save: saveSettings,
   })
@@ -606,7 +672,7 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
                 Парсер ключевых слов в ответе кандидата → отправляет один из трёх эскалационных шаблонов и продолжает дожимать на демо.
               </p>
             </div>
-            <Switch checked={callIntentEnabled} onCheckedChange={setCallIntentEnabled} />
+            <Switch checked={callIntentEnabled} onCheckedChange={toggleCallIntent} />
           </div>
         </CardHeader>
         <CardContent className={cn("space-y-4", !callIntentEnabled && "opacity-60")}>
@@ -649,10 +715,12 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
                 variant="outline"
                 size="sm"
                 onClick={addKeyword}
-                disabled={!callIntentEnabled || !keywordInput.trim()}
+                disabled={!callIntentEnabled || !keywordInput.trim() || callIntentSaving}
                 className="gap-1.5"
               >
-                <Plus className="w-3.5 h-3.5" />
+                {callIntentSaving
+                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  : <Plus className="w-3.5 h-3.5" />}
                 Добавить
               </Button>
             </div>
@@ -678,7 +746,7 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
                       : "border-border hover:border-primary/30",
                     (opt.soon || !callIntentEnabled) && "opacity-60 cursor-not-allowed",
                   )}
-                  onClick={() => !opt.soon && setCallIntentMode(opt.value)}
+                  onClick={() => !opt.soon && changeCallIntentMode(opt.value)}
                 >
                   <div className={cn(
                     "w-4 h-4 rounded-full border-2 mt-0.5 shrink-0 flex items-center justify-center",
