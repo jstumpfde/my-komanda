@@ -227,7 +227,17 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     const orderedCandidates = ids
       .map((cid) => byId.get(cid))
       .filter((c): c is NonNullable<typeof c> => !!c)
-      .map((c) => ({ id: c.id, name: c.name, aiScore: c.aiScore, resumeScore: c.resumeScore, isFavorite: c.isFavorite ?? false, stage: c.stage ?? null }))
+      .map((c) => {
+        const aj = subByCandidate.get(c.id) as { objective?: { score?: number; gotPoints?: number; maxPoints?: number } } | undefined
+        const obj = aj?.objective
+        const testScore = typeof obj?.score === "number" ? obj.score : null
+        const testPoints = (typeof obj?.gotPoints === "number" && typeof obj?.maxPoints === "number")
+          ? { got: obj.gotPoints, max: obj.maxPoints } : null
+        return {
+          id: c.id, name: c.name, aiScore: c.aiScore, resumeScore: c.resumeScore,
+          isFavorite: c.isFavorite ?? false, stage: c.stage ?? null, testScore, testPoints,
+        }
+      })
 
     return apiSuccess({ candidates: orderedCandidates, sections })
   } catch (err) {

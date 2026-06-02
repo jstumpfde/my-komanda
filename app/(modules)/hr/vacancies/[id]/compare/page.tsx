@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { useAuth } from "@/lib/auth"
-import { ArrowLeft, Columns3, Rows3, Loader2, Star, Check, X, Trash2, ExternalLink, Ban, ChevronDown } from "lucide-react"
+import { ArrowLeft, Columns3, Rows3, Loader2, Star, Check, X, Trash2, ExternalLink, Ban, ChevronDown, Download } from "lucide-react"
 
 interface QItem { id: string; text: string; points?: number }
 interface Ans { value: string | null; awarded?: number | null; correct?: boolean | null }
@@ -24,6 +24,7 @@ interface Section {
 interface CandidateHead {
   id: string; name: string | null; aiScore: number | null; resumeScore: number | null
   isFavorite?: boolean; stage?: string | null
+  testScore?: number | null; testPoints?: { got: number; max: number } | null
 }
 interface CompareData { candidates: CandidateHead[]; sections: Section[] }
 
@@ -44,7 +45,24 @@ function AnswerCell({ a }: { a: Ans | undefined }) {
           {a.awarded} б{a.correct === false ? " · неверно" : a.correct ? " · верно" : ""}
         </Badge>
       )}
-      {a.value != null && <p className="text-sm whitespace-pre-wrap break-words">{a.value}</p>}
+      {a.value != null && (() => {
+        // Множественный выбор приходит склеенным через «|||» — показываем
+        // аккуратным списком с маркерами вместо сырых разделителей.
+        const parts = a.value.split("|||").map((s) => s.trim()).filter(Boolean)
+        if (parts.length > 1) {
+          return (
+            <ul className="space-y-0.5">
+              {parts.map((p, i) => (
+                <li key={i} className="text-sm flex gap-1.5">
+                  <span className="text-muted-foreground">•</span>
+                  <span className="break-words">{p}</span>
+                </li>
+              ))}
+            </ul>
+          )
+        }
+        return <p className="text-sm whitespace-pre-wrap break-words">{a.value}</p>
+      })()}
     </div>
   )
 }
@@ -131,6 +149,35 @@ function CompareInner() {
 
   const removeFromView = (id: string) => setHeads((hs) => hs.filter((h) => h.id !== id))
 
+  // Выгрузка сравнения в CSV (открывается в Excel; BOM для кириллицы).
+  const exportCsv = () => {
+    if (!data) return
+    const esc = (v: string) => `"${(v ?? "").replace(/"/g, '""')}"`
+    const cell = (a?: Ans): string => {
+      if (!a) return ""
+      const parts: string[] = []
+      if (typeof a.awarded === "number") parts.push(`[${a.awarded} б${a.correct === false ? ", неверно" : a.correct ? ", верно" : ""}]`)
+      if (a.value) parts.push(a.value.split("|||").map((s) => s.trim()).filter(Boolean).join("; "))
+      return parts.join(" ")
+    }
+    const rows: string[] = []
+    rows.push(["Вопрос", ...candidates.map(nameOf)].map(esc).join(","))
+    for (const section of data.sections) {
+      rows.push(esc(section.title.toUpperCase()))
+      for (const q of section.questions) {
+        rows.push([q.text, ...candidates.map((c) => cell(section.answers[c.id]?.[q.id]))].map(esc).join(","))
+      }
+    }
+    const csv = "﻿" + rows.join("\r\n")
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = "Сравнение_кандидатов.csv"
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   // Иконочная панель действий под именем кандидата (режим «Матрица»).
   function CandidateActions({ c }: { c: CandidateHead }) {
     const busy = busyId === c.id
@@ -181,23 +228,34 @@ function CompareInner() {
           </Button>
           <h1 className="text-lg font-semibold">Сравнение кандидатов ({candidates.length})</h1>
         </div>
-        <div className="flex items-center gap-1 rounded-lg border p-0.5">
+        <div className="flex items-center gap-2 flex-wrap">
           <Button
             size="sm"
-            variant={mode === "matrix" ? "default" : "ghost"}
-            className="h-7 gap-1.5 text-xs"
-            onClick={() => setMode("matrix")}
+            variant="outline"
+            className="h-8 gap-1.5 text-xs"
+            onClick={exportCsv}
+            disabled={!data}
           >
-            <Columns3 className="size-3.5" /> Матрица
+            <Download className="size-3.5" /> Скачать Excel
           </Button>
-          <Button
-            size="sm"
-            variant={mode === "byQuestion" ? "default" : "ghost"}
-            className="h-7 gap-1.5 text-xs"
-            onClick={() => setMode("byQuestion")}
-          >
-            <Rows3 className="size-3.5" /> По вопросам
-          </Button>
+          <div className="flex items-center gap-1 rounded-lg border p-0.5">
+            <Button
+              size="sm"
+              variant={mode === "matrix" ? "default" : "ghost"}
+              className="h-7 gap-1.5 text-xs"
+              onClick={() => setMode("matrix")}
+            >
+              <Columns3 className="size-3.5" /> Матрица
+            </Button>
+            <Button
+              size="sm"
+              variant={mode === "byQuestion" ? "default" : "ghost"}
+              className="h-7 gap-1.5 text-xs"
+              onClick={() => setMode("byQuestion")}
+            >
+              <Rows3 className="size-3.5" /> По вопросам
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -245,7 +303,17 @@ function CompareInner() {
                               {c.stage === "rejected" && <Badge variant="outline" className="text-[10px] h-4 px-1 text-destructive border-destructive/40">отказ</Badge>}
                               {c.stage === "interview" && <Badge variant="outline" className="text-[10px] h-4 px-1 text-emerald-600 border-emerald-300">интервью</Badge>}
                             </div>
-                            <div className="flex gap-1 mt-0.5">
+                            <div className="flex flex-wrap gap-1 mt-0.5 items-center">
+                              {c.testScore != null && (
+                                <Badge className={cn(
+                                  "text-[11px] h-5 px-1.5 font-semibold border",
+                                  c.testScore >= 70 ? "bg-success/10 text-success border-success/30"
+                                    : c.testScore >= 40 ? "bg-amber-500/10 text-amber-600 border-amber-300"
+                                    : "bg-destructive/10 text-destructive border-destructive/30",
+                                )}>
+                                  Балл {c.testScore}{c.testPoints ? ` (${c.testPoints.got}/${c.testPoints.max})` : ""}
+                                </Badge>
+                              )}
                               {c.resumeScore != null && <Badge variant="outline" className="text-[10px] h-4 px-1">резюме {c.resumeScore}</Badge>}
                               {c.aiScore != null && <Badge variant="outline" className="text-[10px] h-4 px-1">AI {c.aiScore}</Badge>}
                             </div>
