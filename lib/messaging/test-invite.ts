@@ -13,9 +13,11 @@
 // (если он ещё не дальше по воронке) — это и останавливает дожим
 // (test-стадии добавлены в ADVANCED_STAGES, lib/followup/should-stop.ts).
 //
-// Дедупликация по (candidate_id, branch='test_invite', status pending|sent):
-// повторная отправка тому же кандидату не плодит дублей, пока предыдущее
-// приглашение не доставлено/не упало.
+// Дедупликация на двух уровнях (оба — branch='test_invite', status pending|sent):
+//   1) по candidate_id — повторная отправка тому же кандидату не плодит дублей;
+//   2) по hh_response_id (hh-чату) — два приглашения в один и тот же чат не
+//      уходят, даже если это РАЗНЫЕ candidate_id (B3: дубль-двойник человека)
+//      или повторный запуск рассылки. Считается как alreadyQueued.
 
 import { eq, and, inArray, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
@@ -154,11 +156,37 @@ export async function scheduleTestInvitesForCandidates(args: {
   // 5b. hh-связка: тест шлётся в hh-чат конкретного отклика. Кандидаты без
   // привязанного hh_response отправить нельзя (no_hh_response_link) — отсеиваем
   // заранее, чтобы не плодить молча упавшие сообщения, и сообщаем HR счётчиком.
+  // Заодно тянем hh_response_id — это идентификатор hh-чата, по нему дедупим
+  // (B3: две карточки одного человека / повторный запуск не должны слать
+  // два приглашения в один чат).
   const linkedRows = await db
-    .select({ cid: hhResponses.localCandidateId })
+    .select({ cid: hhResponses.localCandidateId, chat: hhResponses.hhResponseId })
     .from(hhResponses)
     .where(inArray(hhResponses.localCandidateId, validIds))
-  const linkedSet = new Set(linkedRows.map(r => r.cid).filter((x): x is string => !!x))
+  const chatByCandidate = new Map<string, string>()
+  for (const r of linkedRows) {
+    if (r.cid && r.chat) chatByCandidate.set(r.cid, r.chat)
+  }
+
+  // 5c. Дедуп по hh-чату: чаты, в которые приглашение на тест уже стоит в
+  // очереди или отправлено — у ЛЮБОГО кандидата (в т.ч. дубля-двойника с
+  // другим candidate_id). Шаг 5 ловит только повтор тому же candidate_id;
+  // этот шаг закрывает кросс-кандидатные дубли в один и тот же чат.
+  const myChats = [...new Set(chatByCandidate.values())]
+  const chatsAlreadyQueued = new Set<string>()
+  if (myChats.length > 0) {
+    const existingChatRows = await db
+      .select({ chat: hhResponses.hhResponseId })
+      .from(followUpMessages)
+      .innerJoin(candidates, eq(candidates.id, followUpMessages.candidateId))
+      .innerJoin(hhResponses, eq(hhResponses.localCandidateId, candidates.id))
+      .where(and(
+        eq(followUpMessages.branch, "test_invite"),
+        inArray(followUpMessages.status, ["pending", "sent"]),
+        inArray(hhResponses.hhResponseId, myChats),
+      ))
+    for (const r of existingChatRows) if (r.chat) chatsAlreadyQueued.add(r.chat)
+  }
 
   // 6. scheduled_at — один раз: now, сдвинутый в рабочее окно вакансии.
   const nowDate = new Date()
@@ -182,9 +210,18 @@ export async function scheduleTestInvitesForCandidates(args: {
     ? settings.testReminderMessages
     : DEFAULT_TEST_REMINDER_MESSAGES
 
+  // Чаты, в которые мы уже запланировали приглашение в ЭТОМ запуске —
+  // чтобы два выбранных кандидата с одним hh-чатом не дали два сообщения.
+  const scheduledChats = new Set<string>()
   for (const id of validIds) {
     if (alreadyQueued.has(id)) { result.alreadyQueued++; continue }
-    if (!linkedSet.has(id)) { result.noHhLink++; continue }
+    const chat = chatByCandidate.get(id)
+    if (!chat) { result.noHhLink++; continue }
+    if (chatsAlreadyQueued.has(chat) || scheduledChats.has(chat)) {
+      // Дубль в тот же hh-чат — считаем как «уже в очереди», не плодим.
+      result.alreadyQueued++
+      continue
+    }
     try {
       await db.insert(followUpMessages).values({
         campaignId,
@@ -223,6 +260,7 @@ export async function scheduleTestInvitesForCandidates(args: {
           .set({ stage: "test_task_sent", updatedAt: new Date() })
           .where(eq(candidates.id, id))
       }
+      scheduledChats.add(chat)
       result.scheduled++
     } catch (err) {
       console.error("[test-invite] insert failed:", id, err instanceof Error ? err.message : err)
