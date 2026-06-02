@@ -1420,6 +1420,20 @@ export default function VacancyPage() {
           toast.error("Выделите минимум двух кандидатов для сравнения")
           return
         }
+        // Короткая ссылка: сохраняем набор на сервере → /compare?set=<token>.
+        // При сбое — фолбэк на длинную ?ids=, чтобы сравнение всё равно открылось.
+        try {
+          const r = await fetch(`/api/modules/hr/vacancies/${id}/compare/set`, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ids }),
+          })
+          const j = await r.json().catch(() => null)
+          const token = j?.data?.token ?? j?.token
+          if (r.ok && token) {
+            window.location.href = `/hr/vacancies/${id}/compare?set=${encodeURIComponent(token)}`
+            return
+          }
+        } catch { /* фолбэк ниже */ }
         window.location.href = `/hr/vacancies/${id}/compare?ids=${ids.join(",")}`
         return
       }

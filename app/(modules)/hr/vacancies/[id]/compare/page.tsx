@@ -112,6 +112,10 @@ function CompareInner() {
   const router = useRouter()
   const vacancyId = params.id
   const ids = useMemo(() => (search.get("ids") ?? "").split(",").filter(Boolean), [search])
+  const setToken = search.get("set")?.trim() || ""
+  // Источник данных: короткий набор (?set=token) приоритетнее явного ?ids=.
+  const fetchQuery = setToken ? `set=${encodeURIComponent(setToken)}` : `ids=${ids.join(",")}`
+  const hasSource = setToken.length > 0 || ids.length > 0
 
 
   const [data, setData] = useState<CompareData | null>(null)
@@ -125,10 +129,10 @@ function CompareInner() {
     setCollapsed((s) => { const n = new Set(s); n.has(key) ? n.delete(key) : n.add(key); return n })
 
   useEffect(() => {
-    if (!vacancyId || ids.length === 0) { setLoading(false); setError("Не выбраны кандидаты"); return }
+    if (!vacancyId || !hasSource) { setLoading(false); setError("Не выбраны кандидаты"); return }
     let alive = true
     setLoading(true)
-    fetch(`/api/modules/hr/vacancies/${vacancyId}/compare?ids=${ids.join(",")}`)
+    fetch(`/api/modules/hr/vacancies/${vacancyId}/compare?${fetchQuery}`)
       .then(async (r) => {
         if (!r.ok) throw new Error((await r.json().catch(() => ({})))?.error || "Ошибка загрузки")
         return r.json() as Promise<CompareData>
@@ -137,7 +141,7 @@ function CompareInner() {
       .catch((e) => { if (alive) setError(e instanceof Error ? e.message : "Ошибка") })
       .finally(() => { if (alive) setLoading(false) })
     return () => { alive = false }
-  }, [vacancyId, ids])
+  }, [vacancyId, fetchQuery, hasSource])
 
   const candidates = heads
   const nameOf = (c: CandidateHead) => c.name?.trim() || "Без имени"

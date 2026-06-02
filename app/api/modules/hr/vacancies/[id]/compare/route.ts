@@ -1,10 +1,11 @@
 // GET /api/modules/hr/vacancies/[id]/compare?ids=c1,c2,c3
+//   ИЛИ ?set=<token> — короткий набор сравнения (таблица compare_sets).
 // Единая выборка ответов нескольких кандидатов для страницы сравнения.
 // Данные собирает lib/compare/build-comparison.ts (общий хелпер с публичным
 // роутом по share-токену).
-import { eq, inArray } from "drizzle-orm"
+import { eq, and, inArray } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { vacancies, candidates } from "@/lib/db/schema"
+import { vacancies, candidates, compareSets } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { buildComparison } from "@/lib/compare/build-comparison"
 
@@ -15,9 +16,6 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     const user = await requireCompany()
     const { id: vacancyId } = await ctx.params
     const url = new URL(req.url)
-    const ids = (url.searchParams.get("ids") ?? "")
-      .split(",").map((s) => s.trim()).filter(Boolean).slice(0, MAX_COMPARE)
-    if (ids.length === 0) return apiError("ids required", 400)
 
     const [vac] = await db
       .select({ companyId: vacancies.companyId })
@@ -26,6 +24,24 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
       .limit(1)
     if (!vac) return apiError("Vacancy not found", 404)
     if (vac.companyId !== user.companyId) return apiError("Forbidden", 403)
+
+    // Источник id: либо короткий набор (?set=token), либо явный ?ids=.
+    let ids: string[] = []
+    const setToken = (url.searchParams.get("set") ?? "").trim()
+    if (setToken) {
+      const [row] = await db
+        .select({ candidateIds: compareSets.candidateIds })
+        .from(compareSets)
+        .where(and(eq(compareSets.token, setToken), eq(compareSets.companyId, user.companyId), eq(compareSets.vacancyId, vacancyId)))
+        .limit(1)
+      if (!row) return apiError("Набор сравнения не найден", 404)
+      ids = (Array.isArray(row.candidateIds) ? row.candidateIds : [])
+        .filter((x): x is string => typeof x === "string" && x.length > 0).slice(0, MAX_COMPARE)
+    } else {
+      ids = (url.searchParams.get("ids") ?? "")
+        .split(",").map((s) => s.trim()).filter(Boolean).slice(0, MAX_COMPARE)
+    }
+    if (ids.length === 0) return apiError("ids required", 400)
 
     const result = await buildComparison(vacancyId, ids)
     if (result.candidates.length === 0) return apiError("No candidates", 404)

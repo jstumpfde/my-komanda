@@ -2534,3 +2534,15 @@ export const compareShares = pgTable("compare_shares", {
   expiresAt:    timestamp("expires_at", { withTimezone: true }).notNull(),
   revokedAt:    timestamp("revoked_at", { withTimezone: true }),
 })
+
+// Внутренние наборы сравнения — для коротких HR-ссылок ?set=<token>.
+// Без срока жизни и без публичного доступа (в отличие от compareShares).
+export const compareSets = pgTable("compare_sets", {
+  id:           uuid("id").primaryKey().defaultRandom(),
+  token:        text("token").notNull().unique(),
+  companyId:    uuid("company_id").notNull(),
+  vacancyId:    uuid("vacancy_id").notNull(),
+  candidateIds: jsonb("candidate_ids").notNull(),
+  createdBy:    uuid("created_by"),
+  createdAt:    timestamp("created_at", { withTimezone: true }).defaultNow(),
+})
