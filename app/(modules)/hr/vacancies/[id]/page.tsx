@@ -1414,6 +1414,15 @@ export default function VacancyPage() {
       // «Отправить тест» → открываем окно с текстом приглашения (предзаполнено
       // шаблоном вакансии). Отправка — по кнопке окна (confirmSendTest).
       // Выделение пока не сбрасываем.
+      // «Сравнить» → открываем страницу сравнения ответов по выделенным.
+      if (action === "compare") {
+        if (ids.length < 2) {
+          toast.error("Выделите минимум двух кандидатов для сравнения")
+          return
+        }
+        window.location.href = `/hr/vacancies/${id}/compare?ids=${ids.join(",")}`
+        return
+      }
       if (action === "send_test") {
         let msg = ""
         try {

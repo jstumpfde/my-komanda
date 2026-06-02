@@ -32,6 +32,7 @@ import {
   RotateCcw,
   ClipboardList,
   Trash2,
+  GitCompare,
 } from "lucide-react"
 
 export type BulkAction =
@@ -42,6 +43,7 @@ export type BulkAction =
   | "toggle_favorite"
   | "restore"
   | "send_test"
+  | "compare"       // открыть страницу сравнения ответов
   | "trash"         // в «Корзину» (мягкое удаление)
   | "untrash"       // вернуть из «Корзины»
   | "hard_delete"   // удалить навсегда
@@ -253,6 +255,18 @@ export function BulkActionsBar({ count, stages, onClear, onAction, allRejected =
           >
             {busy === "toggle_favorite" ? <Loader2 className="size-4 animate-spin" /> : <Star className="size-4" />}
             <span className="hidden md:inline">В избранное</span>
+          </Button>
+
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-8 px-2.5 gap-1.5 text-sm text-indigo-600 border-indigo-300 hover:bg-indigo-500/10 hover:text-indigo-700 dark:text-indigo-300 dark:border-indigo-700"
+            disabled={!!busy}
+            onClick={() => run("compare")}
+          >
+            {busy === "compare" ? <Loader2 className="size-4 animate-spin" /> : <GitCompare className="size-4" />}
+            <span className="hidden md:inline">Сравнить</span>
           </Button>
 
           {canDelete && (
