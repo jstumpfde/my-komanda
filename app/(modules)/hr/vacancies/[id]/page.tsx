@@ -1160,6 +1160,8 @@ export default function VacancyPage() {
 
   const { role } = useAuth()
   const canAdd = isPlatformRole(role)
+  // Удалять кандидатов могут только администратор / менеджер-админ / директор.
+  const canDeleteCandidates = (["platform_admin", "platform_manager", "director"] as string[]).includes(role)
   const [duplicating, setDuplicating] = useState(false)
   const [permDeleteOpen, setPermDeleteOpen] = useState(false)
 
@@ -4005,6 +4007,7 @@ export default function VacancyPage() {
           }
           return true
         })()}
+        canDelete={canDeleteCandidates}
         onClear={() => setSelectedCandidateIds(new Set())}
         onAction={handleBulkAction}
       />

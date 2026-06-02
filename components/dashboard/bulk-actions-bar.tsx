@@ -68,9 +68,14 @@ interface BulkActionsBarProps {
    * и «Удалить навсегда» вместо обычных действий.
    */
   trashedView?: boolean
+  /**
+   * Может ли текущий пользователь удалять кандидатов (админ / менеджер-админ /
+   * директор). Если нет — кнопки «Удалить» / «Удалить навсегда» скрыты.
+   */
+  canDelete?: boolean
 }
 
-export function BulkActionsBar({ count, stages, onClear, onAction, allRejected = false, trashedView = false }: BulkActionsBarProps) {
+export function BulkActionsBar({ count, stages, onClear, onAction, allRejected = false, trashedView = false, canDelete = false }: BulkActionsBarProps) {
   const [confirmRejectOpen, setConfirmRejectOpen] = useState(false)
   const [confirmRestoreOpen, setConfirmRestoreOpen] = useState(false)
   const [confirmTrashOpen, setConfirmTrashOpen] = useState(false)
@@ -250,17 +255,19 @@ export function BulkActionsBar({ count, stages, onClear, onAction, allRejected =
             <span className="hidden md:inline">В избранное</span>
           </Button>
 
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="h-8 px-2.5 gap-1.5 text-sm text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
-            disabled={!!busy}
-            onClick={() => setConfirmTrashOpen(true)}
-          >
-            {busy === "trash" ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
-            <span className="hidden md:inline">Удалить</span>
-          </Button>
+          {canDelete && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-8 px-2.5 gap-1.5 text-sm text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+              disabled={!!busy}
+              onClick={() => setConfirmTrashOpen(true)}
+            >
+              {busy === "trash" ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+              <span className="hidden md:inline">Удалить</span>
+            </Button>
+          )}
           </>}
         </div>
       </div>

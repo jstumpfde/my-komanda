@@ -56,6 +56,16 @@ interface BulkBody {
 
 const MAX_IDS = 500
 
+// Удалять кандидатов (в корзину / навсегда / восстанавливать из корзины)
+// могут только администратор, менеджер-администратор и директор. Учитываем
+// и «сырые» DB-роли, и мигрированные (см. ROLE_MIGRATION в lib/auth.tsx).
+const DELETE_ROLES = new Set<string>([
+  "platform_admin", "admin",
+  "platform_manager", "manager",
+  "director", "client",
+])
+const DELETE_ACTIONS = new Set<BulkAction>(["trash", "untrash", "hard_delete"])
+
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
 
 // Последовательно синхронизирует отказы с hh.ru.  Делается ПОСЛЕ
@@ -83,6 +93,11 @@ export async function POST(req: NextRequest) {
     if (ids.length === 0) return apiError("candidateIds required", 400)
     if (ids.length > MAX_IDS) return apiError(`Too many ids (max ${MAX_IDS})`, 400)
     if (!action) return apiError("action required", 400)
+
+    // Удаление/восстановление — только для админ/менеджер-админ/директор.
+    if (DELETE_ACTIONS.has(action) && !DELETE_ROLES.has(String(user.role))) {
+      return apiError("Недостаточно прав для удаления кандидатов", 403)
+    }
 
     // Verify all candidates belong to user's company.
     const owned = await db
