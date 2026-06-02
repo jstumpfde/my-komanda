@@ -1834,8 +1834,9 @@ export default function VacancyPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          candidates: top.map(c => ({ name: c.name, skills: c.skills, experience: c.experience, aiScore: c.aiScore })),
+          candidates: top.map(c => ({ id: c.id, name: c.name, skills: c.skills, experience: c.experience, aiScore: c.aiScore })),
           vacancyRequirements: String(anketa.requirements || ""),
+          vacancyId: id,
         }),
       })
       if (!res.ok) throw new Error()
