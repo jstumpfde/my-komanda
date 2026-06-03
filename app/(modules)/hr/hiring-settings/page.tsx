@@ -801,6 +801,17 @@ export default function HiringSettingsPage() {
                     <SelectItem value="never">Не удалять</SelectItem>
                   </SelectContent>
                 </Select>
+                {/* O3: предупреждение ФЗ-152 при долгом сроке хранения ПДн */}
+                {(dataRetention === "12months" || dataRetention === "never") && (
+                  <div className="mt-3 flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/20 px-3 py-2">
+                    <ShieldAlert className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+                    <p className="text-[11px] text-amber-800 dark:text-amber-300 leading-snug">
+                      <b>Внимание (ФЗ-152):</b> хранение персональных данных отказанных кандидатов
+                      дольше необходимого для целей обработки может нарушать закон. Убедитесь, что
+                      у вас есть правовое основание хранить данные {dataRetention === "never" ? "бессрочно" : "12 месяцев"}.
+                    </p>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
