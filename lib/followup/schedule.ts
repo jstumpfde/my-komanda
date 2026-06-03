@@ -2,8 +2,8 @@ import { addDays } from "date-fns"
 import { FOLLOWUP_PRESETS, FOLLOWUP_MESSAGE_SLOTS, type FollowUpPreset } from "./presets"
 import { adjustToWorkingWindow, type VacancySchedule } from "@/lib/schedule/can-send-now"
 
-export type FollowUpBranch = "not_opened" | "opened_not_finished"
-export type ChainD0Source  = "hh_response" | "manual_review" | "branch_switch"
+export type FollowUpBranch = "not_opened" | "opened_not_finished" | "test_not_opened" | "test_opened_not_submitted"
+export type ChainD0Source  = "hh_response" | "manual_review" | "branch_switch" | "test_invite" | "test_branch_switch"
 
 export interface ScheduledTouch {
   campaignId:     string

@@ -68,6 +68,7 @@ import { PostDemoSettings } from "@/components/vacancies/post-demo-settings"
 import { VacancyAiProcessSettings } from "@/components/vacancies/vacancy-ai-process-settings"
 import { VacancyRequirementsSettings } from "@/components/vacancies/vacancy-requirements-settings"
 import { VacancyFollowupSettings } from "@/components/vacancies/vacancy-followup-settings"
+import { VacancyTestFollowupSettings } from "@/components/vacancies/vacancy-test-followup-settings"
 import { VacancyPrequalificationSettings } from "@/components/vacancies/vacancy-prequalification-settings"
 import { VacancyStopWordsSettings } from "@/components/vacancies/vacancy-stop-words-settings"
 import { FinalScreensSettings, type FinalScreensConfig } from "@/components/vacancies/final-screens-settings"
@@ -3524,6 +3525,7 @@ export default function VacancyPage() {
                     onSaved={() => refetchVacancy()}
                   />
                   <VacancyFollowupSettings vacancyId={id} />
+                  <VacancyTestFollowupSettings vacancyId={id} />
                 </div>
                 )}
 

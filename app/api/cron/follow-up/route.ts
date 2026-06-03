@@ -204,9 +204,14 @@ async function processOneTouch(
   // вместо них — собственная отмена при сдаче теста / отказе (ниже). Рабочее окно
   // (canSendNow) при этом соблюдаем — напоминания шлём в часы вакансии.
   const isTestReminder = msg.branch === "test_reminder"
+  // branch='test_not_opened' / 'test_opened_not_submitted' — дожим по тесту
+  // (две ветки, как у демо). Не обычный дожим: стандартные стоп-триггеры
+  // пропускаем, отмена — своя (ниже): тест сдан / открыт (для not_opened) /
+  // отказ-найм. Рабочее окно соблюдаем.
+  const isTestFollowup = msg.branch === "test_not_opened" || msg.branch === "test_opened_not_submitted"
   const isOneOffPostAnketa =
     msg.branch === "anketa_confirmation" || msg.branch === "anketa_auto_reply"
-    || isChainStep || isOffHoursFirst || isTestAfterMessage || isTestInvite || isTestReminder
+    || isChainStep || isOffHoursFirst || isTestAfterMessage || isTestInvite || isTestReminder || isTestFollowup
   if (!isOneOffPostAnketa) {
     // Стоп-триггеры (вакансия закрыта / демо пройдено / отказ /
     // автоматизация остановлена) — только для обычной цепочки дожима.
@@ -284,6 +289,40 @@ async function processOneTouch(
     if (submitted) {
       await db.update(followUpMessages).set({ status: "cancelled", errorMessage: "test_submitted" }).where(eq(followUpMessages.id, msg.id))
       return { outcome: "cancelled", reason: "test_submitted" }
+    }
+    if (cand.stage === "rejected" || cand.stage === "hired" || cand.autoStopped) {
+      await db.update(followUpMessages).set({ status: "cancelled", errorMessage: "stage_terminal" }).where(eq(followUpMessages.id, msg.id))
+      return { outcome: "cancelled", reason: "stage_terminal" }
+    }
+  }
+
+  // Дожим по тесту (две ветки): отменяем, если тест уже СДАН (submitted_at),
+  // отказ/найм/авто-стоп, а для ветки «не открыл» — ещё и если тест уже ОТКРЫТ
+  // (есть запись test_submissions — обычно ветку уже переключил switchToTestBranchOpened,
+  // это страховка на случай гонки/пропуска).
+  if (isTestFollowup) {
+    const [cand] = await db
+      .select({ stage: candidates.stage, autoStopped: candidates.autoProcessingStopped })
+      .from(candidates)
+      .where(eq(candidates.id, msg.candidateId))
+      .limit(1)
+    if (!cand) {
+      await db.update(followUpMessages).set({ status: "cancelled", errorMessage: "candidate_missing" }).where(eq(followUpMessages.id, msg.id))
+      return { outcome: "cancelled", reason: "candidate_missing" }
+    }
+    const subs = await db
+      .select({ submittedAt: testSubmissions.submittedAt })
+      .from(testSubmissions)
+      .where(eq(testSubmissions.candidateId, msg.candidateId))
+    const submitted = subs.some((s) => s.submittedAt != null)
+    const opened = subs.length > 0
+    if (submitted) {
+      await db.update(followUpMessages).set({ status: "cancelled", errorMessage: "test_submitted" }).where(eq(followUpMessages.id, msg.id))
+      return { outcome: "cancelled", reason: "test_submitted" }
+    }
+    if (msg.branch === "test_not_opened" && opened) {
+      await db.update(followUpMessages).set({ status: "cancelled", errorMessage: "test_opened" }).where(eq(followUpMessages.id, msg.id))
+      return { outcome: "cancelled", reason: "test_opened" }
     }
     if (cand.stage === "rejected" || cand.stage === "hired" || cand.autoStopped) {
       await db.update(followUpMessages).set({ status: "cancelled", errorMessage: "stage_terminal" }).where(eq(followUpMessages.id, msg.id))

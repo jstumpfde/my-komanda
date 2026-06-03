@@ -2361,6 +2361,11 @@ export const followUpCampaigns = pgTable("follow_up_campaigns", {
   customMessages:       jsonb("custom_messages").$type<string[] | null>(),
   // Кастомные тексты ветки Б (открыл, но не дошёл до конца).
   customMessagesOpened: jsonb("custom_messages_opened").$type<string[] | null>(),
+  // ── Дожим по тесту (две ветки), независим от демо-дожима. ──
+  testEnabled:          boolean("test_enabled").notNull().default(false),
+  testPreset:           text("test_preset").notNull().default("off"),
+  testMessages:         jsonb("test_messages").$type<string[] | null>(),        // ветка «не открыл тест»
+  testMessagesOpened:   jsonb("test_messages_opened").$type<string[] | null>(),  // ветка «открыл, но не заполнил»
   createdAt:            timestamp("created_at").defaultNow().notNull(),
   updatedAt:            timestamp("updated_at").defaultNow().notNull(),
 })

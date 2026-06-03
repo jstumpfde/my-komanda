@@ -31,6 +31,9 @@ import {
   type PostDemoSettings,
 } from "@/lib/db/schema"
 import { adjustToWorkingWindow } from "@/lib/schedule/can-send-now"
+import { generateTouchSchedule, mergeMessagesWithDefaults } from "@/lib/followup/schedule"
+import { isFollowUpPreset } from "@/lib/followup/presets"
+import { DEFAULT_TEST_NOT_OPENED } from "@/lib/followup/default-messages"
 
 export const DEFAULT_TEST_INVITE_TEXT =
   "{{name}}, спасибо за интерес к вакансии «{{vacancy}}»! Предлагаем пройти короткий тест — пройдите по ссылке:\n\n{{test_link}}"
@@ -129,6 +132,25 @@ export async function scheduleTestInvitesForCandidates(args: {
   // 3. Кампания (follow_up_messages.campaign_id NOT NULL).
   const campaignId = await ensureCampaign(args.vacancyId)
   if (!campaignId) return { ...result, error: "campaign_failed" }
+
+  // 3b. Конфиг дожима по тесту (две ветки). Если test_enabled и test_preset!=off
+  // — при постановке приглашения ставим ветку «не открыл тест» (test_not_opened).
+  // Ветка «открыл, но не заполнил» ставится при первом открытии теста
+  // (switchToTestBranchOpened). Независимо от старого test_reminder.
+  const [campaignCfg] = await db
+    .select({
+      testEnabled:  followUpCampaigns.testEnabled,
+      testPreset:   followUpCampaigns.testPreset,
+      testMessages: followUpCampaigns.testMessages,
+    })
+    .from(followUpCampaigns)
+    .where(eq(followUpCampaigns.id, campaignId))
+    .limit(1)
+  const testFollowupOn = !!campaignCfg?.testEnabled
+    && isFollowUpPreset(campaignCfg.testPreset) && campaignCfg.testPreset !== "off"
+  const testNotOpenedMsgs = testFollowupOn
+    ? mergeMessagesWithDefaults(campaignCfg!.testMessages, DEFAULT_TEST_NOT_OPENED)
+    : []
 
   // 4. Только кандидаты этой вакансии (guard от чужих id).
   const cands = await db
@@ -252,6 +274,23 @@ export async function scheduleTestInvitesForCandidates(args: {
           }
         }).filter((t) => t.messageText.trim().length > 0)
         if (reminderTouches.length > 0) await db.insert(followUpMessages).values(reminderTouches)
+      }
+
+      // Дожим по тесту, ветка «не открыл тест» (Д+N от отправки приглашения).
+      // Отменяется при открытии теста (switchToTestBranchOpened) и при сдаче (cron).
+      if (testFollowupOn) {
+        const notOpenedTouches = generateTouchSchedule({
+          campaignId,
+          candidateId: id,
+          preset:      campaignCfg!.testPreset as "soft" | "standard" | "aggressive",
+          d0Date:      nowDate,
+          d0Source:    "test_invite",
+          messages:    testNotOpenedMsgs,
+          branch:      "test_not_opened",
+          vacancy:     vacSchedule,
+          customDays:  null,
+        })
+        if (notOpenedTouches.length > 0) await db.insert(followUpMessages).values(notOpenedTouches)
       }
 
       // Стадию двигаем только вперёд → «Тест отправлен» в колонке «Статус».

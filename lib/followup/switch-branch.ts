@@ -19,7 +19,7 @@ import { db } from "@/lib/db"
 import { followUpCampaigns, followUpMessages, candidates, vacancies } from "@/lib/db/schema"
 import { isFollowUpPreset } from "./presets"
 import { generateTouchSchedule, mergeMessagesWithDefaults } from "./schedule"
-import { DEFAULT_FOLLOWUP_OPENED_NOT_FINISHED } from "./default-messages"
+import { DEFAULT_FOLLOWUP_OPENED_NOT_FINISHED, DEFAULT_TEST_OPENED_NOT_SUBMITTED } from "./default-messages"
 
 export async function switchToBranchOpened(candidateId: string): Promise<{
   switched: boolean
@@ -101,6 +101,83 @@ export async function switchToBranchOpened(candidateId: string): Promise<{
     branch:      "opened_not_finished",
     vacancy:     vac ?? {},
     customDays:  customDays && customDays.length > 0 ? customDays : null,
+  })
+  let scheduled = 0
+  if (touchesB.length > 0) {
+    const inserted = await db.insert(followUpMessages).values(touchesB).returning({ id: followUpMessages.id })
+    scheduled = inserted.length
+  }
+
+  return { switched: true, cancelledA: cancelled.length, scheduledB: scheduled }
+}
+
+// Тест-дожим: переключение ветки при ОТКРЫТИИ теста кандидатом (первый визит
+// на /test/<token>, см. app/api/public/test/[token]/route.ts). Отменяет
+// pending-касания «не открыл тест» (test_not_opened) и ставит ветку «открыл,
+// но не заполнил» (test_opened_not_submitted) от текущего момента.
+// Гейт: campaign.test_enabled и test_preset != off.
+export async function switchToTestBranchOpened(candidateId: string): Promise<{
+  switched: boolean
+  cancelledA: number
+  scheduledB: number
+  reason?: string
+}> {
+  const [cand] = await db
+    .select({ vacancyId: candidates.vacancyId })
+    .from(candidates)
+    .where(eq(candidates.id, candidateId))
+    .limit(1)
+  if (!cand) return { switched: false, cancelledA: 0, scheduledB: 0, reason: "candidate_not_found" }
+
+  const [campaign] = await db
+    .select()
+    .from(followUpCampaigns)
+    .where(eq(followUpCampaigns.vacancyId, cand.vacancyId))
+    .limit(1)
+  if (!campaign || !campaign.testEnabled) {
+    return { switched: false, cancelledA: 0, scheduledB: 0, reason: "test_followup_off" }
+  }
+  if (!isFollowUpPreset(campaign.testPreset) || campaign.testPreset === "off") {
+    return { switched: false, cancelledA: 0, scheduledB: 0, reason: "test_preset_off" }
+  }
+
+  // Шаг 1: отменить ветку «не открыл тест».
+  const cancelled = await db
+    .update(followUpMessages)
+    .set({ status: "cancelled", errorMessage: "test_branch_switched" })
+    .where(and(
+      eq(followUpMessages.candidateId, candidateId),
+      eq(followUpMessages.branch, "test_not_opened"),
+      eq(followUpMessages.status, "pending"),
+    ))
+    .returning({ id: followUpMessages.id })
+
+  // Шаг 2: запланировать ветку «открыл, но не заполнил» от текущего момента.
+  const messagesB = mergeMessagesWithDefaults(campaign.testMessagesOpened, DEFAULT_TEST_OPENED_NOT_SUBMITTED)
+  const [vac] = await db
+    .select({
+      scheduleEnabled:            vacancies.scheduleEnabled,
+      scheduleStart:              vacancies.scheduleStart,
+      scheduleEnd:                vacancies.scheduleEnd,
+      scheduleTimezone:           vacancies.scheduleTimezone,
+      scheduleWorkingDays:        vacancies.scheduleWorkingDays,
+      scheduleExcludedHolidayIds: vacancies.scheduleExcludedHolidayIds,
+      scheduleCustomHolidays:     vacancies.scheduleCustomHolidays,
+    })
+    .from(vacancies)
+    .where(eq(vacancies.id, cand.vacancyId))
+    .limit(1)
+
+  const touchesB = generateTouchSchedule({
+    campaignId:  campaign.id,
+    candidateId,
+    preset:      campaign.testPreset,
+    d0Date:      new Date(),
+    d0Source:    "test_branch_switch",
+    messages:    messagesB,
+    branch:      "test_opened_not_submitted",
+    vacancy:     vac ?? {},
+    customDays:  null,
   })
   let scheduled = 0
   if (touchesB.length > 0) {

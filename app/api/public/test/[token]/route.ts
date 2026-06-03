@@ -4,6 +4,7 @@ import { db } from "@/lib/db"
 import { candidates, vacancies, demos, companies, testSubmissions } from "@/lib/db/schema"
 import { apiError, apiSuccess } from "@/lib/api-helpers"
 import { isShortId } from "@/lib/short-id"
+import { switchToTestBranchOpened } from "@/lib/followup/switch-branch"
 
 // Публичный API теста. Безопасность как у /demo/[token]: token (short_id или
 // token кандидата) — единственный ключ; вакансия берётся по candidate.vacancyId,
@@ -72,6 +73,9 @@ export async function GET(
           answersJson: { answers: [], objective: null },
           submittedAt: null,
         }).onConflictDoNothing()
+        // Тест-дожим: первое открытие → ветка «не открыл тест» больше не нужна,
+        // переключаем на «открыл, но не заполнил» (no-op, если дожим выключен).
+        void switchToTestBranchOpened(candidate.id).catch(() => {})
       }
     }
 
