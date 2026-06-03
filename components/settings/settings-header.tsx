@@ -20,16 +20,19 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 // Компания → Профиль → Команда → Расписание → Уведомления → Интеграции →
 // Тариф и оплата → Брендинг. Админский «Юр. документы» прячется через
 // roles и идёт последним.
-const navItems: { href: string; label: string; icon: typeof Building2; roles?: UserRole[] }[] = [
-  { href: "/settings/company",       label: "Компания",    icon: Building2 },
-  { href: "/settings/profile",       label: "Профиль",     icon: User },
-  { href: "/settings/team",          label: "Команда",     icon: Users },
-  { href: "/settings/schedule",      label: "Расписание",  icon: Clock },
-  { href: "/settings/notifications", label: "Уведомления", icon: Bell },
-  { href: "/settings/integrations",  label: "Интеграции",  icon: Plug },
-  { href: "/settings/billing",       label: "Тариф и оплата", icon: CreditCard },
-  { href: "/settings/branding",      label: "Брендинг",    icon: Palette },
-  { href: "/settings/legal",         label: "Юр. документы", icon: ScrollText, roles: ["platform_admin"] },
+// IA-рефактор (D8): пункты сгруппированы в 4 раздела. Роуты не меняются.
+const GROUP_ORDER = ["Профиль и компания", "Интеграции", "Дефолты вакансии", "Служебные"] as const
+type NavGroup = (typeof GROUP_ORDER)[number]
+const navItems: { href: string; label: string; icon: typeof Building2; roles?: UserRole[]; group: NavGroup }[] = [
+  { href: "/settings/company",       label: "Компания",       icon: Building2,  group: "Профиль и компания" },
+  { href: "/settings/profile",       label: "Профиль",        icon: User,       group: "Профиль и компания" },
+  { href: "/settings/team",          label: "Команда",        icon: Users,      group: "Профиль и компания" },
+  { href: "/settings/branding",      label: "Брендинг",       icon: Palette,    group: "Профиль и компания" },
+  { href: "/settings/integrations",  label: "Интеграции",     icon: Plug,       group: "Интеграции" },
+  { href: "/settings/schedule",      label: "Расписание",     icon: Clock,      group: "Дефолты вакансии" },
+  { href: "/settings/notifications", label: "Уведомления",    icon: Bell,       group: "Служебные" },
+  { href: "/settings/billing",       label: "Тариф и оплата", icon: CreditCard, group: "Служебные" },
+  { href: "/settings/legal",         label: "Юр. документы",  icon: ScrollText, roles: ["platform_admin"], group: "Служебные" },
 ]
 
 const NOTIFICATIONS = [
@@ -214,24 +217,35 @@ export function SettingsHeader() {
         </div>
       </div>
 
-      {/* Row 2: Settings tabs */}
+      {/* Row 2: Settings tabs — IA D8: 4 раздела с метками групп */}
       <div className="border-b border-border overflow-x-auto">
-        <nav className="flex items-center gap-0.5" style={{ paddingLeft: 56, paddingRight: 56 }}>
-          {visibleNav.map(({ href, label, icon: Icon }) => (
-            <Link
-              key={href}
-              href={href}
-              className={cn(
-                "flex items-center gap-1.5 px-3 py-3 text-sm font-medium whitespace-nowrap transition-colors border-b-2",
-                pathname === href
-                  ? "text-primary border-primary"
-                  : "text-muted-foreground hover:text-foreground border-transparent"
-              )}
-            >
-              <Icon className="w-3.5 h-3.5" />
-              {label}
-            </Link>
-          ))}
+        <nav className="flex items-end gap-x-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
+          {GROUP_ORDER.map((g) => {
+            const items = visibleNav.filter((i) => i.group === g)
+            if (items.length === 0) return null
+            return (
+              <div key={g} className="flex flex-col">
+                <span className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/50 pl-3 pt-2">{g}</span>
+                <div className="flex items-center gap-0.5">
+                  {items.map(({ href, label, icon: Icon }) => (
+                    <Link
+                      key={href}
+                      href={href}
+                      className={cn(
+                        "flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium whitespace-nowrap transition-colors border-b-2",
+                        pathname === href
+                          ? "text-primary border-primary"
+                          : "text-muted-foreground hover:text-foreground border-transparent"
+                      )}
+                    >
+                      <Icon className="w-3.5 h-3.5" />
+                      {label}
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )
+          })}
         </nav>
       </div>
     </header>
