@@ -1611,13 +1611,18 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
             <Label className="text-xs">Количество вакантных мест</Label>
             <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-muted-foreground border-muted-foreground/30">hh.ru</Badge>
           </div>
-          <Input
-            type="number"
-            min={1}
-            value={data.hiringPlan}
-            onChange={e => set("hiringPlan", Math.max(1, parseInt(e.target.value) || 1))}
-            className="h-9 bg-[var(--input-bg)] border border-input w-24"
-          />
+          {/* QW6: компактный степпер вместо number-инпута с браузерными стрелками */}
+          <div className="inline-flex items-center h-9 rounded-md border border-input bg-[var(--input-bg)] w-fit overflow-hidden">
+            <button type="button" aria-label="Меньше" className="px-3 h-full text-muted-foreground hover:text-foreground hover:bg-accent" onClick={() => set("hiringPlan", Math.max(1, (data.hiringPlan || 1) - 1))}>−</button>
+            <input
+              type="number"
+              min={1}
+              value={data.hiringPlan}
+              onChange={e => set("hiringPlan", Math.max(1, parseInt(e.target.value) || 1))}
+              className="w-12 text-center bg-transparent outline-none text-sm border-x border-input [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+            />
+            <button type="button" aria-label="Больше" className="px-3 h-full text-muted-foreground hover:text-foreground hover:bg-accent" onClick={() => set("hiringPlan", (data.hiringPlan || 1) + 1)}>+</button>
+          </div>
         </div>
       </Section>
 

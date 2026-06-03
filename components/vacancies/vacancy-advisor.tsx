@@ -552,11 +552,12 @@ function FormatCard({ workFormats }: { workFormats: string[] }) {
 
   return (
     <div className="rounded-lg border p-3 space-y-2">
-      <div className="flex items-center gap-1.5">
-        <Sparkles className="w-3.5 h-3.5 text-primary" />
-        <span className="text-xs font-medium">Формат работы</span>
-      </div>
-      <div className="flex flex-wrap gap-1">
+      {/* QW5: заголовок и бейджи формата — в одну строку */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-1.5 shrink-0">
+          <Sparkles className="w-3.5 h-3.5 text-primary" />
+          <span className="text-xs font-medium">Формат работы</span>
+        </div>
         {workFormats.map(f => (
           <Badge key={f} variant="secondary" className="text-[10px]">{f}</Badge>
         ))}
@@ -663,7 +664,7 @@ function TitleScoringCard({ title, context, suggestions, onApply }: {
       </div>
 
       {suggestions.length > 0 && onApply && (
-        <div className="pt-1 border-t space-y-1">
+        <div className="pt-1 border-t space-y-0.5">
           <span className="text-[10px] font-medium text-muted-foreground">Варианты с высоким откликом:</span>
           {suggestions.map((s, i) => {
             const sScore = scoreVacancyTitle(s, context)
@@ -672,7 +673,7 @@ function TitleScoringCard({ title, context, suggestions, onApply }: {
               <button
                 key={i}
                 onClick={() => onApply(s)}
-                className="w-full text-left px-2 py-1.5 rounded hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors group"
+                className="w-full text-left px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors group"
               >
                 <span className="text-xs text-blue-800 dark:text-blue-200 underline decoration-dotted underline-offset-2 group-hover:text-blue-600">{s}</span>
                 <span className={cn("text-[10px] font-bold ml-1.5", sColor)}>&rarr; {sScore.score}/100</span>

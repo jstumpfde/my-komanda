@@ -255,7 +255,7 @@ export function UtmLinksSection({ vacancyId }: UtmLinksSectionProps) {
             <div className="space-y-1.5">
               <Label className="text-sm">Источник</Label>
               <Select value={newSource} onValueChange={setNewSource}>
-                <SelectTrigger>
+                <SelectTrigger className="w-full">
                   <SelectValue placeholder="Выберите источник..." />
                 </SelectTrigger>
                 <SelectContent>
