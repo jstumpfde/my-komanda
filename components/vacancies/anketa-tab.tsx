@@ -1685,7 +1685,6 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
         <div className="space-y-1.5">
           <div className="flex items-center gap-2">
             <Label className="text-xs">Обязанности</Label>
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-primary border-primary/30">Нужно для AI-скрининга</Badge>
           </div>
           <Textarea
             value={data.responsibilities}
@@ -1699,7 +1698,6 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
         <div className="space-y-1.5">
           <div className="flex items-center gap-2">
             <Label className="text-xs">Требования</Label>
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-primary border-primary/30">Нужно для AI-скрининга</Badge>
           </div>
           <Textarea
             value={data.requirements}
@@ -1783,7 +1781,6 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
         <div className="space-y-1.5" onFocus={() => setAdvisorFocusedField("skills")}>
           <div className="flex items-center gap-2">
             <Label className="text-xs">Обязательные навыки</Label>
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-primary border-primary/30">Нужно для AI-скрининга</Badge>
           </div>
           <TagInputWithSuggestions tags={data.requiredSkills} onChange={v => set("requiredSkills", v)} placeholder="Добавить навык..." suggestions={REQUIRED_SKILL_SUGGESTIONS} customType="skill" />
         </div>
@@ -1794,7 +1791,6 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
         <div className="space-y-1.5" onFocus={() => setAdvisorFocusedField("stopFactors")}>
           <div className="flex items-center gap-2">
             <Label className="text-xs text-destructive/80">Неприемлемо</Label>
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-primary border-primary/30">Нужно для AI-скрининга</Badge>
           </div>
           <TagInputWithSuggestions tags={data.unacceptableSkills} onChange={v => set("unacceptableSkills", v)} placeholder="Что неприемлемо..." suggestions={UNACCEPTABLE_SUGGESTIONS} customType="skill" />
         </div>
@@ -1894,7 +1890,6 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
         <div className="space-y-2 pt-2 border-t">
           <div className="flex items-center gap-2">
             <Label className="text-xs font-semibold">Критерии отбора</Label>
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-primary border-primary/30">Нужно для AI-скрининга</Badge>
           </div>
           <div className="space-y-2">
             {data.stopFactors.map((f, idx) => (
