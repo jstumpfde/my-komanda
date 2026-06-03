@@ -208,9 +208,9 @@ export function EventModal({
           <div className="space-y-1">
             <Label htmlFor="room">Переговорная</Label>
             <Select
-              value={roomId}
+              value={roomId || "none"}
               onValueChange={(v) => {
-                setRoomId(v)
+                setRoomId(v === "none" ? "" : v)
                 setConflict(null)
               }}
             >
@@ -218,7 +218,7 @@ export function EventModal({
                 <SelectValue placeholder="Без переговорной" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Без переговорной</SelectItem>
+                <SelectItem value="none">Без переговорной</SelectItem>
                 {rooms.map((r) => (
                   <SelectItem key={r.id} value={r.id}>
                     {r.name}
