@@ -26,6 +26,12 @@ const THEME_KEYS = ["light", "dark", "warm"] as const
 export default function BrandingPage() {
   const { setTheme: applyTheme, theme: currentTheme } = useTheme()
   const [brandPlan] = useState<BrandConfig["plan"]>("business")
+  // D12: блок «Поддомен компании» (плашка «Скоро») — только платформенному админу.
+  const [isPlatformAdmin, setIsPlatformAdmin] = useState(false)
+  useEffect(() => {
+    fetch("/api/auth/me").then(r => r.ok ? r.json() : null)
+      .then(d => setIsPlatformAdmin(!!(d?.data ?? d)?.isPlatformAdmin)).catch(() => {})
+  }, [])
   const canBrand = canCustomizeBrand(brandPlan)
   const [logoPreview, setLogoPreview] = useState<string | null>(null)
   const [uploadingLogo, setUploadingLogo] = useState(false)
@@ -408,8 +414,8 @@ export default function BrandingPage() {
           </CardContent>
         </Card>
 
-        {/* ═══ Поддомен ═══ */}
-        <Card className="opacity-70">
+        {/* ═══ Поддомен (D12: «Скоро» — только платформенному админу) ═══ */}
+        <Card className={cn("opacity-70", !isPlatformAdmin && "hidden")}>
           <CardHeader className="pb-2 pt-4 px-5">
             <CardTitle className="text-base flex items-center gap-2">
               <Link2 className="w-4 h-4" />
