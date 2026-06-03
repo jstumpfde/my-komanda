@@ -1,9 +1,10 @@
 import { NextRequest } from "next/server"
 import { eq, and } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { candidates, vacancies } from "@/lib/db/schema"
+import { candidates, vacancies, companies } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { trySyncStageToHh } from "@/lib/hh/sync-stage"
+import { sendWebhook } from "@/lib/webhooks"
 
 const VALID_STAGES = [
   "new", "primary_contact", "demo", "demo_opened", "decision",
@@ -91,6 +92,29 @@ export async function PUT(
         console.warn(`[stage-route] hh sync failed for ${id} (${stage}):`, err)
       })
     }
+
+    // Webhooks (hiring_defaults.webhooks): отправляем событие смены этапа во
+    // внешнюю систему компании, если HR задал URL и включил событие.
+    // Fire-and-forget — таймаут/ошибка не влияют на ответ. Раньше настройки
+    // webhooks ни к чему не были подключены (lib/webhooks.ts не вызывался).
+    void (async () => {
+      try {
+        const [company] = await db
+          .select({ hd: companies.hiringDefaultsJson })
+          .from(companies)
+          .where(eq(companies.id, user.companyId))
+          .limit(1)
+        const wh = (company?.hd as { webhooks?: { url?: string; events?: Record<string, boolean> } } | null)?.webhooks
+        if (wh?.url) {
+          const events = wh.events || {}
+          const payload = { candidateId: id, stage, previousStage: row.previousStage, vacancyId: updated.vacancyId }
+          if (events.stage_change) await sendWebhook(wh.url, "stage_change", payload)
+          if (stage === "rejected" && events.reject) await sendWebhook(wh.url, "reject", payload)
+        }
+      } catch (err) {
+        console.warn("[stage-route] webhook dispatch failed:", err)
+      }
+    })()
 
     return apiSuccess(updated)
   } catch (err) {
