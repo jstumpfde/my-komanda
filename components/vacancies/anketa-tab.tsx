@@ -1433,9 +1433,38 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
   const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const scheduleAutosave = useCallback(() => {
     if (autosaveTimer.current) clearTimeout(autosaveTimer.current)
-    autosaveTimer.current = setTimeout(() => save(), 2000)
+    autosaveTimer.current = setTimeout(() => save(), 800)
   }, [save])
   useEffect(() => () => { if (autosaveTimer.current) clearTimeout(autosaveTimer.current) }, [])
+
+  // Flush несохранённой анкеты при уходе со страницы (F5/закрытие/сворачивание),
+  // пока не сработал автосейв. keepalive-fetch (в отличие от sendBeacon) шлёт
+  // PATCH и переживает выгрузку страницы. Иначе быстрый F5 терял правку.
+  const latestDataRef = useRef(data)
+  useEffect(() => { latestDataRef.current = data }, [data])
+  useEffect(() => {
+    const flush = () => {
+      if (!dataDirtyRef.current) return
+      try {
+        fetch(`/api/modules/hr/vacancies/${vacancyId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ description_json: { anketa: latestDataRef.current } }),
+          keepalive: true,
+        })
+        dataDirtyRef.current = false
+      } catch { /* fire-and-forget */ }
+    }
+    const onVis = () => { if (document.visibilityState === "hidden") flush() }
+    window.addEventListener("pagehide", flush)
+    window.addEventListener("beforeunload", flush)
+    document.addEventListener("visibilitychange", onVis)
+    return () => {
+      window.removeEventListener("pagehide", flush)
+      window.removeEventListener("beforeunload", flush)
+      document.removeEventListener("visibilitychange", onVis)
+    }
+  }, [vacancyId])
   useEffect(() => {
     if (!dataDirtyRef.current) {
       dataDirtyRef.current = true
