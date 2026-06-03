@@ -488,6 +488,13 @@ export default function VacancyPage() {
   // запрос в режиме list-paginated и не дублировал usePaginatedCandidates.
   // Сеттер-обёртка setViewMode (с persist в user-prefs) объявлена ниже.
   const [viewMode, setViewModeLocal] = useState<ViewMode>("list")
+  // D12: «Скоро»-заглушки (источники Авито/SuperJob/Яндекс, CRM-интеграции)
+  // скрываем от клиентов — показываем только платформенному админу.
+  const [isPlatformAdmin, setIsPlatformAdmin] = useState(false)
+  useEffect(() => {
+    fetch("/api/auth/me").then(r => r.ok ? r.json() : null)
+      .then(d => setIsPlatformAdmin(!!(d?.data ?? d)?.isPlatformAdmin)).catch(() => {})
+  }, [])
   const tabFromUrl = searchParams?.get("tab") ?? "candidates"
   // Режим серверной пагинации: только tab=candidates + viewMode=list.
   // В этом режиме useCandidates отключается (vacancyId=null), источником
@@ -3311,6 +3318,7 @@ export default function VacancyPage() {
                             <Button size="sm" className="h-8 text-xs shrink-0" onClick={() => setHhImportDialogOpen(true)}>Привязать</Button>
                           </div>
                         )}
+                      {isPlatformAdmin && (<>
                         <div className="rounded-lg border bg-card p-4 flex items-center gap-3">
                           <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-white text-[11px] font-bold" style={{ backgroundColor: "#00AAFF" }}>A</div>
                           <div className="flex-1 min-w-0"><p className="text-sm font-medium flex items-center gap-2">Авито Работа <span className="text-[10px] bg-amber-100 text-amber-700 rounded-full px-2 py-0.5 font-normal">Скоро</span></p><p className="text-[11px] text-muted-foreground">Импорт откликов с Авито</p></div>
@@ -3332,6 +3340,7 @@ export default function VacancyPage() {
                         <Badge variant="outline" className="text-xs h-6 text-muted-foreground shrink-0">Не подключено</Badge>
                         <Button size="sm" className="h-8 text-xs shrink-0" disabled>Подключить</Button>
                       </div>
+                      </>)}
                     </div>
                   </div>
 
@@ -3554,6 +3563,7 @@ export default function VacancyPage() {
                     <h3 className="text-lg font-semibold text-foreground mb-1">CRM-интеграции</h3>
                     <p className="text-sm text-muted-foreground mb-3">Синхронизация воронки с CRM</p>
                     <div className="space-y-3">
+                      {isPlatformAdmin ? (<>
                       <div className="rounded-lg border bg-card p-4 flex items-center gap-3">
                         <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-white text-[9px] font-bold" style={{ backgroundColor: "#2FC6F6" }}>Б24</div>
                         <div className="flex-1 min-w-0"><p className="text-sm font-medium flex items-center gap-2">Битрикс24 <span className="text-[10px] bg-amber-100 text-amber-700 rounded-full px-2 py-0.5 font-normal">Скоро</span></p><p className="text-[11px] text-muted-foreground">Синхронизация воронки и кандидатов</p></div>
@@ -3572,6 +3582,9 @@ export default function VacancyPage() {
                         <Badge variant="outline" className="text-xs h-6 text-muted-foreground shrink-0">Не подключено</Badge>
                         <Button size="sm" className="h-8 text-xs shrink-0" disabled>Настроить</Button>
                       </div>
+                      </>) : (
+                      <p className="text-sm text-muted-foreground">CRM-интеграции скоро будут доступны.</p>
+                      )}
                     </div>
                     <p className="text-[11px] text-muted-foreground mt-3">Любые webhook/API-настройки появятся здесь после подключения CRM.</p>
                   </div>
