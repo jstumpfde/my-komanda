@@ -24,8 +24,9 @@ import { Badge } from "@/components/ui/badge"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { Link2, Plus, Copy, Loader2, MousePointerClick, Users, Trash2 } from "lucide-react"
 import { toast } from "sonner"
+import { cn } from "@/lib/utils"
 
-type DestinationType = "vacancy" | "demo"
+type DestinationType = "vacancy" | "demo" | "test"
 
 interface UtmLink {
   id: string
@@ -199,13 +200,15 @@ export function UtmLinksSection({ vacancyId }: UtmLinksSectionProps) {
                           <div className="flex items-center gap-2">
                             <span>{link.name}</span>
                             <Badge
-                              variant={link.destinationType === "demo" ? "default" : "secondary"}
+                              variant={link.destinationType === "vacancy" ? "secondary" : "default"}
                               className="h-4 px-1.5 text-[10px] font-medium leading-none"
-                              title={link.destinationType === "demo"
-                                ? "Ссылка ведёт сразу на демо"
+                              title={
+                                link.destinationType === "demo" ? "Ссылка ведёт сразу на демо"
+                                : link.destinationType === "test" ? "Ссылка ведёт сразу на тест"
                                 : "Ссылка ведёт на описание вакансии"}
                             >
-                              {link.destinationType === "demo" ? "Демо" : "Вакансия"}
+                              {link.destinationType === "demo" ? "Демо"
+                                : link.destinationType === "test" ? "Тест" : "Вакансия"}
                             </Badge>
                           </div>
                         </td>
@@ -281,26 +284,28 @@ export function UtmLinksSection({ vacancyId }: UtmLinksSectionProps) {
               <RadioGroup
                 value={newDestinationType}
                 onValueChange={(v) => setNewDestinationType(v as DestinationType)}
-                className="space-y-1"
+                className="space-y-1.5"
               >
-                <div className="flex items-start gap-2">
-                  <RadioGroupItem value="vacancy" id="dest-vacancy" className="mt-0.5" />
-                  <Label htmlFor="dest-vacancy" className="text-sm font-normal cursor-pointer">
-                    Описание вакансии
-                    <span className="block text-xs text-muted-foreground">
-                      Кандидат сначала видит описание, затем откликается.
+                {([
+                  { value: "vacancy", title: "Описание вакансии", desc: "Кандидат сначала видит описание, затем откликается." },
+                  { value: "demo",    title: "Сразу на демо",     desc: "Кандидат сразу попадает на демо вакансии, минуя описание." },
+                  { value: "test",    title: "Сразу на тест",     desc: "Кандидат сразу попадает на тест вакансии, минуя описание и демо." },
+                ] as const).map((opt) => (
+                  <Label
+                    key={opt.value}
+                    htmlFor={`dest-${opt.value}`}
+                    className={cn(
+                      "flex items-start gap-2.5 rounded-md border p-2.5 cursor-pointer transition-colors font-normal",
+                      newDestinationType === opt.value ? "border-primary bg-primary/5" : "border-border hover:bg-muted/40",
+                    )}
+                  >
+                    <RadioGroupItem value={opt.value} id={`dest-${opt.value}`} className="mt-0.5 shrink-0" />
+                    <span className="min-w-0">
+                      <span className="block text-sm">{opt.title}</span>
+                      <span className="block text-xs text-muted-foreground mt-0.5">{opt.desc}</span>
                     </span>
                   </Label>
-                </div>
-                <div className="flex items-start gap-2">
-                  <RadioGroupItem value="demo" id="dest-demo" className="mt-0.5" />
-                  <Label htmlFor="dest-demo" className="text-sm font-normal cursor-pointer">
-                    Сразу на демо
-                    <span className="block text-xs text-muted-foreground">
-                      Кандидат сразу попадает на демо вакансии, минуя описание.
-                    </span>
-                  </Label>
-                </div>
+                ))}
               </RadioGroup>
             </div>
           </div>

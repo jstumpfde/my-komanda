@@ -78,10 +78,10 @@ export async function POST(
     // Enum 'vacancy' | 'demo'. Дефолт 'vacancy' — поведение до этой фичи
     // (см. миграцию 0145 и /v/[code]). Невалидное значение → 400.
     const rawDest = body.destinationType?.trim() || "vacancy"
-    if (rawDest !== "vacancy" && rawDest !== "demo") {
-      return apiError("destinationType must be 'vacancy' or 'demo'", 400)
+    if (rawDest !== "vacancy" && rawDest !== "demo" && rawDest !== "test") {
+      return apiError("destinationType must be 'vacancy', 'demo' or 'test'", 400)
     }
-    const destinationType = rawDest as "vacancy" | "demo"
+    const destinationType = rawDest as "vacancy" | "demo" | "test"
 
     // Get company name for short code prefix
     const [company] = await db

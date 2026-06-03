@@ -39,12 +39,12 @@ export async function GET(
       // External destination (приоритетнее, чем destinationType — это явно
       // указанный HR-ом внешний URL, его трогать не должны).
       redirectUrl = new URL(link.destinationUrl)
-    } else if (link.destinationType === "demo") {
-      // Источник ведёт сразу на демо. Bounce создаст кандидата под
-      // link.vacancyId, выставит cookie myk_candidate_uuid и редиректит
-      // на /demo/{newShortId}. ?ref={linkId} — для аналитики на /demo
-      // (utm_ref cookie ниже всё равно ставится).
+    } else if (link.destinationType === "demo" || link.destinationType === "test") {
+      // Источник ведёт сразу на демо ИЛИ на тест. Bounce создаёт кандидата под
+      // link.vacancyId, ставит cookie и редиректит на /demo/{shortId} или
+      // /test/{shortId} (флаг ?to=test). ?ref — аналитика (utm_ref cookie ниже).
       redirectUrl = new URL(`/api/public/source/${link.id}/visit`, _req.url)
+      if (link.destinationType === "test") redirectUrl.searchParams.set("to", "test")
     } else {
       // Default: страница описания вакансии (destinationType='vacancy').
       const [vacancy] = await db

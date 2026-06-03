@@ -22,6 +22,10 @@ export async function GET(
   { params }: { params: Promise<{ linkId: string }> },
 ) {
   const { linkId } = await params
+  // Куда вести после создания кандидата: демо (по умолчанию) или тест (?to=test).
+  const toTest = req.nextUrl.searchParams.get("to") === "test"
+  const landingPath = (shortId: string, candId: string) =>
+    toTest ? `/test/${shortId}?c=${candId}` : `/demo/${shortId}?c=${candId}`
 
   // Невалидный uuid → отправляем домой (как /v/[code] делает для unknown slug).
   if (!UUID_RE.test(linkId)) {
@@ -62,9 +66,9 @@ export async function GET(
       .where(eq(candidates.id, cookieUuid))
       .limit(1)
     if (existing && existing.shortId && existing.vacancyId === link.vacancyId) {
-      await markDemoOpened(existing.id)
+      if (!toTest) await markDemoOpened(existing.id)
       return NextResponse.redirect(
-        new URL(`/demo/${existing.shortId}?c=${existing.id}`, req.url),
+        new URL(landingPath(existing.shortId, existing.id), req.url),
       )
     }
     // Cookie указывает на (а) несуществующего кандидата, (б) кандидата
@@ -109,7 +113,7 @@ export async function GET(
     .set({ candidatesCount: sql`${vacancyUtmLinks.candidatesCount} + 1` })
     .where(eq(vacancyUtmLinks.id, link.id))
 
-  const target = new URL(`/demo/${created.shortId}?c=${created.id}`, req.url)
+  const target = new URL(landingPath(created.shortId, created.id), req.url)
   const res = NextResponse.redirect(target)
   res.cookies.set({
     name:     COOKIE_NAME,
