@@ -298,12 +298,15 @@ export async function fetchHhResume(
 export async function changeNegotiationState(
   accessToken: string,
   negotiationId: string,
-  action: "invitation" | "discard",
+  action: "invitation" | "discard" | "assessment",
   message?: string,
   _vacancyId?: string,
   _resumeId?: string
 ): Promise<void> {
-  const hhAction = action === "invitation" ? "phone_interview" : "discard_by_employer"
+  // assessment — стадия воронки hh «Тестовое задание» (PUT /negotiations/assessment/{id}).
+  const hhAction = action === "invitation" ? "phone_interview"
+    : action === "assessment" ? "assessment"
+    : "discard_by_employer"
   const bodyParams = new URLSearchParams()
   if (message) bodyParams.set("message", message)
   const url = `${HH_API_BASE}/negotiations/${hhAction}/${negotiationId}`

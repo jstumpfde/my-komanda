@@ -34,6 +34,7 @@ import { adjustToWorkingWindow } from "@/lib/schedule/can-send-now"
 import { generateTouchSchedule, mergeMessagesWithDefaults } from "@/lib/followup/schedule"
 import { isFollowUpPreset } from "@/lib/followup/presets"
 import { DEFAULT_TEST_NOT_OPENED } from "@/lib/followup/default-messages"
+import { trySyncTestStageToHh } from "@/lib/hh/sync-stage"
 
 export const DEFAULT_TEST_INVITE_TEXT =
   "{{name}}, спасибо за интерес к вакансии «{{vacancy}}»! Предлагаем пройти короткий тест — пройдите по ссылке:\n\n{{test_link}}"
@@ -298,6 +299,9 @@ export async function scheduleTestInvitesForCandidates(args: {
         await db.update(candidates)
           .set({ stage: "test_task_sent", updatedAt: new Date() })
           .where(eq(candidates.id, id))
+        // Зеркалим в воронку hh: переводим отклик в стадию «Тестовое задание»
+        // (коллекция assessment). Fire-and-forget — не блокируем рассылку.
+        void trySyncTestStageToHh(id).catch(() => {})
       }
       scheduledChats.add(chat)
       result.scheduled++

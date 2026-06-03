@@ -173,6 +173,28 @@ export async function trySyncInviteToHh(candidateId: string): Promise<boolean> {
 }
 
 /**
+ * Переводит отклик кандидата на hh в стадию «Тестовое задание» (коллекция
+ * hh `assessment`). Без сообщения в чат — текст с тест-ссылкой уходит
+ * отдельным сообщением (test-invite). Вызывается при отправке теста.
+ * Вернёт false, если кандидат не привязан к hh-отклику или нет токена.
+ */
+export async function trySyncTestStageToHh(candidateId: string): Promise<boolean> {
+  try {
+    const ctx = await loadContext(candidateId)
+    if (!ctx) return false
+    const token = await getValidToken(ctx.vac.companyId)
+    if (!token) return false
+    await changeNegotiationState(token.accessToken, ctx.hh.hhResponseId, "assessment")
+    console.info(`[hh:sync-stage] assessment (тест) → ${ctx.hh.hhResponseId} (cand ${ctx.cand.id})`)
+    return true
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.warn(`[hh:sync-stage] assessment failed for cand ${candidateId}: ${msg}`)
+    return false
+  }
+}
+
+/**
  * Универсальная синхронизация: читает hh-action из настроек воронки вакансии
  * (vacancies.description_json.pipeline) для конкретной стадии и отправляет
  * соответствующее действие в hh (Ф6 рефакторинга 2026-05-10).
