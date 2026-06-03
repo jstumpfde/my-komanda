@@ -210,17 +210,42 @@ export default function BrandingPage() {
               onDragOver={(e) => { e.preventDefault(); setIsDragging(true) }}
               onDragLeave={() => setIsDragging(false)}
               onDrop={(e) => { e.preventDefault(); setIsDragging(false); const f = e.dataTransfer.files?.[0]; if (f) uploadLogoFile(f) }}
-              onClick={() => canBrand && fileInputRef.current?.click()}
+              onClick={() => canBrand && !uploadingLogo && fileInputRef.current?.click()}
               className={cn(
-                "flex flex-col items-center justify-center gap-2 p-4 rounded-xl border-2 border-dashed transition-all w-40 h-32 shrink-0",
+                "group relative flex flex-col items-center justify-center gap-2 p-3 rounded-xl border-2 border-dashed transition-all w-40 h-32 shrink-0 overflow-hidden",
                 canBrand ? "cursor-pointer hover:border-primary/40 hover:bg-muted/20" : "cursor-not-allowed opacity-60",
                 isDragging && "border-primary bg-primary/5",
+                logoPreview && "border-solid bg-muted/10",
               )}
+              title={logoPreview ? "Нажмите, чтобы заменить логотип" : "Загрузить логотип"}
             >
               <input ref={fileInputRef} type="file" accept=".png,.svg,.jpg,.jpeg,.webp" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadLogoFile(f) }} disabled={!canBrand} />
-              {uploadingLogo ? <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-                : <Upload className="w-5 h-5 text-muted-foreground" />}
-              <p className="text-xs text-center text-muted-foreground">PNG, SVG, до 2 МБ</p>
+              {uploadingLogo ? (
+                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+              ) : logoPreview ? (
+                <>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={logoPreview} alt="Логотип" className="max-w-[120px] max-h-[72px] object-contain" />
+                  {/* Оверлей по наведению: Заменить / Удалить */}
+                  <div className="absolute inset-0 hidden group-hover:flex flex-col items-center justify-center gap-1.5 bg-background/85 backdrop-blur-[1px]">
+                    <span className="inline-flex items-center gap-1 text-xs font-medium text-primary">
+                      <Upload className="w-3.5 h-3.5" /> Заменить
+                    </span>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); setLogoPreview(null); if (fileInputRef.current) fileInputRef.current.value = "" }}
+                      className="inline-flex items-center gap-1 text-xs font-medium text-destructive hover:underline"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" /> Удалить
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <Upload className="w-5 h-5 text-muted-foreground" />
+                  <p className="text-xs text-center text-muted-foreground">PNG, SVG, до 2 МБ</p>
+                </>
+              )}
             </div>
 
             <div className="flex items-center gap-4 flex-1 min-h-[128px]">
