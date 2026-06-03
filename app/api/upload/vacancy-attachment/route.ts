@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { writeFile, mkdir } from "fs/promises"
 import path from "path"
+import { uploadsDir } from "@/lib/uploads-path"
 
 const ALLOWED_TYPES = new Set([
   "application/pdf",
@@ -47,7 +48,7 @@ export async function POST(req: NextRequest) {
     .slice(0, 100)
   const filename = `${timestamp}-${safeName}`
 
-  const dir = path.join(process.cwd(), "public", "uploads", companyId, "attachments")
+  const dir = uploadsDir(companyId, "attachments")
   await mkdir(dir, { recursive: true })
 
   const filepath = path.join(dir, filename)

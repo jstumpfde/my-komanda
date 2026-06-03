@@ -6,6 +6,7 @@ import { eq } from "drizzle-orm"
 import { writeFile } from "fs/promises"
 import { mkdirSync, existsSync } from "fs"
 import path from "path"
+import { uploadsDir } from "@/lib/uploads-path"
 
 export async function POST(req: NextRequest) {
   try {
@@ -46,7 +47,7 @@ export async function POST(req: NextRequest) {
     // Директория — на проде (standalone build) public не writable. Используем
     // cwd/public/uploads/logos и создаём рекурсивно. На проде Timeweb это
     // путь к смонтированному тому.
-    const dir = path.join(process.cwd(), "public", "uploads", "logos")
+    const dir = uploadsDir("logos")
     try {
       if (!existsSync(dir)) {
         mkdirSync(dir, { recursive: true })

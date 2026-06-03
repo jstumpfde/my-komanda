@@ -10,8 +10,9 @@ import { eq } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { companies } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
+import { uploadsDir, publicDir } from "@/lib/uploads-path"
 
-const UPLOAD_DIR = path.join(process.cwd(), "public/uploads/ceo-photos")
+const UPLOAD_DIR = uploadsDir("ceo-photos")
 const MAX_SIZE = 5 * 1024 * 1024 // 5 MB
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"]
 
@@ -49,7 +50,7 @@ export async function POST(req: NextRequest) {
     // Удаляем старое фото если оно было загружено у нас
     const oldUrl = currentProfile.ceoPhotoUrl
     if (oldUrl && oldUrl.startsWith("/uploads/ceo-photos/")) {
-      const oldPath = path.join(process.cwd(), "public", oldUrl)
+      const oldPath = publicDir(oldUrl)
       await unlink(oldPath).catch(() => {})
     }
 
@@ -87,7 +88,7 @@ export async function DELETE() {
     const oldUrl = currentProfile.ceoPhotoUrl
 
     if (oldUrl && oldUrl.startsWith("/uploads/ceo-photos/")) {
-      const oldPath = path.join(process.cwd(), "public", oldUrl)
+      const oldPath = publicDir(oldUrl)
       await unlink(oldPath).catch(() => {})
     }
 
