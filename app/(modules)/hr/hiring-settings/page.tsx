@@ -388,29 +388,32 @@ export default function HiringSettingsPage() {
         if (hd.dataRetention) setDataRetention(hd.dataRetention)
 
         // Стоп-факторы-дефолты (VacancyStopFactors → плоские sf*)
+        // B8-fix: гидрируем enabled ЯВНО (и false тоже), а значения — если они
+        // ОПРЕДЕЛЕНЫ (включая очищенные пустые). Старые truthy-guards теряли
+        // выключенные факторы и очищенные поля после reload.
         const sf = hd.stopFactorsDefaults
         if (sf) {
-          if (sf.city?.enabled) {
-            setSfCity(true)
-            if (sf.city.allowedCities?.length) setSfCityValue(sf.city.allowedCities.join(", "))
+          if (sf.city) {
+            setSfCity(!!sf.city.enabled)
+            if (sf.city.allowedCities != null) setSfCityValue(sf.city.allowedCities.join(", "))
           }
-          if (sf.format?.enabled) setSfFormat(true)
-          if (sf.age?.enabled) {
-            setSfAge(true)
+          if (sf.format) setSfFormat(!!sf.format.enabled)
+          if (sf.age) {
+            setSfAge(!!sf.age.enabled)
             if (sf.age.minAge != null) setSfAgeMin(String(sf.age.minAge))
             if (sf.age.maxAge != null) setSfAgeMax(String(sf.age.maxAge))
           }
-          if (sf.experience?.enabled) {
-            setSfExperience(true)
+          if (sf.experience) {
+            setSfExperience(!!sf.experience.enabled)
             if (sf.experience.minYears != null) setSfExpValue(String(sf.experience.minYears))
           }
-          if (sf.documents?.enabled) setSfDocs(true)
-          if (sf.citizenship?.enabled) {
-            setSfCitizenship(true)
-            if (sf.citizenship.allowed?.length) setSfCitizenshipValue(sf.citizenship.allowed.join(", "))
+          if (sf.documents) setSfDocs(!!sf.documents.enabled)
+          if (sf.citizenship) {
+            setSfCitizenship(!!sf.citizenship.enabled)
+            if (sf.citizenship.allowed != null) setSfCitizenshipValue(sf.citizenship.allowed.join(", "))
           }
-          if (sf.salaryExpectation?.enabled) {
-            setSfSalary(true)
+          if (sf.salaryExpectation) {
+            setSfSalary(!!sf.salaryExpectation.enabled)
             if (sf.salaryExpectation.maxAmount != null) setSfSalaryValue(String(sf.salaryExpectation.maxAmount))
           }
         }

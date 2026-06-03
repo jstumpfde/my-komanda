@@ -445,6 +445,17 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
     return DEFAULT_FAQ
   })()
   const [faq, setFaq] = useState<FaqItem[]>(initialFaq)
+  // B7-fix: FAQ resync. Если descriptionJson приходит ПОСЛЕ mount (родитель
+  // грузит вакансию асинхронно), useState(initialFaq) зафиксировал DEFAULT_FAQ
+  // и не обновлялся → после reload пользователь видел дефолт вместо своего
+  // сохранённого FAQ. Тот же приём, что для callIntent ниже.
+  const faqInitedRef = useRef(descriptionJson !== undefined)
+  useEffect(() => {
+    if (faqInitedRef.current || descriptionJson === undefined) return
+    faqInitedRef.current = true
+    setFaq(initialFaq)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [descriptionJson])
 
   // anketaConfirmation — устаревший блок (#19). UI удалён 22.05.2026, поле
   // descriptionJson.automation.anketaConfirmation остаётся в БД для совместимости
