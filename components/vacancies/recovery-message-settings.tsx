@@ -20,10 +20,13 @@ interface Props {
   initialEnabled?: boolean | null
   initialText?: string | null
   onSaved?: () => void
+  // В Sheet конструктора воронки карточку открываем сразу (HR уже кликнул по
+  // блоку). В legacy-табе автоматизации остаётся свёрнутой по умолчанию.
+  defaultOpen?: boolean
 }
 
-export function RecoveryMessageSettings({ vacancyId, initialEnabled, initialText, onSaved }: Props) {
-  const [open, setOpen] = useState(false)
+export function RecoveryMessageSettings({ vacancyId, initialEnabled, initialText, onSaved, defaultOpen = false }: Props) {
+  const [open, setOpen] = useState(defaultOpen)
   const [enabled, setEnabled] = useState(Boolean(initialEnabled))
   const [text, setText] = useState(typeof initialText === "string" ? initialText : "")
   const [saving, setSaving] = useState(false)

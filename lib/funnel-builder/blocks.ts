@@ -3,6 +3,7 @@
 // В БД (funnel_config_json) лежит только { type, order, enabled }.
 
 import {
+  AlertTriangle,
   Bot,
   Brain,
   Calendar,
@@ -12,8 +13,10 @@ import {
   FileSignature,
   FileText,
   Filter,
+  ListChecks,
   MessageCircle,
   Phone,
+  PhoneCall,
   PlayCircle,
   Repeat,
   ShieldAlert,
@@ -27,18 +30,21 @@ export type FunnelBlockType =
   | "ai_resume_score"
   | "stop_factors_resume"
   | "first_message"
+  | "recovery"
   | "prequalification"
   | "demo"
   | "anketa"
   | "ai_anketa_score"
   | "auto_reply_test_task"
   | "stop_words_chat"
+  | "call_intent"
   | "dozhim"
   | "ai_chatbot"
   | "interview"
   | "thank_you_screen"
   | "video_intro"
   | "test_task"
+  | "test_quiz"
   | "reference_check"
   | "offer"
 
@@ -74,6 +80,14 @@ export const BLOCK_META: Record<FunnelBlockType, FunnelBlockMeta> = {
     description:      "Серия приветственных сообщений с demo-ссылкой",
     icon:             MessageCircle,
     required:         true,
+    incompatibleWith: [],
+  },
+  recovery: {
+    type:             "recovery",
+    label:            "Аварийное сообщение",
+    description:      "Повторная отправка, если ссылка в первом сообщении битая",
+    icon:             AlertTriangle,
+    required:         false,
     incompatibleWith: [],
   },
   prequalification: {
@@ -121,6 +135,14 @@ export const BLOCK_META: Record<FunnelBlockType, FunnelBlockMeta> = {
     label:            "Стоп-слова в чате",
     description:      "Триггер автоотказа по словам кандидата",
     icon:             ShieldAlert,
+    required:         false,
+    incompatibleWith: [],
+  },
+  call_intent: {
+    type:             "call_intent",
+    label:            "Хочет созвониться",
+    description:      "Ключевые слова в чате → эскалация на демо",
+    icon:             PhoneCall,
     required:         false,
     incompatibleWith: [],
   },
@@ -172,6 +194,14 @@ export const BLOCK_META: Record<FunnelBlockType, FunnelBlockMeta> = {
     required:         false,
     incompatibleWith: [],
   },
+  test_quiz: {
+    type:             "test_quiz",
+    label:            "Тест",
+    description:      "Квиз с вопросами и баллами (таб «Тест»)",
+    icon:             ListChecks,
+    required:         false,
+    incompatibleWith: [],
+  },
   reference_check: {
     type:             "reference_check",
     label:            "Реф-чек",
@@ -194,6 +224,7 @@ export const BLOCK_TYPES: FunnelBlockType[] = [
   "ai_resume_score",
   "stop_factors_resume",
   "first_message",
+  "recovery",
   "prequalification",
   "demo",
   "video_intro",
@@ -201,7 +232,9 @@ export const BLOCK_TYPES: FunnelBlockType[] = [
   "ai_anketa_score",
   "auto_reply_test_task",
   "test_task",
+  "test_quiz",
   "stop_words_chat",
+  "call_intent",
   "dozhim",
   "ai_chatbot",
   "interview",

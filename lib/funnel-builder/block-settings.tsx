@@ -10,11 +10,14 @@ import { toast } from "sonner"
 
 import { AiChatbotSettings } from "@/components/vacancies/ai-chatbot-settings"
 import { QuestionEditor } from "@/components/vacancies/anketa-tab"
+import { AutomationSettings } from "@/components/vacancies/automation-settings"
+import { CourseTab } from "@/components/vacancies/course-tab"
 import { AnketaTemplateControls } from "@/components/vacancies/anketa-template-controls"
 import { FinalScreensSettings, type FinalScreensConfig } from "@/components/vacancies/final-screens-settings"
 import { FirstMessagesChainEditor } from "@/components/vacancies/first-messages-chain-editor"
 import { OfferSettings } from "@/components/vacancies/offer-settings"
 import { PostDemoSettings } from "@/components/vacancies/post-demo-settings"
+import { RecoveryMessageSettings } from "@/components/vacancies/recovery-message-settings"
 import { ReferenceCheckSettings } from "@/components/vacancies/reference-check-settings"
 import { TestTaskSettings } from "@/components/vacancies/test-task-settings"
 import { VideoIntroSettings } from "@/components/vacancies/video-intro-settings"
@@ -64,6 +67,8 @@ interface VacancyShape {
   stopWordsJson:        string[] | null
   requirementsJson:     VacancyRequirements | null
   descriptionJson:      { finalScreens?: FinalScreensConfig; anketa?: AnketaShape } | null
+  recoveryMessageEnabled: boolean
+  recoveryMessageText:    string
 }
 
 function useVacancyData(vacancyId: string): { data: VacancyShape | null; loaded: boolean } {
@@ -85,10 +90,14 @@ function useVacancyData(vacancyId: string): { data: VacancyShape | null; loaded:
   return { data, loaded }
 }
 
+// B4: на «тяжёлых» блоках (напр. «Анкета» — двойной фетч: вакансия + PostDemoSettings)
+// холодная загрузка занимает ~0.5-2с. Голый спиннер-иконка без текста читается как
+// «пустое тело Sheet» (см. B4). Подписанный лоадер явно сообщает «идёт загрузка».
 function LoadingSpinner() {
   return (
-    <div className="flex items-center justify-center py-12">
-      <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+    <div className="flex flex-col items-center justify-center gap-3 py-12 text-muted-foreground">
+      <Loader2 className="w-5 h-5 animate-spin" />
+      <span className="text-sm">Загрузка настроек…</span>
     </div>
   )
 }
@@ -150,6 +159,23 @@ function StopWordsSettingsWrapped({ vacancyId, onSaved }: BlockSettingsProps) {
     <VacancyStopWordsSettings
       vacancyId={vacancyId}
       initial={data?.stopWordsJson ?? null}
+      onSaved={onSaved}
+    />
+  )
+}
+
+// T4: «Аварийное сообщение» (recovery). Сам компонент сохраняется своим
+// endpoint'ом (/recovery-message), поэтому общий saver контекста не нужен.
+// defaultOpen — карточка раскрыта сразу (HR уже кликнул по блоку в Sheet).
+function RecoveryMessageSettingsWrapped({ vacancyId, onSaved }: BlockSettingsProps) {
+  const { data, loaded } = useVacancyData(vacancyId)
+  if (!loaded) return <LoadingSpinner />
+  return (
+    <RecoveryMessageSettings
+      vacancyId={vacancyId}
+      initialEnabled={data?.recoveryMessageEnabled ?? false}
+      initialText={data?.recoveryMessageText ?? ""}
+      defaultOpen
       onSaved={onSaved}
     />
   )
@@ -237,6 +263,13 @@ function AnketaFullSettingsWrapped({ vacancyId, onSaved }: BlockSettingsProps) {
 function AiAnketaScoreSettingsWrapped({ vacancyId }: BlockSettingsProps) {
   return <PostDemoSettings vacancyId={vacancyId} sections={["thresholds"]} />
 }
+
+// T2: блок «Тест» (квиз) — переиспользуем CourseTab(kind="test"), тот же
+// редактор, что в верхнем табе «Тест». Self-saving (useDemo), общий
+// футер-Save не задействуется. Отличается от test_task («Тестовое задание»).
+function TestQuizSettingsWrapped({ vacancyId }: BlockSettingsProps) {
+  return <CourseTab vacancyId={vacancyId} kind="test" />
+}
 // Группа 35: Sheet-обёртка для VacancyFollowupSettings. Передаёт
 // tabKey="funnel-builder", чтобы pending-индикатор попадал на этот таб
 // (а не на standalone followup-таб, где компонента нет в Sheet).
@@ -246,6 +279,23 @@ function DozhimSettingsWrapped({ vacancyId, onSaved }: BlockSettingsProps) {
 
 function AutoReplyTestTaskSettingsWrapped({ vacancyId }: BlockSettingsProps) {
   return <PostDemoSettings vacancyId={vacancyId} sections={["anketaAutoReply"]} />
+}
+
+// T3: «Хочет созвониться» (callIntent). Переиспользуем секцию callIntent из
+// AutomationSettings. tabKey="funnel-builder" — эскалац. шаблоны сохраняются
+// общей кнопкой Sheet (как у Дожима); тумблер/ключевые слова авто-сохраняются
+// внутри компонента (persistCallIntent, сервер мёржит только automation.callIntent).
+function CallIntentSettingsWrapped({ vacancyId }: BlockSettingsProps) {
+  const { data, loaded } = useVacancyData(vacancyId)
+  if (!loaded) return <LoadingSpinner />
+  return (
+    <AutomationSettings
+      vacancyId={vacancyId}
+      descriptionJson={data?.descriptionJson}
+      sections={["callIntent"]}
+      tabKey="funnel-builder"
+    />
+  )
 }
 
 // VacancyScheduleSettings и AiChatbotSettings — без initial-пропа, отдаём как есть.
@@ -267,6 +317,11 @@ export const BLOCK_SETTINGS_REGISTRY: Partial<Record<FunnelBlockType, BlockSetti
     component:   FirstMessagesChainEditor,
     title:       "Первое сообщение",
     description: "Серия из 1–3 приветственных сообщений с demo-ссылкой",
+  },
+  recovery: {
+    component:   RecoveryMessageSettingsWrapped,
+    title:       "Аварийное сообщение",
+    description: "Повторная отправка, если ссылка в первом сообщении битая",
   },
   prequalification: {
     component:   PrequalificationSettingsWrapped,
@@ -298,6 +353,11 @@ export const BLOCK_SETTINGS_REGISTRY: Partial<Record<FunnelBlockType, BlockSetti
     title:       "Стоп-слова в чате",
     description: "Триггер автоотказа по словам кандидата",
   },
+  call_intent: {
+    component:   CallIntentSettingsWrapped,
+    title:       "Хочет созвониться",
+    description: "Ключевые слова в чате → эскалация на демо",
+  },
   dozhim: {
     component:   DozhimSettingsWrapped,
     title:       "Дожим",
@@ -327,6 +387,11 @@ export const BLOCK_SETTINGS_REGISTRY: Partial<Record<FunnelBlockType, BlockSetti
     component:   TestTaskSettings,
     title:       "Тестовое задание",
     description: "Отдельная ступень: задание → ответ → AI-проверка",
+  },
+  test_quiz: {
+    component:   TestQuizSettingsWrapped,
+    title:       "Тест",
+    description: "Квиз с вопросами и баллами (как в табе «Тест»)",
   },
   reference_check: {
     component:   ReferenceCheckSettings,
