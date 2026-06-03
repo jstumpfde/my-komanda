@@ -12,7 +12,7 @@ import { toast } from "sonner"
 import { ArrowLeft, Columns3, Rows3, Loader2, Star, Check, X, ExternalLink, Ban, ChevronDown, Download, Share2, SlidersHorizontal } from "lucide-react"
 import { CandidateDrawer } from "@/components/candidates/candidate-drawer"
 
-interface QItem { id: string; text: string; points?: number }
+interface QItem { id: string; text: string; points?: number; answerType?: string }
 interface Ans { value: string | null; awarded?: number | null; max?: number | null; correct?: boolean | null }
 interface Section {
   key: "test" | "demo" | "anketa"
@@ -190,8 +190,18 @@ function CompareInner() {
           }
         }
         const distinct = [...counts.entries()].sort((a, b) => b[1] - a[1])
-        const isValues = distinct.length > 0 && distinct.length <= 12 && distinct.every(([val]) => val.length <= 60)
-        return { id: q.id, text: q.text, mode: isValues ? "values" as const : "answered" as const, values: distinct, answered, empty }
+        // Режим определяем по типу вопроса (надёжнее эвристики): выборные →
+        // всегда чипы вариантов; текстовые → «ответили/без ответа». Для
+        // демо/анкеты (тип неизвестен) — эвристика по кардинальности.
+        const choiceType = q.answerType === "single" || q.answerType === "multiple" || q.answerType === "yesno" || q.answerType === "sort"
+        const textType = q.answerType === "short" || q.answerType === "long" || q.answerType === "text"
+        const isValues = choiceType
+          ? distinct.length > 0
+          : textType
+            ? false
+            : (distinct.length > 0 && distinct.length <= 12 && distinct.every(([val]) => val.length <= 60))
+        // Ограничиваем число чипов (частые сверху); редкие «другое»-ответы не плодим.
+        return { id: q.id, text: q.text, mode: isValues ? "values" as const : "answered" as const, values: distinct.slice(0, 25), answered, empty }
       }).filter((q) => q.answered + q.empty > 0),
     })).filter((s) => s.questions.length > 0)
   }, [data, candidates])

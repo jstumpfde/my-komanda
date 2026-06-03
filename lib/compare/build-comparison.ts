@@ -20,7 +20,7 @@ function questionMaxPoints(q: Question): number | undefined {
   return typeof q.points === "number" && q.points > 0 ? q.points : undefined
 }
 
-export interface CompareQItem { id: string; text: string; points?: number }
+export interface CompareQItem { id: string; text: string; points?: number; answerType?: string }
 export interface CompareAns { value: string | null; awarded?: number | null; max?: number | null; correct?: boolean | null }
 export interface CompareSection {
   key: "test" | "demo" | "anketa"
@@ -146,7 +146,7 @@ export async function buildComparison(vacancyId: string, ids: string[]): Promise
 
   const testSection: CompareSection = {
     key: "test", title: "Тест", scored: true,
-    questions: testQuestions.map((q) => ({ id: q.id, text: q.text, points: questionMaxPoints(q) })),
+    questions: testQuestions.map((q) => ({ id: q.id, text: q.text, points: questionMaxPoints(q), answerType: q.answerType })),
     answers: {},
   }
   for (const c of cands) {
