@@ -136,6 +136,14 @@ export default function HiringSettingsPage() {
     return "general"
   })
 
+  // D12: «Скоро»-заглушки (опросы адаптации, интеграции календарей/Zoom,
+  // шаблоны сообщений) показываем только платформенному админу.
+  const [isPlatformAdmin, setIsPlatformAdmin] = useState(false)
+  useEffect(() => {
+    fetch("/api/auth/me").then(r => r.ok ? r.json() : null)
+      .then(d => setIsPlatformAdmin(!!(d?.data ?? d)?.isPlatformAdmin)).catch(() => {})
+  }, [])
+
   // ── Schedule state ──
   const [slotDuration, setSlotDuration] = useState("45")
   const [bufferTime, setBufferTime] = useState("15")
@@ -674,7 +682,7 @@ export default function HiringSettingsPage() {
                 подключена. Юрий не хочет показывать неработающее. Старая
                 логика state и saveFeedbackSchedule оставлена для будущего
                 включения — UI заблокирован overlay'ем. */}
-            <Card className="mb-5 max-w-3xl relative overflow-hidden">
+            <Card className={cn("mb-5 max-w-3xl relative overflow-hidden", !isPlatformAdmin && "hidden")}>
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between gap-3">
                   <div>
@@ -857,7 +865,7 @@ export default function HiringSettingsPage() {
                   </Card>
 
                   {/* #41: интеграции календарей и Zoom — заглушки «Скоро». */}
-                  <Card>
+                  <Card className={cn(!isPlatformAdmin && "hidden")}>
                     <CardHeader className="pb-3">
                       <CardTitle className="text-sm font-medium flex items-center gap-2">
                         <Plug className="size-4 text-muted-foreground" />Интеграции календарей
@@ -1092,7 +1100,7 @@ export default function HiringSettingsPage() {
                       не подключены к диалогу отправки в карточке кандидата.
                       Будем доделывать вместе с этим диалогом отдельной
                       задачей. UI оставляем виден, но кликать нельзя. */}
-                  <Card className="relative overflow-hidden">
+                  <Card className={cn("relative overflow-hidden", !isPlatformAdmin && "hidden")}>
                     <CardHeader>
                       <div className="flex items-center justify-between">
                         <div>
