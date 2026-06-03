@@ -99,11 +99,17 @@ export async function PUT(
   }
 }
 
-// POST = алиас PUT. navigator.sendBeacon (flush черновика демо/теста при
-// уходе со страницы, hooks/use-demo.ts) умеет слать ТОЛЬКО POST — без этого
-// алиаса последний правок (например ИИ-проверка) терялся при перезагрузке,
-// если не успел сработать debounce.
-export const POST = PUT
+// POST = тот же апдейт, что PUT. navigator.sendBeacon (flush черновика демо/
+// теста при уходе со страницы, hooks/use-demo.ts) умеет слать ТОЛЬКО POST —
+// без этого последняя правка (баллы по вариантам, ИИ-проверка и т.п.) терялась
+// при быстрой перезагрузке. Объявляем РЕАЛЬНОЙ функцией (а не `export const
+// POST = PUT`) — иначе Turbopack может не зарегистрировать метод-хендлер.
+export async function POST(
+  req: NextRequest,
+  ctx: { params: Promise<{ id: string }> },
+) {
+  return PUT(req, ctx)
+}
 
 // DELETE /api/demos/[id]
 export async function DELETE(

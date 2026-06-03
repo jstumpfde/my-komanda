@@ -45,6 +45,9 @@ export function useDemo(vacancyId: string | null, kind: "demo" | "test" = "demo"
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const latestDemoRef = useRef<Demo | null>(null)
+  // Есть несохранённые изменения. Управляет отправкой beacon при уходе со
+  // страницы — чтобы при быстрой перезагрузке последняя правка не терялась.
+  const dirtyRef = useRef(false)
 
   // Load demo on mount (kind разделяет демо/тест — Этап 2.5)
   useEffect(() => {
@@ -80,6 +83,7 @@ export function useDemo(vacancyId: string | null, kind: "demo" | "test" = "demo"
         }),
       })
       if (!res.ok) throw new Error("save failed")
+      dirtyRef.current = false
       setSaveStatus("saved")
     } catch {
       setSaveStatus("error")
@@ -89,6 +93,7 @@ export function useDemo(vacancyId: string | null, kind: "demo" | "test" = "demo"
   const updateDemo = useCallback((updated: Demo) => {
     setDemo(updated)
     latestDemoRef.current = updated
+    dirtyRef.current = true
     setSaveStatus("saving")
 
     if (debounceRef.current) clearTimeout(debounceRef.current)
@@ -96,7 +101,7 @@ export function useDemo(vacancyId: string | null, kind: "demo" | "test" = "demo"
       if (latestDemoRef.current) {
         persistUpdate(latestDemoRef.current)
       }
-    }, 1500)
+    }, 700)
   }, [persistUpdate])
 
   const createDemo = useCallback(async (title: string, lessons: Lesson[]): Promise<Demo | null> => {
@@ -134,29 +139,37 @@ export function useDemo(vacancyId: string | null, kind: "demo" | "test" = "demo"
     }
   }, [persistUpdate])
 
-  // Save on unmount and before page unload
+  // Сохранение при уходе со страницы. Шлём beacon ПОКА ЕСТЬ несохранённые
+  // изменения (dirtyRef), а не «пока тикает debounce» — иначе быстрый F5 после
+  // правки терял её. pagehide/visibilitychange надёжнее beforeunload (срабатывают
+  // при перезагрузке, закрытии вкладки и сворачивании, в т.ч. на мобильных).
   useEffect(() => {
-    const handleBeforeUnload = () => {
-      if (debounceRef.current && latestDemoRef.current) {
-        clearTimeout(debounceRef.current)
-        // Use navigator.sendBeacon for reliable delivery on unload
-        const blob = new Blob(
-          [JSON.stringify({
-            title: latestDemoRef.current.title,
-            status: latestDemoRef.current.status,
-            lessons_json: latestDemoRef.current.lessons,
-          })],
-          { type: "application/json" }
-        )
-        navigator.sendBeacon(`/api/modules/hr/demos/${latestDemoRef.current.id}`, blob)
-      }
+    const beaconSave = () => {
+      if (!dirtyRef.current || !latestDemoRef.current) return
+      if (debounceRef.current) { clearTimeout(debounceRef.current); debounceRef.current = null }
+      const blob = new Blob(
+        [JSON.stringify({
+          title: latestDemoRef.current.title,
+          status: latestDemoRef.current.status,
+          lessons_json: latestDemoRef.current.lessons,
+        })],
+        { type: "application/json" }
+      )
+      // beacon шлёт POST → роут демо принимает POST как PUT (см. demos/[id]/route).
+      const ok = navigator.sendBeacon(`/api/modules/hr/demos/${latestDemoRef.current.id}`, blob)
+      if (ok) dirtyRef.current = false
     }
-    window.addEventListener("beforeunload", handleBeforeUnload)
+    const onVisibility = () => { if (document.visibilityState === "hidden") beaconSave() }
+    window.addEventListener("pagehide", beaconSave)
+    window.addEventListener("beforeunload", beaconSave)
+    document.addEventListener("visibilitychange", onVisibility)
     return () => {
-      window.removeEventListener("beforeunload", handleBeforeUnload)
+      window.removeEventListener("pagehide", beaconSave)
+      window.removeEventListener("beforeunload", beaconSave)
+      document.removeEventListener("visibilitychange", onVisibility)
       if (debounceRef.current) clearTimeout(debounceRef.current)
-      // Flush on unmount too
-      if (latestDemoRef.current) {
+      // Flush on unmount too (смена вкладки внутри SPA).
+      if (dirtyRef.current && latestDemoRef.current) {
         persistUpdate(latestDemoRef.current).catch(() => {})
       }
     }
