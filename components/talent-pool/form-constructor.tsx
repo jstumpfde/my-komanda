@@ -152,7 +152,7 @@ export function FormConstructor({ enabledSources, editForm, onSave }: FormConstr
       {/* Название */}
       <div className="grid gap-1">
         <Label className="text-xs font-semibold">Название формы</Label>
-        <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Общая анкета Talent Pool" className="h-9 text-sm" />
+        <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Общая анкета резерва" className="h-9 text-sm" />
       </div>
 
       {/* Источник */}

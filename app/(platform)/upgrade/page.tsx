@@ -95,7 +95,7 @@ const MODULE_INFO: Record<string, { name: string; description: string }> = {
     description: "Онбординг, адаптация и управление сотрудниками",
   },
   "talent-pool": {
-    name: "Талант-пул",
+    name: "Резерв",
     description: "База резервных кандидатов и управление кадровым резервом",
   },
   marketing: {
@@ -109,7 +109,7 @@ const FEATURE_ROWS = [
   { key: "candidates", label: "Кандидатов" },
   { key: "users",      label: "Пользователей" },
   { key: "hrOps",      label: "HR-операции", boolean: true },
-  { key: "talentPool", label: "Талант-пул", boolean: true },
+  { key: "talentPool", label: "Резерв", boolean: true },
   { key: "ai",         label: "AI-видеоинтервью", boolean: true },
   { key: "branding",   label: "Брендинг", boolean: true },
   { key: "api",        label: "API-доступ", boolean: true },

@@ -130,7 +130,7 @@ export function TrackingLinks({ sourceName, sourceId }: TrackingLinksProps) {
             <Select value={newTarget} onValueChange={setNewTarget}>
               <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="pool">Общая форма Talent Pool</SelectItem>
+                <SelectItem value="pool">Общая форма резерва</SelectItem>
                 <SelectItem value="sales">Менеджер по продажам</SelectItem>
                 <SelectItem value="devops">DevOps инженер</SelectItem>
                 <SelectItem value="hr">HR-менеджер</SelectItem>

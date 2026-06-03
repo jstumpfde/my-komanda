@@ -302,7 +302,7 @@ export default function VacancyPage() {
         throw new Error(errBody.error || "Не удалось сохранить анкету")
       }
       await refetchVacancy()
-      toast.success("Анкета заполнена")
+      toast.success("Вакансия заполнена")
       setTextDialogOpen(false)
       setPasteText("")
     } catch (err) {
@@ -404,7 +404,7 @@ export default function VacancyPage() {
       })
       if (!patchRes.ok) throw new Error("Не удалось применить шаблон")
       await refetchVacancy()
-      toast.success(`Анкета заполнена из «${src.title}»`)
+      toast.success(`Заполнено из «${src.title}»`)
       setLibraryDialogOpen(false)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Ошибка")
@@ -1761,7 +1761,7 @@ export default function VacancyPage() {
   const inviteFromPool = async (candidateId: string) => {
     await updateStage(candidateId, "new")
     setTalentMatches(prev => prev.filter(c => c.id !== candidateId))
-    toast.success("Кандидат приглашён из Talent Pool")
+    toast.success("Кандидат приглашён из резерва")
     refetchCandidates()
   }
 
@@ -2264,12 +2264,12 @@ export default function VacancyPage() {
                   {((status === "active" || status === "published") ? [
                     { value: "candidates", icon: Kanban, label: "Кандидаты" },
                     { value: "analytics", icon: BarChart3, label: "Аналитика" },
-                    { value: "anketa", icon: ClipboardList, label: "Анкета" },
+                    { value: "anketa", icon: ClipboardList, label: "Вакансия" },
                     { value: "course", icon: BookOpen, label: "Демонстрация" },
                     { value: "test", icon: ListChecks, label: "Тест" },
                     { value: "outbound", icon: UserSearch, label: "Исходящий подбор" },
                   ] : [
-                    { value: "anketa", icon: ClipboardList, label: "Анкета" },
+                    { value: "anketa", icon: ClipboardList, label: "Вакансия" },
                     { value: "course", icon: BookOpen, label: "Демонстрация" },
                     { value: "test", icon: ListChecks, label: "Тест" },
                     { value: "outbound", icon: UserSearch, label: "Исходящий подбор" },
@@ -2555,7 +2555,7 @@ export default function VacancyPage() {
                 {talentMatches.length > 0 && !talentRadarHidden && (
                   <div className="mb-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
                     <div className="flex items-center justify-between mb-2">
-                      <p className="text-sm font-medium flex items-center gap-1.5"><Users className="w-4 h-4 text-primary" />В Talent Pool найдено {talentMatches.length} подходящих кандидатов</p>
+                      <p className="text-sm font-medium flex items-center gap-1.5"><Users className="w-4 h-4 text-primary" />В резерве найдено {talentMatches.length} подходящих кандидатов</p>
                       <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => setTalentRadarHidden(true)}><X className="w-3 h-3" /></Button>
                     </div>
                     <div className="space-y-1.5">
@@ -3155,7 +3155,7 @@ export default function VacancyPage() {
                                         const domain = e.target.value.replace(/^(https?:\/\/)?(www\.)?/, "").split("/")[0].split(".")[0]
                                         if (domain) setBrandCompanySlug(domain.toLowerCase().replace(/[^a-z0-9-]/g, ""))
                                       }}
-                                      placeholder="orlink.ru"
+                                      placeholder="yourdomain.ru"
                                       className="h-7 text-xs font-mono w-40"
                                     />
                                   </div>
@@ -3180,7 +3180,7 @@ export default function VacancyPage() {
                                   <Input
                                     value={brandCustomDomain}
                                     onChange={(e) => setBrandCustomDomain(e.target.value)}
-                                    placeholder="careers.orlink.ru"
+                                    placeholder="careers.yourdomain.ru"
                                     className="h-8 text-xs font-mono"
                                   />
                                   {brandCustomDomain && (
@@ -3601,7 +3601,7 @@ export default function VacancyPage() {
               const tabOrder = status === "active"
                 ? ["candidates", "analytics", "course", "test", "anketa", "settings"]
                 : ["anketa", "analytics", "candidates", "course", "test", "settings"]
-              const tabLabels: Record<string, string> = { anketa: "Анкета", course: "Демонстрация", test: "Тест", candidates: "Кандидаты", analytics: "Аналитика", settings: "Настройки" }
+              const tabLabels: Record<string, string> = { anketa: "Вакансия", course: "Демонстрация", test: "Тест", candidates: "Кандидаты", analytics: "Аналитика", settings: "Настройки" }
               const idx = tabOrder.indexOf(activeTab)
               const prevTab = idx > 0 ? tabOrder[idx - 1] : null
               const nextTab = idx < tabOrder.length - 1 ? tabOrder[idx + 1] : null
@@ -3801,9 +3801,9 @@ export default function VacancyPage() {
       <AlertDialog open={talentPoolDialogOpen} onOpenChange={setTalentPoolDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Добавить в Talent Pool?</AlertDialogTitle>
+            <AlertDialogTitle>Добавить в резерв?</AlertDialogTitle>
             <AlertDialogDescription>
-              Кандидат {talentPoolCandidate?.name} набрал {talentPoolCandidate?.aiScore} баллов AI-скрининга. Хотите сохранить его в Talent Pool для будущих вакансий?
+              Кандидат {talentPoolCandidate?.name} набрал {talentPoolCandidate?.aiScore} баллов AI-скрининга. Хотите сохранить его в резерв для будущих вакансий?
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -3811,7 +3811,7 @@ export default function VacancyPage() {
             <AlertDialogAction onClick={async () => {
               if (talentPoolCandidate) {
                 await updateStage(talentPoolCandidate.id, "talent_pool")
-                toast.success(`${talentPoolCandidate.name} добавлен в Talent Pool`)
+                toast.success(`${talentPoolCandidate.name} добавлен в резерв`)
               }
               setTalentPoolDialogOpen(false)
             }}>

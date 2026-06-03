@@ -147,7 +147,7 @@ export default function TalentPoolPage() {
     setCandidates((p) => [...p, { ...form, id: `t-${Date.now()}`, status: "cold" as TalentStatus, lastContact: new Date(), referralName: undefined, score: 0, scoreBreakdown: { experience: 0, skills: 0, culture: 0, motivation: 0, availability: 0 } }])
     setForm({ name: "", position: "", company: "", source: "", email: "", phone: "", telegram: "", comment: "" })
     setAddOpen(false)
-    toast.success("Кандидат добавлен в Talent Pool")
+    toast.success("Кандидат добавлен в резерв")
   }
 
   const handleCreateCampaign = () => {
@@ -214,7 +214,7 @@ export default function TalentPoolPage() {
           <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
             <div className="flex items-center justify-between mb-5">
               <div>
-                <h1 className="text-2xl font-semibold">Talent Pool</h1>
+                <h1 className="text-2xl font-semibold">Резерв</h1>
                 <p className="text-sm text-muted-foreground">База пассивных кандидатов и кампании прогрева</p>
               </div>
             </div>
@@ -394,7 +394,7 @@ export default function TalentPoolPage() {
       {/* Add candidate dialog */}
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
         <DialogContent className="sm:max-w-md">
-          <DialogHeader><DialogTitle>Добавить в Talent Pool</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Добавить в резерв</DialogTitle></DialogHeader>
           <div className="grid gap-3 py-2">
             <div className="grid grid-cols-2 gap-3">
               <div className="grid gap-1"><Label className="text-xs">Имя *</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Иван Петров" /></div>

@@ -448,7 +448,7 @@ export default function TeamPage() {
               <Input
                 value={joinCode}
                 onChange={(e) => setJoinCode(e.target.value)}
-                placeholder="orlink"
+                placeholder="company"
                 className="h-9 border-0 bg-transparent font-mono text-sm focus-visible:ring-0 px-1"
               />
             </div>
@@ -473,7 +473,7 @@ export default function TeamPage() {
           </div>
           {!joinCodeSaved && (
             <p className="text-xs text-amber-600">
-              Ссылка ещё не задана — впишите уникальный адрес (например <b>orlink</b>) и нажмите «Сохранить».
+              Ссылка ещё не задана — впишите уникальный адрес (например <b>company</b>) и нажмите «Сохранить».
             </p>
           )}
           <div className="flex items-center gap-2">
