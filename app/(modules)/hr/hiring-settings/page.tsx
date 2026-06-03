@@ -137,7 +137,7 @@ export default function HiringSettingsPage() {
   })
 
   // ── Schedule state ──
-  const [slotDuration, setSlotDuration] = useState("30")
+  const [slotDuration, setSlotDuration] = useState("45")
   const [bufferTime, setBufferTime] = useState("15")
   const [interviewFrom, setInterviewFrom] = useState("09:00")
   const [interviewTo, setInterviewTo] = useState("18:00")
