@@ -16,7 +16,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
-import {Settings, Clock, Save, Bell, GitBranch, MessageSquare, ShieldAlert, Plus, Pencil, Trash2, Palette, Plug} from "lucide-react"
+import {Settings, Clock, Save, Bell, GitBranch, MessageSquare, ShieldAlert, Plus, Pencil, Trash2, Palette, Plug, ChevronDown} from "lucide-react"
 import { toast } from "sonner"
 import { IntegrationsContent } from "@/components/hr/integrations-content"
 import { AiAbuseModeSettings } from "@/components/company/ai-abuse-mode-settings"
@@ -222,6 +222,39 @@ export default function HiringSettingsPage() {
       toast.error("Не удалось сохранить")
     } finally {
       setAiKillSaving(false)
+    }
+  }
+
+  // O5: точечное отключение AI по конкретным вакансиям.
+  const [aiVacExpanded, setAiVacExpanded] = useState(false)
+  const [aiVacancies, setAiVacancies] = useState<Array<{ id: string; title: string; aiChatbotEnabled: boolean }>>([])
+  const [aiVacLoading, setAiVacLoading] = useState(false)
+  const [aiVacBusy, setAiVacBusy] = useState<string | null>(null)
+  const loadAiVacancies = async () => {
+    setAiVacLoading(true)
+    try {
+      const r = await fetch("/api/modules/hr/company/ai-vacancies")
+      const d = r.ok ? await r.json() : null
+      setAiVacancies(Array.isArray(d?.vacancies) ? d.vacancies : [])
+    } catch { /* ignore */ } finally {
+      setAiVacLoading(false)
+    }
+  }
+  const toggleVacancyAi = async (id: string, next: boolean) => {
+    setAiVacBusy(id)
+    setAiVacancies(prev => prev.map(v => v.id === id ? { ...v, aiChatbotEnabled: next } : v))
+    try {
+      const res = await fetch(`/api/modules/hr/vacancies/${id}/ai-chatbot`, {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: next }),
+      })
+      if (!res.ok) throw new Error("save_failed")
+      toast.success(next ? "AI-чат-бот включён для вакансии" : "AI-чат-бот отключён для вакансии")
+    } catch {
+      setAiVacancies(prev => prev.map(v => v.id === id ? { ...v, aiChatbotEnabled: !next } : v))
+      toast.error("Не удалось сохранить")
+    } finally {
+      setAiVacBusy(null)
     }
   }
 
@@ -629,6 +662,41 @@ export default function HiringSettingsPage() {
                     onCheckedChange={toggleAiChatbotKill}
                     disabled={aiKillSaving}
                   />
+                </div>
+
+                {/* O5: точечное отключение AI по вакансиям */}
+                <div className="mt-3 pt-3 border-t">
+                  <button
+                    type="button"
+                    className="text-xs font-medium text-muted-foreground hover:text-foreground flex items-center gap-1"
+                    onClick={() => { const n = !aiVacExpanded; setAiVacExpanded(n); if (n && aiVacancies.length === 0) loadAiVacancies() }}
+                  >
+                    <ChevronDown className={cn("w-3.5 h-3.5 transition-transform", aiVacExpanded && "rotate-180")} />
+                    Точечно — по вакансиям
+                  </button>
+                  {aiVacExpanded && (
+                    <div className="mt-2 space-y-1.5">
+                      {aiVacLoading ? (
+                        <p className="text-xs text-muted-foreground">Загрузка…</p>
+                      ) : aiVacancies.length === 0 ? (
+                        <p className="text-xs text-muted-foreground">Нет вакансий с включённым AI-чат-ботом.</p>
+                      ) : aiVacancies.map(v => (
+                        <div key={v.id} className="flex items-center justify-between gap-3 rounded-md border bg-card px-3 py-2">
+                          <span className="text-sm truncate">{v.title}</span>
+                          <Switch
+                            checked={v.aiChatbotEnabled}
+                            disabled={aiVacBusy === v.id || aiChatbotKilled}
+                            onCheckedChange={(c) => toggleVacancyAi(v.id, c)}
+                          />
+                        </div>
+                      ))}
+                      {aiChatbotKilled && aiVacancies.length > 0 && (
+                        <p className="text-[11px] text-amber-700">
+                          Глобальный рубильник включён — AI отключён у всех вакансий независимо от этих переключателей.
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
