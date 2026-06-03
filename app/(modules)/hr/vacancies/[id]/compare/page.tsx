@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
-import { ArrowLeft, Columns3, Rows3, Loader2, Star, Check, X, ExternalLink, Ban, ChevronDown, Download, Share2 } from "lucide-react"
+import { ArrowLeft, Columns3, Rows3, Loader2, Star, Check, X, ExternalLink, Ban, ChevronDown, Download, Share2, SlidersHorizontal } from "lucide-react"
 import { CandidateDrawer } from "@/components/candidates/candidate-drawer"
 
 interface QItem { id: string; text: string; points?: number }
@@ -126,6 +126,15 @@ function CompareInner() {
   const [error, setError] = useState<string | null>(null)
   const [mode, setMode] = useState<"matrix" | "byQuestion">("matrix")
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+  // ── Фильтр кандидатов (скрывает не подходящих, обратимо) ──
+  const [filterOpen, setFilterOpen] = useState(false)
+  // questionId → выбранные значения (для выборных) либо "__answered__"/"__empty__" (для текстовых)
+  const [answerSel, setAnswerSel] = useState<Record<string, string[]>>({})
+  const [testMin, setTestMin] = useState<number | null>(null)
+  const [demoMin, setDemoMin] = useState<number | null>(null)
+  const [resumeMin, setResumeMin] = useState<number | null>(null)
+  const [stageSel, setStageSel] = useState<string[]>([])
+  const resetFilter = () => { setAnswerSel({}); setTestMin(null); setDemoMin(null); setResumeMin(null); setStageSel([]) }
   // Боковая карточка кандидата (drawer) поверх сравнения.
   const [drawerId, setDrawerId] = useState<string | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -150,6 +159,77 @@ function CompareInner() {
 
   const candidates = heads
   const nameOf = (c: CandidateHead) => c.name?.trim() || "Без имени"
+
+  // ── Фасеты фильтра: по каждому вопросу — распределение ответов ──
+  // mode "values" — мало уникальных коротких значений (выборные вопросы): чипы
+  // вариантов с числом. mode "answered" — свободный текст: «ответил / нет».
+  const sectionByQid = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const s of data?.sections ?? []) for (const q of s.questions) m.set(q.id, s.key)
+    return m
+  }, [data])
+  const answerValueOf = (cid: string, qid: string): string => {
+    const sk = sectionByQid.get(qid)
+    const sec = data?.sections.find((s) => s.key === sk)
+    return (sec?.answers[cid]?.[qid]?.value ?? "").trim()
+  }
+  const facets = useMemo(() => {
+    if (!data) return []
+    return data.sections.map((section) => ({
+      key: section.key,
+      title: section.title,
+      questions: section.questions.map((q) => {
+        const counts = new Map<string, number>()
+        let answered = 0, empty = 0
+        for (const c of candidates) {
+          const v = (section.answers[c.id]?.[q.id]?.value ?? "").trim()
+          if (!v) { empty++; continue }
+          answered++
+          for (const part of v.split("|||").map((s) => s.trim()).filter(Boolean)) {
+            counts.set(part, (counts.get(part) ?? 0) + 1)
+          }
+        }
+        const distinct = [...counts.entries()].sort((a, b) => b[1] - a[1])
+        const isValues = distinct.length > 0 && distinct.length <= 12 && distinct.every(([val]) => val.length <= 60)
+        return { id: q.id, text: q.text, mode: isValues ? "values" as const : "answered" as const, values: distinct, answered, empty }
+      }).filter((q) => q.answered + q.empty > 0),
+    })).filter((s) => s.questions.length > 0)
+  }, [data, candidates])
+
+  const passesFilter = (c: CandidateHead): boolean => {
+    if (testMin != null && (c.testScore == null || c.testScore < testMin)) return false
+    if (demoMin != null && (c.demoPercent == null || c.demoPercent < demoMin)) return false
+    if (resumeMin != null && (c.resumeScore == null || c.resumeScore < resumeMin)) return false
+    if (stageSel.length && !(c.stage && stageSel.includes(c.stage))) return false
+    for (const [qid, sel] of Object.entries(answerSel)) {
+      if (!sel.length) continue
+      const v = answerValueOf(c.id, qid)
+      const hasAnswered = sel.includes("__answered__")
+      const hasEmpty = sel.includes("__empty__")
+      if (hasAnswered || hasEmpty) {
+        if (!((v && hasAnswered) || (!v && hasEmpty))) return false
+        continue
+      }
+      const parts = new Set(v.split("|||").map((s) => s.trim()).filter(Boolean))
+      if (!sel.some((s) => parts.has(s))) return false
+    }
+    return true
+  }
+  const filterActive = Object.values(answerSel).some((a) => a.length) || testMin != null || demoMin != null || resumeMin != null || stageSel.length > 0
+  const visible = filterActive ? candidates.filter(passesFilter) : candidates
+  const stageOptions = useMemo(() => {
+    const set = new Set<string>()
+    for (const c of candidates) if (c.stage) set.add(c.stage)
+    return [...set]
+  }, [candidates])
+  const toggleAnswerVal = (qid: string, val: string) =>
+    setAnswerSel((prev) => {
+      const cur = prev[qid] ?? []
+      const next = cur.includes(val) ? cur.filter((x) => x !== val) : [...cur, val]
+      const out = { ...prev }
+      if (next.length) out[qid] = next; else delete out[qid]
+      return out
+    })
 
   const patchHead = (id: string, patch: Partial<CandidateHead>) =>
     setHeads((hs) => hs.map((h) => (h.id === id ? { ...h, ...patch } : h)))
@@ -186,7 +266,7 @@ function CompareInner() {
   // проблем с разделителем/кодировкой, в отличие от CSV).
   const exportCsv = () => {
     if (candidates.length === 0) return
-    const idsParam = candidates.map((c) => c.id).join(",")
+    const idsParam = visible.map((c) => c.id).join(",")
     window.location.href = `/api/modules/hr/vacancies/${vacancyId}/compare/export?ids=${idsParam}`
   }
 
@@ -198,7 +278,7 @@ function CompareInner() {
     try {
       const r = await fetch(`/api/modules/hr/vacancies/${vacancyId}/compare/share`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ids: candidates.map((c) => c.id) }),
+        body: JSON.stringify({ ids: visible.map((c) => c.id) }),
       })
       const j = await r.json().catch(() => null) as { token?: string; error?: string } | null
       if (!r.ok || !j?.token) throw new Error(j?.error || "Не удалось создать ссылку")
@@ -252,7 +332,9 @@ function CompareInner() {
           <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => router.push(`/hr/vacancies/${vacancyId}`)}>
             <ArrowLeft className="size-4" /> К вакансии
           </Button>
-          <h1 className="text-lg font-semibold">Сравнение кандидатов ({candidates.length})</h1>
+          <h1 className="text-lg font-semibold">
+            Сравнение кандидатов ({filterActive ? `${visible.length} из ${candidates.length}` : candidates.length})
+          </h1>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <Button
@@ -272,6 +354,14 @@ function CompareInner() {
             disabled={!data || sharing}
           >
             {sharing ? <Loader2 className="size-3.5 animate-spin" /> : <Share2 className="size-3.5" />} Поделиться
+          </Button>
+          <Button
+            size="sm"
+            variant={filterActive ? "default" : "outline"}
+            className="h-8 gap-1.5 text-xs"
+            onClick={() => setFilterOpen((v) => !v)}
+          >
+            <SlidersHorizontal className="size-3.5" /> Фильтр{filterActive ? ` · ${visible.length}` : ""}
           </Button>
           <div className="flex items-center gap-1 rounded-lg border p-0.5">
             <Button
@@ -293,6 +383,99 @@ function CompareInner() {
           </div>
         </div>
       </div>
+
+      {/* ── Панель фильтра (скрывает не подходящих, обратимо) ── */}
+      {filterOpen && data && (
+        <div className="mb-4 rounded-lg border bg-muted/20 p-3 space-y-3">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <span className="text-sm font-medium">
+              Фильтр · показано <b>{visible.length}</b> из {candidates.length}
+            </span>
+            <div className="flex items-center gap-2">
+              {filterActive && (
+                <button className="text-xs text-primary/70 hover:text-primary underline underline-offset-2" onClick={resetFilter}>
+                  Сбросить
+                </button>
+              )}
+              <button className="text-muted-foreground/60 hover:text-foreground" onClick={() => setFilterOpen(false)}>
+                <X className="size-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* Пороги по баллам + стадия */}
+          <div className="flex items-center gap-x-4 gap-y-2 flex-wrap text-xs">
+            {([
+              { label: "тест ≥", val: testMin, set: setTestMin },
+              { label: "демо % ≥", val: demoMin, set: setDemoMin },
+              { label: "резюме ≥", val: resumeMin, set: setResumeMin },
+            ] as const).map(({ label, val, set }) => (
+              <label key={label} className="flex items-center gap-1.5">
+                <span className="text-muted-foreground">{label}</span>
+                <input
+                  type="number" min={0} max={100} placeholder="—"
+                  className="w-16 text-xs border border-border rounded px-2 py-1 outline-none bg-background focus:border-primary/50 text-center"
+                  value={val ?? ""}
+                  onChange={(e) => { const v = parseInt(e.target.value); set(Number.isFinite(v) ? v : null) }}
+                />
+              </label>
+            ))}
+            {stageOptions.length > 0 && (
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-muted-foreground">стадия:</span>
+                {stageOptions.map((st) => {
+                  const active = stageSel.includes(st)
+                  return (
+                    <button key={st}
+                      onClick={() => setStageSel((p) => p.includes(st) ? p.filter((x) => x !== st) : [...p, st])}
+                      className={cn("px-2 py-0.5 rounded border text-[11px]", active ? "bg-primary/10 border-primary text-primary" : "border-border text-muted-foreground hover:border-primary/40")}>
+                      {st}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* По ответам на вопросы */}
+          <div className="space-y-2 max-h-[40vh] overflow-y-auto pr-1">
+            {facets.map((section) => (
+              <div key={section.key} className="space-y-1.5">
+                <div className="text-[11px] uppercase tracking-wide text-muted-foreground/60 font-medium">{section.title}</div>
+                {section.questions.map((q) => {
+                  const sel = answerSel[q.id] ?? []
+                  return (
+                    <div key={q.id} className="flex flex-wrap items-center gap-1.5">
+                      <span className="text-xs text-foreground/80 mr-1 max-w-[280px] truncate" title={q.text}>{q.text}</span>
+                      {q.mode === "values" ? (
+                        q.values.map(([val, n]) => {
+                          const active = sel.includes(val)
+                          return (
+                            <button key={val} onClick={() => toggleAnswerVal(q.id, val)}
+                              className={cn("px-2 py-0.5 rounded border text-[11px]", active ? "bg-primary/10 border-primary text-primary" : "border-border text-muted-foreground hover:border-primary/40")}>
+                              {val} <span className="opacity-50">· {n}</span>
+                            </button>
+                          )
+                        })
+                      ) : (
+                        ([["__answered__", `ответили · ${q.answered}`], ["__empty__", `без ответа · ${q.empty}`]] as const).map(([tok, lbl]) => {
+                          const active = sel.includes(tok)
+                          return (
+                            <button key={tok} onClick={() => toggleAnswerVal(q.id, tok)}
+                              className={cn("px-2 py-0.5 rounded border text-[11px]", active ? "bg-primary/10 border-primary text-primary" : "border-border text-muted-foreground hover:border-primary/40")}>
+                              {lbl}
+                            </button>
+                          )
+                        })
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {loading && (
         <div className="flex items-center gap-2 text-muted-foreground py-12 justify-center">
@@ -331,7 +514,7 @@ function CompareInner() {
                         <th className="text-left font-medium p-2.5 align-bottom sticky left-0 z-20 bg-muted border-r shadow-[2px_0_4px_rgba(0,0,0,0.04)] w-[300px] min-w-[300px] max-w-[300px]">
                           Вопрос
                         </th>
-                        {candidates.map((c) => (
+                        {visible.map((c) => (
                           <th key={c.id} className="text-left font-medium p-2.5 align-top w-[260px] min-w-[260px] border-l h-full">
                             <div className="flex flex-col h-full">
                               {/* Имя + скоры. Высоту не фиксируем — отступ до иконок
@@ -374,7 +557,7 @@ function CompareInner() {
                               <div className="text-[11px] text-muted-foreground">макс. {q.points} б</div>
                             )}
                           </td>
-                          {candidates.map((c) => (
+                          {visible.map((c) => (
                             <td key={c.id} className={cn("p-2.5 border-l align-top w-[260px] min-w-[260px]", qi % 2 && "bg-muted/30")}>
                               <AnswerCell a={section.answers[c.id]?.[q.id]} />
                             </td>
@@ -396,7 +579,7 @@ function CompareInner() {
                         )}
                       </div>
                       <div className="divide-y">
-                        {candidates.map((c) => (
+                        {visible.map((c) => (
                           <div key={c.id} className="p-2.5 grid grid-cols-[180px_1fr] gap-3">
                             <div className="text-sm font-medium truncate" title={nameOf(c)}>{nameOf(c)}</div>
                             <AnswerCell a={section.answers[c.id]?.[q.id]} />
