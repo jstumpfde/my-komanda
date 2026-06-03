@@ -587,21 +587,17 @@ export default function VacancyPage() {
       // URL-таб «застрял» (anketa/settings/analytics) от прошлого визита,
       // но вакансия уже опубликована — принудительно открываем «Кандидаты»
       // и чистим ?tab, чтобы при следующем визите дефолт не залипал.
-      const STICKY_TABS = new Set(["anketa", "settings", "analytics"])
-      if (!tabAutoSyncedRef.current && isActive && urlTab && STICKY_TABS.has(urlTab)) {
+      // Q1 (deep-link): явный ?tab= в URL — намеренный диплинк/закладка,
+      // его уважаем даже для активной вакансии (activeTab уже инициализирован
+      // в urlTab при mount — переопределять не нужно). Дефолт «Кандидаты»
+      // (active) / «Настройки» (черновик) — только когда ?tab отсутствует.
+      // Ref-guard оставляет это на ПЕРВЫЙ mount, чтобы refetch apiVacancy
+      // (напр. после сохранения брендинга) не выкидывал юзера с его таба.
+      if (!tabAutoSyncedRef.current) {
         tabAutoSyncedRef.current = true
-        setActiveTab("candidates")
-        const sp = new URLSearchParams(window.location.search)
-        sp.delete("tab")
-        const qs = sp.toString()
-        router.replace(`${window.location.pathname}${qs ? "?" + qs : ""}`, { scroll: false })
-      } else if (!urlTab && !tabAutoSyncedRef.current) {
-        // P0-50 hotfix: ref-guard на ветке без ?tab= тоже. Раньше каждый
-        // refetch apiVacancy без ?tab= тащил setActiveTab("candidates"),
-        // и после сохранения брендинга (refetchVacancy после успешного PATCH)
-        // юзера выкидывало с таба «Брендинг». Теперь — только первый mount.
-        tabAutoSyncedRef.current = true
-        setActiveTab(isActive ? "candidates" : "settings")
+        if (!urlTab) {
+          setActiveTab(isActive ? "candidates" : "settings")
+        }
       }
     }
     // Load custom columns from description_json (skip hidden ones)
