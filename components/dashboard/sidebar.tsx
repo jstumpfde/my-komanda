@@ -409,9 +409,11 @@ export function DashboardSidebar() {
         <div className="flex items-center gap-3">
           {companyLogo ? (
             <div className={cn(
-              "shrink-0 flex items-center justify-center overflow-hidden bg-white/15 rounded-md p-1",
+              // Сплошная светлая подложка-бейдж: любой логотип (тёмный, цветной,
+              // прозрачный) читается на тёмном сайдбаре без отдельной версии.
+              "shrink-0 flex items-center justify-center overflow-hidden bg-white rounded-md p-1.5",
               "h-10 w-auto max-w-[140px] min-w-10",
-              "group-data-[collapsible=icon]:w-8 group-data-[collapsible=icon]:h-8 group-data-[collapsible=icon]:max-w-8 group-data-[collapsible=icon]:rounded-[6px]",
+              "group-data-[collapsible=icon]:w-8 group-data-[collapsible=icon]:h-8 group-data-[collapsible=icon]:max-w-8 group-data-[collapsible=icon]:rounded-[6px] group-data-[collapsible=icon]:p-1",
             )}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img

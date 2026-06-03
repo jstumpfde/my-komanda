@@ -253,10 +253,10 @@ export default function BrandingPage() {
                 <>
                   <div className="flex items-start gap-4">
                     <div className="flex flex-col items-center gap-1">
-                      <div className="w-[140px] h-10 rounded-md bg-[#1a1040] flex items-center justify-center overflow-hidden p-1">
-                        <div className="bg-white/15 rounded p-0.5 flex items-center justify-center max-w-full max-h-full">
+                      <div className="w-[140px] h-10 rounded-md bg-[#1a1040] flex items-center justify-center overflow-hidden p-1.5">
+                        <div className="bg-white rounded p-1 flex items-center justify-center max-w-full max-h-full">
                           {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={logoPreview} alt="" className="max-w-[120px] max-h-8 object-contain" />
+                          <img src={logoPreview} alt="" className="max-w-[110px] max-h-7 object-contain" />
                         </div>
                       </div>
                       <span className="text-[10px] text-muted-foreground">Sidebar</span>
