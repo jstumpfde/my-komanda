@@ -5,6 +5,7 @@ import { candidates, vacancies, companies } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { trySyncStageToHh } from "@/lib/hh/sync-stage"
 import { sendWebhook } from "@/lib/webhooks"
+import { sendToBitrix } from "@/lib/bitrix"
 
 const VALID_STAGES = [
   "new", "primary_contact", "demo", "demo_opened", "decision",
@@ -111,8 +112,28 @@ export async function PUT(
           if (events.stage_change) await sendWebhook(wh.url, "stage_change", payload)
           if (stage === "rejected" && events.reject) await sendWebhook(wh.url, "reject", payload)
         }
+
+        // O4: Битрикс24 — при достижении настроенного этапа создаём лид в CRM.
+        // trigger: конкретный этап (напр. 'offer') или 'all'. Без URL — ничего.
+        const bx = (company?.hd as { bitrix?: { url?: string; trigger?: string } } | null)?.bitrix
+        if (bx?.url && (bx.trigger === "all" || bx.trigger === stage)) {
+          const [cand] = await db
+            .select({ name: candidates.name, phone: candidates.phone, email: candidates.email, aiScore: candidates.aiScore, vacancyTitle: vacancies.title })
+            .from(candidates)
+            .innerJoin(vacancies, eq(candidates.vacancyId, vacancies.id))
+            .where(eq(candidates.id, id)).limit(1)
+          if (cand?.name) {
+            await sendToBitrix(bx.url, {
+              name: cand.name,
+              phone: cand.phone ?? undefined,
+              email: cand.email ?? undefined,
+              vacancyTitle: cand.vacancyTitle ?? undefined,
+              aiScore: cand.aiScore ?? undefined,
+            })
+          }
+        }
       } catch (err) {
-        console.warn("[stage-route] webhook dispatch failed:", err)
+        console.warn("[stage-route] webhook/bitrix dispatch failed:", err)
       }
     })()
 

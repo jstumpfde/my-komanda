@@ -187,15 +187,30 @@ export default function HiringSettingsPage() {
   }
 
   // ── General: company selector toggle ──
+  // O1: мультикомпанийность — тумблер + список компаний-брендов (на сервере).
   const [showCompanySelector, setShowCompanySelector] = useState(false)
-  useEffect(() => {
-    setShowCompanySelector(localStorage.getItem("mk_hr_show_company_selector") === "true")
-  }, [])
-  const toggleCompanySelector = (checked: boolean) => {
+  type BrandCompany = { id: string; name: string; slogan?: string; description?: string }
+  const [brandCompanies, setBrandCompanies] = useState<BrandCompany[]>([])
+  const toggleCompanySelector = async (checked: boolean) => {
     setShowCompanySelector(checked)
-    localStorage.setItem("mk_hr_show_company_selector", String(checked))
-    toast.success(checked ? "Выбор компании включён в анкете" : "Секция «Компания» скрыта")
+    try {
+      await patchHiringDefaults({ showCompanySelector: checked })
+      toast.success(checked ? "Выбор компании включён в анкете" : "Секция «Компания» скрыта")
+    } catch { toast.error("Не удалось сохранить") }
   }
+  const persistCompanies = async (list: BrandCompany[]) => {
+    setBrandCompanies(list)
+    try { await patchHiringDefaults({ brandCompanies: list }) }
+    catch { toast.error("Не удалось сохранить список") }
+  }
+  const addBrandCompany = () => {
+    if (brandCompanies.length >= 30) { toast.error("Максимум 30 компаний"); return }
+    persistCompanies([...brandCompanies, { id: `bc-${Math.random().toString(36).slice(2, 9)}`, name: "", slogan: "", description: "" }])
+  }
+  const updateBrandCompany = (id: string, patch: Partial<BrandCompany>) =>
+    setBrandCompanies(prev => prev.map(c => c.id === id ? { ...c, ...patch } : c))
+  const saveBrandCompany = () => persistCompanies(brandCompanies)
+  const removeBrandCompany = (id: string) => persistCompanies(brandCompanies.filter(c => c.id !== id))
 
   // ── AI-чат-бот kill switch (глобально на компанию) ──
   const [aiChatbotKilled, setAiChatbotKilled] = useState(false)
@@ -330,6 +345,21 @@ export default function HiringSettingsPage() {
       setSavingBitrix(false)
     }
   }
+  const [bitrixTesting, setBitrixTesting] = useState(false)
+  const checkBitrix = async () => {
+    if (!bitrixUrl.trim()) { toast.error("Сначала укажите Webhook URL"); return }
+    setBitrixTesting(true)
+    try {
+      const res = await fetch("/api/modules/hr/company/bitrix-test", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: bitrixUrl.trim() }),
+      })
+      const d = await res.json() as { ok?: boolean; error?: string }
+      if (d.ok) toast.success("Связь с Битрикс24 установлена ✓")
+      else toast.error(d.error || "Связь не установлена")
+    } catch { toast.error("Ошибка проверки") }
+    finally { setBitrixTesting(false) }
+  }
 
   // ── Funnel state ──
   const [selectedScenario, setSelectedScenario] = useState("standard")
@@ -420,6 +450,10 @@ export default function HiringSettingsPage() {
           if (typeof f.d60 === "boolean") setFeedback60(f.d60)
           if (typeof f.d90 === "boolean") setFeedback90(f.d90)
         }
+
+        // O1: мультикомпанийность
+        if (typeof hd.showCompanySelector === "boolean") setShowCompanySelector(hd.showCompanySelector)
+        if (Array.isArray(hd.brandCompanies)) setBrandCompanies(hd.brandCompanies)
 
         // Битрикс24
         if (hd.bitrix) {
@@ -713,6 +747,43 @@ export default function HiringSettingsPage() {
                   </div>
                   <Switch checked={showCompanySelector} onCheckedChange={toggleCompanySelector} />
                 </div>
+
+                {showCompanySelector && (
+                  <div className="mt-4 pt-4 border-t space-y-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-medium text-muted-foreground">Компании-бренды для найма ({brandCompanies.length}/30)</p>
+                      <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={addBrandCompany}>
+                        <Plus className="w-3.5 h-3.5" />Добавить компанию
+                      </Button>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      Основная компания берётся из профиля. Здесь — дополнительные, под которые ведёте найм
+                      (клиенты/бренды). При создании вакансии HR выбирает, под какую компанию она идёт.
+                    </p>
+                    {brandCompanies.length === 0 ? (
+                      <p className="text-xs text-muted-foreground italic py-2">Пока только основная компания. Добавьте бренд, если ведёте найм под несколько компаний.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {brandCompanies.map((c) => (
+                          <div key={c.id} className="rounded-lg border p-3 space-y-2 bg-muted/20">
+                            <div className="flex items-center gap-2">
+                              <Input value={c.name} onChange={(e) => updateBrandCompany(c.id, { name: e.target.value })}
+                                onBlur={saveBrandCompany} placeholder="Название компании" className="h-8 text-sm flex-1" />
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0"
+                                title="Удалить" onClick={() => removeBrandCompany(c.id)}>
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </Button>
+                            </div>
+                            <Input value={c.slogan ?? ""} onChange={(e) => updateBrandCompany(c.id, { slogan: e.target.value })}
+                              onBlur={saveBrandCompany} placeholder="Слоган (необязательно)" className="h-8 text-xs" />
+                            <Textarea value={c.description ?? ""} onChange={(e) => updateBrandCompany(c.id, { description: e.target.value })}
+                              onBlur={saveBrandCompany} placeholder="Краткое описание для кандидатов" rows={2} className="text-xs" />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -861,7 +932,15 @@ export default function HiringSettingsPage() {
                     </SelectContent>
                   </Select>
                 </div>
-                <Button size="sm" className="h-8 text-xs" onClick={saveBitrix} disabled={savingBitrix}>Сохранить</Button>
+                <div className="flex items-center gap-2">
+                  <Button size="sm" className="h-8 text-xs" onClick={saveBitrix} disabled={savingBitrix}>Сохранить</Button>
+                  <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={checkBitrix} disabled={bitrixTesting || !bitrixUrl.trim()}>
+                    {bitrixTesting ? "Проверка…" : "Проверить связь"}
+                  </Button>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  При достижении выбранного этапа кандидат создаётся лидом в Битрикс24 (crm.lead.add).
+                </p>
               </CardContent>
             </Card>
 

@@ -127,6 +127,11 @@ export interface CompanyHiringDefaults {
     d30?: boolean; d60?: boolean; d90?: boolean
     q30?: string;  q60?: string;  q90?: string
   }
+  // O1: мультикомпанийность — список компаний-брендов, под которые ведётся найм
+  // (аутсорсинг/рекрутинг). Основная компания берётся из профиля; здесь —
+  // дополнительные. При создании вакансии HR выбирает компанию (vacancy-side — отдельно).
+  showCompanySelector?: boolean
+  brandCompanies?: Array<{ id: string; name: string; slogan?: string; description?: string }>
 }
 
 export const companies = pgTable("companies", {
