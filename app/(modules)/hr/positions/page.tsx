@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
-import { Card } from "@/components/ui/card"
+import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -194,18 +194,16 @@ export default function PositionsPage() {
               </Select>
             </div>
 
-            {/* Table */}
-            <Card className="rounded-xl border border-border shadow-sm bg-card overflow-hidden">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-border bg-muted/30">
-                    <th className="text-[10px] uppercase font-medium text-muted-foreground tracking-wider px-5 py-3 text-left">Название</th>
-                    <th className="text-[10px] uppercase font-medium text-muted-foreground tracking-wider px-5 py-3 text-left">Отдел</th>
-                    <th className="text-[10px] uppercase font-medium text-muted-foreground tracking-wider px-5 py-3 text-left">Грейд</th>
-                    <th className="text-[10px] uppercase font-medium text-muted-foreground tracking-wider px-5 py-3 text-left">Зарплата</th>
-                    <th className="text-[10px] uppercase font-medium text-muted-foreground tracking-wider px-5 py-3 text-right">Действия</th>
-                  </tr>
-                </thead>
+            {/* Table — единый вид через data-table primitives (S2) */}
+            <TableCard>
+              <DataTable>
+                <DataHead>
+                  <DataHeadCell>Название</DataHeadCell>
+                  <DataHeadCell>Отдел</DataHeadCell>
+                  <DataHeadCell>Грейд</DataHeadCell>
+                  <DataHeadCell>Зарплата</DataHeadCell>
+                  <DataHeadCell align="right">Действия</DataHeadCell>
+                </DataHead>
                 <tbody>
                   {loading ? (
                     <tr><td colSpan={5} className="text-center py-12 text-muted-foreground">Загрузка...</td></tr>
@@ -213,24 +211,24 @@ export default function PositionsPage() {
                     <tr><td colSpan={5} className="text-center py-12 text-muted-foreground">Нет должностей</td></tr>
                   ) : (
                     filteredPositions.map((pos) => (
-                      <tr key={pos.id} className="border-b border-border last:border-0 hover:bg-muted/20 transition-colors">
-                        <td className="px-5 py-3">
+                      <DataRow key={pos.id}>
+                        <DataCell>
                           <div className="flex items-center gap-2">
                             <Briefcase className="h-4 w-4 text-primary shrink-0" />
-                            <span className="font-medium text-sm">{pos.name}</span>
+                            <span className="font-medium">{pos.name}</span>
                           </div>
-                        </td>
-                        <td className="px-5 py-3 text-sm text-muted-foreground">
+                        </DataCell>
+                        <DataCell className="text-muted-foreground">
                           {pos.departmentName ?? "—"}
-                        </td>
-                        <td className="px-5 py-3">
+                        </DataCell>
+                        <DataCell>
                           {pos.grade ? (
                             <Badge variant="outline">{pos.grade}</Badge>
                           ) : (
-                            <span className="text-sm text-muted-foreground">—</span>
+                            <span className="text-muted-foreground">—</span>
                           )}
-                        </td>
-                        <td className="px-5 py-3 text-sm">
+                        </DataCell>
+                        <DataCell>
                           {pos.salaryMin != null || pos.salaryMax != null ? (
                             <span>
                               {formatRubles(pos.salaryMin)} — {formatRubles(pos.salaryMax)}
@@ -238,8 +236,8 @@ export default function PositionsPage() {
                           ) : (
                             <span className="text-muted-foreground">—</span>
                           )}
-                        </td>
-                        <td className="px-5 py-3 text-right">
+                        </DataCell>
+                        <DataCell align="right">
                           <div className="flex items-center justify-end gap-1">
                             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(pos)}>
                               <Pencil className="h-4 w-4" />
@@ -248,13 +246,13 @@ export default function PositionsPage() {
                               <Trash2 className="h-4 w-4" />
                             </Button>
                           </div>
-                        </td>
-                      </tr>
+                        </DataCell>
+                      </DataRow>
                     ))
                   )}
                 </tbody>
-              </table>
-            </Card>
+              </DataTable>
+            </TableCard>
 
             {/* Create / Edit Dialog */}
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

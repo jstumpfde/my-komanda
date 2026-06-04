@@ -5,6 +5,7 @@ import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Button } from "@/components/ui/button"
+import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import { Badge } from "@/components/ui/badge"
 import {
   MessageSquare, Plus, Send, Clock, CheckCircle, BarChart3,
@@ -217,34 +218,32 @@ export default function PulseSurveysPage() {
 
           {/* ── Вопросы ── */}
           {tab === "questions" && (
-            <div className="border border-border rounded-xl overflow-hidden">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-muted/50 border-b">
-                    <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Вопрос</th>
-                    <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3 w-32">Категория</th>
-                    <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3 w-24">Тип</th>
-                  </tr>
-                </thead>
+            <TableCard>
+              <DataTable>
+                <DataHead>
+                  <DataHeadCell>Вопрос</DataHeadCell>
+                  <DataHeadCell align="center" width="128px">Категория</DataHeadCell>
+                  <DataHeadCell align="center" width="96px">Тип</DataHeadCell>
+                </DataHead>
                 <tbody>
                   {questions.map((q) => (
-                    <tr key={q.id} className="border-t border-border">
-                      <td className="px-4 py-3">{q.text}</td>
-                      <td className="px-4 py-3 text-center">
+                    <DataRow key={q.id}>
+                      <DataCell>{q.text}</DataCell>
+                      <DataCell align="center">
                         <Badge variant="secondary" className="text-xs">
                           {CATEGORY_LABELS[q.category] || q.category}
                         </Badge>
-                      </td>
-                      <td className="px-4 py-3 text-center">
+                      </DataCell>
+                      <DataCell align="center">
                         <span className="text-xs text-muted-foreground">
                           {q.isSystem ? "Системный" : "Свой"}
                         </span>
-                      </td>
-                    </tr>
+                      </DataCell>
+                    </DataRow>
                   ))}
                 </tbody>
-              </table>
-            </div>
+              </DataTable>
+            </TableCard>
           )}
 
         </main>

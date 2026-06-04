@@ -5,6 +5,7 @@ import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import {Card, CardContent} from "@/components/ui/card"
+import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -396,44 +397,41 @@ export default function TalentPoolPage() {
                   <Button size="sm" className="h-8 text-xs gap-1.5 bg-purple-600 hover:bg-purple-700 border border-purple-700" onClick={() => setCampaignOpen(true)}><Rocket className="w-3.5 h-3.5" />Запустить кампанию</Button>
                 </div>
 
-                <Card>
-                  <CardContent className="p-0">
-                    <table className="w-full">
-                      <thead>
-                        <tr className="bg-muted/50 border-b border-border">
-                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">
-                          <button onClick={() => toggleColSort("name")} className={cn("inline-flex items-center gap-1 select-none transition-colors", colSort.column === "name" ? "text-foreground" : "text-muted-foreground hover:text-foreground")}>
-                            Имя <ArrowUpDown className={cn("size-3", colSort.column !== "name" && "opacity-40")} />
-                          </button>
-                        </th>
-                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Должность</th>
-                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Компания</th>
-                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Источник</th>
-                        <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">
-                          <button onClick={() => toggleColSort("score")} className={cn("inline-flex items-center gap-1 select-none transition-colors", colSort.column === "score" ? "text-foreground" : "text-muted-foreground hover:text-foreground")}>
-                            Скоринг <ArrowUpDown className={cn("size-3", colSort.column !== "score" && "opacity-40")} />
-                          </button>
-                        </th>
-                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Статус</th>
-                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">
-                          <button onClick={() => toggleColSort("contact")} className={cn("inline-flex items-center gap-1 select-none transition-colors", colSort.column === "contact" ? "text-foreground" : "text-muted-foreground hover:text-foreground")}>
-                            Контакт <ArrowUpDown className={cn("size-3", colSort.column !== "contact" && "opacity-40")} />
-                          </button>
-                        </th>
-                        <th className="px-4 py-3"></th>
-                      </tr>
-                      </thead>
-                      <tbody>
+                <TableCard>
+                  <DataTable>
+                    <DataHead>
+                      <DataHeadCell>
+                        <button onClick={() => toggleColSort("name")} className={cn("inline-flex items-center gap-1 select-none transition-colors", colSort.column === "name" ? "text-foreground" : "hover:text-foreground")}>
+                          Имя <ArrowUpDown className={cn("size-3", colSort.column !== "name" && "opacity-40")} />
+                        </button>
+                      </DataHeadCell>
+                      <DataHeadCell>Должность</DataHeadCell>
+                      <DataHeadCell>Компания</DataHeadCell>
+                      <DataHeadCell>Источник</DataHeadCell>
+                      <DataHeadCell align="center">
+                        <button onClick={() => toggleColSort("score")} className={cn("inline-flex items-center gap-1 select-none transition-colors", colSort.column === "score" ? "text-foreground" : "hover:text-foreground")}>
+                          Скоринг <ArrowUpDown className={cn("size-3", colSort.column !== "score" && "opacity-40")} />
+                        </button>
+                      </DataHeadCell>
+                      <DataHeadCell>Статус</DataHeadCell>
+                      <DataHeadCell>
+                        <button onClick={() => toggleColSort("contact")} className={cn("inline-flex items-center gap-1 select-none transition-colors", colSort.column === "contact" ? "text-foreground" : "hover:text-foreground")}>
+                          Контакт <ArrowUpDown className={cn("size-3", colSort.column !== "contact" && "opacity-40")} />
+                        </button>
+                      </DataHeadCell>
+                      <DataHeadCell align="right" />
+                    </DataHead>
+                    <tbody>
                         {filtered.map((c) => {
                           const st = STATUS_CFG[c.status]
                           return (
-                            <tr key={c.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
-                              <td className="px-4 py-2.5 text-[13px] font-medium text-foreground/85">{c.name}</td>
-                              <td className="px-3 py-2.5 text-[13px] text-muted-foreground">{c.position}</td>
-                              <td className="px-3 py-2.5 text-[13px] text-muted-foreground">{c.company}</td>
-                              <td className="px-3 py-2.5">
+                            <DataRow key={c.id}>
+                              <DataCell className="font-medium text-foreground/85">{c.name}</DataCell>
+                              <DataCell className="text-muted-foreground">{c.position}</DataCell>
+                              <DataCell className="text-muted-foreground">{c.company}</DataCell>
+                              <DataCell>
                                 <div className="flex items-center gap-1.5">
-                                  <span className="text-[13px]">{c.source}</span>
+                                  <span>{c.source}</span>
                                   {c.referralName && (
                                     <>
                                       <span className="text-[11px] text-muted-foreground">· {c.referralName}</span>
@@ -441,28 +439,27 @@ export default function TalentPoolPage() {
                                     </>
                                   )}
                                 </div>
-                              </td>
-                              <td className="px-3 py-2.5">
+                              </DataCell>
+                              <DataCell align="center">
                                 <div className="flex justify-center">
                                   <ScoringBadge score={c.score} breakdown={c.scoreBreakdown} size="sm" />
                                 </div>
-                              </td>
-                              <td className="px-3 py-2.5"><Badge variant="outline" className={cn("text-[10px]", st.cls)}>{st.emoji} {st.label}</Badge></td>
-                              <td className="px-3 py-2.5 text-xs text-muted-foreground">{formatDate(c.lastContact)}</td>
-                              <td className="px-3 py-2.5">
+                              </DataCell>
+                              <DataCell><Badge variant="outline" className={cn("text-[10px]", st.cls)}>{st.emoji} {st.label}</Badge></DataCell>
+                              <DataCell className="text-xs text-muted-foreground">{formatDate(c.lastContact)}</DataCell>
+                              <DataCell>
                                 <div className="flex items-center gap-1">
                                   <Button variant="ghost" size="icon" className="h-7 w-7" title="Написать" onClick={() => toast.info("Открыть чат")}><Send className="w-3 h-3" /></Button>
                                   <Button variant="ghost" size="icon" className="h-7 w-7" title="Удалить" onClick={() => setCandidates((p) => p.filter((x) => x.id !== c.id))}><Trash2 className="w-3 h-3" /></Button>
                                 </div>
-                              </td>
-                            </tr>
+                              </DataCell>
+                            </DataRow>
                           )
                         })}
                         {filtered.length === 0 && <tr><td colSpan={8} className="text-center py-8 text-sm text-muted-foreground">Нет кандидатов</td></tr>}
                       </tbody>
-                    </table>
-                  </CardContent>
-                </Card>
+                  </DataTable>
+                </TableCard>
               </TabsContent>
 
               {/* ═══ TAB: Кампании ═══ */}
