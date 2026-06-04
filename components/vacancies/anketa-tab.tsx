@@ -53,6 +53,11 @@ interface AnketaData {
   showSalary: boolean
   // 4. О компании
   companyDescription: string
+  // O1 мультикомпанийность: под какую компанию-бренд идёт вакансия.
+  // "" = основная компания из кабинета (Брендинг), №1. Иначе — id бренда
+  // из companies.hiringDefaultsJson.brandCompanies (№2+). Кандидат видит
+  // имя/описание выбранного бренда. Основная компания не редактируется здесь.
+  brandCompanyId: string
   // 5. Обязанности и требования
   responsibilities: string
   requirements: string
@@ -338,7 +343,7 @@ function emptyAnketa(): AnketaData {
     positionCategory: "", workFormats: [], employment: [], positionCity: "",
     requiredExperience: "", hiringPlan: 1,
     salaryFrom: "", salaryTo: "", bonus: "", payFrequency: [], showSalary: true,
-    companyDescription: "",
+    companyDescription: "", brandCompanyId: "",
     responsibilities: "", requirements: "",
     requiredSkills: [], desiredSkills: [], unacceptableSkills: [],
     experienceMin: "", experienceIdeal: "",
@@ -1045,10 +1050,15 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
   const [aiLoadingStep, setAiLoadingStep] = useState(0)
   const [showCompanySection, setShowCompanySection] = useState(false)
   const [companyDescription, setCompanyDescription] = useState("")
+  // O1 мультикомпанийность: основная компания (№1, из кабинета) + бренды (№2+).
+  type BrandCompany = { id: string; name: string; slogan?: string; description?: string }
+  const [mainCompanyName, setMainCompanyName] = useState("")
+  const [brandCompanies, setBrandCompanies] = useState<BrandCompany[]>([])
+  const [brandSelectorEnabled, setBrandSelectorEnabled] = useState(false)
   useEffect(() => {
     setShowCompanySection(localStorage.getItem("mk_hr_show_company_selector") === "true")
   }, [])
-  // Fetch company description for advisor
+  // Fetch company description + основная компания (имя) для advisor и O1-селектора
   useEffect(() => {
     fetch("/api/companies").then(r => r.ok ? r.json() : null).then(json => {
       // Строго один источник — только описание из «Настроек найма»
@@ -1059,6 +1069,16 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
         setCompanyDescription(desc)
         setData(prev => prev.companyDescription ? prev : { ...prev, companyDescription: desc })
       }
+      if (json) setMainCompanyName((json.brandName || json.name || "").toString())
+    }).catch(() => {})
+  }, [])
+  // O1: список компаний-брендов + флаг показа селектора (Настройки найма)
+  useEffect(() => {
+    fetch("/api/modules/hr/company/hiring-defaults").then(r => r.ok ? r.json() : null).then(json => {
+      const hd = json?.hiringDefaults
+      if (!hd) return
+      if (Array.isArray(hd.brandCompanies)) setBrandCompanies(hd.brandCompanies.filter((c: BrandCompany) => c?.name?.trim()))
+      if (typeof hd.showCompanySelector === "boolean") setBrandSelectorEnabled(hd.showCompanySelector)
     }).catch(() => {})
   }, [])
 
@@ -1659,6 +1679,43 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
 
       {/* ── 4. О компании ── */}
       <Section title="О компании" number={4} filled={sectionFilled(4)} id="section-4">
+        {/* O1: выбор компании-бренда, под которую идёт вакансия. №1 — основная
+            из кабинета (не редактируется), №2+ — бренды из Настроек найма. */}
+        {brandSelectorEnabled && brandCompanies.length > 0 && (
+          <div className="space-y-1.5 mb-3 pb-3 border-b">
+            <Label className="text-xs">Компания вакансии</Label>
+            <Select
+              value={data.brandCompanyId || "__main__"}
+              onValueChange={(v) => {
+                const id = v === "__main__" ? "" : v
+                set("brandCompanyId", id)
+                // Подставить описание выбранной компании (основная — из кабинета,
+                // бренд — из его описания). Имя бренда кандидат увидит на странице.
+                if (id === "") {
+                  if (companyDescription) set("companyDescription", companyDescription)
+                } else {
+                  const bc = brandCompanies.find(c => c.id === id)
+                  if (bc?.description?.trim()) set("companyDescription", bc.description)
+                }
+              }}
+            >
+              <SelectTrigger className="h-9 bg-[var(--input-bg)] border border-input w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__main__">Основная: {mainCompanyName || "из кабинета"}</SelectItem>
+                {brandCompanies.map(c => (
+                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Под какую компанию идёт вакансия. Кандидат увидит её название и описание ниже.
+              Основная компания и список брендов настраиваются в{" "}
+              <a href="/hr/hiring-settings" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Настройках найма</a>.
+            </p>
+          </div>
+        )}
         <div className="space-y-1.5">
           <div className="flex items-center justify-between gap-2">
             <Label className="text-xs">Описание компании</Label>

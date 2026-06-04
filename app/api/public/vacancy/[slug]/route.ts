@@ -35,6 +35,8 @@ export async function GET(
         // Группа 38: расширенный брендинг + флаг override.
         brandingJson:             companies.brandingJson,
         brandingOverrideEnabled:  vacancies.brandingOverrideEnabled,
+        // O1: список компаний-брендов для резолва выбранной на вакансии.
+        hiringDefaultsJson:       companies.hiringDefaultsJson,
       })
       .from(vacancies)
       .innerJoin(companies, eq(vacancies.companyId, companies.id))
@@ -51,7 +53,21 @@ export async function GET(
       return apiError("Вакансия не найдена", 404)
     }
 
-    return apiSuccess(result[0])
+    // O1 мультикомпанийность: если на вакансии выбран бренд (№2+), кандидат
+    // видит его название вместо основной компании. brandCompanyId="" / отсутствует
+    // → основная компания (companies.name), ничего не меняем. Описание кандидат
+    // и так берёт из descriptionJson.companyDescription (блок 4), оно уже под бренд.
+    const { hiringDefaultsJson, ...row } = result[0] as Record<string, unknown> & {
+      hiringDefaultsJson?: { brandCompanies?: Array<{ id: string; name: string }> } | null
+    }
+    const anketa = (row.descriptionJson as { anketa?: { brandCompanyId?: string } } | null)?.anketa
+    const brandId = anketa?.brandCompanyId
+    if (brandId) {
+      const brand = hiringDefaultsJson?.brandCompanies?.find(c => c.id === brandId)
+      if (brand?.name?.trim()) row.companyName = brand.name
+    }
+
+    return apiSuccess(row)
   } catch (err) {
     if (err instanceof Response) return err
     console.error("GET /api/public/vacancy/[slug]", err)
