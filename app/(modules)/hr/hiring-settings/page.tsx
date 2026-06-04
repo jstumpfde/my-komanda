@@ -984,7 +984,6 @@ export default function HiringSettingsPage() {
                         { id: "zoom",      label: "Видео-звонок Zoom" },
                         { id: "telemost",  label: "Видео-звонок Я.Телемост" },
                         { id: "meet",      label: "Видео-звонок Google Meet" },
-                        { id: "telegram",  label: "Видео-звонок Telegram" },
                         { id: "phone",     label: "Звонок по телефону" },
                         { id: "office",    label: "Встреча в офисе" },
                       ].map(t => (
