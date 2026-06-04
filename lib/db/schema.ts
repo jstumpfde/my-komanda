@@ -1634,6 +1634,9 @@ export const calendarEvents = pgTable("calendar_events", {
   color:       text("color"),
   recurrence:  text("recurrence"),
   status:      text("status").default("confirmed"), // confirmed|tentative|cancelled
+  // C6: метки отправленных напоминаний (24ч/2ч до start_at). NULL = не слали.
+  remind24hSentAt: timestamp("remind_24h_sent_at", { withTimezone: true }),
+  remind2hSentAt:  timestamp("remind_2h_sent_at", { withTimezone: true }),
   createdAt:   timestamp("created_at").defaultNow(),
   updatedAt:   timestamp("updated_at").defaultNow(),
 })
