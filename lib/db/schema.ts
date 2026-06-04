@@ -699,6 +699,26 @@ export const talentCampaigns = pgTable("talent_campaigns", {
   updatedAt:    timestamp("updated_at").defaultNow(),
 })
 
+// ── Резерв (Talent Pool) → ручные/CSV записи «Базы» (drizzle/0169) ──
+// Пассивные кандидаты, добавленные вручную или импортом CSV (НЕ из откликов на
+// вакансию). Кандидаты-из-вакансий (стадия talent_pool) живут в candidates и
+// мёрджатся в UI отдельно. Здесь — свои поля должность/компания/источник.
+export const talentPoolEntries = pgTable("talent_pool_entries", {
+  id:          uuid("id").defaultRandom().primaryKey(),
+  companyId:   uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  name:        text("name").notNull(),
+  position:    text("position").notNull().default(""),
+  company:     text("company").notNull().default(""),
+  source:      text("source").notNull().default(""),
+  email:       text("email").notNull().default(""),
+  phone:       text("phone").notNull().default(""),
+  telegram:    text("telegram").notNull().default(""),
+  comment:     text("comment").notNull().default(""),
+  score:       integer("score").notNull().default(0),
+  status:      text("status").notNull().default("cold"),  // cold|warming|hot|ideal
+  createdAt:   timestamp("created_at").defaultNow(),
+})
+
 export const demos = pgTable("demos", {
   id: uuid("id").primaryKey().defaultRandom(),
   vacancyId: uuid("vacancy_id").references(() => vacancies.id).notNull(),

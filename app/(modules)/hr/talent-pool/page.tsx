@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
@@ -123,35 +123,56 @@ export default function TalentPoolPage() {
   const [selectedSources, setSelectedSources] = useState<Set<string>>(new Set())
   const [sources] = useState<SourceItem[]>(INITIAL_SOURCES)
 
-  // R2: реальные кандидаты резерва (стадия talent_pool) вместо mock.
-  // Должность/компания пока «—» (нет полей в БД), статус — из скоринга.
-  useEffect(() => {
-    fetch("/api/modules/hr/talent-pool/candidates")
-      .then(r => r.ok ? r.json() : null)
-      .then(d => {
-        const rows = Array.isArray(d?.candidates) ? d.candidates : []
-        setCandidates(rows.map((r: {
-          id: string; name: string; source: string | null;
-          aiScore: number | null; resumeScore: number | null; score: number | null;
-          email: string | null; phone: string | null; telegram: string | null;
-          updatedAt: string | null; vacancyTitle: string | null
-        }): TalentCandidate => {
-          const sc = r.aiScore ?? r.resumeScore ?? r.score ?? 0
-          return {
-            id: r.id, name: r.name,
-            position: "—", company: r.vacancyTitle || "—",
-            source: r.source || "—",
-            status: scoreToStatus(sc),
-            lastContact: r.updatedAt ? new Date(r.updatedAt) : new Date(),
-            email: r.email || "", phone: r.phone || "",
-            telegram: r.telegram ? "@" + r.telegram : "",
-            comment: "", score: sc,
-            scoreBreakdown: { experience: 0, skills: 0, culture: 0, motivation: 0, availability: 0 },
-          }
-        }))
+  // R2 + Доводка: «База» резерва — кандидаты из откликов (стадия talent_pool)
+  // И ручные/CSV записи (talent_pool_entries), смёрджены в одну таблицу.
+  // У записей должность/компания/источник реальные; у вакансийных пока «—».
+  const ZERO_BREAKDOWN = { experience: 0, skills: 0, culture: 0, motivation: 0, availability: 0 }
+  const loadAll = useCallback(async () => {
+    try {
+      const [cRes, eRes] = await Promise.all([
+        fetch("/api/modules/hr/talent-pool/candidates"),
+        fetch("/api/modules/hr/talent-pool/entries"),
+      ])
+      const cData = cRes.ok ? await cRes.json() : null
+      const eData = eRes.ok ? await eRes.json() : null
+      const fromCandidates: TalentCandidate[] = (Array.isArray(cData?.candidates) ? cData.candidates : []).map((r: {
+        id: string; name: string; source: string | null;
+        aiScore: number | null; resumeScore: number | null; score: number | null;
+        email: string | null; phone: string | null; telegram: string | null;
+        updatedAt: string | null; vacancyTitle: string | null
+      }): TalentCandidate => {
+        const sc = r.aiScore ?? r.resumeScore ?? r.score ?? 0
+        return {
+          id: r.id, name: r.name,
+          position: "—", company: r.vacancyTitle || "—",
+          source: r.source || "—",
+          status: scoreToStatus(sc),
+          lastContact: r.updatedAt ? new Date(r.updatedAt) : new Date(),
+          email: r.email || "", phone: r.phone || "",
+          telegram: r.telegram ? "@" + r.telegram : "",
+          comment: "", score: sc,
+          scoreBreakdown: ZERO_BREAKDOWN,
+        }
       })
-      .catch(() => {})
+      const fromEntries: TalentCandidate[] = (Array.isArray(eData?.entries) ? eData.entries : []).map((e: {
+        id: string; name: string; position: string; company: string; source: string
+        email: string; phone: string; telegram: string; comment: string
+        score: number; status: string; createdAt: string | null
+      }): TalentCandidate => ({
+        id: e.id, name: e.name,
+        position: e.position || "—", company: e.company || "—",
+        source: e.source || "—",
+        status: (e.status as TalentStatus) || "cold",
+        lastContact: e.createdAt ? new Date(e.createdAt) : new Date(),
+        email: e.email || "", phone: e.phone || "", telegram: e.telegram || "",
+        comment: e.comment || "", score: e.score || 0,
+        scoreBreakdown: ZERO_BREAKDOWN,
+      }))
+      setCandidates([...fromEntries, ...fromCandidates])
+    } catch { /* пусто */ }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+  useEffect(() => { loadAll() }, [loadAll])
   const [expandedFilterSources, setExpandedFilterSources] = useState<Set<string>>(new Set())
   const [thanked, setThanked] = useState<Set<string>>(new Set())
   const [colSort, setColSort] = useState<{ column: string; dir: "asc" | "desc" }>({ column: "name", dir: "asc" })
@@ -172,12 +193,53 @@ export default function TalentPoolPage() {
   // Campaign form
   const [campForm, setCampForm] = useState({ name: "", type: "invite", steps: [{ id: "ns1", day: 0, text: "", channel: "tg" as const }] as CampaignStep[] })
 
-  const handleAdd = () => {
+  const handleAdd = async () => {
     if (!form.name.trim()) return
-    setCandidates((p) => [...p, { ...form, id: `t-${Date.now()}`, status: "cold" as TalentStatus, lastContact: new Date(), referralName: undefined, score: 0, scoreBreakdown: { experience: 0, skills: 0, culture: 0, motivation: 0, availability: 0 } }])
+    const res = await fetch("/api/modules/hr/talent-pool/entries", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(form),
+    })
+    if (!res.ok) { toast.error("Не удалось добавить"); return }
     setForm({ name: "", position: "", company: "", source: "", email: "", phone: "", telegram: "", comment: "" })
     setAddOpen(false)
     toast.success("Кандидат добавлен в резерв")
+    await loadAll()
+  }
+
+  // CSV-импорт: первая строка — заголовки (имя/должность/компания/источник/
+  // email/телефон/telegram/комментарий), дальше строки. Поддерживаем рус. и
+  // англ. заголовки. Парсим просто (разделитель , или ;).
+  const handleCsvFile = async (file: File) => {
+    const text = await file.text()
+    const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0)
+    if (lines.length < 2) { toast.error("CSV пустой или без данных"); return }
+    const sep = lines[0].includes(";") ? ";" : ","
+    const headers = lines[0].split(sep).map(h => h.trim().toLowerCase())
+    const idx = (names: string[]) => headers.findIndex(h => names.some(n => h.includes(n)))
+    const ci = {
+      name: idx(["имя", "фио", "name"]), position: idx(["должн", "position", "title"]),
+      company: idx(["компан", "company"]), source: idx(["источ", "source"]),
+      email: idx(["email", "почт", "mail"]), phone: idx(["телеф", "phone", "тел"]),
+      telegram: idx(["telegram", "телег", "tg"]), comment: idx(["коммент", "comment", "примеч"]),
+    }
+    const rows = lines.slice(1).map(line => {
+      const cols = line.split(sep).map(c => c.trim())
+      const get = (i: number) => (i >= 0 && i < cols.length ? cols[i] : "")
+      return {
+        name: get(ci.name) || cols[0] || "", position: get(ci.position), company: get(ci.company),
+        source: get(ci.source) || "CSV", email: get(ci.email), phone: get(ci.phone),
+        telegram: get(ci.telegram), comment: get(ci.comment),
+      }
+    }).filter(r => r.name.length > 0)
+    if (rows.length === 0) { toast.error("Не найдено строк с именем"); return }
+    const res = await fetch("/api/modules/hr/talent-pool/entries", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rows }),
+    })
+    if (!res.ok) { toast.error("Не удалось импортировать"); return }
+    const data = await res.json() as { count?: number }
+    toast.success(`Импортировано: ${data.count ?? rows.length}`)
+    await loadAll()
   }
 
   const handleCreateCampaign = () => {
@@ -323,7 +385,13 @@ export default function TalentPoolPage() {
                     </PopoverContent>
                   </Popover>
                   <div className="flex-1" />
-                  <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5"><Upload className="w-3.5 h-3.5" />Загрузить CSV</Button>
+                  <Button asChild variant="outline" size="sm" className="h-8 text-xs gap-1.5">
+                    <label className="cursor-pointer">
+                      <Upload className="w-3.5 h-3.5" />Загрузить CSV
+                      <input type="file" accept=".csv,text/csv" className="hidden"
+                        onChange={(e) => { const f = e.target.files?.[0]; if (f) handleCsvFile(f); e.target.value = "" }} />
+                    </label>
+                  </Button>
                   <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={() => setAddOpen(true)}><Plus className="w-3.5 h-3.5" />Добавить</Button>
                   <Button size="sm" className="h-8 text-xs gap-1.5 bg-purple-600 hover:bg-purple-700 border border-purple-700" onClick={() => setCampaignOpen(true)}><Rocket className="w-3.5 h-3.5" />Запустить кампанию</Button>
                 </div>
