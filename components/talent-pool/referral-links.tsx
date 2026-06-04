@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { Copy, Link, Plus, Trash2, Loader2 } from "lucide-react"
+import { DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 
 export interface ReferralLink {
   id: string
@@ -86,43 +87,41 @@ export function ReferralLinks({ links, bonusPerHire, loading, onAdd, onDelete }:
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          <table className="w-full">
-            <thead>
-              <tr className="bg-muted/50 border-b">
-                <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Сотрудник</th>
-                <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Ссылка</th>
-                <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Переходов</th>
-                <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Привёл</th>
-                <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Нанято</th>
-                <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Бонус</th>
-                <th className="px-4 py-3"></th>
-              </tr>
-            </thead>
+          <DataTable>
+            <DataHead>
+              <DataHeadCell>Сотрудник</DataHeadCell>
+              <DataHeadCell>Ссылка</DataHeadCell>
+              <DataHeadCell align="center">Переходов</DataHeadCell>
+              <DataHeadCell align="center">Привёл</DataHeadCell>
+              <DataHeadCell align="center">Нанято</DataHeadCell>
+              <DataHeadCell align="right">Бонус</DataHeadCell>
+              <DataHeadCell></DataHeadCell>
+            </DataHead>
             <tbody>
               {links.map((r) => {
                 const earnedBonus = r.hired * bonusPerHire
                 return (
-                  <tr key={r.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
-                    <td className="px-4 py-2.5">
-                      <p className="text-[13px] font-medium">{r.name}</p>
+                  <DataRow key={r.id}>
+                    <DataCell>
+                      <p className="font-medium">{r.name}</p>
                       {r.position && <p className="text-[11px] text-muted-foreground">{r.position}</p>}
-                    </td>
-                    <td className="px-4 py-2.5">
+                    </DataCell>
+                    <DataCell>
                       <code className="text-[11px] text-muted-foreground bg-muted/50 px-1.5 py-0.5 rounded">{r.url}</code>
-                    </td>
-                    <td className="px-4 py-2.5 text-xs text-center">{r.clicks}</td>
-                    <td className="px-4 py-2.5 text-xs text-center">
+                    </DataCell>
+                    <DataCell align="center">{r.clicks}</DataCell>
+                    <DataCell align="center">
                       <Badge variant="secondary" className="text-xs">{r.referred}</Badge>
-                    </td>
-                    <td className="px-4 py-2.5 text-xs text-center">
+                    </DataCell>
+                    <DataCell align="center">
                       <Badge variant={r.hired > 0 ? "default" : "outline"} className="text-xs">{r.hired}</Badge>
-                    </td>
-                    <td className="px-4 py-2.5 text-right">
-                      <span className={cn("text-sm font-semibold", earnedBonus > 0 ? "text-emerald-600" : "text-muted-foreground")}>
+                    </DataCell>
+                    <DataCell align="right">
+                      <span className={cn("font-semibold", earnedBonus > 0 ? "text-emerald-600" : "text-muted-foreground")}>
                         {earnedBonus > 0 ? `${earnedBonus.toLocaleString("ru-RU")} ₽` : "—"}
                       </span>
-                    </td>
-                    <td className="px-4 py-2.5">
+                    </DataCell>
+                    <DataCell>
                       <div className="flex items-center gap-0.5">
                         <Button variant="ghost" size="icon" className="h-7 w-7" title="Копировать ссылку" onClick={() => handleCopy(r.url)}>
                           <Copy className="w-3 h-3" />
@@ -131,8 +130,8 @@ export function ReferralLinks({ links, bonusPerHire, loading, onAdd, onDelete }:
                           <Trash2 className="w-3 h-3" />
                         </Button>
                       </div>
-                    </td>
-                  </tr>
+                    </DataCell>
+                  </DataRow>
                 )
               })}
               {!loading && links.length === 0 && (
@@ -142,7 +141,7 @@ export function ReferralLinks({ links, bonusPerHire, loading, onAdd, onDelete }:
                 <tr><td colSpan={7} className="text-center py-8 text-sm text-muted-foreground"><Loader2 className="w-4 h-4 animate-spin inline" /> Загрузка…</td></tr>
               )}
             </tbody>
-          </table>
+          </DataTable>
           {links.length > 0 && (
             <div className="flex items-center justify-between px-4 py-2.5 border-t bg-muted/20 text-xs text-muted-foreground">
               <span>{links.length} сотрудников в программе</span>

@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
+import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import {
   AlertTriangle, Clock, Download, CreditCard, CheckCircle2, XCircle, Plus, FileText, Loader2, Trash2,
 } from "lucide-react"
@@ -508,19 +509,17 @@ export default function BillingPage() {
             <p className="text-sm text-muted-foreground">Нет выставленных счетов</p>
           </div>
         ) : (
-          <div className="rounded-xl border border-border overflow-hidden">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-muted/50 border-b">
-                  <th className="text-left uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-2.5">Номер</th>
-                  <th className="text-left uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-2.5">Тип</th>
-                  <th className="text-left uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-2.5">Дата</th>
-                  <th className="text-left uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-2.5">Период</th>
-                  <th className="text-right uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-2.5">Сумма</th>
-                  <th className="text-center uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-2.5">Статус</th>
-                  <th className="w-[90px] px-4 py-2.5" />
-                </tr>
-              </thead>
+          <TableCard>
+            <DataTable>
+              <DataHead>
+                <DataHeadCell>Номер</DataHeadCell>
+                <DataHeadCell>Тип</DataHeadCell>
+                <DataHeadCell>Дата</DataHeadCell>
+                <DataHeadCell>Период</DataHeadCell>
+                <DataHeadCell align="right">Сумма</DataHeadCell>
+                <DataHeadCell align="center">Статус</DataHeadCell>
+                <DataHeadCell width="90px" />
+              </DataHead>
               <tbody>
                 {invoices.map(inv => {
                   // Для оплаченных показываем «Акт» (документ закрытия) и
@@ -533,18 +532,18 @@ export default function BillingPage() {
                     ? `${formatDate(inv.paidAt)} — ${formatDate(addDaysIso(inv.paidAt, 30))}`
                     : "—"
                   return (
-                  <tr key={inv.id} className="border-b border-border/50 last:border-0 hover:bg-muted/50 transition-colors">
-                    <td className="px-4 py-2.5 font-mono text-sm">{inv.invoiceNumber}</td>
-                    <td className="px-4 py-2.5 text-sm text-muted-foreground">{docType}</td>
-                    <td className="px-4 py-2.5 text-sm text-muted-foreground">{formatDate(inv.issuedAt ?? inv.createdAt)}</td>
-                    <td className="px-4 py-2.5 text-sm text-muted-foreground">{periodCell}</td>
-                    <td className="px-4 py-2.5 text-right text-sm font-medium">{formatKopecks(inv.amountKopecks)}</td>
-                    <td className="px-4 py-2.5 text-center">
+                  <DataRow key={inv.id}>
+                    <DataCell className="font-mono">{inv.invoiceNumber}</DataCell>
+                    <DataCell className="text-muted-foreground">{docType}</DataCell>
+                    <DataCell className="text-muted-foreground">{formatDate(inv.issuedAt ?? inv.createdAt)}</DataCell>
+                    <DataCell className="text-muted-foreground">{periodCell}</DataCell>
+                    <DataCell align="right" className="font-medium">{formatKopecks(inv.amountKopecks)}</DataCell>
+                    <DataCell align="center">
                       <Badge variant="outline" className={cn("text-xs", invoiceStatusClass(inv.status))}>
                         {INVOICE_STATUS_LABELS[inv.status] ?? inv.status}
                       </Badge>
-                    </td>
-                    <td className="px-4 py-2.5">
+                    </DataCell>
+                    <DataCell>
                       <div className="flex items-center gap-1 justify-end">
                         <Button variant="ghost" size="icon" className="h-7 w-7" title="Скачать счёт" asChild>
                           <a href={`/api/billing/invoices/${inv.id}/pdf`} download>
@@ -564,13 +563,13 @@ export default function BillingPage() {
                             : <Trash2 className="w-3.5 h-3.5" />}
                         </Button>
                       </div>
-                    </td>
-                  </tr>
+                    </DataCell>
+                  </DataRow>
                   )
                 })}
               </tbody>
-            </table>
-          </div>
+            </DataTable>
+          </TableCard>
         )}
       </div>
 

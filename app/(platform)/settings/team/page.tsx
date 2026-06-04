@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
+import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import {
   Users, Plus, Settings, Trash2, Save, UserPlus,
   Mail, AlertTriangle, Check,
@@ -484,18 +485,15 @@ export default function TeamPage() {
       </Card>
 
       {/* Таблица участников */}
-      <div className="rounded-xl border border-border shadow-sm bg-card mb-8">
-        <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-muted/50 border-b border-border/50">
-                  <th className="text-left text-[10px] uppercase font-medium text-muted-foreground tracking-wider px-5 py-3">Участник</th>
-                  <th className="text-left text-[10px] uppercase font-medium text-muted-foreground tracking-wider px-3 py-3 w-[140px]">Роль</th>
-                  <th className="text-left text-[10px] uppercase font-medium text-muted-foreground tracking-wider px-3 py-3">Email</th>
-                  <th className="text-center text-[10px] uppercase font-medium text-muted-foreground tracking-wider px-3 py-3 w-[100px]">Статус</th>
-                  <th className="text-center text-[10px] uppercase font-medium text-muted-foreground tracking-wider px-3 py-3 w-[50px]"></th>
-                </tr>
-              </thead>
+      <TableCard className="mb-8">
+            <DataTable>
+              <DataHead>
+                <DataHeadCell>Участник</DataHeadCell>
+                <DataHeadCell width="140px">Роль</DataHeadCell>
+                <DataHeadCell>Email</DataHeadCell>
+                <DataHeadCell align="center" width="100px">Статус</DataHeadCell>
+                <DataHeadCell align="center" width="50px"></DataHeadCell>
+              </DataHead>
               <tbody>
                 {members.map(member => {
                   const roleCfg = ROLE_CONFIG[member.role]
@@ -523,9 +521,8 @@ export default function TeamPage() {
                   )
                 })}
               </tbody>
-            </table>
-        </div>
-      </div>
+            </DataTable>
+      </TableCard>
 
       {/* ═══ Диалог ссылок-приглашений ══════════════════════════════ */}
       <Dialog open={linkDialogOpen} onOpenChange={setLinkDialogOpen}>
@@ -902,14 +899,14 @@ function MemberRow({
 
   return (
     <>
-      <tr
+      <DataRow
         className={cn(
-          "border-b border-border/50 hover:bg-muted/50 transition-colors cursor-pointer",
+          "cursor-pointer",
           isExpanded && "bg-muted/30"
         )}
         onClick={onToggle}
       >
-        <td className="px-5 py-3">
+        <DataCell>
           <div className="flex items-center gap-3">
             <Avatar className="w-8 h-8 shrink-0">
               {member.avatarUrl && (
@@ -921,17 +918,17 @@ function MemberRow({
             </Avatar>
             <span className="text-sm font-medium text-foreground truncate">{member.name}</span>
           </div>
-        </td>
-        <td className="px-3 py-3">
+        </DataCell>
+        <DataCell>
           <span className={cn(
             "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border-transparent whitespace-nowrap",
             roleCfg.color
           )}>
             {roleCfg.label}
           </span>
-        </td>
-        <td className="px-3 py-3 text-sm text-muted-foreground truncate">{member.email}</td>
-        <td className="text-center px-3 py-3">
+        </DataCell>
+        <DataCell className="text-muted-foreground truncate">{member.email}</DataCell>
+        <DataCell align="center">
           <span className="inline-flex items-center gap-1.5 text-xs">
             <span className={cn(
               "w-2 h-2 rounded-full shrink-0",
@@ -956,8 +953,8 @@ function MemberRow({
                   : isActive ? "Активен" : "Не в сети"}
             </span>
           </span>
-        </td>
-        <td className="text-center px-3 py-3">
+        </DataCell>
+        <DataCell align="center">
           <Button
             variant="ghost"
             size="icon"
@@ -966,8 +963,8 @@ function MemberRow({
           >
             <ChevronDown className={cn("w-4 h-4 transition-transform", isExpanded && "rotate-180")} />
           </Button>
-        </td>
-      </tr>
+        </DataCell>
+      </DataRow>
 
       {/* Expandable content */}
       {isExpanded && (

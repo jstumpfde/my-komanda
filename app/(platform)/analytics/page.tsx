@@ -7,6 +7,7 @@ import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import { cn } from "@/lib/utils"
 import {
   Users, UserCheck, Eye, Briefcase,
@@ -275,31 +276,29 @@ export default function AnalyticsPage() {
                     </ResponsiveContainer>
                   </div>
                   {/* Table */}
-                  <div className="flex-1 overflow-x-auto">
-                    <table className="w-full">
-                      <thead>
-                        <tr className="border-b bg-muted/50">
-                          <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Источник</th>
-                          <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Кандидатов</th>
-                          <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">% от общего</th>
-                          <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Ср. AI-скор</th>
-                        </tr>
-                      </thead>
+                  <div className="flex-1">
+                    <DataTable>
+                      <DataHead>
+                        <DataHeadCell>Источник</DataHeadCell>
+                        <DataHeadCell align="right">Кандидатов</DataHeadCell>
+                        <DataHeadCell align="right">% от общего</DataHeadCell>
+                        <DataHeadCell align="right">Ср. AI-скор</DataHeadCell>
+                      </DataHead>
                       <tbody>
                         {sources.map((s) => (
-                          <tr key={s.source} className="border-b last:border-0 hover:bg-muted/20">
-                            <td className="px-3 py-2">
+                          <DataRow key={s.source}>
+                            <DataCell>
                               <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: s.color }} /><span className="text-sm font-medium">{s.source}</span></div>
-                            </td>
-                            <td className="text-right px-3 py-2 text-sm font-medium">{s.count}</td>
-                            <td className="text-right px-3 py-2 text-sm text-muted-foreground">{s.pct}%</td>
-                            <td className="text-right px-3 py-2">
+                            </DataCell>
+                            <DataCell align="right" className="font-medium">{s.count}</DataCell>
+                            <DataCell align="right" className="text-muted-foreground">{s.pct}%</DataCell>
+                            <DataCell align="right">
                               <Badge variant="outline" className={cn("text-xs", s.avgScore >= 75 ? "bg-emerald-500/10 text-emerald-700 border-emerald-200" : s.avgScore >= 60 ? "bg-amber-500/10 text-amber-700 border-amber-200" : "bg-red-500/10 text-red-700 border-red-200")}>{s.avgScore}</Badge>
-                            </td>
-                          </tr>
+                            </DataCell>
+                          </DataRow>
                         ))}
                       </tbody>
-                    </table>
+                    </DataTable>
                   </div>
                 </div>
               </CardContent>
@@ -343,30 +342,28 @@ export default function AnalyticsPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-0">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b bg-muted/50">
-                      <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Вакансия</th>
-                      <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Дней активна</th>
-                      <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Кандидатов</th>
-                      <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Нанято</th>
-                      <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Статус</th>
-                    </tr>
-                  </thead>
+                <DataTable>
+                  <DataHead>
+                    <DataHeadCell>Вакансия</DataHeadCell>
+                    <DataHeadCell align="right">Дней активна</DataHeadCell>
+                    <DataHeadCell align="right">Кандидатов</DataHeadCell>
+                    <DataHeadCell align="right">Нанято</DataHeadCell>
+                    <DataHeadCell align="right">Статус</DataHeadCell>
+                  </DataHead>
                   <tbody>
                     {(vacancyFilter === "all" ? allVacancies : allVacancies.filter((v) => v.id === vacancyFilter)).map((v) => (
-                      <tr key={v.id} className="border-b last:border-0 hover:bg-muted/20">
-                        <td className="px-4 py-3 text-sm font-medium text-foreground">{v.name}</td>
-                        <td className="text-right px-4 py-3 text-sm">{v.daysActive} дн.</td>
-                        <td className="text-right px-4 py-3 text-sm">{v.candidates}</td>
-                        <td className="text-right px-4 py-3 text-sm font-semibold">{v.hired}</td>
-                        <td className="text-right px-4 py-3">
+                      <DataRow key={v.id}>
+                        <DataCell className="font-medium text-foreground">{v.name}</DataCell>
+                        <DataCell align="right">{v.daysActive} дн.</DataCell>
+                        <DataCell align="right">{v.candidates}</DataCell>
+                        <DataCell align="right" className="font-semibold">{v.hired}</DataCell>
+                        <DataCell align="right">
                           <Badge variant="outline" className="text-xs bg-emerald-500/10 text-emerald-700 border-emerald-200">{v.status}</Badge>
-                        </td>
-                      </tr>
+                        </DataCell>
+                      </DataRow>
                     ))}
                   </tbody>
-                </table>
+                </DataTable>
               </CardContent>
             </Card>
           </div>

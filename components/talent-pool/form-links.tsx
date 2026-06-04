@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { toast } from "sonner"
 import { Link, Plus, Copy, CheckCircle2, Code, Trash2 } from "lucide-react"
+import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 
 interface TrackingLink {
   id: string
@@ -120,46 +121,42 @@ export function FormLinks() {
       )}
 
       {/* Table */}
-      <Card>
-        <CardContent className="p-0">
-          <table className="w-full">
-            <thead>
-              <tr className="bg-muted/50 border-b">
-                <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Источник</th>
-                <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Название</th>
-                <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Короткая ссылка</th>
-                <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Клики</th>
-                <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Кандидаты</th>
-                <th className="px-4 py-3"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {links.map((link) => (
-                <tr key={link.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
-                  <td className="px-3 py-2 text-xs text-muted-foreground">{link.source}</td>
-                  <td className="px-3 py-2 text-xs font-medium">{link.name}</td>
-                  <td className="px-3 py-2 text-[11px] text-muted-foreground font-mono">{link.shortUrl}</td>
-                  <td className="px-2 py-2 text-xs text-center">{link.clicks}</td>
-                  <td className="px-2 py-2 text-xs text-center font-semibold">{link.candidates}</td>
-                  <td className="px-2 py-2">
-                    <div className="flex items-center gap-0.5">
-                      <Button variant="ghost" size="icon" className="h-6 w-6" title="Копировать" onClick={() => handleCopy(link.id, link.shortUrl)}>
-                        {copiedId === link.id ? <CheckCircle2 className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
-                      </Button>
-                      <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" title="Удалить" onClick={() => handleDelete(link.id)}>
-                        <Trash2 className="w-3 h-3" />
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {links.length === 0 && (
-                <tr><td colSpan={6} className="text-center py-8 text-sm text-muted-foreground">Пока нет ссылок. Создайте первую для отслеживания источника.</td></tr>
-              )}
-            </tbody>
-          </table>
-        </CardContent>
-      </Card>
+      <TableCard>
+        <DataTable>
+          <DataHead>
+            <DataHeadCell>Источник</DataHeadCell>
+            <DataHeadCell>Название</DataHeadCell>
+            <DataHeadCell>Короткая ссылка</DataHeadCell>
+            <DataHeadCell align="center">Клики</DataHeadCell>
+            <DataHeadCell align="center">Кандидаты</DataHeadCell>
+            <DataHeadCell></DataHeadCell>
+          </DataHead>
+          <tbody>
+            {links.map((link) => (
+              <DataRow key={link.id}>
+                <DataCell className="text-muted-foreground">{link.source}</DataCell>
+                <DataCell className="font-medium">{link.name}</DataCell>
+                <DataCell className="text-[11px] text-muted-foreground font-mono">{link.shortUrl}</DataCell>
+                <DataCell align="center">{link.clicks}</DataCell>
+                <DataCell align="center" className="font-semibold">{link.candidates}</DataCell>
+                <DataCell>
+                  <div className="flex items-center gap-0.5">
+                    <Button variant="ghost" size="icon" className="h-6 w-6" title="Копировать" onClick={() => handleCopy(link.id, link.shortUrl)}>
+                      {copiedId === link.id ? <CheckCircle2 className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" title="Удалить" onClick={() => handleDelete(link.id)}>
+                      <Trash2 className="w-3 h-3" />
+                    </Button>
+                  </div>
+                </DataCell>
+              </DataRow>
+            ))}
+            {links.length === 0 && (
+              <tr><td colSpan={6} className="text-center py-8 text-sm text-muted-foreground">Пока нет ссылок. Создайте первую для отслеживания источника.</td></tr>
+            )}
+          </tbody>
+        </DataTable>
+      </TableCard>
 
       {/* HTML section */}
       <Card>

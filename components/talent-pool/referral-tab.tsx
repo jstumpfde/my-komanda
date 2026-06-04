@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { Users, UserCheck, TrendingUp, Banknote, Gift, CheckCircle2, Pencil, Save } from "lucide-react"
+import { DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import { ReferralLinks, type ReferralLink } from "./referral-links"
 
 interface ReferralRules {
@@ -128,43 +129,41 @@ export function ReferralTab() {
             <CardTitle className="text-sm">Топ рефереров</CardTitle>
           </CardHeader>
           <CardContent className="p-0">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-muted/50 border-b">
-                  <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Сотрудник</th>
-                  <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Рефералов</th>
-                  <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Нанято</th>
-                  <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Бонус</th>
-                </tr>
-              </thead>
+            <DataTable>
+              <DataHead>
+                <DataHeadCell>Сотрудник</DataHeadCell>
+                <DataHeadCell align="center">Рефералов</DataHeadCell>
+                <DataHeadCell align="center">Нанято</DataHeadCell>
+                <DataHeadCell align="right">Бонус</DataHeadCell>
+              </DataHead>
               <tbody>
                 {topReferrers.map((r) => {
                   const bonus = r.hired * rules.bonusPerHire
                   return (
-                    <tr key={r.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
-                      <td className="px-4 py-2.5">
-                        <p className="text-sm font-medium">{r.name}</p>
+                    <DataRow key={r.id}>
+                      <DataCell>
+                        <p className="font-medium">{r.name}</p>
                         {r.position && <p className="text-[11px] text-muted-foreground">{r.position}</p>}
-                      </td>
-                      <td className="px-3 py-2.5 text-center">
+                      </DataCell>
+                      <DataCell align="center">
                         <Badge variant="secondary" className="text-xs">{r.referred}</Badge>
-                      </td>
-                      <td className="px-3 py-2.5 text-center">
+                      </DataCell>
+                      <DataCell align="center">
                         <Badge variant={r.hired > 0 ? "default" : "outline"} className="text-xs">{r.hired}</Badge>
-                      </td>
-                      <td className="px-4 py-2.5 text-right">
-                        <span className={cn("text-sm font-semibold", bonus > 0 ? "text-emerald-600" : "text-muted-foreground")}>
+                      </DataCell>
+                      <DataCell align="right">
+                        <span className={cn("font-semibold", bonus > 0 ? "text-emerald-600" : "text-muted-foreground")}>
                           {bonus > 0 ? `${bonus.toLocaleString("ru-RU")} ₽` : "—"}
                         </span>
-                      </td>
-                    </tr>
+                      </DataCell>
+                    </DataRow>
                   )
                 })}
                 {!loading && topReferrers.length === 0 && (
                   <tr><td colSpan={4} className="text-center py-8 text-sm text-muted-foreground">Пока нет рефереров — добавьте сотрудников выше.</td></tr>
                 )}
               </tbody>
-            </table>
+            </DataTable>
           </CardContent>
         </Card>
 
