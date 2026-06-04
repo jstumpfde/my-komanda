@@ -163,10 +163,18 @@ export default function HiringSettingsPage() {
   // из настроек» в анкете вакансии берёт текст отсюда (GET /api/companies).
   const [companyDescription, setCompanyDescription] = useState("")
   const [savingCompanyDesc, setSavingCompanyDesc] = useState(false)
+  // O1: данные основной компании (№1) — из профиля/Брендинга, read-only здесь.
+  const [mainBrandName, setMainBrandName] = useState("")
+  const [mainBrandSlogan, setMainBrandSlogan] = useState("")
   useEffect(() => {
     fetch("/api/companies")
       .then(r => r.ok ? r.json() : null)
-      .then(j => { if (j && typeof j.companyDescription === "string") setCompanyDescription(j.companyDescription) })
+      .then(j => {
+        if (!j) return
+        if (typeof j.companyDescription === "string") setCompanyDescription(j.companyDescription)
+        setMainBrandName((j.brandName || j.name || "").toString())
+        setMainBrandSlogan((j.brandSlogan || "").toString())
+      })
       .catch(() => {})
   }, [])
   const saveCompanyDescription = async () => {
@@ -751,37 +759,56 @@ export default function HiringSettingsPage() {
                 {showCompanySelector && (
                   <div className="mt-4 pt-4 border-t space-y-3">
                     <div className="flex items-center justify-between">
-                      <p className="text-xs font-medium text-muted-foreground">Компании-бренды для найма ({brandCompanies.length}/30)</p>
+                      <p className="text-xs font-medium text-muted-foreground">Компании для найма ({brandCompanies.length + 1}/30)</p>
                       <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={addBrandCompany}>
                         <Plus className="w-3.5 h-3.5" />Добавить компанию
                       </Button>
                     </div>
                     <p className="text-[11px] text-muted-foreground">
-                      Основная компания берётся из профиля. Здесь — дополнительные, под которые ведёте найм
-                      (клиенты/бренды). При создании вакансии HR выбирает, под какую компанию она идёт.
+                      При создании вакансии HR выбирает, под какую компанию она идёт. №1 — основная (из Брендинга),
+                      ниже — дополнительные бренды/клиенты.
                     </p>
-                    {brandCompanies.length === 0 ? (
-                      <p className="text-xs text-muted-foreground italic py-2">Пока только основная компания. Добавьте бренд, если ведёте найм под несколько компаний.</p>
-                    ) : (
-                      <div className="space-y-2">
-                        {brandCompanies.map((c) => (
-                          <div key={c.id} className="rounded-lg border p-3 space-y-2 bg-muted/20">
-                            <div className="flex items-center gap-2">
-                              <Input value={c.name} onChange={(e) => updateBrandCompany(c.id, { name: e.target.value })}
-                                onBlur={saveBrandCompany} placeholder="Название компании" className="h-8 text-sm flex-1" />
-                              <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0"
-                                title="Удалить" onClick={() => removeBrandCompany(c.id)}>
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </Button>
-                            </div>
-                            <Input value={c.slogan ?? ""} onChange={(e) => updateBrandCompany(c.id, { slogan: e.target.value })}
-                              onBlur={saveBrandCompany} placeholder="Слоган (необязательно)" className="h-8 text-xs" />
-                            <Textarea value={c.description ?? ""} onChange={(e) => updateBrandCompany(c.id, { description: e.target.value })}
-                              onBlur={saveBrandCompany} placeholder="Краткое описание для кандидатов" rows={2} className="text-xs" />
-                          </div>
-                        ))}
+
+                    {/* №1 — основная компания, из Брендинга (read-only) */}
+                    <div className="rounded-lg border border-primary/30 bg-primary/5 p-3">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-primary">№1 · Основная</span>
+                        <a href="/settings/branding" className="text-[11px] text-primary hover:underline">Изменить в Брендинге →</a>
                       </div>
-                    )}
+                      {mainBrandName ? (
+                        <>
+                          <p className="text-sm font-semibold">{mainBrandName}</p>
+                          {mainBrandSlogan && <p className="text-xs text-muted-foreground mt-0.5">{mainBrandSlogan}</p>}
+                          {companyDescription && <p className="text-[11px] text-muted-foreground mt-1 line-clamp-2">{companyDescription}</p>}
+                        </>
+                      ) : (
+                        <p className="text-[11px] text-amber-600">Название/слоган основной компании не заданы — укажите в Брендинге, и они появятся здесь.</p>
+                      )}
+                    </div>
+
+                    {/* Дополнительные компании */}
+                    {brandCompanies.map((c, i) => (
+                      <div key={c.id} className="rounded-lg border p-3 space-y-2 bg-muted/20">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-semibold text-muted-foreground shrink-0">№{i + 2}</span>
+                          <Input value={c.name} onChange={(e) => updateBrandCompany(c.id, { name: e.target.value })}
+                            placeholder="Название компании *" className="h-8 text-sm flex-1" />
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0"
+                            title="Удалить" onClick={() => removeBrandCompany(c.id)}>
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                        <Input value={c.slogan ?? ""} onChange={(e) => updateBrandCompany(c.id, { slogan: e.target.value })}
+                          placeholder="Слоган (необязательно)" className="h-8 text-xs" />
+                        <Textarea value={c.description ?? ""} onChange={(e) => updateBrandCompany(c.id, { description: e.target.value })}
+                          placeholder="Краткое описание для кандидатов" rows={2} className="text-xs" />
+                        <div className="flex justify-end">
+                          <Button size="sm" className="h-7 text-xs gap-1.5" onClick={saveBrandCompany} disabled={!c.name.trim()}>
+                            <Save className="w-3.5 h-3.5" />Сохранить
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
               </CardContent>
