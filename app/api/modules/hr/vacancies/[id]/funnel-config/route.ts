@@ -54,6 +54,7 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
       .select({
         funnelConfigJson:  vacancies.funnelConfigJson,
         aiProcessSettings: vacancies.aiProcessSettings,
+        descriptionJson:   vacancies.descriptionJson,
       })
       .from(vacancies)
       .where(and(eq(vacancies.id, id), eq(vacancies.companyId, user.companyId)))
@@ -92,8 +93,11 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
       //   first_message        → aiProcessSettings.firstMessageEnabled   (soft, required = всегда true)
       //   interview            → aiProcessSettings.interviewEnabled      (soft)
       //   thank_you_screen     → aiProcessSettings.thankYouScreenEnabled (soft)
+      //   recovery             → vacancies.recoveryMessageEnabled        (hard, см. ниже)
+      //   call_intent          → descriptionJson.automation.callIntent.enabled (nested, см. ниже)
       //   demo / anketa        — required, источника правды как такового
       //                          нет: всегда включены, не зеркалим.
+      //   test_quiz            — состояние в таблице demos, не зеркалим.
       const findBlock = (t: FunnelBlockType): FunnelBlock | undefined =>
         nextConfig.blocks.find(b => b.type === t)
       const enabledOf = (t: FunnelBlockType): boolean | undefined => findBlock(t)?.enabled
@@ -128,6 +132,32 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
       }
       if (Object.keys(softUpdates).length > 0) {
         updates.aiProcessSettings = { ...prev, ...softUpdates }
+      }
+
+      // ── Блоки T2–T4, хранящие enabled НЕ в aiProcessSettings ────────────
+      // recovery → vacancies.recoveryMessageEnabled (hard-колонка, читает
+      //   рантайм process-queue). call_intent → descriptionJson.automation.
+      //   callIntent.enabled (вложенный jsonb, читает scan-incoming).
+      // test_quiz НЕ зеркалим: состояние теста живёт в таблице demos
+      //   (kind='test'), простого boolean-флага на вакансии нет.
+      const recovery = enabledOf("recovery")
+      if (recovery !== undefined) updates.recoveryMessageEnabled = recovery
+
+      const callIntent = enabledOf("call_intent")
+      if (callIntent !== undefined) {
+        const desc = (current.descriptionJson && typeof current.descriptionJson === "object")
+          ? current.descriptionJson as Record<string, unknown>
+          : {}
+        const automation = (desc.automation && typeof desc.automation === "object")
+          ? desc.automation as Record<string, unknown>
+          : {}
+        const ci = (automation.callIntent && typeof automation.callIntent === "object")
+          ? automation.callIntent as Record<string, unknown>
+          : {}
+        updates.descriptionJson = {
+          ...desc,
+          automation: { ...automation, callIntent: { ...ci, enabled: callIntent } },
+        }
       }
     }
 
