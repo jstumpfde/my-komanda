@@ -719,6 +719,26 @@ export const talentPoolEntries = pgTable("talent_pool_entries", {
   createdAt:   timestamp("created_at").defaultNow(),
 })
 
+// ── Резерв (Talent Pool) → Формы (drizzle/0170) ──
+// Определения форм сбора кандидатов (внешние/внутренние). Поля формы — в
+// fields_json. Публичная отправка формы (inbound) — отдельная фича.
+export interface TalentFormField { key: string; label: string; enabled: boolean; required: boolean; locked?: boolean }
+export const talentForms = pgTable("talent_forms", {
+  id:               uuid("id").defaultRandom().primaryKey(),
+  companyId:        uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  name:             text("name").notNull(),
+  type:             text("type").notNull().default("external"),  // 'external' | 'internal'
+  source:           text("source").notNull().default(""),
+  placement:        text("placement").notNull().default(""),
+  slug:             text("slug").notNull().default(""),
+  slogan:           text("slogan").notNull().default(""),
+  fieldsJson:       jsonb("fields_json").$type<TalentFormField[]>().notNull().default([]),
+  active:           boolean("active").notNull().default(true),
+  applicationsCount: integer("applications_count").notNull().default(0),
+  createdAt:        timestamp("created_at").defaultNow(),
+  updatedAt:        timestamp("updated_at").defaultNow(),
+})
+
 export const demos = pgTable("demos", {
   id: uuid("id").primaryKey().defaultRandom(),
   vacancyId: uuid("vacancy_id").references(() => vacancies.id).notNull(),
