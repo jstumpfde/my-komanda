@@ -119,12 +119,12 @@ export function IntegrationsContent() {
     <div className="space-y-4 max-w-4xl">
       {/* hh.ru card */}
       <Card className="rounded-xl border border-border p-5">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex items-start gap-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex items-start gap-4 min-w-0">
             <div className="w-12 h-12 rounded-xl bg-red-500/10 flex items-center justify-center shrink-0">
               <span className="text-red-600 font-bold text-lg">hh</span>
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <h3 className="text-base font-semibold text-foreground">hh.ru</h3>
                 {loading ? (
@@ -141,7 +141,7 @@ export function IntegrationsContent() {
                 Импорт вакансий и откликов с HeadHunter
               </p>
               {status?.connected && (
-                <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-xs text-muted-foreground">
                   {status.employerName && (
                     <span className="flex items-center gap-1"><Building2 className="w-3 h-3" />{status.employerName}</span>
                   )}
@@ -153,7 +153,7 @@ export function IntegrationsContent() {
               )}
             </div>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex flex-wrap items-center justify-end gap-2">
             {status?.connected ? (
               <>
                 <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={handleSync} disabled={syncing}>

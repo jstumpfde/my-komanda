@@ -39,6 +39,9 @@ public/uploads/
 /*.png
 /recon-followup-*.md
 
+# Временные скрины архитектуры под разбор (не коммитим, итог — в SYSTEM-MAP.md)
+/docs/architecture/screens/
+
 # Logs and temp directories
 *.log
 tmp/
@@ -53,3 +56,7 @@ test-results/
 /BUGS-CHECKLIST.md
 /TZ-pack-A.md
 /NIGHT-QUEUE.md
+
+# рабочие скриншоты/пробы (мусор)
+*.jpeg
+sheet-probe.json
