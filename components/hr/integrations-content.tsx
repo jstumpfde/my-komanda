@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import {
   Plug, RefreshCw, Loader2, CheckCircle2, XCircle, Clock, Building2, Stethoscope, AlertCircle, Mail, IdCard,
+  Plus, ChevronDown,
 } from "lucide-react"
 
 interface HHStatus {
@@ -52,6 +53,7 @@ export function IntegrationsContent() {
   const [diagnostic, setDiagnostic] = useState<HHDiagnostic | null>(null)
   const [diagnosing, setDiagnosing] = useState(false)
   const [diagnosticOpen, setDiagnosticOpen] = useState(false)
+  const [addSourceOpen, setAddSourceOpen] = useState(false)
 
   useEffect(() => {
     fetch("/api/integrations/hh/status")
@@ -300,31 +302,48 @@ export function IntegrationsContent() {
         Управление вакансиями и откликами происходит в карточке каждой вакансии. Здесь — только подключение площадок.
       </p>
 
-      {/* Other integrations — placeholders */}
+      {/* Другие площадки — единый вход «Добавить источник» (#39). Вместо
+          россыпи faded-карточек «Скоро» — одна карточка в стиле hh, по клику
+          раскрывает список площадок в разработке. */}
       <div className="pt-2">
         <h2 className="text-base font-semibold text-foreground mb-3">Другие площадки</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {[
-            { name: "Авито Работа", icon: "А", color: "bg-blue-500/10 text-blue-600" },
-            { name: "SuperJob", icon: "SJ", color: "bg-green-500/10 text-green-600" },
-            { name: "Яндекс Работа", icon: "Я", color: "bg-yellow-500/10 text-yellow-700" },
-          ].map(platform => (
-            <Card key={platform.name} className="rounded-xl border border-border p-5 opacity-70">
-              <div className="flex items-center gap-3">
-                <div className={cn("w-10 h-10 rounded-lg flex items-center justify-center shrink-0 font-bold text-sm", platform.color)}>
-                  {platform.icon}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-foreground">{platform.name}</span>
-                    <Badge variant="outline" className="text-[10px] bg-muted text-muted-foreground">Скоро</Badge>
+        <Card className="rounded-xl border border-border overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setAddSourceOpen(o => !o)}
+            className="w-full flex items-center gap-3 p-5 text-left hover:bg-muted/40 transition-colors"
+          >
+            <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 bg-primary/10 text-primary">
+              <Plus className="w-5 h-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h3 className="text-base font-semibold text-foreground">Добавить источник</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">Авито Работа, SuperJob, Яндекс Работа — подключение площадок</p>
+            </div>
+            <ChevronDown className={cn("w-4 h-4 text-muted-foreground shrink-0 transition-transform", addSourceOpen && "rotate-180")} />
+          </button>
+
+          {addSourceOpen && (
+            <div className="border-t border-border divide-y divide-border">
+              {[
+                { name: "Авито Работа", icon: "А", color: "bg-blue-500/10 text-blue-600" },
+                { name: "SuperJob", icon: "SJ", color: "bg-green-500/10 text-green-600" },
+                { name: "Яндекс Работа", icon: "Я", color: "bg-yellow-500/10 text-yellow-700" },
+              ].map(platform => (
+                <div key={platform.name} className="flex items-center gap-3 px-5 py-3">
+                  <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center shrink-0 font-bold text-xs", platform.color)}>
+                    {platform.icon}
                   </div>
-                  <p className="text-xs text-muted-foreground mt-0.5">Интеграция в разработке</p>
+                  <span className="flex-1 text-sm font-medium text-foreground">{platform.name}</span>
+                  <Badge variant="outline" className="text-[10px] bg-muted text-muted-foreground">Скоро</Badge>
                 </div>
-              </div>
-            </Card>
-          ))}
-        </div>
+              ))}
+              <p className="px-5 py-3 text-xs text-muted-foreground">
+                Интеграции в разработке. Напишите в поддержку, если нужна приоритетная площадка.
+              </p>
+            </div>
+          )}
+        </Card>
       </div>
     </div>
   )

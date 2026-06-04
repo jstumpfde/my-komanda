@@ -438,7 +438,7 @@ export default function CalendarPage() {
                 </SheetTitle>
               </SheetHeader>
 
-              <div className="space-y-6 mt-6">
+              <div className="space-y-6 mt-2 px-4 pb-6">
 
                 {/* ── Рабочее время по дням ── */}
                 <Card>
