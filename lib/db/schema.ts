@@ -681,6 +681,24 @@ export const referralLinks = pgTable("referral_links", {
   createdAt:     timestamp("created_at").defaultNow(),
 })
 
+// ── Резерв (Talent Pool) → Кампании прогрева (drizzle/0168) ──
+// Управляемая сущность кампании: канал + статус + счётчики воронки
+// (отправлено/открыто/ответили). Реальная ОТПРАВКА касаний кандидатам —
+// отдельная фича (outward, под флагом); сейчас кампания создаётся/паузится,
+// счётчики стартуют с 0 и растут, когда подключим рассылку.
+export const talentCampaigns = pgTable("talent_campaigns", {
+  id:           uuid("id").defaultRandom().primaryKey(),
+  companyId:    uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  name:         text("name").notNull(),
+  status:       text("status").notNull().default("active"),  // 'active' | 'paused'
+  channel:      text("channel").notNull().default("email"),  // 'email' | 'telegram' | 'both'
+  sentCount:    integer("sent_count").notNull().default(0),
+  openedCount:  integer("opened_count").notNull().default(0),
+  repliedCount: integer("replied_count").notNull().default(0),
+  createdAt:    timestamp("created_at").defaultNow(),
+  updatedAt:    timestamp("updated_at").defaultNow(),
+})
+
 export const demos = pgTable("demos", {
   id: uuid("id").primaryKey().defaultRandom(),
   vacancyId: uuid("vacancy_id").references(() => vacancies.id).notNull(),
