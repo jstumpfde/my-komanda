@@ -5,6 +5,7 @@ import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import {Settings2} from "lucide-react"
 
 const channelBudgets = [
@@ -89,48 +90,44 @@ export default function BudgetPage() {
           <CardTitle>Распределение по каналам</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b bg-muted/50">
-                  <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Канал</th>
-                  <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">План ₽</th>
-                  <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Факт ₽</th>
-                  <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">%</th>
-                  <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3 w-44">Прогресс</th>
-                </tr>
-              </thead>
-              <tbody>
-                {channelBudgets.map((row) => {
-                  const pct = row.plan > 0 ? Math.round((row.fact / row.plan) * 100) : 0
-                  return (
-                    <tr key={row.channel} className="border-b last:border-0 hover:bg-muted/30">
-                      <td className="py-3 px-4 font-medium">{row.channel}</td>
-                      <td className="py-3 px-4 text-right text-muted-foreground">
-                        {row.plan.toLocaleString("ru")}
-                      </td>
-                      <td className="py-3 px-4 text-right font-semibold">
-                        {row.fact.toLocaleString("ru")}
-                      </td>
-                      <td className="py-3 px-4 text-right">
-                        <span className={`font-medium ${pct >= 90 ? "text-orange-600" : "text-foreground"}`}>
-                          {pct}%
-                        </span>
-                      </td>
-                      <td className="py-3 px-4">
-                        <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
-                          <div
-                            className={`h-full rounded-full ${pct >= 90 ? "bg-orange-500" : "bg-blue-500"}`}
-                            style={{ width: `${Math.min(pct, 100)}%` }}
-                          />
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
+          <DataTable>
+            <DataHead>
+              <DataHeadCell>Канал</DataHeadCell>
+              <DataHeadCell align="right">План ₽</DataHeadCell>
+              <DataHeadCell align="right">Факт ₽</DataHeadCell>
+              <DataHeadCell align="right">%</DataHeadCell>
+              <DataHeadCell width="11rem">Прогресс</DataHeadCell>
+            </DataHead>
+            <tbody>
+              {channelBudgets.map((row) => {
+                const pct = row.plan > 0 ? Math.round((row.fact / row.plan) * 100) : 0
+                return (
+                  <DataRow key={row.channel}>
+                    <DataCell className="font-medium">{row.channel}</DataCell>
+                    <DataCell align="right" className="text-muted-foreground">
+                      {row.plan.toLocaleString("ru")}
+                    </DataCell>
+                    <DataCell align="right" className="font-semibold">
+                      {row.fact.toLocaleString("ru")}
+                    </DataCell>
+                    <DataCell align="right">
+                      <span className={`font-medium ${pct >= 90 ? "text-orange-600" : "text-foreground"}`}>
+                        {pct}%
+                      </span>
+                    </DataCell>
+                    <DataCell>
+                      <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full ${pct >= 90 ? "bg-orange-500" : "bg-blue-500"}`}
+                          style={{ width: `${Math.min(pct, 100)}%` }}
+                        />
+                      </div>
+                    </DataCell>
+                  </DataRow>
+                )
+              })}
+            </tbody>
+          </DataTable>
         </CardContent>
       </Card>
 
@@ -140,33 +137,29 @@ export default function BudgetPage() {
           <CardTitle>История по месяцам</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b bg-muted/50">
-                  <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Месяц</th>
-                  <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Бюджет ₽</th>
-                  <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Потрачено ₽</th>
-                  <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Лиды</th>
-                  <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">CPL ₽</th>
-                </tr>
-              </thead>
-              <tbody>
-                {monthlyHistory.map((row, i) => (
-                  <tr
-                    key={row.month}
-                    className={`border-b last:border-0 hover:bg-muted/30 ${i === monthlyHistory.length - 1 ? "bg-blue-50/40 font-semibold" : ""}`}
-                  >
-                    <td className="py-3 px-4">{row.month}</td>
-                    <td className="py-3 px-4 text-right text-muted-foreground">{row.budget.toLocaleString("ru")}</td>
-                    <td className="py-3 px-4 text-right">{row.spent.toLocaleString("ru")}</td>
-                    <td className="py-3 px-4 text-right">{row.leads}</td>
-                    <td className="py-3 px-4 text-right text-green-600">₽{row.cpl}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable>
+            <DataHead>
+              <DataHeadCell>Месяц</DataHeadCell>
+              <DataHeadCell align="right">Бюджет ₽</DataHeadCell>
+              <DataHeadCell align="right">Потрачено ₽</DataHeadCell>
+              <DataHeadCell align="right">Лиды</DataHeadCell>
+              <DataHeadCell align="right">CPL ₽</DataHeadCell>
+            </DataHead>
+            <tbody>
+              {monthlyHistory.map((row, i) => (
+                <DataRow
+                  key={row.month}
+                  className={i === monthlyHistory.length - 1 ? "bg-blue-50/40 font-semibold" : ""}
+                >
+                  <DataCell>{row.month}</DataCell>
+                  <DataCell align="right" className="text-muted-foreground">{row.budget.toLocaleString("ru")}</DataCell>
+                  <DataCell align="right">{row.spent.toLocaleString("ru")}</DataCell>
+                  <DataCell align="right">{row.leads}</DataCell>
+                  <DataCell align="right" className="text-green-600">₽{row.cpl}</DataCell>
+                </DataRow>
+              ))}
+            </tbody>
+          </DataTable>
         </CardContent>
       </Card>
           </div>

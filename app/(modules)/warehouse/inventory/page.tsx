@@ -4,7 +4,7 @@ import { useState } from "react"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
-import { Card, CardContent } from "@/components/ui/card"
+import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -171,50 +171,44 @@ export default function LogisticsInventoryPage() {
             </div>
 
             {/* Table */}
-            <Card>
-              <CardContent className="p-0">
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b bg-muted/50">
-                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Артикул</th>
-                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Наименование</th>
-                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Категория</th>
-                        <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Остаток</th>
-                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Ед.</th>
-                        <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Мин.</th>
-                        <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Цена</th>
-                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Поставщик</th>
-                        <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Статус</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filtered.map(item => {
-                        const st = STATUS_MAP[item.status]
-                        return (
-                          <tr key={item.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
-                            <td className="px-4 py-3 text-xs font-mono text-muted-foreground">{item.sku}</td>
-                            <td className="px-3 py-3 text-sm font-medium">{item.name}</td>
-                            <td className="px-3 py-3 text-sm text-muted-foreground">{item.category}</td>
-                            <td className="text-right px-3 py-3 text-sm font-semibold">{item.qty}</td>
-                            <td className="px-3 py-3 text-sm text-muted-foreground">{item.unit}</td>
-                            <td className="text-right px-3 py-3 text-sm text-muted-foreground">{item.min_qty}</td>
-                            <td className="text-right px-3 py-3 text-sm">{item.price.toLocaleString("ru-RU")} ₽</td>
-                            <td className="px-3 py-3 text-sm text-muted-foreground">{item.supplier}</td>
-                            <td className="text-center px-3 py-3">
-                              <Badge variant={st.variant} className="text-xs">{st.label}</Badge>
-                            </td>
-                          </tr>
-                        )
-                      })}
-                      {filtered.length === 0 && (
-                        <tr><td colSpan={9} className="text-center py-10 text-sm text-muted-foreground">Нет позиций</td></tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </CardContent>
-            </Card>
+            <TableCard>
+              <DataTable>
+                <DataHead>
+                  <DataHeadCell>Артикул</DataHeadCell>
+                  <DataHeadCell>Наименование</DataHeadCell>
+                  <DataHeadCell>Категория</DataHeadCell>
+                  <DataHeadCell align="right">Остаток</DataHeadCell>
+                  <DataHeadCell>Ед.</DataHeadCell>
+                  <DataHeadCell align="right">Мин.</DataHeadCell>
+                  <DataHeadCell align="right">Цена</DataHeadCell>
+                  <DataHeadCell>Поставщик</DataHeadCell>
+                  <DataHeadCell align="center">Статус</DataHeadCell>
+                </DataHead>
+                <tbody>
+                  {filtered.map(item => {
+                    const st = STATUS_MAP[item.status]
+                    return (
+                      <DataRow key={item.id}>
+                        <DataCell className="text-xs font-mono text-muted-foreground">{item.sku}</DataCell>
+                        <DataCell className="font-medium">{item.name}</DataCell>
+                        <DataCell className="text-muted-foreground">{item.category}</DataCell>
+                        <DataCell align="right" className="font-semibold">{item.qty}</DataCell>
+                        <DataCell className="text-muted-foreground">{item.unit}</DataCell>
+                        <DataCell align="right" className="text-muted-foreground">{item.min_qty}</DataCell>
+                        <DataCell align="right">{item.price.toLocaleString("ru-RU")} ₽</DataCell>
+                        <DataCell className="text-muted-foreground">{item.supplier}</DataCell>
+                        <DataCell align="center">
+                          <Badge variant={st.variant} className="text-xs">{st.label}</Badge>
+                        </DataCell>
+                      </DataRow>
+                    )
+                  })}
+                  {filtered.length === 0 && (
+                    <tr><td colSpan={9} className="text-center py-10 text-sm text-muted-foreground">Нет позиций</td></tr>
+                  )}
+                </tbody>
+              </DataTable>
+            </TableCard>
           </div>
         </main>
       </SidebarInset>
@@ -272,22 +266,20 @@ export default function LogisticsInventoryPage() {
             </DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">Введите фактическое количество. Пустые поля — не изменять.</p>
-          <table className="w-full mt-3">
-            <thead>
-              <tr className="border-b bg-muted/50">
-                <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider py-2">Артикул</th>
-                <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider py-2">Название</th>
-                <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider py-2 pr-2">Учёт</th>
-                <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider py-2">Факт</th>
-              </tr>
-            </thead>
+          <DataTable containerClassName="mt-3">
+            <DataHead>
+              <DataHeadCell>Артикул</DataHeadCell>
+              <DataHeadCell>Название</DataHeadCell>
+              <DataHeadCell align="right" className="pr-2">Учёт</DataHeadCell>
+              <DataHeadCell align="right">Факт</DataHeadCell>
+            </DataHead>
             <tbody>
               {items.map(item => (
-                <tr key={item.id} className="border-b last:border-0">
-                  <td className="py-2 text-xs font-mono text-muted-foreground">{item.sku}</td>
-                  <td className="py-2 text-sm">{item.name}</td>
-                  <td className="py-2 text-right pr-2 text-sm text-muted-foreground">{item.qty} {item.unit}</td>
-                  <td className="py-2 pl-2">
+                <DataRow key={item.id} className="hover:bg-transparent">
+                  <DataCell className="text-xs font-mono text-muted-foreground">{item.sku}</DataCell>
+                  <DataCell>{item.name}</DataCell>
+                  <DataCell align="right" className="pr-2 text-muted-foreground">{item.qty} {item.unit}</DataCell>
+                  <DataCell className="pl-2">
                     <Input
                       type="number"
                       className="h-8 w-24 text-right"
@@ -295,11 +287,11 @@ export default function LogisticsInventoryPage() {
                       value={counts[item.id] ?? ""}
                       onChange={e => setCounts(c => ({ ...c, [item.id]: e.target.value }))}
                     />
-                  </td>
-                </tr>
+                  </DataCell>
+                </DataRow>
               ))}
             </tbody>
-          </table>
+          </DataTable>
           <Button className="mt-4 w-full" onClick={handleInventory}>Сохранить инвентаризацию</Button>
         </DialogContent>
       </Dialog>

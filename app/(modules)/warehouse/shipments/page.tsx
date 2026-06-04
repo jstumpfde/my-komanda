@@ -4,7 +4,7 @@ import { useState } from "react"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
-import { Card, CardContent } from "@/components/ui/card"
+import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -95,45 +95,39 @@ export default function LogisticsShipmentsPage() {
             </div>
 
             {/* Table */}
-            <Card>
-              <CardContent className="p-0">
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b bg-muted/50">
-                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Номер</th>
-                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Заказ</th>
-                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Клиент</th>
-                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Дата</th>
-                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Перевозчик</th>
-                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Трек-номер</th>
-                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Склад</th>
-                        <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Статус</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {shipments.map(s => {
-                        const st = STATUS_MAP[s.status]
-                        return (
-                          <tr key={s.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
-                            <td className="px-4 py-3 text-xs font-mono font-semibold">{s.number}</td>
-                            <td className="px-3 py-3 text-xs font-mono text-muted-foreground">{s.orderNumber}</td>
-                            <td className="px-3 py-3 text-sm max-w-[160px] truncate">{s.client}</td>
-                            <td className="px-3 py-3 text-sm text-muted-foreground">{s.date}</td>
-                            <td className="px-3 py-3 text-sm">{s.carrier}</td>
-                            <td className="px-3 py-3 text-xs font-mono text-muted-foreground">{s.tracking}</td>
-                            <td className="px-3 py-3 text-sm text-muted-foreground">{s.warehouse}</td>
-                            <td className="text-center px-3 py-3">
-                              <Badge variant={st.variant} className="text-xs">{st.label}</Badge>
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </CardContent>
-            </Card>
+            <TableCard>
+              <DataTable>
+                <DataHead>
+                  <DataHeadCell>Номер</DataHeadCell>
+                  <DataHeadCell>Заказ</DataHeadCell>
+                  <DataHeadCell>Клиент</DataHeadCell>
+                  <DataHeadCell>Дата</DataHeadCell>
+                  <DataHeadCell>Перевозчик</DataHeadCell>
+                  <DataHeadCell>Трек-номер</DataHeadCell>
+                  <DataHeadCell>Склад</DataHeadCell>
+                  <DataHeadCell align="center">Статус</DataHeadCell>
+                </DataHead>
+                <tbody>
+                  {shipments.map(s => {
+                    const st = STATUS_MAP[s.status]
+                    return (
+                      <DataRow key={s.id}>
+                        <DataCell className="text-xs font-mono font-semibold">{s.number}</DataCell>
+                        <DataCell className="text-xs font-mono text-muted-foreground">{s.orderNumber}</DataCell>
+                        <DataCell className="max-w-[160px] truncate">{s.client}</DataCell>
+                        <DataCell className="text-muted-foreground">{s.date}</DataCell>
+                        <DataCell>{s.carrier}</DataCell>
+                        <DataCell className="text-xs font-mono text-muted-foreground">{s.tracking}</DataCell>
+                        <DataCell className="text-muted-foreground">{s.warehouse}</DataCell>
+                        <DataCell align="center">
+                          <Badge variant={st.variant} className="text-xs">{st.label}</Badge>
+                        </DataCell>
+                      </DataRow>
+                    )
+                  })}
+                </tbody>
+              </DataTable>
+            </TableCard>
           </div>
         </main>
       </SidebarInset>

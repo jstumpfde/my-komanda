@@ -4,6 +4,7 @@ import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import { Badge } from "@/components/ui/badge"
 import { BarChart3, TrendingUp, Target, AlertTriangle } from "lucide-react"
 import {
@@ -126,17 +127,17 @@ export default function LogisticsAnalyticsPage() {
                         {group.class === "A" ? "Высокий оборот — 80% выручки" : group.class === "B" ? "Средний оборот — 15% выручки" : "Низкий оборот — 5% выручки"}
                       </span>
                     </div>
-                    <table className="w-full">
+                    <DataTable>
                       <tbody>
                         {group.items.map((item, i) => (
-                          <tr key={i} className="border-b last:border-0">
-                            <td className="py-2 text-sm">{item.name}</td>
-                            <td className="py-2 text-sm text-right text-muted-foreground">{item.turnover}</td>
-                            <td className="py-2 text-sm text-right font-semibold w-16">{item.share}</td>
-                          </tr>
+                          <DataRow key={i} className="hover:bg-transparent">
+                            <DataCell>{item.name}</DataCell>
+                            <DataCell align="right" className="text-muted-foreground">{item.turnover}</DataCell>
+                            <DataCell align="right" className="font-semibold w-16">{item.share}</DataCell>
+                          </DataRow>
                         ))}
                       </tbody>
-                    </table>
+                    </DataTable>
                   </div>
                 ))}
               </CardContent>
@@ -171,30 +172,28 @@ export default function LogisticsAnalyticsPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-0">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b bg-muted/50">
-                      <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Артикул</th>
-                      <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Наименование</th>
-                      <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Остаток</th>
-                      <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Дней без движения</th>
-                      <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Стоимость</th>
-                    </tr>
-                  </thead>
+                <DataTable>
+                  <DataHead>
+                    <DataHeadCell>Артикул</DataHeadCell>
+                    <DataHeadCell>Наименование</DataHeadCell>
+                    <DataHeadCell align="right">Остаток</DataHeadCell>
+                    <DataHeadCell align="right">Дней без движения</DataHeadCell>
+                    <DataHeadCell align="right">Стоимость</DataHeadCell>
+                  </DataHead>
                   <tbody>
                     {DEAD_STOCK.map(item => (
-                      <tr key={item.sku} className="border-b last:border-0 hover:bg-muted/20">
-                        <td className="px-4 py-2.5 text-xs font-mono text-muted-foreground">{item.sku}</td>
-                        <td className="px-3 py-2.5 text-sm">{item.name}</td>
-                        <td className="text-right px-3 py-2.5 text-sm">{item.qty}</td>
-                        <td className="text-right px-3 py-2.5">
+                      <DataRow key={item.sku}>
+                        <DataCell className="text-xs font-mono text-muted-foreground">{item.sku}</DataCell>
+                        <DataCell>{item.name}</DataCell>
+                        <DataCell align="right">{item.qty}</DataCell>
+                        <DataCell align="right">
                           <Badge variant={item.days > 50 ? "destructive" : "secondary"} className="text-xs">{item.days} дн.</Badge>
-                        </td>
-                        <td className="text-right px-4 py-2.5 text-sm font-medium">{item.value}</td>
-                      </tr>
+                        </DataCell>
+                        <DataCell align="right" className="font-medium">{item.value}</DataCell>
+                      </DataRow>
                     ))}
                   </tbody>
-                </table>
+                </DataTable>
               </CardContent>
             </Card>
           </div>

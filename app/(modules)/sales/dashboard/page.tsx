@@ -12,6 +12,7 @@ import {
   Plus, UserPlus, ClipboardList, ArrowUpRight, Clock, Phone,
   Calendar, DollarSign, AlertCircle,
 } from "lucide-react"
+import { DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import { cn } from "@/lib/utils"
 
 const KPI_CARDS = [
@@ -171,41 +172,37 @@ export default function SalesDashboardPage() {
                 <CardTitle className="text-base">Топ менеджеры</CardTitle>
               </CardHeader>
               <CardContent className="p-0">
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="bg-muted/50 border-b">
-                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">#</th>
-                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Менеджер</th>
-                        <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Сделок</th>
-                        <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Сумма</th>
-                        <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Конверсия</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {TOP_MANAGERS.map((mgr, i) => (
-                        <tr key={mgr.name} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
-                          <td className="px-4 py-3 text-sm text-muted-foreground">{i + 1}</td>
-                          <td className="px-4 py-3">
-                            <div className="flex items-center gap-2.5">
-                              <Avatar className="w-7 h-7">
-                                <AvatarFallback className="text-xs bg-primary/10 text-primary">{mgr.initials}</AvatarFallback>
-                              </Avatar>
-                              <span className="text-sm font-medium text-foreground">{mgr.name}</span>
-                            </div>
-                          </td>
-                          <td className="text-right px-4 py-3 text-sm font-medium text-foreground">{mgr.deals}</td>
-                          <td className="text-right px-4 py-3 text-sm font-medium text-foreground">{formatMoney(mgr.amount)}</td>
-                          <td className="text-right px-4 py-3">
-                            <Badge variant={mgr.conversion >= 28 ? "default" : "secondary"} className="text-xs">
-                              {mgr.conversion}%
-                            </Badge>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <DataTable>
+                  <DataHead>
+                    <DataHeadCell>#</DataHeadCell>
+                    <DataHeadCell>Менеджер</DataHeadCell>
+                    <DataHeadCell align="right">Сделок</DataHeadCell>
+                    <DataHeadCell align="right">Сумма</DataHeadCell>
+                    <DataHeadCell align="right">Конверсия</DataHeadCell>
+                  </DataHead>
+                  <tbody>
+                    {TOP_MANAGERS.map((mgr, i) => (
+                      <DataRow key={mgr.name}>
+                        <DataCell className="text-muted-foreground">{i + 1}</DataCell>
+                        <DataCell>
+                          <div className="flex items-center gap-2.5">
+                            <Avatar className="w-7 h-7">
+                              <AvatarFallback className="text-xs bg-primary/10 text-primary">{mgr.initials}</AvatarFallback>
+                            </Avatar>
+                            <span className="text-sm font-medium text-foreground">{mgr.name}</span>
+                          </div>
+                        </DataCell>
+                        <DataCell align="right" className="font-medium text-foreground">{mgr.deals}</DataCell>
+                        <DataCell align="right" className="font-medium text-foreground">{formatMoney(mgr.amount)}</DataCell>
+                        <DataCell align="right">
+                          <Badge variant={mgr.conversion >= 28 ? "default" : "secondary"} className="text-xs">
+                            {mgr.conversion}%
+                          </Badge>
+                        </DataCell>
+                      </DataRow>
+                    ))}
+                  </tbody>
+                </DataTable>
               </CardContent>
             </Card>
           </div>

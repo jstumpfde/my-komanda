@@ -1,10 +1,10 @@
 "use client"
 
-import { useState } from "react"
+import React, { useState } from "react"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
-import {Card, CardContent} from "@/components/ui/card"
+import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -143,69 +143,64 @@ export default function LogisticsOrdersPage() {
                 const list = t.value === "all" ? orders : orders.filter(o => o.status === t.value)
                 return (
                   <TabsContent key={t.value} value={t.value}>
-                    <Card>
-                      <CardContent className="p-0">
-                        <table className="w-full">
-                          <thead>
-                            <tr className="border-b bg-muted/50">
-                              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Номер</th>
-                              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Клиент</th>
-                              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Дата</th>
-                              <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Позиций</th>
-                              <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Сумма</th>
-                              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Склад</th>
-                              <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Статус</th>
-                              <th className="w-8 px-2" />
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {list.map(order => {
-                              const st = STATUS_MAP[order.status]
-                              const isOpen = expanded === order.id
-                              const total = orderTotal(order)
-                              return (
-                                <>
-                                  <tr key={order.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors cursor-pointer" onClick={() => setExpanded(isOpen ? null : order.id)}>
-                                    <td className="px-4 py-3 text-xs font-mono font-semibold">{order.number}</td>
-                                    <td className="px-3 py-3 text-sm max-w-[160px] truncate">{order.client}</td>
-                                    <td className="px-3 py-3 text-sm text-muted-foreground">{order.date}</td>
-                                    <td className="text-right px-3 py-3 text-sm">{order.items.length}</td>
-                                    <td className="text-right px-3 py-3 text-sm font-semibold">{total.toLocaleString("ru-RU")} ₽</td>
-                                    <td className="px-3 py-3 text-sm text-muted-foreground">{order.warehouse}</td>
-                                    <td className="text-center px-3 py-3">
-                                      <Badge variant={st.variant} className="text-xs">{st.label}</Badge>
-                                    </td>
-                                    <td className="px-2 text-muted-foreground">
-                                      {isOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                                    </td>
-                                  </tr>
-                                  {isOpen && (
-                                    <tr key={`${order.id}-detail`} className="bg-muted/10 border-b">
-                                      <td colSpan={8} className="px-6 py-4">
+                    <TableCard>
+                      <DataTable>
+                        <DataHead>
+                          <DataHeadCell>Номер</DataHeadCell>
+                          <DataHeadCell>Клиент</DataHeadCell>
+                          <DataHeadCell>Дата</DataHeadCell>
+                          <DataHeadCell align="right">Позиций</DataHeadCell>
+                          <DataHeadCell align="right">Сумма</DataHeadCell>
+                          <DataHeadCell>Склад</DataHeadCell>
+                          <DataHeadCell align="center">Статус</DataHeadCell>
+                          <DataHeadCell className="w-8 px-2" />
+                        </DataHead>
+                        <tbody>
+                          {list.map(order => {
+                            const st = STATUS_MAP[order.status]
+                            const isOpen = expanded === order.id
+                            const total = orderTotal(order)
+                            return (
+                              <React.Fragment key={order.id}>
+                                <DataRow className="cursor-pointer" onClick={() => setExpanded(isOpen ? null : order.id)}>
+                                  <DataCell className="text-xs font-mono font-semibold">{order.number}</DataCell>
+                                  <DataCell className="max-w-[160px] truncate">{order.client}</DataCell>
+                                  <DataCell className="text-muted-foreground">{order.date}</DataCell>
+                                  <DataCell align="right">{order.items.length}</DataCell>
+                                  <DataCell align="right" className="font-semibold">{total.toLocaleString("ru-RU")} ₽</DataCell>
+                                  <DataCell className="text-muted-foreground">{order.warehouse}</DataCell>
+                                  <DataCell align="center">
+                                    <Badge variant={st.variant} className="text-xs">{st.label}</Badge>
+                                  </DataCell>
+                                  <DataCell className="px-2 text-muted-foreground">
+                                    {isOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                                  </DataCell>
+                                </DataRow>
+                                {isOpen && (
+                                  <tr className="bg-muted/10 border-b">
+                                    <td colSpan={8} className="px-6 py-4">
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                           {/* Items */}
                                           <div>
                                             <p className="text-xs font-semibold text-muted-foreground mb-2">Позиции заказа</p>
-                                            <table className="w-full text-sm">
-                                              <thead>
-                                                <tr className="border-b">
-                                                  <th className="text-left py-1.5 text-xs text-muted-foreground font-medium">Товар</th>
-                                                  <th className="text-right py-1.5 text-xs text-muted-foreground font-medium">Кол-во</th>
-                                                  <th className="text-right py-1.5 text-xs text-muted-foreground font-medium">Цена</th>
-                                                  <th className="text-right py-1.5 text-xs text-muted-foreground font-medium">Сумма</th>
-                                                </tr>
-                                              </thead>
+                                            <DataTable className="text-sm">
+                                              <DataHead>
+                                                <DataHeadCell>Товар</DataHeadCell>
+                                                <DataHeadCell align="right">Кол-во</DataHeadCell>
+                                                <DataHeadCell align="right">Цена</DataHeadCell>
+                                                <DataHeadCell align="right">Сумма</DataHeadCell>
+                                              </DataHead>
                                               <tbody>
                                                 {order.items.map((item, i) => (
-                                                  <tr key={i} className="border-b last:border-0">
-                                                    <td className="py-1.5">{item.product}</td>
-                                                    <td className="text-right py-1.5 text-muted-foreground">{item.qty}</td>
-                                                    <td className="text-right py-1.5 text-muted-foreground">{item.price} ₽</td>
-                                                    <td className="text-right py-1.5 font-medium">{(item.qty * item.price).toLocaleString("ru-RU")} ₽</td>
-                                                  </tr>
+                                                  <DataRow key={i} className="hover:bg-transparent">
+                                                    <DataCell>{item.product}</DataCell>
+                                                    <DataCell align="right" className="text-muted-foreground">{item.qty}</DataCell>
+                                                    <DataCell align="right" className="text-muted-foreground">{item.price} ₽</DataCell>
+                                                    <DataCell align="right" className="font-medium">{(item.qty * item.price).toLocaleString("ru-RU")} ₽</DataCell>
+                                                  </DataRow>
                                                 ))}
                                               </tbody>
-                                            </table>
+                                            </DataTable>
                                             <div className="flex justify-end mt-2 text-sm font-semibold">
                                               Итого: {total.toLocaleString("ru-RU")} ₽
                                             </div>
@@ -226,19 +221,18 @@ export default function LogisticsOrdersPage() {
                                             <p className="text-xs text-muted-foreground mt-3">Доставка: {order.deliveryDate}</p>
                                           </div>
                                         </div>
-                                      </td>
-                                    </tr>
-                                  )}
-                                </>
-                              )
-                            })}
-                            {list.length === 0 && (
-                              <tr><td colSpan={8} className="text-center py-10 text-sm text-muted-foreground">Нет заказов</td></tr>
-                            )}
-                          </tbody>
-                        </table>
-                      </CardContent>
-                    </Card>
+                                    </td>
+                                  </tr>
+                                )}
+                              </React.Fragment>
+                            )
+                          })}
+                          {list.length === 0 && (
+                            <tr><td colSpan={8} className="text-center py-10 text-sm text-muted-foreground">Нет заказов</td></tr>
+                          )}
+                        </tbody>
+                      </DataTable>
+                    </TableCard>
                   </TabsContent>
                 )
               })}

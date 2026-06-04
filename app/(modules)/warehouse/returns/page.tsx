@@ -4,7 +4,7 @@ import { useState } from "react"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
-import { Card, CardContent } from "@/components/ui/card"
+import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -100,45 +100,39 @@ export default function LogisticsReturnsPage() {
             </div>
 
             {/* Table */}
-            <Card>
-              <CardContent className="p-0">
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b bg-muted/50">
-                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Номер</th>
-                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Клиент</th>
-                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Заказ</th>
-                        <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Товаров</th>
-                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Причина</th>
-                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Комментарий</th>
-                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Дата</th>
-                        <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Статус</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {returns.map(r => {
-                        const st = STATUS_MAP[r.status]
-                        return (
-                          <tr key={r.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
-                            <td className="px-4 py-3 text-xs font-mono font-semibold">{r.number}</td>
-                            <td className="px-3 py-3 text-sm max-w-[140px] truncate">{r.client}</td>
-                            <td className="px-3 py-3 text-xs font-mono text-muted-foreground">{r.orderNumber}</td>
-                            <td className="text-right px-3 py-3 text-sm">{r.itemCount}</td>
-                            <td className="px-3 py-3 text-sm">{r.reason}</td>
-                            <td className="px-3 py-3 text-sm text-muted-foreground max-w-[200px] truncate">{r.notes}</td>
-                            <td className="px-3 py-3 text-sm text-muted-foreground">{r.date}</td>
-                            <td className="text-center px-3 py-3">
-                              <Badge variant={st.variant} className="text-xs">{st.label}</Badge>
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </CardContent>
-            </Card>
+            <TableCard>
+              <DataTable>
+                <DataHead>
+                  <DataHeadCell>Номер</DataHeadCell>
+                  <DataHeadCell>Клиент</DataHeadCell>
+                  <DataHeadCell>Заказ</DataHeadCell>
+                  <DataHeadCell align="right">Товаров</DataHeadCell>
+                  <DataHeadCell>Причина</DataHeadCell>
+                  <DataHeadCell>Комментарий</DataHeadCell>
+                  <DataHeadCell>Дата</DataHeadCell>
+                  <DataHeadCell align="center">Статус</DataHeadCell>
+                </DataHead>
+                <tbody>
+                  {returns.map(r => {
+                    const st = STATUS_MAP[r.status]
+                    return (
+                      <DataRow key={r.id}>
+                        <DataCell className="text-xs font-mono font-semibold">{r.number}</DataCell>
+                        <DataCell className="max-w-[140px] truncate">{r.client}</DataCell>
+                        <DataCell className="text-xs font-mono text-muted-foreground">{r.orderNumber}</DataCell>
+                        <DataCell align="right">{r.itemCount}</DataCell>
+                        <DataCell>{r.reason}</DataCell>
+                        <DataCell className="text-muted-foreground max-w-[200px] truncate">{r.notes}</DataCell>
+                        <DataCell className="text-muted-foreground">{r.date}</DataCell>
+                        <DataCell align="center">
+                          <Badge variant={st.variant} className="text-xs">{st.label}</Badge>
+                        </DataCell>
+                      </DataRow>
+                    )
+                  })}
+                </tbody>
+              </DataTable>
+            </TableCard>
           </div>
         </main>
       </SidebarInset>

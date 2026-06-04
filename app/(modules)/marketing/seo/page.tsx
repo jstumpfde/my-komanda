@@ -5,6 +5,7 @@ import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import { TrendingUp, TrendingDown, Minus, Search, Link, Globe, Hash } from "lucide-react"
 
 const kpiCards = [
@@ -81,30 +82,26 @@ export default function SeoPage() {
           <CardTitle>Топ страниц</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-muted/50 border-b">
-                  <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">URL</th>
-                  <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Запросы</th>
-                  <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Позиция</th>
-                  <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Клики</th>
-                  <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">CTR</th>
-                </tr>
-              </thead>
-              <tbody>
-                {topPages.map((row, i) => (
-                  <tr key={i} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
-                    <td className="py-3 px-4 font-mono text-xs text-blue-600">{row.url}</td>
-                    <td className="py-3 px-4 text-right text-muted-foreground">{row.queries.toLocaleString("ru")}</td>
-                    <td className="py-3 px-4 text-right font-semibold">{row.position}</td>
-                    <td className="py-3 px-4 text-right text-muted-foreground">{row.clicks}</td>
-                    <td className="py-3 px-4 text-right font-medium text-green-600">{row.ctr}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable>
+            <DataHead>
+              <DataHeadCell>URL</DataHeadCell>
+              <DataHeadCell align="right">Запросы</DataHeadCell>
+              <DataHeadCell align="right">Позиция</DataHeadCell>
+              <DataHeadCell align="right">Клики</DataHeadCell>
+              <DataHeadCell align="right">CTR</DataHeadCell>
+            </DataHead>
+            <tbody>
+              {topPages.map((row, i) => (
+                <DataRow key={i}>
+                  <DataCell className="font-mono text-xs text-blue-600">{row.url}</DataCell>
+                  <DataCell align="right" className="text-muted-foreground">{row.queries.toLocaleString("ru")}</DataCell>
+                  <DataCell align="right" className="font-semibold">{row.position}</DataCell>
+                  <DataCell align="right" className="text-muted-foreground">{row.clicks}</DataCell>
+                  <DataCell align="right" className="font-medium text-green-600">{row.ctr}</DataCell>
+                </DataRow>
+              ))}
+            </tbody>
+          </DataTable>
         </CardContent>
       </Card>
 
@@ -114,36 +111,32 @@ export default function SeoPage() {
           <CardTitle>Ключевые слова</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-muted/50 border-b">
-                  <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Ключевое слово</th>
-                  <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Частота</th>
-                  <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Позиция</th>
-                  <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Тренд</th>
-                </tr>
-              </thead>
-              <tbody>
-                {keywords.map((kw, i) => (
-                  <tr key={i} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
-                    <td className="py-3 px-4 font-medium">{kw.word}</td>
-                    <td className="py-3 px-4 text-right text-muted-foreground">{kw.freq.toLocaleString("ru")}</td>
-                    <td className="py-3 px-4 text-right">
-                      <span className={`font-semibold ${kw.position <= 10 ? "text-green-600" : "text-muted-foreground"}`}>
-                        {kw.position}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4">
-                      <div className="flex justify-center">
-                        <TrendIcon trend={kw.trend} />
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable>
+            <DataHead>
+              <DataHeadCell>Ключевое слово</DataHeadCell>
+              <DataHeadCell align="right">Частота</DataHeadCell>
+              <DataHeadCell align="right">Позиция</DataHeadCell>
+              <DataHeadCell align="center">Тренд</DataHeadCell>
+            </DataHead>
+            <tbody>
+              {keywords.map((kw, i) => (
+                <DataRow key={i}>
+                  <DataCell className="font-medium">{kw.word}</DataCell>
+                  <DataCell align="right" className="text-muted-foreground">{kw.freq.toLocaleString("ru")}</DataCell>
+                  <DataCell align="right">
+                    <span className={`font-semibold ${kw.position <= 10 ? "text-green-600" : "text-muted-foreground"}`}>
+                      {kw.position}
+                    </span>
+                  </DataCell>
+                  <DataCell>
+                    <div className="flex justify-center">
+                      <TrendIcon trend={kw.trend} />
+                    </div>
+                  </DataCell>
+                </DataRow>
+              ))}
+            </tbody>
+          </DataTable>
         </CardContent>
       </Card>
           </div>

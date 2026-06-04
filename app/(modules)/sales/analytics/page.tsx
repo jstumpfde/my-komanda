@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { BarChart3, TrendingUp, Target, Users } from "lucide-react"
+import { DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import { cn } from "@/lib/utils"
 
 const DATE_RANGES = ["Эта неделя", "Этот месяц", "Квартал", "Год"]
@@ -206,50 +207,46 @@ export default function SalesAnalyticsPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="p-0">
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead>
-                        <tr className="border-b bg-muted/50">
-                          <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Менеджер</th>
-                          <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Сделок</th>
-                          <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Сумма</th>
-                          <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Конверсия</th>
-                          <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Ср. цикл</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {MANAGER_PERFORMANCE.map((mgr) => {
-                          const sharePct = Math.round((mgr.amount / totalManagerRevenue) * 100)
-                          return (
-                            <tr key={mgr.name} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
-                              <td className="px-4 py-3">
-                                <div className="flex items-center gap-2.5">
-                                  <Avatar className="w-7 h-7">
-                                    <AvatarFallback className="text-xs bg-primary/10 text-primary">{mgr.initials}</AvatarFallback>
-                                  </Avatar>
-                                  <div>
-                                    <p className="text-sm font-medium text-foreground">{mgr.name}</p>
-                                    <p className="text-[10px] text-muted-foreground">{sharePct}% от общей выручки</p>
-                                  </div>
+                  <DataTable>
+                    <DataHead>
+                      <DataHeadCell>Менеджер</DataHeadCell>
+                      <DataHeadCell align="right">Сделок</DataHeadCell>
+                      <DataHeadCell align="right">Сумма</DataHeadCell>
+                      <DataHeadCell align="right">Конверсия</DataHeadCell>
+                      <DataHeadCell align="right">Ср. цикл</DataHeadCell>
+                    </DataHead>
+                    <tbody>
+                      {MANAGER_PERFORMANCE.map((mgr) => {
+                        const sharePct = Math.round((mgr.amount / totalManagerRevenue) * 100)
+                        return (
+                          <DataRow key={mgr.name}>
+                            <DataCell>
+                              <div className="flex items-center gap-2.5">
+                                <Avatar className="w-7 h-7">
+                                  <AvatarFallback className="text-xs bg-primary/10 text-primary">{mgr.initials}</AvatarFallback>
+                                </Avatar>
+                                <div>
+                                  <p className="text-sm font-medium text-foreground">{mgr.name}</p>
+                                  <p className="text-[10px] text-muted-foreground">{sharePct}% от общей выручки</p>
                                 </div>
-                              </td>
-                              <td className="text-right px-4 py-3 text-sm text-foreground">{mgr.deals}</td>
-                              <td className="text-right px-4 py-3 text-sm font-medium text-foreground">{formatMoney(mgr.amount)}</td>
-                              <td className="text-right px-4 py-3">
-                                <Badge
-                                  variant={mgr.conversion >= 28 ? "default" : "secondary"}
-                                  className="text-xs"
-                                >
-                                  {mgr.conversion}%
-                                </Badge>
-                              </td>
-                              <td className="text-right px-4 py-3 text-sm text-muted-foreground">{mgr.avgCycle} дн</td>
-                            </tr>
-                          )
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
+                              </div>
+                            </DataCell>
+                            <DataCell align="right" className="text-foreground">{mgr.deals}</DataCell>
+                            <DataCell align="right" className="font-medium text-foreground">{formatMoney(mgr.amount)}</DataCell>
+                            <DataCell align="right">
+                              <Badge
+                                variant={mgr.conversion >= 28 ? "default" : "secondary"}
+                                className="text-xs"
+                              >
+                                {mgr.conversion}%
+                              </Badge>
+                            </DataCell>
+                            <DataCell align="right" className="text-muted-foreground">{mgr.avgCycle} дн</DataCell>
+                          </DataRow>
+                        )
+                      })}
+                    </tbody>
+                  </DataTable>
                 </CardContent>
               </Card>
             </div>
@@ -260,46 +257,42 @@ export default function SalesAnalyticsPage() {
                 <CardTitle className="text-base">Анализ источников лидов</CardTitle>
               </CardHeader>
               <CardContent className="p-0">
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b bg-muted/50">
-                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Источник</th>
-                        <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Лидов</th>
-                        <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Конверсия</th>
-                        <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">CPL</th>
-                        <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">ROI</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {SOURCES_ANALYSIS.map((row) => (
-                        <tr key={row.source} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
-                          <td className="px-4 py-3 text-sm font-medium text-foreground">{row.source}</td>
-                          <td className="text-right px-4 py-3 text-sm text-foreground">{row.leads}</td>
-                          <td className="text-right px-4 py-3">
-                            <Badge
-                              variant={row.conversion >= 20 ? "default" : "secondary"}
-                              className="text-xs"
-                            >
-                              {row.conversion}%
-                            </Badge>
-                          </td>
-                          <td className="text-right px-4 py-3 text-sm text-foreground">
-                            {row.cpl === 0 ? "—" : `${row.cpl.toLocaleString("ru-RU")} ₽`}
-                          </td>
-                          <td className="text-right px-4 py-3">
-                            <span className={cn(
-                              "text-sm font-semibold",
-                              row.roi >= 300 ? "text-emerald-600" : row.roi >= 150 ? "text-amber-600" : "text-foreground"
-                            )}>
-                              {row.roi === 9999 ? "∞" : `${row.roi}%`}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <DataTable>
+                  <DataHead>
+                    <DataHeadCell>Источник</DataHeadCell>
+                    <DataHeadCell align="right">Лидов</DataHeadCell>
+                    <DataHeadCell align="right">Конверсия</DataHeadCell>
+                    <DataHeadCell align="right">CPL</DataHeadCell>
+                    <DataHeadCell align="right">ROI</DataHeadCell>
+                  </DataHead>
+                  <tbody>
+                    {SOURCES_ANALYSIS.map((row) => (
+                      <DataRow key={row.source}>
+                        <DataCell className="font-medium text-foreground">{row.source}</DataCell>
+                        <DataCell align="right" className="text-foreground">{row.leads}</DataCell>
+                        <DataCell align="right">
+                          <Badge
+                            variant={row.conversion >= 20 ? "default" : "secondary"}
+                            className="text-xs"
+                          >
+                            {row.conversion}%
+                          </Badge>
+                        </DataCell>
+                        <DataCell align="right" className="text-foreground">
+                          {row.cpl === 0 ? "—" : `${row.cpl.toLocaleString("ru-RU")} ₽`}
+                        </DataCell>
+                        <DataCell align="right">
+                          <span className={cn(
+                            "text-sm font-semibold",
+                            row.roi >= 300 ? "text-emerald-600" : row.roi >= 150 ? "text-amber-600" : "text-foreground"
+                          )}>
+                            {row.roi === 9999 ? "∞" : `${row.roi}%`}
+                          </span>
+                        </DataCell>
+                      </DataRow>
+                    ))}
+                  </tbody>
+                </DataTable>
               </CardContent>
             </Card>
           </div>

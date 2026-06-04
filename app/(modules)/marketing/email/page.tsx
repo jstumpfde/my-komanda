@@ -5,6 +5,7 @@ import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import {Plus, Mail, Eye, UserMinus} from "lucide-react"
 
 const kpiCards = [
@@ -100,43 +101,39 @@ export default function EmailPage() {
           <CardTitle>Кампании</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-muted/50 border-b">
-                  <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Тема</th>
-                  <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Отправлено</th>
-                  <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Открыто</th>
-                  <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">OR %</th>
-                  <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Кликов</th>
-                  <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Дата</th>
-                  <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Статус</th>
-                </tr>
-              </thead>
-              <tbody>
-                {campaigns.map((row) => {
-                  const or = row.sent > 0 ? ((row.opened / row.sent) * 100).toFixed(1) : "—"
-                  return (
-                    <tr key={row.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
-                      <td className="py-3 px-4 font-medium max-w-xs">
-                        <p className="truncate">{row.subject}</p>
-                      </td>
-                      <td className="py-3 px-4 text-right text-muted-foreground">{row.sent.toLocaleString("ru")}</td>
-                      <td className="py-3 px-4 text-right text-muted-foreground">{row.opened.toLocaleString("ru")}</td>
-                      <td className="py-3 px-4 text-right font-semibold text-green-600">{or}%</td>
-                      <td className="py-3 px-4 text-right text-muted-foreground">{row.clicks}</td>
-                      <td className="py-3 px-4 text-muted-foreground">{row.date}</td>
-                      <td className="py-3 px-4">
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusColors[row.status]}`}>
-                          {row.status}
-                        </span>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
+          <DataTable>
+            <DataHead>
+              <DataHeadCell>Тема</DataHeadCell>
+              <DataHeadCell align="right">Отправлено</DataHeadCell>
+              <DataHeadCell align="right">Открыто</DataHeadCell>
+              <DataHeadCell align="right">OR %</DataHeadCell>
+              <DataHeadCell align="right">Кликов</DataHeadCell>
+              <DataHeadCell>Дата</DataHeadCell>
+              <DataHeadCell>Статус</DataHeadCell>
+            </DataHead>
+            <tbody>
+              {campaigns.map((row) => {
+                const or = row.sent > 0 ? ((row.opened / row.sent) * 100).toFixed(1) : "—"
+                return (
+                  <DataRow key={row.id}>
+                    <DataCell className="font-medium max-w-xs">
+                      <p className="truncate">{row.subject}</p>
+                    </DataCell>
+                    <DataCell align="right" className="text-muted-foreground">{row.sent.toLocaleString("ru")}</DataCell>
+                    <DataCell align="right" className="text-muted-foreground">{row.opened.toLocaleString("ru")}</DataCell>
+                    <DataCell align="right" className="font-semibold text-green-600">{or}%</DataCell>
+                    <DataCell align="right" className="text-muted-foreground">{row.clicks}</DataCell>
+                    <DataCell className="text-muted-foreground">{row.date}</DataCell>
+                    <DataCell>
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusColors[row.status]}`}>
+                        {row.status}
+                      </span>
+                    </DataCell>
+                  </DataRow>
+                )
+              })}
+            </tbody>
+          </DataTable>
         </CardContent>
       </Card>
           </div>

@@ -9,6 +9,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 
 export interface SalesContact {
   id: string
@@ -57,105 +58,101 @@ export function ContactsTable({ contacts, onEdit, onArchive, onRestore }: Contac
   }
 
   return (
-    <div className="border rounded-xl overflow-hidden">
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead>
-            <tr className="bg-muted/50 border-b">
-              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Имя</th>
-              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Должность</th>
-              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Компания</th>
-              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3 min-w-[150px]">Телефон</th>
-              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Email</th>
-              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Telegram</th>
-              <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider w-8 px-2 py-3">⭐</th>
-              <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Действия</th>
-            </tr>
-          </thead>
-          <tbody>
-            {contacts.map((contact) => {
-              const initials = `${contact.lastName[0] || ""}${contact.firstName[0] || ""}`.toUpperCase()
-              const fullName = `${contact.lastName} ${contact.firstName}${contact.middleName ? ` ${contact.middleName}` : ""}`
+    <TableCard>
+      <DataTable>
+        <DataHead>
+          <DataHeadCell>Имя</DataHeadCell>
+          <DataHeadCell>Должность</DataHeadCell>
+          <DataHeadCell>Компания</DataHeadCell>
+          <DataHeadCell className="min-w-[150px]">Телефон</DataHeadCell>
+          <DataHeadCell>Email</DataHeadCell>
+          <DataHeadCell>Telegram</DataHeadCell>
+          <DataHeadCell align="center" width="2rem" className="px-2">⭐</DataHeadCell>
+          <DataHeadCell align="right">Действия</DataHeadCell>
+        </DataHead>
+        <tbody>
+          {contacts.map((contact) => {
+            const initials = `${contact.lastName[0] || ""}${contact.firstName[0] || ""}`.toUpperCase()
+            const fullName = `${contact.lastName} ${contact.firstName}${contact.middleName ? ` ${contact.middleName}` : ""}`
 
-              return (
-                <tr key={contact.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2.5">
-                      <Avatar className="w-8 h-8 shrink-0">
-                        <AvatarFallback className="text-xs bg-primary/10 text-primary">{initials}</AvatarFallback>
-                      </Avatar>
-                      <span className="text-sm font-medium text-foreground">{fullName}</span>
+            return (
+              <DataRow key={contact.id}>
+                <DataCell>
+                  <div className="flex items-center gap-2.5">
+                    <Avatar className="w-8 h-8 shrink-0">
+                      <AvatarFallback className="text-xs bg-primary/10 text-primary">{initials}</AvatarFallback>
+                    </Avatar>
+                    <span className="text-sm font-medium text-foreground">{fullName}</span>
+                  </div>
+                </DataCell>
+                <DataCell className="text-muted-foreground">{contact.position || "—"}</DataCell>
+                <DataCell className="text-foreground">{contact.companyName || "—"}</DataCell>
+                <DataCell>
+                  {contact.phone || contact.mobile ? (
+                    <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                      <Phone className="w-3 h-3 shrink-0" />
+                      {contact.phone || contact.mobile}
                     </div>
-                  </td>
-                  <td className="px-4 py-3 text-sm text-muted-foreground">{contact.position || "—"}</td>
-                  <td className="px-4 py-3 text-sm text-foreground">{contact.companyName || "—"}</td>
-                  <td className="px-4 py-3">
-                    {contact.phone || contact.mobile ? (
-                      <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                        <Phone className="w-3 h-3 shrink-0" />
-                        {contact.phone || contact.mobile}
-                      </div>
-                    ) : (
-                      <span className="text-sm text-muted-foreground">—</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    {contact.email ? (
-                      <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                        <Mail className="w-3 h-3 shrink-0" />
-                        <span className="truncate max-w-[160px]">{contact.email}</span>
-                      </div>
-                    ) : (
-                      <span className="text-sm text-muted-foreground">—</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    {contact.telegram ? (
-                      <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                        <MessageCircle className="w-3 h-3 shrink-0" />
-                        {contact.telegram}
-                      </div>
-                    ) : (
-                      <span className="text-sm text-muted-foreground">—</span>
-                    )}
-                  </td>
-                  <td className="px-2 py-3 text-center w-8">
-                    {contact.isPrimary && (
-                      <Star className="w-4 h-4 text-amber-500 mx-auto fill-amber-500" />
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                          <MoreHorizontal className="w-4 h-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => onEdit?.(contact)}>
-                          <Pencil className="w-4 h-4 mr-2" />
-                          Редактировать
+                  ) : (
+                    <span className="text-sm text-muted-foreground">—</span>
+                  )}
+                </DataCell>
+                <DataCell>
+                  {contact.email ? (
+                    <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                      <Mail className="w-3 h-3 shrink-0" />
+                      <span className="truncate max-w-[160px]">{contact.email}</span>
+                    </div>
+                  ) : (
+                    <span className="text-sm text-muted-foreground">—</span>
+                  )}
+                </DataCell>
+                <DataCell>
+                  {contact.telegram ? (
+                    <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                      <MessageCircle className="w-3 h-3 shrink-0" />
+                      {contact.telegram}
+                    </div>
+                  ) : (
+                    <span className="text-sm text-muted-foreground">—</span>
+                  )}
+                </DataCell>
+                <DataCell align="center" className="px-2 w-8">
+                  {contact.isPrimary && (
+                    <Star className="w-4 h-4 text-amber-500 mx-auto fill-amber-500" />
+                  )}
+                </DataCell>
+                <DataCell align="right">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon" className="h-8 w-8">
+                        <MoreHorizontal className="w-4 h-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => onEdit?.(contact)}>
+                        <Pencil className="w-4 h-4 mr-2" />
+                        Редактировать
+                      </DropdownMenuItem>
+                      {contact.status === "active" ? (
+                        <DropdownMenuItem onClick={() => onArchive?.(contact)}>
+                          <Archive className="w-4 h-4 mr-2" />
+                          В архив
                         </DropdownMenuItem>
-                        {contact.status === "active" ? (
-                          <DropdownMenuItem onClick={() => onArchive?.(contact)}>
-                            <Archive className="w-4 h-4 mr-2" />
-                            В архив
-                          </DropdownMenuItem>
-                        ) : (
-                          <DropdownMenuItem onClick={() => onRestore?.(contact)}>
-                            <RotateCcw className="w-4 h-4 mr-2" />
-                            Восстановить
-                          </DropdownMenuItem>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
-    </div>
+                      ) : (
+                        <DropdownMenuItem onClick={() => onRestore?.(contact)}>
+                          <RotateCcw className="w-4 h-4 mr-2" />
+                          Восстановить
+                        </DropdownMenuItem>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </DataCell>
+              </DataRow>
+            )
+          })}
+        </tbody>
+      </DataTable>
+    </TableCard>
   )
 }
