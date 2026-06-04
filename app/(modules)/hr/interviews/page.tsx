@@ -61,26 +61,45 @@ const EMOJI_OPTIONS = ["📅", "🌅", "✅", "❌", "⏳", "🔥", "⭐", "📞
 // ─── Данные ──────────────────────────────────────────────────
 
 interface Interview {
-  id: number; date: Date; time: string; endTime: string; candidate: string; vacancy: string; interviewer: string; type: InterviewType; format: InterviewFormat; status: InterviewStatus
+  id: string; date: Date; time: string; endTime: string; candidate: string; vacancy: string; interviewer: string; type: InterviewType; format: InterviewFormat; status: InterviewStatus
 }
 
 const today2 = new Date()
-const d = (offset: number, h: number, m: number) => { const r = new Date(today2); r.setDate(r.getDate() + offset); r.setHours(h, m, 0, 0); return r }
 
-const ALL_INTERVIEWS: Interview[] = [
-  { id: 1, date: d(1, 10, 0), time: "10:00", endTime: "10:45", candidate: "Алексей Морозов", vacancy: "Менеджер по продажам", interviewer: "Анна И.", type: "Техническое", format: "Онлайн", status: "Подтверждено" },
-  { id: 2, date: d(2, 14, 30), time: "14:30", endTime: "15:15", candidate: "Мария Соколова", vacancy: "Product Manager", interviewer: "Елена С.", type: "HR", format: "Офис", status: "Ожидает" },
-  { id: 3, date: d(4, 11, 0), time: "11:00", endTime: "11:45", candidate: "Дмитрий Захаров", vacancy: "Backend Developer", interviewer: "Андрей К.", type: "Техническое", format: "Онлайн", status: "Подтверждено" },
-  { id: 4, date: d(7, 15, 0), time: "15:00", endTime: "16:00", candidate: "Ольга Новикова", vacancy: "UX Designer", interviewer: "Наталья В.", type: "Финальное", format: "Офис", status: "Ожидает" },
-  { id: 5, date: d(9, 9, 30), time: "09:30", endTime: "10:15", candidate: "Сергей Лебедев", vacancy: "DevOps Engineer", interviewer: "Кирилл Ф.", type: "HR", format: "Онлайн", status: "Подтверждено" },
-  { id: 6, date: d(0, 11, 30), time: "11:30", endTime: "12:15", candidate: "Анна Кузнецова", vacancy: "Data Analyst", interviewer: "Максим О.", type: "Техническое", format: "Онлайн", status: "Подтверждено" },
-  { id: 7, date: d(0, 16, 0), time: "16:00", endTime: "16:45", candidate: "Павел Воробьёв", vacancy: "QA Engineer", interviewer: "Светлана Б.", type: "HR", format: "Офис", status: "Ожидает" },
-  { id: 8, date: d(-3, 10, 0), time: "10:00", endTime: "10:45", candidate: "Татьяна Михайлова", vacancy: "Marketing", interviewer: "Елена С.", type: "Финальное", format: "Офис", status: "Пройдено" },
-  { id: 9, date: d(-5, 13, 0), time: "13:00", endTime: "13:45", candidate: "Роман Попов", vacancy: "iOS Developer", interviewer: "Андрей К.", type: "Техническое", format: "Онлайн", status: "Не явился" },
-  { id: 10, date: d(-7, 15, 30), time: "15:30", endTime: "16:15", candidate: "Екатерина Семёнова", vacancy: "HR BP", interviewer: "Наталья В.", type: "HR", format: "Офис", status: "Пройдено" },
-  { id: 11, date: d(-10, 9, 0), time: "09:00", endTime: "10:00", candidate: "Никита Григорьев", vacancy: "Android Dev", interviewer: "Кирилл Ф.", type: "Финальное", format: "Онлайн", status: "Пройдено" },
-  { id: 12, date: d(-2, 14, 0), time: "14:00", endTime: "14:45", candidate: "Виктор Лебедев", vacancy: "Менеджер по продажам", interviewer: "Анна И.", type: "Финальное", format: "Онлайн", status: "Отменено" },
-]
+// Событие календаря type='interview' → форма Interview для этой страницы.
+// candidate берём из title (HR его и заполняет), vacancy — по vacancyId через
+// мапу названий. Статус: cancelled→Отменено, прошедшее→Пройдено, tentative→Ожидает,
+// иначе Подтверждено. Тип/формат — из структурных полей, дефолты для старых событий.
+interface CalEvent {
+  id: string; title: string; startAt: string; endAt: string; status: string | null
+  vacancyId: string | null; interviewer: string | null; interviewType: string | null; interviewFormat: string | null
+}
+function timeStr(dt: Date): string {
+  return `${String(dt.getHours()).padStart(2, "0")}:${String(dt.getMinutes()).padStart(2, "0")}`
+}
+function mapEventToInterview(ev: CalEvent, vacMap: Map<string, string>): Interview {
+  const start = new Date(ev.startAt)
+  const end = new Date(ev.endAt)
+  const now = new Date()
+  let status: InterviewStatus
+  if (ev.status === "cancelled") status = "Отменено"
+  else if (end < now) status = "Пройдено"
+  else if (ev.status === "tentative") status = "Ожидает"
+  else status = "Подтверждено"
+  const type: InterviewType = (["Техническое", "HR", "Финальное"] as const).includes(ev.interviewType as InterviewType)
+    ? (ev.interviewType as InterviewType) : "HR"
+  const format: InterviewFormat = ev.interviewFormat === "Офис" ? "Офис" : "Онлайн"
+  return {
+    id: ev.id,
+    date: start,
+    time: timeStr(start),
+    endTime: timeStr(end),
+    candidate: ev.title || "Интервью",
+    vacancy: (ev.vacancyId && vacMap.get(ev.vacancyId)) || "—",
+    interviewer: ev.interviewer || "—",
+    type, format, status,
+  }
+}
 
 // ─── Утилиты ────────────────────────────────────────────────
 
@@ -131,7 +150,7 @@ function MiniCard({ iv, compact }: { iv: Interview; compact?: boolean }) {
 
 export default function InterviewsPage() {
   const [view, setView] = useState<ViewMode>("list")
-  const [interviews, setInterviews] = useState<Interview[]>(ALL_INTERVIEWS)
+  const [interviews, setInterviews] = useState<Interview[]>([])
   const [stages, setStages] = useState<Stage[]>(DEFAULT_STAGES)
   const [activeStage, setActiveStage] = useState<string>("upcoming")
   const [calMonth, setCalMonth] = useState(today2.getMonth())
@@ -142,7 +161,7 @@ export default function InterviewsPage() {
   const [dragIdx, setDragIdx] = useState<number | null>(null)
 
   // Drag-drop state for interviews
-  const [dragIvId, setDragIvId] = useState<number | null>(null)
+  const [dragIvId, setDragIvId] = useState<string | null>(null)
   const [dropTargetHour, setDropTargetHour] = useState<number | null>(null)
   const [dropTargetDay, setDropTargetDay] = useState<string | null>(null)
   const [dropTargetStatus, setDropTargetStatus] = useState<InterviewStatus | null>(null)
@@ -160,13 +179,57 @@ export default function InterviewsPage() {
 
   useEffect(() => { setStages(loadStages()) }, [])
 
+  // Реальные интервью из календаря (type='interview') + мапа названий вакансий.
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const [evRes, vacRes] = await Promise.all([
+          fetch("/api/modules/hr/calendar?type=interview"),
+          fetch("/api/modules/hr/vacancies?limit=200"),
+        ])
+        const evJson = evRes.ok ? await evRes.json() : null
+        const events = (evJson?.data ?? evJson ?? []) as CalEvent[]
+        const vacJson = vacRes.ok ? await vacRes.json() : null
+        const vacs = (vacJson?.vacancies ?? vacJson?.data ?? []) as { id: string; title: string }[]
+        const vacMap = new Map(vacs.map(v => [v.id, v.title]))
+        if (!cancelled) setInterviews(events.map(ev => mapEventToInterview(ev, vacMap)))
+      } catch { if (!cancelled) setInterviews([]) }
+    })()
+    return () => { cancelled = true }
+  }, [])
+
   // --- Interview drag helpers ---
-  const updateInterview = (id: number, patch: Partial<Interview>, msg: string) => {
+  // Меняет интервью локально + персистит в календарь (PATCH): перенос времени/даты
+  // пишет startAt/endAt, смена статуса маппится на статус события календаря
+  // (confirmed/tentative/cancelled). Тонкие статусы (Пройдено/Не явился) — только
+  // локально/производные, в календаре отдельно не хранятся.
+  const updateInterview = (id: string, patch: Partial<Interview>, msg: string) => {
+    const current = interviews.find(iv => iv.id === id)
     setInterviews(prev => prev.map(iv => iv.id === id ? { ...iv, ...patch } : iv))
     setNotifyDialog({ message: msg })
+    if (!current) return
+    const merged = { ...current, ...patch }
+    const body: Record<string, unknown> = {}
+    if (patch.time !== undefined || patch.endTime !== undefined || patch.date !== undefined) {
+      const [sh, sm] = merged.time.split(":").map(Number)
+      const [eh, em] = merged.endTime.split(":").map(Number)
+      const start = new Date(merged.date); start.setHours(sh, sm, 0, 0)
+      const end = new Date(merged.date); end.setHours(eh, em, 0, 0)
+      body.startAt = start.toISOString(); body.endAt = end.toISOString()
+    }
+    if (patch.status !== undefined) {
+      body.status = patch.status === "Отменено" || patch.status === "Не явился" ? "cancelled"
+        : patch.status === "Ожидает" ? "tentative" : "confirmed"
+    }
+    if (Object.keys(body).length > 0) {
+      fetch(`/api/modules/hr/calendar/${id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+      }).catch(() => {})
+    }
   }
 
-  const ivDragStart = (id: number) => setDragIvId(id)
+  const ivDragStart = (id: string) => setDragIvId(id)
   const ivDragEnd = () => { setDragIvId(null); setDropTargetHour(null); setDropTargetDay(null); setDropTargetStatus(null) }
 
   // Day view: drop on hour
