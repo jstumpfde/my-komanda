@@ -765,28 +765,10 @@ export default function HiringSettingsPage() {
                       </Button>
                     </div>
                     <p className="text-[11px] text-muted-foreground">
-                      При создании вакансии HR выбирает, под какую компанию она идёт. №1 — основная (из Брендинга),
-                      ниже — дополнительные бренды/клиенты.
+                      №1 — основная компания: <span className="font-medium text-foreground">{mainBrandName || "из профиля"}</span> (по умолчанию, настраивается в профиле). При создании вакансии HR выбирает, под какую компанию она идёт.
                     </p>
 
-                    {/* №1 — основная компания, из Брендинга (read-only) */}
-                    <div className="rounded-lg border border-primary/30 bg-primary/5 p-3">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-[10px] font-semibold uppercase tracking-wider text-primary">№1 · Основная</span>
-                        <a href="/settings/branding" className="text-[11px] text-primary hover:underline">Изменить в Брендинге →</a>
-                      </div>
-                      {mainBrandName ? (
-                        <>
-                          <p className="text-sm font-semibold">{mainBrandName}</p>
-                          {mainBrandSlogan && <p className="text-xs text-muted-foreground mt-0.5">{mainBrandSlogan}</p>}
-                          {companyDescription && <p className="text-[11px] text-muted-foreground mt-1 line-clamp-2">{companyDescription}</p>}
-                        </>
-                      ) : (
-                        <p className="text-[11px] text-amber-600">Название/слоган основной компании не заданы — укажите в Брендинге, и они появятся здесь.</p>
-                      )}
-                    </div>
-
-                    {/* Дополнительные компании */}
+                    {/* Дополнительные компании (№2+) */}
                     {brandCompanies.map((c, i) => (
                       <div key={c.id} className="rounded-lg border p-3 space-y-2 bg-muted/20">
                         <div className="flex items-center gap-2">
