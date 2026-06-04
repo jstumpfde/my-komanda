@@ -723,6 +723,23 @@ export const talentPoolEntries = pgTable("talent_pool_entries", {
 // Определения форм сбора кандидатов (внешние/внутренние). Поля формы — в
 // fields_json. Публичная отправка формы (inbound) — отдельная фича.
 export interface TalentFormField { key: string; label: string; enabled: boolean; required: boolean; locked?: boolean }
+
+// ── Резерв → Формы: tracking-ссылки (drizzle/0171) ──
+// Короткая ссылка /f/{slug} для отслеживания источника. Ведёт на публичную
+// форму (опционально конкретную talent_form). Кандидат заполняет → запись в
+// talent_pool_entries + инкремент counters.
+export const formTrackingLinks = pgTable("form_tracking_links", {
+  id:         uuid("id").defaultRandom().primaryKey(),
+  companyId:  uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  formId:     uuid("form_id").references(() => talentForms.id, { onDelete: "set null" }),
+  source:     text("source").notNull().default(""),
+  name:       text("name").notNull().default(""),
+  slug:       text("slug").notNull(),
+  clicks:     integer("clicks").notNull().default(0),
+  candidates: integer("candidates").notNull().default(0),
+  createdAt:  timestamp("created_at").defaultNow(),
+})
+
 export const talentForms = pgTable("talent_forms", {
   id:               uuid("id").defaultRandom().primaryKey(),
   companyId:        uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),

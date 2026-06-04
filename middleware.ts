@@ -31,6 +31,7 @@ const PUBLIC_PREFIXES = [
   "/schedule/",
   "/ref/",
   "/v/",
+  "/f/",                // публичная форма Резерва (tracking-ссылка)
   "/join/",
   "/api/auth",          // sign-in/out + forgot-password/reset-password
   "/api/cron/",         // cron-эндпоинты — защищены X-Cron-Secret в самом роуте,
