@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
@@ -114,7 +114,7 @@ const INITIAL_CAMPAIGNS: Campaign[] = [
 
 // ─── Component ──────────────────────────────────────────
 export default function TalentPoolPage() {
-  const [candidates, setCandidates] = useState(INITIAL_CANDIDATES)
+  const [candidates, setCandidates] = useState<TalentCandidate[]>([])
   const [campaigns, setCampaigns] = useState(INITIAL_CAMPAIGNS)
   const [addOpen, setAddOpen] = useState(false)
   const [campaignOpen, setCampaignOpen] = useState(false)
@@ -122,6 +122,36 @@ export default function TalentPoolPage() {
   const [statusFilter, setStatusFilter] = useState("all")
   const [selectedSources, setSelectedSources] = useState<Set<string>>(new Set())
   const [sources] = useState<SourceItem[]>(INITIAL_SOURCES)
+
+  // R2: реальные кандидаты резерва (стадия talent_pool) вместо mock.
+  // Должность/компания пока «—» (нет полей в БД), статус — из скоринга.
+  useEffect(() => {
+    fetch("/api/modules/hr/talent-pool/candidates")
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        const rows = Array.isArray(d?.candidates) ? d.candidates : []
+        setCandidates(rows.map((r: {
+          id: string; name: string; source: string | null;
+          aiScore: number | null; resumeScore: number | null; score: number | null;
+          email: string | null; phone: string | null; telegram: string | null;
+          updatedAt: string | null; vacancyTitle: string | null
+        }): TalentCandidate => {
+          const sc = r.aiScore ?? r.resumeScore ?? r.score ?? 0
+          return {
+            id: r.id, name: r.name,
+            position: "—", company: r.vacancyTitle || "—",
+            source: r.source || "—",
+            status: scoreToStatus(sc),
+            lastContact: r.updatedAt ? new Date(r.updatedAt) : new Date(),
+            email: r.email || "", phone: r.phone || "",
+            telegram: r.telegram ? "@" + r.telegram : "",
+            comment: "", score: sc,
+            scoreBreakdown: { experience: 0, skills: 0, culture: 0, motivation: 0, availability: 0 },
+          }
+        }))
+      })
+      .catch(() => {})
+  }, [])
   const [expandedFilterSources, setExpandedFilterSources] = useState<Set<string>>(new Set())
   const [thanked, setThanked] = useState<Set<string>>(new Set())
   const [colSort, setColSort] = useState<{ column: string; dir: "asc" | "desc" }>({ column: "name", dir: "asc" })
