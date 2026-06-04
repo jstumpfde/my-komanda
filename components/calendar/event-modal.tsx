@@ -46,7 +46,15 @@ export interface EventFormData {
   endAt: string
   description: string
   roomId: string
+  // Поля интервью (отправляются только для type='interview').
+  vacancyId?: string | null
+  interviewer?: string
+  interviewType?: string
+  interviewFormat?: string
 }
+
+const INTERVIEW_TYPES = ["Техническое", "HR", "Финальное"]
+const INTERVIEW_FORMATS = ["Онлайн", "Офис"]
 
 const EVENT_TYPES = [
   { value: "meeting", label: "Встреча" },
@@ -79,6 +87,21 @@ export function EventModal({
   const [roomId, setRoomId] = useState("")
   const [conflict, setConflict] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  // Поля интервью
+  const [vacancyId, setVacancyId] = useState("")
+  const [interviewer, setInterviewer] = useState("")
+  const [interviewType, setInterviewType] = useState("HR")
+  const [interviewFormat, setInterviewFormat] = useState("Онлайн")
+  const [vacancies, setVacancies] = useState<{ id: string; title: string }[]>([])
+
+  // Список вакансий для селектора (подгружаем при открытии).
+  useEffect(() => {
+    if (!open) return
+    fetch("/api/modules/hr/vacancies?limit=200")
+      .then(r => r.ok ? r.json() : null)
+      .then(j => { const v = j?.vacancies ?? j?.data ?? []; setVacancies(v.map((x: { id: string; title: string }) => ({ id: x.id, title: x.title }))) })
+      .catch(() => {})
+  }, [open])
 
   useEffect(() => {
     if (event) {
@@ -88,6 +111,10 @@ export function EventModal({
       setEndAt(toLocalDatetime(event.endAt))
       setDescription("")
       setRoomId(event.roomId ?? "")
+      setVacancyId(event.vacancyId ?? "")
+      setInterviewer(event.interviewer ?? "")
+      setInterviewType(event.interviewType ?? "HR")
+      setInterviewFormat(event.interviewFormat ?? "Онлайн")
     } else if (defaultDate) {
       const start = defaultDate
       const end = new Date(start.getTime() + 60 * 60 * 1000)
@@ -97,6 +124,10 @@ export function EventModal({
       setEndAt(toLocalDatetime(end))
       setDescription("")
       setRoomId("")
+      setVacancyId("")
+      setInterviewer("")
+      setInterviewType("HR")
+      setInterviewFormat("Онлайн")
     }
     setConflict(null)
   }, [event, defaultDate, open])
@@ -143,7 +174,14 @@ export function EventModal({
     if (!title.trim() || !startAt || !endAt) return
     setLoading(true)
     try {
-      await onSave({ title, type, startAt, endAt, description, roomId })
+      const isInterview = type === "interview"
+      await onSave({
+        title, type, startAt, endAt, description, roomId,
+        vacancyId:       isInterview ? (vacancyId || null) : null,
+        interviewer:     isInterview ? interviewer : "",
+        interviewType:   isInterview ? interviewType : "",
+        interviewFormat: isInterview ? interviewFormat : "",
+      })
       onClose()
     } finally {
       setLoading(false)
@@ -195,6 +233,51 @@ export function EventModal({
               </SelectContent>
             </Select>
           </div>
+
+          {/* Поля интервью — только для type='interview'. candidate = название события. */}
+          {type === "interview" && (
+            <div className="space-y-3 rounded-lg border border-border bg-muted/20 p-3">
+              <p className="text-xs text-muted-foreground">
+                Имя кандидата укажите в названии события. Эти поля наполняют раздел «Интервью».
+              </p>
+              <div className="space-y-1">
+                <Label htmlFor="iv-vacancy">Вакансия</Label>
+                <Select value={vacancyId || "none"} onValueChange={(v) => setVacancyId(v === "none" ? "" : v)}>
+                  <SelectTrigger id="iv-vacancy"><SelectValue placeholder="Не указана" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Не указана</SelectItem>
+                    {vacancies.map((v) => (
+                      <SelectItem key={v.id} value={v.id}>{v.title}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="iv-interviewer">Интервьюер</Label>
+                <Input id="iv-interviewer" value={interviewer} onChange={(e) => setInterviewer(e.target.value)} placeholder="Кто проводит" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label htmlFor="iv-type">Тип интервью</Label>
+                  <Select value={interviewType} onValueChange={setInterviewType}>
+                    <SelectTrigger id="iv-type"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {INTERVIEW_TYPES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="iv-format">Формат</Label>
+                  <Select value={interviewFormat} onValueChange={setInterviewFormat}>
+                    <SelectTrigger id="iv-format"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {INTERVIEW_FORMATS.map((f) => <SelectItem key={f} value={f}>{f}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
