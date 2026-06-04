@@ -1531,6 +1531,22 @@ export const notifications = pgTable("notifications", {
   createdAt:  timestamp("created_at").defaultNow(),
 })
 
+// ─── Audit Log (ФЗ-152) ───────────────────────────────────────────────────────
+// Журнал операций с персональными данными кандидатов (доступ/экспорт/удаление).
+export const auditLog = pgTable("audit_log", {
+  id:         uuid("id").primaryKey().defaultRandom(),
+  tenantId:   uuid("tenant_id").references(() => companies.id, { onDelete: "cascade" }),
+  userId:     uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+  userEmail:  text("user_email"),
+  action:     text("action").notNull(),     // candidate_export | candidate_delete | candidate_view_contacts
+  entityType: text("entity_type"),           // candidate | vacancy
+  entityId:   text("entity_id"),
+  count:      integer("count"),
+  meta:       jsonb("meta").$type<Record<string, unknown>>().default({}),
+  ip:         text("ip"),
+  createdAt:  timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+})
+
 // ─── Invite Links ─────────────────────────────────────────────────────────────
 
 export const inviteLinks = pgTable("invite_links", {

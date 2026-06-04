@@ -5,6 +5,7 @@ import { db } from "@/lib/db"
 import { candidates, vacancies, demos, hhResponses } from "@/lib/db/schema"
 import { requireCompany, apiError } from "@/lib/api-helpers"
 import { deriveCandidateName } from "@/lib/candidate-name"
+import { logAudit, ipFromRequest } from "@/lib/audit/log"
 
 // GET  /api/modules/hr/vacancies/[id]/export-candidates
 //   — выгружает ВСЕХ кандидатов вакансии со ВСЕМИ полями (обратная совместимость,
@@ -113,7 +114,7 @@ async function buildXlsx(
   vacTitle: string | null,
   where: SQL | undefined,
   fields: string[],
-): Promise<Response> {
+): Promise<{ response: Response; count: number }> {
   const rows = await db.select().from(candidates).where(where).orderBy(desc(candidates.createdAt))
 
   // Структура демо для расчёта прогресса по страницам (total = lessons + 2).
@@ -194,7 +195,7 @@ async function buildXlsx(
 
   const safeTitle = (vacTitle || "vacancy").replace(/[^\p{L}\p{N}\-_ ]/gu, "").trim() || "vacancy"
   const fileName = `Кандидаты — ${safeTitle}.xlsx`
-  return new Response(new Uint8Array(buf), {
+  const response = new Response(new Uint8Array(buf), {
     status: 200,
     headers: {
       "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -202,6 +203,7 @@ async function buildXlsx(
       "Cache-Control": "no-store",
     },
   })
+  return { response, count: rows.length }
 }
 
 const notPreview = or(isNull(candidates.source), ne(candidates.source, "preview"))
@@ -219,7 +221,13 @@ export async function GET(
       .where(and(eq(vacancies.id, id), eq(vacancies.companyId, user.companyId)))
       .limit(1)
     if (!vac) return apiError("Vacancy not found", 404)
-    return await buildXlsx(user.companyId, id, vac.title, and(eq(candidates.vacancyId, id), notPreview), ALL_FIELD_KEYS)
+    const { response, count } = await buildXlsx(user.companyId, id, vac.title, and(eq(candidates.vacancyId, id), notPreview), ALL_FIELD_KEYS)
+    await logAudit({
+      tenantId: user.companyId, userId: user.id, userEmail: user.email,
+      action: "candidate_export", entityType: "vacancy", entityId: id, count,
+      meta: { scope: "all", via: "GET" }, ip: ipFromRequest(_req),
+    })
+    return response
   } catch (err) {
     if (err instanceof Response) return err
     console.error("[export-candidates GET]", err)
@@ -263,7 +271,13 @@ export async function POST(
       where = and(eq(candidates.vacancyId, id), notPreview, inArray(candidates.stage, statuses))
     }
 
-    return await buildXlsx(user.companyId, id, vac.title, where, fields)
+    const { response, count } = await buildXlsx(user.companyId, id, vac.title, where, fields)
+    await logAudit({
+      tenantId: user.companyId, userId: user.id, userEmail: user.email,
+      action: "candidate_export", entityType: "vacancy", entityId: id, count,
+      meta: { scope, via: "POST", fields }, ip: ipFromRequest(req),
+    })
+    return response
   } catch (err) {
     if (err instanceof Response) return err
     console.error("[export-candidates POST]", err)

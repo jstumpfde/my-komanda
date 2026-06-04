@@ -4,6 +4,7 @@ import { db } from "@/lib/db"
 import { candidates, vacancies, hhCandidates, hhResponses } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { trySyncRejectToHh } from "@/lib/hh/sync-stage"
+import { logAudit, ipFromRequest } from "@/lib/audit/log"
 
 const HH_BULK_DELAY_MS = 500
 
@@ -332,6 +333,15 @@ export async function POST(req: NextRequest) {
 
       default:
         return apiError(`Unknown action: ${String(action)}`, 400)
+    }
+
+    // ФЗ-152: фиксируем удаление ПДн кандидатов (корзина / навсегда).
+    if (action === "trash" || action === "hard_delete") {
+      await logAudit({
+        tenantId: user.companyId, userId: user.id, userEmail: user.email,
+        action: "candidate_delete", entityType: "candidate", count: affected,
+        meta: { kind: action, candidateIds: ownedIds.slice(0, 500) }, ip: ipFromRequest(req),
+      })
     }
 
     return apiSuccess({ success: true, affected })
