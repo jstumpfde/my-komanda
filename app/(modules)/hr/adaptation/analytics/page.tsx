@@ -5,6 +5,7 @@ import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import { Loader2, Users, TrendingUp, Clock, CheckCircle2, BarChart3 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
@@ -247,30 +248,27 @@ export default function AdaptationAnalyticsPage() {
                     {problems.length === 0 ? (
                       <p className="text-sm text-muted-foreground text-center py-8">Нет данных</p>
                     ) : (
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
-                          <thead>
-                            <tr className="bg-muted/50 border-b">
-                              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Шаг</th>
-                              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Тип</th>
-                              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">План</th>
-                              <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">День</th>
-                              <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">% выполн.</th>
-                              <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Ср. балл</th>
-                            </tr>
-                          </thead>
-                          <tbody>
+                      <DataTable>
+                        <DataHead>
+                          <DataHeadCell>Шаг</DataHeadCell>
+                          <DataHeadCell>Тип</DataHeadCell>
+                          <DataHeadCell>План</DataHeadCell>
+                          <DataHeadCell align="center">День</DataHeadCell>
+                          <DataHeadCell align="center">% выполн.</DataHeadCell>
+                          <DataHeadCell align="center">Ср. балл</DataHeadCell>
+                        </DataHead>
+                        <tbody>
                             {problems.map(s => (
-                              <tr key={s.stepId} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
-                                <td className="px-4 py-2.5 font-medium max-w-[200px] truncate">{s.title}</td>
-                                <td className="px-4 py-2.5 text-muted-foreground text-xs">
+                              <DataRow key={s.stepId}>
+                                <DataCell className="font-medium max-w-[200px] truncate">{s.title}</DataCell>
+                                <DataCell className="text-muted-foreground text-xs">
                                   {STEP_TYPE_LABELS[s.type] ?? s.type}
-                                </td>
-                                <td className="px-4 py-2.5 text-muted-foreground text-xs max-w-[160px] truncate">
+                                </DataCell>
+                                <DataCell className="text-muted-foreground text-xs max-w-[160px] truncate">
                                   {s.planTitle}
-                                </td>
-                                <td className="px-4 py-2.5 text-center">{s.dayNumber}</td>
-                                <td className="px-4 py-2.5 text-center">
+                                </DataCell>
+                                <DataCell align="center">{s.dayNumber}</DataCell>
+                                <DataCell align="center">
                                   <span className={cn(
                                     "font-semibold",
                                     s.completionPct < 40 ? "text-rose-600" :
@@ -278,15 +276,14 @@ export default function AdaptationAnalyticsPage() {
                                   )}>
                                     {s.completionPct}%
                                   </span>
-                                </td>
-                                <td className="px-4 py-2.5 text-center text-muted-foreground">
+                                </DataCell>
+                                <DataCell align="center" className="text-muted-foreground">
                                   {s.avgScore != null ? s.avgScore : "—"}
-                                </td>
-                              </tr>
+                                </DataCell>
+                              </DataRow>
                             ))}
-                          </tbody>
-                        </table>
-                      </div>
+                        </tbody>
+                      </DataTable>
                     )}
                   </CardContent>
                 </Card>

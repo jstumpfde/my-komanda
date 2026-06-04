@@ -6,6 +6,7 @@ import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Card, CardContent } from "@/components/ui/card"
+import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
@@ -177,29 +178,26 @@ export default function AdaptationAssignmentsPage() {
                 </Button>
               </div>
             ) : (
-              <Card>
-                <CardContent className="p-0">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="bg-muted/50 border-b">
-                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Сотрудник</th>
-                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">План</th>
-                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">День</th>
-                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3 w-36">Прогресс</th>
-                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Статус</th>
-                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Дата старта</th>
-                        <th className="px-4 py-3" />
-                      </tr>
-                    </thead>
-                    <tbody>
+              <TableCard>
+                <DataTable>
+                  <DataHead>
+                    <DataHeadCell>Сотрудник</DataHeadCell>
+                    <DataHeadCell>План</DataHeadCell>
+                    <DataHeadCell>День</DataHeadCell>
+                    <DataHeadCell width="144px">Прогресс</DataHeadCell>
+                    <DataHeadCell>Статус</DataHeadCell>
+                    <DataHeadCell>Дата старта</DataHeadCell>
+                    <DataHeadCell align="right" />
+                  </DataHead>
+                  <tbody>
                       {filtered.map(a => {
                         const sc = STATUS_CONFIG[a.status] ?? STATUS_CONFIG.active
                         const startDate = a.startDate
                           ? new Date(a.startDate).toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", year: "2-digit" })
                           : "—"
                         return (
-                          <tr key={a.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
-                            <td className="px-4 py-3">
+                          <DataRow key={a.id}>
+                            <DataCell>
                               <div className="flex items-center gap-2">
                                 <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center text-xs font-medium text-primary">
                                   {a.employeeId ? a.employeeId.slice(0, 2).toUpperCase() : "—"}
@@ -208,39 +206,38 @@ export default function AdaptationAssignmentsPage() {
                                   {a.employeeId ? `Сотрудник ${a.employeeId.slice(0, 6)}` : "Не назначен"}
                                 </span>
                               </div>
-                            </td>
-                            <td className="px-4 py-3 text-muted-foreground">{a.planTitle ?? "—"}</td>
-                            <td className="px-4 py-3 font-medium">День {a.currentDay}</td>
-                            <td className="px-4 py-3">
+                            </DataCell>
+                            <DataCell className="text-muted-foreground">{a.planTitle ?? "—"}</DataCell>
+                            <DataCell className="font-medium">День {a.currentDay}</DataCell>
+                            <DataCell>
                               <div className="space-y-1">
                                 <Progress value={a.completionPct} className="h-1.5 w-28" />
                                 <span className="text-[10px] text-muted-foreground">
                                   {a.completedSteps}/{a.totalSteps ?? "?"} шагов · {a.completionPct}%
                                 </span>
                               </div>
-                            </td>
-                            <td className="px-4 py-3">
+                            </DataCell>
+                            <DataCell>
                               <Badge variant="outline" className={cn("text-[10px]", sc.color)}>{sc.label}</Badge>
-                            </td>
-                            <td className="px-4 py-3 text-muted-foreground">
+                            </DataCell>
+                            <DataCell className="text-muted-foreground">
                               <span className="flex items-center gap-1">
                                 <Calendar className="w-3.5 h-3.5" />{startDate}
                               </span>
-                            </td>
-                            <td className="px-4 py-3">
+                            </DataCell>
+                            <DataCell align="right">
                               <Link href={`/hr/adaptation/assignments/${a.id}`}>
                                 <Button variant="ghost" size="icon" className="h-7 w-7">
                                   <ArrowRight className="w-3.5 h-3.5" />
                                 </Button>
                               </Link>
-                            </td>
-                          </tr>
+                            </DataCell>
+                          </DataRow>
                         )
                       })}
-                    </tbody>
-                  </table>
-                </CardContent>
-              </Card>
+                  </tbody>
+                </DataTable>
+              </TableCard>
             )}
           </div>
         </main>

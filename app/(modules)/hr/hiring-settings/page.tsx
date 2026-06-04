@@ -6,6 +6,7 @@ import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
@@ -1284,25 +1285,23 @@ export default function HiringSettingsPage() {
                       </div>
                     </CardHeader>
                     <CardContent className="pointer-events-none opacity-40 select-none">
-                      <div className="rounded-md border">
-                        <table className="w-full text-sm">
-                          <thead className="bg-muted/50 border-b">
-                            <tr>
-                              <th className="text-left py-2.5 px-4 uppercase text-xs font-medium text-muted-foreground tracking-wider">Название</th>
-                              <th className="text-left py-2.5 px-4 uppercase text-xs font-medium text-muted-foreground tracking-wider">Тип</th>
-                              <th className="text-left py-2.5 px-4 uppercase text-xs font-medium text-muted-foreground tracking-wider">Канал</th>
-                              <th className="text-right py-2.5 px-4 uppercase text-xs font-medium text-muted-foreground tracking-wider">Действия</th>
-                            </tr>
-                          </thead>
+                      <div className="rounded-md border overflow-hidden">
+                        <DataTable>
+                          <DataHead>
+                            <DataHeadCell>Название</DataHeadCell>
+                            <DataHeadCell>Тип</DataHeadCell>
+                            <DataHeadCell>Канал</DataHeadCell>
+                            <DataHeadCell align="right">Действия</DataHeadCell>
+                          </DataHead>
                           <tbody>
                             {templates.map((t) => (
-                              <tr key={t.id} className="hover:bg-muted/50">
-                                <td className="py-2.5 px-4 font-medium">{t.name}</td>
-                                <td className="py-2.5 px-4">
+                              <DataRow key={t.id}>
+                                <DataCell className="font-medium">{t.name}</DataCell>
+                                <DataCell>
                                   <Badge variant="outline" className="text-xs">{TYPE_LABELS[t.type]}</Badge>
-                                </td>
-                                <td className="py-2.5 px-4 text-muted-foreground">{CHANNEL_LABELS[t.channel]}</td>
-                                <td className="py-2.5 px-4 text-right">
+                                </DataCell>
+                                <DataCell className="text-muted-foreground">{CHANNEL_LABELS[t.channel]}</DataCell>
+                                <DataCell align="right">
                                   <div className="flex items-center justify-end gap-1">
                                     <Button variant="ghost" size="icon" className="size-7" disabled>
                                       <Pencil className="size-3.5" />
@@ -1311,11 +1310,11 @@ export default function HiringSettingsPage() {
                                       <Trash2 className="size-3.5" />
                                     </Button>
                                   </div>
-                                </td>
-                              </tr>
+                                </DataCell>
+                              </DataRow>
                             ))}
                           </tbody>
-                        </table>
+                        </DataTable>
                       </div>
                     </CardContent>
                   </Card>

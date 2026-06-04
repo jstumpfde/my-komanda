@@ -32,6 +32,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import { CourseTab, type CourseTabHandle } from "@/components/vacancies/course-tab"
 import { AnketaTab, type AnketaTabHandle } from "@/components/vacancies/anketa-tab"
 import type { NotionEditorHandle } from "@/components/vacancies/notion-editor"
@@ -2864,27 +2865,27 @@ export default function VacancyPage() {
                                 </PieChart>
                               </ResponsiveContainer>
                             </div>
-                            <div className="flex-1 overflow-x-auto">
-                              <table className="w-full">
-                                <thead><tr className="bg-muted/50 border-b">
-                                  <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Источник</th>
-                                  <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Кол-во</th>
-                                  <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">%</th>
-                                  <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Ср. AI-скор</th>
-                                </tr></thead>
+                            <div className="flex-1">
+                              <DataTable>
+                                <DataHead>
+                                  <DataHeadCell>Источник</DataHeadCell>
+                                  <DataHeadCell align="right">Кол-во</DataHeadCell>
+                                  <DataHeadCell align="right">%</DataHeadCell>
+                                  <DataHeadCell align="right">Ср. AI-скор</DataHeadCell>
+                                </DataHead>
                                 <tbody>
                                   {sourceData.map((s) => (
-                                    <tr key={s.source} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
-                                      <td className="px-3 py-2"><div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: s.color }} /><span className="text-sm font-medium">{s.source}</span></div></td>
-                                      <td className="text-right px-3 py-2 text-sm font-medium">{s.count}</td>
-                                      <td className="text-right px-3 py-2 text-sm text-muted-foreground">{s.pct}%</td>
-                                      <td className="text-right px-3 py-2">
+                                    <DataRow key={s.source}>
+                                      <DataCell><div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: s.color }} /><span className="font-medium">{s.source}</span></div></DataCell>
+                                      <DataCell align="right" className="font-medium">{s.count}</DataCell>
+                                      <DataCell align="right" className="text-muted-foreground">{s.pct}%</DataCell>
+                                      <DataCell align="right">
                                         <Badge variant="outline" className={cn("text-xs", s.avgScore >= 75 ? "bg-emerald-500/10 text-emerald-700 border-emerald-200" : s.avgScore >= 60 ? "bg-amber-500/10 text-amber-700 border-amber-200" : "bg-red-500/10 text-red-700 border-red-200")}>{s.avgScore}</Badge>
-                                      </td>
-                                    </tr>
+                                      </DataCell>
+                                    </DataRow>
                                   ))}
                                 </tbody>
-                              </table>
+                              </DataTable>
                             </div>
                           </div>
                         </CardContent>
