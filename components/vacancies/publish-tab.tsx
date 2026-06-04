@@ -45,7 +45,11 @@ function generateFullPageHtml(
   const text = brand.textColor
   const rawCompany = override?.companyName || brand.companyName || ""
   const company = rawCompany.trim() || "Ваша компания"
-  const logoUrl = override?.logo || brand.logoUrl
+  const origin = typeof window !== "undefined" ? window.location.origin : "https://company24.pro"
+  // B6: на внешнем сайте (Tilda/Wix) относительный путь /uploads/... ломается
+  // (резолвится к чужому домену) → пустой квадрат. Делаем логотип абсолютным.
+  const logoSrc = override?.logo || brand.logoUrl
+  const logoUrl = logoSrc && logoSrc.startsWith("/") ? origin + logoSrc : logoSrc
   const initial = company.charAt(0) || "•"
   const logoHtml = logoUrl
     ? `<img src="${logoUrl}" alt="${company}" style="width:44px;height:44px;border-radius:12px;object-fit:contain" />`
@@ -105,7 +109,7 @@ function handleSubmit(){
 var n=document.getElementById('hf-name').value;
 var p=document.getElementById('hf-phone').value;
 if(!n||!p){alert('Заполните все поля');return}
-window.location.href='${typeof window !== "undefined" ? window.location.origin : ""}/vacancy/${vacancy.slug}?name='+encodeURIComponent(n)+'&phone='+encodeURIComponent(p)+'&utm_source=embed';
+window.location.href='${origin}/vacancy/${vacancy.slug}?name='+encodeURIComponent(n)+'&phone='+encodeURIComponent(p)+'&utm_source=embed';
 }
 </script>
 </body>

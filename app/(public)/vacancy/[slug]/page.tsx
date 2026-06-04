@@ -359,7 +359,7 @@ function VacancyPageInner({ params }: { params: Promise<{ slug: string }> }) {
 
           {/* ── CTA или форма ──────────────────────────────────── */}
           {screen === "landing" && (
-            <section className="pt-2">
+            <section className="pt-2 flex flex-col items-center text-center">
               <Button
                 size="lg"
                 className="w-full sm:w-auto h-14 px-8 text-base font-semibold text-white rounded-xl shadow-lg"

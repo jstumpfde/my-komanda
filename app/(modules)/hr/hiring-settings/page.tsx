@@ -896,6 +896,7 @@ export default function HiringSettingsPage() {
                     <CardContent className="space-y-2">
                       {[
                         { id: "zoom",      label: "Видео-звонок Zoom" },
+                        { id: "telemost",  label: "Видео-звонок Я.Телемост" },
                         { id: "meet",      label: "Видео-звонок Google Meet" },
                         { id: "telegram",  label: "Видео-звонок Telegram" },
                         { id: "phone",     label: "Звонок по телефону" },
