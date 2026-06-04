@@ -39,6 +39,8 @@ export default function BrandingPage() {
   const [brandSlogan, setBrandSlogan] = useState("")
   const [customDomain, setCustomDomain] = useState("")
   const [domainStatus, setDomainStatus] = useState<"idle" | "checking" | "verified" | "error">("idle")
+  const [subdomain, setSubdomain] = useState("")
+  const [subStatus, setSubStatus] = useState<"idle" | "checking" | "available" | "taken" | "invalid">("idle")
   const [verifying, setVerifying] = useState(false)
   const [saving, setSaving] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
@@ -66,7 +68,8 @@ export default function BrandingPage() {
       setBrandName(brandNameVal)
       setBrandSlogan(brandSloganVal)
       if (logoUrlVal) setLogoPreview(logoUrlVal)
-      // subdomain: пока не используется (планируется позже)
+      const subVal = (c.subdomain ?? "") as string
+      setSubdomain(subVal)
       if (customThemeVal) {
         setThemeEnabled(prev => {
           const next = { ...prev }
@@ -169,7 +172,27 @@ export default function BrandingPage() {
     }
   }
 
+  // Проверка доступности поддомена (debounce 500мс) через готовый API.
+  useEffect(() => {
+    const s = subdomain.trim().toLowerCase()
+    if (!s) { setSubStatus("idle"); return }
+    if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(s) || s.length < 3) { setSubStatus("invalid"); return }
+    setSubStatus("checking")
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/branding/check-subdomain?subdomain=${encodeURIComponent(s)}`)
+        const d = await res.json() as { available?: boolean }
+        setSubStatus(d.available ? "available" : "taken")
+      } catch { setSubStatus("idle") }
+    }, 500)
+    return () => clearTimeout(t)
+  }, [subdomain])
+
   const handleSave = async () => {
+    if (subStatus === "taken" || subStatus === "invalid") {
+      toast.error(subStatus === "taken" ? "Этот поддомен уже занят" : "Некорректный поддомен")
+      return
+    }
     setSaving(true)
     try {
       const customTheme = Object.fromEntries(
@@ -179,6 +202,7 @@ export default function BrandingPage() {
         logo_url: logoPreview ?? "",
         brand_name: brandName,
         brand_slogan: brandSlogan,
+        subdomain: subdomain.trim().toLowerCase(),
         custom_theme: customTheme as Record<string, unknown>,
       })
       saveBrand({ logoUrl: logoPreview, companyName: brandName })
@@ -414,32 +438,37 @@ export default function BrandingPage() {
           </CardContent>
         </Card>
 
-        {/* ═══ Поддомен (D12: «Скоро» — только платформенному админу) ═══ */}
-        <Card className={cn("opacity-70", !isPlatformAdmin && "hidden")}>
+        {/* ═══ Поддомен компании (company24.pro) ═══ */}
+        <Card>
           <CardHeader className="pb-2 pt-4 px-5">
             <CardTitle className="text-base flex items-center gap-2">
               <Link2 className="w-4 h-4" />
               Поддомен компании
-              <Badge variant="secondary" className="text-[10px] ml-1">Скоро</Badge>
             </CardTitle>
           </CardHeader>
-          <CardContent className="px-5 pb-4 pt-0 space-y-3">
+          <CardContent className="px-5 pb-4 pt-0 space-y-2">
             <p className="text-sm text-muted-foreground">
-              Ваш поддомен для публичных страниц вакансий и демонстраций.
+              Поддомен для публичных страниц вакансий и демонстраций — проще кастомного домена,
+              работает сразу после сохранения.
             </p>
-            <div className="flex gap-2 items-center">
-              <div className="flex-1 flex items-center max-w-lg">
-                <Input
-                  disabled
-                  placeholder="mycompany"
-                  className="h-9 font-mono text-sm rounded-r-none border-r-0"
-                />
-                <span className="h-9 px-3 flex items-center text-sm text-muted-foreground bg-muted border border-l-0 rounded-r-lg shrink-0 font-mono">
-                  .company24.pro
-                </span>
-              </div>
+            <div className="flex items-center max-w-lg">
+              <Input
+                value={subdomain}
+                onChange={e => setSubdomain(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
+                placeholder="mycompany"
+                className="h-9 font-mono text-sm rounded-r-none border-r-0"
+              />
+              <span className="h-9 px-3 flex items-center text-sm text-muted-foreground bg-muted border border-l-0 rounded-r-lg shrink-0 font-mono">
+                .company24.pro
+              </span>
             </div>
-            <p className="text-xs text-muted-foreground">Функция находится в разработке</p>
+            {subStatus === "checking" && <p className="text-xs text-muted-foreground flex items-center gap-1.5"><Loader2 className="w-3 h-3 animate-spin" />Проверяем…</p>}
+            {subStatus === "available" && <p className="text-xs text-emerald-600 flex items-center gap-1.5"><CheckCircle2 className="w-3 h-3" />Свободен — нажмите «Сохранить»</p>}
+            {subStatus === "taken" && <p className="text-xs text-destructive flex items-center gap-1.5"><XCircle className="w-3 h-3" />Уже занят</p>}
+            {subStatus === "invalid" && <p className="text-xs text-destructive flex items-center gap-1.5"><XCircle className="w-3 h-3" />Минимум 3 символа: латиница, цифры, дефис</p>}
+            {subdomain.trim() && (subStatus === "available" || subStatus === "idle") && (
+              <p className="text-xs text-muted-foreground">Адрес: <code className="font-mono text-foreground">{subdomain.trim()}.company24.pro</code></p>
+            )}
           </CardContent>
         </Card>
 
