@@ -34,7 +34,7 @@ export default async function CareersPage({ searchParams }: { searchParams: Prom
   const vacs = await db
     .select({
       slug: vacancies.slug, title: vacancies.title, city: vacancies.city,
-      salaryFrom: vacancies.salaryFrom, salaryTo: vacancies.salaryTo,
+      salaryFrom: vacancies.salaryMin, salaryTo: vacancies.salaryMax,
     })
     .from(vacancies)
     .where(and(
