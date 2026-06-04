@@ -430,6 +430,11 @@ export const vacancies = pgTable("vacancies", {
     .$type<{ blocks: Array<{ type: string; order: number; enabled: boolean }> }>()
     .notNull()
     .default({ blocks: [] }),
+  // Phase 3 консолидации: отдельный флаг — читает ли РАНТАЙМ воронку из
+  // funnelConfigJson (а не legacy-полей). По умолчанию false → поведение не
+  // меняется. Включается точечно (полигон), обратимо. См. drizzle/0166 и
+  // lib/funnel-builder/runtime.ts (isBlockEnabled).
+  funnelRuntimeEnabled: boolean("funnel_runtime_enabled").notNull().default(false),
   // Авто-разбор hh-откликов: cron каждые 10 минут разбирает накопленные отклики
   // в рабочее время. Если выключено — клиент жмёт «Разобрать» вручную.
   autoProcessingEnabled:      boolean("auto_processing_enabled").notNull().default(false),

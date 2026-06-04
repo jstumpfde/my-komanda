@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { candidates, vacancies, followUpCampaigns } from "@/lib/db/schema"
 import { STOP_WORDS, matchStopWord, matchStopWordList } from "@/lib/followup/stop-words"
+import { isBlockEnabled } from "@/lib/funnel-builder/runtime"
 
 export type StopReason =
   | "vacancy_closed"
@@ -106,7 +107,12 @@ export async function shouldStopFollowUp(
     let vacancyStopWords: string[] | null = null
     try {
       const [vac] = await db
-        .select({ stopWordsJson: vacancies.stopWordsJson, aiProcessSettings: vacancies.aiProcessSettings })
+        .select({
+          stopWordsJson:        vacancies.stopWordsJson,
+          aiProcessSettings:    vacancies.aiProcessSettings,
+          funnelRuntimeEnabled: vacancies.funnelRuntimeEnabled,
+          funnelConfigJson:     vacancies.funnelConfigJson,
+        })
         .from(vacancies)
         .where(eq(vacancies.id, candidate.vacancyId))
         .limit(1)
@@ -114,8 +120,10 @@ export async function shouldStopFollowUp(
       // список стоп-слов вакансии (undefined/отсутствует = включено).
       // Жёстко закодированный baseline matchStopWord НЕ отключаем — это
       // защита от нежелательного дожима (инцидент 04.05.2026).
+      // Phase 3: при funnelRuntimeEnabled источник — блок stop_words_chat.
       const funnelFlag = (vac?.aiProcessSettings as { stopWordsChatEnabled?: boolean } | null)?.stopWordsChatEnabled
-      if (funnelFlag !== false && Array.isArray(vac?.stopWordsJson) && vac.stopWordsJson.length > 0) {
+      const stopWordsOn = isBlockEnabled(vac, "stop_words_chat", funnelFlag !== false)
+      if (stopWordsOn && Array.isArray(vac?.stopWordsJson) && vac.stopWordsJson.length > 0) {
         vacancyStopWords = vac.stopWordsJson.filter((s): s is string => typeof s === "string")
       }
     } catch { /* silent — fallback ниже */ }

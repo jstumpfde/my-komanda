@@ -27,6 +27,7 @@ import { hhResponses, candidates, followUpMessages, hhCandidates, vacancies } fr
 import { getValidToken } from "@/lib/hh-helpers"
 import { classifyCandidateResponse } from "@/lib/ai/classify-candidate-response"
 import { processChatbotMessage } from "@/lib/ai/chatbot-processor"
+import { isBlockEnabled } from "@/lib/funnel-builder/runtime"
 import { saveCandidatePhoto } from "@/lib/hh/save-candidate-photo"
 import { extractHhResumeFields } from "@/lib/hh/extract-resume-fields"
 import { matchCallIntentKeyword, renderInsistTemplate } from "@/lib/messaging/call-intent"
@@ -417,6 +418,8 @@ export async function scanIncomingMessages(opts: {
         aiChatbotEnabled:  vacancies.aiChatbotEnabled,
         aiChatbotSettings: vacancies.aiChatbotSettings,
         aiChatbotPrompt:   vacancies.aiChatbotPrompt,
+        funnelRuntimeEnabled: vacancies.funnelRuntimeEnabled,
+        funnelConfigJson:     vacancies.funnelConfigJson,
       })
       .from(candidates)
       .innerJoin(vacancies, eq(vacancies.id, candidates.vacancyId))
@@ -440,7 +443,7 @@ export async function scanIncomingMessages(opts: {
       // отдаём сообщение ему. processChatbotMessage сам решает: ответить, эскалировать,
       // отклонить или пропустить. handled=true означает «AI взял на себя» —
       // дальше в legacy-классификацию не идём для этого сообщения.
-      if (candVac?.aiChatbotEnabled === true && (candVac?.aiChatbotPrompt ?? "").trim().length > 0) {
+      if (isBlockEnabled(candVac, "ai_chatbot", candVac?.aiChatbotEnabled === true) && (candVac?.aiChatbotPrompt ?? "").trim().length > 0) {
         try {
           const cb = await processChatbotMessage({
             candidateId,

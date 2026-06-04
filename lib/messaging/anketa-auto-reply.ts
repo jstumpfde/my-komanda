@@ -28,6 +28,7 @@ import {
   type PostDemoSettings,
 } from "@/lib/db/schema"
 import { adjustToWorkingWindow } from "@/lib/schedule/can-send-now"
+import { isBlockEnabled } from "@/lib/funnel-builder/runtime"
 
 // #59: новые пресеты в секундах: 10с/30с/1м/3м/5м/15м/30м/1ч.
 // Поддерживаем и старые «минутные» значения для backward-compat (5/15/30/60/240/1440 минут).
@@ -73,6 +74,8 @@ export async function scheduleAnketaAutoReply(args: {
       .select({
         postDemoSettings:           demos.postDemoSettings,
         aiProcessSettings:          vacancies.aiProcessSettings,
+        funnelRuntimeEnabled:       vacancies.funnelRuntimeEnabled,
+        funnelConfigJson:           vacancies.funnelConfigJson,
         scheduleEnabled:            vacancies.scheduleEnabled,
         scheduleStart:              vacancies.scheduleStart,
         scheduleEnd:                vacancies.scheduleEnd,
@@ -91,8 +94,9 @@ export async function scheduleAnketaAutoReply(args: {
 
     // Funnel-флаг auto_reply_test_task: только явный false выключает блок
     // (undefined/отсутствует = включено — обратная совместимость).
+    // Phase 3: при funnelRuntimeEnabled источник — блок auto_reply_test_task.
     const funnelFlag = (row.aiProcessSettings as { testTaskAutoReplyEnabled?: boolean } | null)?.testTaskAutoReplyEnabled
-    if (funnelFlag === false) {
+    if (!isBlockEnabled(row, "auto_reply_test_task", funnelFlag !== false)) {
       return { scheduled: false, reason: "funnel_disabled" }
     }
 

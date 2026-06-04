@@ -23,6 +23,7 @@ import { scheduleRejection, rejectionDelayMinutes } from "@/lib/rejection/execut
 import { startPrequalification } from "@/lib/prequalification/start"
 import { renderTemplate } from "@/lib/template-renderer"
 import { matchStopFactors, type StopFactorMatch } from "@/lib/funnel-builder/stop-factors-matcher"
+import { isBlockEnabled } from "@/lib/funnel-builder/runtime"
 
 const DEMO_INVITE_MESSAGE = "Здравствуйте! Спасибо за отклик. Мы подготовили короткую демонстрацию должности — 15 минут, и вы узнаете всё о задачах, команде и доходе."
 
@@ -199,7 +200,8 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
         if (
           localVac.firstMessageOffHoursEnabled === true &&
           offText.length > 0 &&
-          localVac.aiChatbotEnabled !== true
+          // Phase 3: «бот выключен» — через адаптер (флаг off → прежнее legacy).
+          !isBlockEnabled(localVac, "ai_chatbot", localVac.aiChatbotEnabled === true)
         ) {
           offHoursSoftMode = true
         } else {
@@ -477,7 +479,7 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
       // Off-hours soft mode: не применяем стоп-факторы ночью (никаких авто-отказов).
       // Funnel-флаг stopFactorsEnabled: только явный false выключает блок
       // (undefined/отсутствует = включено — обратная совместимость).
-      if (candidateId && localVac && !offHoursSoftMode && aiSettings.stopFactorsEnabled !== false) {
+      if (candidateId && localVac && !offHoursSoftMode && isBlockEnabled(localVac, "stop_factors_resume", aiSettings.stopFactorsEnabled !== false)) {
         const factors = (localVac as { stopFactorsJson?: VacancyStopFactors | null }).stopFactorsJson
         if (factors && Object.keys(factors).length > 0) {
           // hh-резюме отдаёт age напрямую или только birth_date. Берём оба
