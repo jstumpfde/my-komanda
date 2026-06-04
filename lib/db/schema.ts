@@ -650,6 +650,12 @@ export interface VacancyAiProcessSettings {
   aiAnketaScoreEnabled?:     boolean
   stopWordsChatEnabled?:     boolean
   testTaskAutoReplyEnabled?: boolean
+
+  // D5 (Phase 4): тумблер авто-отказа по AI-скору резюме. По умолчанию ВЫКЛ
+  // (P0-14): кандидаты ниже порога идут в keep_new (ручной разбор), отказ НЕ
+  // отправляется. true — HR осознанно включил реальный авто-отказ; это OUTWARD
+  // (discard_by_employer через hh кандидату). См. process-queue.ts.
+  autoRejectEnabled?:        boolean
 }
 
 export const demos = pgTable("demos", {

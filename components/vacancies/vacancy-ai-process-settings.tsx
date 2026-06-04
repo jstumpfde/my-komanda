@@ -56,6 +56,9 @@ export function VacancyAiProcessSettings({ vacancyId, initial, initialAiScoringE
   const [rejectionDelay, setRejectionDelay] = useState<number>(
     typeof initial?.rejectionDelayMinutes === "number" ? initial.rejectionDelayMinutes : 300,
   )
+  // D5: реальный авто-отказ при балле <lower. По умолчанию ВЫКЛ (P0-14):
+  // такие кандидаты идут в ручной разбор, отказ НЕ отправляется.
+  const [autoRejectEnabled, setAutoRejectEnabled] = useState<boolean>(initial?.autoRejectEnabled === true)
   const [saving, setSaving] = useState(false)
   // P0-50: sticky-bar считывает loaded — пока initial не подсунули, секцию игнорим.
   const loaded = initial !== undefined
@@ -71,6 +74,7 @@ export function VacancyAiProcessSettings({ vacancyId, initial, initialAiScoringE
       setRejectMessage(initial.rejectMessage)
     }
     if (typeof initial.rejectionDelayMinutes === "number") setRejectionDelay(initial.rejectionDelayMinutes)
+    if (typeof initial.autoRejectEnabled === "boolean") setAutoRejectEnabled(initial.autoRejectEnabled)
   }, [initial])
 
   useEffect(() => {
@@ -102,6 +106,7 @@ export function VacancyAiProcessSettings({ vacancyId, initial, initialAiScoringE
           midRangeAction,
           rejectMessage,
           rejectionDelayMinutes: rejectionDelay,
+          autoRejectEnabled,
           aiScoringEnabled,
         }),
       })
@@ -120,7 +125,7 @@ export function VacancyAiProcessSettings({ vacancyId, initial, initialAiScoringE
     sectionKey: `ai-process:${vacancyId}`,
     tabKey: "followup",
     loaded,
-    watchedValues: { aiScoringEnabled, upper, lower, midRangeAction, rejectMessage, rejectionDelay },
+    watchedValues: { aiScoringEnabled, upper, lower, midRangeAction, rejectMessage, rejectionDelay, autoRejectEnabled },
     save: handleSave,
   })
   void saving
@@ -237,6 +242,21 @@ export function VacancyAiProcessSettings({ vacancyId, initial, initialAiScoringE
                 </span>
               </span>
             </label>
+          </div>
+        </div>
+
+        {/* D5: тумблер реального авто-отказа (<lower). По умолчанию ВЫКЛ. */}
+        <div className="rounded-md border border-amber-300 dark:border-amber-800 bg-amber-500/5 px-3 py-2.5">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <Label className="text-xs font-medium">Авто-отказ при низком балле (&lt;{lower})</Label>
+              <p className="text-[11px] text-muted-foreground mt-1">
+                {autoRejectEnabled
+                  ? "⚠️ Кандидатам ниже порога будет автоматически отправлен отказ через hh (с текстом ниже)."
+                  : "Выключено: кандидаты ниже порога остаются в «Новый» для ручного разбора, отказ НЕ отправляется."}
+              </p>
+            </div>
+            <Switch checked={autoRejectEnabled} onCheckedChange={setAutoRejectEnabled} disabled={disabled} />
           </div>
         </div>
 

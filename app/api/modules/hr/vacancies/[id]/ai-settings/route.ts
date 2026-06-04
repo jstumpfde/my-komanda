@@ -92,6 +92,10 @@ export async function PUT(
     if (body.belowThresholdAction !== undefined) {
       settings.belowThresholdAction = body.belowThresholdAction === "keep_new" ? "keep_new" : "reject"
     }
+    // D5: тумблер авто-отказа по AI-скору (по умолчанию выкл).
+    if (body.autoRejectEnabled !== undefined) {
+      settings.autoRejectEnabled = body.autoRejectEnabled === true
+    }
     if (body.inviteMessage !== undefined) {
       const text = typeof body.inviteMessage === "string" ? body.inviteMessage.slice(0, 2000) : ""
       // P0-43: первое сообщение должно содержать плейсхолдер ссылки на демо.

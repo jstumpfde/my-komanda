@@ -613,7 +613,10 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
           const nowIso = new Date().toISOString()
           const nowTs  = new Date()
 
-          if (false /* P0-14 disabled: auto-rejection by AI score */) {
+          // D5: авто-отказ по AI-скору. По умолчанию ВЫКЛ (autoRejectEnabled
+          // !== true) → reject-кандидаты падают в else (keep_new, ручной разбор)
+          // — поведение P0-14 сохранено. Включается HR'ом осознанно (OUTWARD).
+          if (aiSettings.autoRejectEnabled === true && belowThreshold.action === "reject") {
             await db.update(candidates)
               .set({
                 stage:                        "rejected",
