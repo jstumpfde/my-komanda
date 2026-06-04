@@ -1,5 +1,20 @@
 import { auth } from "@/auth"
+import { NextResponse } from "next/server"
 import {HR_MODULE_SLUGS} from "@/lib/modules/access"
+
+// Хосты платформы — НЕ поддомены компаний.
+const PLATFORM_HOSTS = new Set(["company24.pro", "www.company24.pro", "new.company24.pro", "localhost"])
+
+// Извлечь поддомен компании из Host ({sub}.company24.pro → "sub"), иначе null.
+function getCompanySubdomain(host: string): string | null {
+  const h = host.split(":")[0].toLowerCase()
+  if (PLATFORM_HOSTS.has(h)) return null
+  if (h.endsWith(".company24.pro")) {
+    const sub = h.slice(0, -".company24.pro".length)
+    if (sub && sub !== "www" && sub !== "new" && !sub.includes(".")) return sub
+  }
+  return null
+}
 
 // Node.js runtime — нужен для DB-запросов в middleware
 export const runtime = "nodejs"
@@ -35,6 +50,7 @@ const PUBLIC_PREFIXES = [
   "/politicahr2026",
   "/ask/",
   "/uploads/",
+  "/careers",            // публичная карьерная страница компании (поддомен)
 ]
 
 function isPublic(pathname: string): boolean {
@@ -58,6 +74,17 @@ const MODULE_PATH_MAP: { prefix: string; slugs: string[]; moduleParam: string }[
 export default auth(async (req) => {
   const { pathname } = req.nextUrl
   const session = req.auth
+
+  // ── Поддомен компании ({sub}.company24.pro) ───────────────────────────────
+  // Корень поддомена → карьерная страница компании (/careers?sub=...). Остальные
+  // публичные пути (vacancy/demo/…) работают как есть — слаги глобальны.
+  const sub = getCompanySubdomain(req.headers.get("host") || "")
+  if (sub && (pathname === "/" || pathname === "/careers")) {
+    const url = req.nextUrl.clone()
+    url.pathname = "/careers"
+    url.searchParams.set("sub", sub)
+    return NextResponse.rewrite(url)
+  }
 
   // Публичный маршрут — пропускаем
   if (isPublic(pathname)) return
