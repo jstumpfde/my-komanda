@@ -101,21 +101,35 @@ export function EventModal({
     setConflict(null)
   }, [event, defaultDate, open])
 
-  const checkAvailability = async () => {
-    if (!roomId || !startAt || !endAt) return
-    const params = new URLSearchParams({
-      roomId,
-      start: new Date(startAt).toISOString(),
-      end: new Date(endAt).toISOString(),
-    })
+  // #60: авто-проверка пересечений при изменении времени/переговорной (дебаунс).
+  useEffect(() => {
+    if (!open) return
+    const t = setTimeout(() => { void checkConflicts() }, 400)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, startAt, endAt, roomId])
+
+  // #60: авто-проверка конфликтов времени. Покрывает и занятость переговорной,
+  // и общее пересечение по времени (двойное бронирование слота). Не блокирует
+  // сохранение — только мягкое предупреждение.
+  const checkConflicts = async () => {
+    if (!startAt || !endAt) { setConflict(null); return }
+    const s = new Date(startAt), e = new Date(endAt)
+    if (isNaN(s.getTime()) || isNaN(e.getTime()) || e <= s) { setConflict(null); return }
+    const params = new URLSearchParams({ start: s.toISOString(), end: e.toISOString() })
+    if (roomId) params.set("roomId", roomId)
+    if (event?.id) params.set("excludeId", event.id)
     try {
-      const res = await fetch(`/api/modules/hr/rooms/availability?${params}`)
-      const data = await res.json()
-      if (!data.available) {
-        const conflictTitles = data.conflicts
-          .map((c: CalendarEvent) => c.title)
-          .join(", ")
-        setConflict(`Переговорная занята: ${conflictTitles}`)
+      const res = await fetch(`/api/modules/hr/calendar/conflicts?${params}`)
+      if (!res.ok) return
+      const json = await res.json()
+      const data = json.data ?? json
+      const room: { title: string }[] = data.roomConflicts ?? []
+      const time: { title: string }[] = data.timeConflicts ?? []
+      if (room.length) {
+        setConflict(`Переговорная занята: ${room.map(c => c.title).join(", ")}`)
+      } else if (time.length) {
+        setConflict(`В это время уже запланировано: ${time.map(c => c.title).join(", ")}`)
       } else {
         setConflict(null)
       }
@@ -228,21 +242,10 @@ export function EventModal({
                 ))}
               </SelectContent>
             </Select>
-            {roomId && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="text-xs mt-1"
-                onClick={checkAvailability}
-              >
-                Проверить доступность
-              </Button>
-            )}
             {conflict && (
-              <div className="flex items-center gap-1 text-xs text-destructive mt-1">
-                <AlertCircle className="h-3 w-3" />
-                {conflict}
+              <div className="flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-500 mt-1.5">
+                <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-px" />
+                <span>{conflict}. Сохранить всё равно можно.</span>
               </div>
             )}
           </div>
