@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -9,9 +9,8 @@ import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { Users, UserCheck, TrendingUp, Banknote, Gift, CheckCircle2, Pencil, Save } from "lucide-react"
-import { ReferralLinks } from "./referral-links"
+import { ReferralLinks, type ReferralLink } from "./referral-links"
 
-// ─── Editable rules structure ─────────────────────────────
 interface ReferralRules {
   bonusPerHire: number
   trialMonths: number
@@ -26,39 +25,81 @@ const DEFAULT_RULES: ReferralRules = {
   standardScreening: true,
 }
 
-// ─── Mock referrers (top table) ───────────────────────────
-const REFERRERS = [
-  { name: "Анна Иванова", position: "HR-менеджер", referrals: 5, hired: 2, topCandidate: "Андрей Фёдоров" },
-  { name: "Дмитрий Козлов", position: "Тимлид", referrals: 4, hired: 1, topCandidate: "Ольга Петрова" },
-  { name: "Мария Сидорова", position: "Маркетолог", referrals: 3, hired: 0, topCandidate: "Роман Кузнецов" },
-]
+// API row → UI ReferralLink.
+interface ApiLink {
+  id: string; name: string; position: string; slug: string
+  clicks: number; referredCount: number; hiredCount: number
+}
+function toUi(r: ApiLink): ReferralLink {
+  return {
+    id: r.id, name: r.name, position: r.position,
+    url: `company24.pro/ref/${r.slug}`,
+    clicks: r.clicks, referred: r.referredCount, hired: r.hiredCount, bonus: 0,
+  }
+}
 
 export function ReferralTab() {
+  const [links, setLinks] = useState<ReferralLink[]>([])
+  const [loading, setLoading] = useState(true)
   const [rules, setRules] = useState<ReferralRules>(DEFAULT_RULES)
   const [editingRules, setEditingRules] = useState(false)
   const [draft, setDraft] = useState<ReferralRules>(DEFAULT_RULES)
 
-  const totalHired = REFERRERS.reduce((s, r) => s + r.hired, 0)
-  const totalReferrals = REFERRERS.reduce((s, r) => s + r.referrals, 0)
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch("/api/modules/hr/talent-pool/referrals")
+      const data = await res.json() as { links?: ApiLink[]; rules?: ReferralRules }
+      if (data.links) setLinks(data.links.map(toUi))
+      if (data.rules) { setRules(data.rules); setDraft(data.rules) }
+    } catch { /* пусто — покажем дефолты */ }
+    finally { setLoading(false) }
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  const onAdd = async (name: string, position: string) => {
+    const res = await fetch("/api/modules/hr/talent-pool/referrals", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, position }),
+    })
+    if (!res.ok) { toast.error("Не удалось создать ссылку"); return }
+    toast.success("Сотрудник добавлен, ссылка создана")
+    await load()
+  }
+
+  const onDelete = async (id: string) => {
+    const res = await fetch(`/api/modules/hr/talent-pool/referrals/${id}`, { method: "DELETE" })
+    if (!res.ok) { toast.error("Не удалось удалить"); return }
+    setLinks(prev => prev.filter(l => l.id !== id))
+    toast.success("Ссылка удалена")
+  }
+
+  const startEditing = () => { setDraft({ ...rules }); setEditingRules(true) }
+
+  const saveRules = async () => {
+    const res = await fetch("/api/modules/hr/talent-pool/referrals", {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rules: draft }),
+    })
+    if (!res.ok) { toast.error("Не удалось сохранить правила"); return }
+    const data = await res.json() as { rules?: ReferralRules }
+    if (data.rules) setRules(data.rules)
+    setEditingRules(false)
+    toast.success("Правила программы обновлены")
+  }
+
+  // Топ рефереров и KPI — из реальных ссылок.
+  const totalHired = links.reduce((s, r) => s + r.hired, 0)
+  const totalReferrals = links.reduce((s, r) => s + r.referred, 0)
   const totalPaid = totalHired * rules.bonusPerHire
+  const topReferrers = [...links].sort((a, b) => b.referred - a.referred || b.hired - a.hired).slice(0, 5)
 
   const kpi = [
     { label: "Всего рефералов", value: String(totalReferrals), icon: Users, color: "text-blue-600" },
     { label: "Нанято", value: String(totalHired), icon: UserCheck, color: "text-emerald-600" },
-    { label: "Ср. скоринг", value: "67", icon: TrendingUp, color: "text-purple-600" },
+    { label: "Сотрудников", value: String(links.length), icon: TrendingUp, color: "text-purple-600" },
     { label: "Выплачено", value: `${totalPaid.toLocaleString("ru-RU")} ₽`, icon: Banknote, color: "text-amber-600" },
   ]
-
-  const startEditing = () => {
-    setDraft({ ...rules })
-    setEditingRules(true)
-  }
-
-  const saveRules = () => {
-    setRules({ ...draft })
-    setEditingRules(false)
-    toast.success("Правила программы обновлены")
-  }
 
   return (
     <div className="space-y-4">
@@ -78,10 +119,10 @@ export function ReferralTab() {
       </div>
 
       {/* Ссылки сотрудников */}
-      <ReferralLinks bonusPerHire={rules.bonusPerHire} />
+      <ReferralLinks links={links} bonusPerHire={rules.bonusPerHire} loading={loading} onAdd={onAdd} onDelete={onDelete} />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Таблица рефереров */}
+        {/* Топ рефереров — из реальных ссылок */}
         <Card className="lg:col-span-2">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm">Топ рефереров</CardTitle>
@@ -97,16 +138,16 @@ export function ReferralTab() {
                 </tr>
               </thead>
               <tbody>
-                {REFERRERS.map((r) => {
+                {topReferrers.map((r) => {
                   const bonus = r.hired * rules.bonusPerHire
                   return (
-                    <tr key={r.name} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
+                    <tr key={r.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
                       <td className="px-4 py-2.5">
                         <p className="text-sm font-medium">{r.name}</p>
-                        <p className="text-[11px] text-muted-foreground">{r.position}</p>
+                        {r.position && <p className="text-[11px] text-muted-foreground">{r.position}</p>}
                       </td>
                       <td className="px-3 py-2.5 text-center">
-                        <Badge variant="secondary" className="text-xs">{r.referrals}</Badge>
+                        <Badge variant="secondary" className="text-xs">{r.referred}</Badge>
                       </td>
                       <td className="px-3 py-2.5 text-center">
                         <Badge variant={r.hired > 0 ? "default" : "outline"} className="text-xs">{r.hired}</Badge>
@@ -119,12 +160,15 @@ export function ReferralTab() {
                     </tr>
                   )
                 })}
+                {!loading && topReferrers.length === 0 && (
+                  <tr><td colSpan={4} className="text-center py-8 text-sm text-muted-foreground">Пока нет рефереров — добавьте сотрудников выше.</td></tr>
+                )}
               </tbody>
             </table>
           </CardContent>
         </Card>
 
-        {/* Правила программы — редактируемые */}
+        {/* Правила программы — редактируемые, персистятся */}
         <Card>
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
@@ -175,38 +219,23 @@ export function ReferralTab() {
               <div className="space-y-3">
                 <div className="grid gap-1">
                   <Label className="text-[11px] text-muted-foreground">Бонус за найм, ₽</Label>
-                  <Input
-                    type="number"
-                    className="h-8 text-sm"
-                    value={draft.bonusPerHire}
-                    onChange={(e) => setDraft({ ...draft, bonusPerHire: parseInt(e.target.value) || 0 })}
-                  />
+                  <Input type="number" className="h-8 text-sm" value={draft.bonusPerHire}
+                    onChange={(e) => setDraft({ ...draft, bonusPerHire: parseInt(e.target.value) || 0 })} />
                 </div>
                 <div className="grid gap-1">
                   <Label className="text-[11px] text-muted-foreground">Испытательный срок, мес.</Label>
-                  <Input
-                    type="number"
-                    className="h-8 text-sm"
-                    value={draft.trialMonths}
-                    onChange={(e) => setDraft({ ...draft, trialMonths: parseInt(e.target.value) || 0 })}
-                  />
+                  <Input type="number" className="h-8 text-sm" value={draft.trialMonths}
+                    onChange={(e) => setDraft({ ...draft, trialMonths: parseInt(e.target.value) || 0 })} />
                 </div>
                 <div className="grid gap-1">
                   <Label className="text-[11px] text-muted-foreground">Макс. активных рефералов</Label>
-                  <Input
-                    type="number"
-                    className="h-8 text-sm"
-                    value={draft.maxActiveReferrals}
-                    onChange={(e) => setDraft({ ...draft, maxActiveReferrals: parseInt(e.target.value) || 0 })}
-                  />
+                  <Input type="number" className="h-8 text-sm" value={draft.maxActiveReferrals}
+                    onChange={(e) => setDraft({ ...draft, maxActiveReferrals: parseInt(e.target.value) || 0 })} />
                 </div>
                 <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={draft.standardScreening}
+                  <input type="checkbox" checked={draft.standardScreening}
                     onChange={(e) => setDraft({ ...draft, standardScreening: e.target.checked })}
-                    className="rounded border-border"
-                  />
+                    className="rounded border-border" />
                   <span className="text-xs text-muted-foreground">Стандартный отбор обязателен</span>
                 </label>
                 <div className="flex gap-2 pt-1">

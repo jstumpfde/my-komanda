@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
-import { Copy, Link, Plus, Trash2 } from "lucide-react"
+import { Copy, Link, Plus, Trash2, Loader2 } from "lucide-react"
 
 export interface ReferralLink {
   id: string
@@ -22,13 +22,7 @@ export interface ReferralLink {
   bonus: number
 }
 
-const INITIAL_LINKS: ReferralLink[] = [
-  { id: "rl1", name: "Анна Иванова", position: "HR-менеджер", url: "company24.pro/ref/anna-ivanova", clicks: 34, referred: 5, hired: 2, bonus: 20000 },
-  { id: "rl2", name: "Дмитрий Козлов", position: "Тимлид", url: "company24.pro/ref/dmitry-kozlov", clicks: 21, referred: 4, hired: 1, bonus: 10000 },
-  { id: "rl3", name: "Мария Сидорова", position: "Маркетолог", url: "company24.pro/ref/maria-sidorova", clicks: 15, referred: 3, hired: 0, bonus: 0 },
-]
-
-function transliterate(text: string): string {
+export function transliterate(text: string): string {
   const map: Record<string, string> = {
     а: "a", б: "b", в: "v", г: "g", д: "d", е: "e", ё: "yo", ж: "zh",
     з: "z", и: "i", й: "y", к: "k", л: "l", м: "m", н: "n", о: "o",
@@ -45,41 +39,33 @@ function transliterate(text: string): string {
 }
 
 interface ReferralLinksProps {
+  links: ReferralLink[]
   bonusPerHire: number
+  loading?: boolean
+  onAdd: (name: string, position: string) => Promise<void>
+  onDelete: (id: string) => Promise<void>
 }
 
-export function ReferralLinks({ bonusPerHire }: ReferralLinksProps) {
-  const [links, setLinks] = useState<ReferralLink[]>(INITIAL_LINKS)
+export function ReferralLinks({ links, bonusPerHire, loading, onAdd, onDelete }: ReferralLinksProps) {
   const [addOpen, setAddOpen] = useState(false)
   const [form, setForm] = useState({ name: "", position: "" })
+  const [saving, setSaving] = useState(false)
 
   const handleCopy = (url: string) => {
     navigator.clipboard.writeText(`https://${url}`)
     toast.success("Ссылка скопирована")
   }
 
-  const handleAdd = () => {
+  const handleAdd = async () => {
     if (!form.name.trim()) return
-    const slug = transliterate(form.name.trim())
-    const newLink: ReferralLink = {
-      id: `rl-${Date.now()}`,
-      name: form.name.trim(),
-      position: form.position.trim(),
-      url: `company24.pro/ref/${slug}`,
-      clicks: 0,
-      referred: 0,
-      hired: 0,
-      bonus: 0,
+    setSaving(true)
+    try {
+      await onAdd(form.name.trim(), form.position.trim())
+      setForm({ name: "", position: "" })
+      setAddOpen(false)
+    } finally {
+      setSaving(false)
     }
-    setLinks((prev) => [...prev, newLink])
-    setForm({ name: "", position: "" })
-    setAddOpen(false)
-    toast.success("Сотрудник добавлен, ссылка создана")
-  }
-
-  const handleDelete = (id: string) => {
-    setLinks((prev) => prev.filter((l) => l.id !== id))
-    toast.success("Ссылка удалена")
   }
 
   const totalPaid = links.reduce((sum, l) => sum + l.hired * bonusPerHire, 0)
@@ -141,7 +127,7 @@ export function ReferralLinks({ bonusPerHire }: ReferralLinksProps) {
                         <Button variant="ghost" size="icon" className="h-7 w-7" title="Копировать ссылку" onClick={() => handleCopy(r.url)}>
                           <Copy className="w-3 h-3" />
                         </Button>
-                        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" title="Удалить" onClick={() => handleDelete(r.id)}>
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" title="Удалить" onClick={() => onDelete(r.id)}>
                           <Trash2 className="w-3 h-3" />
                         </Button>
                       </div>
@@ -149,8 +135,11 @@ export function ReferralLinks({ bonusPerHire }: ReferralLinksProps) {
                   </tr>
                 )
               })}
-              {links.length === 0 && (
+              {!loading && links.length === 0 && (
                 <tr><td colSpan={7} className="text-center py-8 text-sm text-muted-foreground">Нет сотрудников. Добавьте первого участника программы.</td></tr>
+              )}
+              {loading && (
+                <tr><td colSpan={7} className="text-center py-8 text-sm text-muted-foreground"><Loader2 className="w-4 h-4 animate-spin inline" /> Загрузка…</td></tr>
               )}
             </tbody>
           </table>
@@ -181,7 +170,9 @@ export function ReferralLinks({ bonusPerHire }: ReferralLinksProps) {
                 <code className="text-xs text-foreground">company24.pro/ref/{transliterate(form.name.trim())}</code>
               </div>
             )}
-            <Button onClick={handleAdd} disabled={!form.name.trim()}>Создать ссылку</Button>
+            <Button onClick={handleAdd} disabled={!form.name.trim() || saving}>
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Создать ссылку"}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

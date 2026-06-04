@@ -113,6 +113,13 @@ export interface CompanyHiringDefaults {
   dataRetention?:  string
   webhooks?: { url?: string; events?: Record<string, boolean> }
   bitrix?:   { url?: string; trigger?: string }
+  // Резерв → Рефералы: правила реферальной программы (drizzle/0167).
+  referralRules?: {
+    bonusPerHire?:       number
+    trialMonths?:        number
+    maxActiveReferrals?: number
+    standardScreening?:  boolean
+  }
 }
 
 export const companies = pgTable("companies", {
@@ -657,6 +664,22 @@ export interface VacancyAiProcessSettings {
   // (discard_by_employer через hh кандидату). См. process-queue.ts.
   autoRejectEnabled?:        boolean
 }
+
+// ── Резерв (Talent Pool) → Рефералы (drizzle/0167) ──
+// Реферальные ссылки сотрудников: company24.pro/ref/{slug}. Счётчики кликов/
+// приведённых/нанятых растут по мере перехода и найма. Бонус считается в UI
+// как hired_count * companies.hiringDefaultsJson.referralRules.bonusPerHire.
+export const referralLinks = pgTable("referral_links", {
+  id:            uuid("id").defaultRandom().primaryKey(),
+  companyId:     uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  name:          text("name").notNull(),
+  position:      text("position").notNull().default(""),
+  slug:          text("slug").notNull(),
+  clicks:        integer("clicks").notNull().default(0),
+  referredCount: integer("referred_count").notNull().default(0),
+  hiredCount:    integer("hired_count").notNull().default(0),
+  createdAt:     timestamp("created_at").defaultNow(),
+})
 
 export const demos = pgTable("demos", {
   id: uuid("id").primaryKey().defaultRandom(),
