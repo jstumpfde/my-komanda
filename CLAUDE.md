@@ -301,8 +301,8 @@ pm2 reload my-komanda --update-env  # --update-env когда менялись E
 curl -s -o /dev/null -w "HTTP %{http_code}\n" https://company24.pro/hr/vacancies
 ```
 
-## TODO (актуально на 18.05.2026)
-- [ ] Подтянуть 4 коммита с main в develop: git checkout develop && git merge origin/main
-- [ ] Удалить старую ветку deploy/pagination-clean (локально и на remote)
-- [ ] Удалить старую ветку feat/pagination-v1
-- [ ] Перевести стейджинг new.company24.pro с timestamped-ветки на develop
+## TODO (актуально на 04.06.2026)
+- [x] Подтянуть коммиты main→develop — нечего тянуть, develop уже содержит всё с main (04.06).
+- [x] Удалить старую ветку deploy/pagination-clean (локально и на remote) (04.06).
+- [x] Удалить старую ветку feat/pagination-v1 (04.06).
+- [x] Перевести стейджинг new.company24.pro на develop — уже на develop (upstream origin/develop).
