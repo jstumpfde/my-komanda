@@ -268,26 +268,19 @@ export default function HiringSettingsPage() {
   const [feedback30, setFeedback30] = useState(true)
   const [feedback60, setFeedback60] = useState(true)
   const [feedback90, setFeedback90] = useState(true)
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem("mk_hr_feedback_schedule")
-      if (saved) {
-        const p = JSON.parse(saved) as { enabled?: boolean; d30?: boolean; d60?: boolean; d90?: boolean }
-        setFeedbackEnabled(p.enabled ?? false)
-        setFeedback30(p.d30 ?? true)
-        setFeedback60(p.d60 ?? true)
-        setFeedback90(p.d90 ?? true)
-      }
-    } catch {}
-  }, [])
-  const saveFeedbackSchedule = (patch: Partial<{ enabled: boolean; d30: boolean; d60: boolean; d90: boolean }>) => {
+  // Загрузка опросов — из серверных hiringDefaults (см. гидратацию ниже).
+  const saveFeedbackSchedule = async (patch: Partial<{ enabled: boolean; d30: boolean; d60: boolean; d90: boolean }>) => {
     const next = { enabled: patch.enabled ?? feedbackEnabled, d30: patch.d30 ?? feedback30, d60: patch.d60 ?? feedback60, d90: patch.d90 ?? feedback90 }
     if ("enabled" in patch) setFeedbackEnabled(next.enabled)
     if ("d30" in patch) setFeedback30(next.d30)
     if ("d60" in patch) setFeedback60(next.d60)
     if ("d90" in patch) setFeedback90(next.d90)
-    localStorage.setItem("mk_hr_feedback_schedule", JSON.stringify(next))
-    toast.success("Настройки обратной связи сохранены")
+    try {
+      await patchHiringDefaults({ feedbackSurveys: next })
+      toast.success("Настройки обратной связи сохранены")
+    } catch {
+      toast.error("Не удалось сохранить")
+    }
   }
 
   // ── Data retention (ФЗ-152) — сохраняется на сервер (только хранение значения) ──
@@ -417,6 +410,15 @@ export default function HiringSettingsPage() {
         if (hd.webhooks) {
           if (hd.webhooks.url) setWebhookUrl(hd.webhooks.url)
           if (hd.webhooks.events) setWebhookEvents((prev) => ({ ...prev, ...hd.webhooks!.events }))
+        }
+
+        // O2: опросы обратной связи
+        if (hd.feedbackSurveys) {
+          const f = hd.feedbackSurveys
+          if (typeof f.enabled === "boolean") setFeedbackEnabled(f.enabled)
+          if (typeof f.d30 === "boolean") setFeedback30(f.d30)
+          if (typeof f.d60 === "boolean") setFeedback60(f.d60)
+          if (typeof f.d90 === "boolean") setFeedback90(f.d90)
         }
 
         // Битрикс24
@@ -750,32 +752,27 @@ export default function HiringSettingsPage() {
                 подключена. Юрий не хочет показывать неработающее. Старая
                 логика state и saveFeedbackSchedule оставлена для будущего
                 включения — UI заблокирован overlay'ем. */}
-            <Card className={cn("mb-5 max-w-3xl relative overflow-hidden", !isPlatformAdmin && "hidden")}>
+            <Card className="mb-5 max-w-3xl">
               <CardHeader className="pb-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <CardTitle className="text-sm font-medium">Автоматический сбор обратной связи</CardTitle>
-                    <CardDescription>Опросы новых сотрудников на контрольных точках адаптации</CardDescription>
-                  </div>
-                  <Badge variant="outline" className="text-[10px] h-5 px-1.5 shrink-0">Скоро</Badge>
-                </div>
+                <CardTitle className="text-sm font-medium">Автоматический сбор обратной связи</CardTitle>
+                <CardDescription>Опросы новых сотрудников на контрольных точках адаптации (дефолт компании; отправляются модулем «Адаптация» после найма)</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-3 pointer-events-none opacity-40 select-none">
+              <CardContent className="space-y-3">
                 <div className="flex items-center justify-between">
                   <p className="text-sm">Включить автоматические опросы</p>
-                  <Switch checked={false} disabled />
+                  <Switch checked={feedbackEnabled} onCheckedChange={(v) => saveFeedbackSchedule({ enabled: v })} />
                 </div>
-                <div className="space-y-2 pl-4 border-l-2 border-primary/20 opacity-60">
-                  <label className="flex items-center gap-2 text-sm">
-                    <input type="checkbox" checked={false} disabled className="rounded" />
+                <div className={cn("space-y-2 pl-4 border-l-2 border-primary/20", !feedbackEnabled && "opacity-50 pointer-events-none")}>
+                  <label className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input type="checkbox" checked={feedback30} onChange={(e) => saveFeedbackSchedule({ d30: e.target.checked })} className="rounded" />
                     30 дней — «Как проходит адаптация?»
                   </label>
-                  <label className="flex items-center gap-2 text-sm">
-                    <input type="checkbox" checked={false} disabled className="rounded" />
+                  <label className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input type="checkbox" checked={feedback60} onChange={(e) => saveFeedbackSchedule({ d60: e.target.checked })} className="rounded" />
                     60 дней — «Чувствуете ли уверенность?»
                   </label>
-                  <label className="flex items-center gap-2 text-sm">
-                    <input type="checkbox" checked={false} disabled className="rounded" />
+                  <label className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input type="checkbox" checked={feedback90} onChange={(e) => saveFeedbackSchedule({ d90: e.target.checked })} className="rounded" />
                     90 дней — «Оправдались ли ожидания?»
                   </label>
                 </div>

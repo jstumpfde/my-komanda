@@ -120,6 +120,13 @@ export interface CompanyHiringDefaults {
     maxActiveReferrals?: number
     standardScreening?:  boolean
   }
+  // O2: авто-сбор обратной связи (опросы адаптации 30/60/90). Дефолт компании;
+  // отправка — модулем «Адаптация» после найма.
+  feedbackSurveys?: {
+    enabled?: boolean
+    d30?: boolean; d60?: boolean; d90?: boolean
+    q30?: string;  q60?: string;  q90?: string
+  }
 }
 
 export const companies = pgTable("companies", {
