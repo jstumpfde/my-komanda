@@ -41,6 +41,8 @@ export default function BrandingPage() {
   const [domainStatus, setDomainStatus] = useState<"idle" | "checking" | "verified" | "error">("idle")
   const [subdomain, setSubdomain] = useState("")
   const [subStatus, setSubStatus] = useState<"idle" | "checking" | "available" | "taken" | "invalid">("idle")
+  // Вид логотипа в сайдбаре: на белой подложке (padded) или без неё (plain).
+  const [sidebarLogoMode, setSidebarLogoMode] = useState<"padded" | "plain">("padded")
   const [verifying, setVerifying] = useState(false)
   const [saving, setSaving] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
@@ -78,6 +80,8 @@ export default function BrandingPage() {
           }
           return next
         })
+        const mode = (customThemeVal as Record<string, unknown>).sidebarLogoMode
+        if (mode === "plain" || mode === "padded") setSidebarLogoMode(mode)
       }
     } catch {
       // ignore
@@ -195,9 +199,10 @@ export default function BrandingPage() {
     }
     setSaving(true)
     try {
-      const customTheme = Object.fromEntries(
-        THEME_KEYS.map(k => [k, { enabled: themeEnabled[k] }])
-      )
+      const customTheme = {
+        ...Object.fromEntries(THEME_KEYS.map(k => [k, { enabled: themeEnabled[k] }])),
+        sidebarLogoMode,
+      }
       await updateCompanyApi({
         logo_url: logoPreview ?? "",
         brand_name: brandName,
@@ -282,15 +287,42 @@ export default function BrandingPage() {
               {logoPreview ? (
                 <>
                   <div className="flex items-start gap-4">
-                    <div className="flex flex-col items-center gap-1">
-                      <div className="w-[140px] h-10 rounded-md bg-[#1a1040] flex items-center justify-center overflow-hidden p-1.5">
-                        <div className="bg-white rounded p-1 flex items-center justify-center max-w-full max-h-full">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={logoPreview} alt="" className="max-w-[110px] max-h-7 object-contain" />
+                    {/* Sidebar: два варианта (с подложкой / без) с выбором —
+                        выбранный применяется в реальном сайдбаре. */}
+                    {([
+                      { mode: "padded" as const, label: "Sidebar — с подложкой" },
+                      { mode: "plain"  as const, label: "Sidebar — без подложки" },
+                    ]).map(v => (
+                      <button
+                        key={v.mode}
+                        type="button"
+                        onClick={() => setSidebarLogoMode(v.mode)}
+                        className="flex flex-col items-center gap-1 group/sb"
+                        title={v.label}
+                      >
+                        <div className={cn(
+                          "w-[140px] h-10 rounded-md bg-[#1a1040] flex items-center justify-center overflow-hidden p-1.5 ring-2 transition-all",
+                          sidebarLogoMode === v.mode ? "ring-primary" : "ring-transparent group-hover/sb:ring-primary/30",
+                        )}>
+                          {v.mode === "padded" ? (
+                            <div className="bg-white rounded p-1 flex items-center justify-center max-w-full max-h-full">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={logoPreview} alt="" className="max-w-[110px] max-h-7 object-contain" />
+                            </div>
+                          ) : (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={logoPreview} alt="" className="max-w-[120px] max-h-8 object-contain" />
+                          )}
                         </div>
-                      </div>
-                      <span className="text-[10px] text-muted-foreground">Sidebar</span>
-                    </div>
+                        <span className={cn(
+                          "text-[10px] flex items-center gap-1",
+                          sidebarLogoMode === v.mode ? "text-primary font-medium" : "text-muted-foreground",
+                        )}>
+                          {sidebarLogoMode === v.mode && <CheckCircle2 className="w-3 h-3" />}
+                          {v.mode === "padded" ? "С подложкой" : "Без подложки"}
+                        </span>
+                      </button>
+                    ))}
                     <div className="flex flex-col items-center gap-1">
                       <div className="w-[80px] h-[80px] rounded-xl border bg-muted/20 flex items-center justify-center overflow-hidden">
                         <CompanyLogo logoUrl={logoPreview} companyName={brandName} size="lg" rounded="md" className="!w-[60px] !h-[60px]" />

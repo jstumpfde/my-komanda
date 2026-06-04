@@ -170,15 +170,19 @@ export function DashboardSidebar() {
   const [companyLogo, setCompanyLogo] = useState<string | null>(null)
   const [companyName, setCompanyName] = useState<string | null>(null)
   const [companySlogan, setCompanySlogan] = useState<string | null>(null)
+  // Вид логотипа: подложка-бейдж (padded, по умолчанию) или без неё (plain).
+  // Выбирается в Настройки → Брендинг (customTheme.sidebarLogoMode).
+  const [logoPadded, setLogoPadded] = useState(true)
   useEffect(() => {
     const loadCompany = () => {
       fetch('/api/companies').then(r => r.ok ? r.json() : null)
-        .then((d: { logoUrl?: string; name?: string; brandName?: string; brandSlogan?: string } | null) => {
+        .then((d: { logoUrl?: string; name?: string; brandName?: string; brandSlogan?: string; customTheme?: Record<string, unknown> } | null) => {
           if (d) {
             setCompanyLogo(d.logoUrl ?? null)
             const display = d.brandName?.trim() || d.name?.trim() || null
             setCompanyName(display)
             setCompanySlogan(d.brandSlogan?.trim() || null)
+            setLogoPadded((d.customTheme as Record<string, unknown> | undefined)?.sidebarLogoMode !== "plain")
           }
         }).catch(() => {})
     }
@@ -409,9 +413,10 @@ export function DashboardSidebar() {
         <div className="flex items-center gap-3">
           {companyLogo ? (
             <div className={cn(
-              // Сплошная светлая подложка-бейдж: любой логотип (тёмный, цветной,
-              // прозрачный) читается на тёмном сайдбаре без отдельной версии.
-              "shrink-0 flex items-center justify-center overflow-hidden bg-white rounded-md p-0.5",
+              // Подложка-бейдж выбирается в Брендинге: padded — белый фон (любой
+              // логотип читается на тёмном сайдбаре), plain — логотип без подложки.
+              "shrink-0 flex items-center justify-center overflow-hidden rounded-md",
+              logoPadded && "bg-white p-0.5",
               "h-10 w-auto max-w-[140px] min-w-10",
               "group-data-[collapsible=icon]:w-8 group-data-[collapsible=icon]:h-8 group-data-[collapsible=icon]:max-w-8 group-data-[collapsible=icon]:rounded-[6px] group-data-[collapsible=icon]:p-0.5",
             )}>
