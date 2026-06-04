@@ -856,7 +856,8 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
         // Иначе шлём обычный inviteMessage (или DEMO_INVITE_MESSAGE как
         // последний fallback). aiSettings.reInviteMessage (legacy) больше
         // НЕ используется как автоматический fallback.
-        const recoveryEnabled = localVac?.recoveryMessageEnabled === true
+        // Phase 3: recovery теперь зеркалится dual-write'ом — гейтим через адаптер.
+        const recoveryEnabled = isBlockEnabled(localVac, "recovery", localVac?.recoveryMessageEnabled === true)
         const recoveryText = typeof localVac?.recoveryMessageText === "string"
           ? localVac.recoveryMessageText.trim()
           : ""
