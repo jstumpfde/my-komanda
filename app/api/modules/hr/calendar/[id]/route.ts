@@ -52,6 +52,11 @@ export async function PATCH(
     if (body.color !== undefined) updateData.color = body.color
     if (body.recurrence !== undefined) updateData.recurrence = body.recurrence
     if (body.status !== undefined) updateData.status = body.status
+    if (body.candidateId !== undefined) updateData.candidateId = body.candidateId
+    if (body.vacancyId !== undefined) updateData.vacancyId = body.vacancyId
+    if (body.interviewer !== undefined) updateData.interviewer = body.interviewer
+    if (body.interviewType !== undefined) updateData.interviewType = body.interviewType
+    if (body.interviewFormat !== undefined) updateData.interviewFormat = body.interviewFormat
 
     const [updated] = await db
       .update(calendarEvents)

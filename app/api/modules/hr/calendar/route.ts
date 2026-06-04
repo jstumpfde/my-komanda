@@ -48,7 +48,8 @@ export async function POST(req: NextRequest) {
     const user = await requireCompany()
     const body = await req.json()
 
-    const { title, description, type, startAt, endAt, allDay, roomId, color, recurrence, participants } = body
+    const { title, description, type, startAt, endAt, allDay, roomId, color, recurrence, participants,
+            candidateId, vacancyId, interviewer, interviewType, interviewFormat } = body
 
     if (!title || !startAt || !endAt) {
       return apiError("Обязательные поля: title, startAt, endAt")
@@ -69,6 +70,11 @@ export async function POST(req: NextRequest) {
         color,
         recurrence,
         status: "confirmed",
+        candidateId:     candidateId ?? null,
+        vacancyId:       vacancyId ?? null,
+        interviewer:     interviewer ?? null,
+        interviewType:   interviewType ?? null,
+        interviewFormat: interviewFormat ?? null,
       })
       .returning()
 

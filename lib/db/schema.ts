@@ -1653,6 +1653,12 @@ export const calendarEvents = pgTable("calendar_events", {
   // C6: метки отправленных напоминаний (24ч/2ч до start_at). NULL = не слали.
   remind24hSentAt: timestamp("remind_24h_sent_at", { withTimezone: true }),
   remind2hSentAt:  timestamp("remind_2h_sent_at", { withTimezone: true }),
+  // Интервью-модуль: структура для событий type='interview' (всё nullable).
+  candidateId:      uuid("candidate_id").references(() => candidates.id, { onDelete: "set null" }),
+  vacancyId:        uuid("vacancy_id").references(() => vacancies.id, { onDelete: "set null" }),
+  interviewer:      text("interviewer"),
+  interviewType:    text("interview_type"),    // Техническое | HR | Финальное
+  interviewFormat:  text("interview_format"),   // Онлайн | Офис
   createdAt:   timestamp("created_at").defaultNow(),
   updatedAt:   timestamp("updated_at").defaultNow(),
 })
