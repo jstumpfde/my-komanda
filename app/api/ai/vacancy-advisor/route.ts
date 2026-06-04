@@ -387,6 +387,28 @@ ${AI_SAFETY_PROMPT}`,
       }
     }
 
+    // B5/#31: ложное «Критично: О компании отсутствует». Описание берётся либо
+    // из самой вакансии (vacancyData.companyDescription), либо из настроек
+    // компании (body.companyDescription). AI иногда не видит, что поле
+    // заполнено, и помечает секцию «company» как error. Чиним детерминированно:
+    //  • если описание реально есть — секцию в ok;
+    //  • если пусто — максимум warning (в статике «company» НИКОГДА не error,
+    //    это необязательное поле, а не блокер).
+    {
+      const companyDescFilled = (((vacancyData.companyDescription as string) || (body.companyDescription as string) || "")).trim().length > 0
+      if (Array.isArray(parsed.sections)) {
+        for (const s of parsed.sections) {
+          if (!s || !(s.id === "company" || /о компании/i.test(s.title || ""))) continue
+          if (companyDescFilled) {
+            s.status = "ok"
+            s.message = "Заполнено"
+          } else if (s.status === "error") {
+            s.status = "warning"
+          }
+        }
+      }
+    }
+
     // Merge static salary analysis if AI didn't return one
     if (!parsed.salaryAnalysis && fallback.salaryAnalysis) {
       parsed.salaryAnalysis = fallback.salaryAnalysis

@@ -921,8 +921,6 @@ function BestPublishTimeCard({ vacancyId, city }: { vacancyId?: string; city?: s
 // ── Company Description Card ────────────────────────────────────────────────
 
 function CompanyDescriptionCard({ description }: { description: string }) {
-  const [includeInVacancy, setIncludeInVacancy] = useState(true)
-
   // Пустое описание — подсказка с кнопкой заполнения
   if (!description) {
     return (
@@ -948,17 +946,16 @@ function CompanyDescriptionCard({ description }: { description: string }) {
     )
   }
 
-  const preview = description.length > 150 ? description.slice(0, 150) + "..." : description
-
+  // Описание заполнено — компактное подтверждение без повтора текста: само
+  // описание редактируется в блоке 4 формы рядом (#29 — убрали дубль контента).
   return (
     <div className="rounded-lg border p-3 space-y-2">
       <div className="flex items-center gap-1.5">
         <span className="text-sm font-semibold">🏢 О компании</span>
       </div>
-      <p className="text-sm text-foreground leading-relaxed">{preview}</p>
       <div className="flex items-center gap-1.5">
         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-        <span className="text-xs text-emerald-700 dark:text-emerald-400">Описание заполнено</span>
+        <span className="text-xs text-emerald-700 dark:text-emerald-400">Описание заполнено — редактируется в блоке «О компании» формы</span>
       </div>
       <a
         href="/hr/hiring-settings"
@@ -966,17 +963,8 @@ function CompanyDescriptionCard({ description }: { description: string }) {
         rel="noopener noreferrer"
         className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
       >
-        Редактировать в настройках →
+        Изменить в настройках компании →
       </a>
-      <label className="flex items-center gap-2 pt-1 border-t cursor-pointer">
-        <input
-          type="checkbox"
-          checked={includeInVacancy}
-          onChange={e => setIncludeInVacancy(e.target.checked)}
-          className="rounded"
-        />
-        <span className="text-sm">Включить в описание вакансии</span>
-      </label>
     </div>
   )
 }
