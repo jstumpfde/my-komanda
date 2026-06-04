@@ -73,6 +73,7 @@ const today2 = new Date()
 interface CalEvent {
   id: string; title: string; startAt: string; endAt: string; status: string | null
   vacancyId: string | null; interviewer: string | null; interviewType: string | null; interviewFormat: string | null
+  interviewStatus: string | null
 }
 function timeStr(dt: Date): string {
   return `${String(dt.getHours()).padStart(2, "0")}:${String(dt.getMinutes()).padStart(2, "0")}`
@@ -81,8 +82,12 @@ function mapEventToInterview(ev: CalEvent, vacMap: Map<string, string>): Intervi
   const start = new Date(ev.startAt)
   const end = new Date(ev.endAt)
   const now = new Date()
+  const ALL_ST = ["Подтверждено", "Ожидает", "Пройдено", "Не явился", "Отменено"] as const
   let status: InterviewStatus
-  if (ev.status === "cancelled") status = "Отменено"
+  if (ev.interviewStatus && (ALL_ST as readonly string[]).includes(ev.interviewStatus)) {
+    // Явно выставленный статус интервью (включая «Не явился») имеет приоритет.
+    status = ev.interviewStatus as InterviewStatus
+  } else if (ev.status === "cancelled") status = "Отменено"
   else if (end < now) status = "Пройдено"
   else if (ev.status === "tentative") status = "Ожидает"
   else status = "Подтверждено"
@@ -219,6 +224,9 @@ export default function InterviewsPage() {
       body.startAt = start.toISOString(); body.endAt = end.toISOString()
     }
     if (patch.status !== undefined) {
+      // Полный статус интервью — в interview_status; статус события календаря
+      // маппим к ближайшему (для согласованности календаря/конфликтов/C6).
+      body.interviewStatus = patch.status
       body.status = patch.status === "Отменено" || patch.status === "Не явился" ? "cancelled"
         : patch.status === "Ожидает" ? "tentative" : "confirmed"
     }

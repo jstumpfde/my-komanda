@@ -57,6 +57,7 @@ export async function PATCH(
     if (body.interviewer !== undefined) updateData.interviewer = body.interviewer
     if (body.interviewType !== undefined) updateData.interviewType = body.interviewType
     if (body.interviewFormat !== undefined) updateData.interviewFormat = body.interviewFormat
+    if (body.interviewStatus !== undefined) updateData.interviewStatus = body.interviewStatus
 
     const [updated] = await db
       .update(calendarEvents)
