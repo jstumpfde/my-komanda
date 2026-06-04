@@ -25,6 +25,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Link2, Plus, Copy, Loader2, MousePointerClick, Users, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
+import { DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 
 type DestinationType = "vacancy" | "demo" | "test"
 
@@ -164,83 +165,79 @@ export function UtmLinksSection({ vacancyId }: UtmLinksSectionProps) {
               Нет ссылок. Создайте первую для отслеживания источников.
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-muted/50 border-b">
-                    <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Источник</th>
-                    <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Название</th>
-                    <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Короткая ссылка</th>
-                    <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">
-                      <span className="inline-flex items-center gap-1"><MousePointerClick className="w-3 h-3" />Клики</span>
-                    </th>
-                    <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">
-                      <span className="inline-flex items-center gap-1"><Users className="w-3 h-3" />Кандидаты</span>
-                    </th>
-                    <th className="px-4 py-3"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {links.map((link, i) => {
-                    const meta = getSourceMeta(link.source)
-                    return (
-                      <tr key={link.id} className={`border-b last:border-0 hover:bg-muted/20 group/row ${i % 2 === 1 ? "bg-muted/10" : ""}`}>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
-                            <div
-                              className="w-6 h-6 rounded flex items-center justify-center text-white text-[9px] font-bold shrink-0"
-                              style={{ backgroundColor: meta.color }}
-                            >
-                              {meta.label.slice(0, 2).toUpperCase()}
-                            </div>
-                            <span className="text-xs font-medium">{meta.label}</span>
+            <DataTable>
+              <DataHead>
+                <DataHeadCell>Источник</DataHeadCell>
+                <DataHeadCell>Название</DataHeadCell>
+                <DataHeadCell>Короткая ссылка</DataHeadCell>
+                <DataHeadCell align="right">
+                  <span className="inline-flex items-center gap-1"><MousePointerClick className="w-3 h-3" />Клики</span>
+                </DataHeadCell>
+                <DataHeadCell align="right">
+                  <span className="inline-flex items-center gap-1"><Users className="w-3 h-3" />Кандидаты</span>
+                </DataHeadCell>
+                <DataHeadCell></DataHeadCell>
+              </DataHead>
+              <tbody>
+                {links.map((link, i) => {
+                  const meta = getSourceMeta(link.source)
+                  return (
+                    <DataRow key={link.id} className={cn("group/row", i % 2 === 1 && "bg-muted/10")}>
+                      <DataCell>
+                        <div className="flex items-center gap-2">
+                          <div
+                            className="w-6 h-6 rounded flex items-center justify-center text-white text-[9px] font-bold shrink-0"
+                            style={{ backgroundColor: meta.color }}
+                          >
+                            {meta.label.slice(0, 2).toUpperCase()}
                           </div>
-                        </td>
-                        <td className="px-4 py-3 text-xs">
-                          <div className="flex items-center gap-2">
-                            <span>{link.name}</span>
-                            <Badge
-                              variant={link.destinationType === "vacancy" ? "secondary" : "default"}
-                              className="h-4 px-1.5 text-[10px] font-medium leading-none"
-                              title={
-                                link.destinationType === "demo" ? "Ссылка ведёт сразу на демо"
-                                : link.destinationType === "test" ? "Ссылка ведёт сразу на тест"
-                                : "Ссылка ведёт на описание вакансии"}
-                            >
-                              {link.destinationType === "demo" ? "Демо"
-                                : link.destinationType === "test" ? "Тест" : "Вакансия"}
-                            </Badge>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className="text-xs text-primary font-mono">/v/{link.slug}</span>
-                        </td>
-                        <td className="px-4 py-3 text-right tabular-nums font-medium text-xs">{link.clicks}</td>
-                        <td className="px-4 py-3 text-right tabular-nums font-medium text-xs">{link.candidatesCount}</td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
-                            <button
-                              className="text-muted-foreground hover:text-primary transition-colors"
-                              onClick={() => { navigator.clipboard.writeText(buildShortUrl(link)); toast.success("Ссылка скопирована") }}
-                              title="Скопировать"
-                            >
-                              <Copy className="w-3 h-3" />
-                            </button>
-                            <button
-                              className="text-muted-foreground hover:text-red-500 transition-colors opacity-0 group-hover/row:opacity-100"
-                              onClick={() => setDeleteLinkId(link.id)}
-                              title="Удалить"
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
+                          <span className="text-xs font-medium">{meta.label}</span>
+                        </div>
+                      </DataCell>
+                      <DataCell className="text-xs">
+                        <div className="flex items-center gap-2">
+                          <span>{link.name}</span>
+                          <Badge
+                            variant={link.destinationType === "vacancy" ? "secondary" : "default"}
+                            className="h-4 px-1.5 text-[10px] font-medium leading-none"
+                            title={
+                              link.destinationType === "demo" ? "Ссылка ведёт сразу на демо"
+                              : link.destinationType === "test" ? "Ссылка ведёт сразу на тест"
+                              : "Ссылка ведёт на описание вакансии"}
+                          >
+                            {link.destinationType === "demo" ? "Демо"
+                              : link.destinationType === "test" ? "Тест" : "Вакансия"}
+                          </Badge>
+                        </div>
+                      </DataCell>
+                      <DataCell>
+                        <span className="text-xs text-primary font-mono">/v/{link.slug}</span>
+                      </DataCell>
+                      <DataCell align="right" className="tabular-nums font-medium text-xs">{link.clicks}</DataCell>
+                      <DataCell align="right" className="tabular-nums font-medium text-xs">{link.candidatesCount}</DataCell>
+                      <DataCell>
+                        <div className="flex items-center gap-2">
+                          <button
+                            className="text-muted-foreground hover:text-primary transition-colors"
+                            onClick={() => { navigator.clipboard.writeText(buildShortUrl(link)); toast.success("Ссылка скопирована") }}
+                            title="Скопировать"
+                          >
+                            <Copy className="w-3 h-3" />
+                          </button>
+                          <button
+                            className="text-muted-foreground hover:text-red-500 transition-colors opacity-0 group-hover/row:opacity-100"
+                            onClick={() => setDeleteLinkId(link.id)}
+                            title="Удалить"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </DataCell>
+                    </DataRow>
+                  )
+                })}
+              </tbody>
+            </DataTable>
           )}
         </CardContent>
       </Card>

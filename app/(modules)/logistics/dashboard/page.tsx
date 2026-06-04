@@ -5,6 +5,7 @@ import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Badge } from "@/components/ui/badge"
+import { DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import {
   Truck, Inbox, Send, DollarSign, Percent,
   Sparkles,
@@ -216,35 +217,31 @@ export default function LogisticsDashboardPage() {
             {/* Shipments table */}
             <div className="dash-card-enter rounded-xl border border-border shadow-sm bg-card" style={{ animationDelay: "1200ms" }}>
               <div className="p-5 pb-0"><h3 className="text-base font-semibold">Последние перевозки</h3></div>
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-border bg-muted/50">
-                      {["#", "Маршрут", "Тип", "Клиент", "Статус", "Дата", "Сумма"].map((h) => (
-                        <th key={h} className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {SHIPMENTS.map((s) => {
-                      const st = STATUS_MAP[s.status]
-                      return (
-                        <tr key={s.id} className="border-b border-border/50 hover:bg-muted/50 transition-colors">
-                          <td className="px-4 py-3 text-sm font-mono text-muted-foreground">{s.id}</td>
-                          <td className="px-4 py-3 text-sm font-medium">{s.route}</td>
-                          <td className="px-4 py-3 text-center">{s.type}</td>
-                          <td className="px-4 py-3 text-sm">{s.client}</td>
-                          <td className="px-4 py-3">
-                            <Badge variant="secondary" className={`text-[10px] border-0 font-medium ${st?.cls}`}>{st?.label}</Badge>
-                          </td>
-                          <td className="px-4 py-3 text-sm text-muted-foreground">{s.date}</td>
-                          <td className="px-4 py-3 text-sm font-bold">₽{s.amount}</td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
+              <DataTable>
+                <DataHead>
+                  {["#", "Маршрут", "Тип", "Клиент", "Статус", "Дата", "Сумма"].map((h) => (
+                    <DataHeadCell key={h}>{h}</DataHeadCell>
+                  ))}
+                </DataHead>
+                <tbody>
+                  {SHIPMENTS.map((s) => {
+                    const st = STATUS_MAP[s.status]
+                    return (
+                      <DataRow key={s.id}>
+                        <DataCell className="font-mono text-muted-foreground">{s.id}</DataCell>
+                        <DataCell className="font-medium">{s.route}</DataCell>
+                        <DataCell align="center">{s.type}</DataCell>
+                        <DataCell>{s.client}</DataCell>
+                        <DataCell>
+                          <Badge variant="secondary" className={`text-[10px] border-0 font-medium ${st?.cls}`}>{st?.label}</Badge>
+                        </DataCell>
+                        <DataCell className="text-muted-foreground">{s.date}</DataCell>
+                        <DataCell className="font-bold">₽{s.amount}</DataCell>
+                      </DataRow>
+                    )
+                  })}
+                </tbody>
+              </DataTable>
             </div>
           </div>
         </main>

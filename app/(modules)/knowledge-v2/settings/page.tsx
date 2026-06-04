@@ -37,6 +37,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 
@@ -1019,28 +1020,26 @@ export default function KnowledgeSettingsPage() {
                         </div>
 
                         {progressData && progressData.items.length > 0 ? (
-                          <div className="rounded-lg border border-border overflow-hidden">
-                            <table className="w-full text-sm">
-                              <thead className="bg-muted/40 text-xs text-muted-foreground">
-                                <tr>
-                                  <th className="text-left font-medium px-3 py-2">Сотрудник</th>
-                                  <th className="text-left font-medium px-3 py-2">План</th>
-                                  <th className="text-left font-medium px-3 py-2 w-24">Прогресс</th>
-                                  <th className="text-left font-medium px-3 py-2 w-28">Дедлайн</th>
-                                  <th className="text-left font-medium px-3 py-2 w-28">Статус</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-border">
+                          <TableCard className="rounded-lg">
+                            <DataTable>
+                              <DataHead>
+                                <DataHeadCell>Сотрудник</DataHeadCell>
+                                <DataHeadCell>План</DataHeadCell>
+                                <DataHeadCell width="96px">Прогресс</DataHeadCell>
+                                <DataHeadCell width="112px">Дедлайн</DataHeadCell>
+                                <DataHeadCell width="112px">Статус</DataHeadCell>
+                              </DataHead>
+                              <tbody>
                                 {progressData.items.map((row) => {
                                   const deadlineRu = row.deadline
                                     ? new Date(row.deadline).toLocaleDateString("ru-RU", { day: "2-digit", month: "short" })
                                     : "—"
                                   const statusMeta = getStatusMeta(row.status)
                                   return (
-                                    <tr key={row.assignmentId}>
-                                      <td className="px-3 py-2 truncate">{row.userName}</td>
-                                      <td className="px-3 py-2 truncate text-muted-foreground">{row.planTitle}</td>
-                                      <td className="px-3 py-2">
+                                    <DataRow key={row.assignmentId}>
+                                      <DataCell className="truncate">{row.userName}</DataCell>
+                                      <DataCell className="truncate text-muted-foreground">{row.planTitle}</DataCell>
+                                      <DataCell>
                                         <div className="flex items-center gap-2">
                                           <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
                                             <div
@@ -1057,9 +1056,9 @@ export default function KnowledgeSettingsPage() {
                                           </div>
                                           <span className="text-xs text-muted-foreground tabular-nums">{row.progress}%</span>
                                         </div>
-                                      </td>
-                                      <td className="px-3 py-2 text-muted-foreground">{deadlineRu}</td>
-                                      <td className="px-3 py-2">
+                                      </DataCell>
+                                      <DataCell className="text-muted-foreground">{deadlineRu}</DataCell>
+                                      <DataCell>
                                         <span
                                           className={cn(
                                             "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
@@ -1068,13 +1067,13 @@ export default function KnowledgeSettingsPage() {
                                         >
                                           {statusMeta.label}
                                         </span>
-                                      </td>
-                                    </tr>
+                                      </DataCell>
+                                    </DataRow>
                                   )
                                 })}
                               </tbody>
-                            </table>
-                          </div>
+                            </DataTable>
+                          </TableCard>
                         ) : (
                           <div className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
                             Нет активных назначений

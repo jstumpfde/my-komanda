@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/select"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { cn } from "@/lib/utils"
+import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 
 // hh experience ids → человекочитаемо.
 const EXPERIENCE_OPTIONS = [
@@ -679,7 +680,7 @@ export function OutboundSourcingTab({
 
       {/* ─── Список найденных ─── */}
       {ranked.length > 0 && (
-        <div className="rounded-lg border overflow-hidden">
+        <TableCard>
           <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/30">
             <div className="text-xs text-muted-foreground">
               Найдено: <span className="font-medium tabular-nums">{ranked.length}</span>
@@ -699,63 +700,61 @@ export function OutboundSourcingTab({
           {inviteHint && (
             <div className="px-3 py-1.5 text-[11px] text-amber-600 bg-amber-500/5 border-b">{inviteHint}</div>
           )}
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-xs text-muted-foreground border-b">
-                <th className="w-8 px-3 py-2">
-                  <Checkbox
-                    checked={invitable.length > 0 && selected.size === invitable.length}
-                    onCheckedChange={toggleAll}
-                    aria-label="Выбрать все"
-                  />
-                </th>
-                <th className="px-2 py-2 font-medium">Заголовок резюме</th>
-                <th className="px-2 py-2 font-medium w-20">Опыт</th>
-                <th className="px-2 py-2 font-medium w-28">Ожид. ЗП</th>
-                <th className="px-2 py-2 font-medium w-20">AI-score</th>
-                <th className="px-2 py-2 font-medium w-24">Статус</th>
-              </tr>
-            </thead>
+          <DataTable>
+            <DataHead>
+              <DataHeadCell width="2rem">
+                <Checkbox
+                  checked={invitable.length > 0 && selected.size === invitable.length}
+                  onCheckedChange={toggleAll}
+                  aria-label="Выбрать все"
+                />
+              </DataHeadCell>
+              <DataHeadCell>Заголовок резюме</DataHeadCell>
+              <DataHeadCell width="5rem">Опыт</DataHeadCell>
+              <DataHeadCell width="7rem">Ожид. ЗП</DataHeadCell>
+              <DataHeadCell width="5rem">AI-score</DataHeadCell>
+              <DataHeadCell width="6rem">Статус</DataHeadCell>
+            </DataHead>
             <tbody>
               {ranked.map((i) => {
                 const isInvited = i.status === "invited" || i.status === "responded"
                 return (
-                  <tr key={i.id} className={cn("border-b last:border-0 hover:bg-muted/20", isInvited && "opacity-60")}>
-                    <td className="px-3 py-2 align-top">
+                  <DataRow key={i.id} className={cn(isInvited && "opacity-60")}>
+                    <DataCell className="align-top">
                       <Checkbox
                         checked={selected.has(i.id)}
                         onCheckedChange={() => toggle(i.id)}
                         disabled={isInvited}
                         aria-label="Выбрать резюме"
                       />
-                    </td>
-                    <td className="px-2 py-2 align-top">
+                    </DataCell>
+                    <DataCell className="align-top">
                       <div className="font-medium leading-tight">{i.title ?? "Без заголовка"}</div>
                       {i.area && <div className="text-xs text-muted-foreground">{i.area}</div>}
                       {i.aiReasoning && (
                         <div className="text-[11px] text-muted-foreground/80 mt-0.5 line-clamp-2">{i.aiReasoning}</div>
                       )}
-                    </td>
-                    <td className="px-2 py-2 align-top tabular-nums text-muted-foreground">
+                    </DataCell>
+                    <DataCell className="align-top tabular-nums text-muted-foreground">
                       {i.experienceYears != null ? `${i.experienceYears} л.` : "—"}
-                    </td>
-                    <td className="px-2 py-2 align-top tabular-nums text-muted-foreground">
+                    </DataCell>
+                    <DataCell className="align-top tabular-nums text-muted-foreground">
                       {i.salary?.amount != null ? `${i.salary.amount.toLocaleString("ru")} ${i.salary.currency ?? ""}`.trim() : "—"}
-                    </td>
-                    <td className="px-2 py-2 align-top">
+                    </DataCell>
+                    <DataCell className="align-top">
                       <span className={cn("inline-flex items-center justify-center rounded-md border px-2 py-0.5 text-xs font-medium tabular-nums", scoreClasses(i.aiScore))}>
                         {i.aiScore != null ? i.aiScore : "—"}
                       </span>
-                    </td>
-                    <td className="px-2 py-2 align-top text-xs text-muted-foreground">
+                    </DataCell>
+                    <DataCell className="align-top text-xs text-muted-foreground">
                       {STATUS_LABEL[i.status] ?? i.status}
-                    </td>
-                  </tr>
+                    </DataCell>
+                  </DataRow>
                 )
               })}
             </tbody>
-          </table>
-        </div>
+          </DataTable>
+        </TableCard>
       )}
 
       {ranked.length === 0 && !searching && (

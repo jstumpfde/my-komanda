@@ -9,6 +9,7 @@ import {
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
@@ -353,14 +354,12 @@ export default function KnowledgeDashboardPage() {
                   <h3 className="text-base font-semibold">Прогресс по сотрудникам</h3>
                 </div>
                 <div className="overflow-hidden">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b border-border">
-                        <th className="text-left text-[10px] uppercase font-medium text-muted-foreground tracking-wider py-2">Сотрудник</th>
-                        <th className="text-center text-[10px] uppercase font-medium text-muted-foreground tracking-wider py-2">Прогресс</th>
-                        <th className="text-right text-[10px] uppercase font-medium text-muted-foreground tracking-wider py-2">Статус</th>
-                      </tr>
-                    </thead>
+                  <DataTable>
+                    <DataHead>
+                      <DataHeadCell>Сотрудник</DataHeadCell>
+                      <DataHeadCell align="center">Прогресс</DataHeadCell>
+                      <DataHeadCell align="right">Статус</DataHeadCell>
+                    </DataHead>
                     <tbody>
                       {employeeProgress.length === 0 && (
                         <tr>
@@ -376,12 +375,12 @@ export default function KnowledgeDashboardPage() {
                         const pct = e.assigned > 0 ? Math.round((e.done / e.assigned) * 100) : 0
                         const meta = STATUS_META[e.status]
                         return (
-                          <tr key={e.userId} className="border-b border-border/50">
-                            <td className="py-2.5">
+                          <DataRow key={e.userId}>
+                            <DataCell>
                               <div className="text-sm font-medium">{e.name}</div>
                               <div className="text-xs text-muted-foreground">{e.position}</div>
-                            </td>
-                            <td className="py-2.5 px-3">
+                            </DataCell>
+                            <DataCell>
                               <div className="flex items-center gap-2">
                                 <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
                                   <div
@@ -396,17 +395,17 @@ export default function KnowledgeDashboardPage() {
                                 </div>
                                 <span className="text-xs text-muted-foreground w-14 text-right whitespace-nowrap">{e.done}/{e.assigned}</span>
                               </div>
-                            </td>
-                            <td className="py-2.5 text-right">
+                            </DataCell>
+                            <DataCell align="right">
                               <Badge variant="secondary" className={cn("text-[10px] font-medium border-0", meta.badgeClass)}>
                                 {meta.label}
                               </Badge>
-                            </td>
-                          </tr>
+                            </DataCell>
+                          </DataRow>
                         )
                       })}
                     </tbody>
-                  </table>
+                  </DataTable>
                 </div>
               </div>
 
@@ -514,15 +513,13 @@ export default function KnowledgeDashboardPage() {
               style={{ animationDelay: "1500ms" }}
             >
               <h3 className="text-base font-semibold mb-4">Топ авторов</h3>
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-border">
-                    <th className="text-left text-[10px] uppercase font-medium text-muted-foreground tracking-wider py-2">Автор</th>
-                    <th className="text-center text-[10px] uppercase font-medium text-muted-foreground tracking-wider py-2">Создано</th>
-                    <th className="text-center text-[10px] uppercase font-medium text-muted-foreground tracking-wider py-2">Обновлено</th>
-                    <th className="text-right text-[10px] uppercase font-medium text-muted-foreground tracking-wider py-2">Последняя активность</th>
-                  </tr>
-                </thead>
+              <DataTable>
+                <DataHead>
+                  <DataHeadCell>Автор</DataHeadCell>
+                  <DataHeadCell align="center">Создано</DataHeadCell>
+                  <DataHeadCell align="center">Обновлено</DataHeadCell>
+                  <DataHeadCell align="right">Последняя активность</DataHeadCell>
+                </DataHead>
                 <tbody>
                   {topAuthors.length === 0 && (
                     <tr>
@@ -532,20 +529,20 @@ export default function KnowledgeDashboardPage() {
                     </tr>
                   )}
                   {topAuthors.map((a, i) => (
-                    <tr key={`${a.name}-${i}`} className="border-b border-border/50">
-                      <td className="py-2.5">
+                    <DataRow key={`${a.name}-${i}`}>
+                      <DataCell>
                         <div className="text-sm font-medium">{a.name}</div>
                         <div className="text-xs text-muted-foreground">{a.role}</div>
-                      </td>
-                      <td className="py-2.5 text-center text-sm text-muted-foreground">{a.created}</td>
-                      <td className="py-2.5 text-center text-sm text-muted-foreground">{a.updated}</td>
-                      <td className="py-2.5 text-right text-xs text-muted-foreground whitespace-nowrap">
+                      </DataCell>
+                      <DataCell align="center" className="text-muted-foreground">{a.created}</DataCell>
+                      <DataCell align="center" className="text-muted-foreground">{a.updated}</DataCell>
+                      <DataCell align="right" className="text-xs text-muted-foreground whitespace-nowrap">
                         {formatRelative(a.lastActivity)}
-                      </td>
-                    </tr>
+                      </DataCell>
+                    </DataRow>
                   ))}
                 </tbody>
-              </table>
+              </DataTable>
             </div>
 
             {/* ═══ Recent updates ═══ */}
@@ -554,15 +551,13 @@ export default function KnowledgeDashboardPage() {
               style={{ animationDelay: "1650ms" }}
             >
               <h3 className="text-base font-semibold mb-4">Последние обновления</h3>
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-border">
-                    <th className="text-left text-[10px] uppercase font-medium text-muted-foreground tracking-wider py-2">Название</th>
-                    <th className="text-left text-[10px] uppercase font-medium text-muted-foreground tracking-wider py-2">Тип</th>
-                    <th className="text-left text-[10px] uppercase font-medium text-muted-foreground tracking-wider py-2">Автор</th>
-                    <th className="text-right text-[10px] uppercase font-medium text-muted-foreground tracking-wider py-2">Обновлено</th>
-                  </tr>
-                </thead>
+              <DataTable>
+                <DataHead>
+                  <DataHeadCell>Название</DataHeadCell>
+                  <DataHeadCell>Тип</DataHeadCell>
+                  <DataHeadCell>Автор</DataHeadCell>
+                  <DataHeadCell align="right">Обновлено</DataHeadCell>
+                </DataHead>
                 <tbody>
                   {recent.length === 0 ? (
                     <tr>
@@ -573,22 +568,22 @@ export default function KnowledgeDashboardPage() {
                     </tr>
                   ) : (
                     recent.map((r, i) => (
-                      <tr
+                      <DataRow
                         key={r.id ?? `${r.name}-${i}`}
-                        className="dash-row-enter border-b border-border/50 hover:bg-muted/30 transition-colors"
+                        className="dash-row-enter"
                         style={{ animationDelay: `${1800 + i * 100}ms` }}
                       >
-                        <td className="py-2.5 text-sm font-medium">{r.name}</td>
-                        <td className="py-2.5 text-xs text-muted-foreground">{r.type}</td>
-                        <td className="py-2.5 text-xs text-muted-foreground">{r.author}</td>
-                        <td className="py-2.5 text-xs text-muted-foreground text-right whitespace-nowrap">
+                        <DataCell className="font-medium">{r.name}</DataCell>
+                        <DataCell className="text-xs text-muted-foreground">{r.type}</DataCell>
+                        <DataCell className="text-xs text-muted-foreground">{r.author}</DataCell>
+                        <DataCell align="right" className="text-xs text-muted-foreground whitespace-nowrap">
                           {formatRelative(r.updatedAt)}
-                        </td>
-                      </tr>
+                        </DataCell>
+                      </DataRow>
                     ))
                   )}
                 </tbody>
-              </table>
+              </DataTable>
             </div>
           </div>
         </div>

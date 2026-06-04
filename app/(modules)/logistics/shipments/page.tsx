@@ -11,6 +11,7 @@ import {
   Eye, EyeOff, LayoutGrid, List, Sparkles,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
 
@@ -103,51 +104,48 @@ export default function LogisticsShipmentsPage() {
 
             {/* Table view */}
             {view === "table" && (
-              <div className="rounded-xl border border-border shadow-sm bg-card">
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b border-border bg-muted/50">
-                        {["#", "Маршрут", "Тип", "Клиент", "Перевозчик", "Отгрузка", "ETA", "Статус", "Прогресс", ""].map((h) => (
-                          <th key={h} className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {SHIPMENTS.map((s) => {
-                        const st = STATUS_MAP[s.status]
-                        const isExp = expandedId === s.id
-                        return (
-                          <>
-                            <tr key={s.id} className="border-b border-border/50 hover:bg-muted/50 transition-colors">
-                              <td className="px-4 py-3 text-sm font-mono text-muted-foreground">{s.id}</td>
-                              <td className="px-4 py-3 text-sm font-medium">{s.route}</td>
-                              <td className="px-4 py-3 text-center">{s.type}</td>
-                              <td className="px-4 py-3 text-sm">{s.client}</td>
-                              <td className="px-4 py-3 text-sm text-muted-foreground">{s.carrier}</td>
-                              <td className="px-4 py-3 text-sm text-muted-foreground">{s.shipDate}</td>
-                              <td className="px-4 py-3 text-sm">{s.eta}</td>
-                              <td className="px-4 py-3">
-                                <Badge variant="secondary" className={`text-[10px] border-0 font-medium ${st?.cls}`}>{st?.label}</Badge>
-                              </td>
-                              <td className="px-4 py-3 w-32">
-                                <div className="flex items-center gap-2">
-                                  <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
-                                    <div className="h-full rounded-full" style={{ width: `${s.progress}%`, backgroundColor: st?.barColor }} />
-                                  </div>
-                                  <span className="text-xs text-muted-foreground w-8 text-right">{s.progress}%</span>
+              <TableCard className="border border-border shadow-sm">
+                <DataTable>
+                  <DataHead>
+                    {["#", "Маршрут", "Тип", "Клиент", "Перевозчик", "Отгрузка", "ETA", "Статус", "Прогресс", ""].map((h) => (
+                      <DataHeadCell key={h}>{h}</DataHeadCell>
+                    ))}
+                  </DataHead>
+                  <tbody>
+                    {SHIPMENTS.map((s) => {
+                      const st = STATUS_MAP[s.status]
+                      const isExp = expandedId === s.id
+                      return (
+                        <>
+                          <DataRow key={s.id}>
+                            <DataCell className="font-mono text-muted-foreground">{s.id}</DataCell>
+                            <DataCell className="font-medium">{s.route}</DataCell>
+                            <DataCell align="center">{s.type}</DataCell>
+                            <DataCell>{s.client}</DataCell>
+                            <DataCell className="text-muted-foreground">{s.carrier}</DataCell>
+                            <DataCell className="text-muted-foreground">{s.shipDate}</DataCell>
+                            <DataCell>{s.eta}</DataCell>
+                            <DataCell>
+                              <Badge variant="secondary" className={`text-[10px] border-0 font-medium ${st?.cls}`}>{st?.label}</Badge>
+                            </DataCell>
+                            <DataCell className="w-32">
+                              <div className="flex items-center gap-2">
+                                <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                                  <div className="h-full rounded-full" style={{ width: `${s.progress}%`, backgroundColor: st?.barColor }} />
                                 </div>
-                              </td>
-                              <td className="px-4 py-3">
-                                <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs" onClick={() => setExpandedId(isExp ? null : s.id)}>
-                                  {isExp ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
-                                  Трекинг
-                                </Button>
-                              </td>
-                            </tr>
-                            {isExp && (
-                              <tr key={`${s.id}-track`}>
-                                <td colSpan={10} className="p-0">
+                                <span className="text-xs text-muted-foreground w-8 text-right">{s.progress}%</span>
+                              </div>
+                            </DataCell>
+                            <DataCell>
+                              <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs" onClick={() => setExpandedId(isExp ? null : s.id)}>
+                                {isExp ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                                Трекинг
+                              </Button>
+                            </DataCell>
+                          </DataRow>
+                          {isExp && (
+                            <tr key={`${s.id}-track`}>
+                              <td colSpan={10} className="p-0">
                                   <div className="px-6 py-5 bg-muted/20 border-b border-border">
                                     <div className="grid grid-cols-3 gap-6">
                                       {/* Timeline */}
@@ -201,15 +199,14 @@ export default function LogisticsShipmentsPage() {
                                     </div>
                                   </div>
                                 </td>
-                              </tr>
-                            )}
-                          </>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+                            </tr>
+                          )}
+                        </>
+                      )
+                    })}
+                  </tbody>
+                </DataTable>
+              </TableCard>
             )}
 
             {/* Cards view */}

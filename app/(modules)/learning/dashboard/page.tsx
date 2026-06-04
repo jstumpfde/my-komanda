@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
+import { DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 
 // ─── Types (subset of dashboard-stats API) ──────────────────────────────────
 
@@ -180,14 +181,12 @@ export default function LearningDashboardPage() {
                 <h3 className="text-base font-semibold">Прогресс по сотрудникам</h3>
               </div>
               <div className="overflow-hidden">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-border">
-                      <th className="text-left text-[10px] uppercase font-medium text-muted-foreground tracking-wider py-2">Сотрудник</th>
-                      <th className="text-center text-[10px] uppercase font-medium text-muted-foreground tracking-wider py-2">Прогресс</th>
-                      <th className="text-right text-[10px] uppercase font-medium text-muted-foreground tracking-wider py-2">Статус</th>
-                    </tr>
-                  </thead>
+                <DataTable>
+                  <DataHead>
+                    <DataHeadCell>Сотрудник</DataHeadCell>
+                    <DataHeadCell align="center">Прогресс</DataHeadCell>
+                    <DataHeadCell align="right">Статус</DataHeadCell>
+                  </DataHead>
                   <tbody>
                     {employeeProgress.length === 0 && (
                       <tr>
@@ -203,12 +202,12 @@ export default function LearningDashboardPage() {
                       const pct = e.assigned > 0 ? Math.round((e.done / e.assigned) * 100) : 0
                       const meta = STATUS_META[e.status]
                       return (
-                        <tr key={e.userId} className="border-b border-border/50">
-                          <td className="py-2.5">
+                        <DataRow key={e.userId}>
+                          <DataCell>
                             <div className="text-sm font-medium">{e.name}</div>
                             <div className="text-xs text-muted-foreground">{e.position}</div>
-                          </td>
-                          <td className="py-2.5 px-3">
+                          </DataCell>
+                          <DataCell>
                             <div className="flex items-center gap-2">
                               <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
                                 <div
@@ -223,17 +222,17 @@ export default function LearningDashboardPage() {
                               </div>
                               <span className="text-xs text-muted-foreground w-14 text-right whitespace-nowrap">{e.done}/{e.assigned}</span>
                             </div>
-                          </td>
-                          <td className="py-2.5 text-right">
+                          </DataCell>
+                          <DataCell align="right">
                             <Badge variant="secondary" className={cn("text-[10px] font-medium border-0", meta.badgeClass)}>
                               {meta.label}
                             </Badge>
-                          </td>
-                        </tr>
+                          </DataCell>
+                        </DataRow>
                       )
                     })}
                   </tbody>
-                </table>
+                </DataTable>
               </div>
             </div>
 

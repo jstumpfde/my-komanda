@@ -15,6 +15,7 @@ import {
   Inbox, Plus, Search, Mail, Clock, Send, CheckCircle, Calculator,
 } from "lucide-react"
 import { toast } from "sonner"
+import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 
 // ─── Types & Data ─────────────────────────────────────────────────────────────
 
@@ -160,53 +161,49 @@ export default function LogisticsRequestsPage() {
             </div>
 
             {/* Table */}
-            <div className="rounded-xl border border-border shadow-sm bg-card">
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-border bg-muted/50">
-                      {["#", "Дата", "Клиент", "Контакт", "Маршрут", "Тип", "Груз", "Статус", "Источник", ""].map((h) => (
-                        <th key={h} className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filtered.map((r) => {
-                      const st = STATUS_MAP[r.status]
-                      const src = SOURCE_MAP[r.source]
-                      return (
-                        <tr key={r.id} className="border-b border-border/50 hover:bg-muted/50 transition-colors">
-                          <td className="px-4 py-3 text-sm font-mono text-muted-foreground">{r.id}</td>
-                          <td className="px-4 py-3 text-sm text-muted-foreground">{r.date}</td>
-                          <td className="px-4 py-3 text-sm font-medium">{r.client}</td>
-                          <td className="px-4 py-3 text-sm text-muted-foreground">{r.contact}</td>
-                          <td className="px-4 py-3 text-sm">{r.route}</td>
-                          <td className="px-4 py-3 text-sm">{r.type}</td>
-                          <td className="px-4 py-3 text-sm text-muted-foreground">{r.cargo}</td>
-                          <td className="px-4 py-3">
-                            <Badge variant="secondary" className={`text-[10px] border-0 font-medium ${st?.cls}`}>{st?.label}</Badge>
-                          </td>
-                          <td className="px-4 py-3">
-                            <Badge variant="secondary" className={`text-[10px] border-0 ${src?.cls}`}>{src?.label}</Badge>
-                          </td>
-                          <td className="px-4 py-3">
-                            {(r.status === "new" || r.status === "in_progress") && (
-                              <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs" onClick={() => toast.info("Перенаправление в расчёты...")}>
-                                <Calculator className="w-3 h-3" />
-                                Рассчитать
-                              </Button>
-                            )}
-                          </td>
-                        </tr>
-                      )
-                    })}
-                    {filtered.length === 0 && (
-                      <tr><td colSpan={10} className="py-12 text-center text-sm text-muted-foreground">Нет запросов</td></tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+            <TableCard className="border border-border shadow-sm">
+              <DataTable>
+                <DataHead>
+                  {["#", "Дата", "Клиент", "Контакт", "Маршрут", "Тип", "Груз", "Статус", "Источник", ""].map((h) => (
+                    <DataHeadCell key={h}>{h}</DataHeadCell>
+                  ))}
+                </DataHead>
+                <tbody>
+                  {filtered.map((r) => {
+                    const st = STATUS_MAP[r.status]
+                    const src = SOURCE_MAP[r.source]
+                    return (
+                      <DataRow key={r.id}>
+                        <DataCell className="font-mono text-muted-foreground">{r.id}</DataCell>
+                        <DataCell className="text-muted-foreground">{r.date}</DataCell>
+                        <DataCell className="font-medium">{r.client}</DataCell>
+                        <DataCell className="text-muted-foreground">{r.contact}</DataCell>
+                        <DataCell>{r.route}</DataCell>
+                        <DataCell>{r.type}</DataCell>
+                        <DataCell className="text-muted-foreground">{r.cargo}</DataCell>
+                        <DataCell>
+                          <Badge variant="secondary" className={`text-[10px] border-0 font-medium ${st?.cls}`}>{st?.label}</Badge>
+                        </DataCell>
+                        <DataCell>
+                          <Badge variant="secondary" className={`text-[10px] border-0 ${src?.cls}`}>{src?.label}</Badge>
+                        </DataCell>
+                        <DataCell>
+                          {(r.status === "new" || r.status === "in_progress") && (
+                            <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs" onClick={() => toast.info("Перенаправление в расчёты...")}>
+                              <Calculator className="w-3 h-3" />
+                              Рассчитать
+                            </Button>
+                          )}
+                        </DataCell>
+                      </DataRow>
+                    )
+                  })}
+                  {filtered.length === 0 && (
+                    <tr><td colSpan={10} className="py-12 text-center text-sm text-muted-foreground">Нет запросов</td></tr>
+                  )}
+                </tbody>
+              </DataTable>
+            </TableCard>
           </div>
         </main>
       </SidebarInset>

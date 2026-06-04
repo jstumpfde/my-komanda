@@ -16,6 +16,7 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
+import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
 
@@ -157,100 +158,96 @@ export default function LogisticsCarriersPage() {
             </div>
 
             {/* Table */}
-            <div className="rounded-xl border border-border shadow-sm bg-card">
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-border bg-muted/50">
-                      {["Название", "Тип", "Регионы", "Рейтинг", "Надёжность", "Контакт", "Посл. перевозка", "Статус", ""].map((h) => (
-                        <th key={h} className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filtered.map((c) => {
-                      const st = STATUS_MAP[c.status]
-                      const isExp = expandedId === c.id
-                      return (
-                        <>
-                          <tr key={c.id} className="border-b border-border/50 hover:bg-muted/50 transition-colors">
-                            <td className="px-4 py-3 text-sm font-medium">{c.name}</td>
-                            <td className="px-4 py-3 text-center">{c.type}</td>
-                            <td className="px-4 py-3 text-sm text-muted-foreground">{c.regions}</td>
-                            <td className="px-4 py-3">
-                              <div className="flex items-center gap-1.5">
-                                <Stars rating={c.rating} />
-                                <span className="text-xs text-muted-foreground">{c.rating}({c.reviews})</span>
+            <TableCard className="border border-border shadow-sm">
+              <DataTable>
+                <DataHead>
+                  {["Название", "Тип", "Регионы", "Рейтинг", "Надёжность", "Контакт", "Посл. перевозка", "Статус", ""].map((h) => (
+                    <DataHeadCell key={h}>{h}</DataHeadCell>
+                  ))}
+                </DataHead>
+                <tbody>
+                  {filtered.map((c) => {
+                    const st = STATUS_MAP[c.status]
+                    const isExp = expandedId === c.id
+                    return (
+                      <>
+                        <DataRow key={c.id}>
+                          <DataCell className="font-medium">{c.name}</DataCell>
+                          <DataCell align="center">{c.type}</DataCell>
+                          <DataCell className="text-muted-foreground">{c.regions}</DataCell>
+                          <DataCell>
+                            <div className="flex items-center gap-1.5">
+                              <Stars rating={c.rating} />
+                              <span className="text-xs text-muted-foreground">{c.rating}({c.reviews})</span>
+                            </div>
+                          </DataCell>
+                          <DataCell className="w-28">
+                            <div className="flex items-center gap-2">
+                              <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                                <div className="h-full rounded-full" style={{ width: `${c.reliability}%`, backgroundColor: reliabilityColor(c.reliability) }} />
                               </div>
-                            </td>
-                            <td className="px-4 py-3 w-28">
-                              <div className="flex items-center gap-2">
-                                <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
-                                  <div className="h-full rounded-full" style={{ width: `${c.reliability}%`, backgroundColor: reliabilityColor(c.reliability) }} />
-                                </div>
-                                <span className="text-xs font-medium w-8 text-right">{c.reliability}%</span>
-                              </div>
-                            </td>
-                            <td className="px-4 py-3 text-sm text-muted-foreground">{c.contact}</td>
-                            <td className="px-4 py-3 text-sm text-muted-foreground">{c.lastShipment}</td>
-                            <td className="px-4 py-3">
-                              <Badge variant="secondary" className={`text-[10px] border-0 font-medium ${st?.cls}`}>{st?.label}</Badge>
-                            </td>
-                            <td className="px-4 py-3">
-                              <div className="flex gap-1">
-                                <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs" onClick={() => setExpandedId(isExp ? null : c.id)}>
-                                  {isExp ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
-                                </Button>
-                                <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs" onClick={() => toast.success(`Запрос отправлен ${c.name}`)}>
-                                  <Send className="w-3 h-3" />
-                                </Button>
-                              </div>
-                            </td>
-                          </tr>
-                          {isExp && (
-                            <tr key={`${c.id}-detail`}>
-                              <td colSpan={9} className="p-0">
-                                <div className="px-6 py-5 bg-muted/20 border-b border-border">
-                                  <div className="grid grid-cols-2 gap-6">
-                                    <div>
-                                      <h4 className="text-sm font-semibold mb-2">{c.name}</h4>
-                                      <div className="space-y-1.5 text-sm">
-                                        <div className="flex gap-2"><span className="text-muted-foreground w-20">ИНН:</span><span>770{c.id}234567</span></div>
-                                        <div className="flex gap-2"><span className="text-muted-foreground w-20">Адрес:</span><span>г. Москва, ул. Транспортная {c.id}</span></div>
-                                        <div className="flex gap-2"><span className="text-muted-foreground w-20">Контакт:</span><span>{c.contact} · {c.phone}</span></div>
-                                      </div>
+                              <span className="text-xs font-medium w-8 text-right">{c.reliability}%</span>
+                            </div>
+                          </DataCell>
+                          <DataCell className="text-muted-foreground">{c.contact}</DataCell>
+                          <DataCell className="text-muted-foreground">{c.lastShipment}</DataCell>
+                          <DataCell>
+                            <Badge variant="secondary" className={`text-[10px] border-0 font-medium ${st?.cls}`}>{st?.label}</Badge>
+                          </DataCell>
+                          <DataCell>
+                            <div className="flex gap-1">
+                              <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs" onClick={() => setExpandedId(isExp ? null : c.id)}>
+                                {isExp ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                              </Button>
+                              <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs" onClick={() => toast.success(`Запрос отправлен ${c.name}`)}>
+                                <Send className="w-3 h-3" />
+                              </Button>
+                            </div>
+                          </DataCell>
+                        </DataRow>
+                        {isExp && (
+                          <tr key={`${c.id}-detail`}>
+                            <td colSpan={9} className="p-0">
+                              <div className="px-6 py-5 bg-muted/20 border-b border-border">
+                                <div className="grid grid-cols-2 gap-6">
+                                  <div>
+                                    <h4 className="text-sm font-semibold mb-2">{c.name}</h4>
+                                    <div className="space-y-1.5 text-sm">
+                                      <div className="flex gap-2"><span className="text-muted-foreground w-20">ИНН:</span><span>770{c.id}234567</span></div>
+                                      <div className="flex gap-2"><span className="text-muted-foreground w-20">Адрес:</span><span>г. Москва, ул. Транспортная {c.id}</span></div>
+                                      <div className="flex gap-2"><span className="text-muted-foreground w-20">Контакт:</span><span>{c.contact} · {c.phone}</span></div>
                                     </div>
-                                    <div>
-                                      <div className="flex flex-wrap gap-1.5 mb-3">
-                                        {c.type.split("+").map((t) => t.trim()).map((t) => (
-                                          <Badge key={t} variant="secondary" className="text-xs">{t}</Badge>
-                                        ))}
-                                      </div>
-                                      <div className="flex flex-wrap gap-1.5 mb-3">
-                                        {c.regions.split("+").map((r) => r.trim()).map((r) => (
-                                          <span key={r} className="text-xs rounded-full border border-border px-2 py-0.5">{r}</span>
-                                        ))}
-                                      </div>
-                                      <div className="flex gap-3 text-xs text-muted-foreground">
-                                        <span className="flex items-center gap-1"><Shield className="w-3 h-3" />Страхование: да</span>
-                                        <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />GPS-трекинг: да</span>
-                                      </div>
+                                  </div>
+                                  <div>
+                                    <div className="flex flex-wrap gap-1.5 mb-3">
+                                      {c.type.split("+").map((t) => t.trim()).map((t) => (
+                                        <Badge key={t} variant="secondary" className="text-xs">{t}</Badge>
+                                      ))}
+                                    </div>
+                                    <div className="flex flex-wrap gap-1.5 mb-3">
+                                      {c.regions.split("+").map((r) => r.trim()).map((r) => (
+                                        <span key={r} className="text-xs rounded-full border border-border px-2 py-0.5">{r}</span>
+                                      ))}
+                                    </div>
+                                    <div className="flex gap-3 text-xs text-muted-foreground">
+                                      <span className="flex items-center gap-1"><Shield className="w-3 h-3" />Страхование: да</span>
+                                      <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />GPS-трекинг: да</span>
                                     </div>
                                   </div>
                                 </div>
-                              </td>
-                            </tr>
-                          )}
-                        </>
-                      )
-                    })}
-                    {filtered.length === 0 && (
-                      <tr><td colSpan={9} className="py-12 text-center text-sm text-muted-foreground">Не найдено</td></tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </>
+                    )
+                  })}
+                  {filtered.length === 0 && (
+                    <tr><td colSpan={9} className="py-12 text-center text-sm text-muted-foreground">Не найдено</td></tr>
+                  )}
+                </tbody>
+              </DataTable>
+            </TableCard>
           </div>
         </main>
       </SidebarInset>

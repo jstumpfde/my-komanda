@@ -13,6 +13,7 @@ import {
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
+import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 
@@ -230,21 +231,19 @@ export default function LearningPlansPage() {
                   </Button>
                 </div>
               ) : (
-                <div className="rounded-xl border border-border overflow-hidden">
-                  <table className="w-full text-sm">
-                    <thead className="bg-muted/40 border-b border-border">
-                      <tr className="text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                        <th className="px-4 py-3">Название</th>
-                        <th className="px-4 py-3 text-center">Материалов</th>
-                        <th className="px-4 py-3 text-center">Назначено</th>
-                        <th className="px-4 py-3 text-center">Завершили</th>
-                        <th className="px-4 py-3 w-20"></th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border">
+                <TableCard>
+                  <DataTable>
+                    <DataHead>
+                      <DataHeadCell>Название</DataHeadCell>
+                      <DataHeadCell align="center">Материалов</DataHeadCell>
+                      <DataHeadCell align="center">Назначено</DataHeadCell>
+                      <DataHeadCell align="center">Завершили</DataHeadCell>
+                      <DataHeadCell align="right" width="80px"></DataHeadCell>
+                    </DataHead>
+                    <tbody>
                       {(plans ?? []).map((plan) => (
-                        <tr key={plan.id} className="hover:bg-muted/30 transition-colors">
-                          <td className="px-4 py-3">
+                        <DataRow key={plan.id}>
+                          <DataCell>
                             <Link
                               href={`/knowledge-v2/plans/${plan.id}`}
                               className="font-medium hover:text-primary transition-colors"
@@ -254,33 +253,33 @@ export default function LearningPlansPage() {
                             {plan.description && (
                               <p className="text-xs text-muted-foreground truncate max-w-md">{plan.description}</p>
                             )}
-                          </td>
-                          <td className="px-4 py-3 text-center">{plan.materialsCount}</td>
-                          <td className="px-4 py-3 text-center">
+                          </DataCell>
+                          <DataCell align="center">{plan.materialsCount}</DataCell>
+                          <DataCell align="center">
                             <span className="inline-flex items-center gap-1">
                               <Users className="w-3.5 h-3.5 text-muted-foreground" />
                               {plan.assignedCount}
                             </span>
-                          </td>
-                          <td className="px-4 py-3 text-center">
+                          </DataCell>
+                          <DataCell align="center">
                             <span className="inline-flex items-center gap-1 text-green-600">
                               <CheckCircle2 className="w-3.5 h-3.5" />
                               {plan.completedCount}
                             </span>
-                          </td>
-                          <td className="px-4 py-3 text-right">
+                          </DataCell>
+                          <DataCell align="right">
                             <Link
                               href={`/knowledge-v2/plans/${plan.id}`}
                               className="text-xs text-primary hover:underline"
                             >
                               Открыть
                             </Link>
-                          </td>
-                        </tr>
+                          </DataCell>
+                        </DataRow>
                       ))}
                     </tbody>
-                  </table>
-                </div>
+                  </DataTable>
+                </TableCard>
               )}
             </div>
           </div>

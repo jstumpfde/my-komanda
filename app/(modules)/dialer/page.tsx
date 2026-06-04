@@ -5,6 +5,7 @@ import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Badge } from "@/components/ui/badge"
+import { DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import {
   Phone, PhoneCall, CheckCircle, TrendingUp,
   Bell, ClipboardList, RefreshCw, PhoneOutgoing,
@@ -242,37 +243,33 @@ export default function DialerDashboardPage() {
             {/* Call History */}
             <div className="dash-card-enter rounded-xl border border-border shadow-sm bg-card hover:shadow-lg transition-shadow" style={{ animationDelay: "1050ms" }}>
               <div className="p-5 pb-0"><h3 className="text-base font-semibold">Последние звонки</h3></div>
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-border">
-                      {["Время", "Скрипт", "Клиент", "Телефон", "Длительность", "Результат", ""].map((h) => (
-                        <th key={h} className="text-left text-[10px] uppercase font-medium text-muted-foreground tracking-wider px-5 py-3">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {CALL_HISTORY.map((call) => {
-                      const res = RESULT_MAP[call.result]
-                      return (
-                        <tr key={call.id} className="border-b border-border/50 hover:bg-muted/50 transition-colors">
-                          <td className="px-5 py-3 text-sm text-muted-foreground whitespace-nowrap">{new Date(call.date).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}</td>
-                          <td className="px-5 py-3 text-sm">{call.scriptName}</td>
-                          <td className="px-5 py-3 text-sm font-medium">{call.clientName}</td>
-                          <td className="px-5 py-3 text-sm text-muted-foreground">{call.phone}</td>
-                          <td className="px-5 py-3 text-sm tabular-nums">{formatDuration(call.duration)}</td>
-                          <td className="px-5 py-3">
-                            <Badge variant="secondary" className="text-[10px] border-0 font-medium" style={{ backgroundColor: `${res?.color}15`, color: res?.color }}>
-                              {res?.label}
-                            </Badge>
-                          </td>
-                          <td className="px-5 py-3 text-center">{call.sentiment ? SENTIMENT_EMOJI[call.sentiment] : ""}</td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
+              <DataTable>
+                <DataHead>
+                  {["Время", "Скрипт", "Клиент", "Телефон", "Длительность", "Результат", ""].map((h) => (
+                    <DataHeadCell key={h}>{h}</DataHeadCell>
+                  ))}
+                </DataHead>
+                <tbody>
+                  {CALL_HISTORY.map((call) => {
+                    const res = RESULT_MAP[call.result]
+                    return (
+                      <DataRow key={call.id}>
+                        <DataCell className="text-muted-foreground whitespace-nowrap">{new Date(call.date).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}</DataCell>
+                        <DataCell>{call.scriptName}</DataCell>
+                        <DataCell className="font-medium">{call.clientName}</DataCell>
+                        <DataCell className="text-muted-foreground">{call.phone}</DataCell>
+                        <DataCell className="tabular-nums">{formatDuration(call.duration)}</DataCell>
+                        <DataCell>
+                          <Badge variant="secondary" className="text-[10px] border-0 font-medium" style={{ backgroundColor: `${res?.color}15`, color: res?.color }}>
+                            {res?.label}
+                          </Badge>
+                        </DataCell>
+                        <DataCell align="center">{call.sentiment ? SENTIMENT_EMOJI[call.sentiment] : ""}</DataCell>
+                      </DataRow>
+                    )
+                  })}
+                </tbody>
+              </DataTable>
             </div>
           </div>
         </main>
