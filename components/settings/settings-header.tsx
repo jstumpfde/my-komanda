@@ -21,7 +21,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 // Тариф и оплата → Брендинг. Админский «Юр. документы» прячется через
 // roles и идёт последним.
 // IA-рефактор (D8): пункты сгруппированы в 4 раздела. Роуты не меняются.
-const GROUP_ORDER = ["Профиль и компания", "Интеграции", "Дефолты вакансии", "Служебные"] as const
+const GROUP_ORDER = ["Профиль и компания", "Интеграции", "Служебные"] as const
 type NavGroup = (typeof GROUP_ORDER)[number]
 const navItems: { href: string; label: string; icon: typeof Building2; roles?: UserRole[]; group: NavGroup }[] = [
   { href: "/settings/company",       label: "Компания",       icon: Building2,  group: "Профиль и компания" },
@@ -29,7 +29,7 @@ const navItems: { href: string; label: string; icon: typeof Building2; roles?: U
   { href: "/settings/team",          label: "Команда",        icon: Users,      group: "Профиль и компания" },
   { href: "/settings/branding",      label: "Брендинг",       icon: Palette,    group: "Профиль и компания" },
   { href: "/settings/integrations",  label: "Интеграции",     icon: Plug,       group: "Интеграции" },
-  { href: "/settings/schedule",      label: "Расписание",     icon: Clock,      group: "Дефолты вакансии" },
+  { href: "/settings/schedule",      label: "Расписание",     icon: Clock,      group: "Профиль и компания" },
   { href: "/settings/notifications", label: "Уведомления",    icon: Bell,       group: "Служебные" },
   { href: "/settings/billing",       label: "Тариф и оплата", icon: CreditCard, group: "Служебные" },
   { href: "/settings/legal",         label: "Юр. документы",  icon: ScrollText, roles: ["platform_admin"], group: "Служебные" },
