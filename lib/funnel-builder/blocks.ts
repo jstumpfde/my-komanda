@@ -47,7 +47,6 @@ export type FunnelBlockType =
   | "thank_you_screen"
   | "video_intro"
   | "test_task"
-  | "test_quiz"
   | "reference_check"
   | "offer"
 
@@ -221,14 +220,6 @@ export const BLOCK_META: Record<FunnelBlockType, FunnelBlockMeta> = {
     required:         false,
     incompatibleWith: [],
   },
-  test_quiz: {
-    type:             "test_quiz",
-    label:            "Тест",
-    description:      "Квиз с вопросами и баллами (таб «Тест»)",
-    icon:             ListChecks,
-    required:         false,
-    incompatibleWith: [],
-  },
   reference_check: {
     type:             "reference_check",
     label:            "Реф-чек",
@@ -260,7 +251,6 @@ export const BLOCK_TYPES: FunnelBlockType[] = [
   "ai_anketa_score",
   "auto_reply_test_task",
   "test_task",
-  "test_quiz",
   "stop_words_chat",
   "call_intent",
   "dozhim",

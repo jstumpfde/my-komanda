@@ -11,7 +11,6 @@ import { toast } from "sonner"
 import { AiChatbotSettings } from "@/components/vacancies/ai-chatbot-settings"
 import { QuestionEditor } from "@/components/vacancies/anketa-tab"
 import { AutomationSettings } from "@/components/vacancies/automation-settings"
-import { CourseTab } from "@/components/vacancies/course-tab"
 import { FunnelTab } from "@/components/vacancies/funnel-tab"
 import { VacancyTestFollowupSettings } from "@/components/vacancies/vacancy-test-followup-settings"
 import { AnketaTemplateControls } from "@/components/vacancies/anketa-template-controls"
@@ -267,12 +266,6 @@ function AiAnketaScoreSettingsWrapped({ vacancyId }: BlockSettingsProps) {
   return <PostDemoSettings vacancyId={vacancyId} sections={["thresholds"]} />
 }
 
-// T2: блок «Тест» (квиз) — переиспользуем CourseTab(kind="test"), тот же
-// редактор, что в верхнем табе «Тест». Self-saving (useDemo), общий
-// футер-Save не задействуется. Отличается от test_task («Тестовое задание»).
-function TestQuizSettingsWrapped({ vacancyId }: BlockSettingsProps) {
-  return <CourseTab vacancyId={vacancyId} kind="test" />
-}
 // Группа 35: Sheet-обёртка для VacancyFollowupSettings. Передаёт
 // tabKey="funnel-builder", чтобы pending-индикатор попадал на этот таб
 // (а не на standalone followup-таб, где компонента нет в Sheet).
@@ -447,11 +440,6 @@ export const BLOCK_SETTINGS_REGISTRY: Partial<Record<FunnelBlockType, BlockSetti
     component:   TestTaskSettings,
     title:       "Тестовое задание",
     description: "Отдельная ступень: задание → ответ → AI-проверка",
-  },
-  test_quiz: {
-    component:   TestQuizSettingsWrapped,
-    title:       "Тест",
-    description: "Квиз с вопросами и баллами (как в табе «Тест»)",
   },
   reference_check: {
     component:   ReferenceCheckSettings,
