@@ -71,8 +71,8 @@ export default function AuditLogPage() {
           <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
             <div className="mb-6 flex items-center justify-between gap-4">
               <div>
-                <h1 className="text-xl font-semibold text-foreground mb-1 flex items-center gap-2">
-                  <ShieldCheck className="size-5 text-muted-foreground" />Журнал аудита
+                <h1 className="text-lg font-semibold text-foreground mb-1 flex items-center gap-2">
+                  <ShieldCheck className="size-5 text-violet-600" />Журнал аудита
                 </h1>
                 <p className="text-sm text-muted-foreground">
                   ФЗ-152: операции с персональными данными кандидатов (экспорт, удаление). Кто, когда, сколько записей.
