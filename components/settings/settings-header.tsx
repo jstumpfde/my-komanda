@@ -6,7 +6,7 @@ import { useSession } from "next-auth/react"
 import { toast } from "sonner"
 import { useSidebar } from "@/components/ui/sidebar"
 import { Button } from "@/components/ui/button"
-import { Sun, Moon, Coffee, PanelLeftClose, PanelLeft, Bell, Building2, CreditCard, Users, Plug, Clock, User, LogOut, Palette, ScrollText, ChevronDown, Loader2 } from "lucide-react"
+import { Sun, Moon, Coffee, PanelLeftClose, PanelLeft, Bell, Building2, CreditCard, Users, Plug, Clock, User, LogOut, Palette, ScrollText, Shield, ChevronDown, Loader2 } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
@@ -23,16 +23,21 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 // IA-рефактор (D8): пункты сгруппированы в 4 раздела. Роуты не меняются.
 const GROUP_ORDER = ["Профиль и компания", "Интеграции", "Служебные"] as const
 type NavGroup = (typeof GROUP_ORDER)[number]
+// Компанийские настройки (Компания/Команда/Брендинг/Интеграции/Расписание/
+// Тариф/Юр.документы/Роли) редактирует только директор — отдаём их роли
+// ["platform_admin","director"]. Личные (Профиль, Уведомления) — всем.
+const COMPANY_ROLES: UserRole[] = ["platform_admin", "director"]
 const navItems: { href: string; label: string; icon: typeof Building2; roles?: UserRole[]; group: NavGroup }[] = [
-  { href: "/settings/company",       label: "Компания",       icon: Building2,  group: "Профиль и компания" },
+  { href: "/settings/company",       label: "Компания",       icon: Building2,  roles: COMPANY_ROLES, group: "Профиль и компания" },
   { href: "/settings/profile",       label: "Профиль",        icon: User,       group: "Профиль и компания" },
-  { href: "/settings/team",          label: "Команда",        icon: Users,      group: "Профиль и компания" },
-  { href: "/settings/branding",      label: "Брендинг",       icon: Palette,    group: "Профиль и компания" },
-  { href: "/settings/integrations",  label: "Интеграции",     icon: Plug,       group: "Интеграции" },
-  { href: "/settings/schedule",      label: "Расписание",     icon: Clock,      group: "Профиль и компания" },
+  { href: "/settings/team",          label: "Команда",        icon: Users,      roles: COMPANY_ROLES, group: "Профиль и компания" },
+  { href: "/settings/branding",      label: "Брендинг",       icon: Palette,    roles: COMPANY_ROLES, group: "Профиль и компания" },
+  { href: "/settings/integrations",  label: "Интеграции",     icon: Plug,       roles: COMPANY_ROLES, group: "Интеграции" },
+  { href: "/settings/schedule",      label: "Расписание",     icon: Clock,      roles: COMPANY_ROLES, group: "Профиль и компания" },
   { href: "/settings/notifications", label: "Уведомления",    icon: Bell,       group: "Служебные" },
-  { href: "/settings/billing",       label: "Тариф и оплата", icon: CreditCard, group: "Служебные" },
-  { href: "/settings/legal",         label: "Юр. документы",  icon: ScrollText, roles: ["platform_admin", "director"], group: "Служебные" },
+  { href: "/settings/billing",       label: "Тариф и оплата", icon: CreditCard, roles: COMPANY_ROLES, group: "Служебные" },
+  { href: "/settings/legal",         label: "Юр. документы",  icon: ScrollText, roles: COMPANY_ROLES, group: "Служебные" },
+  { href: "/settings/roles",         label: "Роли и доступ",  icon: Shield,     roles: COMPANY_ROLES, group: "Служебные" },
 ]
 
 const NOTIFICATIONS = [

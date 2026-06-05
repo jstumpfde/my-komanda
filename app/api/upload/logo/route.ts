@@ -17,6 +17,10 @@ export async function POST(req: NextRequest) {
     if (!session.user.companyId) {
       return NextResponse.json({ error: "No company" }, { status: 403 })
     }
+    // Логотип — общий брендинг компании, только директор (client = legacy директор).
+    if (!["director", "client", "platform_admin", "admin"].includes(session.user.role)) {
+      return NextResponse.json({ error: "Только директор может менять брендинг" }, { status: 403 })
+    }
 
     // Parse multipart — если content-type не multipart, .formData() кинет
     // внятную ошибку, её ловим в общем catch ниже

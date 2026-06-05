@@ -12,7 +12,8 @@ export default function LegalSettingsPage() {
   const { hasAccess } = useAuth()
 
   const isPlatformAdmin = hasAccess(["platform_admin"])
-  const canEditCompanyPolicy = hasAccess(["platform_admin", "director", "hr_lead"])
+  // #4: юр.документы — компанийская настройка, редактирует только директор.
+  const canEditCompanyPolicy = hasAccess(["platform_admin", "director"])
 
   if (!isPlatformAdmin && !canEditCompanyPolicy) {
     return (

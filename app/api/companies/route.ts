@@ -2,7 +2,7 @@ import { NextRequest } from "next/server"
 import { eq } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { companies, users } from "@/lib/db/schema"
-import { requireAuth, apiError, apiSuccess } from "@/lib/api-helpers"
+import { requireAuth, requireDirector, apiError, apiSuccess } from "@/lib/api-helpers"
 import { seedDefaultFunnelStages } from "@/lib/funnel/seed-default-stages"
 
 export async function POST(req: NextRequest) {
@@ -80,7 +80,8 @@ export const PATCH = PUT
 
 export async function PUT(req: NextRequest) {
   try {
-    const user = await requireAuth()
+    // Профиль/брендинг компании — общие настройки, только директор.
+    const user = await requireDirector()
 
     const body = await req.json() as {
       name?: string

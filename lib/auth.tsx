@@ -177,10 +177,12 @@ export function getVisibleSections(role: UserRole) {
 // Settings items visible per role
 export function getVisibleSettings(role: UserRole): string[] {
   switch (role) {
-    case "platform_admin": return ["company", "profile", "team", "branding", "integrations", "schedule", "notifications", "billing", "legal"]
+    case "platform_admin": return ["company", "profile", "team", "branding", "integrations", "schedule", "notifications", "billing", "legal", "roles"]
     case "platform_manager": return ["profile", "notifications"]
-    case "director": return ["company", "profile", "team", "branding", "integrations", "schedule", "notifications", "billing", "legal"]
-    case "hr_lead": return ["company", "profile", "team", "branding", "integrations", "schedule", "notifications"]
+    // Компанийские настройки редактирует только директор (см. requireDirector).
+    case "director": return ["company", "profile", "team", "branding", "integrations", "schedule", "notifications", "billing", "legal", "roles"]
+    // hr_lead больше не видит компанийские настройки — только личные.
+    case "hr_lead": return ["profile", "notifications"]
     case "hr_manager": return ["profile", "notifications"]
     case "department_head": return ["profile", "notifications"]
     case "observer": return ["profile"]

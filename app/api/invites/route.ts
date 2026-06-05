@@ -5,8 +5,9 @@ import { inviteLinks, users, companies } from "@/lib/db/schema"
 import { eq, and, desc } from "drizzle-orm"
 import { randomBytes } from "crypto"
 
-// Роли, которым разрешено создавать ссылки (включая legacy DB-имена)
-const CAN_INVITE = ["platform_admin", "platform_manager", "director", "hr_lead", "admin", "manager"]
+// Приглашения — управление командой, только директор (компанийская настройка).
+// Включая legacy DB-имена (client = director). hr_lead больше не приглашает.
+const CAN_INVITE = ["platform_admin", "platform_manager", "director", "client", "admin", "manager"]
 
 // Бренд-слаг компании для читаемого адреса приглашения /invite/{slug}-{random}.
 // Источник: subdomain → joinCode → транслит названия. Только [a-z0-9-], ≤24 симв.

@@ -2,7 +2,7 @@ import { eq, and, isNull } from "drizzle-orm"
 import bcrypt from "bcryptjs"
 import { db } from "@/lib/db"
 import { users } from "@/lib/db/schema"
-import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
+import { requireCompany, requireDirector, apiError, apiSuccess } from "@/lib/api-helpers"
 
 const ALLOWED_ROLES = new Set(["director", "hr_lead", "hr_manager", "department_head", "observer", "employee"])
 
@@ -46,7 +46,7 @@ export async function GET() {
 // Возвращает временный пароль один раз, дальше уже не отдаётся.
 export async function POST(req: Request) {
   try {
-    const user = await requireCompany()
+    const user = await requireDirector()
     const body = await req.json().catch(() => ({})) as {
       name?: string
       email?: string
@@ -98,7 +98,7 @@ export async function POST(req: Request) {
 // перезагрузке — теперь персистятся в БД.
 export async function PATCH(req: Request) {
   try {
-    const user = await requireCompany()
+    const user = await requireDirector()
     const body = await req.json().catch(() => ({})) as {
       id?: string
       role?: string
@@ -154,7 +154,7 @@ export async function PATCH(req: Request) {
 // (deletedAt + isActive=false). FK не трогаем, в списке (GET) такие скрыты.
 export async function DELETE(req: Request) {
   try {
-    const user = await requireCompany()
+    const user = await requireDirector()
     const { searchParams } = new URL(req.url)
     const id = (searchParams.get("id") ?? "").trim()
     if (!id) return apiError("id обязателен", 400)

@@ -3,7 +3,7 @@ import { db } from "@/lib/db"
 import { invoices, companies } from "@/lib/db/schema"
 import { sendInvoiceDocument } from "@/lib/billing/send-documents"
 import { eq, and } from "drizzle-orm"
-import { apiError, requireAuth, requireCompany } from "@/lib/api-helpers"
+import { apiError, requireAuth, requireCompany, requireDirector } from "@/lib/api-helpers"
 
 export async function GET(
   _req: NextRequest,
@@ -39,7 +39,8 @@ export async function PATCH(
   }
 
   // Only platform admins/managers can update invoice status to 'paid'
-  const isAdmin = user.role === "platform_admin" || user.role === "admin" || user.role === "platform_manager"
+  const role = user.role as string
+  const isAdmin = role === "platform_admin" || role === "admin" || role === "platform_manager"
 
   const { id } = await params
   const body = await req.json().catch(() => ({}))
@@ -83,7 +84,7 @@ export async function DELETE(
 ) {
   let user: Awaited<ReturnType<typeof requireCompany>>
   try {
-    user = await requireCompany()
+    user = await requireDirector()
   } catch (e) {
     return e as NextResponse
   }

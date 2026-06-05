@@ -2,7 +2,7 @@ import { NextRequest } from "next/server"
 import { eq } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { companies } from "@/lib/db/schema"
-import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
+import { requireCompany, requireDirector, apiError, apiSuccess } from "@/lib/api-helpers"
 
 // Настройки документооборота компании: email для счетов/актов, бумажные
 // оригиналы (флаг + адрес), задел под ЭДО, авто-создание счёта за 7 дней.
@@ -43,7 +43,7 @@ export async function GET() {
 
 export async function PATCH(req: NextRequest) {
   try {
-    const user = await requireCompany()
+    const user = await requireDirector()
     const body = await req.json().catch(() => ({})) as Record<string, unknown>
 
     const updates: Record<string, unknown> = {}

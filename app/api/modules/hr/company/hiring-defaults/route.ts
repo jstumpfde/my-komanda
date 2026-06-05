@@ -61,6 +61,13 @@ export async function PATCH(req: NextRequest) {
 
   const patch = (await req.json().catch(() => ({}))) as Partial<CompanyHiringDefaults>;
 
+  // rolePermissions — компанийская настройка («Роли и доступ»), её меняет только
+  // директор. Остальные ключи (воронка/автоматизация/опросы) доступны HR-модулю.
+  if ("rolePermissions" in patch &&
+      !["director", "client", "platform_admin", "admin"].includes(ctx.role)) {
+    return NextResponse.json({ error: "Только директор может менять права ролей" }, { status: 403 });
+  }
+
   const [company] = await db
     .select({ hiringDefaultsJson: companies.hiringDefaultsJson })
     .from(companies)

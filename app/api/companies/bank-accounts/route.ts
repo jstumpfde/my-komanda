@@ -2,7 +2,7 @@ import { NextRequest } from "next/server"
 import { asc, eq } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { companyBankAccounts } from "@/lib/db/schema"
-import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
+import { requireCompany, requireDirector, apiError, apiSuccess } from "@/lib/api-helpers"
 
 export async function GET() {
   try {
@@ -24,7 +24,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    const user = await requireCompany()
+    const user = await requireDirector()
 
     const body = await req.json() as {
       bank_name?: string
