@@ -484,33 +484,36 @@ export default function TeamPage() {
             конкретная роль (HR, директор) или срок/лимит — используйте{" "}
             <button type="button" onClick={openLinkDialog} className="text-primary hover:underline">персональные приглашения</button>.
           </p>
-          {/* Редактируемый код: префикс + поле + сохранить (когда изменён) */}
+          {/* Редактируемый код: префикс + поле + кнопка — единый контрол */}
           <div className="flex items-center gap-2 flex-wrap">
-            <div className="flex items-center flex-1 min-w-[260px] rounded-lg border bg-muted/40 overflow-hidden">
-              <span className="px-3 py-2 font-mono text-sm text-muted-foreground select-none">{joinOrigin}/join/</span>
+            <div className="flex items-center flex-1 min-w-[260px] rounded-md border border-input bg-background overflow-hidden focus-within:ring-2 focus-within:ring-ring/50 focus-within:border-ring transition-[box-shadow,border-color]">
+              <span className="px-3 py-2 font-mono text-sm text-muted-foreground bg-muted select-none whitespace-nowrap border-r border-input">
+                {joinOrigin}/join/
+              </span>
               <Input
                 value={joinCode}
                 onChange={(e) => setJoinCode(e.target.value)}
                 placeholder="company"
-                className="h-9 border-0 bg-transparent font-mono text-sm focus-visible:ring-0 px-1"
+                className="h-9 border-0 shadow-none rounded-none bg-transparent font-mono text-sm focus-visible:ring-0 focus-visible:border-0 px-2 flex-1"
               />
+              {joinCode === joinCodeSaved && (
+                <button
+                  type="button"
+                  className="px-3 h-full flex items-center text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40 border-l border-input"
+                  disabled={!joinCodeSaved}
+                  onClick={() => {
+                    navigator.clipboard.writeText(`${window.location.origin}/join/${joinCodeSaved}`)
+                    toast.success("Ссылка скопирована")
+                  }}
+                  title="Скопировать ссылку"
+                >
+                  <Copy className="w-4 h-4" />
+                </button>
+              )}
             </div>
-            {joinCode !== joinCodeSaved ? (
+            {joinCode !== joinCodeSaved && (
               <Button size="sm" disabled={joinSaving || !joinCode.trim()} onClick={() => saveJoin({ join_code: joinCode.trim() })}>
                 Сохранить
-              </Button>
-            ) : (
-              <Button
-                variant="outline"
-                size="icon"
-                className="shrink-0"
-                disabled={!joinCodeSaved}
-                onClick={() => {
-                  navigator.clipboard.writeText(`${window.location.origin}/join/${joinCodeSaved}`)
-                  toast.success("Ссылка скопирована")
-                }}
-              >
-                <Copy className="w-4 h-4" />
               </Button>
             )}
           </div>

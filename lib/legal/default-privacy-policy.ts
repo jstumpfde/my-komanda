@@ -7,15 +7,30 @@ export interface CompanyForPolicy {
   inn: string
   legalAddress?: string | null
   email: string
+  phone?: string | null
+  responsible?: string | null  // Ответственный за обработку персональных данных
 }
 
 function fmtDate(d: Date = new Date()): string {
   return d.toLocaleDateString("ru-RU", { day: "2-digit", month: "long", year: "numeric" })
 }
 
+// Экранирование значений реквизитов перед вставкой в HTML политики:
+// текст рендерится публично через dangerouslySetInnerHTML, поэтому
+// пользовательский ввод (название/адрес/email/телефон/ответственный)
+// обязан быть экранирован — иначе stored-XSS на публичной странице.
+function he(s: string | null | undefined): string {
+  return String(s ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
+}
+
 export function generateDefaultPrivacyPolicy(company: CompanyForPolicy): string {
-  const operator = `${company.name} (ИНН ${company.inn}${company.legalAddress ? `, юридический адрес: ${company.legalAddress}` : ""})`
-  const contactEmail = company.email
+  const operator = `${he(company.name)} (ИНН ${he(company.inn)}${company.legalAddress ? `, юридический адрес: ${he(company.legalAddress)}` : ""})`
+  const contactEmail = he(company.email)
   const today = fmtDate()
 
   return [
@@ -95,7 +110,8 @@ export function generateDefaultPrivacyPolicy(company: CompanyForPolicy): string 
     `<p>Сайт Оператора использует cookie-файлы и аналогичные технологии для обеспечения работоспособности сервиса, аутентификации пользователей и сбора обезличенной статистики посещений. Субъект ПД может отключить cookie в настройках своего браузера, однако в этом случае часть функциональности может стать недоступной.</p>`,
 
     `<h2>10. Контактная информация Оператора</h2>`,
-    `<p>Запросы, связанные с обработкой персональных данных (включая отзыв согласия, требования об уточнении или удалении данных), направляются по электронной почте: <a href="mailto:${contactEmail}">${contactEmail}</a>.</p>`,
+    ...(company.responsible ? [`<p>Ответственный за организацию обработки персональных данных: <strong>${he(company.responsible)}</strong>.</p>`] : []),
+    `<p>Запросы, связанные с обработкой персональных данных (включая отзыв согласия, требования об уточнении или удалении данных), направляются по электронной почте: <a href="mailto:${contactEmail}">${contactEmail}</a>${company.phone ? ` или по телефону: ${he(company.phone)}` : ""}.</p>`,
     `<p>Срок ответа Оператора на обращение Субъекта ПД — не более 30 (тридцати) календарных дней с момента получения обращения.</p>`,
 
     `<h2>11. Изменения Политики</h2>`,

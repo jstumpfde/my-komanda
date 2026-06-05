@@ -9,7 +9,8 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
-import { Globe, Save, Loader2, CheckCircle2, XCircle, RefreshCw, Copy, AlertCircle, Upload, Trash2, Link2, Palette } from "lucide-react"
+import { Globe, Save, Loader2, CheckCircle2, XCircle, RefreshCw, Copy, AlertCircle, Upload, Trash2, Link2, Palette, ChevronDown } from "lucide-react"
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible"
 import { saveBrand, canCustomizeBrand, type BrandConfig } from "@/lib/branding"
 import { fetchCompanyApi, updateCompanyApi } from "@/lib/company-storage"
 import { CompanyLogo } from "@/components/company-logo"
@@ -566,6 +567,35 @@ export default function BrandingPage() {
                 </div>
               </div>
             )}
+            <Collapsible>
+              <CollapsibleTrigger className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors group">
+                <ChevronDown className="w-3.5 h-3.5 transition-transform group-data-[state=open]:rotate-180" />
+                Инструкция по подключению
+              </CollapsibleTrigger>
+              <CollapsibleContent className="mt-2">
+                <div className="rounded-lg border bg-muted/20 p-3 space-y-2.5 text-xs text-muted-foreground">
+                  <ol className="space-y-2 list-none">
+                    <li className="flex gap-2">
+                      <span className="shrink-0 w-4 h-4 rounded-full bg-primary/10 text-primary flex items-center justify-center font-medium text-[10px]">1</span>
+                      <span>Введите желаемый адрес (например <code className="font-mono text-foreground">hr.company.ru</code>) в поле выше.</span>
+                    </li>
+                    <li className="flex gap-2">
+                      <span className="shrink-0 w-4 h-4 rounded-full bg-primary/10 text-primary flex items-center justify-center font-medium text-[10px]">2</span>
+                      <span>В панели управления вашим доменом (у регистратора или DNS-провайдера) создайте запись типа <strong className="text-foreground font-medium">CNAME</strong>: Имя — поддомен (например <code className="font-mono text-foreground">{customDomain ? customDomain.split(".")[0] : "hr"}</code>), Значение — <code className="font-mono text-foreground">cname.company24.pro</code>.</span>
+                    </li>
+                    <li className="flex gap-2">
+                      <span className="shrink-0 w-4 h-4 rounded-full bg-primary/10 text-primary flex items-center justify-center font-medium text-[10px]">3</span>
+                      <span>Сохраните запись. Обновление DNS может занять от нескольких минут до 24 часов.</span>
+                    </li>
+                    <li className="flex gap-2">
+                      <span className="shrink-0 w-4 h-4 rounded-full bg-primary/10 text-primary flex items-center justify-center font-medium text-[10px]">4</span>
+                      <span>Нажмите «Проверить» — когда DNS обновится, домен подключится, и публичные страницы вакансий начнут открываться на вашем домене.</span>
+                    </li>
+                  </ol>
+                  <p className="pt-0.5 border-t">HTTPS-сертификат выпускается автоматически после успешного подтверждения домена.</p>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
           </CardContent>
         </Card>
 

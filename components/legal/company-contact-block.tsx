@@ -1,47 +1,76 @@
 "use client"
 
-// Контактный блок компании для /settings/legal: показывает реквизиты
-// «куда обращаться» (название/email/телефон/юр.адрес), которые подставляются
-// в публичную политику и документы. Если email пуст — спокойно подсказывает
-// заполнить его (генератор шаблона требует ИНН + email).
+// Контактный блок компании для /settings/legal: редактируемые реквизиты
+// «куда обращаться» (название/email/телефон/юр.адрес/ответственный),
+// которые подставляются в публичную политику и документы. Хранятся в
+// companies.legal_contact_json (независимо от основных реквизитов).
 
 import { useEffect, useState } from "react"
-import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Building2, Mail, Phone, MapPin, AlertTriangle, ArrowRight, Loader2 } from "lucide-react"
-import { fetchCompanyApi } from "@/lib/company-storage"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Button } from "@/components/ui/button"
+import { Building2, AlertTriangle, Loader2, Save } from "lucide-react"
 
-interface CompanyContacts {
-  name?: string
+interface LegalContact {
+  companyName?: string
   email?: string
   phone?: string
   legalAddress?: string
+  responsible?: string
 }
 
 export function CompanyContactBlock() {
   const [loading, setLoading] = useState(true)
-  const [c, setC] = useState<CompanyContacts>({})
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  // Значения полей (из legalContactJson; плейсхолдеры — из fallback)
+  const [form, setForm] = useState<LegalContact>({})
+  const [fallback, setFallback] = useState<LegalContact>({})
 
   useEffect(() => {
     let cancelled = false
-    fetchCompanyApi()
-      .then((data) => {
+    fetch("/api/companies/legal-contact")
+      .then((r) => r.json())
+      .then((data: { ok?: boolean; data?: { legalContact?: LegalContact; fallback?: LegalContact } }) => {
         if (cancelled) return
-        const r = (data ?? {}) as Record<string, unknown>
-        const s = (k: string) => (typeof r[k] === "string" ? (r[k] as string) : "")
-        setC({ name: s("name"), email: s("email"), phone: s("phone"), legalAddress: s("legalAddress") })
+        const d = data?.data ?? {}
+        setForm(d.legalContact ?? {})
+        setFallback(d.fallback ?? {})
       })
       .catch(() => {})
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
   }, [])
 
-  const rows: { icon: typeof Mail; label: string; value: string }[] = [
-    { icon: Building2, label: "Компания", value: c.name ?? "" },
-    { icon: Mail, label: "Email", value: c.email ?? "" },
-    { icon: Phone, label: "Телефон", value: c.phone ?? "" },
-    { icon: MapPin, label: "Юр. адрес", value: c.legalAddress ?? "" },
-  ]
+  function set(field: keyof LegalContact, value: string) {
+    setForm((prev) => ({ ...prev, [field]: value }))
+    setSaved(false)
+  }
+
+  async function handleSave() {
+    setSaving(true)
+    setError(null)
+    try {
+      const res = await fetch("/api/companies/legal-contact", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      })
+      const data = await res.json() as { ok?: boolean; error?: string }
+      if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`)
+      setSaved(true)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Ошибка сохранения")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const emailValue = form.email ?? ""
+  const emailPlaceholder = fallback.email ?? ""
 
   return (
     <Card>
@@ -50,41 +79,102 @@ export function CompanyContactBlock() {
           <Building2 className="w-4 h-4" /> Контактные данные для документов
         </CardTitle>
         <p className="text-xs text-muted-foreground">
-          Эти реквизиты подставляются в публичную политику конфиденциальности
-          (раздел «куда обращаться»). Редактируются в{" "}
-          <Link href="/settings/company" className="text-primary hover:underline">Настройках компании</Link>.
+          Эти реквизиты подставляются в публичную политику конфиденциальности, укажите ваши данные
         </p>
       </CardHeader>
-      <CardContent className="px-5 pb-4 pt-0">
+      <CardContent className="px-5 pb-5 pt-0">
         {loading ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
             <Loader2 className="w-4 h-4 animate-spin" /> Загрузка...
           </div>
         ) : (
-          <div className="space-y-2">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
-              {rows.map(({ icon: Icon, label, value }) => (
-                <div key={label} className="flex items-start gap-2 text-sm">
-                  <Icon className="w-3.5 h-3.5 mt-0.5 shrink-0 text-muted-foreground" />
-                  <span className="text-muted-foreground w-24 shrink-0">{label}</span>
-                  <span className={value ? "text-foreground" : "text-muted-foreground/60 italic"}>
-                    {value || "не указано"}
-                  </span>
-                </div>
-              ))}
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="lc-company" className="text-xs">Компания</Label>
+                <Input
+                  id="lc-company"
+                  value={form.companyName ?? ""}
+                  placeholder={fallback.companyName ?? "Название компании"}
+                  onChange={(e) => set("companyName", e.target.value)}
+                  className="h-8 text-sm"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="lc-responsible" className="text-xs">Ответственный за обработку ПДн</Label>
+                <Input
+                  id="lc-responsible"
+                  value={form.responsible ?? ""}
+                  placeholder="ФИО или должность"
+                  onChange={(e) => set("responsible", e.target.value)}
+                  className="h-8 text-sm"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="lc-email" className="text-xs">Email</Label>
+                <Input
+                  id="lc-email"
+                  type="email"
+                  value={emailValue}
+                  placeholder={emailPlaceholder || "contact@example.ru"}
+                  onChange={(e) => set("email", e.target.value)}
+                  className="h-8 text-sm"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="lc-phone" className="text-xs">Телефон</Label>
+                <Input
+                  id="lc-phone"
+                  value={form.phone ?? ""}
+                  placeholder={fallback.phone ?? "+7 (000) 000-00-00"}
+                  onChange={(e) => set("phone", e.target.value)}
+                  className="h-8 text-sm"
+                />
+              </div>
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label htmlFor="lc-address" className="text-xs">Юридический адрес</Label>
+                <Input
+                  id="lc-address"
+                  value={form.legalAddress ?? ""}
+                  placeholder={fallback.legalAddress ?? "г. Москва, ул. Примерная, д. 1"}
+                  onChange={(e) => set("legalAddress", e.target.value)}
+                  className="h-8 text-sm"
+                />
+              </div>
             </div>
-            {!c.email && (
-              <div className="flex items-start gap-2 mt-3 px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-xs text-amber-800 dark:text-amber-300">
+
+            {!emailValue && !emailPlaceholder && (
+              <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-xs text-amber-800 dark:text-amber-300">
                 <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
                 <span>
                   Не указан контактный email — без него не сгенерировать шаблон политики
-                  и не на что принимать обращения по персональным данным.{" "}
-                  <Link href="/settings/company" className="font-medium underline inline-flex items-center gap-0.5">
-                    Заполнить <ArrowRight className="w-3 h-3" />
-                  </Link>
+                  и не на что принимать обращения по персональным данным.
                 </span>
               </div>
             )}
+
+            {error && (
+              <p className="text-xs text-destructive">{error}</p>
+            )}
+
+            <div className="flex items-center gap-3">
+              <Button
+                size="sm"
+                onClick={handleSave}
+                disabled={saving}
+                className="h-8 gap-1.5"
+              >
+                {saving ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Save className="w-3.5 h-3.5" />
+                )}
+                Сохранить контактные данные
+              </Button>
+              {saved && (
+                <span className="text-xs text-muted-foreground">Сохранено</span>
+              )}
+            </div>
           </div>
         )}
       </CardContent>

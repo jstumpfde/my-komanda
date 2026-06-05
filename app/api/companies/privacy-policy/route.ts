@@ -15,12 +15,15 @@ async function loadCompany(companyId: string) {
     .select({
       id:                     companies.id,
       name:                   companies.name,
+      fullName:               companies.fullName,
       inn:                    companies.inn,
       legalAddress:           companies.legalAddress,
       email:                  companies.email,
+      phone:                  companies.phone,
       subdomain:              companies.subdomain,
       privacyPolicyHtml:      companies.privacyPolicyHtml,
       privacyPolicyUpdatedAt: companies.privacyPolicyUpdatedAt,
+      legalContactJson:       companies.legalContactJson,
     })
     .from(companies)
     .where(eq(companies.id, companyId))
@@ -75,15 +78,24 @@ export async function POST() {
     const company = await loadCompany(user.companyId)
     if (!company) return apiError("Company not found", 404)
 
-    if (!company.inn || !company.email) {
-      return apiError("Заполните ИНН и контактный email компании в настройках перед генерацией шаблона", 400)
+    // legalContactJson — приоритет; fallback на основные реквизиты компании.
+    const lc = (company.legalContactJson ?? {}) as {
+      companyName?: string; email?: string; phone?: string
+      legalAddress?: string; responsible?: string
+    }
+
+    const resolvedEmail = lc.email || company.email
+    if (!company.inn || !resolvedEmail) {
+      return apiError("Заполните ИНН и контактный email перед генерацией шаблона", 400)
     }
 
     const html = generateDefaultPrivacyPolicy({
-      name:         company.name,
+      name:         lc.companyName || company.fullName || company.name,
       inn:          company.inn,
-      legalAddress: company.legalAddress,
-      email:        company.email,
+      legalAddress: lc.legalAddress ?? company.legalAddress,
+      email:        resolvedEmail,
+      phone:        lc.phone || company.phone || null,
+      responsible:  lc.responsible || null,
     })
 
     return apiSuccess({ html })

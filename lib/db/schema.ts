@@ -160,6 +160,18 @@ export interface CompanyHiringDefaults {
   }
 }
 
+// ── CompanyLegalContact (drizzle/0177) ──
+// Контактные данные для юр.документов (/settings/legal). Независимы от
+// основных реквизитов — телефон/email могут отличаться от companies.*.
+// При отсутствии поля используется fallback на companies.* в генераторе.
+export interface CompanyLegalContact {
+  companyName?:  string
+  email?:        string
+  phone?:        string
+  legalAddress?: string
+  responsible?:  string  // Ответственный за обработку персональных данных
+}
+
 // ── CompanyWorkSchedule (drizzle/0176) ──
 // Standalone-расписание компании (/settings/schedule). Отдельное от can-send-now
 // (vacancies.schedule_*), календаря и hiring-settings — см. memory
@@ -289,6 +301,10 @@ export const companies = pgTable("companies", {
   // общего рабочего времени. НЕ связано с can-send-now (vacancies.schedule_*),
   // календарём, hiring-settings. Миграция 0176. См. schedule-three-systems-keep-separate.
   workScheduleJson:         jsonb("work_schedule_json").$type<CompanyWorkSchedule>().notNull().default({}),
+  // Контактные данные для юр.документов (/settings/legal). Отдельны от
+  // companies.* — телефон/email могут отличаться от основных реквизитов.
+  // Подставляются в генератор политики (раздел «куда обращаться»). Миграция 0177.
+  legalContactJson:         jsonb("legal_contact_json").$type<CompanyLegalContact>().notNull().default({}),
   // Корзина компаний (миграция 0148): NULL — активна; не-NULL — в корзине,
   // cron trash-cleanup удалит навсегда через trash_retention_days. Признак
   // корзины — deleted_at (как у вакансий), отдельного статуса не вводим.
