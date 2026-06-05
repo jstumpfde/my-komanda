@@ -27,6 +27,7 @@ const NESTED_KEYS: (keyof CompanyHiringDefaults)[] = [
   "webhooks",
   "bitrix",
   "stopFactorsDefaults",
+  "rolePermissions",
 ];
 
 function mergeDefaults(

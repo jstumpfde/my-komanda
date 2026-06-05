@@ -61,19 +61,46 @@ const PERMISSIONS = [
   { label: "Обзор",              director: true,  hr_lead: true,  hr_manager: true,  department_head: true,  observer: true  },
 ]
 
-const TRASH_ACCESS_KEY = "mk_trash_access_hr_manager"
+const HIRING_DEFAULTS_URL = "/api/modules/hr/company/hiring-defaults"
 
 export default function RolesPage() {
   const [trashAccessHrManager, setTrashAccessHrManager] = useState(false)
+  const [loaded, setLoaded] = useState(false)
+  const [saving, setSaving] = useState(false)
 
+  // Загрузка настройки с сервера (общая для компании, не localStorage).
   useEffect(() => {
-    setTrashAccessHrManager(localStorage.getItem(TRASH_ACCESS_KEY) === "true")
+    let cancelled = false
+    fetch(HIRING_DEFAULTS_URL)
+      .then(r => (r.ok ? r.json() : null))
+      .then(data => {
+        if (cancelled || !data) return
+        setTrashAccessHrManager(Boolean(data.hiringDefaults?.rolePermissions?.hrManagerTrashAccess))
+      })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setLoaded(true) })
+    return () => { cancelled = true }
   }, [])
 
-  const toggleTrashAccess = (checked: boolean) => {
+  // Оптимистичный апдейт + откат при ошибке (как в «Команда»).
+  const toggleTrashAccess = async (checked: boolean) => {
+    const prev = trashAccessHrManager
     setTrashAccessHrManager(checked)
-    localStorage.setItem(TRASH_ACCESS_KEY, String(checked))
-    toast.success(checked ? "HR-менеджеры теперь видят корзину" : "Доступ к корзине для HR-менеджеров отключён")
+    setSaving(true)
+    try {
+      const res = await fetch(HIRING_DEFAULTS_URL, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rolePermissions: { hrManagerTrashAccess: checked } }),
+      })
+      if (!res.ok) throw new Error("save failed")
+      toast.success(checked ? "HR-менеджеры теперь видят корзину" : "Доступ к корзине для HR-менеджеров отключён")
+    } catch {
+      setTrashAccessHrManager(prev)
+      toast.error("Не удалось сохранить — попробуйте ещё раз")
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -103,7 +130,7 @@ export default function RolesPage() {
                 </p>
               </div>
             </div>
-            <Switch id="trash-access" checked={trashAccessHrManager} onCheckedChange={toggleTrashAccess} />
+            <Switch id="trash-access" checked={trashAccessHrManager} onCheckedChange={toggleTrashAccess} disabled={!loaded || saving} />
           </div>
         </CardContent>
       </Card>

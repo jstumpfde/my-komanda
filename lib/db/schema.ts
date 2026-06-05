@@ -139,6 +139,13 @@ export interface CompanyHiringDefaults {
   // при входе кандидата в стадию. Ключ — slug стадии, значение —
   // "invitation"|"discard"|null. Дефолт для вакансий, где воронка не кастомизирована.
   stageHhActions?: Record<string, "invitation" | "discard" | null>
+  // Настройки доступа ролей (HR → Настройки → Роли и доступ). Хранятся
+  // на уровне компании (общие, не per-user), чтобы шарились между всеми.
+  rolePermissions?: {
+    // По умолчанию корзина вакансий видна только директору/главному HR.
+    // true → HR-менеджеры тоже видят таб «Корзина» и могут восстанавливать/удалять.
+    hrManagerTrashAccess?: boolean
+  }
 }
 
 export const companies = pgTable("companies", {

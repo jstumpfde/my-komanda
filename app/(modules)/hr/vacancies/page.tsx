@@ -302,6 +302,26 @@ export default function VacanciesPage() {
   // сервер — список и счётчики считаются по БД, не по загруженной странице.
   const [scope, setScope] = useState<"active" | "archive" | "trash">("active")
   const { vacancies, total, counts, trashRetentionDays, loading, refetch } = useVacancies(1, 100, scope)
+  // Корзина по умолчанию видна только директору/главному HR. HR-менеджеру —
+  // только если в «Настройки → Роли и доступ» включён доступ к корзине
+  // (companies.hiringDefaultsJson.rolePermissions.hrManagerTrashAccess).
+  const [hrManagerTrashAccess, setHrManagerTrashAccess] = useState(false)
+  useEffect(() => {
+    if (role !== "hr_manager") return
+    let cancelled = false
+    fetch("/api/modules/hr/company/hiring-defaults")
+      .then(r => (r.ok ? r.json() : null))
+      .then(data => {
+        if (!cancelled && data) setHrManagerTrashAccess(Boolean(data.hiringDefaults?.rolePermissions?.hrManagerTrashAccess))
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [role])
+  const canSeeTrash = role !== "hr_manager" || hrManagerTrashAccess
+  // Если HR-менеджер был на табе «Корзина», а доступ выключен — вернуть на «Активные».
+  useEffect(() => {
+    if (!canSeeTrash && scope === "trash") { setScope("active"); setSelected(new Set()) }
+  }, [canSeeTrash, scope])
   const [view, setView] = useState<ViewMode>(() => {
     if (typeof window === "undefined") return "table"
     const stored = window.localStorage.getItem("vacancies-view")
@@ -606,7 +626,7 @@ export default function VacanciesPage() {
               {([
                 { key: "active",  label: "Активные", n: counts.active },
                 { key: "archive", label: "Архив",    n: counts.archived },
-                { key: "trash",   label: "Корзина",  n: counts.trashed },
+                ...(canSeeTrash ? [{ key: "trash" as const, label: "Корзина", n: counts.trashed }] : []),
               ] as const).map((t) => (
                 <button
                   key={t.key}
