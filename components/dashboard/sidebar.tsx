@@ -213,28 +213,30 @@ export function DashboardSidebar() {
   const ALL_MODULES_FOR_ROLE = (vis.modules ?? ['hr', 'knowledge', 'learning', 'tasks', 'sales', 'marketing', 'warehouse', 'logistics', 'booking', 'dialer', 'qc', 'b2b']) as ModuleId[]
   const [activeModules, setActiveModules] = useState<ModuleId[]>(ALL_MODULES_FOR_ROLE)
 
-  // STAGING-ONLY: директору на new.company24.pro открываем ПОЛНЫЙ HR + Базу знаний.
-  // На проде остаётся клиентский lite-режим. Гейт по hostname — клиентский, поэтому
-  // через состояние после маунта (без SSR-рассинхрона). Прод НЕ затрагивается.
-  const [directorStagingFull, setDirectorStagingFull] = useState(false)
+  // STAGING-ONLY: всем КЛИЕНТСКИМ ролям на new.company24.pro открываем ПОЛНЫЙ HR +
+  // Базу знаний (для редактирования/тестов). На проде остаётся клиентский lite-режим.
+  // Гейт по hostname — клиентский, поэтому через состояние после маунта (без
+  // SSR-рассинхрона). Прод НЕ затрагивается. Позже откроем и на проде по команде.
+  const [stagingFullAccess, setStagingFullAccess] = useState(false)
   useEffect(() => {
-    setDirectorStagingFull(
-      role === 'director' && typeof window !== 'undefined' && window.location.hostname === 'new.company24.pro'
+    setStagingFullAccess(
+      !isAdminOrManager && role !== 'employee' &&
+      typeof window !== 'undefined' && window.location.hostname === 'new.company24.pro'
     )
-  }, [role])
-  const hrLite = !isAdminOrManager && !directorStagingFull
+  }, [role, isAdminOrManager])
+  const hrLite = !isAdminOrManager && !stagingFullAccess
 
   // Пересчёт модулей при изменении роли (когда useSession догружает данные)
   useEffect(() => {
     const base = (vis.modules ?? ['hr', 'knowledge', 'learning', 'tasks', 'sales', 'marketing', 'warehouse', 'logistics', 'booking', 'dialer', 'qc', 'b2b']) as ModuleId[]
-    const newModules = (directorStagingFull && !base.includes('knowledge' as ModuleId)
+    const newModules = (stagingFullAccess && !base.includes('knowledge' as ModuleId)
       ? [...base, 'knowledge' as ModuleId]
       : base)
     setActiveModules(prev => {
       if (prev.length === newModules.length && prev.every((m, i) => m === newModules[i])) return prev
       return newModules
     })
-  }, [vis.modules, directorStagingFull])
+  }, [vis.modules, stagingFullAccess])
 
   // ── Sidebar visibility customization ──
   const { visibility: sidebarVis, setVisibility: setSidebarVis, isModuleVisible, isItemVisible, resetToDefault: resetSidebarVis } = useSidebarVisibility()
@@ -510,7 +512,7 @@ export function DashboardSidebar() {
 
           {/* Module switcher icons */}
           {(Object.keys(MODULE_REGISTRY) as ModuleId[])
-            .filter((id) => (id !== 'hr' || vis.hiring) && isModuleVisible(id) && activeModules.includes(id))
+            .filter((id) => (id !== 'hr' || vis.hiring || stagingFullAccess) && isModuleVisible(id) && activeModules.includes(id))
             .map((id) => {
             const mod = MODULE_REGISTRY[id]
             const Icon = getIcon(mod.icon)
@@ -602,7 +604,7 @@ export function DashboardSidebar() {
           <div className="my-1.5 mx-3 border-t border-sidebar-border/60" />
 
           {(Object.keys(MODULE_REGISTRY) as ModuleId[])
-            .filter((id) => (id !== 'hr' || vis.hiring) && isModuleVisible(id) && activeModules.includes(id))
+            .filter((id) => (id !== 'hr' || vis.hiring || stagingFullAccess) && isModuleVisible(id) && activeModules.includes(id))
             .map((id) => {
             const isModuleEnabled = activeModules.includes(id)
             const mod = MODULE_REGISTRY[id]
