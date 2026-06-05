@@ -179,10 +179,7 @@ export function SettingsHeader() {
                   </div>
                 </div>
                 <DropdownMenuItem className="text-sm cursor-pointer" asChild>
-                  <Link href="/settings/company"><Building2 className="w-4 h-4 mr-2" />Компания</Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem className="text-sm cursor-pointer" asChild>
-                  <Link href="/settings/profile"><User className="w-4 h-4 mr-2" />Профиль</Link>
+                  <Link href="/settings/company"><Building2 className="w-4 h-4 mr-2" />Настройки компании</Link>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 {mounted && (

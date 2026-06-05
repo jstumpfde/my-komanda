@@ -18,11 +18,11 @@ export const SETTINGS_MENU: PlatformMenuItem[] = [
   { name: 'Компания',           href: '/settings/company',       icon: 'Building2'   },
   { name: 'Профиль',            href: '/settings/profile',       icon: 'User'        },
   { name: 'Команда',            href: '/settings/team',          icon: 'Users'       },
+  { name: 'Брендинг',           href: '/settings/branding',      icon: 'Palette'     },
+  { name: 'Интеграции',         href: '/settings/integrations',  icon: 'Plug'        },
   { name: 'Расписание',         href: '/settings/schedule',      icon: 'Calendar'    },
   { name: 'Уведомления',        href: '/settings/notifications', icon: 'Bell'        },
-  { name: 'Интеграции',         href: '/settings/integrations',  icon: 'Plug'        },
   { name: 'Тариф и оплата',     href: '/settings/billing',       icon: 'CreditCard'  },
-  { name: 'Брендинг',           href: '/settings/branding',      icon: 'Palette'     },
   { name: 'Роли и доступ',      href: '/settings/roles',         icon: 'Shield'      },
 ]
 
