@@ -100,6 +100,14 @@ export interface CompanyHiringDefaults {
     timezone?:         string
     interviewMethods?: string[]
     officeAddress?:    string
+    // Конфиг длительности и буфера на каждый способ интервью (additive, drizzle/0177+).
+    // Если отсутствует — используются legacy-поля slotDuration/bufferTime/interviewMethods.
+    interviewMethodConfigs?: Array<{
+      method:  'phone' | 'zoom' | 'telemost' | 'meet' | 'office'
+      enabled: boolean
+      duration: number  // минуты
+      buffer:   number  // минуты между встречами
+    }>
   }
   stopFactorsDefaults?:      VacancyStopFactors
   applyStopFactorsOnCreate?: boolean

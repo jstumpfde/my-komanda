@@ -28,6 +28,7 @@ const NESTED_KEYS: (keyof CompanyHiringDefaults)[] = [
   "bitrix",
   "stopFactorsDefaults",
   "rolePermissions",
+  "feedbackSurveys",
 ];
 
 function mergeDefaults(
