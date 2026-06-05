@@ -212,14 +212,29 @@ export function DashboardSidebar() {
   // E-commerce: убран из меню, планируется позже
   const ALL_MODULES_FOR_ROLE = (vis.modules ?? ['hr', 'knowledge', 'learning', 'tasks', 'sales', 'marketing', 'warehouse', 'logistics', 'booking', 'dialer', 'qc', 'b2b']) as ModuleId[]
   const [activeModules, setActiveModules] = useState<ModuleId[]>(ALL_MODULES_FOR_ROLE)
+
+  // STAGING-ONLY: директору на new.company24.pro открываем ПОЛНЫЙ HR + Базу знаний.
+  // На проде остаётся клиентский lite-режим. Гейт по hostname — клиентский, поэтому
+  // через состояние после маунта (без SSR-рассинхрона). Прод НЕ затрагивается.
+  const [directorStagingFull, setDirectorStagingFull] = useState(false)
+  useEffect(() => {
+    setDirectorStagingFull(
+      role === 'director' && typeof window !== 'undefined' && window.location.hostname === 'new.company24.pro'
+    )
+  }, [role])
+  const hrLite = !isAdminOrManager && !directorStagingFull
+
   // Пересчёт модулей при изменении роли (когда useSession догружает данные)
   useEffect(() => {
-    const newModules = (vis.modules ?? ['hr', 'knowledge', 'learning', 'tasks', 'sales', 'marketing', 'warehouse', 'logistics', 'booking', 'dialer', 'qc', 'b2b']) as ModuleId[]
+    const base = (vis.modules ?? ['hr', 'knowledge', 'learning', 'tasks', 'sales', 'marketing', 'warehouse', 'logistics', 'booking', 'dialer', 'qc', 'b2b']) as ModuleId[]
+    const newModules = (directorStagingFull && !base.includes('knowledge' as ModuleId)
+      ? [...base, 'knowledge' as ModuleId]
+      : base)
     setActiveModules(prev => {
       if (prev.length === newModules.length && prev.every((m, i) => m === newModules[i])) return prev
       return newModules
     })
-  }, [vis.modules])
+  }, [vis.modules, directorStagingFull])
 
   // ── Sidebar visibility customization ──
   const { visibility: sidebarVis, setVisibility: setSidebarVis, isModuleVisible, isItemVisible, resetToDefault: resetSidebarVis } = useSidebarVisibility()
@@ -301,7 +316,7 @@ export function DashboardSidebar() {
     } catch {}
     // Auto-expand group matching current path
     for (const id of activeModules) {
-      for (const group of getModuleGroups(id, !isAdminOrManager)) {
+      for (const group of getModuleGroups(id, hrLite)) {
         if (group.label && group.items.some(i => !i.divider && (pathname === i.href || pathname.startsWith(i.href + '/')))) {
           next.add(`${id}:${group.label}`)
         }
@@ -320,7 +335,7 @@ export function DashboardSidebar() {
   useEffect(() => {
     if (!mounted) return
     for (const id of activeModules) {
-      for (const group of getModuleGroups(id, !isAdminOrManager)) {
+      for (const group of getModuleGroups(id, hrLite)) {
         if (group.label && group.items.some(i => !i.divider && (pathname === i.href || pathname.startsWith(i.href + '/')))) {
           const key = `${id}:${group.label}`
           setExpandedGroups(prev => {
@@ -522,7 +537,7 @@ export function DashboardSidebar() {
           {(() => {
             const activeId = activeModules.find(id => pathname.startsWith(MODULE_REGISTRY[id].basePath)) || activeModules[0]
             if (!activeId) return null
-            const groups = getModuleGroups(activeId, !isAdminOrManager)
+            const groups = getModuleGroups(activeId, hrLite)
             return groups.filter(g => g.items.some(i => !i.divider)).map((group) => {
               const firstItem = group.items.find(i => !i.divider)!
               const GroupIcon = getIcon(firstItem.icon)
@@ -594,7 +609,7 @@ export function DashboardSidebar() {
             const ModIcon = getIcon(mod.icon)
             const isExpanded = expandedModules.has(id)
             const isModuleActive = pathname.startsWith(mod.basePath)
-            const groups = isModuleEnabled ? getModuleGroups(id, !isAdminOrManager) : []
+            const groups = isModuleEnabled ? getModuleGroups(id, hrLite) : []
             const hasItems = isModuleEnabled && groups.some(g => g.items.length > 0)
 
             // Single-item module → render as direct link (no accordion)
