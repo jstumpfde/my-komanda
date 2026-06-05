@@ -3,7 +3,7 @@ import { db } from "@/lib/db"
 import { calendarEvents, calendarEventParticipants } from "@/lib/db/schema"
 import { requireCompany } from "@/lib/api-helpers"
 import { apiError, apiSuccess } from "@/lib/api-helpers"
-import { eq, and, gte, lte } from "drizzle-orm"
+import { eq, and, gte, lte, or, inArray } from "drizzle-orm"
 
 export async function GET(req: NextRequest) {
   try {
@@ -27,7 +27,17 @@ export async function GET(req: NextRequest) {
       conditions.push(eq(calendarEvents.type, type))
     }
     if (filter === "mine") {
-      conditions.push(eq(calendarEvents.createdBy, user.id!))
+      // «Мой» = события, где я автор ИЛИ участник (а не только созданные мной).
+      const myParticipantEvents = db
+        .select({ eventId: calendarEventParticipants.eventId })
+        .from(calendarEventParticipants)
+        .where(eq(calendarEventParticipants.userId, user.id!))
+      conditions.push(
+        or(
+          eq(calendarEvents.createdBy, user.id!),
+          inArray(calendarEvents.id, myParticipantEvents),
+        )!
+      )
     }
 
     const events = await db
