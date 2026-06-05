@@ -414,28 +414,27 @@ export default function InterviewsPage() {
         <DashboardHeader />
         <main className="flex-1 overflow-auto bg-background">
           <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
-            {/* Header */}
+            {/* Header — единый стиль платформы (как Календарь): иконка violet + Tabs + primary */}
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-5">
-              <div>
-                <h1 className="text-2xl font-semibold text-foreground">Собеседования</h1>
-                <p className="text-muted-foreground text-sm">Запланированные и прошедшие интервью</p>
+              <div className="flex items-center gap-2">
+                <CalendarDays className="h-5 w-5 text-violet-600" />
+                <h1 className="text-lg font-semibold">Собеседования</h1>
               </div>
               <div className="flex items-center gap-2">
-                {/* View switcher */}
-                <div className="flex items-center bg-muted rounded-lg p-1 gap-0.5">
-                  {views.map(v => (
-                    <Button key={v.mode} variant={view === v.mode ? "default" : "ghost"} size="sm"
-                      className={cn("h-7 px-2 sm:px-3 text-xs gap-1", view === v.mode ? "shadow-sm" : "text-muted-foreground")}
-                      style={view === v.mode ? { backgroundColor: "#C0622F", color: "#fff" } : undefined}
-                      onClick={() => setView(v.mode)}>
-                      <v.icon className="w-3.5 h-3.5" /><span className="hidden sm:inline">{v.label}</span>
-                    </Button>
-                  ))}
-                </div>
-                <Button variant="outline" size="sm" className="h-7 gap-1 text-xs" onClick={() => setSettingsOpen(true)}>
+                {/* View switcher — shadcn Tabs */}
+                <Tabs value={view} onValueChange={(v) => setView(v as ViewMode)}>
+                  <TabsList>
+                    {views.map(v => (
+                      <TabsTrigger key={v.mode} value={v.mode} className="gap-1 text-xs">
+                        <v.icon className="w-3.5 h-3.5" /><span className="hidden sm:inline">{v.label}</span>
+                      </TabsTrigger>
+                    ))}
+                  </TabsList>
+                </Tabs>
+                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setSettingsOpen(true)}>
                   <Settings className="w-3.5 h-3.5" /><span className="hidden sm:inline">Настроить стадии</span>
                 </Button>
-                <Button size="sm" className="h-7 gap-1 text-xs" style={{ backgroundColor: "#C0622F", color: "#fff" }} onClick={openCreate}>
+                <Button size="sm" className="gap-1.5" onClick={openCreate}>
                   <Plus className="w-3.5 h-3.5" /><span className="hidden sm:inline">Запланировать интервью</span>
                 </Button>
               </div>
