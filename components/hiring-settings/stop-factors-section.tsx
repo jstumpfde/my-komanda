@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { ShieldAlert, Save, ChevronDown } from "lucide-react"
+import { ShieldAlert, Save, ChevronDown, AlertTriangle } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import type { CompanyHiringDefaults, VacancyStopFactors } from "@/lib/db/schema"
@@ -19,7 +20,7 @@ export function StopFactorsSection({ defaults, onPatch }: {
 }) {
   const sf = defaults.stopFactorsDefaults
 
-  // ── Стоп-факторы (плоские состояния, как в оригинале) ──
+  // ── Стоп-факторы (плоские состояния) ──
   const [sfCity, setSfCity] = useState<boolean>(!!sf?.city?.enabled)
   const [sfCityValue, setSfCityValue] = useState<string>(
     sf?.city?.allowedCities ? sf.city.allowedCities.join(", ") : ""
@@ -46,13 +47,16 @@ export function StopFactorsSection({ defaults, onPatch }: {
     sf?.salaryExpectation?.maxAmount != null ? String(sf.salaryExpectation.maxAmount) : ""
   )
 
-  // Автоматический отказ
+  // Мастер-тумблер живого применения ко всем вакансиям
+  const [applyToAll, setApplyToAll] = useState<boolean>(
+    !!(defaults as CompanyHiringDefaults & { stopFactorsApplyToAll?: boolean }).stopFactorsApplyToAll
+  )
+
+  // Копировать в новые вакансии (бывший «Автоматический отказ»)
   const [sfAutoReject, setSfAutoReject] = useState<boolean>(!!defaults.applyStopFactorsOnCreate)
   const [sfRejectTemplate, setSfRejectTemplate] = useState<string>("Вежливый отказ")
 
   const [saving, setSaving] = useState(false)
-
-  // Состояние свёрнутости (по умолчанию свёрнуто)
   const [open, setOpen] = useState(false)
 
   const handleSave = async () => {
@@ -77,7 +81,12 @@ export function StopFactorsSection({ defaults, onPatch }: {
         : { enabled: false },
     }
     try {
-      await onPatch({ stopFactorsDefaults, applyStopFactorsOnCreate: sfAutoReject })
+      await onPatch({
+        stopFactorsDefaults,
+        applyStopFactorsOnCreate: sfAutoReject,
+        // stopFactorsApplyToAll добавляется schema-агентом — кастуем через spread
+        ...({ stopFactorsApplyToAll: applyToAll } as Partial<CompanyHiringDefaults>),
+      })
       toast.success("Стоп-факторы сохранены")
     } catch {
       toast.error("Не удалось сохранить")
@@ -96,8 +105,14 @@ export function StopFactorsSection({ defaults, onPatch }: {
               className="flex items-center justify-between w-full text-left group"
             >
               <div className="flex items-center gap-2">
-                <ShieldAlert className="size-4 text-muted-foreground" />
-                <CardTitle className="text-sm font-medium">Стоп-факторы (дефолты)</CardTitle>
+                <ShieldAlert className="size-4 text-violet-600" />
+                <CardTitle className="text-sm font-medium">Общие стоп-факторы компании</CardTitle>
+                {/* Индикатор в свёрнутом виде: показываем если мастер-тумблер включён */}
+                {!open && applyToAll && (
+                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-normal text-amber-700 bg-amber-50 border-amber-200">
+                    Применяется ко всем
+                  </Badge>
+                )}
               </div>
               <ChevronDown
                 className={cn(
@@ -108,22 +123,46 @@ export function StopFactorsSection({ defaults, onPatch }: {
             </button>
           </CollapsibleTrigger>
           <CardDescription className="mt-1">
-            Это стартовые значения для новых вакансий. Точечно стоп-факторы настраиваются на каждой вакансии.
+            Минимальный базовый набор стоп-факторов для всей компании. Указывайте здесь только самые важные общие правила — детальные стоп-факторы лучше задавать на каждой вакансии.
           </CardDescription>
         </CardHeader>
 
         <CollapsibleContent>
           <CardContent className="space-y-4 pt-0">
 
+            {/* ── Мастер-тумблер живого применения ── */}
+            <Card className="border-amber-200 bg-amber-50/40 dark:bg-amber-950/20">
+              <CardContent className="pt-4 pb-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1 space-y-1">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="size-4 text-amber-600 shrink-0" />
+                      <p className="text-sm font-medium">Применять ко всем вакансиям</p>
+                    </div>
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      Когда включено — эти стоп-факторы применяются ко всем вакансиям компании
+                      при автоматической обработке откликов. Включайте осознанно: кандидаты,
+                      попадающие под фактор, будут автоматически отклоняться по всем вакансиям.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={applyToAll}
+                    onCheckedChange={setApplyToAll}
+                    className="mt-0.5 shrink-0"
+                  />
+                </div>
+              </CardContent>
+            </Card>
+
             {/* Стоп-факторы */}
             <Card>
               <CardHeader>
                 <CardTitle className="text-base flex items-center gap-2">
-                  <ShieldAlert className="size-4" />Стоп-факторы для нового резюме
+                  <ShieldAlert className="size-4 text-violet-600" />Стоп-факторы для нового резюме
                 </CardTitle>
                 <CardDescription>
                   Критерии отсева на этапе AI-скоринга резюме (НЕ стоп-слова в чате).
-                  Применяется к новым вакансиям. В вакансии можно изменить.
+                  В каждой вакансии можно уточнить или изменить эти правила.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-2">
@@ -252,26 +291,22 @@ export function StopFactorsSection({ defaults, onPatch }: {
               </CardContent>
             </Card>
 
-            {/* Пояснение */}
-            <div className="rounded-lg border border-blue-200 bg-blue-50/60 dark:bg-blue-950/20 p-3 text-xs text-blue-900 dark:text-blue-200">
-              <strong>Это дефолты компании.</strong> Реальные стоп-факторы
-              настраиваются на каждой вакансии — в табе «Воронка» → блок
-              «Стоп-факторы по резюме». Эти значения берутся как стартовые
-              при создании новой вакансии, если включена опция ниже.
-            </div>
-
-            {/* Автоматический отказ */}
+            {/* Копировать в новые вакансии */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Автоматический отказ</CardTitle>
+                <CardTitle className="text-base">При создании вакансии</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="flex items-center justify-between py-2">
-                  <div>
-                    <p className="text-sm font-medium">Применять стоп-факторы автоматически при создании вакансии</p>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">При создании новой вакансии — копировать эти дефолты в её настройки.</p>
+                <div className="flex items-start justify-between gap-4 py-2">
+                  <div className="flex-1">
+                    <p className="text-sm font-medium">Копировать эти стоп-факторы в новые вакансии (как стартовые)</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
+                      При создании новой вакансии — однократно скопировать эти значения в её настройки.
+                      Это разовая копия: изменение общих стоп-факторов впоследствии не затронет уже созданные вакансии.
+                      Отличие от «Применять ко всем» выше: там изменения действуют сразу на все вакансии.
+                    </p>
                   </div>
-                  <Switch checked={sfAutoReject} onCheckedChange={setSfAutoReject} />
+                  <Switch checked={sfAutoReject} onCheckedChange={setSfAutoReject} className="mt-0.5 shrink-0" />
                 </div>
                 {sfAutoReject && (
                   <div className="space-y-1.5">

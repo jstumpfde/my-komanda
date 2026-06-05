@@ -5,8 +5,8 @@
 // /api/cron/hh-import (X-Cron-Secret + respectWorkingHours=true).
 
 import { db } from "@/lib/db"
-import { hhResponses, candidates, vacancies, followUpCampaigns, followUpMessages, hhCandidates } from "@/lib/db/schema"
-import type { VacancyAiProcessSettings, VacancyStopFactors } from "@/lib/db/schema"
+import { hhResponses, candidates, vacancies, followUpCampaigns, followUpMessages, hhCandidates, companies } from "@/lib/db/schema"
+import type { VacancyAiProcessSettings, VacancyStopFactors, CompanyHiringDefaults } from "@/lib/db/schema"
 import {and, asc, eq, inArray, isNull, notInArray, or} from "drizzle-orm"
 import { getValidToken } from "@/lib/hh-helpers"
 import { changeNegotiationState, getNegotiationMessages } from "@/lib/hh-api"
@@ -145,6 +145,23 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
 
   const localVacancies = await db.select().from(vacancies)
     .where(and(eq(vacancies.companyId, companyId), isNull(vacancies.deletedAt)))
+
+  // Company-level стоп-факторы: читаем ОДИН РАЗ вне цикла.
+  // stopFactorsApplyToAll — мастер-тумблер (дефолт false = выкл).
+  let companyStopFactors: VacancyStopFactors | null = null
+  let companyStopFactorsApplyToAll = false
+  {
+    const [companyRow] = await db
+      .select({ hiringDefaultsJson: companies.hiringDefaultsJson })
+      .from(companies)
+      .where(eq(companies.id, companyId))
+      .limit(1)
+    const hiringDefaults = (companyRow?.hiringDefaultsJson as CompanyHiringDefaults | null) ?? null
+    if (hiringDefaults?.stopFactorsApplyToAll === true && hiringDefaults.stopFactorsDefaults) {
+      companyStopFactors = hiringDefaults.stopFactorsDefaults
+      companyStopFactorsApplyToAll = true
+    }
+  }
 
   if (stopFlags) stopFlags.set(companyId, false)
 
@@ -470,37 +487,47 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
         await db.update(candidates).set(setFields).where(eq(candidates.id, candidateId))
       }
 
-      // #61: per-vacancy стоп-факторы (city/age/experience/format/citizenship/
-      // salaryExpectation). Применяем ДО AI-скоринга — это экономит токены и
-      // соответствует семантике «жёстких» стопов: AI не должен «перезаписывать»
-      // явное HR-правило «не из Москвы / не моложе 18». Если фактор сработал —
-      // далее обработка кандидата идёт по ветке rejected (см. блок ниже).
+      // Стоп-факторы: два слоя — company-wide и per-vacancy.
+      // Применяем ДО AI-скоринга — экономит токены и соответствует семантике
+      // «жёстких» стопов: AI не должен «перезаписывать» явное HR-правило.
+      // Если фактор сработал — далее обработка идёт по ветке rejected.
+      //
+      // Данные кандидата (city/age/…) вычисляем один раз для обоих слоёв.
+      // hh-резюме отдаёт age напрямую или только birth_date — берём оба источника.
       let stopFactorMatch: StopFactorMatch | null = null
+      const rawAgeUnknown = (raw?.resume?.["age"]) as unknown
+      let candAge: number | null = typeof rawAgeUnknown === "number" ? rawAgeUnknown : null
+      if (candAge == null && typeof extracted.birthDate === "string") {
+        const m = /^(\d{4})/.exec(extracted.birthDate)
+        if (m) candAge = new Date().getUTCFullYear() - Number(m[1])
+      }
+      const salaryRaw = (raw?.resume?.["salary"]) as { amount?: unknown } | null | undefined
+      const salaryAmount = typeof salaryRaw?.amount === "number" ? salaryRaw.amount : null
+      const candidateStopData = {
+        city:              candidateCity ?? null,
+        age:               candAge,
+        experienceYears:   extracted.experienceYears ?? null,
+        workFormat:        extracted.workFormat ?? null,
+        relocationReady:   extracted.relocationReady ?? null,
+        salaryExpectation: salaryAmount,
+      }
+
+      // Слой 1: company-wide (мастер-тумблер).
+      // Применяется НЕЗАВИСИМО от per-vacancy block toggle, но только если
+      // stopFactorsApplyToAll===true (дефолт: false — предохранитель) И набор непустой.
+      // Off-hours soft mode НЕ блокирует company-layer — это глобальное правило компании.
+      if (candidateId && companyStopFactorsApplyToAll && companyStopFactors && Object.keys(companyStopFactors).length > 0) {
+        stopFactorMatch = matchStopFactors(candidateStopData, companyStopFactors)
+      }
+
+      // Слой 2: per-vacancy (как было).
       // Off-hours soft mode: не применяем стоп-факторы ночью (никаких авто-отказов).
       // Funnel-флаг stopFactorsEnabled: только явный false выключает блок
       // (undefined/отсутствует = включено — обратная совместимость).
-      if (candidateId && localVac && !offHoursSoftMode && isBlockEnabled(localVac, "stop_factors_resume", aiSettings.stopFactorsEnabled !== false)) {
+      if (!stopFactorMatch && candidateId && localVac && !offHoursSoftMode && isBlockEnabled(localVac, "stop_factors_resume", aiSettings.stopFactorsEnabled !== false)) {
         const factors = (localVac as { stopFactorsJson?: VacancyStopFactors | null }).stopFactorsJson
         if (factors && Object.keys(factors).length > 0) {
-          // hh-резюме отдаёт age напрямую или только birth_date. Берём оба
-          // источника, чтобы фактор «возраст» срабатывал по полному резюме.
-          const rawAgeUnknown = (raw?.resume?.["age"]) as unknown
-          let candAge: number | null = typeof rawAgeUnknown === "number" ? rawAgeUnknown : null
-          if (candAge == null && typeof extracted.birthDate === "string") {
-            const m = /^(\d{4})/.exec(extracted.birthDate)
-            if (m) candAge = new Date().getUTCFullYear() - Number(m[1])
-          }
-          const salaryRaw = (raw?.resume?.["salary"]) as { amount?: unknown } | null | undefined
-          const salaryAmount = typeof salaryRaw?.amount === "number" ? salaryRaw.amount : null
-
-          stopFactorMatch = matchStopFactors({
-            city:              candidateCity ?? null,
-            age:               candAge,
-            experienceYears:   extracted.experienceYears ?? null,
-            workFormat:        extracted.workFormat ?? null,
-            relocationReady:   extracted.relocationReady ?? null,
-            salaryExpectation: salaryAmount,
-          }, factors)
+          stopFactorMatch = matchStopFactors(candidateStopData, factors)
         }
       }
 
