@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
-import { ArrowLeft, Columns3, Rows3, Loader2, Star, Check, X, ExternalLink, Ban, ChevronDown, Download, Share2, SlidersHorizontal } from "lucide-react"
+import { ArrowLeft, Columns3, Rows3, Loader2, Star, Check, X, ExternalLink, Ban, ChevronDown, Download, Share2, SlidersHorizontal, ChevronsUpDown, ChevronsDownUp } from "lucide-react"
 import { CandidateDrawer } from "@/components/candidates/candidate-drawer"
 
 interface QItem { id: string; text: string; points?: number; answerType?: string }
@@ -65,7 +65,7 @@ function ScoreLine({ c }: { c: CandidateHead }) {
 }
 interface CompareData { candidates: CandidateHead[]; sections: Section[] }
 
-function AnswerCell({ a }: { a: Ans | undefined }) {
+function AnswerCell({ a, clamped, onToggle }: { a: Ans | undefined; clamped?: boolean; onToggle?: () => void }) {
   if (!a || (a.value == null && a.awarded == null)) {
     return <span className="text-muted-foreground/40 text-xs italic">—</span>
   }
@@ -89,19 +89,28 @@ function AnswerCell({ a }: { a: Ans | undefined }) {
         // Множественный выбор приходит склеенным через «|||» — показываем
         // аккуратным списком с маркерами вместо сырых разделителей.
         const parts = a.value.split("|||").map((s) => s.trim()).filter(Boolean)
-        if (parts.length > 1) {
-          return (
-            <ul className="space-y-0.5">
-              {parts.map((p, i) => (
-                <li key={i} className="text-sm flex gap-1.5">
-                  <span className="text-muted-foreground">•</span>
-                  <span className="break-words">{p}</span>
-                </li>
-              ))}
-            </ul>
-          )
-        }
-        return <p className="text-sm whitespace-pre-wrap break-words">{a.value}</p>
+        const body = parts.length > 1 ? (
+          <ul className="space-y-0.5">
+            {parts.map((p, i) => (
+              <li key={i} className="text-sm flex gap-1.5">
+                <span className="text-muted-foreground">•</span>
+                <span className="break-words">{p}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm whitespace-pre-wrap break-words">{a.value}</p>
+        )
+        // По умолчанию свёрнуто до ~8 строк; клик по ячейке — раскрыть/свернуть.
+        return (
+          <div
+            className={cn(clamped && "line-clamp-[8] cursor-pointer", onToggle && "cursor-pointer")}
+            onClick={onToggle}
+            title={onToggle ? (clamped ? "Нажмите, чтобы раскрыть" : "Нажмите, чтобы свернуть") : undefined}
+          >
+            {body}
+          </div>
+        )
       })()}
     </div>
   )
@@ -126,6 +135,26 @@ function CompareInner() {
   const [error, setError] = useState<string | null>(null)
   const [mode, setMode] = useState<"matrix" | "byQuestion">("matrix")
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+  // Ячейки ответов по умолчанию свёрнуты (~8 строк). «Раскрыть всё» / клик по ячейке.
+  const [expandAll, setExpandAll] = useState(false)
+  const [expandedCells, setExpandedCells] = useState<Set<string>>(new Set())
+  const toggleCell = (key: string) => setExpandedCells(prev => {
+    const next = new Set(prev); next.has(key) ? next.delete(key) : next.add(key); return next
+  })
+  // Ручная ширина колонок кандидатов (px). Дефолт — 260.
+  const [colWidths, setColWidths] = useState<Record<string, number>>({})
+  const startColResize = (colId: string, e: React.MouseEvent) => {
+    e.preventDefault(); e.stopPropagation()
+    const startX = e.clientX
+    const startW = colWidths[colId] ?? 260
+    const onMove = (ev: MouseEvent) => {
+      const w = Math.max(140, Math.min(700, startW + (ev.clientX - startX)))
+      setColWidths(prev => ({ ...prev, [colId]: w }))
+    }
+    const onUp = () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp) }
+    window.addEventListener("mousemove", onMove)
+    window.addEventListener("mouseup", onUp)
+  }
   // ── Фильтр кандидатов (скрывает не подходящих, обратимо) ──
   const [filterOpen, setFilterOpen] = useState(false)
   // questionId → выбранные значения (для выборных) либо "__answered__"/"__empty__" (для текстовых)
@@ -367,6 +396,16 @@ function CompareInner() {
           </Button>
           <Button
             size="sm"
+            variant={expandAll ? "default" : "outline"}
+            className="h-8 gap-1.5 text-xs"
+            onClick={() => { setExpandAll(v => !v); setExpandedCells(new Set()) }}
+            title="Свернуть ответы до ~8 строк / раскрыть все полностью"
+          >
+            {expandAll ? <ChevronsDownUp className="size-3.5" /> : <ChevronsUpDown className="size-3.5" />}
+            {expandAll ? "Свернуть всё" : "Раскрыть всё"}
+          </Button>
+          <Button
+            size="sm"
             variant={filterActive ? "default" : "outline"}
             className="h-8 gap-1.5 text-xs"
             onClick={() => setFilterOpen((v) => !v)}
@@ -525,7 +564,11 @@ function CompareInner() {
                           Вопрос
                         </th>
                         {visible.map((c) => (
-                          <th key={c.id} className="text-left font-medium p-2.5 align-top w-[260px] min-w-[260px] border-l h-full">
+                          <th key={c.id} className="relative text-left font-medium p-2.5 align-top border-l h-full"
+                            style={{ width: colWidths[c.id] ?? 260, minWidth: colWidths[c.id] ?? 260, maxWidth: colWidths[c.id] ?? 260 }}>
+                            {/* Ручка ресайза колонки — тянуть за правую границу */}
+                            <div onMouseDown={(e) => startColResize(c.id, e)} title="Потяните, чтобы изменить ширину"
+                              className="absolute top-0 right-0 h-full w-1.5 cursor-col-resize hover:bg-primary/40 z-10" />
                             <div className="flex flex-col h-full">
                               {/* Имя + скоры. Высоту не фиксируем — отступ до иконок
                                   минимальный; выравнивание ряда иконок между колонками
@@ -567,11 +610,16 @@ function CompareInner() {
                               <div className="text-[11px] text-muted-foreground">макс. {q.points} б</div>
                             )}
                           </td>
-                          {visible.map((c) => (
-                            <td key={c.id} className={cn("p-2.5 border-l align-top w-[260px] min-w-[260px]", qi % 2 && "bg-muted/30")}>
-                              <AnswerCell a={section.answers[c.id]?.[q.id]} />
+                          {visible.map((c) => {
+                            const cellKey = `${c.id}:${q.id}`
+                            return (
+                            <td key={c.id} className={cn("p-2.5 border-l align-top", qi % 2 && "bg-muted/30")}
+                              style={{ width: colWidths[c.id] ?? 260, minWidth: colWidths[c.id] ?? 260, maxWidth: colWidths[c.id] ?? 260 }}>
+                              <AnswerCell a={section.answers[c.id]?.[q.id]}
+                                clamped={!expandAll && !expandedCells.has(cellKey)}
+                                onToggle={() => toggleCell(cellKey)} />
                             </td>
-                          ))}
+                          )})}
                         </tr>
                       ))}
                     </tbody>
@@ -589,12 +637,16 @@ function CompareInner() {
                         )}
                       </div>
                       <div className="divide-y">
-                        {visible.map((c) => (
+                        {visible.map((c) => {
+                          const cellKey = `bq:${c.id}:${q.id}`
+                          return (
                           <div key={c.id} className="p-2.5 grid grid-cols-[180px_1fr] gap-3">
                             <div className="text-sm font-medium truncate" title={nameOf(c)}>{nameOf(c)}</div>
-                            <AnswerCell a={section.answers[c.id]?.[q.id]} />
+                            <AnswerCell a={section.answers[c.id]?.[q.id]}
+                              clamped={!expandAll && !expandedCells.has(cellKey)}
+                              onToggle={() => toggleCell(cellKey)} />
                           </div>
-                        ))}
+                        )})}
                       </div>
                     </div>
                   ))}
