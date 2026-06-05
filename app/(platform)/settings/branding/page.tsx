@@ -158,10 +158,17 @@ export default function BrandingPage() {
   const handleBrandBlockSave = async () => {
     setSaving(true)
     try {
+      // Сохраняем и sidebarLogoMode (вариант «с подложкой / без») — иначе выбор
+      // «Без подложки» терялся: он живёт в custom_theme, а этот блок его не слал.
+      const customTheme = {
+        ...Object.fromEntries(THEME_KEYS.map(k => [k, { enabled: themeEnabled[k] }])),
+        sidebarLogoMode,
+      }
       await updateCompanyApi({
         logo_url: logoPreview ?? "",
         brand_name: brandName,
         brand_slogan: brandSlogan,
+        custom_theme: customTheme as Record<string, unknown>,
       })
       saveBrand({ logoUrl: logoPreview, companyName: brandName })
       toast.success("Сохранено")
@@ -247,10 +254,14 @@ export default function BrandingPage() {
               onDrop={(e) => { e.preventDefault(); setIsDragging(false); const f = e.dataTransfer.files?.[0]; if (f) uploadLogoFile(f) }}
               onClick={() => canBrand && !uploadingLogo && fileInputRef.current?.click()}
               className={cn(
-                "group relative flex flex-col items-center justify-center gap-2 p-3 rounded-xl border-2 border-dashed transition-all w-40 h-32 shrink-0 overflow-hidden",
-                canBrand ? "cursor-pointer hover:border-primary/40 hover:bg-muted/20" : "cursor-not-allowed opacity-60",
-                isDragging && "border-primary bg-primary/5",
-                logoPreview && "border-solid bg-muted/10",
+                "group relative flex flex-col items-center justify-center gap-2 rounded-xl transition-all shrink-0 overflow-hidden",
+                canBrand ? "cursor-pointer" : "cursor-not-allowed opacity-60",
+                // Логотип загружен — компактно и БЕЗ рамки (рамка не идёт под
+                // прямоугольные/круглые/овальные лого). Пусто — дропзона с пунктиром.
+                logoPreview
+                  ? "p-1.5 h-20 w-auto max-w-[200px] hover:bg-muted/10"
+                  : "p-3 w-40 h-32 border-2 border-dashed hover:border-primary/40 hover:bg-muted/20",
+                isDragging && "ring-2 ring-primary ring-offset-1",
               )}
               title={logoPreview ? "Нажмите, чтобы заменить логотип" : "Загрузить логотип"}
             >
@@ -260,7 +271,7 @@ export default function BrandingPage() {
               ) : logoPreview ? (
                 <>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={logoPreview} alt="Логотип" className="max-w-[120px] max-h-[72px] object-contain" />
+                  <img src={logoPreview} alt="Логотип" className="max-h-16 max-w-[180px] object-contain" />
                   {/* Оверлей по наведению: Заменить / Удалить */}
                   <div className="absolute inset-0 hidden group-hover:flex flex-col items-center justify-center gap-1.5 bg-background/85 backdrop-blur-[1px]">
                     <span className="inline-flex items-center gap-1 text-xs font-medium text-primary">
@@ -287,8 +298,9 @@ export default function BrandingPage() {
               {logoPreview ? (
                 <>
                   <div className="flex items-start gap-4">
-                    {/* Sidebar: два варианта (с подложкой / без) с выбором —
+                    {/* Sidebar: два варианта (с подложкой / без) — столбиком,
                         выбранный применяется в реальном сайдбаре. */}
+                    <div className="flex flex-col gap-2">
                     {([
                       { mode: "padded" as const, label: "Sidebar — с подложкой" },
                       { mode: "plain"  as const, label: "Sidebar — без подложки" },
@@ -323,6 +335,7 @@ export default function BrandingPage() {
                         </span>
                       </button>
                     ))}
+                    </div>
                     <div className="flex flex-col items-center gap-1">
                       <div className="w-[80px] h-[80px] rounded-xl border bg-muted/20 flex items-center justify-center overflow-hidden">
                         <CompanyLogo logoUrl={logoPreview} companyName={brandName} size="lg" rounded="md" className="!w-[60px] !h-[60px]" />
