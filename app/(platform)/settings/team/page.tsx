@@ -118,7 +118,7 @@ export default function TeamPage() {
     let alive = true
     fetch("/api/team")
       .then((r) => (r.ok ? r.json() : []))
-      .then((rows: { id: string; name: string; email: string; role: string; avatarUrl?: string | null }[]) => {
+      .then((rows: { id: string; name: string; email: string; role: string; avatarUrl?: string | null; isActive?: boolean; permissions?: Record<string, boolean> | null }[]) => {
         if (!alive || !Array.isArray(rows)) return
         const VALID: TeamRole[] = ["director", "hr_lead", "hr_manager", "department_head", "observer", "employee"]
         setMembers(rows.map((u) => ({
@@ -126,7 +126,8 @@ export default function TeamPage() {
           name: u.name || u.email,
           email: u.email,
           role: (VALID.includes(u.role as TeamRole) ? u.role : "employee") as TeamRole,
-          status: "active" as MemberStatus,
+          status: (u.isActive === false ? "disabled" : "active") as MemberStatus,
+          permissions: (u.permissions as Record<string, boolean>) ?? undefined,
           avatar: (u.name || u.email).split(/\s+/).map((s) => s[0]).filter(Boolean).slice(0, 2).join("").toUpperCase(),
           avatarUrl: u.avatarUrl || undefined,
           vacancyIds: [], categories: [], candidateVisibility: "all",
@@ -347,28 +348,62 @@ export default function TeamPage() {
     setConfirmDeleteId(null)
   }
 
-  const handleSaveInline = (memberId: string) => {
+  const handleSaveInline = async (memberId: string) => {
+    const snapshot = members
+    const nextRole = editRole
+    const nextPerms = editPermissions
     setMembers(prev => prev.map(m =>
-      m.id === memberId ? { ...m, role: editRole, permissions: editPermissions } : m
+      m.id === memberId ? { ...m, role: nextRole, permissions: nextPerms } : m
     ))
     setExpandedId(null)
-    toast.success("Настройки сохранены")
+    try {
+      const res = await fetch("/api/team", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: memberId, role: nextRole, permissions: nextPerms }),
+      })
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`)
+      toast.success("Настройки сохранены")
+    } catch (e) {
+      setMembers(snapshot) // откат — на сервере не сохранилось
+      toast.error(e instanceof Error ? e.message : "Не удалось сохранить")
+    }
   }
 
-  const handleDeleteMember = (memberId: string) => {
+  const handleDeleteMember = async (memberId: string) => {
     const member = members.find(m => m.id === memberId)
+    const snapshot = members
     setMembers(prev => prev.filter(m => m.id !== memberId))
     setExpandedId(null)
-    toast.error(`${member?.name ?? "Участник"} удалён из команды`)
+    try {
+      const res = await fetch(`/api/team?id=${encodeURIComponent(memberId)}`, { method: "DELETE" })
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`)
+      toast.success(`${member?.name ?? "Участник"} удалён из команды`)
+    } catch (e) {
+      setMembers(snapshot) // откат
+      toast.error(e instanceof Error ? e.message : "Не удалось удалить")
+    }
   }
 
-  const handleBlockMember = (memberId: string) => {
-    setMembers(prev => prev.map(m =>
-      m.id === memberId ? { ...m, status: m.status === "disabled" ? "active" : "disabled" as MemberStatus } : m
-    ))
+  const handleBlockMember = async (memberId: string) => {
     const member = members.find(m => m.id === memberId)
-    const wasDisabled = member?.status === "disabled"
-    toast.success(wasDisabled ? `${member?.name} разблокирован` : `${member?.name} заблокирован`)
+    const snapshot = members
+    const willDisable = member?.status !== "disabled"
+    setMembers(prev => prev.map(m =>
+      m.id === memberId ? { ...m, status: (willDisable ? "disabled" : "active") as MemberStatus } : m
+    ))
+    try {
+      const res = await fetch("/api/team", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: memberId, isActive: !willDisable }),
+      })
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`)
+      toast.success(willDisable ? `${member?.name} заблокирован` : `${member?.name} разблокирован`)
+    } catch (e) {
+      setMembers(snapshot) // откат
+      toast.error(e instanceof Error ? e.message : "Не удалось изменить статус")
+    }
   }
 
   const handleResetPassword = (memberId: string) => {
