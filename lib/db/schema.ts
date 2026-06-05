@@ -110,7 +110,6 @@ export interface CompanyHiringDefaults {
     }>
   }
   stopFactorsDefaults?:      VacancyStopFactors
-  applyStopFactorsOnCreate?: boolean
   // Мастер-тумблер: применять stopFactorsDefaults живьём ко ВСЕМ вакансиям
   // компании во время обработки hh-очереди (company-level стоп-факторы).
   // Дефолт: false — предохранитель от массовых неожиданных отказов.

@@ -5,9 +5,7 @@ import { ShieldAlert, Save, ChevronDown, AlertTriangle } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
@@ -52,10 +50,6 @@ export function StopFactorsSection({ defaults, onPatch }: {
     !!(defaults as CompanyHiringDefaults & { stopFactorsApplyToAll?: boolean }).stopFactorsApplyToAll
   )
 
-  // Копировать в новые вакансии (бывший «Автоматический отказ»)
-  const [sfAutoReject, setSfAutoReject] = useState<boolean>(!!defaults.applyStopFactorsOnCreate)
-  const [sfRejectTemplate, setSfRejectTemplate] = useState<string>("Вежливый отказ")
-
   const [saving, setSaving] = useState(false)
   const [open, setOpen] = useState(true)
 
@@ -83,7 +77,6 @@ export function StopFactorsSection({ defaults, onPatch }: {
     try {
       await onPatch({
         stopFactorsDefaults,
-        applyStopFactorsOnCreate: sfAutoReject,
         // stopFactorsApplyToAll добавляется schema-агентом — кастуем через spread
         ...({ stopFactorsApplyToAll: applyToAll } as Partial<CompanyHiringDefaults>),
       })
@@ -288,40 +281,6 @@ export function StopFactorsSection({ defaults, onPatch }: {
                   </div>
                 </div>
 
-              </CardContent>
-            </Card>
-
-            {/* Копировать в новые вакансии */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">При создании вакансии</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-start justify-between gap-4 py-2">
-                  <div className="flex-1">
-                    <p className="text-sm font-medium">Копировать эти стоп-факторы в новые вакансии (как стартовые)</p>
-                    <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
-                      При создании новой вакансии — однократно скопировать эти значения в её настройки.
-                      Это разовая копия: изменение общих стоп-факторов впоследствии не затронет уже созданные вакансии.
-                      Отличие от «Применять ко всем» выше: там изменения действуют сразу на все вакансии.
-                    </p>
-                  </div>
-                  <Switch checked={sfAutoReject} onCheckedChange={setSfAutoReject} className="mt-0.5 shrink-0" />
-                </div>
-                {sfAutoReject && (
-                  <div className="space-y-1.5">
-                    <Label className="text-xs text-muted-foreground">Шаблон отказа</Label>
-                    <Select value={sfRejectTemplate} onValueChange={setSfRejectTemplate}>
-                      <SelectTrigger className="h-9 text-sm bg-[var(--input-bg)] max-w-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Вежливый отказ">Вежливый отказ</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-                <p className="text-xs text-muted-foreground">HR может вручную вернуть отклонённого кандидата</p>
               </CardContent>
             </Card>
 

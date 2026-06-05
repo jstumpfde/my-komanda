@@ -199,16 +199,6 @@ export async function POST(req: NextRequest) {
 
       const hd = companyDefaults?.hiringDefaultsJson
       if (hd && typeof hd === "object") {
-        // 1) Стоп-факторы — только если явно включён applyStopFactorsOnCreate
-        //    и набор дефолтов непуст.
-        if (
-          hd.applyStopFactorsOnCreate === true &&
-          hd.stopFactorsDefaults &&
-          Object.keys(hd.stopFactorsDefaults).length > 0
-        ) {
-          insertValues.stopFactorsJson = hd.stopFactorsDefaults
-        }
-
         // 2) Расписание — переносим значения времени/таймзоны/дней. НЕ трогаем
         //    scheduleEnabled (оставляем дефолт вакансии = true), только значения.
         const sched = hd.schedule
