@@ -10,10 +10,13 @@
 //   - «Пригласить выбранных» — дизейбл без доступа/при исчерпании лимита
 //
 // Дедуп: приглашённые помечаются и не предлагаются повторно (по статусу строки).
+//
+// Оптимизация токенов: авто-скоринг только топ-20 (AUTO_SCORE_LIMIT).
+// Остальные — по кнопке «Оценить ещё» или «Оценить выбранных».
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
-import { Loader2, Search, Send, AlertCircle, CheckCircle2, ChevronDown, Wand2 } from "lucide-react"
+import { Loader2, Search, Send, AlertCircle, CheckCircle2, ChevronDown, Wand2, Sparkles } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -110,6 +113,10 @@ const LANGUAGE_LEVEL_OPTIONS = [
   { value: "c2", label: "C2" },
   { value: "l1", label: "Родной" },
 ]
+
+// Авто-скоринг: скорим только первые N результатов hh (топ по релевантности).
+// Остальные показываются без AI-балла, HR может дооценить по кнопке.
+const AUTO_SCORE_LIMIT = 20
 
 // vacancies.required_experience → hh experience id.
 function mapVacancyExperience(req?: string | null): string {
@@ -297,6 +304,16 @@ export function OutboundSourcingTab({
   const [scoring, setScoring] = useState(false)
   const [inviting, setInviting] = useState(false)
 
+  // Количество уже оценённых (с ai_score != null).
+  const scoredCount = useMemo(() => items.filter((i) => i.aiScore != null).length, [items])
+  // id кандидатов без оценки, первые AUTO_SCORE_LIMIT из текущего списка (по порядку hh).
+  const unscoredItems = useMemo(() => items.filter((i) => i.aiScore == null), [items])
+  // Следующая порция для «Оценить ещё».
+  const nextBatchIds = useMemo(
+    () => unscoredItems.slice(0, AUTO_SCORE_LIMIT).map((i) => i.id),
+    [unscoredItems],
+  )
+
   const loadStatus = useCallback(async () => {
     try {
       const res = await fetch(`/api/modules/hr/outbound/status?vacancyId=${vacancyId}`)
@@ -373,10 +390,14 @@ export function OutboundSourcingTab({
       })
       const data = await res.json()
       if (!res.ok) { toast.error(data.error ?? "Ошибка поиска"); return }
-      setItems(data.items ?? [])
+      const foundItems: OutboundItem[] = data.items ?? []
+      setItems(foundItems)
       setSelected(new Set())
-      toast.success(`Найдено резюме: ${data.found ?? data.items?.length ?? 0}`)
-      void runScore() // авто-скоринг по сниппетам сразу после поиска
+      const foundCount = data.found ?? foundItems.length ?? 0
+      toast.success(`Найдено резюме: ${foundCount}`)
+      // Авто-скоринг только первых AUTO_SCORE_LIMIT (топ по релевантности hh).
+      const autoScoreIds = foundItems.slice(0, AUTO_SCORE_LIMIT).map((i: OutboundItem) => i.id)
+      void runScore(autoScoreIds)
       void loadStatus()
     } catch {
       toast.error("Сеть недоступна")
@@ -385,13 +406,15 @@ export function OutboundSourcingTab({
     }
   }
 
-  async function runScore() {
+  // ids — конкретные outbound_candidate.id для порционного скоринга.
+  // Если не переданы — скорит все без ai_score (старое поведение).
+  async function runScore(ids?: string[]) {
     setScoring(true)
     try {
       const res = await fetch("/api/modules/hr/outbound/score", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ vacancyId }),
+        body: JSON.stringify({ vacancyId, ...(ids ? { ids } : {}) }),
       })
       const data = await res.json()
       if (!res.ok) { toast.error(data.error ?? "Ошибка скоринга"); return }
@@ -401,6 +424,24 @@ export function OutboundSourcingTab({
     } finally {
       setScoring(false)
     }
+  }
+
+  // Дооценить следующую порцию (nextBatchIds).
+  async function runScoreNextBatch() {
+    if (nextBatchIds.length === 0) return
+    await runScore(nextBatchIds)
+  }
+
+  // Оценить выбранных (из selected — только не оценённые).
+  async function runScoreSelected() {
+    const selectedUnscored = items
+      .filter((i) => selected.has(i.id) && i.aiScore == null)
+      .map((i) => i.id)
+    if (selectedUnscored.length === 0) {
+      toast.info("Все выбранные уже оценены")
+      return
+    }
+    await runScore(selectedUnscored)
   }
 
   async function runInvite() {
@@ -419,8 +460,8 @@ export function OutboundSourcingTab({
       const limited = (data.results ?? []).filter((r: { status: string }) => r.status === "limit").length
       toast.success(`Приглашено: ${ok}${limited ? `, упёрлись в лимит: ${limited}` : ""}`)
       setSelected(new Set())
-      await runScore()   // подтянуть обновлённые статусы
-      await loadStatus() // обновить квоту
+      await runScore(undefined)   // подтянуть обновлённые статусы (без ids = все)
+      await loadStatus()          // обновить квоту
     } catch {
       toast.error("Сеть недоступна при приглашении")
     } finally {
@@ -499,8 +540,8 @@ export function OutboundSourcingTab({
           </div>
         </div>
 
-        {/* ─── Расширенный фильтр (структурированные поля hh) — свёрнут ─── */}
-        <Collapsible>
+        {/* ─── Расширенный фильтр — раскрыт по умолчанию ─── */}
+        <Collapsible defaultOpen>
           <CollapsibleTrigger className="flex w-full items-center justify-between text-xs font-medium text-muted-foreground hover:text-foreground [&[data-state=open]>svg]:rotate-180">
             <span className="flex items-center gap-2">
               Расширенный фильтр
@@ -511,14 +552,14 @@ export function OutboundSourcingTab({
             <ChevronDown className="h-3.5 w-3.5 transition-transform" />
           </CollapsibleTrigger>
           <CollapsibleContent className="pt-3">
-            {/* «Заполнить из анкеты» — подтягивает занятость/график из анкеты
-                вакансии. Базовые поля уже автозаполнены. Без магии: только по клику. */}
-            <div className="flex justify-end mb-3">
+            {/* «Заполнить из анкеты» — заметная вторичная кнопка над сеткой полей */}
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-[11px] text-muted-foreground">Уточните параметры поиска</p>
               <Button
                 type="button"
-                variant="outline"
+                variant="secondary"
                 size="sm"
-                className="h-7 gap-1.5 text-xs"
+                className="h-8 gap-1.5 text-xs"
                 onClick={fillFromAnketa}
               >
                 <Wand2 className="h-3.5 w-3.5" />
@@ -681,21 +722,56 @@ export function OutboundSourcingTab({
       {/* ─── Список найденных ─── */}
       {ranked.length > 0 && (
         <TableCard>
-          <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/30">
-            <div className="text-xs text-muted-foreground">
-              Найдено: <span className="font-medium tabular-nums">{ranked.length}</span>
-              {selected.size > 0 && <> · Выбрано: <span className="font-medium tabular-nums">{selected.size}</span></>}
+          <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 border-b bg-muted/30">
+            <div className="text-xs text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span>Найдено: <span className="font-medium tabular-nums">{ranked.length}</span></span>
+              {selected.size > 0 && <span>Выбрано: <span className="font-medium tabular-nums">{selected.size}</span></span>}
+              {/* Счётчик оценённых */}
+              <span className={cn(scoredCount < ranked.length ? "text-amber-600" : "text-green-600")}>
+                Оценено AI: <span className="font-medium tabular-nums">{scoredCount}</span> из <span className="font-medium tabular-nums">{ranked.length}</span>
+              </span>
             </div>
-            <Button
-              size="sm"
-              className="h-7 gap-1.5 text-xs"
-              onClick={runInvite}
-              disabled={inviteDisabled}
-              title={inviteHint}
-            >
-              {inviting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-              Пригласить выбранных
-            </Button>
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Кнопки порционного скоринга */}
+              {unscoredItems.length > 0 && (
+                <>
+                  {selected.size > 0 && items.filter((i) => selected.has(i.id) && i.aiScore == null).length > 0 && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 gap-1.5 text-xs"
+                      onClick={runScoreSelected}
+                      disabled={scoring}
+                      title="AI-оценка выбранных резюме без балла"
+                    >
+                      {scoring ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                      Оценить выбранных
+                    </Button>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 gap-1.5 text-xs"
+                    onClick={runScoreNextBatch}
+                    disabled={scoring}
+                    title={`Дооценить следующие ${nextBatchIds.length} резюме`}
+                  >
+                    {scoring ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                    Оценить ещё {nextBatchIds.length}
+                  </Button>
+                </>
+              )}
+              <Button
+                size="sm"
+                className="h-7 gap-1.5 text-xs"
+                onClick={runInvite}
+                disabled={inviteDisabled}
+                title={inviteHint}
+              >
+                {inviting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                Пригласить выбранных
+              </Button>
+            </div>
           </div>
           {inviteHint && (
             <div className="px-3 py-1.5 text-[11px] text-amber-600 bg-amber-500/5 border-b">{inviteHint}</div>
