@@ -1113,10 +1113,6 @@ export default function HiringSettingsPage() {
                 <TabsTrigger value="messages" className="gap-1.5"><MessageSquare className="size-3.5" />Сообщения</TabsTrigger>
                 <TabsTrigger value="stopfactors" className="gap-1.5"><ShieldAlert className="size-3.5" />Стоп-факторы</TabsTrigger>
               </TabsList>
-              <p className="text-xs text-muted-foreground mb-4 -mt-2">
-                <Palette className="size-3 inline-block mr-1 -mt-0.5" />
-                Брендинг настраивается в <Link href="/settings/branding" className="text-primary hover:underline">Настройках компании</Link>
-              </p>
 
               {/* ═══ TAB 1: Расписание ═══ */}
               <TabsContent value="schedule">
