@@ -10,7 +10,7 @@
 // последовательно с задержкой (anti-429) — см. bulk/route.ts.
 
 import { db } from "@/lib/db"
-import { candidates, hhCandidates, hhResponses, vacancies } from "@/lib/db/schema"
+import { candidates, hhCandidates, hhResponses, vacancies, companies } from "@/lib/db/schema"
 import type { VacancyAiProcessSettings } from "@/lib/db/schema"
 import { and, eq } from "drizzle-orm"
 import { getCandidateFirstName } from "@/lib/messaging/candidate-name"
@@ -215,8 +215,17 @@ export async function trySyncStageToHh(candidateId: string, newStage: string): P
     const ctx = await loadContext(candidateId)
     if (!ctx) return false
 
+    // Company-level дефолты hh-маппинга (для вакансий без кастомной воронки).
+    const [companyRow] = await db
+      .select({ hiringDefaults: companies.hiringDefaultsJson })
+      .from(companies)
+      .where(eq(companies.id, ctx.vac.companyId))
+      .limit(1)
+    const companyHhActions = (companyRow?.hiringDefaults as { stageHhActions?: Record<string, "invitation" | "discard" | null> } | null)?.stageHhActions
+
     const pipeline = parsePipeline(
       (ctx.vac.descriptionJson as Record<string, unknown> | null)?.pipeline,
+      companyHhActions,
     )
     const action = getStageHhAction(newStage as StageSlug, pipeline)
     if (!action) return false

@@ -135,6 +135,10 @@ export interface CompanyHiringDefaults {
   // O1: какая компания выбрана по умолчанию при создании вакансии.
   // "" = основная (№1, из профиля), иначе id из brandCompanies.
   defaultBrandCompanyId?: string
+  // Маппинг воронки → hh.ru на уровне компании: какое действие hh.ru шлётся
+  // при входе кандидата в стадию. Ключ — slug стадии, значение —
+  // "invitation"|"discard"|null. Дефолт для вакансий, где воронка не кастомизирована.
+  stageHhActions?: Record<string, "invitation" | "discard" | null>
 }
 
 export const companies = pgTable("companies", {

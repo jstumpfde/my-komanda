@@ -380,8 +380,23 @@ export interface VacancyPipelineV2 {
   stages: VacancyStageConfig[]
 }
 
-/** Дефолтный pipeline для новой вакансии. */
-export function getDefaultPipeline(preset: Exclude<FunnelPreset, "custom"> = "standard"): VacancyPipelineV2 {
+// Company-level дефолты hh-действий по стадиям (hiringDefaults.stageHhActions).
+export type CompanyStageHhActions = Partial<Record<StageSlug, HhAction>>
+
+/** hh-действие стадии: company-дефолт (если задан) перекрывает платформенный. */
+function defaultHhActionFor(slug: StageSlug, companyHhActions?: CompanyStageHhActions): HhAction {
+  if (companyHhActions && slug in companyHhActions) {
+    const v = companyHhActions[slug]
+    return v === "invitation" || v === "discard" ? v : null
+  }
+  return PLATFORM_STAGES[slug].defaultHhAction
+}
+
+/** Дефолтный pipeline для новой вакансии (с учётом company-маппинга hh, если задан). */
+export function getDefaultPipeline(
+  preset: Exclude<FunnelPreset, "custom"> = "standard",
+  companyHhActions?: CompanyStageHhActions,
+): VacancyPipelineV2 {
   const presetDef = FUNNEL_PRESETS[preset]
   return {
     version: 2,
@@ -391,7 +406,7 @@ export function getDefaultPipeline(preset: Exclude<FunnelPreset, "custom"> = "st
       enabled: presetDef.enabledStages.includes(slug),
       customLabel: null,
       customColor: null,
-      hhAction: PLATFORM_STAGES[slug].defaultHhAction,
+      hhAction: defaultHhActionFor(slug, companyHhActions),
     })),
   }
 }
@@ -406,11 +421,11 @@ const FUNNEL_PRESET_SET: Set<FunnelPreset> = new Set(["fast", "standard", "deep"
  * Гарантирует, что в результате присутствуют ВСЕ 16 слугов воронки,
  * даже если в сохранёнке кого-то не было.
  */
-export function parsePipeline(raw: unknown): VacancyPipelineV2 {
-  if (!raw || typeof raw !== "object") return getDefaultPipeline("standard")
+export function parsePipeline(raw: unknown, companyHhActions?: CompanyStageHhActions): VacancyPipelineV2 {
+  if (!raw || typeof raw !== "object") return getDefaultPipeline("standard", companyHhActions)
   const obj = raw as Record<string, unknown>
   if (obj.version !== 2 || !Array.isArray(obj.stages)) {
-    return getDefaultPipeline("standard")
+    return getDefaultPipeline("standard", companyHhActions)
   }
 
   const savedByslug = new Map<StageSlug, Record<string, unknown>>()
@@ -433,7 +448,7 @@ export function parsePipeline(raw: unknown): VacancyPipelineV2 {
         enabled: defaultEnabled,
         customLabel: null,
         customColor: null,
-        hhAction: PLATFORM_STAGES[slug].defaultHhAction,
+        hhAction: defaultHhActionFor(slug, companyHhActions),
       }
     }
     const customLabel = typeof saved.customLabel === "string" && saved.customLabel.trim().length > 0

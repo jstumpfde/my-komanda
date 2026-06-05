@@ -24,6 +24,7 @@ import { AiAbuseModeSettings } from "@/components/company/ai-abuse-mode-settings
 import { SendDelaySettings } from "@/components/company/send-delay-settings"
 import { TrashRetentionSettings } from "@/components/company/trash-retention-settings"
 import type { CompanyHiringDefaults, VacancyStopFactors } from "@/lib/db/schema"
+import { PLATFORM_STAGES, FUNNEL_PRESETS, type StageSlug } from "@/lib/stages"
 
 // ─── Constants ─────────────────────────────────────────────────────────────
 
@@ -200,6 +201,15 @@ export default function HiringSettingsPage() {
   const [showCompanySelector, setShowCompanySelector] = useState(false)
   type BrandCompany = { id: string; name: string; slogan?: string; description?: string }
   const [brandCompanies, setBrandCompanies] = useState<BrandCompany[]>([])
+  // Маппинг воронки → hh.ru на уровне компании (дефолт для невакансий-кастомов).
+  const [stageHhActions, setStageHhActions] = useState<Record<string, "invitation" | "discard" | null>>({})
+  const [savingStageHh, setSavingStageHh] = useState(false)
+  const saveStageHhActions = async () => {
+    setSavingStageHh(true)
+    try { await patchHiringDefaults({ stageHhActions }); toast.success("Маппинг воронки → hh.ru сохранён") }
+    catch { toast.error("Не удалось сохранить") }
+    finally { setSavingStageHh(false) }
+  }
   // O1: компания по умолчанию ("" = основная №1, иначе id бренда).
   const [defaultBrandCompanyId, setDefaultBrandCompanyId] = useState("")
   const chooseDefaultCompany = async (id: string) => {
@@ -484,6 +494,7 @@ export default function HiringSettingsPage() {
         if (typeof hd.showCompanySelector === "boolean") setShowCompanySelector(hd.showCompanySelector)
         if (Array.isArray(hd.brandCompanies)) setBrandCompanies(hd.brandCompanies)
         if (typeof hd.defaultBrandCompanyId === "string") setDefaultBrandCompanyId(hd.defaultBrandCompanyId)
+        if (hd.stageHhActions && typeof hd.stageHhActions === "object") setStageHhActions(hd.stageHhActions as Record<string, "invitation" | "discard" | null>)
 
         // Битрикс24
         if (hd.bitrix) {
@@ -870,6 +881,56 @@ export default function HiringSettingsPage() {
                 />
                 <div className="flex justify-end">
                   <Button size="sm" className="h-8 text-xs gap-1.5" onClick={saveCompanyDescription} disabled={savingCompanyDesc}>
+                    <Save className="size-3.5" />Сохранить
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Маппинг воронки → hh.ru (company-level дефолт) */}
+            <Card className="mb-5 max-w-3xl">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                  <GitBranch className="w-4 h-4" />Воронка → действия в hh.ru
+                </CardTitle>
+                <CardDescription>
+                  Что делать в hh.ru, когда кандидат входит в стадию воронки. Это дефолт компании —
+                  применяется к вакансиям, где воронка не настроена отдельно. На конкретной вакансии
+                  можно переопределить.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <div className="rounded-lg border divide-y">
+                  {FUNNEL_PRESETS.standard.enabledStages.map((slug: StageSlug) => {
+                    const def = PLATFORM_STAGES[slug]
+                    const val = (slug in stageHhActions ? stageHhActions[slug] : def.defaultHhAction) ?? null
+                    return (
+                      <div key={slug} className="flex items-center justify-between gap-3 px-3 py-2">
+                        <span className="text-sm">{def.defaultLabel}</span>
+                        <Select
+                          value={val ?? "none"}
+                          onValueChange={(v) => setStageHhActions(prev => ({
+                            ...prev,
+                            [slug]: v === "invitation" || v === "discard" ? v : null,
+                          }))}
+                        >
+                          <SelectTrigger className="h-8 text-xs w-[200px]"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">Ничего не делать</SelectItem>
+                            <SelectItem value="invitation">Пригласить (hh-приглашение)</SelectItem>
+                            <SelectItem value="discard">Отказать (hh-отказ)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )
+                  })}
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Приглашение/отказ уходят в hh-чат кандидата с текстом из настроек вакансии. Работает
+                  только для откликов с hh.ru.
+                </p>
+                <div className="flex justify-end">
+                  <Button size="sm" className="h-8 text-xs gap-1.5" onClick={saveStageHhActions} disabled={savingStageHh}>
                     <Save className="size-3.5" />Сохранить
                   </Button>
                 </div>
