@@ -8,6 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
+import { useAuth } from "@/lib/auth"
 
 // ─── Типы ───────────────────────────────────────────────────────────────────
 
@@ -70,18 +71,40 @@ const ROLES: Array<{
 const ROLE_KEYS: RoleKey[] = ["director", "hr_lead", "hr_manager", "department_head", "observer"]
 
 const SECTIONS: SectionRow[] = [
-  { key: "vacancies",        label: "Вакансии",           defaults: { director: true,  hr_lead: true,  hr_manager: true,  department_head: false, observer: false } },
-  { key: "candidates",       label: "Кандидаты",          defaults: { director: true,  hr_lead: true,  hr_manager: true,  department_head: false, observer: false } },
-  { key: "interviews",       label: "Интервью",           defaults: { director: true,  hr_lead: true,  hr_manager: true,  department_head: false, observer: false } },
-  { key: "adaptation",       label: "Адаптация",          defaults: { director: true,  hr_lead: true,  hr_manager: false, department_head: false, observer: false } },
-  { key: "lms",              label: "LMS / Обучение",     defaults: { director: true,  hr_lead: true,  hr_manager: false, department_head: true,  observer: false } },
-  { key: "skills",           label: "Оценка навыков",     defaults: { director: true,  hr_lead: true,  hr_manager: false, department_head: true,  observer: false } },
-  { key: "analytics",        label: "Аналитика",          defaults: { director: true,  hr_lead: true,  hr_manager: false, department_head: false, observer: false } },
-  { key: "company_settings", label: "Настройки компании", defaults: { director: true,  hr_lead: false, hr_manager: false, department_head: false, observer: false } },
-  { key: "team",             label: "Команда",            defaults: { director: true,  hr_lead: true,  hr_manager: false, department_head: false, observer: false } },
-  { key: "billing",          label: "Биллинг",            defaults: { director: true,  hr_lead: false, hr_manager: false, department_head: false, observer: false } },
-  { key: "overview",         label: "Обзор",              defaults: { director: true,  hr_lead: true,  hr_manager: true,  department_head: true,  observer: true  } },
-  { key: "trash",            label: "Корзина",            defaults: { director: true,  hr_lead: true,  hr_manager: false, department_head: false, observer: false }, controlledByTrash: true },
+  // ── Найм ──────────────────────────────────────────────────────────────────
+  { key: "vacancies",        label: "Вакансии",             defaults: { director: true,  hr_lead: true,  hr_manager: true,  department_head: false, observer: false } },
+  { key: "candidates",       label: "Кандидаты",            defaults: { director: true,  hr_lead: true,  hr_manager: true,  department_head: false, observer: false } },
+  { key: "interviews",       label: "Интервью",             defaults: { director: true,  hr_lead: true,  hr_manager: true,  department_head: false, observer: false } },
+  { key: "talent_pool",      label: "Talent Pool",          defaults: { director: true,  hr_lead: true,  hr_manager: true,  department_head: false, observer: false } },
+  { key: "hr_analytics",     label: "Аналитика найма",      defaults: { director: true,  hr_lead: true,  hr_manager: false, department_head: false, observer: false } },
+  { key: "templates",        label: "Шаблоны / Библиотека", defaults: { director: true,  hr_lead: true,  hr_manager: true,  department_head: false, observer: false } },
+  { key: "hiring_settings",  label: "Настройки найма",      defaults: { director: true,  hr_lead: true,  hr_manager: false, department_head: false, observer: false } },
+  { key: "hr_integrations",  label: "Интеграции (hh.ru)",   defaults: { director: true,  hr_lead: true,  hr_manager: false, department_head: false, observer: false } },
+  { key: "trash",            label: "Корзина",              defaults: { director: true,  hr_lead: true,  hr_manager: false, department_head: false, observer: false }, controlledByTrash: true },
+  { key: "audit_log",        label: "Журнал аудита",        defaults: { director: true,  hr_lead: false, hr_manager: false, department_head: false, observer: false } },
+  // ── Персонал и развитие ───────────────────────────────────────────────────
+  { key: "adaptation",       label: "Адаптация",            defaults: { director: true,  hr_lead: true,  hr_manager: false, department_head: false, observer: false } },
+  { key: "preboarding",      label: "Пребординг / Оффбординг", defaults: { director: true, hr_lead: true, hr_manager: false, department_head: false, observer: false } },
+  { key: "lms",              label: "LMS / Обучение",       defaults: { director: true,  hr_lead: true,  hr_manager: false, department_head: true,  observer: false } },
+  { key: "skills",           label: "Оценка навыков",       defaults: { director: true,  hr_lead: true,  hr_manager: false, department_head: true,  observer: false } },
+  { key: "flight_risk",      label: "Flight Risk",          defaults: { director: true,  hr_lead: true,  hr_manager: false, department_head: false, observer: false } },
+  { key: "pulse_surveys",    label: "Пульс-опросы",         defaults: { director: true,  hr_lead: true,  hr_manager: false, department_head: false, observer: false } },
+  { key: "certificates",     label: "Сертификаты",          defaults: { director: true,  hr_lead: true,  hr_manager: false, department_head: true,  observer: false } },
+  // ── Оргструктура ─────────────────────────────────────────────────────────
+  { key: "org_structure",    label: "Орг-структура",        defaults: { director: true,  hr_lead: true,  hr_manager: false, department_head: true,  observer: false } },
+  { key: "departments",      label: "Отделы / Должности",   defaults: { director: true,  hr_lead: true,  hr_manager: false, department_head: false, observer: false } },
+  { key: "employees",        label: "Сотрудники",           defaults: { director: true,  hr_lead: true,  hr_manager: false, department_head: true,  observer: false } },
+  // ── Аналитика ─────────────────────────────────────────────────────────────
+  { key: "analytics",        label: "Аналитика",            defaults: { director: true,  hr_lead: true,  hr_manager: false, department_head: false, observer: false } },
+  { key: "overview",         label: "Обзор",                defaults: { director: true,  hr_lead: true,  hr_manager: true,  department_head: true,  observer: true  } },
+  // ── Настройки компании ────────────────────────────────────────────────────
+  { key: "company_settings", label: "Настройки компании",   defaults: { director: true,  hr_lead: false, hr_manager: false, department_head: false, observer: false } },
+  { key: "team",             label: "Команда",              defaults: { director: true,  hr_lead: false, hr_manager: false, department_head: false, observer: false } },
+  { key: "branding",         label: "Брендинг",             defaults: { director: true,  hr_lead: false, hr_manager: false, department_head: false, observer: false } },
+  { key: "integrations",     label: "Интеграции (платформа)", defaults: { director: true, hr_lead: false, hr_manager: false, department_head: false, observer: false } },
+  { key: "legal",            label: "Юр. документы",        defaults: { director: true,  hr_lead: false, hr_manager: false, department_head: false, observer: false } },
+  { key: "billing",          label: "Биллинг",              defaults: { director: true,  hr_lead: false, hr_manager: false, department_head: false, observer: false } },
+  { key: "roles",            label: "Роли и доступ",        defaults: { director: true,  hr_lead: false, hr_manager: false, department_head: false, observer: false } },
 ]
 
 // ─── localStorage helpers ────────────────────────────────────────────────────
@@ -160,6 +183,8 @@ const HIRING_DEFAULTS_URL = "/api/modules/hr/company/hiring-defaults"
 // ─── Компонент ───────────────────────────────────────────────────────────────
 
 export default function RolesPage() {
+  const { hasAccess } = useAuth()
+
   // Флаг доступа HR-менеджеров к корзине (hrManagerTrashAccess)
   const [trashAccessHrManager, setTrashAccessHrManager] = useState(false)
   const [loaded, setLoaded] = useState(false)
@@ -237,6 +262,15 @@ export default function RolesPage() {
     } finally {
       setMatrixSaving(false)
     }
+  }
+
+  if (!hasAccess(["platform_admin", "admin", "director", "client"])) {
+    return (
+      <div className="max-w-2xl mx-auto py-16 text-center">
+        <h1 className="text-xl font-semibold mb-2">Доступ ограничен</h1>
+        <p className="text-sm text-muted-foreground">Эта страница доступна только директору компании.</p>
+      </div>
+    )
   }
 
   return (

@@ -22,6 +22,7 @@ import {
   Loader2, ExternalLink, Camera, KeyRound, Ban, ChevronDown,
 } from "lucide-react"
 import { getVacancyCategories } from "@/lib/vacancy-storage"
+import { useAuth } from "@/lib/auth"
 
 // ─── Типы ────────────────────────────────────────────────────
 
@@ -111,6 +112,7 @@ const PERMISSIONS_CONFIG = [
 // ─── Компонент ──────────────────────────────────────────────
 
 export default function TeamPage() {
+  const { hasAccess } = useAuth()
   const [members, setMembers] = useState<TeamMember[]>([])
 
   // Реальные участники компании из БД (GET /api/team), а не демо-данные.
@@ -271,6 +273,15 @@ export default function TeamPage() {
   const [linkMaxUses, setLinkMaxUses]       = useState<string>("1")
   const [linkExpireDays, setLinkExpireDays] = useState<string>("7")
   const [creating, setCreating]             = useState(false)
+
+  if (!hasAccess(["platform_admin", "admin", "director", "client"])) {
+    return (
+      <div className="max-w-2xl mx-auto py-16 text-center">
+        <h1 className="text-xl font-semibold mb-2">Доступ ограничен</h1>
+        <p className="text-sm text-muted-foreground">Эта страница доступна только директору компании.</p>
+      </div>
+    )
+  }
 
   const openLinkDialog = async () => {
     setLinkDialogOpen(true)

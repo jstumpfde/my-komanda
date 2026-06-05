@@ -8,6 +8,7 @@ import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from 
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ShieldCheck, Download, Trash2 } from "lucide-react"
+import { useAuth } from "@/lib/auth"
 
 // ФЗ-152: страница просмотра журнала аудита операций с ПДн кандидатов.
 // Данные из GET /api/modules/hr/audit-log (доступ — админ/директор тенанта).
@@ -38,6 +39,7 @@ function fmtDate(s: string): string {
 }
 
 export default function AuditLogPage() {
+  const { hasAccess } = useAuth()
   const [entries, setEntries] = useState<AuditEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [forbidden, setForbidden] = useState(false)
@@ -61,6 +63,15 @@ export default function AuditLogPage() {
   }, [action])
 
   useEffect(() => { void load() }, [load])
+
+  if (!hasAccess(["platform_admin", "admin", "director", "client", "hr_lead"])) {
+    return (
+      <div className="max-w-2xl mx-auto py-16 text-center">
+        <h1 className="text-xl font-semibold mb-2">Доступ ограничен</h1>
+        <p className="text-sm text-muted-foreground">У вас нет доступа к этому разделу.</p>
+      </div>
+    )
+  }
 
   return (
     <SidebarProvider defaultOpen={true}>

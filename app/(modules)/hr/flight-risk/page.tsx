@@ -13,6 +13,7 @@ import {
   Plus, Search, ArrowUpDown, ChevronRight,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useAuth } from "@/lib/auth"
 
 // ── Типы ────────────────────────────────────────────────────────────────────
 
@@ -76,6 +77,7 @@ const PRIORITY_COLORS: Record<string, string> = {
 // ── Компонент ───────────────────────────────────────────────────────────────
 
 export default function FlightRiskPage() {
+  const { hasAccess } = useAuth()
   const [scores, setScores] = useState<FlightRiskScore[]>([])
   const [actions, setActions] = useState<RetentionAction[]>([])
   const [summary, setSummary] = useState<RiskSummary | null>(null)
@@ -100,6 +102,15 @@ export default function FlightRiskPage() {
   }, [filter])
 
   useEffect(() => { load() }, [load])
+
+  if (!hasAccess(["platform_admin", "admin", "director", "client", "hr_lead"])) {
+    return (
+      <div className="max-w-2xl mx-auto py-16 text-center">
+        <h1 className="text-xl font-semibold mb-2">Доступ ограничен</h1>
+        <p className="text-sm text-muted-foreground">У вас нет доступа к этому разделу.</p>
+      </div>
+    )
+  }
 
   const seedDemo = async () => {
     await fetch("/api/modules/hr/flight-risk", {

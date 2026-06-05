@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
+import { useAuth } from "@/lib/auth"
 import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import {
   AlertTriangle, Clock, Download, CreditCard, CheckCircle2, XCircle, Plus, FileText, Loader2, Trash2,
@@ -137,6 +138,7 @@ const PERIOD_OPTIONS = [
 // ─── Компонент ────────────────────────────────────────────────────────────────
 
 export default function BillingPage() {
+  const { hasAccess } = useAuth()
   const [subscription, setSubscription] = useState<SubscriptionInfo | null>(null)
   const [allPlans, setAllPlans] = useState<Plan[]>([])
   const [invoices, setInvoices] = useState<Invoice[]>([])
@@ -262,6 +264,15 @@ export default function BillingPage() {
     } finally {
       setCreatingInvoice(false)
     }
+  }
+
+  if (!hasAccess(["platform_admin", "admin", "director", "client"])) {
+    return (
+      <div className="max-w-2xl mx-auto py-16 text-center">
+        <h1 className="text-xl font-semibold mb-2">Доступ ограничен</h1>
+        <p className="text-sm text-muted-foreground">Эта страница доступна только директору компании.</p>
+      </div>
+    )
   }
 
   const currentPlanId = subscription?.plan?.id

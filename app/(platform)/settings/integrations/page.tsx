@@ -16,6 +16,7 @@ import {
   Link2, CheckCircle2, XCircle, Loader2, Lock, ExternalLink,
   RefreshCw, Save, ArrowRight, Info,
 } from "lucide-react"
+import { useAuth } from "@/lib/auth"
 
 interface HhStatus {
   connected: boolean
@@ -34,6 +35,7 @@ const HIREFLOW_STAGES = ["Новый", "Ожидает ответа", "Демо�
 const CRM_STATUSES = ["Новый лид", "В работе", "Квалифицирован", "Переговоры", "Решение", "Успешно реализовано", "Закрыто и не реализовано"]
 
 export default function IntegrationsPage() {
+  const { hasAccess } = useAuth()
   const [bitrix, setBitrix] = useState<CrmConnection>({ name: "Bitrix24", connected: false })
   const [amo, setAmo] = useState<CrmConnection>({ name: "AmoCRM", connected: false })
   const [connectDialog, setConnectDialog] = useState<string | null>(null)
@@ -90,6 +92,15 @@ export default function IntegrationsPage() {
     "Нанят": "Успешно реализовано",
     "Отказ": "Закрыто и не реализовано",
   })
+
+  if (!hasAccess(["platform_admin", "admin", "director", "client"])) {
+    return (
+      <div className="max-w-2xl mx-auto py-16 text-center">
+        <h1 className="text-xl font-semibold mb-2">Доступ ограничен</h1>
+        <p className="text-sm text-muted-foreground">Эта страница доступна только директору компании.</p>
+      </div>
+    )
+  }
 
   const isAnyCrmConnected = bitrix.connected || amo.connected
 
