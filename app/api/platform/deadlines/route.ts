@@ -44,8 +44,10 @@ export async function GET() {
 
   // 1) TLS-серты (живая проверка).
   const certHosts: { name: string; host: string }[] = [
-    { name: "Основной домен", host: "company24.pro" },
-    { name: "Wildcard *.company24.pro (поддомены)", host: "new.company24.pro" },
+    { name: "Основной домен company24.pro", host: "company24.pro" },
+    // Произвольный поддомен → nginx отдаёт wildcard-серт *.company24.pro.
+    { name: "Wildcard *.company24.pro (поддомены компаний)", host: "cert-check.company24.pro" },
+    { name: "Стейджинг new.company24.pro", host: "new.company24.pro" },
   ]
   const certs: CertInfo[] = await Promise.all(certHosts.map(async (c) => {
     const r = await checkCert(c.host)
