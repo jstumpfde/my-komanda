@@ -543,6 +543,8 @@ export function CandidateDrawer({
   const [restoring, setRestoring] = useState(false)
   const [confirmRestoreOpen, setConfirmRestoreOpen] = useState(false)
   const [restoreTargetStage, setRestoreTargetStage] = useState<string | null>(null)
+  const [confirmInterviewOpen, setConfirmInterviewOpen] = useState(false)
+  const [confirmRejectOpen, setConfirmRejectOpen] = useState(false)
   const [noteText, setNoteText] = useState("")
   const [savingNote, setSavingNote] = useState(false)
   const [scoringAi, setScoringAi] = useState(false)
@@ -1449,9 +1451,9 @@ export function CandidateDrawer({
             <Button
               size="sm"
               variant="outline"
-              className="flex-1 gap-2 text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+              className="h-10 flex-1 gap-2 text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
               disabled={!!changingStage}
-              onClick={() => handleStageChange("rejected")}
+              onClick={() => setConfirmRejectOpen(true)}
             >
               {changingStage === "rejected" ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4" />}
               Отказать
@@ -1460,9 +1462,9 @@ export function CandidateDrawer({
             {candidate.stage !== "interview" && candidate.stage !== "final_decision" && candidate.stage !== "hired" ? (
               <Button
                 size="sm"
-                className="flex-1 gap-2 bg-purple-600 hover:bg-purple-700 text-white"
+                className="h-10 flex-[1.5] gap-2 bg-purple-600 hover:bg-purple-700 text-white font-semibold shadow-md shadow-purple-600/25"
                 disabled={!!changingStage}
-                onClick={() => handleStageChange("interview")}
+                onClick={() => setConfirmInterviewOpen(true)}
               >
                 {changingStage === "interview" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Calendar className="w-4 h-4" />}
                 Пригласить на интервью
@@ -1502,6 +1504,54 @@ export function CandidateDrawer({
             >
               {restoring ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-2" /> : null}
               Вернуть
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Подтверждение приглашения на интервью */}
+      <AlertDialog open={confirmInterviewOpen} onOpenChange={setConfirmInterviewOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Пригласить на интервью?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {candidate?.name ? <><b>{candidate.name}</b> будет переведён</> : "Кандидат будет переведён"} на стадию «Интервью».
+              {" "}Если в воронке для стадии «Интервью» настроено действие hh.ru «Пригласить» — кандидату автоматически уйдёт приглашение в hh-чат с текстом из настроек вакансии.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={!!changingStage}>Отмена</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={!!changingStage}
+              className="bg-purple-600 hover:bg-purple-700"
+              onClick={(e) => { e.preventDefault(); setConfirmInterviewOpen(false); void handleStageChange("interview") }}
+            >
+              {changingStage === "interview" ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-2" /> : null}
+              Пригласить
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Подтверждение отказа */}
+      <AlertDialog open={confirmRejectOpen} onOpenChange={setConfirmRejectOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Отказать кандидату?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {candidate?.name ? <><b>{candidate.name}</b> будет переведён</> : "Кандидат будет переведён"} на стадию «Отказ», автоматическая обработка остановится.
+              {" "}Если в воронке для стадии «Отказ» настроено действие hh.ru «Отказать» — кандидату уйдёт отказ в hh с текстом из настроек вакансии.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={!!changingStage}>Отмена</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={!!changingStage}
+              className="bg-destructive hover:bg-destructive/90"
+              onClick={(e) => { e.preventDefault(); setConfirmRejectOpen(false); void handleStageChange("rejected") }}
+            >
+              {changingStage === "rejected" ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-2" /> : null}
+              Отказать
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
