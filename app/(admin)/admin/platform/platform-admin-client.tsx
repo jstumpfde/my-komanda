@@ -189,6 +189,7 @@ export function PlatformAdminClient({
           <TabsTrigger value="templates">Templates ({templates.length})</TabsTrigger>
           <TabsTrigger value="yulia">Yulia ({yulia.metrics.total})</TabsTrigger>
           <TabsTrigger value="cron">Cron</TabsTrigger>
+          <TabsTrigger value="deadlines">Сроки</TabsTrigger>
           <TabsTrigger value="emergency" className="text-red-600">Emergency</TabsTrigger>
           <TabsTrigger value="logs">Logs</TabsTrigger>
         </TabsList>
@@ -210,6 +211,9 @@ export function PlatformAdminClient({
         </TabsContent>
         <TabsContent value="cron" className="mt-4">
           <CronTab items={cronRuns} />
+        </TabsContent>
+        <TabsContent value="deadlines" className="mt-4">
+          <DeadlinesTab />
         </TabsContent>
         <TabsContent value="emergency" className="mt-4">
           <EmergencyTab />
@@ -902,6 +906,131 @@ function LogsTab({ items }: { items: ActionItem[] }) {
         </Table>
       </CardContent>
     </Card>
+  )
+}
+
+// ─── Сроки / инфраструктура (серты, hh-токены, кроны) ────────────────────────
+
+interface DeadlinesData {
+  checkedAt: string
+  certs: { name: string; host: string; validTo: string | null; daysLeft: number | null; error?: string }[]
+  hhTokens: { company: string; employerName: string | null; expiresAt: string | null; daysLeft: number | null; isActive: boolean; lastSyncedAt: string | null }[]
+  crons: { name: string; lastRun: string; status: string; error: string | null }[]
+  backups: { note: string }
+}
+
+function dateRu(s: string | null): string {
+  if (!s) return "—"
+  const t = Date.parse(s)
+  if (Number.isNaN(t)) return s
+  return new Intl.DateTimeFormat("ru-RU", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(t))
+}
+function daysBadge(days: number | null): { cls: string; text: string } {
+  if (days == null) return { cls: "bg-muted text-muted-foreground border-border", text: "—" }
+  if (days < 0) return { cls: "bg-red-500/10 text-red-700 border-red-200", text: `истёк ${-days} дн. назад` }
+  if (days <= 14) return { cls: "bg-red-500/10 text-red-700 border-red-200", text: `${days} дн.` }
+  if (days <= 30) return { cls: "bg-amber-500/10 text-amber-700 border-amber-200", text: `${days} дн.` }
+  return { cls: "bg-emerald-500/10 text-emerald-700 border-emerald-200", text: `${days} дн.` }
+}
+
+function DeadlinesTab() {
+  const [data, setData] = useState<DeadlinesData | null>(null)
+  const [loading, setLoading] = useState(true)
+  const load = () => {
+    setLoading(true)
+    fetch("/api/platform/deadlines").then(r => r.ok ? r.json() : null).then(j => setData(j)).catch(() => setData(null)).finally(() => setLoading(false))
+  }
+  useEffect(() => { load() }, [])
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-muted-foreground">
+          Сроки и здоровье инфраструктуры. {data?.checkedAt ? `Проверено: ${dateRu(data.checkedAt)}.` : ""}
+        </p>
+        <Button size="sm" variant="outline" onClick={load} disabled={loading}>{loading ? "Проверяю…" : "↻ Обновить"}</Button>
+      </div>
+
+      {/* TLS-серты */}
+      <Card>
+        <CardHeader><CardTitle className="text-base">TLS-сертификаты</CardTitle></CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader><TableRow><TableHead>Что</TableHead><TableHead>Хост</TableHead><TableHead>Истекает</TableHead><TableHead>Осталось</TableHead></TableRow></TableHeader>
+            <TableBody>
+              {(data?.certs ?? []).map((c) => {
+                const b = daysBadge(c.daysLeft)
+                return (
+                  <TableRow key={c.host}>
+                    <TableCell className="font-medium">{c.name}</TableCell>
+                    <TableCell className="font-mono text-xs">{c.host}</TableCell>
+                    <TableCell>{c.error ? <span className="text-red-600 text-xs">ошибка: {c.error}</span> : dateRu(c.validTo)}</TableCell>
+                    <TableCell><Badge variant="outline" className={b.cls}>{b.text}</Badge></TableCell>
+                  </TableRow>
+                )
+              })}
+              {!loading && (data?.certs?.length ?? 0) === 0 && <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-6">Нет данных</TableCell></TableRow>}
+            </TableBody>
+          </Table>
+          <p className="text-[11px] text-muted-foreground mt-2">Продление wildcard *.company24.pro — вручную через Timeweb (DNS-01). Авто-обновление здесь не делаем — только мониторинг срока.</p>
+        </CardContent>
+      </Card>
+
+      {/* hh-токены */}
+      <Card>
+        <CardHeader><CardTitle className="text-base">hh.ru — токены компаний</CardTitle></CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader><TableRow><TableHead>Компания</TableHead><TableHead>Работодатель hh</TableHead><TableHead>Токен истекает</TableHead><TableHead>Осталось</TableHead><TableHead>Активна</TableHead></TableRow></TableHeader>
+            <TableBody>
+              {(data?.hhTokens ?? []).map((h, i) => {
+                const b = daysBadge(h.daysLeft)
+                return (
+                  <TableRow key={i}>
+                    <TableCell className="font-medium">{h.company}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{h.employerName ?? "—"}</TableCell>
+                    <TableCell>{dateRu(h.expiresAt)}</TableCell>
+                    <TableCell><Badge variant="outline" className={b.cls}>{b.text}</Badge></TableCell>
+                    <TableCell>{h.isActive ? <Badge variant="outline" className="bg-emerald-500/10 text-emerald-700 border-emerald-200">да</Badge> : <Badge variant="outline" className="bg-muted text-muted-foreground">нет</Badge>}</TableCell>
+                  </TableRow>
+                )
+              })}
+              {!loading && (data?.hhTokens?.length ?? 0) === 0 && <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-6">Нет подключённых hh-интеграций</TableCell></TableRow>}
+            </TableBody>
+          </Table>
+          <p className="text-[11px] text-muted-foreground mt-2">hh-токены обновляются автоматически (cron hh-token-refresh) — здесь видно срок и активность.</p>
+        </CardContent>
+      </Card>
+
+      {/* Кроны */}
+      <Card>
+        <CardHeader><CardTitle className="text-base">Кроны — последний запуск</CardTitle></CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader><TableRow><TableHead>Крон</TableHead><TableHead>Последний запуск</TableHead><TableHead>Статус</TableHead></TableRow></TableHeader>
+            <TableBody>
+              {(data?.crons ?? []).map((c) => (
+                <TableRow key={c.name}>
+                  <TableCell className="font-mono text-xs">{c.name}</TableCell>
+                  <TableCell>{dateRu(c.lastRun)}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className={c.status === "ok" ? "bg-emerald-500/10 text-emerald-700 border-emerald-200" : c.status === "error" ? "bg-red-500/10 text-red-700 border-red-200" : "bg-amber-500/10 text-amber-700 border-amber-200"}>{c.status}</Badge>
+                    {c.error && <span className="text-[11px] text-red-600 ml-2">{c.error}</span>}
+                  </TableCell>
+                </TableRow>
+              ))}
+              {!loading && (data?.crons?.length ?? 0) === 0 && <TableRow><TableCell colSpan={3} className="text-center text-muted-foreground py-6">Нет запусков кронов в логе</TableCell></TableRow>}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      {/* Бэкапы */}
+      <Card>
+        <CardHeader><CardTitle className="text-base">Бэкапы</CardTitle></CardHeader>
+        <CardContent><p className="text-sm text-muted-foreground">{data?.backups?.note ?? "—"}</p></CardContent>
+      </Card>
+    </div>
   )
 }
 
