@@ -46,6 +46,7 @@ import {
   FileQuestion,
   Play,
   RotateCcw,
+  Pencil,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
@@ -545,6 +546,26 @@ export function CandidateDrawer({
   const [restoreTargetStage, setRestoreTargetStage] = useState<string | null>(null)
   const [confirmInterviewOpen, setConfirmInterviewOpen] = useState(false)
   const [confirmRejectOpen, setConfirmRejectOpen] = useState(false)
+  // Инлайн-редактирование имени (например, для анонимных «Новый кандидат»).
+  const [editingName, setEditingName] = useState(false)
+  const [nameDraft, setNameDraft] = useState("")
+  const [savingName, setSavingName] = useState(false)
+  const startEditName = () => { setNameDraft(candidate?.name ?? ""); setEditingName(true) }
+  const saveName = async () => {
+    if (!candidate) return
+    const next = nameDraft.trim()
+    if (!next || next === candidate.name) { setEditingName(false); return }
+    setSavingName(true)
+    try {
+      const res = await fetch(`/api/modules/hr/candidates/${candidate.id}`, {
+        method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: next }),
+      })
+      if (!res.ok) throw new Error()
+      setCandidate((prev) => prev ? { ...prev, name: next } : prev)
+      setEditingName(false)
+      toast.success("Имя сохранено")
+    } catch { toast.error("Не удалось сохранить имя") } finally { setSavingName(false) }
+  }
   const [noteText, setNoteText] = useState("")
   const [savingNote, setSavingNote] = useState(false)
   const [scoringAi, setScoringAi] = useState(false)
@@ -932,7 +953,26 @@ export function CandidateDrawer({
               <AvatarInitials name={candidate.name} size="md" />
               <div className="flex-1 min-w-0">
                 <div className="text-base font-semibold leading-tight mb-1 flex items-center gap-2">
-                  <span className="truncate">{candidate.name}</span>
+                  {editingName ? (
+                    <input
+                      autoFocus
+                      value={nameDraft}
+                      onChange={(e) => setNameDraft(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") void saveName(); if (e.key === "Escape") setEditingName(false) }}
+                      onBlur={() => void saveName()}
+                      disabled={savingName}
+                      placeholder="Имя кандидата"
+                      className="flex-1 min-w-0 text-base font-semibold border-b border-primary/40 bg-transparent outline-none px-0.5"
+                    />
+                  ) : (
+                    <>
+                      <span className="truncate">{candidate.name}</span>
+                      <button type="button" onClick={startEditName} title="Переименовать"
+                        className="shrink-0 text-muted-foreground/40 hover:text-foreground transition-colors p-0.5">
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                    </>
+                  )}
                   <button
                     type="button"
                     onClick={handleFavoriteToggle}
