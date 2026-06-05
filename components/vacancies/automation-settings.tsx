@@ -147,14 +147,6 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
   const [savingInvite, setSavingInvite] = useState(false)
   const inviteDirty = firstMessageText !== savedInviteMessage
 
-  // Текст для повторной отправки (после исправления битой ссылки).
-  // Используется в hh process-queue, если по отклику уже было исходящее сообщение от работодателя.
-  const initialReInviteMessage = aiProcessSettings?.reInviteMessage || ""
-  const [reInviteText, setReInviteText] = useState(initialReInviteMessage)
-  const [savedReInviteMessage, setSavedReInviteMessage] = useState(initialReInviteMessage)
-  const [savingReInvite, setSavingReInvite] = useState(false)
-  const reInviteDirty = reInviteText !== savedReInviteMessage
-
   useEffect(() => {
     const next = aiProcessSettings?.inviteMessage
     if (typeof next === "string" && next.length > 0 && next !== savedInviteMessage) {
@@ -162,14 +154,6 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
       setFirstMessageText(next)
     }
   }, [aiProcessSettings, savedInviteMessage])
-
-  useEffect(() => {
-    const next = aiProcessSettings?.reInviteMessage
-    if (typeof next === "string" && next !== savedReInviteMessage) {
-      setSavedReInviteMessage(next)
-      setReInviteText(next)
-    }
-  }, [aiProcessSettings, savedReInviteMessage])
 
   const saveInviteMessage = useCallback(async () => {
     setSavingInvite(true)
@@ -195,27 +179,6 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
       setSavingInvite(false)
     }
   }, [vacancyId, firstMessageText])
-
-  const saveReInviteMessage = useCallback(async () => {
-    setSavingReInvite(true)
-    try {
-      const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}/ai-settings`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reInviteMessage: reInviteText }),
-      })
-      if (!res.ok) {
-        const body = await res.json().catch(() => null) as { error?: string } | null
-        const msg = body?.error || "Не удалось сохранить"
-        toast.error(msg)
-        throw new Error(msg)
-      }
-      setSavedReInviteMessage(reInviteText)
-      toast.success("Сохранено")
-    } finally {
-      setSavingReInvite(false)
-    }
-  }, [vacancyId, reInviteText])
 
   // 1b. Рабочие часы — переехали в отдельный компонент VacancyScheduleSettings.
   // Здесь старые поля больше не редактируются, но описание_json мы при сохранении
@@ -560,16 +523,7 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
     },
   })
 
-  // 2. reInvite — текст для повторной отправки.
-  useVacancySectionRegister({
-    sectionKey: `automation-${vacancyId}-${effectiveTab}-reinvite`,
-    tabKey: effectiveTab,
-    loaded: loadedReady && (sections?.includes("firstMessage") ?? true),
-    watchedValues: { reInviteText },
-    save: saveReInviteMessage,
-  })
-
-  // 3. callIntent + templates (FAQ) — обе секции таба «Сообщения» через saveSettings.
+  // 2. callIntent + templates (FAQ) — обе секции таба «Сообщения» через saveSettings.
   useVacancySectionRegister({
     sectionKey: `automation-${vacancyId}-${effectiveTab}-callintent`,
     tabKey: effectiveTab,
@@ -650,7 +604,7 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
               Один textarea заменён на серию из 3 шагов с тумблерами и
               задержками. См. components/vacancies/first-messages-chain-editor.tsx.
               Эта Card теперь содержит только глобальную задержку (используется
-              как fallback для chain[0] если массив пустой) и блок reInvite ниже.
+              как fallback для chain[0] если массив пустой).
           */}
 
           {/* #19: блок «Подтверждение после анкеты» УДАЛЁН отсюда. Его

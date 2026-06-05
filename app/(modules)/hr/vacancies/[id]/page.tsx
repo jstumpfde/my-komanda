@@ -3472,16 +3472,6 @@ export default function VacancyPage() {
                     initialPipeline={parsePipeline((apiVacancy?.descriptionJson as { pipeline?: unknown } | undefined)?.pipeline, companyHhActions)}
                     onSaved={() => refetchVacancy()}
                   />
-                  <AutomationSettings
-                    vacancyId={id}
-                    descriptionJson={apiVacancy?.descriptionJson}
-                    vacancyTitle={apiVacancy?.title}
-                    salaryFrom={apiVacancy?.salaryMin}
-                    salaryTo={apiVacancy?.salaryMax}
-                    aiProcessSettings={apiVacancy?.aiProcessSettings as { inviteMessage?: string; reInviteMessage?: string } | null | undefined}
-                    sections={["pipeline"] satisfies AutomationSectionId[]}
-                    tabKey="funnel"
-                  />
                   <VacancyPrequalificationSettings
                     vacancyId={id}
                     initial={apiVacancy?.aiProcessSettings ?? null}
