@@ -15,6 +15,7 @@ import { saveBrand, canCustomizeBrand, type BrandConfig } from "@/lib/branding"
 import { fetchCompanyApi, updateCompanyApi } from "@/lib/company-storage"
 import { CompanyLogo } from "@/components/company-logo"
 import { useTheme } from "next-themes"
+import { applyBrandColor } from "@/components/brand-color-injector"
 
 const THEME_PRESETS: Record<string, { label: string; emoji: string }> = {
   light: { label: "Светлая", emoji: "☀️" },
@@ -51,6 +52,7 @@ export default function BrandingPage() {
   // Вид логотипа в сайдбаре: на белой подложке (padded) или без неё (plain).
   const [sidebarLogoMode, setSidebarLogoMode] = useState<"padded" | "plain">("padded")
   const [verifying, setVerifying] = useState(false)
+  const [brandColor, setBrandColor] = useState("#3b82f6")
   const [saving, setSaving] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
   const [themeEnabled, setThemeEnabled] = useState<Record<string, boolean>>(() =>
@@ -77,6 +79,8 @@ export default function BrandingPage() {
       setBrandName(brandNameVal)
       setBrandSlogan(brandSloganVal)
       if (logoUrlVal) setLogoPreview(logoUrlVal)
+      const brandColorVal = (c.brandPrimaryColor ?? c.brand_primary_color ?? "#3b82f6") as string
+      setBrandColor(brandColorVal)
       const websiteVal = (c.website ?? "") as string
       setWebsite(websiteVal)
       const subVal = (c.subdomain ?? "") as string
@@ -182,7 +186,9 @@ export default function BrandingPage() {
         brand_slogan: brandSlogan,
         website: website.trim(),
         custom_theme: customTheme as Record<string, unknown>,
+        brand_primary_color: brandColor,
       })
+      applyBrandColor(brandColor)
       saveBrand({ logoUrl: logoPreview, companyName: brandName })
       toast.success("Сохранено")
       await loadCompany()
@@ -421,6 +427,37 @@ export default function BrandingPage() {
                 {website.trim() && !/^https?:\/\//i.test(website.trim())
                   ? <span className="text-amber-500">Рекомендуется начинать с https://</span>
                   : "Ссылка на сайт вашей компании"}
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-sm">Цвет бренда</Label>
+              <div className="flex items-center gap-2">
+                <div className="relative shrink-0">
+                  <input
+                    type="color"
+                    value={brandColor}
+                    onChange={e => setBrandColor(e.target.value)}
+                    className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+                    aria-label="Выбрать цвет бренда"
+                  />
+                  <div
+                    className="w-9 h-9 rounded-md border border-border shadow-sm cursor-pointer"
+                    style={{ backgroundColor: brandColor }}
+                  />
+                </div>
+                <Input
+                  value={brandColor}
+                  onChange={e => {
+                    const val = e.target.value
+                    setBrandColor(val)
+                  }}
+                  placeholder="#3b82f6"
+                  className="h-9 text-sm font-mono w-32"
+                  maxLength={7}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Используется как основной цвет интерфейса и публичных страниц
               </p>
             </div>
           </div>

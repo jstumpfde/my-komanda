@@ -5,6 +5,7 @@ import { ThemeProvider } from "@/components/theme-provider"
 import { AuthProvider } from "@/lib/auth"
 import { BundleRefreshGuard } from "@/components/bundle-refresh-guard"
 import { MobileBottomNav } from "@/components/dashboard/mobile-nav"
+import { BrandColorInjector } from "@/components/brand-color-injector"
 import type { ReactNode } from "react"
 import { usePathname } from "next/navigation"
 
@@ -40,6 +41,7 @@ export function Providers({ children }: { children: ReactNode }) {
       >
         <AuthProvider>
           <BundleRefreshGuard />
+          <BrandColorInjector />
           {children}
           <MobileNavWrapper />
         </AuthProvider>
