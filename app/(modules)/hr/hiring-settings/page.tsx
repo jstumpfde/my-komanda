@@ -4,7 +4,6 @@ import { useState, useEffect } from "react"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
 import { Settings, Plug, GitBranch, Clock, ShieldAlert, Wrench, MessageSquare } from "lucide-react"
 import { IntegrationsContent } from "@/components/hr/integrations-content"
@@ -20,26 +19,27 @@ import type { CompanyHiringDefaults } from "@/lib/db/schema"
 
 const HIRING_DEFAULTS_URL = "/api/modules/hr/company/hiring-defaults"
 
-// ─── Боковая навигация (секции «Основные») ──────────────────────────────────
+type TabKey = "funnel" | "interview" | "ai" | "stop-factors" | "service" | "integrations"
 
-const SECTIONS = [
-  { id: "funnel",       label: "Воронка и автоматизация", icon: GitBranch },
-  { id: "interview",    label: "Интервью",                icon: Clock },
-  { id: "ai",          label: "AI-общение",               icon: MessageSquare },
-  { id: "stop-factors", label: "Стоп-факторы (дефолты)", icon: ShieldAlert },
-  { id: "service",     label: "Служебное",                icon: Wrench },
-] as const
+const TABS: { value: TabKey; label: string; icon: typeof Settings }[] = [
+  { value: "funnel",        label: "Воронка и автоматизация", icon: GitBranch },
+  { value: "interview",     label: "Интервью",                icon: Clock },
+  { value: "ai",            label: "AI-общение",              icon: MessageSquare },
+  { value: "stop-factors",  label: "Стоп-факторы",           icon: ShieldAlert },
+  { value: "service",       label: "Служебное",               icon: Wrench },
+  { value: "integrations",  label: "Интеграции",              icon: Plug },
+]
 
 // ─── Страница ────────────────────────────────────────────────────────────────
 
 export default function HiringSettingsPage() {
-  // ── Инициализация верхнего таба из ?tab=integrations ──
-  const [topTab, setTopTab] = useState<"general" | "integrations">(() => {
+  // ── Инициализация таба из ?tab=integrations (и других) ──
+  const [activeTab, setActiveTab] = useState<TabKey>(() => {
     if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search)
-      return params.get("tab") === "integrations" ? "integrations" : "general"
+      const v = new URLSearchParams(window.location.search).get("tab") as TabKey | null
+      if (v && TABS.some((t) => t.value === v)) return v
     }
-    return "general"
+    return "funnel"
   })
 
   // ── Единый источник данных ──
@@ -66,12 +66,6 @@ export default function HiringSettingsPage() {
     setDefaults((prev) =>
       prev ? { ...prev, ...data.hiringDefaults } : data.hiringDefaults
     )
-  }
-
-  // ── Скролл к секции ──
-  const scrollTo = (id: string) => {
-    const el = document.getElementById(id)
-    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" })
   }
 
   // ── Ожидание загрузки defaults ──
@@ -108,103 +102,62 @@ export default function HiringSettingsPage() {
               <Settings className="h-5 w-5 text-violet-600" />
               <h1 className="text-lg font-semibold">Настройки найма</h1>
             </div>
-            <p className="text-sm text-muted-foreground mb-5">
+            <p className="text-sm text-muted-foreground mb-4">
               Эти настройки применяются ко всем новым вакансиям при создании.
               В каждой вакансии их можно изменить отдельно.
             </p>
 
-            {/* Верхние табы: Основные / Интеграции */}
-            <Tabs
-              value={topTab}
-              onValueChange={(v) => setTopTab(v as "general" | "integrations")}
-              className="w-full"
-            >
-              <TabsList className="mb-6">
-                <TabsTrigger value="general" className="gap-1.5">
-                  <Settings className="w-3.5 h-3.5" />
-                  Основные
-                </TabsTrigger>
-                <TabsTrigger value="integrations" className="gap-1.5">
-                  <Plug className="w-3.5 h-3.5" />
-                  Интеграции
-                </TabsTrigger>
-              </TabsList>
+            {/* Горизонтальный таб-бар — стиль настроек вакансии */}
+            <div className="flex items-center gap-1 border-b overflow-x-auto mb-6">
+              {TABS.map(({ value, label, icon: Icon }) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setActiveTab(value)}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 px-3 py-2 text-sm border-b-2 -mb-px transition-colors whitespace-nowrap shrink-0",
+                    activeTab === value
+                      ? "border-primary text-foreground font-medium"
+                      : "border-transparent text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <Icon className="w-3.5 h-3.5" />
+                  {label}
+                </button>
+              ))}
+            </div>
 
-              {/* Таб «Интеграции» */}
-              <TabsContent value="integrations">
-                <IntegrationsContent />
-              </TabsContent>
+            {/* Контент активного таба */}
+            <div className="max-w-3xl">
 
-              {/* Таб «Основные»: прокручиваемая колонка + липкая боковая навигация */}
-              <TabsContent value="general">
-                <div className="flex gap-8">
+              {activeTab === "funnel" && (
+                <FunnelAutomationSection defaults={defaults} onPatch={onPatch} />
+              )}
 
-                  {/* Боковая навигация — sticky */}
-                  <aside className="w-52 shrink-0">
-                    <nav className="sticky top-6 space-y-1">
-                      <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide px-2 mb-2">
-                        Разделы
-                      </p>
-                      {SECTIONS.map(({ id, label, icon: Icon }) => (
-                        <button
-                          key={id}
-                          type="button"
-                          onClick={() => scrollTo(id)}
-                          className={cn(
-                            "w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-left",
-                            "text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-                          )}
-                        >
-                          <Icon className="w-3.5 h-3.5 shrink-0" />
-                          {label}
-                        </button>
-                      ))}
-                    </nav>
-                  </aside>
+              {activeTab === "interview" && (
+                <InterviewSection defaults={defaults} onPatch={onPatch} />
+              )}
 
-                  {/* Основная колонка секций */}
-                  <div className="flex-1 min-w-0 space-y-10 max-w-3xl">
+              {activeTab === "ai" && (
+                <SendDelaySettings />
+              )}
 
-                    {/* ─── 1. Воронка и автоматизация ─── */}
-                    <section id="funnel">
-                      <FunnelAutomationSection defaults={defaults} onPatch={onPatch} />
-                    </section>
+              {activeTab === "stop-factors" && (
+                <StopFactorsSection defaults={defaults} onPatch={onPatch} />
+              )}
 
-                    {/* ─── 2. Интервью ─── */}
-                    <section id="interview">
-                      <InterviewSection defaults={defaults} onPatch={onPatch} />
-                    </section>
-
-                    {/* ─── 3. AI-общение ─── */}
-                    <section id="ai">
-                      <div className="space-y-4">
-                        <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                          <MessageSquare className="w-4 h-4 text-violet-600" />
-                          AI-общение
-                        </h2>
-                        {/* Per-company темп отправки follow-up (безопасность hh-аккаунта) */}
-                        <SendDelaySettings />
-                      </div>
-                    </section>
-
-                    {/* ─── 4. Стоп-факторы (дефолты) ─── */}
-                    <section id="stop-factors">
-                      <StopFactorsSection defaults={defaults} onPatch={onPatch} />
-                    </section>
-
-                    {/* ─── 5. Служебное ─── */}
-                    <section id="service">
-                      <div className="space-y-4">
-                        <ServiceSection defaults={defaults} onPatch={onPatch} />
-                        {/* Корзина вакансий — срок хранения */}
-                        <TrashRetentionSettings />
-                      </div>
-                    </section>
-
-                  </div>
+              {activeTab === "service" && (
+                <div className="space-y-4">
+                  <ServiceSection defaults={defaults} onPatch={onPatch} />
+                  <TrashRetentionSettings />
                 </div>
-              </TabsContent>
-            </Tabs>
+              )}
+
+              {activeTab === "integrations" && (
+                <IntegrationsContent />
+              )}
+
+            </div>
 
           </div>
         </div>
