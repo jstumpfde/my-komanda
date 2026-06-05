@@ -14,7 +14,8 @@ const SYS_MODULE = "__system"
 const SYS_CATEGORY = "all_enabled"
 
 export default function NotificationsSettingsPage() {
-  const [allEnabled, setAllEnabled] = useState(true)
+  // Дефолт — ВЫКЛ: уведомления включаются пользователем осознанно.
+  const [allEnabled, setAllEnabled] = useState(false)
 
   useEffect(() => {
     fetch("/api/settings/notification-preferences")

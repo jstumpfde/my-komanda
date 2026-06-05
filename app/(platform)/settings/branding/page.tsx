@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
-import { Globe, Save, Loader2, CheckCircle2, XCircle, RefreshCw, Copy, AlertCircle, Upload, Trash2, Link2, Palette, ChevronDown } from "lucide-react"
+import { Globe, Save, Loader2, CheckCircle2, XCircle, RefreshCw, Copy, AlertCircle, Upload, Trash2, Link2, Palette, ChevronDown, Pencil, PlugZap } from "lucide-react"
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible"
 import { saveBrand, canCustomizeBrand, type BrandConfig } from "@/lib/branding"
 import { fetchCompanyApi, updateCompanyApi } from "@/lib/company-storage"
@@ -42,6 +42,11 @@ export default function BrandingPage() {
   const [customDomain, setCustomDomain] = useState("")
   const [domainStatus, setDomainStatus] = useState<"idle" | "checking" | "verified" | "error">("idle")
   const [subdomain, setSubdomain] = useState("")
+  // savedSubdomain — значение, сохранённое в БД (загружается при монте).
+  // Если subdomain === savedSubdomain && savedSubdomain !== "" — режим «зафиксирован».
+  const [savedSubdomain, setSavedSubdomain] = useState("")
+  const [subEditMode, setSubEditMode] = useState(false)
+  const [subConfirmOpen, setSubConfirmOpen] = useState(false)
   const [subStatus, setSubStatus] = useState<"idle" | "checking" | "available" | "taken" | "invalid">("idle")
   // Вид логотипа в сайдбаре: на белой подложке (padded) или без неё (plain).
   const [sidebarLogoMode, setSidebarLogoMode] = useState<"padded" | "plain">("padded")
@@ -76,6 +81,9 @@ export default function BrandingPage() {
       setWebsite(websiteVal)
       const subVal = (c.subdomain ?? "") as string
       setSubdomain(subVal)
+      setSavedSubdomain(subVal)
+      // Если поддомен уже задан — сразу режим «зафиксирован», без редактирования
+      if (subVal) setSubEditMode(false)
       if (customThemeVal) {
         setThemeEnabled(prev => {
           const next = { ...prev }
@@ -189,9 +197,14 @@ export default function BrandingPage() {
   }
 
   // Проверка доступности поддомена (debounce 500мс) через готовый API.
+  // НЕ проверяем, если это уже сохранённое значение (режим «зафиксирован»)
+  // или если не находимся в режиме редактирования.
   useEffect(() => {
+    if (!subEditMode) { setSubStatus("idle"); return }
     const s = subdomain.trim().toLowerCase()
     if (!s) { setSubStatus("idle"); return }
+    // Если значение совпадает с сохранённым — не дёргаем API
+    if (s === savedSubdomain) { setSubStatus("idle"); return }
     if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(s) || s.length < 3) { setSubStatus("invalid"); return }
     setSubStatus("checking")
     const t = setTimeout(async () => {
@@ -202,7 +215,7 @@ export default function BrandingPage() {
       } catch { setSubStatus("idle") }
     }, 500)
     return () => clearTimeout(t)
-  }, [subdomain])
+  }, [subdomain, subEditMode, savedSubdomain])
 
   const handleSave = async () => {
     if (subStatus === "taken" || subStatus === "invalid") {
@@ -224,6 +237,10 @@ export default function BrandingPage() {
       })
       saveBrand({ logoUrl: logoPreview, companyName: brandName })
       toast.success("Брендинг сохранён")
+      const newSub = subdomain.trim().toLowerCase()
+      setSavedSubdomain(newSub)
+      setSubEditMode(false)
+      setSubStatus("idle")
       // Перечитать данные чтобы форма отразила то что реально в БД
       await loadCompany()
       // Уведомить sidebar (и другие компоненты) о смене данных компании
@@ -511,28 +528,120 @@ export default function BrandingPage() {
               Поддомен компании
             </CardTitle>
           </CardHeader>
-          <CardContent className="px-5 pb-4 pt-0 space-y-2">
+          <CardContent className="px-5 pb-4 pt-0 space-y-3">
             <p className="text-sm text-muted-foreground">
               Поддомен для публичных страниц вакансий и демонстраций — проще кастомного домена,
               работает сразу после сохранения.
             </p>
-            <div className="flex items-center max-w-lg">
-              <Input
-                value={subdomain}
-                onChange={e => setSubdomain(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
-                placeholder="mycompany"
-                className="h-9 font-mono text-sm rounded-r-none border-r-0"
-              />
-              <span className="h-9 px-3 flex items-center text-sm text-muted-foreground bg-muted border border-l-0 rounded-r-lg shrink-0 font-mono">
-                .company24.pro
-              </span>
-            </div>
-            {subStatus === "checking" && <p className="text-xs text-muted-foreground flex items-center gap-1.5"><Loader2 className="w-3 h-3 animate-spin" />Проверяем…</p>}
-            {subStatus === "available" && <p className="text-xs text-emerald-600 flex items-center gap-1.5"><CheckCircle2 className="w-3 h-3" />Свободен — нажмите «Сохранить»</p>}
-            {subStatus === "taken" && <p className="text-xs text-destructive flex items-center gap-1.5"><XCircle className="w-3 h-3" />Уже занят</p>}
-            {subStatus === "invalid" && <p className="text-xs text-destructive flex items-center gap-1.5"><XCircle className="w-3 h-3" />Минимум 3 символа: латиница, цифры, дефис</p>}
-            {subdomain.trim() && (subStatus === "available" || subStatus === "idle") && (
-              <p className="text-xs text-muted-foreground">Адрес: <code className="font-mono text-foreground">{subdomain.trim()}.company24.pro</code></p>
+
+            {/* Режим «зафиксирован»: поддомен уже задан и не редактируется */}
+            {savedSubdomain && !subEditMode && (
+              <>
+                {/* Подтверждение смены поддомена */}
+                {subConfirmOpen ? (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30 p-3 space-y-2.5">
+                    <p className="text-sm text-amber-800 dark:text-amber-300 font-medium">Вы уверены?</p>
+                    <p className="text-xs text-amber-700 dark:text-amber-400">
+                      Смена поддомена изменит адреса всех ваших публичных ссылок — старые адреса перестанут работать.
+                    </p>
+                    <div className="flex gap-2 pt-0.5">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs"
+                        onClick={() => setSubConfirmOpen(false)}
+                      >
+                        Отмена
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="h-7 text-xs gap-1.5"
+                        onClick={() => { setSubConfirmOpen(false); setSubEditMode(true) }}
+                      >
+                        <Pencil className="w-3 h-3" />Продолжить изменение
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <div className="flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2">
+                      <PlugZap className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span className="text-sm">
+                        Поддомен подключён:{" "}
+                        <code className="font-mono font-medium text-foreground">{savedSubdomain}.company24.pro</code>
+                      </span>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-8 text-xs gap-1.5 shrink-0"
+                      onClick={() => setSubConfirmOpen(true)}
+                    >
+                      <Pencil className="w-3 h-3" />Изменить поддомен
+                    </Button>
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* Режим ввода: поддомен не задан (первичная установка) ИЛИ активное редактирование */}
+            {(!savedSubdomain || subEditMode) && (
+              <>
+                <div className="flex items-center max-w-lg">
+                  <Input
+                    value={subdomain}
+                    onChange={e => setSubdomain(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
+                    placeholder="mycompany"
+                    className="h-9 font-mono text-sm rounded-r-none border-r-0"
+                    autoFocus={subEditMode}
+                  />
+                  <span className="h-9 px-3 flex items-center text-sm text-muted-foreground bg-muted border border-l-0 rounded-r-lg shrink-0 font-mono">
+                    .company24.pro
+                  </span>
+                </div>
+                {subStatus === "checking" && (
+                  <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                    <Loader2 className="w-3 h-3 animate-spin" />Проверяем…
+                  </p>
+                )}
+                {subStatus === "available" && (
+                  <p className="text-xs text-emerald-600 flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3 h-3" />Свободен — нажмите «Сохранить»
+                  </p>
+                )}
+                {subStatus === "taken" && (
+                  <p className="text-xs text-destructive flex items-center gap-1.5">
+                    <XCircle className="w-3 h-3" />Уже занят
+                  </p>
+                )}
+                {subStatus === "invalid" && (
+                  <p className="text-xs text-destructive flex items-center gap-1.5">
+                    <XCircle className="w-3 h-3" />Минимум 3 символа: латиница, цифры, дефис
+                  </p>
+                )}
+                {subdomain.trim() && (subStatus === "available" || subStatus === "idle") && (
+                  <p className="text-xs text-muted-foreground">
+                    Адрес: <code className="font-mono text-foreground">{subdomain.trim()}.company24.pro</code>
+                  </p>
+                )}
+                {/* Кнопка «Отмена» — только в режиме редактирования (не при первичной установке) */}
+                {subEditMode && (
+                  <div className="pt-0.5">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 text-xs text-muted-foreground"
+                      onClick={() => {
+                        setSubdomain(savedSubdomain)
+                        setSubEditMode(false)
+                        setSubStatus("idle")
+                      }}
+                    >
+                      Отмена
+                    </Button>
+                  </div>
+                )}
+              </>
             )}
           </CardContent>
         </Card>
