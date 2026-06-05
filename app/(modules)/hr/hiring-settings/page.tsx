@@ -24,7 +24,6 @@ type TabKey = "funnel" | "interview" | "ai" | "stop-factors" | "service" | "inte
 const TABS: { value: TabKey; label: string; icon: typeof Settings }[] = [
   { value: "funnel",        label: "Воронка и автоматизация", icon: GitBranch },
   { value: "interview",     label: "Интервью",                icon: Clock },
-  { value: "ai",            label: "AI-общение",              icon: MessageSquare },
   { value: "stop-factors",  label: "Стоп-факторы",           icon: ShieldAlert },
   { value: "service",       label: "Служебное",               icon: Wrench },
   { value: "integrations",  label: "Интеграции",              icon: Plug },
@@ -138,10 +137,6 @@ export default function HiringSettingsPage() {
                 <InterviewSection defaults={defaults} onPatch={onPatch} />
               )}
 
-              {activeTab === "ai" && (
-                <SendDelaySettings />
-              )}
-
               {activeTab === "stop-factors" && (
                 <StopFactorsSection defaults={defaults} onPatch={onPatch} />
               )}
@@ -149,6 +144,7 @@ export default function HiringSettingsPage() {
               {activeTab === "service" && (
                 <div className="space-y-4">
                   <ServiceSection defaults={defaults} onPatch={onPatch} />
+                  <SendDelaySettings />
                   <TrashRetentionSettings />
                 </div>
               )}

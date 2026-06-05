@@ -57,7 +57,7 @@ export function StopFactorsSection({ defaults, onPatch }: {
   const [sfRejectTemplate, setSfRejectTemplate] = useState<string>("Вежливый отказ")
 
   const [saving, setSaving] = useState(false)
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(true)
 
   const handleSave = async () => {
     setSaving(true)
