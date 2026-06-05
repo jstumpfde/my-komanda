@@ -759,10 +759,6 @@ export function DashboardSidebar() {
                                 ? <>{group.label.replace(' (v1)', '')}<span className="ml-1 text-[9px] font-normal normal-case opacity-50">(v1)</span></>
                                 : group.label}
                             </span>
-                            <span className={cn(
-                              "text-[10px] font-medium px-1.5 py-0.5 rounded-full",
-                              GROUP_COLORS[group.label]?.bg || (group.legacy ? "bg-slate-500/10 text-sidebar-foreground/30" : "bg-sidebar-accent/50 text-sidebar-foreground/50")
-                            )}>{group.items.filter(i => !i.divider && !i.legacy).length}</span>
                             <ChevronRight className={cn(
                               "size-3 shrink-0 transition-transform duration-150",
                               mounted && isGroupExpanded && "rotate-90"
